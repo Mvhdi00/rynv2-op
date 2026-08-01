@@ -12123,9 +12123,7 @@ window.grbtp = 35;
       return true;
     }
     _isItemLimit(id, myPlayer) {
-      const group = ItemGroups[Items[id].itemGroup];
-      const limit = ("sandboxLimit" in group ? group.sandboxLimit : null) || 99;
-      const count = myPlayer.itemCount.get(Items[id].itemGroup) || 0;
+      const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
       return count >= limit;
     }
     _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
@@ -22020,7 +22018,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-07-31T23:57:16.513Z",
+      "builtAt": "2026-08-01T00:04:56.759Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"

@@ -41,11 +41,47 @@ Luna features that were **not** ported, and why:
 
 - *Song / auto-chat lyric loop* — RYN already has a fuller version of this
   (the Music page, with chunked chat sending and session tracking).
-- *Killchat, shame combat, anti-KB, autoplace, autobuy, pathfinding, AI
-  movement/spikepush* — already present in RYN, in several cases as direct
-  ports (`LunaPathfinder`, `LunaSafeWalk`, `_lunaExactPlacer`).
+- *Autoplacer / preplace / replace* — see below; RYN's `AutoPlacer` **is**
+  Luna's placer, ported.
+- *Killchat, shame combat, anti-KB, autobuy, pathfinding, AI movement /
+  spikepush* — already present in RYN, in several cases as direct ports
+  (`LunaPathfinder`, `LunaSafeWalk`).
 - *"ai hat predict" (`autsh1`) and "ai triangulation" (`triangle2`)* — these
   are menu entries in Luna with no implementation behind them. Nothing to port.
+
+### The placer
+
+Luna's placer was already ported into RYN before this merge — `AutoPlacer`
+carries Luna's function set under RYN's naming (`getConfig` → `_getConfig`,
+`canPlace` → `_canPlace`, `addPredictObject` → `_addPredictObject`,
+`getPrePlaceAngles` → `_getPrePlaceAngles`, `getPrePlaceObject` →
+`_getPrePlaceObject`), rebuilt on RYN's spatial grid. Luna's whole placer menu
+is present and then some:
+
+| Luna | ReUp Mix |
+|---|---|
+| `autoPlace` | `_autoplacer` |
+| `placeRange` | `_autoplacerRadius` |
+| `prePlace` | `_preplacer` |
+| `prePlace2` (replace) | `_replacer` |
+| — | `_placeAttempts`, `_glotusPlacer`, `_placerRetrapCombo` |
+
+`_lunaExactPlacer` picks between the two decision sets: **on** restricts spike
+placement to Luna's original conditions, **off** (the default) adds RYN's extra
+heuristics — seals-exit, double-spike, bounces-onto-spike, touches-enemy.
+
+**Bug fixed in the placer.** `AutoPlacer._isItemLimit` read
+`group.sandboxLimit || 99` and never looked at `group.limit`. Outside sandbox
+that made the cap 99 for everything without a `sandboxLimit` — spikes (real
+limit 15), traps (6), turrets (2), mines (1) — and 299 for the three that have
+one. The limit gate effectively never fired, so the placer kept spending
+placement ticks on items it could not place.
+
+This came straight from Luna, which has the same expression. The rest of the
+client already gets it right: `ClientPlayer.getItemCount` picks `sandboxLimit`
+only when actually in sandbox and falls back to `group.limit` otherwise, and
+`AutoRetrap._isItemLimit` is written against that. `AutoPlacer` now makes the
+same call, so all three agree.
 
 ### Driver correction
 
