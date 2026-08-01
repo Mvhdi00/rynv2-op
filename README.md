@@ -134,6 +134,7 @@ tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/lemon-bridge.js     old-protocol <-> current-protocol bridge, injected by
+tools/lemon-visuals.js    the Visuals script's three features, ported, likewise
 tools/build-lemon.js      src/LemonMod_v3.0.js -> LemonMod_Fixed.user.js
 tools/verify-lemon.js     LemonMod_Fixed.user.js vs. the bundle's own crypto
 ```
@@ -310,14 +311,53 @@ wire through `addEventListener("message")`.
   and sign on with a reCAPTCHA token. The game moved to Cloudflare Turnstile, so
   the token those sockets present is not one the server will take. Getting that
   working is a rewrite of the bot connect path, not a fix.
-- **`LemonMod - Visuals`.** That script is a fork of the whole old webpack
-  `bundle.js`, the same kind of thing as Luna 1.1 — it replaces the client
-  rather than hooking it, and it predates this transport entirely. It cannot be
-  patched forward; it is checked in as `src/LemonMod_Visuals_v3.0.js` for
-  reference only. (It also opens with a `fetch` to a base64'd glitch.me URL, on
-  every load.)
+- **The `LemonMod - Visuals` script itself.** It is a fork of the whole old
+  webpack `bundle.js`, the same kind of thing as Luna 1.1 — it replaces the
+  client rather than hooking it, and it predates this transport entirely. It
+  cannot be patched forward; it is checked in as `src/LemonMod_Visuals_v3.0.js`
+  for reference only. (It also opens with a `fetch` to a base64'd glitch.me URL,
+  on every load.) What it *added* was ported instead — see below.
 - **`!crash`** sends a deliberately malformed buffer. The bridge passes it
   through untouched rather than trying to make it work.
+
+## The visuals, ported
+
+The Visuals script cannot run, but the three things it drew are self-contained,
+and `tools/lemon-visuals.js` rebuilds them on the current game. It ships inside
+`LemonMod_Fixed.user.js` with toggles — **Reload Bars**, **Shame Counter**,
+**Insta Marker** — added into LemonMod's own settings menu next to Radar, and
+remembered in `localStorage`.
+
+| | |
+|---|---|
+| **Reload bars** | Primary and secondary weapon reload above each player's health bar, in the fork's colours (`#fff200` ready, `#ffa600` past half, `#FF0000` below). |
+| **Shame counter** | `<n/7>` after every other player's name, counting the times they healed straight out of damage — up on a heal within two ticks of taking damage, down two otherwise, pinned at 7 for anyone already wearing Shame!. |
+| **Insta marker** | A red crosshair over whoever LemonMod is tracking, while its insta display reads ON. The fork drew a 27 KB PNG; this is the same mark in strokes. |
+
+**How it draws without a camera.** Neither the camera nor the interpolation is
+reachable from outside the bundle, so the overlay does not try to reproduce
+them. The bundle strokes and then fills every nametag at
+`(x - xOffset, y - yOffset - scale - nameY)`, and nothing else on that canvas is
+both stroked and filled at the same spot — so hooking `fillText` hands over the
+exact screen position of every visible player, in the frame it is drawn, with
+the game's own interpolation already applied. The health bar sits
+`2 * (playerScale + nameY)` below that, which is what the bars measure from, and
+the shame counter is just the string being rewritten on its way through.
+
+State comes off the wire through the bridge's observer hook under the old opcode
+names, and the reload model is the fork's own: accumulate `111 / weapon.speed`
+per tick while the weapon is held and not building, empty it on the swing the
+player is seen making, and let projectile frames account for the ranged
+secondaries. One deliberate difference: the fork emptied the *primary* bar on
+any attack that was not a great hammer or mc grabby, which included bow and
+musket shots; those are left alone here, since the projectile frame is what
+empties the secondary.
+
+`verify-lemon.js` drives all of this end to end in a sandbox — frames in through
+the bridge on a real socket, then a strokeText/fillText pair the way the bundle
+issues one — and checks the recharge step, that building does not recharge, that
+the right bar empties for each weapon, both directions of the shame counter, the
+bar geometry, and that chat bubbles and other canvases are left alone.
 
 ---
 

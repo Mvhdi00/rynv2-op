@@ -605,6 +605,19 @@
    * Incoming
    * ------------------------------------------------------------------ */
 
+  /* The opcode this frame carries, under the name LemonMod knows it by, or
+   * undefined if there is no name for it. */
+  function oldName(socket, type) {
+    if (typeof type === "number") {
+      var st = stateOf(socket);
+      if (!st || !st.tables) return undefined;
+      type = st.tables.s2c.dec[type];
+      if (type === undefined) return undefined;
+    }
+    if (type === "io-init") return "io-init";
+    return S2C[type];
+  }
+
   function toOldStyleMessage(socket, raw) {
     var bytes = toBytes(raw);
     if (!bytes) return null;
@@ -616,21 +629,29 @@
     }
     if (!Array.isArray(decoded)) return null;
 
-    var type = decoded[0];
-    var args = decoded[1] === undefined ? [] : decoded[1];
-
-    if (typeof type === "number") {
-      var st = stateOf(socket);
-      if (!st || !st.tables) return null;
-      type = st.tables.s2c.dec[type];
-      if (type === undefined) return null;
-    }
-    if (type === "io-init") return raw;
-
-    var old = S2C[type];
+    var old = oldName(socket, decoded[0]);
     if (old === undefined) return null;
-    var out = encode([old, args]);
+    if (old === "io-init") return raw;
+
+    var out = encode([old, decoded[1] === undefined ? [] : decoded[1]]);
     return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+  }
+
+  /* Anything that wants to read the wire without hooking it itself - the
+   * visuals overlay does - registers here and is handed every incoming frame
+   * under its old name, once, whichever socket it arrived on. */
+  var observers = [];
+
+  function notify(socket, decoded) {
+    if (!observers.length) return;
+    var old = oldName(socket, decoded[0]);
+    if (old === undefined) return;
+    var args = decoded[1] === undefined ? [] : decoded[1];
+    for (var i = 0; i < observers.length; i++) {
+      try {
+        observers[i](socket, old, args);
+      } catch (e) {}
+    }
   }
 
   /* ------------------------------------------------------------------ *
@@ -739,7 +760,9 @@
       if (!bytes) return;
       try {
         var decoded = decode(bytes);
-        if (Array.isArray(decoded) && decoded[0] === "io-init") onIoInit(socket, decoded[1]);
+        if (!Array.isArray(decoded)) return;
+        if (decoded[0] === "io-init") onIoInit(socket, decoded[1]);
+        notify(socket, decoded);
       } catch (e) {}
     });
     return socket;
@@ -773,7 +796,10 @@
             if (bytes) {
               try {
                 var decoded = decode(bytes);
-                if (Array.isArray(decoded) && decoded[0] === "io-init") onIoInit(socket, decoded[1]);
+                if (Array.isArray(decoded)) {
+                  if (decoded[0] === "io-init") onIoInit(socket, decoded[1]);
+                  notify(socket, decoded);
+                }
               } catch (err) {}
             }
             if (socket.__lemonOnMessage) socket.__lemonOnMessage.call(socket, event);
@@ -820,6 +846,9 @@
     s2c: S2C,
     msgpack: { encode: encode, decode: decode },
     stateOf: stateOf,
+    observe: function (fn) {
+      if (typeof fn === "function") observers.push(fn);
+    },
     protocol: {
       signatureBytes: SIG_BYTES,
       encryptedMode: ENCRYPTED_MODE,

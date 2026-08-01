@@ -6,7 +6,7 @@
  *
  *   node tools/verify-lemon.js [LemonMod_Fixed.user.js]
  *
- * Five passes:
+ * Six passes:
  *
  *   1. the userscript header and the shape of the build;
  *   2. the bridge's opcode tables against drivers/game-drivers.json - every
@@ -19,7 +19,9 @@
  *      reaching the mod's message listener under the name it switches on;
  *   4. what a real hook does - sending from inside the hook, swallowing a
  *      frame, reading through onmessage on a bot socket, a second connection;
- *   5. the hats, accessories and upgrade slots the mod names by id.
+ *   5. the hats, accessories and upgrade slots the mod names by id;
+ *   6. the visuals overlay - the reload model off real frames, both directions
+ *      of the shame counter, and the nametag drawing it hangs off.
  *
  * Passes 3 and 4 build and check their frames with the bundle's *own* crypto,
  * lifted out of src/game_index.js rather than reimplemented here, so the test
@@ -83,6 +85,33 @@ const BROWSER_SHIM = `
   var document = window.document;
 `;
 
+/* Enough canvas for the overlay: it hooks the prototype's text methods and
+ * draws paths, so calls are recorded rather than rasterised. */
+const CANVAS_SHIM = `
+  var CanvasRenderingContext2DShim = class {
+    constructor(canvasId) { this.canvas = { id: canvasId }; this.calls = []; }
+    record(op, args) { this.calls.push({ op: op, args: args }); }
+    fillText() { this.record("fillText", Array.prototype.slice.call(arguments)); }
+    strokeText() { this.record("strokeText", Array.prototype.slice.call(arguments)); }
+    save() { this.record("save", []); }
+    restore() { this.record("restore", []); }
+    beginPath() { this.record("beginPath", []); }
+    closePath() { this.record("closePath", []); }
+    moveTo() { this.record("moveTo", Array.prototype.slice.call(arguments)); }
+    lineTo() { this.record("lineTo", Array.prototype.slice.call(arguments)); }
+    arcTo() { this.record("arcTo", Array.prototype.slice.call(arguments)); }
+    arc() { this.record("arc", Array.prototype.slice.call(arguments)); }
+    fill() { this.record("fill", []); }
+    stroke() { this.record("stroke", []); }
+  };
+  var CanvasRenderingContext2D = CanvasRenderingContext2DShim;
+  window.CanvasRenderingContext2D = CanvasRenderingContext2DShim;
+  window.setInterval = function () { return 0; };
+  window.clearInterval = function () {};
+  window.document.getElementById = function () { return null; };
+  window.document.cookie = "";
+`;
+
 function makeBrowser(wire) {
   const context = {
     console, Math, Date, JSON, Array, Object, Number, String, Error, TypeError, RangeError,
@@ -96,15 +125,22 @@ function makeBrowser(wire) {
   return context;
 }
 
-/* The bridge as it actually sits in the built userscript, so what gets checked
- * is the shipped copy and not tools/lemon-bridge.js beside it. */
-function extractBridge(script) {
+/* The bridge and the visuals overlay as they actually sit in the built
+ * userscript, so what gets checked is the shipped copy and not the files in
+ * tools/ beside it. */
+function extractModules(script) {
   const start = script.indexOf("(function () {\n  \"use strict\";");
+  const visualsAt = script.indexOf("* lemon-visuals.js");
   const end = script.indexOf("/* --- LemonMod body:");
   if (start === -1 || end === -1 || end < start) {
     throw new Error("could not find the bridge in the build output");
   }
-  return script.slice(start, end);
+  if (visualsAt === -1 || visualsAt > end) throw new Error("could not find the visuals overlay in the build output");
+  const visualsStart = script.lastIndexOf("/*", visualsAt);
+  return {
+    bridge: script.slice(start, visualsStart),
+    visuals: script.slice(visualsStart, end)
+  };
 }
 
 function extractFunction(src, name) {
@@ -172,7 +208,9 @@ check(script.includes("window.__lemonBridge"), "build: the protocol bridge is no
 check(script.includes("__lemonBoot"), "build: the mod body is not gated on the DOM");
 check(!script.includes("'\\x74']('\\x26')[0x16b1"), "build: the bot socket URL still splits on '&'");
 
-const bridgeSource = extractBridge(script);
+const modules = extractModules(script);
+const bridgeSource = modules.bridge;
+const visualsSource = modules.visuals;
 
 /* ------------------------------------------------------------------ *
  * 2. Opcode tables
@@ -531,6 +569,129 @@ check(game.To.join() === DRIVERS.protocol.s2cAlphabet.join(),
       `data: LemonMod buys upgrade ${index}, past the end of the bundle's ${upgradeSlots} upgrade slots`);
   }
   notes.push(`data: ${hats.length} hats, ${accessories.length} accessories and ${upgrades.length} upgrade slots still exist`);
+}
+
+/* ------------------------------------------------------------------ *
+ * 6. The visuals overlay
+ *
+ * Driven end to end: frames go in through the bridge on a real (sandbox)
+ * socket, and the overlay is then asked to draw the way the bundle asks it to
+ * - a strokeText immediately followed by an identical fillText, which is how a
+ * nametag is distinguished from a chat bubble.
+ * ------------------------------------------------------------------ */
+
+{
+  const seed = 0x2468ace0;
+  const keyHex = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
+  const tables = game.Po(seed >>> 0);
+
+  const env = makeBrowser([]);
+  vm.runInContext(CANVAS_SHIM, env, { filename: "canvas-shim.js" });
+  vm.runInContext(bridgeSource, env, { filename: "lemon-bridge.js", timeout: 20000 });
+  vm.runInContext(visualsSource, env, { filename: "lemon-visuals.js", timeout: 20000 });
+
+  const visuals = env.window.__lemonVisuals;
+  if (!visuals) {
+    problems.push("visuals: the overlay did not install itself in the sandbox");
+    report();
+  }
+
+  const mp = env.window.__lemonBridge.msgpack;
+  const socket = vm.runInContext(`new WebSocket("wss://test.moomoo.io/")`, env);
+  const deliver = (value) => {
+    const bytes = mp.encode(value);
+    socket.dispatchEvent({
+      type: "message",
+      data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+    });
+  };
+  const send = (op, args) => deliver([tables.s2c.enc[op], args]);
+
+  deliver(["io-init", [1, seed, keyHex, DRIVERS.protocol.encryptedMode]]);
+  send("C", [1]);                                   // our own sid
+  send("D", [[9, 2, "victim", 0, 0, 0, 100, 100, 35, 0], false]);
+
+  /* Holding a hand axe (400ms) - one tick recharges 111/400 of the bar. */
+  const tickWith = (weapon, buildIndex) =>
+    send("a", [[2, 100, 200, 0, buildIndex === undefined ? -1 : buildIndex, weapon, 0, null, 0, 0, 0, 0, 0]]);
+
+  tickWith(1);                                      // first sight: learns the weapon
+  const victim = visuals.players.get(2);
+  check(!!victim, "visuals: the player from the add-player frame was not tracked");
+  if (victim) {
+    victim.primaryReload = 0;
+    tickWith(1);
+    const step = 111 / 400;
+    check(Math.abs(victim.primaryReload - step) < 1e-9,
+      `visuals: a tick recharged the bar by ${victim.primaryReload}, expected ${step}`);
+
+    /* Building does not recharge anything. */
+    const held = victim.primaryReload;
+    tickWith(1, 3);
+    check(victim.primaryReload === held, "visuals: the bar recharged while the player was building");
+
+    /* The swing empties it; a musket shot leaves it alone. */
+    victim.primaryReload = 1;
+    send("K", [2, 1, 1]);
+    check(victim.primaryReload === 0, "visuals: the attack did not empty the primary bar");
+    victim.primaryReload = 1;
+    send("K", [2, 1, 15]);
+    check(victim.primaryReload === 1, "visuals: a musket shot emptied the primary bar");
+
+    /* Great hammer and mc grabby are the two secondaries that swing. */
+    victim.secondaryReload = 1;
+    send("K", [2, 1, 10]);
+    check(victim.secondaryReload === 0, "visuals: the great hammer swing did not empty the secondary bar");
+
+    /* Shame: damage, then healing back inside two ticks. */
+    victim.clown = 0;
+    send("O", [2, 90]);
+    send("a", [[2, 100, 200, 0, -1, 1, 0, null, 0, 0, 0, 0, 0]]);
+    send("O", [2, 100]);
+    check(victim.clown === 1, `visuals: the shame counter is ${victim.clown} after a heal out of damage, expected 1`);
+
+    /* Healing long after the damage walks it back down instead. */
+    victim.clown = 5;
+    send("O", [2, 90]);
+    for (let i = 0; i < 4; i++) send("a", [[2, 100, 200, 0, -1, 1, 0, null, 0, 0, 0, 0, 0]]);
+    send("O", [2, 100]);
+    check(victim.clown === 3, `visuals: the shame counter is ${victim.clown} after a late heal, expected 3`);
+  }
+
+  /* Now the drawing: the bundle strokes a nametag and then fills the same
+   * string at the same spot, and nothing else on that canvas does. */
+  const ctx = vm.runInContext(`new CanvasRenderingContext2D("gameCanvas")`, env);
+  ctx.calls.length = 0;
+  ctx.strokeText("victim", 400, 300);
+  ctx.fillText("victim", 400, 300);
+
+  const texts = ctx.calls.filter((c) => c.op === "fillText");
+  check(texts.length === 1 && /^victim <\d+\/7>$/.test(texts[0].args[0]),
+    `visuals: the nametag was drawn as ${JSON.stringify(texts[0] && texts[0].args[0])}, expected a shame counter after it`);
+  check(ctx.calls.some((c) => c.op === "fill"), "visuals: no reload bars were drawn under the nametag");
+
+  /* The bars belong 13px above the health bar, which sits 2 * (scale + nameY)
+   * below the nametag. */
+  const firstBar = ctx.calls.find((c) => c.op === "moveTo");
+  check(!!firstBar && Math.abs(firstBar.args[1] - (300 + 2 * (35 + 34) - 13)) < 0.001,
+    `visuals: the bars were drawn at y ${firstBar && firstBar.args[1]}, expected ${300 + 2 * (35 + 34) - 13}`);
+
+  /* A chat bubble is filled without being stroked, and must be left alone. */
+  ctx.calls.length = 0;
+  ctx.fillText("victim", 400, 300);
+  const chat = ctx.calls.filter((c) => c.op === "fillText");
+  check(chat.length === 1 && chat[0].args[0] === "victim",
+    "visuals: a chat bubble was decorated as though it were a nametag");
+  check(!ctx.calls.some((c) => c.op === "fill"), "visuals: bars were drawn under a chat bubble");
+
+  /* Text on any other canvas is not ours either. */
+  const other = vm.runInContext(`new CanvasRenderingContext2D("mapDisplay")`, env);
+  other.strokeText("victim", 10, 10);
+  other.fillText("victim", 10, 10);
+  check(other.calls.filter((c) => c.op === "fillText")[0].args[0] === "victim",
+    "visuals: text on another canvas was decorated");
+
+  notes.push("visuals: reload model, shame counter and nametag drawing behave");
 }
 
 report();

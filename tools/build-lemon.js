@@ -34,10 +34,12 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const BASE = path.join(ROOT, "src/LemonMod_v3.0.js");
 const BRIDGE = path.join(ROOT, "tools/lemon-bridge.js");
+const VISUALS = path.join(ROOT, "tools/lemon-visuals.js");
 const OUT = path.join(ROOT, "LemonMod_Fixed.user.js");
 
 let code = fs.readFileSync(BASE, "utf8");
 const bridge = fs.readFileSync(BRIDGE, "utf8");
+const visuals = fs.readFileSync(VISUALS, "utf8");
 const applied = [];
 
 /* Every edit goes through here so a stale anchor fails the build loudly
@@ -168,6 +170,11 @@ const banner = `
  * the protocol bridge below and the document-start / DOM-ready split: the
  * bridge translates between LemonMod's old-protocol frames and the opcode
  * permutation plus truncated-HMAC transport the game uses now.
+ *
+ * After the bridge comes the visuals overlay, which rebuilds the three things
+ * the separate "LemonMod - Visuals" script added - reload bars, the shame
+ * counter, the insta marker. That script is a fork of the whole old bundle and
+ * cannot be patched forward; these are ported onto the current game instead.
  * ------------------------------------------------------------------------- */
 `;
 
@@ -187,8 +194,9 @@ const postlude = `
 })();
 `;
 
-code = header + "\n" + banner + "\n" + bridge + "\n" + prelude + body + postlude;
+code = header + "\n" + banner + "\n" + bridge + "\n" + visuals + "\n" + prelude + body + postlude;
 applied.push("bridge: injected tools/lemon-bridge.js ahead of the mod");
+applied.push("visuals: injected tools/lemon-visuals.js (reload bars, shame counter, insta marker)");
 applied.push("boot: mod body deferred to DOMContentLoaded");
 
 fs.writeFileSync(OUT, code);
