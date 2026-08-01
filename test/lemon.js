@@ -31,19 +31,41 @@ for (const f of ['LemonModVisuals.user.js', 'LemonMod.user.js']) {
 }
 
 // --------------------------------------------------------------------------
-console.log('\n2. the vocabularies genuinely do not line up');
+console.log('\n2. the derived legacy packet mapping');
 
-const oldOut = ['10', '11', '12', '13c', '14', '2', '33', '5', '6', '7', '8', '9', 'c', 'ch', 'pp', 'rmd', 'sp'];
-const newOut = game.bo;
-const missing = oldOut.filter(n => !newOut.includes(n));
-check(missing.length === 14, missing.length + ' of ' + oldOut.length + ' outgoing names have no opcode today');
+const lemonSrc = fs.readFileSync(path.join(ROOT, 'LemonMod.user.js'), 'utf8');
+const visSrc = fs.readFileSync(path.join(ROOT, 'LemonModVisuals.user.js'), 'utf8');
+check(lemonSrc.includes('const LEGACY = (function () {'), 'main script carries the legacy map');
+check(visSrc.includes('const LEGACY = (function () {'), 'Visuals carries the legacy map');
 
-const oldIn = ['id', 'd', '1', '2', '4', '33', '5', '6', 'a', 'aa', '7', '8', 'sp', '9', 'h',
-               '11', '12', '13', '14', '15', '16', '17', '18', '19', '20',
-               'ac', 'ad', 'an', 'st', 'sa', 'us', 'ch', 'mm'];
-const collide = oldIn.filter(n => game.To.includes(n));
-check(collide.length === 9,
-      collide.length + ' incoming names collide across generations: ' + collide.join(' '));
+// pull the maps out of the shipped file and check them against the game bundle
+const c2sBlock = lemonSrc.slice(lemonSrc.indexOf('const C2S = {'), lemonSrc.indexOf('// current name -> old name'));
+const s2cBlock = lemonSrc.slice(lemonSrc.indexOf('const S2C = {'), lemonSrc.indexOf('// Repoint the shim'));
+const C2S = {}, S2C = {};
+for (const m of c2sBlock.matchAll(/"([^"]+)":\s*"([^"]+)"/g)) C2S[m[1]] = m[2];
+for (const m of s2cBlock.matchAll(/"([^"]+)":\s*"([^"]+)"/g)) S2C[m[1]] = m[2];
+
+check(Object.keys(C2S).length === 17, 'outgoing map has all 17 entries');
+check(Object.keys(S2C).length === 36, 'incoming map has all 36 entries');
+
+const c2sTargets = Object.values(C2S);
+check(c2sTargets.every(n => game.bo.includes(n)),
+      'every outgoing target is a real opcode on the current server');
+check(new Set(c2sTargets).size === 17 && game.bo.length === 17,
+      'outgoing map is a bijection onto the current outgoing set');
+
+const s2cSources = Object.keys(S2C);
+check(s2cSources.every(n => game.To.includes(n)),
+      'every incoming source is a real server packet');
+check(new Set(Object.values(S2C)).size === 36,
+      'incoming map is a bijection onto the old handler table');
+
+// the three names that exist in both generations must resolve as OLD
+check(C2S['6'] === 'H' && C2S['9'] === 'N' && C2S['c'] === 'F',
+      'the colliding names 6/9/c resolve as old (upgrade, leave alliance, attack)');
+
+// the spawn packet -- the thing that was being dropped
+check(C2S['sp'] === 'M', 'spawn "sp" now maps to "M" (this is what blocked entry)');
 
 // --------------------------------------------------------------------------
 console.log('\n3. main script: the oldSend trampoline');
@@ -113,8 +135,8 @@ gameFrame.set(gamePayload, 6);
 sock.sentRaw.length = 0;
 shimSend.call(sock, gameFrame);                // the reference the game captured
 check(seenByModHook.length === 1, 'the game\'s packet reached the mod hook');
-check(Array.isArray(seenByModHook[0]) && seenByModHook[0][0] === 'D',
-      'the mod hook saw plain msgpack with the string name, not a numeric opcode');
+check(Array.isArray(seenByModHook[0]) && seenByModHook[0][0] === '2',
+      'the mod hook saw plain msgpack under the OLD name "2" (current "D", set aim)');
 check(sock.sentRaw.length === 1, 'exactly one frame went out');
 const out = Buffer.from(sock.sentRaw[0]);
 check(Buffer.from(game.Eo(key, out.subarray(6))).equals(out.subarray(0, 6)),
@@ -132,11 +154,27 @@ check(Buffer.from(game.Eo(key, out2.subarray(6))).equals(out2.subarray(0, 6)),
 check(tables.c2s.dec[dec.decode(new Uint8Array(out2.subarray(6)))[0]] === 'M',
       'with the right opcode');
 
-// An old-generation name has no opcode, so it is dropped rather than sent raw.
+// The spawn packet the mod actually sends: old name in, current opcode out.
 sock.sentRaw.length = 0;
-WS.prototype.oldSend.call(sock, EXP.encode(['sp', [{ name: 'lemon' }]]));
-check(sock.sentRaw.length === 0,
-      'the old name "sp" is dropped, not sent as garbage (this is why it still will not play)');
+WS.prototype.oldSend.call(sock, EXP.encode(['sp', [{ name: 'lemon', moofoll: 1, skin: 0 }]]));
+check(sock.sentRaw.length === 1, 'the old spawn name "sp" is now transmitted');
+const spFrame = Buffer.from(sock.sentRaw[0]);
+check(Buffer.from(game.Eo(key, spFrame.subarray(6))).equals(spFrame.subarray(0, 6)),
+      'and verifies against the server key');
+check(tables.c2s.dec[dec.decode(new Uint8Array(spFrame.subarray(6)))[0]] === 'M',
+      'and arrives as the current spawn opcode "M"');
+
+// Every old outgoing name this client uses must now resolve.
+let allOld = true, badName = null;
+for (const oldName of Object.keys(C2S)) {
+  sock.sentRaw.length = 0;
+  WS.prototype.oldSend.call(sock, EXP.encode([oldName, [1]]));
+  if (sock.sentRaw.length !== 1) { allOld = false; badName = oldName; break; }
+  const got = tables.c2s.dec[dec.decode(new Uint8Array(Buffer.from(sock.sentRaw[0]).subarray(6)))[0]];
+  if (got !== C2S[oldName]) { allOld = false; badName = oldName + '->' + got; break; }
+}
+check(allOld, 'all 17 old outgoing names map to the right opcode'
+      + (badName ? ' (failed on ' + badName + ')' : ''));
 
 // Already-framed buffers must not be framed twice.
 sock.sentRaw.length = 0;
@@ -151,12 +189,19 @@ console.log('\n4. main script: opcode-aware msgpack.decode for incoming');
 let decodedByMod = null;
 sock.onmessage = function (ev) { decodedByMod = window.msgpack.decode(new Uint8Array(ev.data)); };
 sock.deliver(enc.encode([tables.s2c.enc['P'], [3]]));
-check(Array.isArray(decodedByMod) && decodedByMod[0] === 'P',
-      'the mod\'s own msgpack.decode sees the name "P", not a numeric opcode');
+check(Array.isArray(decodedByMod) && decodedByMod[0] === '11',
+      'killPlayer arrives as the old name "11" the mod dispatches on');
+
+sock.deliver(enc.encode([tables.s2c.enc['O'], [1, 90]]));
+check(decodedByMod[0] === 'h', 'updateHealth arrives as the old name "h"');
+sock.deliver(enc.encode([tables.s2c.enc['a'], [[]]]));
+check(decodedByMod[0] === '33', 'updatePlayers arrives as the old name "33"');
+sock.deliver(enc.encode([tables.s2c.enc['6'], ['hi']]));
+check(decodedByMod[0] === 'ch', 'chat arrives as the old name "ch"');
 
 sock.deliver(enc.encode(['io-init', [1, SEED, KEY_HEX, game.Ht]]));
 check(decodedByMod[0] === 'io-init', 'the plaintext handshake still decodes normally');
 
-console.log('\n' + (fails === 0 ? '=> ALL LEMONMOD TRANSPORT TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
-console.log('   (transport only -- the packet vocabulary is still a generation behind)');
+console.log('\n' + (fails === 0 ? '=> ALL LEMONMOD TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
+console.log('   (names mapped; payload shapes that changed between generations are untested)');
 process.exit(fails ? 1 : 0);

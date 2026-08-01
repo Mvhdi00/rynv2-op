@@ -533,6 +533,101 @@ const EXP = (function() {
 }
 )();
 
+
+/* ---------------------------------------------------------------------------
+ * Legacy packet vocabulary.
+ *
+ * This client speaks the 2019 protocol. The mapping below was derived by
+ * matching behaviour, not by guessing names:
+ *
+ *   outgoing -- each old call site was matched against the current bundle's
+ *   own call site with the same shape. e.g. old `.send("13c", 0, e, t)` and
+ *   `.send("13c", 1, e, t)` against `O.send("c", 0, e, t)` / `O.send("c", 1,
+ *   e, t)`; old `.send("33", e)` guarded by `Math.abs(e - last) > .3` against
+ *   `O.send("9", e)` behind the identical guard; old
+ *   `.send("c", i, buildIndex >= 0 ? dir() : null)` against
+ *   `O.send("F", U, v.buildIndex >= 0 ? Ci() : null)`.
+ *
+ *   incoming -- the old handler table has exactly 36 entries and the current
+ *   one has exactly 36, in the same order, and sampled handler bodies agree:
+ *   old `h` computes `t - e.health` (updateHealth) where current `O` is
+ *   updateHealth; old `sp` applies gatherWiggle along a direction
+ *   (shootTurret) where current `M` is shootTurret; old `mm` stores minimap
+ *   data, old `pp` measures ping, old `t` pushes floating text.
+ *
+ * Three names -- 6, 9 and c -- exist in both vocabularies meaning different
+ * packets. They are resolved as OLD here, which is what this client is.
+ *
+ * Caveat worth knowing: this fixes the packet *names*. Where a payload's shape
+ * changed between generations the arguments may still be wrong, and that would
+ * show up as a specific feature misbehaving rather than a failure to connect.
+ * ------------------------------------------------------------------------ */
+const LEGACY = (function () {
+    "use strict";
+
+    // old name -> current name (client to server)
+    const C2S = {
+        "sp": "M",     // spawn
+        "2": "D",      // set aim direction
+        "33": "9",     // move direction
+        "rmd": "e",    // reset move direction
+        "c": "F",      // attack state
+        "5": "z",      // select item / weapon
+        "6": "H",      // buy upgrade
+        "7": "K",      // auto-attack toggle
+        "8": "L",      // create alliance
+        "9": "N",      // leave alliance
+        "10": "b",     // join alliance
+        "11": "P",     // answer join request
+        "12": "Q",     // kick from alliance
+        "13c": "c",    // store buy / equip
+        "ch": "6",     // chat
+        "14": "S",     // lock rotation
+        "pp": "0"      // ping
+    };
+
+    // current name -> old name (server to client), so the handler tables in
+    // this client -- which are keyed by the old names -- still fire.
+    const S2C = {
+        "A": "id", "B": "d",  "C": "1",  "D": "2",  "E": "4",  "a": "33",
+        "G": "5",  "H": "6",  "I": "a",  "J": "aa", "K": "7",  "L": "8",
+        "M": "sp", "N": "9",  "O": "h",  "P": "11", "Q": "12", "R": "13",
+        "S": "14", "T": "15", "U": "16", "V": "17", "X": "18", "Y": "19",
+        "Z": "20", "g": "ac", "1": "ad", "2": "an", "3": "st", "4": "sa",
+        "5": "us", "6": "ch", "7": "mm", "8": "t",  "9": "p",  "0": "pp"
+    };
+
+    // Repoint the shim's outgoing map at this vocabulary. send() closes over
+    // the same object, so mutating it in place is what takes effect.
+    Object.keys(EXP.PACKET_MAP).forEach(function (k) { delete EXP.PACKET_MAP[k]; });
+    Object.assign(EXP.PACKET_MAP, C2S);
+
+
+    // Inverse of C2S, for the other direction: when we unframe something the
+    // game sent we get a *current* outgoing name and need the old one. Using
+    // the incoming table here would be wrong -- current outgoing "9" is move
+    // (old "33"), while incoming "9" is pingMap (old "p").
+    const C2S_INV = {};
+    Object.keys(C2S).forEach(function (k) { C2S_INV[C2S[k]] = k; });
+
+    function toLegacyOut(name) {
+        return Object.prototype.hasOwnProperty.call(C2S_INV, name) ? C2S_INV[name] : name;
+    }
+    function toLegacy(name) {
+        return Object.prototype.hasOwnProperty.call(S2C, name) ? S2C[name] : name;
+    }
+
+    const rawReceive = EXP.receive;
+    EXP.receive = function (sock, data) {
+        const r = rawReceive(sock, data);
+        if (r) r.type = toLegacy(r.type);
+        return r;
+    };
+
+    return { toLegacy: toLegacy, toLegacyOut: toLegacyOut, c2s: C2S, s2c: S2C };
+}
+)();
+
 /* --- LemonMod transport glue ------------------------------------------- */
 (function () {
     "use strict";
@@ -585,7 +680,7 @@ const EXP = (function() {
             insideModHook = true;
             try {
                 return current.call(this, unframed
-                    ? EXP.encode([unframed.type, unframed.args])
+                    ? EXP.encode([LEGACY.toLegacyOut(unframed.type), unframed.args])
                     : data);
             } finally {
                 insideModHook = false;
@@ -620,7 +715,8 @@ const EXP = (function() {
                 const st = EXP.stateOf(active);
                 if (st && st.mode === 1) {
                     const name = st.tables.s2c.dec[parsed[0]];
-                    if (name !== undefined) return [name, parsed[1]];
+                    // back to the 2019 names this client's dispatch is keyed by
+                    if (name !== undefined) return [LEGACY.toLegacy(name), parsed[1]];
                 }
             }
             return parsed;

@@ -1,8 +1,8 @@
 # moomoo.io userscripts, updated for the current client
 
 Seven scripts. Five were current-generation clients that needed the new
-transport layer and now work. Two are a full protocol generation behind and
-have the transport fixed but are **not** playable — see the note below.
+transport layer. Two (the LemonMod pair) are a full protocol generation behind
+and additionally needed their packet vocabulary mapped forward.
 
 - **`Revelation.user.js`** (file 17, also uploaded as file 11) — a full client
   replacement.
@@ -15,7 +15,7 @@ have the transport fixed but are **not** playable — see the note below.
 - **`Aurora.user.js`** (`Aurora Client v5.5`) — same family again, plus an
   ALTCHA proof-of-work solver and a private-server redirect.
 - **`LemonMod.user.js`** / **`LemonModVisuals.user.js`** (v3.0) — 2019-era
-  protocol. Transport fixed, packet vocabulary still outdated. Not playable.
+  protocol; transport fixed and packet vocabulary mapped forward.
 
 `reference/` holds the two game bundles they were ported against
 (`game-index.js` = file 1, `game-vendor.js` = file 2) for future diffing.
@@ -308,62 +308,78 @@ shim's legacy map turns it into `"F"`. Asserted in the tests.
 
 ---
 
-# LemonMod v3.0 and LemonMod Visuals v3.0 — transport only, NOT playable
+# LemonMod v3.0 and LemonMod Visuals v3.0
 
-These two differ from the other five in kind, not degree. The others were
-current-generation clients missing the new crypto layer. These target the
-**2019 moomoo protocol**, which is a different vocabulary end to end.
+These two target the **2019 moomoo protocol** — a different packet vocabulary
+end to end, not just the missing crypto layer the other five needed. They were
+broken long before the recent server change.
 
-| | LemonMod | Current server |
-| --- | --- | --- |
-| Connect URL | `wss://host:8008/?gameIndex=N&token=` | `wss://<host>/?token=cf:…` |
-| Outgoing | `sp ch 33 pp rmd 13c 2 5 7 8 10 11 12 14 …` | `M D 9 e F z H K L N b P Q c 6 S 0` |
-| Incoming | `sp ch h ac ad an st sa us mm 33 1 2 4 …` | `A B C D E a G H I J K L M N O … 0-9` |
+Reported symptom after the first pass: parts of the mod worked but the game
+could not be entered. That was exactly the predicted failure — the spawn packet
+is `sp`, which has no opcode on the current server, so it was dropped and no
+spawn ever happened.
 
-**14 of the 17 names these scripts send have no opcode on the current server.**
-Port 8008 and `gameIndex` are the old server API. Both scripts have been broken
-far longer than the recent crypto change.
+## The mapping
 
-The trap is the overlap: nine incoming names — `1 2 4 5 6 7 8 9 a` — exist in
-*both* vocabularies meaning **different packets**. Old `5` was a leaderboard
-update; current `5` is a store update. Aliasing them would not fail cleanly, it
-would dispatch the wrong handler with the wrong arguments and corrupt state
-silently. Both facts are asserted in `test/lemon.js` so they stay visible.
+Rather than guess names — nine of them collide across generations — the map was
+derived from **behaviour**.
 
-## What was done anyway
+**Outgoing:** each old call site was matched against the current bundle's call
+site with the same shape.
 
-At the user's request, the transport layer was fixed so the crypto is correct:
-the `io-init` handshake, shuffled opcode tables, and HMAC framing. Unknown
-names are dropped rather than sent as garbage, so the failure stays quiet
-instead of corrupting state.
+| Evidence | Conclusion |
+| --- | --- |
+| old `.send("13c", 0, e, t)` / `("13c", 1, e, t)` vs `O.send("c", 0, e, t)` / `("c", 1, e, t)` | `13c` → `c` (store buy/equip) |
+| old `.send("33", e)` behind `Math.abs(e - last) > .3` vs `O.send("9", e)` behind the identical guard | `33` → `9` (move) |
+| old `.send("c", i, buildIndex >= 0 ? dir() : null)` vs `O.send("F", U, v.buildIndex >= 0 ? Ci() : null)` | `c` → `F` (attack state) |
+| old `.send("sp", {name, moofoll, skin})` vs `O.send("M", {…})` | `sp` → `M` (spawn) |
 
-For the **Visuals** script (readable) the `io` client was patched directly, the
-same way as the Laffer remake.
+All 17 old outgoing names map onto the 17 current ones — a clean bijection.
 
-For the **main** script — 3.1 MB, obfuscated, ~108 send sites — the transport
-was attached *without editing the obfuscated body at all*:
+**Incoming:** the old handler table has exactly 36 entries, the current one has
+exactly 36, in the same order, and sampled handler bodies agree:
 
-- The shim owns `WebSocket.prototype.send` at `document-start`. The mod later
-  does `oldSend = WebSocket.prototype.send` and installs its own hook, so every
-  `oldSend()` call site is reachable from one place.
-- `oldSend` is pinned to the framing path via an accessor whose setter ignores
-  the mod's assignment. Without this, `oldSend` would route back into the mod's
-  own hook — the mod calls it expecting to *bypass* that hook. (Caught by the
-  tests.)
-- It tells the two kinds of buffer apart by **verifying the HMAC**, not by
-  guessing: already-framed traffic passes through byte-for-byte, plain
-  `msgpack([name, args])` from the mod gets framed.
-- The trampoline hands the mod's hook an *unframed* buffer, because the hook
-  msgpack-decodes whatever it is given.
-- `window.msgpack.decode` is made socket-aware so numeric opcodes turn back
-  into names before the mod's dispatch switch sees them.
+- old `h` computes `t - e.health` → current `O` is `updateHealth`
+- old `sp` applies `gatherWiggle` along a direction → current `M` is `shootTurret`
+- old `mm` stores minimap data → current `7` is `updateMinimap`
+- old `pp` measures ping → current `0` is `pingSocketResponse`
+- old `t` pushes floating damage text → current `8` is `showText`
 
-## What would actually make them work
+The three colliding names — `6`, `9`, `c` — resolve as **old** (upgrade, leave
+alliance, attack state), which is what these clients are.
 
-Rebuilding the packet vocabulary by matching each old handler's *behaviour*
-against the current game's handlers, in both directions, plus argument-shape
-checks and a new connection/server-discovery layer. That is a port, not a
-patch, and the overlapping names mean it cannot be guessed.
+## How it attaches
+
+Both files carry the shared `EXP` shim plus a `LEGACY` block that repoints the
+shim's outgoing map at the old vocabulary and wraps `receive()` so the client's
+own handler tables — keyed by old names — still fire.
+
+The main script is 3.1 MB and obfuscated, so **its body was never edited**:
+
+- The shim owns `WebSocket.prototype.send` at `document-start`, so the mod's
+  `oldSend = WebSocket.prototype.send` captures it and all ~108 send sites
+  become reachable from one place.
+- `oldSend` is pinned to the framing path through an accessor whose setter
+  ignores the mod's assignment. Without this it would route back into the mod's
+  own hook, which it is called specifically to bypass. (Caught by the tests.)
+- Frames are told apart by **verifying the HMAC**, not guessing: already-framed
+  traffic passes through byte-for-byte, plain msgpack gets framed.
+- Outgoing uses the inverse of the c2s map, not the incoming one — current
+  outgoing `9` is move (old `33`) while incoming `9` is pingMap (old `p`).
+  Getting that backwards was a real bug during this work.
+
+The Visuals script also had its connect URL modernised: `host:8008/?gameIndex=N`
+is the old endpoint; current servers use the default port and take the token as
+the only query parameter.
+
+## Remaining risk
+
+This fixes packet **names**. Where a payload's *shape* changed between
+generations the arguments may still be wrong — that would show up as a specific
+feature misbehaving, not as a failure to connect. Nothing here has been run
+against the live server.
+
+---
 
 ---
 
@@ -393,7 +409,7 @@ packet names resolve to real opcodes.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 173 checks.
+them with `npm test` — 187 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
