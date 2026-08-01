@@ -9,6 +9,7 @@ const SCRIPT = path.join(ROOT, 'Revelation.user.js');
 const EXTERNAL = path.join(ROOT, 'ExternalClient.user.js');
 const LAFFER = path.join(ROOT, 'LafferRemake.user.js');
 const AE86 = path.join(ROOT, 'AE86.user.js');
+const AURORA = path.join(ROOT, 'Aurora.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -132,7 +133,14 @@ module.exports = {
     return require(write('exp_ae86.js', expModule(AE86)));
   },
 
-  /** Assert the AE86 script carries the same shim as the External Client. */
+  loadAurora() {
+    return require(write('exp_aurora.js', expModule(AURORA)));
+  },
+
+  /**
+   * The External Client, AE86 and Aurora all carry the same EXP shim. Assert
+   * the copies have not drifted apart.
+   */
   shimsMatch() {
     const strip = f => {
       const l = lines(f);
@@ -140,7 +148,8 @@ module.exports = {
       const b = findLine(l, ')();', a);
       return l.slice(a, b + 1).join('\n');
     };
-    return strip(EXTERNAL) === strip(AE86);
+    const ref = strip(EXTERNAL);
+    return strip(AE86) === ref && strip(AURORA) === ref;
   },
 
   /** The Laffer remake's LAF shim, as a loadable CommonJS module. */

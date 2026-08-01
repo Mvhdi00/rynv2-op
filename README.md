@@ -1,6 +1,6 @@
 # moomoo.io userscripts, updated for the current client
 
-Four scripts, all broken by the same server-side changes, each fixed to suit
+Five scripts, all broken by the same server-side changes, each fixed to suit
 how it attaches to the game:
 
 - **`Revelation.user.js`** (file 17, also uploaded as file 11) — a full client
@@ -11,6 +11,8 @@ how it attaches to the game:
   `window.WebSocket` to steal the game's server address.
 - **`AE86.user.js`** (`ae86 real` V0.1) — same family as the External Client,
   with several bugs of its own on top.
+- **`Aurora.user.js`** (`Aurora Client v5.5`) — same family again, plus an
+  ALTCHA proof-of-work solver and a private-server redirect.
 
 `reference/` holds the two game bundles they were ported against
 (`game-index.js` = file 1, `game-vendor.js` = file 2) for future diffing.
@@ -256,6 +258,53 @@ reaches the socket.
 
 ---
 
+# Aurora.user.js (`Aurora Client v5.5`)
+
+Third script in the External Client family — it hooks the socket the game
+creates — so it gets the same `EXP` shim, byte for byte. The tests assert all
+three copies are identical.
+
+## What was specific to this one
+
+**No `@run-at`.** Same fatal ordering problem as the others: the hook was
+installed after the game bundle had already captured
+`WebSocket.prototype.send`. Now `document-start`, with the body deferred.
+
+**An ALTCHA solver running for nothing.** A `static {}` block eagerly allocated
+one Web Worker per CPU core (`navigator.hardwareConcurrency`, so typically
+8–16), each pulling `js-sha256` from a CDN, to brute-force a proof-of-work
+challenge that no longer exists. The pool is now created lazily, so the workers
+are only spawned if a widget actually appears — which it will not.
+
+**`window.WebSocket` reassigned twice, unguarded.** Once for the private-server
+redirect proxy, once for `WebsocketBot`. The game bundle freezes that property,
+so both assignments fail; they are wrapped in `try/catch` now with a warning,
+rather than depending on non-strict silent failure. Note the consequence: with
+the property frozen, the private-server redirect does not take effect.
+
+**A private-server auto-login that sniffed raw bytes.** It wrapped `nsend` and
+msgpack-decoded the outgoing buffer looking for the spawn packet. Outgoing
+frames are not plain msgpack any more, so the trigger moved into
+`applyOutgoing()`, which already has the decoded packet name.
+
+**Bot tokens.** `AltSolver` mints `alt:<payload>` ALTCHA tokens, which the
+server rejects. Switched to the Turnstile token. Note that `botConnect()` starts
+with a bare `return;` in this source — the bot feature is disabled by its
+author, so this path does not currently run either way.
+
+## What else changed
+
+The shared set: framed sends, opcode mapping in both directions,
+`applyOutgoing()` extracted so injected packets follow the same rules, and the
+bundled msgpack replacing the `@require` (this one used cdnjs, which is alive,
+but the bundled codec is byte-identical to the game's and removes the external
+dependency).
+
+Aurora sends `"d"`, an old name with no opcode on the current server; the
+shim's legacy map turns it into `"F"`. Asserted in the tests.
+
+---
+
 ## Verification
 
 The protocol port was checked against the code lifted straight out of the game
@@ -282,7 +331,7 @@ packet names resolve to real opcodes.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 132 checks.
+them with `npm test` — 150 checks.
 
-None of the four has been verified against the live server; that needs a
+None of the five has been verified against the live server; that needs a
 browser and a real Turnstile token.
