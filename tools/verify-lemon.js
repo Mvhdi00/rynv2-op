@@ -207,6 +207,8 @@ check(/@match\s+\*:\/\/\*\.moomoo\.io\/\*/.test(header), "header: the moomoo.io 
 check(script.includes("window.__lemonBridge"), "build: the protocol bridge is not in the output");
 check(script.includes("__lemonBoot"), "build: the mod body is not gated on the DOM");
 check(!script.includes("'\\x74']('\\x26')[0x16b1"), "build: the bot socket URL still splits on '&'");
+check(script.includes(`|| document.activeElement.id.toLowerCase() === "nameinput") {`),
+  "build: the mod's send gate can still swallow the spawn while the name field has focus");
 
 const modules = extractModules(script);
 const bridgeSource = modules.bridge;

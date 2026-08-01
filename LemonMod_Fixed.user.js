@@ -12364,7 +12364,7 @@ setTimeout(() => {
                     _0x83059 || (document['\x77\x73'] = this, _0x83059 = this, _0x51247d(this), this['\x61\x64' + '\x64\x45' + '\x76\x65' + '\x6e\x74' + '\x4c\x69' + '\x73\x74' + '\x65\x6e' + '\x65\x72']('\x63\x6c' + '\x6f\x73' + '\x65', function () {
                         LEMONMOD_0x32b091 = !(0x27 * -0xb3 + 0x2bf + 0x49 * 0x56);
                     }));
-                    if (!LEMONMOD_0x35bf68['\x69\x6e' + '\x63\x6c' + '\x75\x64' + '\x65\x73'](document['\x61\x63' + '\x74\x69' + '\x76\x65' + '\x45\x6c' + '\x65\x6d' + '\x65\x6e' + '\x74']['\x69\x64']['\x74\x6f' + '\x4c\x6f' + '\x77\x65' + '\x72\x43' + '\x61\x73' + '\x65']())) {
+                    if (!LEMONMOD_0x35bf68['\x69\x6e' + '\x63\x6c' + '\x75\x64' + '\x65\x73'](document['\x61\x63' + '\x74\x69' + '\x76\x65' + '\x45\x6c' + '\x65\x6d' + '\x65\x6e' + '\x74']['\x69\x64']['\x74\x6f' + '\x4c\x6f' + '\x77\x65' + '\x72\x43' + '\x61\x73' + '\x65']()) || document.activeElement.id.toLowerCase() === "nameinput") {
                         if ('\x47\x75' + '\x7a\x76' + '\x7a' !== '\x56\x70' + '\x50\x5a' + '\x68') {
                             if (_0x200659[0x3e1 * 0x7 + 0x2f6 * 0x2 + -0x2113 * 0x1] == '\x63\x68' && document['\x67\x65' + '\x74\x45' + '\x6c\x65' + '\x6d\x65' + '\x6e\x74' + '\x42\x79' + '\x49\x64']('\x73\x69' + '\x6c\x65' + '\x6e\x74' + '\x4d\x6f' + '\x64\x65')['\x63\x68' + '\x65\x63' + '\x6b\x65' + '\x64']) {
                             } else {

@@ -129,7 +129,32 @@ edit(
 );
 
 /* ------------------------------------------------------------------ *
- * 5. The mod's own hooks
+ * 5. Do not let the name field swallow the spawn
+ *
+ * LemonMod's send hook drops every frame while the focus is on one of the
+ * inputs it lists, `nameInput` among them. That was harmless on the old
+ * bundle. The current one added
+ *
+ *   nt.onkeypress = i => { if (i.key === "Enter") return i.preventDefault(),
+ *                          we.onclick(i), !1 }
+ *
+ * so starting the game with Enter now sends the spawn while the name field
+ * still has focus - and the mod drops it. The menu never goes away, the world
+ * behind it is already loaded, and you sit there. The gate stays for every
+ * other input; the name field is exempted from it.
+ * ------------------------------------------------------------------ */
+
+{
+  const gate = `if (!LEMONMOD_0x35bf68['\\x69\\x6e' + '\\x63\\x6c' + '\\x75\\x64' + '\\x65\\x73'](document['\\x61\\x63' + '\\x74\\x69' + '\\x76\\x65' + '\\x45\\x6c' + '\\x65\\x6d' + '\\x65\\x6e' + '\\x74']['\\x69\\x64']['\\x74\\x6f' + '\\x4c\\x6f' + '\\x77\\x65' + '\\x72\\x43' + '\\x61\\x73' + '\\x65']()))`;
+  edit(
+    "spawn: the name field no longer blocks outgoing frames",
+    gate + " {",
+    gate.slice(0, -1) + ` || document.activeElement.id.toLowerCase() === "nameinput") {`
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * 6. The mod's own hooks
  *
  * The bridge is written around three things LemonMod does. If a future
  * LemonMod stops doing any of them the bridge would sit there translating for
@@ -150,7 +175,7 @@ for (const [label, anchor] of expects) {
 }
 
 /* ------------------------------------------------------------------ *
- * 6. Assemble
+ * 7. Assemble
  *
  * The body is wrapped so it still runs with a document behind it. Nothing in
  * LemonMod reaches its own top-level declarations through `window` - every
