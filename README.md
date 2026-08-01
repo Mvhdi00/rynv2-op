@@ -423,13 +423,41 @@ This fixes packet **names**. Where a payload's *shape* changed between
 generations the arguments may still be wrong — that would show up as a specific
 feature misbehaving, not as a failure to connect.
 
-The script still `@require`s **jQuery and jQuery UI from lemonmod.com**, which
-is a genuine hard dependency. Whether that host is reachable could not be
-verified from here. If the script does not load at all, that is the first thing
-to suspect. The requires were left pointing there because the jQuery version
-served is unknown and swapping majors could break the mod.
-
 Nothing here has been run against the live server.
+
+## lemonmod.com has been severed
+
+Worth knowing why, beyond the dependency being fragile: the script phones home
+on startup and one of those calls is a **remote code execution path**.
+
+```js
+if ('1' == crCheckResponse) {
+    fetch cr.php
+    eval(cr.phpResponse);        // arbitrary JS, from a third-party host
+}
+```
+
+Anyone controlling that host — or able to intercept the request — could run
+arbitrary JavaScript on moomoo.io in the user's browser, including reading the
+session and the captcha token. The script also posts game state to
+`/api/death/` on every death.
+
+Requests to that host are now answered locally, with replies chosen so the
+script's own checks pass quietly:
+
+| Request | Canned reply | Why |
+| --- | --- | --- |
+| `latest.php` | `"3.0"` | matches its own version, so it stops setting the document title to "LemonMod Error!" |
+| `crCheck.php` | `"0"` | the `eval(cr.php)` branch can never run |
+| anything else | `""`, status 200 | also stops the blocking "An error occured fetching LemonMod resources!" alert |
+
+jQuery now comes from a public CDN. jQuery UI was `@require`d but never used —
+not one widget call in the entire file — so it is gone. Only basic jQuery is
+used (`.val()`, `.css()`, `$(window).resize`), and none of the APIs removed in
+jQuery 3, so the version swap is safe.
+
+Images, sounds and CSS still point at that host and will simply not load. That
+is cosmetic.
 
 ---
 
@@ -461,7 +489,7 @@ packet names resolve to real opcodes.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 187 checks.
+them with `npm test` — 194 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.

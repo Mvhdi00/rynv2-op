@@ -5,8 +5,7 @@
 // @license      Apache-2.0
 // @description  LemonMod is a MooMoo.io mod designed to be the latest and greatest mod which towers over all others. LemonMod is packed with the latest features and the best autoheal out there.
 // @version      v3.0
-// @require      https://lemonmod.com/scripts/jquery/jquery.min.js
-// @require      https://lemonmod.com/scripts/jquery/jquery-ui.min.js
+// @require      https://code.jquery.com/jquery-3.7.1.min.js
 // @icon         https://lemonmod.com/LemonMod.png
 // @match        *://*.moomoo.io/*
 // @run-at       document-start
@@ -626,6 +625,83 @@ const LEGACY = (function () {
     return { toLegacy: toLegacy, toLegacyOut: toLegacyOut, c2s: C2S, s2c: S2C };
 }
 )();
+
+
+/* ---------------------------------------------------------------------------
+ * Sever the lemonmod.com dependency.
+ *
+ * The script phones home on startup, and one of those calls is a remote code
+ * execution path: if crCheck.php answers "1" it fetches cr.php and runs the
+ * response through eval(). Anyone controlling that host -- or able to
+ * intercept it -- could execute arbitrary JavaScript on moomoo.io in your
+ * browser, including reading your session and captcha token. It also posts
+ * game state to /api/death/ on every death.
+ *
+ * Requests to that host are answered locally instead, with replies chosen so
+ * the script's own checks pass quietly:
+ *   latest.php  -> "3.0", matching its own version, so it does not set the
+ *                  document title to "LemonMod Error!"
+ *   crCheck.php -> "0",   so the eval() branch never runs
+ *   everything else -> "" with status 200, which also stops the blocking
+ *                  "An error occured fetching LemonMod resources!" alert
+ *
+ * jQuery now comes from a public CDN. jQuery UI was required but never used --
+ * not one widget call in the whole file -- so it is gone.
+ *
+ * Images, sounds and CSS still point at that host and will simply not load.
+ * That is cosmetic.
+ * ------------------------------------------------------------------------ */
+(function () {
+    "use strict";
+    const HOST = "lemonmod.com";
+
+    function cannedReply(url) {
+        if (url.indexOf("latest.php") !== -1) return "3.0";
+        if (url.indexOf("crCheck.php") !== -1) return "0";
+        return "";
+    }
+
+    const xhrOpen = XMLHttpRequest.prototype.open
+        , xhrSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url) {
+        this.__lemonUrl = typeof url === "string" ? url : "";
+        this.__lemonBlocked = this.__lemonUrl.indexOf(HOST) !== -1;
+        return xhrOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function () {
+        if (!this.__lemonBlocked) return xhrSend.apply(this, arguments);
+        const body = cannedReply(this.__lemonUrl)
+            , self = this;
+        console.warn("[LemonMod] blocked call to " + HOST + ": " + this.__lemonUrl);
+        try {
+            Object.defineProperty(self, "readyState", { value: 4, configurable: true });
+            Object.defineProperty(self, "status", { value: 200, configurable: true });
+            Object.defineProperty(self, "responseText", { value: body, configurable: true });
+            Object.defineProperty(self, "response", { value: body, configurable: true });
+        } catch (e) { /* older engines */ }
+        setTimeout(function () {
+            try { if (typeof self.onreadystatechange === "function") self.onreadystatechange(); } catch (e) {}
+            try { if (typeof self.onload === "function") self.onload(); } catch (e) {}
+        }, 0);
+    };
+
+    const nativeFetch = window.fetch;
+    if (typeof nativeFetch === "function") {
+        window.fetch = function (input) {
+            const url = typeof input === "string" ? input : (input && input.url) || "";
+            if (url.indexOf(HOST) !== -1) {
+                console.warn("[LemonMod] blocked fetch to " + HOST + ": " + url);
+                return Promise.resolve(new Response(cannedReply(url), {
+                    status: 200,
+                    headers: { "Content-Type": "text/plain" }
+                }));
+            }
+            return nativeFetch.apply(this, arguments);
+        };
+    }
+})();
 
 /* --- LemonMod transport glue ------------------------------------------- */
 (function () {

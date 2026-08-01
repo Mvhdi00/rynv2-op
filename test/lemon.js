@@ -91,6 +91,10 @@ Object.defineProperty(FakeWebSocket.prototype, 'onmessage', {
 global.window = { WebSocket: FakeWebSocket };
 global.document = { getElementById(){ return null; } };
 global.WebSocket = FakeWebSocket;
+// the sever-lemonmod.com block patches these
+global.XMLHttpRequest = class { open(){} send(){} };
+global.Response = class { constructor(b){ this.body = b; } };
+global.window.fetch = undefined;
 `;
 const mod = harness
   + lemon.slice(shimStart, glueEnd + 1).join('\n')
@@ -212,6 +216,63 @@ check(decodedByMod[0] === 'ch', 'chat arrives as the old name "ch"');
 
 sock.deliver(enc.encode(['io-init', [1, SEED, KEY_HEX, game.Ht]]));
 check(decodedByMod[0] === 'io-init', 'the plaintext handshake still decodes normally');
+
+
+// --------------------------------------------------------------------------
+console.log('\n5. lemonmod.com is severed');
+
+{
+  const lm = fs.readFileSync(path.join(ROOT, 'LemonMod.user.js'), 'utf8').split('\n');
+  const a = lm.findIndex(l => l.includes('Sever the lemonmod.com dependency'));
+  const startIife = lm.indexOf('(function () {', a);
+  const endIife = lm.indexOf('})();', startIife);
+  const src = lm.slice(startIife, endIife + 1).join('\n');
+
+  // minimal XHR / fetch stand-ins
+  const calls = [];
+  class FakeXHR {
+    open(m, u) { this.m = m; this.u = u; }
+    send() { calls.push(this.u); }
+  }
+  const sandbox = {
+    XMLHttpRequest: FakeXHR,
+    window: { fetch: (u) => { calls.push('real:' + u); return Promise.resolve('real'); } },
+    console: { warn() {} },
+    setTimeout: (fn) => fn(),
+    Response: class { constructor(body) { this.body = body; } text() { return Promise.resolve(this.body); } },
+    Promise,
+    Object,
+  };
+  const run = new Function('XMLHttpRequest', 'window', 'console', 'setTimeout', 'Response', 'Promise', 'Object', src);
+  run(sandbox.XMLHttpRequest, sandbox.window, sandbox.console, sandbox.setTimeout, sandbox.Response, Promise, Object);
+
+  // a lemonmod.com XHR must never reach send()
+  const x = new FakeXHR();
+  let got = null;
+  x.onreadystatechange = function () { got = this.responseText; };
+  x.open('GET', 'https://lemonmod.com/lemonModUpdate/crCheck.php');
+  x.send();
+  check(calls.length === 0, 'the crCheck.php request never goes out');
+  check(got === '0', 'crCheck.php answers "0", so the eval(cr.php) branch cannot run');
+
+  const y = new FakeXHR();
+  let ver = null;
+  y.onreadystatechange = function () { ver = this.responseText; };
+  y.open('GET', 'https://lemonmod.com/lemonModUpdate/latest.php');
+  y.send();
+  check(ver === '3.0', 'latest.php answers its own version, so no "LemonMod Error!" title');
+
+  const z = new FakeXHR();
+  z.open('GET', 'https://lemonmod.com/api/death/?a=1&b=2');
+  z.send();
+  check(calls.length === 0, 'the death telemetry never leaves the browser');
+
+  // unrelated hosts still work
+  const w = new FakeXHR();
+  w.open('GET', 'https://moomoo.io/serverData.js');
+  w.send();
+  check(calls.length === 1 && calls[0].includes('moomoo.io'), 'requests to other hosts pass through untouched');
+}
 
 console.log('\n' + (fails === 0 ? '=> ALL LEMONMOD TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
 console.log('   (names mapped; payload shapes that changed between generations are untested)');
