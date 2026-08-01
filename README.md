@@ -19,6 +19,9 @@ and additionally needed their packet vocabulary mapped forward.
   script deobfuscated. `LemonMod.obfuscated.user.js` is the same build before
   deobfuscation, kept as a fallback.
 
+Plus **`MooUnpatcher.user.js`** — install it once and run old mods unchanged,
+instead of patching them one at a time. See below.
+
 `reference/` holds the two game bundles they were ported against
 (`game-index.js` = file 1, `game-vendor.js` = file 2) for future diffing.
 `npm test` runs all the suites.
@@ -498,6 +501,65 @@ function count drop (884 → 740) is dead code the pruner removed.
 
 ---
 
+# MooUnpatcher.user.js — fix any mod without editing it
+
+Install it once, order it **above** the mod in your userscript manager, then
+install the old mod unchanged.
+
+## How it works
+
+Mods of this family are all built the same way:
+
+```js
+WebSocket.prototype.nsend = WebSocket.prototype.send;   // saves whatever is there
+WebSocket.prototype.send  = function (buf) {            // installs its own hook
+    ...inspect/mutate plain msgpack...
+    this.nsend(binary);                                 // hands it back
+};
+```
+
+The unpatcher runs at `document-start`, so the reference the mod saves is
+*ours*, and the reference the game captured at bundle load is ours too. That
+puts it on **both sides** of the mod: it hands the mod plain msgpack going out
+and takes plain msgpack back, framing at the boundary. The mod never learns the
+wire changed.
+
+`nsend`, `oldSend`, `staticSend`, `originalSend` and `realSend` are pinned via
+accessors whose setters ignore assignment — a plain assignment would route those
+calls back into the hook the mod is trying to bypass.
+
+## Generation auto-detection
+
+`6`, `9`, `c`, `2`, `5`, `7`, `8` exist in both the 2019 and current
+vocabularies **meaning different packets**, so nothing can be translated until
+the generation is known. But some names appear in exactly one generation —
+`sp`, `ch`, `33`, `pp`, `rmd`, `13c` are old-only; `M`, `D`, `e`, `z`, `b`, `K`
+are current-only. The first one seen settles it, and in practice the very first
+packet a mod sends is its spawn: `sp` or `M`.
+
+## Incoming
+
+The game decodes with its own bundled codec straight off the raw event, so
+rewriting every message would break it. But a hook mod always attaches *after*
+the game has already set `onmessage` on that socket — so a listener registered
+once an `onmessage` exists is the mod's, and only those get the rewritten copy.
+The game keeps seeing raw numeric opcodes; the mod sees the names it was
+written against. Both are asserted in the tests.
+
+## What it does not do
+
+- **Bugs specific to one mod.** A wrong `@run-at`, an unguarded
+  `getElementById` that throws on line 25, a dead CDN `@require`, a stale
+  connect URL. Those were four separate hand fixes in `ae86` alone.
+- **Full client replacements** that own the socket outright and decode with
+  their own bundled codec (Revelation, the Laffer remake). Hook-style mods —
+  where the real game is still running underneath — are the target.
+- **Payload shape changes**, as opposed to packet renames.
+
+So it fixes the protocol for you. It is not a promise that a given mod works.
+
+---
+
 ## Verification
 
 The protocol port was checked against the code lifted straight out of the game
@@ -524,7 +586,7 @@ packet names resolve to real opcodes.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 194 checks.
+them with `npm test` — 216 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
