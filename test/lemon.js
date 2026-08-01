@@ -176,6 +176,17 @@ for (const oldName of Object.keys(C2S)) {
 check(allOld, 'all 17 old outgoing names map to the right opcode'
       + (badName ? ' (failed on ' + badName + ')' : ''));
 
+// The hardcoded malformed "crash" buffers this mod fires in bursts are neither
+// valid frames nor valid msgpack. They must be dropped, not sent raw -- raw
+// garbage on a MAC-authenticated channel risks the server killing the session.
+sock.sentRaw.length = 0;
+const warn = console.warn; let warned = 0; console.warn = () => { warned++; };
+WS.prototype.oldSend.call(sock, Uint8Array.from([159, 18, 223, 1, 76, 246, 3]));
+WS.prototype.oldSend.call(sock, Uint8Array.from([135, 102, 37, 116, 94, 162, 44, 210, 28, 223, 1, 13, 0, 9]));
+console.warn = warn;
+check(sock.sentRaw.length === 0, 'malformed crash buffers are dropped, not sent raw');
+check(warned === 2, 'and each one is reported on the console');
+
 // Already-framed buffers must not be framed twice.
 sock.sentRaw.length = 0;
 WS.prototype.oldSend.call(sock, gameFrame);

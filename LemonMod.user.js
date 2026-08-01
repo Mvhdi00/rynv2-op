@@ -5,7 +5,6 @@
 // @license      Apache-2.0
 // @description  LemonMod is a MooMoo.io mod designed to be the latest and greatest mod which towers over all others. LemonMod is packed with the latest features and the best autoheal out there.
 // @version      v3.0
-// @require      https://lemonmod.com/scripts/msgpack/msgpack.js
 // @require      https://lemonmod.com/scripts/jquery/jquery.min.js
 // @require      https://lemonmod.com/scripts/jquery/jquery-ui.min.js
 // @icon         https://lemonmod.com/LemonMod.png
@@ -660,7 +659,12 @@ const LEGACY = (function () {
             }
         } catch (e) { /* not plain msgpack */ }
 
-        EXP.nativeSend.call(sock, bytes);
+        // Neither a valid frame nor valid msgpack. This mod ships hardcoded
+        // malformed byte arrays it fires in bursts as a crash exploit; on a
+        // MAC-authenticated channel the server would reject them and quite
+        // possibly drop the connection, taking the session with it. Drop them
+        // here instead -- they cannot work against the current server anyway.
+        console.warn("[LemonMod] dropped an unframeable buffer (" + bytes.length + " bytes)");
     }
 
     // The mod replaces WebSocket.prototype.send with its own hook and keeps a
