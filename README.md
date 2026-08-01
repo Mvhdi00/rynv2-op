@@ -1,10 +1,14 @@
 # moomoo.io userscripts, updated for the current client
 
-Two scripts, both broken by the same server-side changes, fixed the same way:
+Three scripts, all broken by the same server-side changes, each fixed to suit
+how it attaches to the game:
 
-- **`Revelation.user.js`** (file 17) — a full client replacement.
+- **`Revelation.user.js`** (file 17, also uploaded as file 11) — a full client
+  replacement.
 - **`ExternalClient.user.js`** (file 19) — a hook-based mod that runs on top of
   the real game.
+- **`LafferRemake.user.js`** (file 24) — a client replacement that hijacks
+  `window.WebSocket` to steal the game's server address.
 
 `reference/` holds the two game bundles they were ported against
 (`game-index.js` = file 1, `game-vendor.js` = file 2) for future diffing.
@@ -118,6 +122,61 @@ later through `EXP.setHandler()`.
 
 ---
 
+# LafferRemake.user.js (file 24)
+
+A client replacement, but it gets its connection in an unusual way: it replaces
+`window.WebSocket` with an inert stand-in, lets the game build its own server
+URL (token included) and call `new WebSocket(url)`, then opens the real socket
+itself with the address it caught.
+
+## Why it broke
+
+Three things, on top of the shared protocol change.
+
+**The hijack was too late.** The script had no `@run-at`, so it ran at
+`document-end` — after the game bundle. By then the bundle has not only captured
+`window.WebSocket`, it has **frozen the property**:
+
+```js
+Object.defineProperty(window, "WebSocket", { value: kn, writable: false, configurable: false })
+```
+
+So `window.WebSocket = class {...}` was silently ignored, the game connected
+normally with its own socket, and `connectSocket()` was never called — the mod
+never started. The hijack now lives in a DOM-free shim at `document-start`, with
+the rest of the script deferred to `DOMContentLoaded`.
+
+**The protocol.** `io.connect` / `io.send` spoke plain msgpack, and dispatched
+incoming packets with `events[type].apply(...)` — an unguarded lookup that
+throws on the first numeric opcode.
+
+**The captcha.** The top of the script polled `#altcha_checkbox` /
+`#altcha_iframe` and auto-clicked the verify box. Those elements are gone.
+
+## What changed
+
+| Area | Fix |
+| --- | --- |
+| `LAF` shim (new, top of file) | Opcode tables, HMAC-SHA256, handshake state, and the `window.WebSocket` stand-in — installed at `document-start` so it wins the race against the bundle's freeze. |
+| `io.connect` | Reads the seed and key out of `io-init`, fires the connect callback there instead of on `onopen`, and maps numeric opcodes back to handler names. |
+| `io.send` | Frames as `tag ‖ msgpack([opcode, args, seq])`. Normalises whatever byte container msgpack-lite returns before hashing. |
+| Event dispatch | `events[type]` is guarded, so an unknown packet is ignored instead of throwing. |
+| Captcha | The ALTCHA poll is replaced by one that waits for the Turnstile widget to render and then steps aside — the game gates its own Enter Game button on the token, and Turnstile cannot be auto-clicked. |
+| msgpack | Removed the dead rawgit `@require`. This script bundles msgpack-lite through its webpack build, so the socket layer was never relying on the CDN. |
+| Cleanup | Removed a `console.log(this.socket)` that fired on every connect, and the trailing empty Tampermonkey boilerplate. |
+
+Its 17 packet names all match the current server set exactly, so unlike the
+External Client it needs no legacy-name remapping — verified in the tests.
+
+## Note on entry
+
+This mod inherits entry from the game: the game solves Turnstile, builds the
+`?token=cf:...` URL, and the shim catches that URL intact. So there is no
+separate captcha path to maintain here, and no bot-token limitation — this
+script has no bot feature.
+
+---
+
 ## Verification
 
 The protocol port was checked against the code lifted straight out of the game
@@ -137,9 +196,14 @@ For the External Client, the bundled msgpack was checked to be byte-identical
 to the game's encoder over 4,000 random values, in both directions, on top of
 the same framing, remapping, trampoline and isolation tests.
 
+The Laffer remake gets the same protocol comparison, plus coverage of the
+hijack itself: that the stand-in tolerates everything the game does to it, that
+the captured URL reaches the mod with its token intact, and that all 17 of its
+packet names resolve to real opcodes.
+
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 77 checks.
+them with `npm test` — 115 checks.
 
-Neither script has been verified against the live server; that needs a browser
-and a real Turnstile token.
+None of the three has been verified against the live server; that needs a
+browser and a real Turnstile token.

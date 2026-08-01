@@ -7,6 +7,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const SCRIPT = path.join(ROOT, 'Revelation.user.js');
 const EXTERNAL = path.join(ROOT, 'ExternalClient.user.js');
+const LAFFER = path.join(ROOT, 'LafferRemake.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -123,5 +124,33 @@ module.exports = {
   },
   loadExternal() {
     return require(write('exp.js', expModule()));
+  },
+
+  /** The Laffer remake's LAF shim, as a loadable CommonJS module. */
+  loadLaffer() {
+    const laf = lines(LAFFER);
+    const a = findLine(laf, 'const LAF = (function() {');
+    const b = findLine(laf, ')();', a);
+    const src = `
+class FakeWebSocket {
+  constructor(url) { this.url = url; this.readyState = 1; this.binaryType = ''; this.sentRaw = []; }
+  send(d) { this.sentRaw.push(d); }
+  close() { this.closed = true; }
+}
+['CONNECTING','OPEN','CLOSING','CLOSED'].forEach((k, i) => { FakeWebSocket[k] = i; });
+global.window = { WebSocket: FakeWebSocket };
+global.FakeNativeWebSocket = FakeWebSocket;
+`
+      + laf.slice(a, b + 1).join('\n')
+      + '\nmodule.exports = { LAF, HijackedWebSocket: window.WebSocket, FakeWebSocket };\n';
+    return require(write('laf.js', src));
+  },
+
+  /** The Laffer remake's io client object, as an expression. */
+  lafferIoExpression() {
+    const laf = lines(LAFFER);
+    const a = findStart(laf, '        module.exports = {', findLine(laf, '            socket: null,') - 4);
+    const b = findLine(laf, '        };', a);
+    return '(' + laf.slice(a, b).join('\n').replace(/^\s*module\.exports = \{/, '{') + '})';
   },
 };
