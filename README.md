@@ -1,8 +1,14 @@
-# Revelation — moomoo.io userscript
+# moomoo.io userscripts, updated for the current client
 
-`Revelation.user.js` (file 17), updated to work against the current moomoo.io
-client. `reference/` holds the two game bundles it was ported against
+Two scripts, both broken by the same server-side changes, fixed the same way:
+
+- **`Revelation.user.js`** (file 17) — a full client replacement.
+- **`ExternalClient.user.js`** (file 19) — a hook-based mod that runs on top of
+  the real game.
+
+`reference/` holds the two game bundles they were ported against
 (`game-index.js` = file 1, `game-vendor.js` = file 2) for future diffing.
+`npm test` runs all three suites.
 
 ## Why it broke
 
@@ -66,6 +72,52 @@ fall back to reusing the session token. Cloudflare treats tokens as single-use,
 so **multi-bot spawning is not reliably automatable any more**. This is a
 server-side change, not something the script can work around.
 
+---
+
+# ExternalClient.user.js (file 19)
+
+Same two server changes, but this script is a *hook* mod rather than a client
+replacement, so the fix lands differently.
+
+## The ordering problem
+
+The game bundle captures `WebSocket.prototype.send` **once, at load**, and calls
+that captured reference for every packet. A hook installed after the bundle
+loads never sees the game's traffic at all. The script had no `@run-at`, so it
+ran at `document-end` — after the bundle. It now runs at `document-start`, with
+only the DOM-free protocol shim at top level and the rest of the script deferred
+to `DOMContentLoaded`.
+
+The shim installs a trampoline into `WebSocket.prototype.send` immediately, so
+the reference the bundle captures is ours; the client registers its real handler
+later through `EXP.setHandler()`.
+
+## What changed
+
+| Area | Fix |
+| --- | --- |
+| `EXP` shim (new, top of file) | Opcode tables, HMAC-SHA256 framing, per-socket protocol state, send trampoline, Turnstile token capture. |
+| msgpack | The script `@require`d msgpack-lite from **rawgit.com, offline since 2019**, so `window.msgpack` was `undefined` and every encode/decode in the file threw. A msgpack codec is now bundled — byte-identical to the game's encoder. |
+| Handshake | Every socket gets a listener at construction, because `io-init` lands before the client attaches anything. Each socket (game *and* each bot) keeps its own key, tables and sequence counter. |
+| Outgoing | The old `PACKET_MAP` Proxy decoded raw buffers, which no longer parse. Remapping moved into the shim, applied to the string name before the opcode lookup. The shim owns sequence numbering, so packets the client injects sit in the same monotonic run as the game's. |
+| Client hook | `applyOutgoing()` extracted from the socket hook so `packet()` and the game's own traffic share one set of rules. Injected packets are framed directly instead of being re-encoded and re-parsed. |
+| Incoming | `getMessage()` and `bot.onmessage` map numeric opcodes back to names. |
+| Bots / captcha | `window.grecaptcha` is gone — the game uses Turnstile. The shim wraps `window.onGotTurnstileToken` before the bundle installs it to capture the token, and bot URLs use `cf:` instead of `re:`. |
+| Trailing junk | Two empty Tampermonkey boilerplate blocks pasted after the end of the code, removed. |
+
+## Known limitations
+
+- **Bots**, same as Revelation: Turnstile tokens are single-use and cannot be
+  solved programmatically, so only the first bot is likely to be accepted.
+- **`window.leave()`** sent a junk `"kys"` packet to force a disconnect. Unknown
+  names are now dropped before they reach the socket, so it no longer does
+  anything. The same goes for the other junk packets (`Tick2`,
+  `7113213.29154`).
+- The game shows a cosmetic "userscript manager detected" banner. It does not
+  block play, and nothing here tries to hide it.
+
+---
+
 ## Verification
 
 The protocol port was checked against the code lifted straight out of the game
@@ -80,3 +132,14 @@ Plus end-to-end tests driving the patched `ee` object and the patched bot
 socket against a simulated server: handshake ordering, server-side HMAC
 verification, opcode round-tripping, sequence numbering, unknown-opcode
 handling, per-bot key isolation, and the legacy (unencrypted) fallback path.
+
+For the External Client, the bundled msgpack was checked to be byte-identical
+to the game's encoder over 4,000 random values, in both directions, on top of
+the same framing, remapping, trampoline and isolation tests.
+
+The test harness pulls the code under test straight out of the shipped scripts
+and out of the game bundles, so the tests cannot drift from what ships. Run
+them with `npm test` — 77 checks.
+
+Neither script has been verified against the live server; that needs a browser
+and a real Turnstile token.

@@ -6,6 +6,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const SCRIPT = path.join(ROOT, 'Revelation.user.js');
+const EXTERNAL = path.join(ROOT, 'ExternalClient.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -86,6 +87,29 @@ function write(name, contents) {
   return p;
 }
 
+/** The External Client's EXP protocol shim, as a loadable CommonJS module. */
+function expModule() {
+  const ext = lines(EXTERNAL);
+  const a = findLine(ext, 'const EXP = (function() {');
+  const b = findLine(ext, ')();', a);
+  return `
+class FakeWebSocket {
+  constructor(url) { this.url = url; this.readyState = 1; this.binaryType = ''; this._listeners = []; this.sentRaw = []; }
+  addEventListener(type, fn) { if (type === 'message') this._listeners.push(fn); }
+  deliver(data) { for (const fn of this._listeners.slice()) fn({ data, target: this }); }
+}
+FakeWebSocket.prototype.send = function (d) { this.sentRaw.push(d); };
+['CONNECTING','OPEN','CLOSING','CLOSED'].forEach((k, i) => { FakeWebSocket[k] = i; });
+global.FakeWebSocket = FakeWebSocket;
+global.window = { WebSocket: FakeWebSocket };
+global.document = { getElementById() { return null; } };
+global.TextEncoder = global.TextEncoder || require('util').TextEncoder;
+global.TextDecoder = global.TextDecoder || require('util').TextDecoder;
+`
+    + ext.slice(a, b + 1).join('\n')
+    + '\nmodule.exports = { EXP, FakeWebSocket, window: global.window };\n';
+}
+
 module.exports = {
   eeExpression,
   botEmitSource,
@@ -96,5 +120,8 @@ module.exports = {
       game: require(write('game_proto.js', gameProtoModule())),
       msgpack: require(write('vendor_msgpack.js', vendorMsgpackModule())),
     };
+  },
+  loadExternal() {
+    return require(write('exp.js', expModule()));
   },
 };
