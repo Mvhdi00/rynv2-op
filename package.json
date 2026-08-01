@@ -2,6 +2,6 @@
   "name": "revelation-userscript",
   "private": true,
   "scripts": {
-    "test": "node test/e2e.js && node test/bot.js && node test/external.js && node test/laffer.js && node test/ae86.js && node test/aurora.js"
+    "test": "node test/e2e.js && node test/bot.js && node test/external.js && node test/laffer.js && node test/ae86.js && node test/aurora.js && node test/lemon.js"
   }
 }

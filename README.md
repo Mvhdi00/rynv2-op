@@ -1,7 +1,8 @@
 # moomoo.io userscripts, updated for the current client
 
-Five scripts, all broken by the same server-side changes, each fixed to suit
-how it attaches to the game:
+Seven scripts. Five were current-generation clients that needed the new
+transport layer and now work. Two are a full protocol generation behind and
+have the transport fixed but are **not** playable — see the note below.
 
 - **`Revelation.user.js`** (file 17, also uploaded as file 11) — a full client
   replacement.
@@ -13,6 +14,8 @@ how it attaches to the game:
   with several bugs of its own on top.
 - **`Aurora.user.js`** (`Aurora Client v5.5`) — same family again, plus an
   ALTCHA proof-of-work solver and a private-server redirect.
+- **`LemonMod.user.js`** / **`LemonModVisuals.user.js`** (v3.0) — 2019-era
+  protocol. Transport fixed, packet vocabulary still outdated. Not playable.
 
 `reference/` holds the two game bundles they were ported against
 (`game-index.js` = file 1, `game-vendor.js` = file 2) for future diffing.
@@ -305,6 +308,65 @@ shim's legacy map turns it into `"F"`. Asserted in the tests.
 
 ---
 
+# LemonMod v3.0 and LemonMod Visuals v3.0 — transport only, NOT playable
+
+These two differ from the other five in kind, not degree. The others were
+current-generation clients missing the new crypto layer. These target the
+**2019 moomoo protocol**, which is a different vocabulary end to end.
+
+| | LemonMod | Current server |
+| --- | --- | --- |
+| Connect URL | `wss://host:8008/?gameIndex=N&token=` | `wss://<host>/?token=cf:…` |
+| Outgoing | `sp ch 33 pp rmd 13c 2 5 7 8 10 11 12 14 …` | `M D 9 e F z H K L N b P Q c 6 S 0` |
+| Incoming | `sp ch h ac ad an st sa us mm 33 1 2 4 …` | `A B C D E a G H I J K L M N O … 0-9` |
+
+**14 of the 17 names these scripts send have no opcode on the current server.**
+Port 8008 and `gameIndex` are the old server API. Both scripts have been broken
+far longer than the recent crypto change.
+
+The trap is the overlap: nine incoming names — `1 2 4 5 6 7 8 9 a` — exist in
+*both* vocabularies meaning **different packets**. Old `5` was a leaderboard
+update; current `5` is a store update. Aliasing them would not fail cleanly, it
+would dispatch the wrong handler with the wrong arguments and corrupt state
+silently. Both facts are asserted in `test/lemon.js` so they stay visible.
+
+## What was done anyway
+
+At the user's request, the transport layer was fixed so the crypto is correct:
+the `io-init` handshake, shuffled opcode tables, and HMAC framing. Unknown
+names are dropped rather than sent as garbage, so the failure stays quiet
+instead of corrupting state.
+
+For the **Visuals** script (readable) the `io` client was patched directly, the
+same way as the Laffer remake.
+
+For the **main** script — 3.1 MB, obfuscated, ~108 send sites — the transport
+was attached *without editing the obfuscated body at all*:
+
+- The shim owns `WebSocket.prototype.send` at `document-start`. The mod later
+  does `oldSend = WebSocket.prototype.send` and installs its own hook, so every
+  `oldSend()` call site is reachable from one place.
+- `oldSend` is pinned to the framing path via an accessor whose setter ignores
+  the mod's assignment. Without this, `oldSend` would route back into the mod's
+  own hook — the mod calls it expecting to *bypass* that hook. (Caught by the
+  tests.)
+- It tells the two kinds of buffer apart by **verifying the HMAC**, not by
+  guessing: already-framed traffic passes through byte-for-byte, plain
+  `msgpack([name, args])` from the mod gets framed.
+- The trampoline hands the mod's hook an *unframed* buffer, because the hook
+  msgpack-decodes whatever it is given.
+- `window.msgpack.decode` is made socket-aware so numeric opcodes turn back
+  into names before the mod's dispatch switch sees them.
+
+## What would actually make them work
+
+Rebuilding the packet vocabulary by matching each old handler's *behaviour*
+against the current game's handlers, in both directions, plus argument-shape
+checks and a new connection/server-discovery layer. That is a port, not a
+patch, and the overlapping names mean it cannot be guessed.
+
+---
+
 ## Verification
 
 The protocol port was checked against the code lifted straight out of the game
@@ -331,7 +393,7 @@ packet names resolve to real opcodes.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 150 checks.
+them with `npm test` — 173 checks.
 
-None of the five has been verified against the live server; that needs a
+None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
