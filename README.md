@@ -372,12 +372,64 @@ The Visuals script also had its connect URL modernised: `host:8008/?gameIndex=N`
 is the old endpoint; current servers use the default port and take the token as
 the only query parameter.
 
+## Audit of the main (obfuscated) script
+
+The mapping was derived from the Visuals file, so the main script — the one
+that actually runs — was checked against it separately.
+
+Verified:
+
+- Its packet-dispatch switch (the one containing `case 'io-init'`) has 16 real
+  cases: `1 2 6 7 8 9 11 12 13 16 17 18 33 ac ch h`. Every one is in the
+  incoming map — it uses a subset of the same 2019 vocabulary. Other `case`
+  labels elsewhere in the file belong to unrelated switches.
+- The dispatch decodes through `LEMONMOD_0x5b0f86`, which is declared
+  `= msgpack` — the window global. So the socket-aware decode patch does reach
+  it. This was not obvious and would have silently broken the whole incoming
+  path if it had been a separate object.
+- Its message handler is installed with an instance `addEventListener`, so the
+  active-socket tracking the decode patch depends on applies.
+- Every outgoing path converges on either the mod's hook or `oldSend()`, and
+  `oldSend` is pinned to the framing path.
+
+Fixed as a result:
+
+- The mod ships hardcoded malformed byte arrays (7–70 bytes, not valid msgpack)
+  that it fires in bursts of 15–21 as a crash exploit. They were falling
+  through to a raw native send; on a MAC-authenticated channel the server
+  rejects those and may drop the connection, ending the session. They are
+  dropped and reported instead.
+- Removed the redundant `msgpack` `@require` from lemonmod.com — the shim owns
+  `window.msgpack` regardless, and a `@require` that fails to load can stop
+  Tampermonkey running the script at all.
+
+Found and deliberately left alone:
+
+- **`case 'io-init'` is dead code.** The dispatch listener is installed on the
+  first *send*, which is always after the handshake, so that branch (audio
+  volumes, canvas sizing, a resize handler) has never run — not now and not on
+  the old protocol either. Making it fire would be a behaviour change nobody
+  has ever tested, so it stays as-is.
+- The ad-removal helper dereferences `getElementById('adCard').parentNode`
+  unguarded and throws on the current page, skipping the rest of its `try`
+  block — so the "Mod Creator" element does not render. It *is* inside a
+  `try/catch`, so it is cosmetic, not fatal.
+- The server-switcher fetches `https://<host>/serverData.js`, the old server
+  list endpoint. Affects that feature only, not entry.
+
 ## Remaining risk
 
 This fixes packet **names**. Where a payload's *shape* changed between
 generations the arguments may still be wrong — that would show up as a specific
-feature misbehaving, not as a failure to connect. Nothing here has been run
-against the live server.
+feature misbehaving, not as a failure to connect.
+
+The script still `@require`s **jQuery and jQuery UI from lemonmod.com**, which
+is a genuine hard dependency. Whether that host is reachable could not be
+verified from here. If the script does not load at all, that is the first thing
+to suspect. The requires were left pointing there because the jQuery version
+served is unknown and swapping majors could break the mod.
+
+Nothing here has been run against the live server.
 
 ---
 
