@@ -1,0 +1,7 @@
+{
+  "name": "revelation-userscript",
+  "private": true,
+  "scripts": {
+    "test": "node test/e2e.js && node test/bot.js"
+  }
+}
