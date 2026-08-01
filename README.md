@@ -464,6 +464,31 @@ jQuery 3, so the version swap is safe.
 Images, sounds and CSS still point at that host and will simply not load. That
 is cosmetic.
 
+## Menu theme
+
+The mod's stylesheet lived on lemonmod.com, so severing that host left the menu
+unstyled. `tools/lemon-theme.js` replaces it with a self-contained space theme,
+injected into the file at build time.
+
+It is **purely additive** — it never renames an id or a class, so every
+checkbox, select and tab keeps working exactly as before, and everything is
+scoped under `#mm-menu-container` so nothing leaks into the game's own UI.
+
+- three parallax starfields of `box-shadow` dots drifting at different speeds,
+  generated from a seeded PRNG rather than hand-written
+- shooting stars on staggered delays
+- glass sidebar, pill tabs with a glowing accent bar on the active one, custom
+  checkboxes, selects, sliders and scrollbars
+- the dead remote lemon image is hidden and its `.circle` reused as a ringed
+  planet
+- no canvas, no images, no timers — it is all CSS, so it costs nothing while
+  the menu is closed, and it honours `prefers-reduced-motion`
+
+`npm run preview:menu` renders the real menu markup with the theme and
+screenshots it. That caught the first pass putting a 340px planet directly
+behind the controls with its ring cutting through the labels; it now sits
+dimmed in a corner and the content pane has a scrim so text always wins.
+
 ## Deobfuscation
 
 The main script shipped as a javascript-obfuscator build: 3.1 MB, 20k lines,
