@@ -455,6 +455,15 @@ const EXP = (function() {
     })();
 
     function token() {
+        // Fall back to reading the widget directly: if the page rendered and
+        // solved it before our wrapper was in place, the callback never fired
+        // for us and captchaToken would still be null.
+        if (!captchaToken && window.turnstile && typeof window.turnstile.getResponse === "function") {
+            try {
+                const el = document.getElementById("turnstileWidget");
+                captchaToken = (el ? window.turnstile.getResponse(el) : window.turnstile.getResponse()) || null;
+            } catch (e) { /* no widget yet */ }
+        }
         return captchaToken ? "cf:" + captchaToken : null;
     }
 

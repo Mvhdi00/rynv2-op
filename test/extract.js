@@ -10,6 +10,8 @@ const EXTERNAL = path.join(ROOT, 'ExternalClient.user.js');
 const LAFFER = path.join(ROOT, 'LafferRemake.user.js');
 const AE86 = path.join(ROOT, 'AE86.user.js');
 const AURORA = path.join(ROOT, 'Aurora.user.js');
+const LEMON = path.join(ROOT, 'LemonMod.user.js');
+const LEMON_VIS = path.join(ROOT, 'LemonModVisuals.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -149,7 +151,7 @@ module.exports = {
       return l.slice(a, b + 1).join('\n');
     };
     const ref = strip(EXTERNAL);
-    return strip(AE86) === ref && strip(AURORA) === ref;
+    return [AE86, AURORA, LEMON, LEMON_VIS].every(f => strip(f) === ref);
   },
 
   /** The Laffer remake's LAF shim, as a loadable CommonJS module. */

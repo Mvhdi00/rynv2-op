@@ -11006,23 +11006,49 @@ function rvnTurnstileReady() {
     return !!(window.turnstile && typeof window.turnstile.render == "function")
 }
 function rvnTurnstileWidget() {
-    let e = document.getElementById("turnstileWidget");
-    // The mod rebuilds much of the menu, so re-create the mount point if the
-    // page we are injected into does not already carry one.
+    return document.getElementById("turnstileWidget")
+}
+// The page's own bundle usually renders the widget before this script runs, and
+// it passes *its* callback to turnstile.render() by value -- so reassigning
+// window.onGotTurnstileToken afterwards never fires for that widget. Rather
+// than fight it for the container (turnstile refuses to render into one twice,
+// which left the token unset and the Enter Game button doing nothing), just
+// read the token straight off whatever widget is already there.
+function rvnReadTurnstileToken() {
+    if (!window.turnstile || typeof window.turnstile.getResponse != "function")
+        return null;
+    try {
+        const e = rvnTurnstileWidget();
+        return (rvnTurnstileId !== null ? window.turnstile.getResponse(rvnTurnstileId)
+                : e ? window.turnstile.getResponse(e)
+                : window.turnstile.getResponse()) || null
+    } catch (t) {
+        return null
+    }
+}
+function rvnAdoptToken() {
+    const e = rvnReadTurnstileToken();
+    if (!e || e === code)
+        return !!e;
+    window.onGotTurnstileToken(e);
+    return !0
+}
+// Only render our own widget if nothing else did -- an empty container, or no
+// container at all on a page that never had one.
+function rvnRenderTurnstile() {
+    if (rvnTurnstileId !== null)
+        return !0;
+    if (!rvnTurnstileReady())
+        return !1;
+    let e = rvnTurnstileWidget();
+    if (e && e.childElementCount > 0)
+        return !1;
     if (!e && Un && Un.parentNode) {
         e = document.createElement("div"),
             e.id = "turnstileWidget",
             e.style.margin = "10px auto",
             Un.parentNode.insertBefore(e, Un);
     }
-    return e
-}
-function rvnRenderTurnstile() {
-    if (rvnTurnstileId !== null)
-        return !0;
-    if (!rvnTurnstileReady())
-        return !1;
-    const e = rvnTurnstileWidget();
     if (!e || e.offsetParent === null)
         return !1;
     try {
@@ -11054,15 +11080,18 @@ function rvnLoadTurnstile() {
         document.head.appendChild(e)
 }
 function rvnSetupTurnstile() {
-    if (rvnTurnstileId !== null || (rvnLoadTurnstile(),
-                                    rvnRenderTurnstile()) || rvnTurnstileRetry)
+    if (rvnTurnstileRetry)
         return;
-    // The widget mounts only once the menu is actually visible.
-    let e = 0;
+    rvnLoadTurnstile();
+    if (rvnAdoptToken())
+        return;
+    // Keep watching: the widget mounts only once the menu is visible, the
+    // player still has to solve it, and the token expires and is reissued.
     rvnTurnstileRetry = setInterval(function() {
-        (rvnRenderTurnstile() || ++e > 100) && (clearInterval(rvnTurnstileRetry),
-                                                rvnTurnstileRetry = null)
-    }, 150)
+        if (rvnAdoptToken())
+            return;
+        rvnRenderTurnstile()
+    }, 500)
 }
 rvnLoadTurnstile();
 function gn(e) {
