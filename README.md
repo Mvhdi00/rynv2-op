@@ -15,7 +15,9 @@ and additionally needed their packet vocabulary mapped forward.
 - **`Aurora.user.js`** (`Aurora Client v5.5`) — same family again, plus an
   ALTCHA proof-of-work solver and a private-server redirect.
 - **`LemonMod.user.js`** / **`LemonModVisuals.user.js`** (v3.0) — 2019-era
-  protocol; transport fixed and packet vocabulary mapped forward.
+  protocol; transport fixed, packet vocabulary mapped forward, and the main
+  script deobfuscated. `LemonMod.obfuscated.user.js` is the same build before
+  deobfuscation, kept as a fallback.
 
 `reference/` holds the two game bundles they were ported against
 (`game-index.js` = file 1, `game-vendor.js` = file 2) for future diffing.
@@ -458,6 +460,39 @@ jQuery 3, so the version swap is safe.
 
 Images, sounds and CSS still point at that host and will simply not load. That
 is cosmetic.
+
+## Deobfuscation
+
+The main script shipped as a javascript-obfuscator build: 3.1 MB, 20k lines,
+hex-escaped strings, a string-array indirection, arithmetic-encoded numbers and
+dead branches. `npm run deobfuscate` reverses what is mechanically reversible
+(`tools/deobfuscate.js`, AST-based via acorn + astring):
+
+| Pass | Count |
+| --- | --- |
+| hex-escaped string concatenation | `'\x61' + '\x62'` → `'ab'` |
+| constant arithmetic folded | 18,046 |
+| string-array calls resolved | 228, via 20 forwarding wrappers |
+| dead `if ('a' === 'b')` branches pruned | 997 |
+| computed member access → dot notation | 3,656 |
+
+3.1 MB / 20,132 lines → **755 KB / 10,147 lines**.
+
+**What it cannot do:** recover the original identifier names. The obfuscator
+destroyed them, so `_0x1a2b3c` stays `_0x1a2b3c`. It is readable, not restored.
+
+Equivalence checks that passed:
+
+- the obfuscator's own string array evaluates to a **byte-identical** 78-entry
+  result from both files
+- the packet-dispatch switch has the **same 17 cases** in the same order
+- the hand-written blocks are passed through verbatim, so their comments survive
+  (astring would otherwise drop every comment)
+- the full test suite passes against the deobfuscated file
+
+Branch pruning never discards a branch containing a `var` or function
+declaration, since those hoist and could be referenced from outside — the
+function count drop (884 → 740) is dead code the pruner removed.
 
 ---
 
