@@ -1,6 +1,6 @@
 # moomoo.io userscripts, updated for the current client
 
-Three scripts, all broken by the same server-side changes, each fixed to suit
+Four scripts, all broken by the same server-side changes, each fixed to suit
 how it attaches to the game:
 
 - **`Revelation.user.js`** (file 17, also uploaded as file 11) — a full client
@@ -9,10 +9,12 @@ how it attaches to the game:
   the real game.
 - **`LafferRemake.user.js`** (file 24) — a client replacement that hijacks
   `window.WebSocket` to steal the game's server address.
+- **`AE86.user.js`** (`ae86 real` V0.1) — same family as the External Client,
+  with several bugs of its own on top.
 
 `reference/` holds the two game bundles they were ported against
 (`game-index.js` = file 1, `game-vendor.js` = file 2) for future diffing.
-`npm test` runs all three suites.
+`npm test` runs all the suites.
 
 ## Why it broke
 
@@ -177,6 +179,83 @@ script has no bot feature.
 
 ---
 
+# AE86.user.js (`ae86 real`)
+
+Same architecture as the External Client — it hooks the socket the game creates
+and renders its own view — so it gets the same `EXP` shim, byte for byte (the
+tests assert the two copies are identical). What makes this one interesting is
+that it had four separate bugs that would each, on their own, stop it dead
+before the protocol ever mattered.
+
+## The bugs that killed it on its own lines
+
+**1. A typo in the metadata block.**
+
+```
+// @run-at       document_start
+```
+
+Underscore, not hyphen. `document_start` is not a valid value, so the manager
+falls back to running at the default — after the game bundle. That alone breaks
+the socket hook.
+
+**2. A dangling assignment swallowing the next statement.**
+
+```js
+let editMainMenu =
+
+
+// ADD REMOVAL
+document.getElementById("wideAdCard").remove();
+```
+
+`editMainMenu` is assigned the result of `.remove()` — but more to the point,
+`getElementById` returns `null` at document-start (and on any page without that
+card), so this threw a `TypeError` on line 25 and **the entire script stopped
+there**. Nothing after it ever ran. Now guarded.
+
+**3. It deleted the client it depends on.**
+
+```js
+if (scriptTags[i].src.includes("index-f3a4c1ad.js")) scriptTags[i].remove();
+```
+
+This script has no socket of its own — it hooks the one the game creates.
+Removing the game bundle leaves it with nothing to hook. The hard-coded build
+hash stopped matching long ago, so in practice the block was inert, but it is
+a loaded gun pointed at the script's own foot. Removed.
+
+**4. It clicked a captcha that no longer exists.** `#altcha_checkbox`, polled
+every 10 ms forever. Turnstile replaced ALTCHA and is not a checkbox that can be
+auto-clicked. Removed, along with the interval.
+
+Two of the "leaderboard" lines next to the ad removal were also no-ops
+(`.append('')`, and `style.color` set to a `text-shadow` string), so they went
+with the dead block.
+
+## What else changed
+
+The same set as the External Client: the `EXP` shim at `document-start`, the
+rest deferred to `DOMContentLoaded`, framed sends, opcode mapping on both
+directions, `applyOutgoing()` extracted so injected packets follow the same
+rules, bundled msgpack replacing the dead rawgit `@require`, and `cf:` Turnstile
+tokens instead of `re:` reCAPTCHA for bots.
+
+It also had **seven** copies of empty Tampermonkey boilerplate pasted after the
+end of the code, the last one truncated mid-block. Removed.
+
+Note that this script sends `"f"` for movement, an old name the current server
+has no opcode for — the shim's legacy map turns it into `"9"`. That is asserted
+in the tests.
+
+## Known limitations
+
+Same as the others: Turnstile tokens are single-use, so multi-bot spawning is
+not reliable; `window.leave()`'s junk `"kys"` packet is dropped before it
+reaches the socket.
+
+---
+
 ## Verification
 
 The protocol port was checked against the code lifted straight out of the game
@@ -203,7 +282,7 @@ packet names resolve to real opcodes.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 115 checks.
+them with `npm test` — 132 checks.
 
-None of the three has been verified against the live server; that needs a
+None of the four has been verified against the live server; that needs a
 browser and a real Turnstile token.

@@ -8,6 +8,7 @@ const ROOT = path.join(__dirname, '..');
 const SCRIPT = path.join(ROOT, 'Revelation.user.js');
 const EXTERNAL = path.join(ROOT, 'ExternalClient.user.js');
 const LAFFER = path.join(ROOT, 'LafferRemake.user.js');
+const AE86 = path.join(ROOT, 'AE86.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -88,9 +89,10 @@ function write(name, contents) {
   return p;
 }
 
-/** The External Client's EXP protocol shim, as a loadable CommonJS module. */
-function expModule() {
-  const ext = lines(EXTERNAL);
+/** The EXP protocol shim, as a loadable CommonJS module. Both the External
+ *  Client and the AE86 script carry the same shim, so this works for either. */
+function expModule(file) {
+  const ext = lines(file || EXTERNAL);
   const a = findLine(ext, 'const EXP = (function() {');
   const b = findLine(ext, ')();', a);
   return `
@@ -124,6 +126,21 @@ module.exports = {
   },
   loadExternal() {
     return require(write('exp.js', expModule()));
+  },
+
+  loadAe86() {
+    return require(write('exp_ae86.js', expModule(AE86)));
+  },
+
+  /** Assert the AE86 script carries the same shim as the External Client. */
+  shimsMatch() {
+    const strip = f => {
+      const l = lines(f);
+      const a = findLine(l, 'const EXP = (function() {');
+      const b = findLine(l, ')();', a);
+      return l.slice(a, b + 1).join('\n');
+    };
+    return strip(EXTERNAL) === strip(AE86);
   },
 
   /** The Laffer remake's LAF shim, as a loadable CommonJS module. */
