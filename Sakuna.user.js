@@ -557,6 +557,12 @@ const code = {
     ping: "0",
 };
 
+// `hue` was declared on the same line as `code` in the original
+// (`let code, hue = 0;`). Replacing the scraper took that line with it and
+// left `hue` undeclared -- updateGame() reads it every frame, so the render
+// loop threw on each tick and nothing of the mod drew.
+let hue = 0;
+
 /* Everything below touches the DOM, so it waits for the document. Only the
  * shim above runs at document-start. */
 function __sakunaBoot() {
@@ -1939,15 +1945,22 @@ function findProjectileBySid(sid) {
     return findSID(gameObjects, sid);
 }
 
+// Five page elements torn down without a null check. The ad card, the promo
+// image and the Google Ad Manager slot are absent whenever ads are blocked --
+// which, for anyone running a userscript, is most of the time -- and
+// #chatButton and #gameName have moved on too. The first null threw right
+// here and everything after it in the boot never ran, so the game came up
+// with none of the mod on screen. Each one is guarded now.
 let gameName = getEl("gameName");
-gameName.innerText = "";
+if (gameName) gameName.innerText = "";
 let adCard = getEl("adCard");
-adCard.remove();
+if (adCard) adCard.remove();
 let promoImageHolder = getEl("promoImgHolder");
-promoImageHolder.remove();
-document.getElementById("/21823819281/frvr-frvr-moomoo-display-banner-frvr_moomoo_728x90").remove();
+if (promoImageHolder) promoImageHolder.remove();
+let adBanner = document.getElementById("/21823819281/frvr-frvr-moomoo-display-banner-frvr_moomoo_728x90");
+if (adBanner) adBanner.remove();
 let chatButton = getEl("chatButton");
-chatButton.remove();
+if (chatButton) chatButton.remove();
 let gameCanvas = getEl("gameCanvas");
 let mainContext = gameCanvas.getContext("2d");
 let stream;
@@ -14239,23 +14252,13 @@ window.debug = function () {
 window.CG = function() {
     WS.close();
     console.log("close")
-}
-// ==UserScript==
-// @name         New Userscript
-// @namespace    http://tampermonkey.net/
-// @version      2025-04-27
-// @description  try to take over the world!
-// @author       You
-// @match        http://*/*
-// @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
-// @grant        none
-// ==/UserScript==
-
-(function() {
-    'use strict';
-
-    // Your code here...
-})();
+};
+// The original wrote this assignment with no terminating semicolon, and the
+// next non-comment token in the file was the "(" of a leftover Tampermonkey
+// boilerplate IIFE. JavaScript therefore read the two as one expression --
+//     window.CG = function () { WS.close(); ... }(function () {...})()
+// -- and *called* the function on load, with WS still undefined. The empty
+// boilerplate that caused it is dropped and the statement is terminated.
 }
 
 // DOMContentLoaded is not enough: the client below reads window.config on

@@ -1079,7 +1079,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 590 checks.
+them with `npm test` — 600 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
@@ -1180,6 +1180,43 @@ giving up loudly after 30 s. A boot that throws anyway is caught, logged as
 identifier it touches before the first function call is undeclared**, so this
 class of bug cannot come back unnoticed. (`typeof`-guarded names are exempt,
 which is exactly how the `unsafeWindow` reference is written now.)
+
+## Three more the reading missed
+
+The mod still came up with nothing on screen. Static analysis had run out of
+road, so `tools/probe-sakuna.js` loads the script into a real Chromium against a
+DOM built from the ids the script itself looks up, and reports the first thing
+that throws. It found three genuine failures in about a minute:
+
+**1. `hue` was undeclared.** The original wrote `let code, hue = 0;` on one
+line. Replacing the packet scraper took that line out and `code` was
+reintroduced as the fixed table — but `hue` went with it. `updateGame()` reads
+it every frame, so the render loop threw on every tick.
+
+**2. Five page elements torn down with no null check** — `gameName`, `adCard`,
+`promoImgHolder`, the `/21823819281/frvr-…` Google Ad Manager slot, and
+`chatButton`. The ad-related three are absent whenever ads are blocked, which
+for anyone running a userscript is most of the time. The first null threw and
+everything after it in the boot never ran.
+
+**3. An assignment that called itself.** The file ended with
+
+```js
+window.CG = function() {
+    WS.close();
+    console.log("close")
+}
+// ==UserScript==  … leftover empty boilerplate …
+(function() { 'use strict'; })();
+```
+
+No semicolon after the `}`, and the next non-comment token is `(`. JavaScript
+reads the two as a single expression — `window.CG = function(){…}(function(){…})()`
+— and **calls** the function on load, with `WS` still undefined. The empty
+boilerplate is dropped and the statement terminated.
+
+All three are pinned by tests, the last one by an AST check that uses
+`preserveParens` to tell a deliberate IIFE from this accident.
 
 The packet rules moved out of the prototype override into `applyOutgoing()`, so
 packets the script injects through `packet()` now get the same anti-profanity,

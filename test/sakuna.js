@@ -249,5 +249,53 @@ check(/function __sakunaBootSafely\(\)/.test(code)
         + (risky.length ? ' (found: ' + [...new Set(risky)].join(', ') + ')' : ''));
 }
 
+// --------------------------------------------------------------------------
+console.log('\n9. three boot failures a browser found that reading could not');
+
+// 1. `hue` shared a declaration with `code` (`let code, hue = 0;`). Replacing
+// the packet scraper took that line out and left `hue` undeclared; updateGame()
+// reads it every frame, so the render loop threw on every tick.
+check(/^let hue = 0;$/m.test(code), '`hue` is declared');
+check(/hue = \(hue \+ delta\/FPS60\) % 360;/.test(code), 'and the render loop that reads it is intact');
+
+// 2. Five page elements torn down with no null check. The ad card, promo image
+// and Google Ad Manager slot are all absent when ads are blocked.
+for (const [name, guard] of [
+  ['gameName', /if \(gameName\) gameName\.innerText/],
+  ['adCard', /if \(adCard\) adCard\.remove\(\)/],
+  ['promoImgHolder', /if \(promoImageHolder\) promoImageHolder\.remove\(\)/],
+  ['the ad banner slot', /if \(adBanner\) adBanner\.remove\(\)/],
+  ['chatButton', /if \(chatButton\) chatButton\.remove\(\)/],
+]) check(guard.test(code), name + ' is only touched when it exists');
+
+// 3. `window.CG = function () {...}` with no terminating semicolon, followed by
+// a leftover boilerplate IIFE, parsed as one expression -- so the function was
+// *called* on load, with WS undefined.
+check(/console\.log\("close"\)\n\};/.test(code),
+      'the window.CG assignment is terminated');
+check(!/\/\/ @name {9}New Userscript/.test(src),
+      'and the empty boilerplate whose "(" caused it is gone');
+{
+  const acorn = require('acorn');
+  // preserveParens tells a deliberate IIFE -- `x = (function(){}）()` -- apart
+  // from the accident, where an unparenthesised function expression is glued to
+  // a following `(` by the absence of a semicolon
+  const ast = acorn.parse(src, { ecmaVersion: 'latest', preserveParens: true });
+  let boot = null;
+  for (const n of ast.body) if (n.type === 'FunctionDeclaration' && n.id.name === '__sakunaBoot') boot = n;
+  const accidental = [];
+  for (const st of boot.body.body) {
+    if (st.type !== 'ExpressionStatement') continue;
+    const e = st.expression;
+    if (e.type === 'AssignmentExpression' && e.right.type === 'CallExpression'
+        && /FunctionExpression/.test(e.right.callee.type)) {
+      accidental.push(src.slice(st.start, st.start + 40).replace(/\n/g, ' '));
+    }
+  }
+  check(accidental.length === 0,
+        'no unparenthesised function expression in the boot is called by accident'
+        + (accidental.length ? ' (' + accidental[0] + ')' : ''));
+}
+
 console.log('\n' + (fails === 0 ? '=> ALL SAKUNA TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
 process.exit(fails ? 1 : 0);
