@@ -643,10 +643,31 @@ cycle. No canvas, no timers, no images, so it does not compete with the game's
 own render loop, and it all stops under `prefers-reduced-motion`.
 
 The card itself is glass over that sky, 760×380 (up from 650×450), with the
-title glowing cyan and the controls restyled to match. It also replaces the
-menu's one remote asset — a city photograph pulled off wallpapers.com.
+title glowing cyan and the controls restyled to match. The **mod menu** gets the
+same scene — its own sky behind the tab column and the settings list, since the
+two are separate stacking contexts.
+
+Taken off the menu while there: the Help, Changelogs and Discord buttons, the
+credits line, the "Welcome back" line, and the ping/FPS graph (which also pulled
+chart.js off jsDelivr on every load). The elements themselves are still built —
+the slide-out panels' close handlers reference them — they are just no longer
+placed.
 
 `npm run preview:chicken` renders it to a standalone HTML file you can open.
+
+## Colours and the texture pack
+
+The **texture pack is gone**: `getTexturePackImg()` resolved hats, accessories
+and weapons through four imgur tables, and the minimap had a photographic
+backdrop from the same host. All of it now resolves to the game's own art.
+`emeraldSprites` survives as a plain set of weapon names, because
+`updateActionBar()` reads it to decide which weapons get a fourth XP tier — the
+images are gone, the names stay.
+
+The **"Hyper Performance"** toggle is removed. All it did was repaint every
+object flat `#0000ff`, the ground flat `#ffff00` and chat bubbles blue; if it
+was ever switched on it stayed on, saved in `localStorage`. Every branch now
+takes the game's own colours.
 
 ## Known limitations
 
@@ -894,7 +915,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 394 checks.
+them with `npm test` — 415 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.

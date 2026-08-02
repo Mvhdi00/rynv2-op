@@ -52,7 +52,7 @@ const page = `<!doctype html>
 <style>${css}</style>
 </head><body>
 <div id="mainMenu">
-  <div id="ck-sky">${sky}</div>
+  <div id="ck-sky" class="ck-sky-box">${sky}</div>
   <div id="ckMenu">${shell}</div>
 </div>
 <script>

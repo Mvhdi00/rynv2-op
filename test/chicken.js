@@ -272,6 +272,56 @@ check(/prefers-reduced-motion: reduce/.test(src), 'and it all stops for prefers-
 check(/width: 760px !important;/.test(src) && /height: 380px !important;/.test(src),
       'the card is bigger than the 650x450 it was');
 
+// the tail has to trail behind the head, and the head travels left and down
+check(/\.ck-sky-box \.ck-shoot::before \{\n\s*content: ""; position: absolute; top: 50%; left: 2px;/.test(src),
+      'the shooting-star tail sits behind the head, not in front of it');
+check(/background: linear-gradient\(90deg, rgba\(255,255,255,\.95\)/.test(src),
+      'and fades away from the head rather than towards it');
+check(!/rotate\(14deg\)/.test(src) && (src.match(/rotate\(-12deg\)/g) || []).length === 2,
+      'and the whole thing is rotated along the direction of travel');
+
+// the mod menu gets the same scene
+check(/CHICKEN_COSMOS\.dressMenu\(this\.menu\);/.test(src), 'the mod menu is themed too');
+check(/#ckScriptMenu \{/.test(src) && /#ckScriptMenu > \.ck-menusky \{/.test(src),
+      'with its own sky, since the two are separate stacking contexts');
+check((src.match(/document\.body\.appendChild\(this\.menu\);/g) || []).length === 1,
+      'and it is still only appended once');
+
+// --------------------------------------------------------------------------
+console.log('\n12. the bits taken off the menu');
+
+for (const [what, re] of [
+  ['the Help button',        /mainMenu\.appendChild\(this\.controlsButton\)/],
+  ['the Changelogs button',  /mainMenu\.appendChild\(this\.channelLogButton\)/],
+  ['the Discord button',     /mainMenu\.appendChild\(this\.discordButton\)/],
+  ['the credits line',       /mainMenu\.appendChild\(this\.createdByElement\)/],
+]) check(!re.test(src), what + ' is no longer put on the menu');
+check(!/Welcome back, \$\{getSavedVal/.test(src), 'the "Welcome back" line is gone');
+check(!/function crate\(\) \{/.test(src) && !/cdn\.jsdelivr\.net\/npm\/chart\.js/.test(src),
+      'the ping/FPS graph and the chart.js it pulled off jsDelivr are gone');
+// the elements themselves stay: the panel close handlers reference them
+check(/this\.discordButton\.style\.display = "block";/.test(src),
+      'the objects still exist, so the handlers that touch them keep working');
+
+// --------------------------------------------------------------------------
+console.log('\n13. natural colours and no texture pack');
+
+check(!/scriptMenu\.toggles\.hyperPerformance/.test(src),
+      'nothing reads the Hyper Performance toggle any more');
+check(!/label: "Hyper Performance"/.test(src), 'and the toggle is gone from the menu');
+check(/if \(false\) \{                 \/\/ was the flat-yellow ground/.test(src),
+      'the flat-yellow ground branch is dead');
+check(/let i = false;/.test(src) && /let t = false;/.test(src),
+      'the sprite builders take the game\'s own colours');
+check(!/var newHatImgs|var newAccImgs|var newWeaponImgs/.test(src),
+      'the hat, accessory and weapon overrides are gone');
+check(!/i\.imgur\.com\/99Xb4Lm|i\.imgur\.com\/fgFsQJp/.test(src),
+      'so are the emerald weapon sprites and the minimap texture');
+check(/var emeraldSprites = \{\n\s*"hand axe": true,/.test(src),
+      'emeraldSprites survives as a plain name set, which is all updateActionBar needs of it');
+check(/if \(t == "acc"\) \{\n\s*return "\.\.\/\.\/img\/accessories/.test(src),
+      "getTexturePackImg resolves to the game's own art only");
+
 console.log('\n' + (fails === 0 ? '=> ALL CHICKEN TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
 process.exit(fails ? 1 : 0);
 

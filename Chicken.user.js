@@ -422,20 +422,20 @@ window.CHICKEN_COSMOS = (function () {
     radial-gradient(90%  90% at 50% 110%, rgba(255, 92, 190, .16) 0%, transparent 60%),
     linear-gradient(160deg, #05061a 0%, #080c26 45%, #120a2a 100%);
 }
-#ck-sky .ck-stars { position: absolute; left: 0; top: 0; border-radius: 50%; }
-#ck-sky .ck-stars::after {
+.ck-sky-box .ck-stars { position: absolute; left: 0; top: 0; border-radius: 50%; }
+.ck-sky-box .ck-stars::after {
   content: ""; position: absolute; left: 0; top: 1200px;
   width: inherit; height: inherit; border-radius: 50%; box-shadow: inherit;
 }
-#ck-sky .ck-s1 {
+.ck-sky-box .ck-s1 {
   width: 1px; height: 1px; box-shadow: ${starfield(260, 2200, 1200, 7)};
   animation: ck-drift 190s linear infinite;
 }
-#ck-sky .ck-s2 {
+.ck-sky-box .ck-s2 {
   width: 2px; height: 2px; box-shadow: ${starfield(110, 2200, 1200, 99)};
   animation: ck-drift 120s linear infinite; opacity: .85;
 }
-#ck-sky .ck-s3 {
+.ck-sky-box .ck-s3 {
   width: 3px; height: 3px; box-shadow: ${starfield(40, 2200, 1200, 4242)};
   animation: ck-drift 75s linear infinite; opacity: .7;
   filter: drop-shadow(0 0 4px rgba(180, 210, 255, .9));
@@ -443,7 +443,7 @@ window.CHICKEN_COSMOS = (function () {
 @keyframes ck-drift { from { transform: translateY(0); } to { transform: translateY(-1200px); } }
 
 /* a slow twinkle over the whole field, so it never looks static */
-#ck-sky::after {
+.ck-sky-box::after {
   content: ""; position: absolute; inset: 0;
   background: radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,.7), transparent 60%),
               radial-gradient(2px 2px at 72% 66%, rgba(190,220,255,.6), transparent 60%),
@@ -454,28 +454,31 @@ window.CHICKEN_COSMOS = (function () {
 @keyframes ck-twinkle { from { opacity: .25; } to { opacity: .9; } }
 
 /* ---------- shooting stars ------------------------------------------ */
-#ck-sky .ck-shoot {
+.ck-sky-box .ck-shoot {
   position: absolute; width: 2px; height: 2px; border-radius: 50%;
   background: #fff; box-shadow: 0 0 8px 2px rgba(190, 220, 255, .9); opacity: 0;
 }
-#ck-sky .ck-shoot::before {                 /* the tail */
-  content: ""; position: absolute; top: 50%; right: 2px;
+/* The tail has to trail *behind* the head. These travel left and slightly
+   down, so the tail extends to the right, fading away from the head — and the
+   whole thing is rotated to sit along the direction of travel, not against it. */
+.ck-sky-box .ck-shoot::before {
+  content: ""; position: absolute; top: 50%; left: 2px;
   width: 190px; height: 1px; transform: translateY(-50%);
-  background: linear-gradient(270deg, rgba(255,255,255,.95), rgba(140,190,255,.35), transparent);
+  background: linear-gradient(90deg, rgba(255,255,255,.95), rgba(140,190,255,.35), transparent);
 }
-#ck-sky .ck-shoot.a { top:  9%; left: 104%; animation: ck-shoot  7s ease-in infinite; animation-delay: 1.5s; }
-#ck-sky .ck-shoot.b { top: 31%; left: 104%; animation: ck-shoot  9s ease-in infinite; animation-delay: 5s;   }
-#ck-sky .ck-shoot.c { top: 58%; left: 104%; animation: ck-shoot 11s ease-in infinite; animation-delay: 8.5s; }
-#ck-sky .ck-shoot.d { top: 76%; left: 104%; animation: ck-shoot 13s ease-in infinite; animation-delay: 12s;  }
+.ck-sky-box .ck-shoot.a { top:  9%; left: 104%; animation: ck-shoot  7s ease-in infinite; animation-delay: 1.5s; }
+.ck-sky-box .ck-shoot.b { top: 31%; left: 104%; animation: ck-shoot  9s ease-in infinite; animation-delay: 5s;   }
+.ck-sky-box .ck-shoot.c { top: 58%; left: 104%; animation: ck-shoot 11s ease-in infinite; animation-delay: 8.5s; }
+.ck-sky-box .ck-shoot.d { top: 76%; left: 104%; animation: ck-shoot 13s ease-in infinite; animation-delay: 12s;  }
 @keyframes ck-shoot {
-  0%        { opacity: 0; transform: translate(0, 0) rotate(14deg); }
+  0%        { opacity: 0; transform: translate(0, 0) rotate(-12deg); }
   3%        { opacity: 1; }
   20%       { opacity: 1; }
-  28%, 100% { opacity: 0; transform: translate(-130vw, 44vh) rotate(14deg); }
+  28%, 100% { opacity: 0; transform: translate(-130vw, 44vh) rotate(-12deg); }
 }
 
 /* a planet, low and dim, so the corner is not empty */
-#ck-sky .ck-planet {
+.ck-sky-box .ck-planet {
   position: absolute; right: -60px; bottom: -90px; width: 260px; height: 260px;
   border-radius: 50%; opacity: .5;
   background:
@@ -483,7 +486,7 @@ window.CHICKEN_COSMOS = (function () {
   box-shadow: 0 0 70px rgba(110, 100, 255, .35), inset -18px -22px 60px rgba(0, 0, 0, .6);
   animation: ck-float 16s ease-in-out infinite alternate;
 }
-#ck-sky .ck-planet::after {                 /* its ring */
+.ck-sky-box .ck-planet::after {                 /* its ring */
   content: ""; position: absolute; left: 50%; top: 50%;
   width: 400px; height: 92px; transform: translate(-50%, -50%) rotate(-18deg);
   border-radius: 50%; border: 2px solid rgba(160, 190, 255, .25);
@@ -576,9 +579,60 @@ window.CHICKEN_COSMOS = (function () {
   box-shadow: 0 0 0 2px rgba(120, 220, 255, .7), 0 0 14px rgba(120, 220, 255, .5);
 }
 
+/* ---------- the mod menu, same treatment ----------------------------- */
+#ckScriptMenu {
+  width: 780px !important;
+  height: 520px !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  isolation: isolate;
+  color: #dbe4ff;
+  background:
+    radial-gradient(120% 90% at 12% 0%,   rgba(124, 92, 255, .26) 0%, transparent 55%),
+    radial-gradient(100% 80% at 88% 10%,  rgba(77, 216, 255, .18) 0%, transparent 50%),
+    linear-gradient(160deg, #06071c 0%, #090d28 50%, #12092b 100%) !important;
+  border: 1px solid rgba(150, 170, 255, .18);
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, .65),
+    0 0 0 1px rgba(255, 255, 255, .03) inset,
+    0 0 120px rgba(124, 92, 255, .12) inset;
+}
+/* its own sky, behind the tabs and the settings list */
+#ckScriptMenu > .ck-menusky {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+}
+#ckScriptMenu > .ck-menusky .ck-planet {
+  right: -70px; bottom: -110px; width: 200px; height: 200px; opacity: .38;
+}
+#ckScriptMenu > .ck-menusky .ck-planet::after { width: 310px; height: 72px; }
+#ckScriptMenu > *:not(.ck-menusky) { position: relative; z-index: 1; }
+#ckScriptMenu > div[style*="212.5px"] {
+  background: rgba(8, 11, 30, .55) !important;
+  border-right: 1px solid rgba(150, 170, 255, .14);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+/* the rows the client builds for each setting */
+#ckScriptMenu div[style*="height: 40px"] {
+  border-radius: 9px !important;
+  transition: background .16s ease, box-shadow .16s ease;
+}
+#ckScriptMenu div[style*="height: 40px"]:hover {
+  background-color: rgba(120, 220, 255, .10) !important;
+  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, .22);
+}
+#ckScriptMenu input, #ckScriptMenu select {
+  color: #e8efff !important;
+  background: rgba(255, 255, 255, .06) !important;
+  border: 1px solid rgba(150, 170, 255, .22) !important;
+  border-radius: 7px !important;
+  outline: none;
+}
+#ckScriptMenu select option { color: #0b1020; background: #dfe7ff; }
+
 /* ---------- someone may be on reduce-motion -------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  #ck-sky *, #ck-sky::after, #ckMenu { animation: none !important; }
+  .ck-sky-box *, .ck-sky-box::after, #ckMenu { animation: none !important; }
 }
 `;
 
@@ -589,24 +643,40 @@ window.CHICKEN_COSMOS = (function () {
         + '<div class="ck-shoot c"></div><div class="ck-shoot d"></div>'
         + '<div class="ck-planet"></div>';
 
+    function styles() {
+        if (document.getElementById("ck-cosmos-css")) return;
+        const style = document.createElement("style");
+        style.id = "ck-cosmos-css";
+        style.textContent = CSS;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
     // Drops the stylesheet in and puts the sky behind everything already in the
-    // menu. Safe to call more than once.
+    // main menu. Safe to call more than once.
     function install(mainMenu) {
-        if (!document.getElementById("ck-cosmos-css")) {
-            const style = document.createElement("style");
-            style.id = "ck-cosmos-css";
-            style.textContent = CSS;
-            (document.head || document.documentElement).appendChild(style);
-        }
+        styles();
         if (mainMenu && !document.getElementById("ck-sky")) {
             const sky = document.createElement("div");
             sky.id = "ck-sky";
+            sky.className = "ck-sky-box";
             sky.innerHTML = SKY;
             mainMenu.insertBefore(sky, mainMenu.firstChild);
         }
     }
 
-    return { css: CSS, sky: SKY, install: install };
+    // Same scene for the mod menu. It gets its own sky element because the two
+    // are separate stacking contexts.
+    function dressMenu(menu) {
+        styles();
+        if (!menu || menu.querySelector(".ck-menusky")) return;
+        menu.id = "ckScriptMenu";
+        const sky = document.createElement("div");
+        sky.className = "ck-menusky ck-sky-box";
+        sky.innerHTML = SKY;
+        menu.insertBefore(sky, menu.firstChild);
+    }
+
+    return { css: CSS, sky: SKY, install: install, dressMenu: dressMenu };
 })();
 
 const config = {
@@ -25732,7 +25802,7 @@ class AI {
     chatButton.style.display = "none";
     storeButton.style.left = "270px";
     mapDisplay.style.backgroundSize = "100% 100%";
-    mapDisplay.style.backgroundImage = "url('https://i.imgur.com/fgFsQJp.png')";
+    // minimap texture removed with the rest of the texture pack
     storeButton.removeAttribute("id");
     allianceButton.removeAttribute("id");
     itemInfoHolder.style.left = "270px";
@@ -25805,7 +25875,9 @@ class AI {
                 this.discordButton.style.display = "none";
                 this.controlsElement.style.right = "0px";
             };
-            mainMenu.appendChild(this.controlsButton);
+            // The Help, Changelogs and Discord buttons and the credits line
+            // are still built -- other handlers reference them -- but they are
+            // no longer put on the menu.
             this.controlsElement = document.createElement("div");
             this.controlsElement.style = `
            position: absolute;
@@ -25871,7 +25943,6 @@ class AI {
                 this.discordButton.style.display = "none";
                 this.changeLogElement.style.right = "0px";
             };
-            mainMenu.appendChild(this.channelLogButton);
             this.changeLogElement = document.createElement("div");
             this.changeLogElement.style = `
            position: absolute;
@@ -25940,7 +26011,6 @@ class AI {
            Game created by <a href="https://frvr.com/" style="cursor: pointer;" target="_blank">FRVR</a><br>
            Script created by <a href="https://www.youtube.com/@memeganoob" style="cursor: pointer;" target="_blank">mega</a>
            `;
-            mainMenu.appendChild(this.createdByElement);
             this.discordButton = document.createElement("div");
             this.discordButton.style = `
            position: absolute;
@@ -25957,7 +26027,6 @@ class AI {
             this.discordButton.onclick = () => {
                 location.href = "https://discord.gg/AFYkkKTZq4";
             };
-            mainMenu.appendChild(this.discordButton);
             /*for (let i = 0; i < tmpBackgroundBuildings.length; i++) {fixed lag, lag fixed, x2
                 let tmp = tmpBackgroundBuildings[i];
                 let scale = 0;
@@ -26057,9 +26126,6 @@ class AI {
                </button>
            </div>
            <div id="playerSkinHolder" style="margin-top: -20px; display: flex; align-items: center; justify-content: center; width: 100%; height: 60px;">
-           </div>
-           <div style="margin-top: -10px; width: 100%; color: white; text-align: center;">
-               Welcome back, ${getSavedVal("moo_discord_username") || "unknown user"}!
            </div>
            `;
             this.nameInput = document.getElementById("playerNameInput");
@@ -27347,8 +27413,11 @@ class AI {
         t.closePath();
     }
     function getItemSprite(e, t) {
-        let i = scriptMenu.toggles.hyperPerformance;
-        let s = e.id + (player && e.owner && e.owner.sid == player.sid ? 0 : player && player.team && e.owner && isAlly(e.owner.sid) ? 25 : 50) + e.scale.toString() + (scriptMenu.toggles.renderShadows ? "Shadow" : "") + scriptMenu.toggles.hyperPerformance;
+        // "Hyper Performance" repaints every object flat blue and the ground
+        // flat yellow. Forced off here so items keep the game's own colours;
+        // the branches below now always take the normal side.
+        let i = false;
+        let s = e.id + (player && e.owner && e.owner.sid == player.sid ? 0 : player && player.team && e.owner && isAlly(e.owner.sid) ? 25 : 50) + e.scale.toString() + (scriptMenu.toggles.renderShadows ? "Shadow" : "") + i;
         var n = itemSprites[s];
         if (!n || t) {
             var a = document.createElement("canvas");
@@ -31876,7 +31945,7 @@ class AI {
     }
     var gameObjectSprites = {};
     function getResSprite(e) {
-        let t = scriptMenu.toggles.hyperPerformance;
+        let t = false;               // see getItemSprite
         let i = e.y >= config.mapScale - config.snowBiomeTop ? 2 : e.y <= config.snowBiomeTop ? 1 : 0;
         let s = e.type + "_" + e.scale + "_" + i + (e.type == 0 ? e.colorType : "") + (scriptMenu.toggles.renderShadows ? "Shadow" : "") + t;
         let n = gameObjectSprites[s];
@@ -32048,7 +32117,7 @@ class AI {
         }
         var f = camX - maxScreenWidth / 2;
         var y = camY - maxScreenHeight / 2;
-        if (scriptMenu.toggles.hyperPerformance) {
+        if (false) {                 // was the flat-yellow ground
             mainContext.fillStyle = "#ffff00";
             mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
         } else if (config.snowBiomeTop - y <= 0 && config.mapScale - config.snowBiomeTop - y >= maxScreenHeight) {
@@ -32191,7 +32260,7 @@ class AI {
             }
         }
         mainContext.globalAlpha = 1;
-        mainContext.fillStyle = `rgba(0, 0, 70, ${scriptMenu.toggles.hyperPerformance ? 0 : 0.35})`;
+        mainContext.fillStyle = "rgba(0, 0, 70, 0.35)";
         mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
         mainContext.strokeStyle = darkOutlineColor;
         if (chicken.pushing) {
@@ -32387,7 +32456,7 @@ class AI {
                         let ei = Z.y - Z.scale - y - 90 - J.add;
                         let es = 37;
                         let en = Q.width + 17;
-                        mainContext.fillStyle = scriptMenu.toggles.hyperPerformance ? "rgb(0, 0, 255, .8)" : "rgba(0, 0, 0, 0.2)";
+                        mainContext.fillStyle = "rgba(0, 0, 0, 0.2)";
                         mainContext.roundRect(ee - en / 2, ei - es / 2 + 10, en, es, 6);
                         mainContext.fill();
                         mainContext.fillStyle = J.color;
@@ -33047,6 +33116,7 @@ class AI {
             this.itemHolder.style = "position: absolute; top: 0px; left: 212.5px; width: calc(100% - 212.5px); height: 100%; overflow: hidden;";
             this.menu.appendChild(this.itemHolder);
             document.body.appendChild(this.menu);
+            CHICKEN_COSMOS.dressMenu(this.menu);   // same space scene as the main menu
             this.darkModeElement = document.createElement("div");
             this.darkModeElement.style = "opacity: 0; position: absolute; top: 0px; left: 0px; width: 100%; height: 100%; background-color: rgb(0, 0, 70, .25); pointer-events: none; transition: 5s; ";
             document.body.insertBefore(this.darkModeElement, this.menuElement);
@@ -33520,11 +33590,7 @@ class AI {
                                     id: "stackText",
                                     type: "toggle",
                                 },
-                                {
-                                    label: "Hyper Performance",
-                                    id: "hyperPerformance",
-                                    type: "toggle",
-                                },
+                                // "Hyper Performance" removed: all it did was repaint everything flat blue.
                                 {
                                     label: "Render Shadows",
                                     id: "renderShadows",
@@ -34987,46 +35053,21 @@ class AI {
     }
     var skinSprites = {};
     var skinPointers = {};
+    // What is left of the texture pack. These were imgur URLs for recoloured
+    // weapon art; the images are gone, but updateActionBar() still reads this
+    // as a set to decide which weapons get the fourth XP tier, so the names
+    // stay. newHatImgs / newAccImgs / newWeaponImgs went with the rest.
     var emeraldSprites = {
-        "hand axe": "https://i.imgur.com/99Xb4Lm.png",
-        bat: "https://i.imgur.com/VlQlb1Z.png",
-        "hunting bow": "https://i.imgur.com/2aW8Wmw.png",
-        crossbow: "https://i.imgur.com/2JWfFFW.png",
-        "repeater crossbow": "https://i.imgur.com/JuLVN8T.png",
-        daggers: "https://i.imgur.com/4VedRsh.png",
-        "mc grabby": "https://i.imgur.com/F1qfrLj.png",
-        "great axe": "https://i.imgur.com/kGbXWqw.png",
-        "great hammer": "https://i.imgur.com/tmUzurk.png",
-        "tool hammer": "https://i.imgur.com/xnVbXSB.png",
-        katana: "https://i.imgur.com/AZP6Aci.png",
-        stick: "https://i.imgur.com/NbSpR2M.png",
-        polearm: "https://media.discordapp.net/attachments/1387181313886392501/1387188857136742400/2025_04_21_0vb_Kleki.png?ex=685e6a0c&is=685d188c&hm=e5f9a37be604f96cf318a85a04cc43fe6a2b90c5839b3245f00165e31dc0cccc&=&format=webp&quality=lossless",
-        "short sword": "https://i.imgur.com/V9dzAbF.png",
-    };
-    var newHatImgs = {
-        7: "https://i.imgur.com/vAOzlyY.png",
-        15: "https://i.imgur.com/YRQ8Ybq.png",
-        40: "https://i.imgur.com/pe3Yx3F.png",
-        26: "https://i.imgur.com/I0xGtyZ.png",
-    };
-    var newAccImgs = {
-        18: "https://i.imgur.com/0rmN7L9.png",
-        21: "https://i.imgur.com/4ddZert.png",
-    };
-    var newWeaponImgs = {
-        sword_1_r: "https://i.imgur.com/V9dzAbF.png",
-        samurai_1_r: "https://i.imgur.com/vxLZW0S.png",
+        "hand axe": true, bat: true, "hunting bow": true, crossbow: true,
+        "repeater crossbow": true, daggers: true, "mc grabby": true,
+        "great axe": true, "great hammer": true, "tool hammer": true,
+        katana: true, stick: true, polearm: true, "short sword": true,
     };
     function getTexturePackImg(e, t, i, s) {
-        if (i && emeraldSprites[s.name]) {
-            return emeraldSprites[s.name];
-        } else if (newHatImgs[e] && t == "hat") {
-            return newHatImgs[e];
-        } else if (newAccImgs[e] && t == "acc") {
-            return newAccImgs[e];
-        } else if (newWeaponImgs[e] && t == "weapons") {
-            return newWeaponImgs[e];
-        } else if (t == "acc") {
+        // The texture pack is gone: every hat, accessory and weapon override
+        // pointed at imgur, and the emerald sprites recoloured weapons on top of
+        // that. These now resolve to the game's own art, nothing remote.
+        if (t == "acc") {
             return ".././img/accessories/access_" + e + ".png";
         } else if (t == "hat") {
             return ".././img/hats/hat_" + e + ".png";
@@ -35140,117 +35181,7 @@ class AI {
         function (e) {
         window.setTimeout(e, 1000 / 60);
     };
-    function crate() {
-        var d = document.createElement("div");
-        d.style.position = "fixed";
-        d.style.top = "35%";
-        d.style.left = "0.5%";
-        d.style.background = "rgba(0,0,0,0.3)";
-        d.style.zIndex = "999999";
-        d.style.boxShadow = "2px 2px 4px 2px rgba(0,0,0,0.3)";
-        d.style.width = "298px";
-        d.style.height = "200px";
-        d.style.overflow = "hidden";
-        d.style.borderWidth = "4px";
-        d.style.backdropFilter = "blur(2px)";
-
-        var k = document.createElement("canvas");
-        d.appendChild(k);
-
-        var key = document.createElement("div");
-        key.style.marginTop = "10px";
-        key.style.textAlign = "center";
-        key.style.fontSize = "12px";
-        key.style.color = "#fff";
-        key.innerHTML = `
-        <div>
-            <span style="display:inline-block;width:12px;height:12px;background:#ff5500;"></span>
-            <strong>Ping</strong>: <span id="pingStat">0</span>
-        </div>
-        <div>
-            <span style="display:inline-block;width:12px;height:12px;background:#00ff55;"></span>
-            <strong>FPS</strong>: <span id="fpsStat">0</span>
-        </div>
-    `;
-        d.appendChild(key);
-
-        document.body.appendChild(d);
-
-        var ctx = k.getContext("2d");
-
-        var show = {
-            labels: [],
-            datasets: [
-                { label: "Ping", data: [], borderColor: "#ff5500", pointRadius: 0, borderWidth: 2, tension: 0.4 },
-                { label: "FPS", data: [], borderColor: "#00ff55", pointRadius: 0, borderWidth: 2, tension: 0.4 },
-            ],
-        };
-
-        var config = {
-            type: "line",
-            data: show,
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { display: false },
-                    y: { grid: { color: "rgba(255,255,255,0.1)" }, ticks: { color: "#fff", callback: (v) => v.toFixed(0) } },
-                },
-                animation: { duration: 0 },
-            },
-        };
-
-        var chart = new Chart(ctx, config);
-        const updateInterval = 16;
-        let lastUpdate = 0;
-
-        function smooth(last, next) {
-            return last + (next - last) * 0.2;
-        }
-
-        function updateChart() {
-            const now = Date.now();
-            if (now - lastUpdate < updateInterval) return;
-
-            const ping = window.pingTime || 0;
-            const fpsVal = fps;
-
-            if (show.datasets[0].data.length) {
-                show.datasets[0].data.push(smooth(show.datasets[0].data.at(-1), ping));
-                show.datasets[1].data.push(smooth(show.datasets[1].data.at(-1), fpsVal));
-            } else {
-                show.datasets[0].data.push(ping);
-                show.datasets[1].data.push(fpsVal);
-            }
-
-            if (show.datasets[0].data.length > 60) {
-                show.datasets.forEach((d) => d.data.shift());
-                show.labels.shift();
-            }
-
-            show.labels.push("");
-            document.getElementById("pingStat").innerText = ping;
-            document.getElementById("fpsStat").innerText = fpsVal;
-
-            chart.update();
-            lastUpdate = now;
-        }
-
-        (function loop() {
-            updateChart();
-            requestAnimationFrame(loop);
-        })();
-    }
-
-    function trashi(url, callback) {
-        var script = document.createElement("script");
-        script.onload = callback;
-        script.src = url;
-        document.head.appendChild(script);
-    }
-
-    trashi("https://cdn.jsdelivr.net/npm/chart.js", crate);
+    // The ping/FPS graph and the chart.js it pulled off jsDelivr are gone.
 
     doUpdate();
 })();
