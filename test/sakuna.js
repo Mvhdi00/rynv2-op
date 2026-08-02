@@ -150,7 +150,7 @@ console.log('\n6. it can actually run');
 
 check(/@run-at\s+document-start/.test(src), 'it runs at document-start now');
 check(/function __sakunaBoot\(\)/.test(code), 'with the DOM work deferred');
-check(/DOMContentLoaded", __sakunaBoot/.test(code), 'until the document is ready');
+check(/__sakunaStart\(\);/.test(code), 'until the game is ready');
 check(!/rawgit\.com/.test(code), 'the dead rawgit msgpack injection is gone');
 // the shim's own trampoline (NativeWebSocket.prototype.send) is the point; what
 // must be gone is the client's own override of the global prototype
@@ -178,6 +178,76 @@ check(!/GM_getValue\(|GM_setValue\(/.test(code),
 check(/localStorage\.setItem\("sakuna_tokenlist"/.test(code)
       && /localStorage\.setItem\("sakuna_chatalist"/.test(code),
       'replaced with localStorage on both call sites');
+
+// --------------------------------------------------------------------------
+console.log('\n8. the boot survives running early');
+
+// Moving to document-start broke this once already: `unsafeWindow` is undefined
+// under "@grant none", and at document-end window.config always happened to be
+// set, so the || short-circuited and nobody noticed. Booting earlier made the
+// right-hand side evaluate, which threw and killed the rest of the boot -- the
+// game ran with none of the mod on screen.
+check(!/window\.config \|\| unsafeWindow\.config/.test(code),
+      'the bare unsafeWindow fallback is gone');
+check(/typeof unsafeWindow !== "undefined"/.test(code),
+      'and the only reference left is behind a typeof guard');
+
+check(/function __sakunaStart\(waited\)/.test(code),
+      'the boot waits on the game, not merely on the DOM');
+check(/if \(window\.config && document\.body\)/.test(code),
+      'specifically on window.config, which is what it reads first');
+check(/waited > 30000/.test(code), 'and gives up loudly rather than polling forever');
+check(/function __sakunaBootSafely\(\)/.test(code)
+      && /the mod failed to start/.test(src),
+      'a boot that throws says so instead of just not appearing');
+
+// every identifier the boot reaches before any function call must exist
+{
+  const acorn = require('acorn');
+  const ast = acorn.parse(src, { ecmaVersion: 'latest' });
+  let boot = null;
+  for (const n of ast.body) if (n.type === 'FunctionDeclaration' && n.id.name === '__sakunaBoot') boot = n;
+  const declared = new Set(require('module').builtinModules ? [] : []);
+  for (const g of ['window','document','console','Math','JSON','Date','Object','Array','String','Number',
+                   'Boolean','Promise','Map','Set','Symbol','RegExp','Error','parseInt','parseFloat','isNaN',
+                   'setTimeout','setInterval','clearTimeout','clearInterval','fetch','localStorage','navigator',
+                   'location','performance','requestAnimationFrame','Uint8Array','DataView','ArrayBuffer',
+                   'TextEncoder','TextDecoder','Image','Audio','WebSocket','Blob','FileReader','URL','btoa',
+                   'atob','alert','prompt','screen','history','Event','Storage','CanvasRenderingContext2D',
+                   'MessageChannel','crypto','undefined','NaN','Infinity','globalThis']) declared.add(g);
+  // a name the file guards with `typeof x !== "undefined"` cannot throw where
+  // it is used, so treat it as safe rather than build a reachability analyser
+  for (const m of src.matchAll(/typeof\s+([A-Za-z_$][\w$]*)\s*[!=]==?\s*["']undefined["']/g)) declared.add(m[1]);
+  (function collect(n) {
+    if (!n || typeof n !== 'object') return;
+    if (Array.isArray(n)) return n.forEach(collect);
+    if ((n.type === 'VariableDeclarator' || n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration')
+        && n.id && n.id.name) declared.add(n.id.name);
+    if (/Function/.test(n.type)) (n.params || []).forEach(p => { if (p.name) declared.add(p.name); });
+    for (const k in n) if (k !== 'type' && k !== 'start' && k !== 'end') collect(n[k]);
+  })(ast);
+
+  const risky = [];
+  for (const st of boot.body.body) {
+    if (st.type === 'FunctionDeclaration' || st.type === 'ClassDeclaration') continue;
+    (function scan(n) {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(scan);
+      if (/FunctionExpression|ArrowFunctionExpression/.test(n.type)) return;   // deferred, not boot-time
+      // `typeof x` on an undeclared name is legal and is exactly how the
+      // unsafeWindow reference is guarded
+      if (n.type === 'UnaryExpression' && n.operator === 'typeof'
+          && n.argument.type === 'Identifier') return;
+      if (n.type === 'Identifier' && !declared.has(n.name)) risky.push(n.name);
+      if (n.type === 'MemberExpression') { scan(n.object); if (n.computed) scan(n.property); return; }
+      if (n.type === 'Property') { if (n.computed) scan(n.key); scan(n.value); return; }
+      for (const k in n) if (k !== 'type' && k !== 'start' && k !== 'end') scan(n[k]);
+    })(st);
+  }
+  check(risky.length === 0,
+        'nothing the boot touches immediately is an undeclared identifier'
+        + (risky.length ? ' (found: ' + [...new Set(risky)].join(', ') + ')' : ''));
+}
 
 console.log('\n' + (fails === 0 ? '=> ALL SAKUNA TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
 process.exit(fails ? 1 : 0);

@@ -1079,7 +1079,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 583 checks.
+them with `npm test` — 590 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
@@ -1154,6 +1154,32 @@ fixed 15-name table, each name cross-checked against the argument shapes at its
 call sites; `getMessage` reading through `EXP.receive`; bots minting a `cf:`
 token each through `EXP.freshToken()` and framing through `EXP.send`;
 `localStorage` in place of the `GM_` calls.
+
+## The boot died silently (a regression I introduced)
+
+Reported after the first fix: the game ran, but none of the mod appeared.
+
+```js
+let config = window.config || unsafeWindow.config;
+```
+
+`unsafeWindow` is undefined under `@grant none`. At `document-end` — where this
+script used to run — `window.config` was always set by then, so `||`
+short-circuited and the right-hand side was never evaluated. Moving to
+`document-start` and booting on `DOMContentLoaded` meant `window.config` often
+was *not* set yet, so the fallback evaluated, threw `ReferenceError`, and killed
+the rest of the boot. The game carried on, so it looked exactly like the script
+not being installed.
+
+Two changes: the reference is behind a `typeof` guard, and the boot now waits
+for `window.config` — the thing it reads first — rather than for the DOM alone,
+giving up loudly after 30 s. A boot that throws anyway is caught, logged as
+`[sakuna] the mod failed to start`, and rethrown.
+
+`test/sakuna.js` walks the AST of `__sakunaBoot` and asserts that **no
+identifier it touches before the first function call is undeclared**, so this
+class of bug cannot come back unnoticed. (`typeof`-guarded names are exempt,
+which is exactly how the `unsafeWindow` reference is written now.)
 
 The packet rules moved out of the prototype override into `applyOutgoing()`, so
 packets the script injects through `packet()` now get the same anti-profanity,

@@ -862,7 +862,13 @@ window.oncontextmenu = function () {
 };
 
 
-let config = window.config || unsafeWindow.config;
+// `unsafeWindow` is undefined under "@grant none", so the original
+// `window.config || unsafeWindow.config` threw a ReferenceError any time
+// window.config was not set yet. At document-end it always was, so the || 
+// short-circuited and nobody noticed; booting earlier made it throw, which
+// killed the rest of the boot and left the game running with none of the
+// mod on screen.
+let config = window.config || (typeof unsafeWindow !== "undefined" ? unsafeWindow.config : undefined);
 
 // CLIENT:
 config.clientSendRate = 9; // Aim Packet Send Rate
@@ -14252,8 +14258,31 @@ window.CG = function() {
 })();
 }
 
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", __sakunaBoot, { once: true });
-} else {
-    __sakunaBoot();
+// DOMContentLoaded is not enough: the client below reads window.config on
+// its first pass, and the game bundle publishes that when *it* runs, which
+// can be well after the DOM is parsed. Wait for the game itself.
+function __sakunaStart(waited) {
+    waited = waited || 0;
+    if (window.config && document.body) {
+        __sakunaBootSafely();
+        return;
+    }
+    if (waited > 30000) {
+        console.error("[sakuna] the game never published window.config; not starting");
+        return;
+    }
+    setTimeout(function () { __sakunaStart(waited + 50); }, 50);
+}
+__sakunaStart();
+
+// If the boot throws partway, the game keeps running and the mod simply is
+// not there -- which looks exactly like the script not being installed. Say
+// so instead of failing silently.
+function __sakunaBootSafely() {
+    try {
+        __sakunaBoot();
+    } catch (e) {
+        console.error("[sakuna] the mod failed to start:", e);
+        throw e;
+    }
 }
