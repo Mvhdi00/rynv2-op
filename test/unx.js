@@ -562,6 +562,141 @@ console.log('\n15. the bots run here now, not on a dead relay');
 }
 
 // --------------------------------------------------------------------------
+console.log('\n15c. auto grind behaves like the RYN client\'s module');
+
+{
+  const G = extract.loadUnxGrind();
+  const { unxGrind: grind, owner, calls } = G;
+
+  // great hammer (10) as secondary, polearm (5) as primary
+  G.setWeapons([
+    { dmg: 25, sDmg: 3.3, range: 70 }, {}, {}, {}, {}, { dmg: 55, sDmg: 3.3, range: 110 },
+    {}, {}, { dmg: 1, sDmg: 1 }, {}, { dmg: 40, sDmg: 7.5, range: 110 },
+  ]);
+  const mkPlayer = xp => ({
+    sid: 1, x: 0, y: 0, points: 10000, weaponIndex: 5,
+    weapons: [5, 10], items: [0, 0, 0, 0, 0, 17], skins: {}, weaponXP: xp,
+  });
+  const turret = (x, y, health) => ({ active: true, name: 'turret', x, y, health, owner: { sid: 1 } });
+
+  G.setPlayer(mkPlayer([]));
+  check(grind.variantOf(5) === 0, 'no XP is variant 0');
+  G.setPlayer(mkPlayer({ 5: 3000 }));
+  check(grind.variantOf(5) === 1, '3000 XP is variant 1');
+  G.setPlayer(mkPlayer({ 5: 12000 }));
+  check(grind.variantOf(5) === 3, '12000 XP is ruby');
+
+  // --- the stop condition, which the old one never had ---
+  G.setPlayer(mkPlayer({ 5: 12000, 10: 12000 }));
+  check(grind.isFullyUpgraded() === true, 'both weapons at ruby counts as done');
+  calls.length = 0;
+  check(grind.tick(owner) === false, 'and grinding stops rather than carrying on for XP that cannot be earned');
+  check(G.scriptMenu.toggles.autoGrind === false, 'the toggle turns itself off');
+  check(calls.length === 0, 'nothing is placed or swung after that');
+  G.scriptMenu.toggles.autoGrind = true;
+
+  G.setPlayer(mkPlayer({ 5: 12000, 10: 0 }));
+  check(grind.isFullyUpgraded() === false, 'a primary at ruby alone is not done -- the hammer still needs XP');
+
+  // --- placement: two turrets either side of the aim, not four on a compass ---
+  G.setPlayer(mkPlayer({ 5: 0, 10: 0 }));
+  G.setObjects([]);
+  G.setSandbox(false);
+  owner.aim = 0;
+  calls.length = 0;
+  check(grind.tick(owner) === true, 'with no turret of ours in range it lays some down');
+  const placed = calls.filter(c => c[0] === 'place');
+  check(placed.length === 2, 'two of them, not the four the old code placed');
+  check(placed.every(c => c[1] === 17), 'and they are the turret from the item slot');
+  const spread = Math.PI / 180 * 40;
+  check(Math.abs(placed[0][2] - -spread) < 1e-9 && Math.abs(placed[1][2] - spread) < 1e-9,
+        'at 40 degrees either side of where we are already aiming');
+
+  G.setSandbox(true);
+  calls.length = 0;
+  grind.tick(owner);
+  check(calls.filter(c => c[0] === 'place').length === 3, 'sandbox gets three, at the wider spread');
+  G.setSandbox(false);
+
+  // --- aiming at the turrets, not the cursor ---
+  G.setObjects([turret(100, 0, 800), turret(0, 100, 800)]);
+  calls.length = 0;
+  grind.tick(owner);
+  check(Math.abs(grind.angle - Math.PI / 4) < 1e-9,
+        'with turrets down it aims at their centre, which the old code never did');
+
+  // --- weapon and hat choice ---
+  G.setPlayer(mkPlayer({ 5: 0, 10: 0 }));
+  G.setObjects([turret(100, 0, 800)]);
+  let act = grind.action({ health: 800 });
+  check(act.weapon === 1, 'the great hammer is levelled first');
+  check(act.hat === 40, 'wearing the tank hat while the turret can take it');
+
+  // While the hammer still needs XP the health of the turret does not enter
+  // into it -- RYN returns the hammer and the tank hat straight away.
+  act = grind.action({ health: 1 });
+  check(act.weapon === 1 && act.hat === 40,
+        'and it does so even on an almost-dead turret, exactly as RYN does');
+
+  // Once the hammer is ruby the primary is the one earning XP, and now the
+  // turret's health decides what actually gets swung.
+  G.setPlayer(mkPlayer({ 5: 0, 10: 12000 }));
+  const primaryDmg = grind.buildingDamage(5, true);
+  const secondaryDmg = grind.buildingDamage(10, true);
+
+  act = grind.action({ health: primaryDmg + secondaryDmg + 100 });
+  check(act.weapon === 1 && act.hat === 40,
+        'a turret too healthy for both weapons together is softened with the hammer and the tank hat');
+
+  act = grind.action({ health: primaryDmg + 1 });
+  check(act.weapon === 1 && act.hat === 0,
+        'a turret it would overkill loses the tank hat -- this is what stops it destroying its own turrets');
+
+  act = grind.action({ health: primaryDmg - 1 });
+  check(act.weapon === 0 && act.hat === 40,
+        'and only once the turret is inside one primary hit does the primary swing');
+
+  G.setPlayer(mkPlayer({ 5: 12000, 10: 12000 }));
+  check(grind.action({ health: 800 }) === null, 'with nothing left to level it asks for no swing at all');
+
+  // --- safety: an enemy on top of you ---
+  // back to a player with XP still to earn; the action() checks above left it
+  // fully upgraded, which would just switch the module off
+  G.setPlayer(mkPlayer({ 5: 0, 10: 0 }));
+  G.scriptMenu.toggles.autoGrind = true;
+  G.setObjects([turret(100, 0, 800)]);
+  G.setEnemy({ x: 50, y: 0 });
+  calls.length = 0;
+  check(grind.tick(owner) === false, 'it will not grind with an enemy in range');
+  check(calls.length === 0, 'and does nothing at all in that case');
+  G.setEnemy({ x: 5000, y: 5000 });
+  check(grind.tick(owner) === true, 'a distant enemy is fine');
+
+  // --- reload gate ---
+  G.setReloaded(0.5);
+  calls.length = 0;
+  grind.tick(owner);
+  check(!calls.some(c => c[0] === 'hit'), 'it does not swing while the weapon is still reloading');
+  G.setReloaded(1);
+  calls.length = 0;
+  grind.tick(owner);
+  check(calls.some(c => c[0] === 'hit'), 'and does once it is ready');
+
+  // --- no turret in the item slot ---
+  const noTurret = mkPlayer({ 5: 0, 10: 0 });
+  noTurret.items[5] = 0;
+  G.setPlayer(noTurret);
+  check(grind.tick(owner) === false, 'without a turret in the build slot it does nothing');
+
+  // --- and the shape of it in the shipped file ---
+  check(!/for \(let m = 0; m < 4; m\+\+\) \{\n\s*placer\.regCheckPlace/.test(src),
+        'the four fixed compass angles are gone from the script');
+  check(/unxGrind\.tick\(this\)/.test(src), 'the action loop calls the ported module');
+  check(/typeof unxGrind\.angle == "number"/.test(src),
+        'and getAttackDir prefers its angle over the cursor');
+}
+
+// --------------------------------------------------------------------------
 console.log('\n16. the file carries no comments but its metadata block');
 
 {
@@ -576,8 +711,8 @@ console.log('\n16. the file carries no comments but its metadata block');
   check(found.length > 0 && found.every(cm => cm.start < metaEnd),
         'the metadata block itself is still there, comments and all');
   check(/^\/\/ ==UserScript==/.test(src), 'and it is still the first thing in the file');
-  check(src.split('\n').length < 14000,
-        'the file is ' + src.split('\n').length + ' lines, down from 35140');
+  check(src.split('\n').length < 15000,
+        'the file is ' + src.split('\n').length + ' lines, down from the 35140 it shipped as');
 }
 
 Promise.all(pending).then(() => {

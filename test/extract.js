@@ -297,6 +297,57 @@ module.exports = {
     return require(write('chicken.js', src));
   },
 
+  /** unX's auto grind -- the port of RYN's AutoGrind -- on stubbed game state. */
+  loadUnxGrind() {
+    const l = lines(CHICKEN);
+    const a = findLine(l, '    const GRIND_RUBY = 3;');
+    const b = findLine(l, '    let lastKillName = "";', a);
+    const grind = l.slice(a, b).join('\n');
+
+    const ca = findLine(l, 'const config = {');
+    const cb = findLine(l, '};', ca);
+    const cfg = l.slice(ca, cb + 1).join('\n');
+
+    const src = `
+${cfg}
+let player = null, gameObjects = [], isSandbox = false;
+const items = { weapons: [] };
+const hats = [{ id: 40, price: 3000 }];
+const scriptMenu = { toggles: { autoGrind: true } };
+const game = { enemies: { nearest: null } };
+const UTILS = { getDistance: (a, b) => Math.hypot(a.x - b.x, a.y - b.y) };
+const calls = [];
+const placer = { regCheckPlace: (id, ang) => calls.push(['place', id, ang]) };
+const hatSystem = {
+  storeEquip: (id, i, f) => calls.push(['hat', id]),
+  doBasicFunction: () => calls.push(['hat', 'basic']),
+};
+let reloaded = 1;
+const healer = { reloadPercent: () => reloaded };
+global.document = { getElementById: () => null };
+
+${grind}
+
+const owner = {
+  aim: 0,
+  getAttackDir(t) { return this.aim; },
+  selectToBuild: (i, w) => calls.push(['weapon', i]),
+  sendHitOnce: () => calls.push(['hit']),
+};
+
+module.exports = {
+  unxGrind, owner, calls, config, items, hats, scriptMenu, game,
+  setPlayer: p => { player = p; },
+  setObjects: o => { gameObjects = o; },
+  setSandbox: v => { isSandbox = v; },
+  setReloaded: v => { reloaded = v; },
+  setEnemy: e => { game.enemies.nearest = e; },
+  setWeapons: w => { items.weapons = w; },
+};
+`;
+    return require(write('unx_grind.js', src));
+  },
+
   /**
    * unX's bot layer: the real per-bot game connection (BotSocket) and the
    * stand-in for the dead glitch.me relay socket (LocalRelay), loaded with the

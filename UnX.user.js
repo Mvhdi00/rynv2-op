@@ -8604,6 +8604,9 @@ class AI {
             if (this.objBreakingTarget) {
                 return UTILS.getDirection(this.objBreakingTarget, player);
             } else if (!e || scriptMenu.toggles.autoGrind || this.onClick.tank || this.onClick.bull) {
+                if (scriptMenu.toggles.autoGrind && typeof unxGrind.angle == "number") {
+                    return unxGrind.angle;
+                }
                 return Math.atan2(mouseY - screenHeight / 2, mouseX - screenWidth / 2);
             }
         }
@@ -9354,20 +9357,7 @@ class AI {
                         instaManager.startInsta(g);
                     } else if (instaManager.holdModeOT && typeof e != "number") {
                         e = instaManager.oneTickMovement();
-                    } else if (scriptMenu.toggles.autoGrind && player.items[5]) {
-                        if (player.weaponIndex != this.preferedWeaponIndex) {
-                            this.selectToBuild(this.preferedWeaponIndex, true);
-                        }
-                        if (healer.reloadPercent(player, this.preferedWeaponIndex) == 1) {
-                            hatSystem.storeEquip(40, 0, true);
-                            this.sendHitOnce();
-                            placer.preplace();
-                        } else {
-                            for (let m = 0; m < 4; m++) {
-                                placer.regCheckPlace(player.items[5], m * (Math.PI / 2));
-                            }
-                            hatSystem.doBasicFunction(true);
-                        }
+                    } else if (scriptMenu.toggles.autoGrind && unxGrind.tick(this)) {
                         hatSystem.storeEquip(11, 1, true);
                     } else if (this.onClick.tank) {
                         let u = this.equipBestBreakWeapon();
@@ -11046,6 +11036,151 @@ class AI {
     function keysActive() {
         return (document.activeElement.tagName != "INPUT" || (document.activeElement.type != "number" && document.activeElement.type != "text")) && document.activeElement.id != "chickenChatBox" && allianceMenu.style.display != "block" && chatHolder.style.display != "flex";
     }
+
+    const GRIND_RUBY = 3;
+    const GRIND_RANGE = 300;
+    const GRIND_ENEMY_RANGE = 400;
+    const GRIND_TANK_HAT = 40;
+
+    const unxGrind = {
+        angle: null,
+
+        variantOf(index) {
+            const xp = (player && player.weaponXP && player.weaponXP[index]) || 0;
+            for (let i = config.weaponVariants.length - 1; i >= 0; i--) {
+                if (xp >= config.weaponVariants[i].xp) return config.weaponVariants[i].id;
+            }
+            return 0;
+        },
+
+        isFullyUpgraded() {
+            if (!player || !player.weapons) return false;
+            const primary = player.weapons[0];
+            const secondary = player.weapons[1];
+            const doneSecondary = secondary === 10 && this.variantOf(secondary) >= GRIND_RUBY;
+            const donePrimary = primary !== 8 && this.variantOf(primary) >= GRIND_RUBY;
+            return doneSecondary && donePrimary;
+        },
+
+        buildingDamage(index, tank) {
+            const weapon = items.weapons[index];
+            if (!weapon) return 0;
+            const variant = config.weaponVariants[this.variantOf(index)];
+            return weapon.dmg * (weapon.sDmg || 1) * ((variant && variant.val) || 1) * (tank ? 3.3 : 1);
+        },
+
+        canAffordTank() {
+            if (player.skins && player.skins[GRIND_TANK_HAT]) return true;
+            const hat = hats.find((h) => h.id === GRIND_TANK_HAT);
+            return !!hat && player.points >= hat.price;
+        },
+
+        action(turret) {
+            if (!turret) return null;
+            const primary = player.weapons[0];
+            const secondary = player.weapons[1];
+            const useTank = this.canAffordTank();
+
+            let type = null;
+            if (secondary === 10 && this.variantOf(secondary) < GRIND_RUBY) type = 1;
+            else if (primary !== 8 && this.variantOf(primary) < GRIND_RUBY) type = 0;
+            if (type === null) return null;
+
+            if (type === 1) return { weapon: 1, hat: useTank ? GRIND_TANK_HAT : 0 };
+
+            const primaryDamage = this.buildingDamage(primary, useTank);
+            if (secondary === 10) {
+                const secondaryDamage = this.buildingDamage(secondary, useTank);
+                const health = turret.health != null ? turret.health : turret.currentHealth || 0;
+                if (health > primaryDamage + secondaryDamage) return { weapon: 1, hat: useTank ? GRIND_TANK_HAT : 0 };
+                if (health > primaryDamage) return { weapon: 1, hat: 0 };
+                return { weapon: 0, hat: useTank ? GRIND_TANK_HAT : 0 };
+            }
+            return { weapon: 0, hat: useTank ? GRIND_TANK_HAT : 0 };
+        },
+
+        nearbyTurrets() {
+            let sumX = 0;
+            let sumY = 0;
+            let count = 0;
+            let nearest = null;
+            let nearestDist = Infinity;
+            for (let i = 0; i < gameObjects.length; i++) {
+                const obj = gameObjects[i];
+                if (!obj.active || obj.name !== "turret") continue;
+                if (!obj.owner || obj.owner.sid !== player.sid) continue;
+                const dist = UTILS.getDistance(player, obj);
+                if (dist > GRIND_RANGE) continue;
+                sumX += obj.x;
+                sumY += obj.y;
+                count++;
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearest = obj;
+                }
+            }
+            if (!count) return null;
+            return {
+                count: count,
+                nearest: nearest,
+                angle: Math.atan2(sumY / count - player.y, sumX / count - player.x),
+            };
+        },
+
+        blocked() {
+            const enemy = game.enemies.nearest;
+            return !!enemy && UTILS.getDistance(player, enemy) < GRIND_ENEMY_RANGE;
+        },
+
+        stop() {
+            const el = document.getElementById("toggle:id:autoGrind");
+            if (el) el.click();
+            else scriptMenu.toggles.autoGrind = false;
+            this.angle = null;
+        },
+
+        tick(owner) {
+            this.angle = null;
+            if (!player || !player.items || !player.items[5]) return false;
+
+            if (this.isFullyUpgraded()) {
+                this.stop();
+                return false;
+            }
+            if (this.blocked()) return false;
+
+            const near = this.nearbyTurrets();
+            if (!near) {
+                const base = owner.getAttackDir(true);
+                if (typeof base !== "number") return false;
+                const spread = (Math.PI / 180) * (isSandbox ? 75 : 40);
+                if (isSandbox) placer.regCheckPlace(player.items[5], base);
+                placer.regCheckPlace(player.items[5], base - spread);
+                placer.regCheckPlace(player.items[5], base + spread);
+                hatSystem.doBasicFunction(true);
+                return true;
+            }
+
+            const action = this.action(near.nearest);
+            if (!action) return false;
+
+            const index = action.weapon === 1 ? player.weapons[1] : player.weapons[0];
+            if (index == null) return false;
+
+            this.angle = near.angle;
+            if (player.weaponIndex !== index) owner.selectToBuild(index, true);
+
+            if (healer.reloadPercent(player, index) !== 1) {
+                hatSystem.doBasicFunction(true);
+                return true;
+            }
+            if (action.hat) hatSystem.storeEquip(action.hat, 0, true);
+            else hatSystem.doBasicFunction(true);
+            owner.sendHitOnce();
+            return true;
+        },
+    };
+
 
     let lastKillName = "";
     let lastKillAt = 0;

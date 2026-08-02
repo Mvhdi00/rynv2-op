@@ -763,6 +763,33 @@ second Turnstile widget alive off-screen and resets it once per bot. The widget
 is parked at `left:-10000px` rather than `display:none` because Turnstile
 refuses to render into a container whose `offsetParent` is null.
 
+## Auto grind
+
+Replaced with a port of the RYN client's `AutoGrind` module, on request. What
+shipped here before placed four turrets at fixed compass angles, always swung
+the preferred weapon wearing the tank hat, aimed wherever the mouse pointed, and
+never stopped — so it kept hitting turrets long after there was any XP left to
+earn, and destroyed them about as often as it farmed them.
+
+| | before | now (RYN's) |
+| --- | --- | --- |
+| Placement | 4 turrets at 0/90/180/270° | 2 at ±40° of where you are aiming (3 at ±75° in sandbox) |
+| Aim | the mouse | the centroid of the turrets it owns within 300 |
+| Weapon | always the preferred one | great hammer until ruby, then the primary |
+| Hat | always tank | tank only when the turret survives the hit |
+| Stop | never | switches itself off once both weapons hit ruby |
+| Safety | none | skips while an enemy is within 400, or while reloading |
+
+The weapon/hat rule is the interesting part and is reproduced exactly: while the
+great hammer still needs XP it swings the hammer with the tank hat regardless of
+turret health. Once the hammer is ruby and the primary is the one earning XP,
+the turret's health decides — too healthy for both weapons together and it keeps
+softening with the hammer; inside one primary hit and the primary swings; in
+between, the tank hat comes off so its 3.3× does not destroy the turret.
+
+`getAttackDir()` now prefers `unxGrind.angle` over the cursor while the module
+has a target, which is what actually points the swing at the turrets.
+
 ## The kill chat
 
 The toggle sent one hardcoded line, `gg - autoGG Master Race`, and nothing else.
@@ -1036,7 +1063,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 501 checks.
+them with `npm test` — 531 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
