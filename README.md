@@ -1079,7 +1079,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 672 checks.
+them with `npm test` — 680 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
@@ -1270,9 +1270,33 @@ It only steers while you are not steering: unX checks `lastMoveDir`, Sakuna
 checks `getMoveDir()` — each script's own record of what you are holding. RYN
 gates on `ModuleHandler.moveTo === "disable"` for the same reason.
 
-RYN reads `pos.future ?? pos.current`. Neither of these scripts carries a
-position-prediction model, so both use the latest server position — which is
-exactly the fallback RYN takes when no prediction is available.
+### Two things the first port got wrong
+
+Re-audited line by line against RYN's `AutoPlay` after play-testing, and two
+real differences turned up.
+
+**1. Pit traps must not block.** RYN's `_isPositionBlocked` opens with
+`if (isPlayerObj && obj.type === 15) return;` — item 15 is the pit trap, skipped
+outright before any other test. The first port treated them as walls, so on a
+trapped map it reversed direction constantly. The game agrees with RYN here: the
+pit trap is the one building whose item definition carries `ignoreCollision`.
+Both scripts already flag it (`this.trap = a.trap`, and `trap: true` appears
+exactly once in the item list), so the check is now `if (obj.trap) continue;` in
+the same position RYN has it.
+
+**2. It should lead a moving enemy, not chase it.** RYN builds the ring geometry
+from `pos.future ?? pos.current` for *both* players, and only measures the final
+bearing from `pos.current`. The first port used the server position throughout,
+on the belief that neither script had a prediction. Both do:
+
+- unX stores the previous server position each tick and computes
+  `vel = {x: 2*x2 - lastX, …}` — a linear extrapolation of the next position,
+  which is precisely `pos.future` under another name.
+- Sakuna keeps `oldPos.x2` each tick, so the same value is `2*x2 - oldPos.x2`.
+
+Both are now recomputed on demand (rather than read from `vel`, which sits at
+`{0,0}` until a player's first update) and fall back to the server position when
+there is no previous one — exactly RYN's `?? pos.current`.
 
 **unX**: mod menu, next to Auto Grind. **Sakuna**: the *Move* section, next to
 Movement Assist; the checkbox lookup is guarded because the menu does not exist

@@ -6738,10 +6738,26 @@ const sakAutoPlay = {
         this.direction = 1;
     },
 
+    // RYN reads pos.future, falling back to pos.current. This script keeps
+    // the previous server position in oldPos each tick, so the next position
+    // by linear extrapolation is 2*x2 - oldPos.x2. Before a player's first
+    // update oldPos is undefined, which is where the fallback comes in.
+    future(p) {
+        if (p.oldPos && typeof p.oldPos.x2 == "number" && typeof p.oldPos.y2 == "number") {
+            return { x: p.x2 * 2 - p.oldPos.x2, y: p.y2 * 2 - p.oldPos.y2 };
+        }
+        return { x: p.x2, y: p.y2 };
+    },
+
     blocked(x, y) {
         for (let i = 0; i < gameObjects.length; i++) {
             const obj = gameObjects[i];
             if (!obj.active) continue;
+            // Pit traps never block. RYN skips item 15 outright, before any
+            // other test, and the game agrees -- the pit trap is the one
+            // building with ignoreCollision set. Treating them as walls made
+            // this reverse direction constantly on a trapped map.
+            if (obj.trap) continue;
             // An enemy's spikes are a damage problem, not a movement one.
             // RYN deliberately circles straight over them -- treating them
             // as walls is what pins you into a corner.
@@ -6762,23 +6778,28 @@ const sakAutoPlay = {
 
         const target = (enemy.length ? near : null);
         if (!target) return undefined;
-        const ex = target.x2;
-        const ey = target.y2;
-        if (typeof ex != "number" || typeof ey != "number") return undefined;
+        if (typeof target.x2 != "number" || typeof target.y2 != "number") return undefined;
 
-        // where we sit on the ring around them right now
-        const current = Math.atan2(player.y2 - ey, player.x2 - ex);
+        // the ring geometry is done on predicted positions, the way RYN
+        // does it, so we aim at where they are going rather than where they
+        // were when the last packet landed
+        const me = this.future(player);
+        const en = this.future(target);
+
+        const current = Math.atan2(me.y - en.y, me.x - en.x);
         let next = current + AUTOPLAY_SPEED * this.direction;
-        let tx = ex + Math.cos(next) * AUTOPLAY_RADIUS;
-        let ty = ey + Math.sin(next) * AUTOPLAY_RADIUS;
+        let tx = en.x + Math.cos(next) * AUTOPLAY_RADIUS;
+        let ty = en.y + Math.sin(next) * AUTOPLAY_RADIUS;
 
         if (this.blocked(tx, ty)) {
             this.direction *= -1;
             next = current + AUTOPLAY_SPEED * this.direction;
-            tx = ex + Math.cos(next) * AUTOPLAY_RADIUS;
-            ty = ey + Math.sin(next) * AUTOPLAY_RADIUS;
+            tx = en.x + Math.cos(next) * AUTOPLAY_RADIUS;
+            ty = en.y + Math.sin(next) * AUTOPLAY_RADIUS;
         }
 
+        // but the bearing we actually walk is measured from where we are
+        // now, not from the prediction -- again as RYN does it
         return Math.atan2(ty - player.y2, tx - player.x2);
     },
     // Once per game tick, the way RYN's postTick does it. Sends through the

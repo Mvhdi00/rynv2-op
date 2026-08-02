@@ -11277,10 +11277,18 @@ class AI {
             this.direction = 1;
         },
 
+        future(p) {
+            if (typeof p.lastX == "number" && typeof p.lastY == "number") {
+                return { x: p.x2 * 2 - p.lastX, y: p.y2 * 2 - p.lastY };
+            }
+            return { x: p.x2, y: p.y2 };
+        },
+
         blocked(x, y) {
             for (let i = 0; i < gameObjects.length; i++) {
                 const obj = gameObjects[i];
                 if (!obj.active) continue;
+                if (obj.trap) continue;
                 if (obj.dmg && obj.owner && !game.isFriendly(obj.owner.sid)) continue;
                 if (Math.hypot(x - obj.x, y - obj.y) < obj.scale + AUTOPLAY_CLEARANCE) return true;
             }
@@ -11294,20 +11302,21 @@ class AI {
 
             const target = game.enemies.nearest;
             if (!target) return undefined;
-            const ex = target.x2;
-            const ey = target.y2;
-            if (typeof ex != "number" || typeof ey != "number") return undefined;
+            if (typeof target.x2 != "number" || typeof target.y2 != "number") return undefined;
 
-            const current = Math.atan2(player.y2 - ey, player.x2 - ex);
+            const me = this.future(player);
+            const en = this.future(target);
+
+            const current = Math.atan2(me.y - en.y, me.x - en.x);
             let next = current + AUTOPLAY_SPEED * this.direction;
-            let tx = ex + Math.cos(next) * AUTOPLAY_RADIUS;
-            let ty = ey + Math.sin(next) * AUTOPLAY_RADIUS;
+            let tx = en.x + Math.cos(next) * AUTOPLAY_RADIUS;
+            let ty = en.y + Math.sin(next) * AUTOPLAY_RADIUS;
 
             if (this.blocked(tx, ty)) {
                 this.direction *= -1;
                 next = current + AUTOPLAY_SPEED * this.direction;
-                tx = ex + Math.cos(next) * AUTOPLAY_RADIUS;
-                ty = ey + Math.sin(next) * AUTOPLAY_RADIUS;
+                tx = en.x + Math.cos(next) * AUTOPLAY_RADIUS;
+                ty = en.y + Math.sin(next) * AUTOPLAY_RADIUS;
             }
 
             return Math.atan2(ty - player.y2, tx - player.x2);

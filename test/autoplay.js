@@ -49,6 +49,33 @@ for (const which of ['unx', 'sakuna']) {
   check(ap.dir() === undefined, 'while you are holding a movement key it does not steer');
   A.setKeys(undefined);
 
+  // --- predicted positions, the way RYN reads pos.future ---
+  {
+    ap.reset();
+    A.setObjects([]);
+    // standing still: with no previous position the future is the current one
+    A.setPlayer({ sid: 1, alive: true, x2: 120, y2: 0 });
+    A.setEnemy({ sid: 2, x2: 200, y2: 0 });
+    const still = ap.dir();
+
+    // now give the enemy a previous position, so it is moving north at 40/tick
+    ap.reset();
+    A.setEnemy(Object.assign(
+      { sid: 2, x2: 200, y2: 0 },
+      which === 'sakuna' ? { oldPos: { x2: 200, y2: 40 } } : { lastX: 200, lastY: 40 }));
+    const moving = ap.dir();
+    check(!near(still, moving),
+          'a moving enemy is led, not chased -- the ring is built on the predicted position');
+
+    // and the prediction is exactly the client's own 2*x2 - previous
+    const enFut = { x: 200, y: -40 };
+    const cur = Math.atan2(0 - enFut.y, 120 - enFut.x);
+    const nextA = cur + 0.2;
+    const tx = enFut.x + Math.cos(nextA) * 80, ty = enFut.y + Math.sin(nextA) * 80;
+    check(near(moving, Math.atan2(ty - 0, tx - 120)),
+          'using 2*x2 - previous for the enemy, and our own position for the bearing');
+  }
+
   // --- the circle ---
   ap.reset();
   // sitting due west of the enemy at exactly the ring radius
@@ -139,6 +166,15 @@ for (const which of ['unx', 'sakuna']) {
   ap.reset();
   A.setObjects([Object.assign({}, wall, { active: false })]);
   check(near(ap.dir(), overSpike), 'a destroyed building blocks nothing');
+
+  // --- pit traps never block (RYN skips item 15 outright) ---
+  ap.reset();
+  A.setObjects([Object.assign({}, wall, { trap: true })]);
+  check(near(ap.dir(), overSpike),
+        'a pit trap on the next point does not block -- RYN skips item 15 outright');
+  ap.reset();
+  A.setObjects([Object.assign({}, spike, { trap: true })]);
+  check(near(ap.dir(), overSpike), "and neither does an enemy's");
 
   // --- the clearance rule ---
   ap.reset();
