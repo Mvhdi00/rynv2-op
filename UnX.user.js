@@ -13907,7 +13907,14 @@ class AI {
             t += !!keys[i] * s[1];
         }
         if (e == 0 && t == 0) {
-            return unxAutoPlay.dir();
+            if (scriptMenu.toggles.autoPlay) {
+                try {
+                    return unxAutoPlay.dir();
+                } catch (autoPlayError) {
+                    console.error("[unx] auto play failed, leaving movement alone", autoPlayError);
+                }
+            }
+            return undefined;
         } else {
             return UTILS.fixTo(Math.atan2(t, e), 2);
         }

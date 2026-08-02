@@ -158,8 +158,18 @@ console.log('\n=== both scripts wire it the same way ===');
 
   check(/return unxAutoPlay\.dir\(\);/.test(unx),
         'unX hands the wheel over only in the no-keys branch of getMoveDir');
-  check(/dx == 0 && dy == 0 \? sakAutoPlay\.dir\(\) : angle/.test(sak),
-        'and Sakuna does the same in its own getMoveDir');
+  check(/if \(dx != 0 \|\| dy != 0\) return angle;/.test(sak),
+        'and Sakuna keeps your keys ahead of it in its own getMoveDir');
+
+  // getMoveDir feeds lastMoveDir, which is what actually drives the move
+  // packet -- so anything that can throw in here costs you the ability to walk
+  check(/if \(scriptMenu\.toggles\.autoPlay\) \{\n\s*try \{/.test(unx),
+        'unX only calls into the module when the toggle is on, and inside a try');
+  check(/if \(box && box\.checked\) \{\n\s*try \{/.test(sak),
+        'and Sakuna does the same');
+  check(/auto play failed, leaving movement alone/.test(unx)
+        && /auto play failed, leaving movement alone/.test(sak),
+        'a failure there falls back to normal movement instead of killing it');
   check(/id: "autoPlay"/.test(unx), 'unX has the toggle in its mod menu');
   check(/addCheck\("Auto Play", "autoPlay"/.test(sak), 'Sakuna has it in the Move section');
   check(/const box = getEl\("autoPlay"\);/.test(sak),

@@ -6781,10 +6781,20 @@ function getMoveDir() {
     }
     const angle = Math.atan2(dy, dx);
 
-    // Nothing pressed: auto play gets the wheel. The moment you touch a
-    // movement key the keys win, which is how RYN keeps it out of the way
-    // of your own input.
-    return dx == 0 && dy == 0 ? sakAutoPlay.dir() : angle;
+    // Nothing pressed: auto play gets the wheel, but only if it is actually
+    // switched on -- with it off this never calls into the module, so the
+    // no-keys path is exactly what it was before. A throw in there degrades
+    // to the same thing rather than taking movement down with it.
+    if (dx != 0 || dy != 0) return angle;
+    const box = getEl("autoPlay");
+    if (box && box.checked) {
+        try {
+            return sakAutoPlay.dir();
+        } catch (autoPlayError) {
+            console.error("[sakuna] auto play failed, leaving movement alone", autoPlayError);
+        }
+    }
+    return undefined;
 }
 
 function getSafeDir() {

@@ -1079,7 +1079,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 641 checks.
+them with `npm test` — 644 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
@@ -1260,6 +1260,20 @@ exactly the fallback RYN takes when no prediction is available.
 **unX**: mod menu, next to Auto Grind. **Sakuna**: the *Move* section, next to
 Movement Assist; the checkbox lookup is guarded because the menu does not exist
 at boot.
+
+### Movement can never depend on it
+
+`getMoveDir()` feeds `lastMoveDir`, and `lastMoveDir` is what the move packet is
+built from — so anything that can throw inside that function costs you the
+ability to walk at all. Reported after the first cut, and hardened whether or
+not that was the cause: the toggle is checked **at the call site**, so with auto
+play off the module is never entered and the no-keys path is exactly what it was
+before the feature existed; and the call is wrapped, so a failure inside it logs
+and falls back to normal movement rather than taking movement down.
+
+For the record, `tools/probe-unx.js` drives the real `getMoveDir()` in a browser
+and reports `undefined` with no keys and `-1.57` with W held, with the toggle
+off — identical to the original either way.
 
 `test/autoplay.js` runs the same 18 checks against both copies — the constants,
 the four cases where it must stay out of the way, the ring geometry, six ticks
