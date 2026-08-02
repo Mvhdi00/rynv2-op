@@ -626,20 +626,39 @@ names still go out.
 | `io.send` | Frames as `tag ‖ msgpack([opcode, args, seq])` when the handshake negotiated it, and keeps the plain `msgpack([name, args])` form otherwise — which is what mohmoh still wants. Nothing goes out before `io-init` at all: the original only checked `readyState`, so the first packets went out unsigned. |
 | Captcha | `executeRecaptcha()` now waits for the page's own Turnstile token (wrapping `window.onGotTurnstileToken`, falling back to `turnstile.getResponse()`) and returns it with the `cf:` prefix. It still writes `window.superman`, which is what the bot relays read, so those pick up the right prefix for free. |
 | Turnstile widget | `CHKP` renders **its own** widget, with the game's sitekey, into its own panel, loading the Turnstile api itself if the page has not. Nothing about the page's menu teardown can affect it. |
-| The captcha is an explicit step | Cloudflare decides whether the challenge wants a click, and in practice it does. So rather than a hidden wait, the client puts up a panel — title, widget, and a **Connect** button that stays disabled until the challenge is solved — and goes on only when you press it. Nothing times out underneath you. |
+| The captcha is a step of its own | Cloudflare decides whether the challenge wants a click, and in practice it does, so the widget goes in a panel in the middle of the screen rather than being tucked away. The panel takes itself down the moment the challenge passes and the client carries straight on — no extra button. Nothing times out underneath you. |
 | Reload timer | `nextLoadingStage()` arms a 30-second `location.reload()`, which would fire while you are still on the captcha. It is called off for the duration and re-armed once a token is in hand. |
 | Server ping | Raced against 100 ms, the way the live client does it. |
 | Server list | Asks for `?v=1.27`, the version the live client asks for; this copy was still on `1.26`. |
 | Page teardown | All of it null-guarded through two small helpers. |
 | Page render loop | The page's own client keeps painting `#gameCanvas` every frame and would draw over this one. Its loop re-arms through `window.requestAnimFrame`, which nothing here uses, so that name is now an accessor that swallows the assignment and returns a no-op. |
 
+## The menu
+
+Restyled as a space scene, and purely additive — it renames nothing, so every
+select, input and button keeps working. The background is generated CSS: three
+parallax starfields drifting at 190s/120s/75s, a 4.2s twinkle, four shooting
+stars on staggered 7/9/11/13s cycles, and a ringed planet floating on a 16s
+cycle. No canvas, no timers, no images, so it does not compete with the game's
+own render loop, and it all stops under `prefers-reduced-motion`.
+
+The card itself is glass over that sky, 760×380 (up from 650×450), with the
+title glowing cyan and the controls restyled to match. It also replaces the
+menu's one remote asset — a city photograph pulled off wallpapers.com.
+
+`npm run preview:chicken` renders it to a standalone HTML file you can open.
+
 ## Known limitations
 
-- The bot feature routes through `*.glitch.me` relays, handing them your server
-  address and a captcha token. Glitch ended free project hosting, so expect
-  those to be dead. Left as-is. The sing-along feature pulls from the same dead
-  host; its fetch is now caught so it fails quietly instead of leaving an
-  unhandled rejection in the console on every load.
+- **The bots do not work.** Not because of anything here: chicken has no bot
+  code of its own at all. It hands your server address and a captcha token to a
+  list of ten `*.glitch.me` relay projects and asks *them* to connect the bots.
+  Glitch ended free project hosting, so those ten projects are gone. Nothing in
+  the script can be fixed to bring them back — it would need a bot
+  implementation written from scratch.
+- The sing-along feature pulls from the same dead host; its fetch is now caught
+  so it fails quietly instead of leaving an unhandled rejection in the console
+  on every load.
 - `getChallenge()` / `validateChallenge()` / `createPayload()` and the worker
   pool are now dead code. Left in place rather than deleted.
 - Turnstile tokens are single-use, so the multi-bot path is not reliably
@@ -875,7 +894,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 384 checks.
+them with `npm test` — 394 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.

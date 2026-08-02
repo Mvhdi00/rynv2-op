@@ -204,12 +204,13 @@ check(/widgetId = window\.turnstile\.render\(slot, \{/.test(src), 'and renders a
 check(/slot\.id = "chkTurnstile";/.test(src) && /document\.body \|\| document\.documentElement/.test(src),
       'into its own panel on the body, which the page teardown cannot take with it');
 
-// solving is manual, so it is an explicit step with a button rather than a
-// hidden wait that can time out under the player
-check(/button\.id = "chkConnect";/.test(src) && /button\.disabled = true;/.test(src),
-      'the panel carries a Connect button, disabled until the challenge is solved');
-check(/ui\.button\.onclick = function \(\) \{\n\s*if \(token\(\)\) finish\(\);/.test(src),
-      'and the client only goes on when that button is pressed');
+// the panel is a step of its own, but it closes itself the moment the
+// challenge passes -- the way any captcha does
+check(/ui\.box\.remove\(\);\n\s*resolve\(token\(\)\);/.test(src),
+      'the panel takes itself down as soon as the challenge passes');
+check(/render\(ui\.slot, finish\);/.test(src),
+      "and the widget's own callback is what closes it, so there is no extra click");
+check(!/chkConnect/.test(src), 'no Connect button is left to press');
 check(!/waited >= limit/.test(src) && !/timeoutMs/.test(src),
       'nothing times out while the player is solving it');
 check(/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit/.test(src),
@@ -254,5 +255,23 @@ check(/if \(pageEl\("topInfoHolder"\)\)/.test(src), '#topInfoHolder lookup is gu
 check(/Object\.defineProperty\(window, "requestAnimFrame"/.test(src),
       "the page's render loop is stopped so it cannot repaint over this client");
 
+// --------------------------------------------------------------------------
+console.log('\n11. the menu theme');
+
+check(/window\.CHICKEN_COSMOS = \(function \(\) \{/.test(src), 'the theme module ships with the script');
+check(/CHICKEN_COSMOS\.install\(mainMenu\);/.test(src), 'and is installed onto the menu');
+check(!/backgroundImage = "url\('https:\/\/wallpapers/.test(src),
+      'the remote city photograph the menu used to load is gone');
+check(/this\.menuElement\.id = "ckMenu";/.test(src), 'the menu card carries the hook the theme styles');
+check(/@keyframes ck-drift/.test(src) && /@keyframes ck-shoot/.test(src)
+      && /@keyframes ck-twinkle/.test(src) && /@keyframes ck-float/.test(src),
+      'starfield drift, shooting stars, twinkle and the planet are all animated');
+check((src.match(/class="ck-stars ck-s\d"/g) || []).length === 3, 'three parallax star layers');
+check((src.match(/class="ck-shoot [a-d]"/g) || []).length === 4, 'four shooting stars on staggered delays');
+check(/prefers-reduced-motion: reduce/.test(src), 'and it all stops for prefers-reduced-motion');
+check(/width: 760px !important;/.test(src) && /height: 380px !important;/.test(src),
+      'the card is bigger than the 650x450 it was');
+
 console.log('\n' + (fails === 0 ? '=> ALL CHICKEN TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
 process.exit(fails ? 1 : 0);
+
