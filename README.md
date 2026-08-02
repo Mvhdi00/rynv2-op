@@ -613,7 +613,7 @@ names still go out.
 | --- | --- |
 | Plain msgpack transport | Same break as the rest — see [Why it broke](#why-it-broke). Its `connect` also fired the callback from `onopen`, so it spawned before the keys existed. |
 | ALTCHA | `executeRecaptcha()` fetches `api.moomoo.io/verify`, brute-forces the proof-of-work in a worker pool, and returns `alt:<payload>`. That endpoint no longer serves a challenge, so the function could only throw — and the connect then went out with no token at all. |
-| It removed the captcha | `document.getElementById("menuContainer").remove()` at module scope. `#turnstileWidget` lives inside that container, so the teardown destroyed the very thing the token has to come from. |
+| The page's captcha is unusable | The page hands its own callback to `turnstile.render()` **by value**, before this script runs, so wrapping `window.onGotTurnstileToken` afterwards never sees the token. And this client removes the page's menu — widget included. Re-parenting the widget does not help either: that reloads its iframe, and the page will not render it again once it thinks it has. |
 | The server ping had no timeout | `processServers()` awaits `fetch("https://<server>/ping")` for every region with no bound, inside a `Promise.all`. One unresponsive host and it never settles — the client sits on **"Connecting to moomoo servers…"** forever. The live client races the same fetch against 100 ms; this one did not. |
 | Unguarded teardown | Eleven `getElementById(...).remove()` / `.style` calls at module scope on elements the page may no longer have. One missing element and the client dies before drawing a frame. |
 
@@ -625,7 +625,8 @@ names still go out.
 | `io.connect` | Reads the seed and key out of `io-init`, fires the connect callback **there** instead of on `onopen`, and maps incoming numeric opcodes back to names. Unmapped ones are ignored rather than thrown on. |
 | `io.send` | Frames as `tag ‖ msgpack([opcode, args, seq])` when the handshake negotiated it, and keeps the plain `msgpack([name, args])` form otherwise — which is what mohmoh still wants. Nothing goes out before `io-init` at all: the original only checked `readyState`, so the first packets went out unsigned. |
 | Captcha | `executeRecaptcha()` now waits for the page's own Turnstile token (wrapping `window.onGotTurnstileToken`, falling back to `turnstile.getResponse()`) and returns it with the `cf:` prefix. It still writes `window.superman`, which is what the bot relays read, so those pick up the right prefix for free. |
-| Turnstile widget | `#menuContainer` is no longer removed at all. The page refuses to render the widget unless it is laid out (`offsetParent !== null`), and re-parenting the node would reload its iframe out from under Turnstile — so the container is stripped down to the widget's ancestor chain and shrunk to a small `position: absolute` box in the corner. A warning is logged if the widget still ends up unlaid-out, instead of hanging silently. |
+| Turnstile widget | `CHKP` renders **its own** widget, with the game's sitekey, into its own container on the body (bottom left), loading the Turnstile api itself if the page has not. Nothing about the page's menu teardown can affect it. |
+| Reload timer | `nextLoadingStage()` arms a 30-second `location.reload()`. A challenge that wants a click takes longer than that, so the timer is held off while the captcha is being solved and the loading text says what it is waiting for. |
 | Server ping | Raced against 100 ms, the way the live client does it. |
 | Server list | Asks for `?v=1.27`, the version the live client asks for; this copy was still on `1.26`. |
 | Page teardown | All of it null-guarded through two small helpers. |
@@ -871,7 +872,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 378 checks.
+them with `npm test` — 380 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.

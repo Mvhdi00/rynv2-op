@@ -19,12 +19,11 @@
  *   2. ALTCHA replaced with Cloudflare Turnstile. api.moomoo.io/verify no
  *      longer serves a proof-of-work challenge, so executeRecaptcha() could
  *      only ever fail and the connect went out without a token.
- *   3. #menuContainer is no longer removed. The Turnstile widget lives inside
- *      it, and the page refuses to render that widget unless it is laid out
- *      (it checks offsetParent !== null) -- so removing the container, or
- *      re-parenting the widget, means no captcha and no token, ever. The
- *      container is stripped down to the widget instead. Every other teardown
- *      lookup is null-guarded.
+ *   3. The captcha widget is this script's own, rendered into its own
+ *      container. Reading the page's widget cannot work: the page passes its
+ *      callback to turnstile.render() by value before this script runs, and
+ *      this client tears the page's menu down anyway. Every teardown lookup is
+ *      null-guarded.
  *   4. The server ping is raced against a 100ms timeout, the way the live
  *      client does it. Without that, one unresponsive host in the server list
  *      hangs Promise.all forever and the client sits on
@@ -214,57 +213,111 @@ const CHKP = (function () {
     }
 
     /* --- Turnstile -------------------------------------------------------
-     * ALTCHA is gone. The page renders and solves a Turnstile widget itself
-     * and publishes its callback on window, so wrap the property to copy the
-     * token as it comes through, and fall back to reading the widget.
+     * ALTCHA is gone; the server verifies a Cloudflare Turnstile token now.
+     *
+     * Reading the page's own widget is not reliable: the page hands its
+     * callback to turnstile.render() *by value* before this script runs, so
+     * wrapping window.onGotTurnstileToken afterwards never sees the token, and
+     * this client tears the page's menu down anyway. So render a widget of our
+     * own, with our own callback, and stop depending on the page entirely. The
+     * page's widget is still read first, in case it happens to have one.
      */
+    const SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
+    const API_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     let captchaToken = null;
-    (function () {
-        let inner = null;
+    let widgetId = null;
+    let apiRequested = false;
+
+    function loadApi() {
+        if (window.turnstile || apiRequested) return;
+        apiRequested = true;
+        const s = document.createElement("script");
+        s.src = API_SRC;
+        s.async = true;
+        s.defer = true;
+        s.onerror = function () {
+            console.error("[chicken] the Turnstile api script failed to load (blocked by an extension?)");
+        };
+        (document.head || document.documentElement).appendChild(s);
+    }
+
+    // Our own container, so nothing the client removes from the page can take
+    // it with it. Visible, because a Turnstile challenge may want a click.
+    function container() {
+        let el = document.getElementById("chkTurnstile");
+        if (el) return el;
+        el = document.createElement("div");
+        el.id = "chkTurnstile";
+        el.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483647;";
+        (document.body || document.documentElement).appendChild(el);
+        return el;
+    }
+
+    function render() {
+        if (widgetId !== null || !window.turnstile || typeof window.turnstile.render != "function") return;
         try {
-            Object.defineProperty(window, "onGotTurnstileToken", {
-                configurable: true,
-                get: function () {
-                    return function (t) {
-                        captchaToken = t;
-                        if (inner) inner(t);
-                    };
+            widgetId = window.turnstile.render(container(), {
+                sitekey: SITEKEY,
+                theme: "light",
+                callback: function (t) {
+                    captchaToken = t;
                 },
-                set: function (fn) {
-                    inner = fn;
+                "error-callback": function () {
+                    captchaToken = null;
+                },
+                "expired-callback": function () {
+                    captchaToken = null;
                 },
             });
         } catch (e) {
-            console.warn("[chicken] could not hook the Turnstile callback", e);
+            console.error("[chicken] turnstile render failed", e);
+            widgetId = null;
         }
-    })();
+    }
+
+    function readPageWidget() {
+        if (captchaToken || !window.turnstile || typeof window.turnstile.getResponse != "function") return;
+        try {
+            if (widgetId !== null) {
+                captchaToken = window.turnstile.getResponse(widgetId) || null;
+                if (captchaToken) return;
+            }
+            const el = document.getElementById("turnstileWidget");
+            if (el) captchaToken = window.turnstile.getResponse(el) || null;
+        } catch (e) {
+            /* no widget of that name */
+        }
+    }
 
     function token() {
-        if (!captchaToken && window.turnstile && typeof window.turnstile.getResponse === "function") {
-            try {
-                const el = document.getElementById("turnstileWidget");
-                captchaToken = (el ? window.turnstile.getResponse(el) : window.turnstile.getResponse()) || null;
-            } catch (e) {
-                /* widget not up yet */
-            }
-        }
+        readPageWidget();
         return captchaToken ? "cf:" + captchaToken : null;
     }
 
-    // The widget is solved asynchronously, and Enter Game can be clicked before
-    // it finishes, so wait for it rather than failing the connect outright.
+    // The challenge is solved asynchronously and may need a click, so wait for
+    // it rather than failing the connect outright.
     function waitForToken(timeoutMs) {
+        loadApi();
         return new Promise(function (resolve) {
             const now = token();
             if (now) return resolve(now);
             let waited = 0;
+            const limit = timeoutMs || 60000;
             const poll = setInterval(function () {
+                render();
                 const t = token();
-                if (t || (waited += 100) >= (timeoutMs || 20000)) {
+                if (t) {
                     clearInterval(poll);
                     resolve(t);
+                    return;
                 }
-            }, 100);
+                waited += 200;
+                if (waited === 5000) console.warn("[chicken] still waiting on the Turnstile challenge -- look for the widget at the bottom left");
+                if (waited >= limit) {
+                    clearInterval(poll);
+                    resolve(null);
+                }
+            }, 200);
         });
     }
 
@@ -276,6 +329,7 @@ const CHKP = (function () {
         hexToBytes: hexToBytes,
         token: token,
         waitForToken: waitForToken,
+        renderWidget: render,
     };
 })();
 
@@ -25370,35 +25424,7 @@ class AI {
     dropEl("joinPartyButton");
     dropEl("settingsButton");
     dropEl("leaderboardButton");
-    // #turnstileWidget lives inside #menuContainer, and the token this client
-    // connects with comes from that widget. The page refuses to render the
-    // widget unless it is laid out (it checks offsetParent !== null), and
-    // moving the node would tear the iframe out from under Turnstile -- so
-    // neither remove the container nor re-parent the widget. Strip the
-    // container down to just the widget's ancestor chain and shrink it.
-    (function () {
-        const mc = pageEl("menuContainer");
-        const w = pageEl("turnstileWidget");
-        if (!mc) return;
-        if (!w || !mc.contains(w)) {
-            mc.remove();
-            return;
-        }
-        for (let node = w; node !== mc; node = node.parentElement) {
-            for (const sib of Array.from(node.parentElement.children)) {
-                if (sib !== node) sib.remove();
-            }
-        }
-        mc.style.cssText = "position:absolute;left:12px;top:12px;width:auto;height:auto;"
-            + "padding:0;margin:0;background:none;z-index:2147483646;";
-    })();
-    // If the widget ends up unlaid-out the page will never render it and the
-    // connect will wait forever, so say so rather than hanging silently.
-    setTimeout(function () {
-        const w = pageEl("turnstileWidget");
-        if (!w) console.warn("[chicken] #turnstileWidget is gone; the captcha cannot be solved");
-        else if (w.offsetParent === null) console.warn("[chicken] #turnstileWidget is not laid out; the page will not render the captcha");
-    }, 3000);
+    dropEl("menuContainer");
     document.getElementById("leaderboard").style.fontSize = "26px";
     var actionBar = document.getElementById("actionBar");
     actionBar.style.position = "absolute";
@@ -26056,14 +26082,24 @@ class AI {
         async executeRecaptcha() {
             // ALTCHA is gone: api.moomoo.io/verify no longer serves a
             // proof-of-work challenge, and the server verifies Cloudflare
-            // Turnstile instead. Turnstile cannot be solved here, but the
-            // page renders and solves its own widget, so wait for that token.
-            // window.superman keeps its meaning -- the bot relays read it.
+            // Turnstile instead. CHKP renders a widget of its own (bottom
+            // left) rather than trying to read the page's -- see the module
+            // for why that does not work. window.superman keeps its meaning:
+            // the bot relays read it.
+            //
+            // The challenge can want a click, so hold off the 30s reload
+            // armed by nextLoadingStage() while we wait, and say what for.
+            clearTimeout(mainMenuManager.connectionTimeout);
+            mainMenuManager.loadingText.innerHTML = "Waiting for the captcha...";
             let token = await CHKP.waitForToken();
             if (!token) {
-                errorEventManager.error("Turnstile token unavailable");
+                errorEventManager.error("Turnstile token unavailable -- is the captcha blocked?");
                 return undefined;
             }
+            mainMenuManager.loadingText.innerHTML = "Connecting to moomoo servers...";
+            mainMenuManager.connectionTimeout = setTimeout(() => {
+                location.reload();
+            }, 30000);
             window.superman = token;
             return token;
         }

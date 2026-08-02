@@ -188,25 +188,39 @@ check(altUses === 1 && /e\(window\.superman\);\n\s*return;/.test(src),
 check(/CHKP\.waitForToken\(\)/.test(src), 'the connect waits for a Turnstile token');
 check(/return captchaToken \? "cf:" \+ captchaToken : null;/.test(src),
       'and prefixes it "cf:" the way the server expects');
-check(/onGotTurnstileToken/.test(src), "the page's Turnstile callback is wrapped to capture the token");
 check(/i \+= "\/\?token=" \+ encodeURIComponent\(e\);/.test(src), 'the token is encoded into the URL');
 
 // --------------------------------------------------------------------------
-console.log('\n9. the page teardown no longer destroys what it needs');
+console.log('\n9. the captcha is this script\'s own, not the page\'s');
+
+// The page passes its callback to turnstile.render() *by value*, before this
+// script runs, so wrapping window.onGotTurnstileToken afterwards never sees the
+// token. And this client removes the page's menu -- and the widget with it.
+check(!/Object\.defineProperty\(window, "onGotTurnstileToken"/.test(src),
+      "it no longer tries to wrap the page's Turnstile callback");
+check(/const SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";/.test(src),
+      "it carries the game's own Turnstile sitekey");
+check(/window\.turnstile\.render\(container\(\), \{/.test(src), 'and renders a widget of its own');
+check(/el\.id = "chkTurnstile";/.test(src) && /document\.body \|\| document\.documentElement/.test(src),
+      'into its own container on the body, which the page teardown cannot take with it');
+check(/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit/.test(src),
+      'loading the Turnstile api itself if the page has not');
+check(!/position:fixed;bottom:12px;left:12px;z-index:2147483646/.test(src),
+      "the page's own widget is no longer re-parented -- that reloaded its iframe,"
+      + ' and position:fixed leaves offsetParent null, which is exactly what the'
+      + ' page checks before it will render');
+
+// a challenge that wants a click takes longer than the client's own reload timer
+check(src.indexOf('clearTimeout(mainMenuManager.connectionTimeout);') > -1
+      && src.indexOf('clearTimeout(mainMenuManager.connectionTimeout);') < src.indexOf('await CHKP.waitForToken()'),
+      "the client's 30s reload is held off while the captcha is being solved");
+check(/Waiting for the captcha\.\.\./.test(src), 'and the loading text says what it is waiting for');
+
+// --------------------------------------------------------------------------
+console.log('\n9b. the page teardown');
 
 check(!/document\.getElementById\("menuContainer"\)\.remove\(\)/.test(src),
-      'nothing removes #menuContainer with the widget still inside it');
-check(/if \(!w \|\| !mc\.contains\(w\)\) \{\n\s*mc\.remove\(\);/.test(src),
-      'the container is only removed when the widget is not inside it');
-check(/for \(let node = w; node !== mc; node = node\.parentElement\)/.test(src),
-      "it strips the container down to the widget's ancestor chain instead");
-check(!/document\.body\.appendChild\(w\)/.test(src),
-      'the widget node itself is never re-parented, which would reload its iframe');
-check(/mc\.style\.cssText = "position:absolute;/.test(src) && !/position:fixed/.test(src),
-      'and it is positioned absolute, not fixed -- fixed leaves offsetParent null'
-      + ' and the page then refuses to render the widget at all');
-check(/#turnstileWidget is not laid out/.test(src),
-      'a warning is logged if the widget ends up unlaid-out, rather than hanging silently');
+      '#menuContainer removal is guarded like the rest');
 
 // --------------------------------------------------------------------------
 console.log('\n10. the server list cannot hang the loading screen');
