@@ -10,7 +10,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const OUT = process.argv[2] || path.join(ROOT, 'chicken-preview.html');
 
-const lines = fs.readFileSync(path.join(ROOT, 'Chicken.user.js'), 'utf8').split('\n');
+const lines = fs.readFileSync(path.join(ROOT, 'UnX.user.js'), 'utf8').split('\n');
 
 // the two template literals the client builds the menu from, verbatim
 function template(startsWith) {

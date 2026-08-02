@@ -19,9 +19,9 @@ and additionally needed their packet vocabulary mapped forward.
   it from running at all.
 - **`PeterClient.user.js`** (`Peter Client` v11) — hook-based again, with a
   couple of packet names still stuck in the 2019 vocabulary.
-- **`Chicken.user.js`** (`chicken` v4.6.2) — a full client replacement that
-  targets moomoo.io *and* a private server still on the 2019 protocol, so both
-  paths had to keep working.
+- **`UnX.user.js`** (`chicken` v4.6.2, renamed to **unX** on request) — a full
+  client replacement that targets moomoo.io *and* a private server still on the
+  2019 protocol, so both paths had to keep working.
 - **`X18K.user.js`** (`x18k`) — another client replacement that hijacks
   `window.WebSocket`. Also shipped with a wildcard `@include` and a hidden
   token logger; both removed. **Do not run the original.**
@@ -596,7 +596,7 @@ So it fixes the protocol for you. It is not a promise that a given mod works.
 
 ---
 
-# Chicken.user.js (`chicken` v4.6.2)
+# UnX.user.js (`chicken` v4.6.2, shipped as **unX**)
 
 A full client replacement with its own `io` object and its own bundled msgpack,
 so it gets a protocol module (`CHKP`) rather than the hook-mod shim. What makes
@@ -645,20 +645,14 @@ own render loop, and it all stops under `prefers-reduced-motion`.
 The card itself is glass over that sky, 760×380 (up from 650×450), with the
 title glowing cyan and the controls restyled to match.
 
-The **mod menu** follows the RYN Client's design language instead, at its
-dimensions: 1180×650 (up from 700×475), `#7A42F4` into `#3A86FF` on near-black
-glass, Inter with Poppins for headings, a 172px rail whose active item is marked
-by a 3px accent border, a shimmering title, flat hairline-separated rows,
-RYN's thin pill switches and flat purple buttons, and the
-`cubic-bezier(.34, 1.4, .64, 1)` it opens and throws its switch knobs with.
-Pages slide in from the top when a tab opens. No starfield behind it — RYN's
-panel is plain glass over the game. The "Not connected" strip along the bottom
-of the rail is gone.
+The **mod menu is left alone** — it keeps the client's own look. It was themed
+twice on the way here (once in this space palette, once in the RYN Client's) and
+both were reverted on request; the only change that stuck is that the
+"Not connected" strip along the bottom of the tab rail is gone.
 
-None of it renames an id or moves an element: every override keys off something
-the client already sets, including the `pointer-events: none` it puts on the
-open tab and the `rgb(33, 150, 243)` it puts on an active switch. So every
-toggle, slider and key bind behaves exactly as before.
+The script is named **unX** — in the metadata block, on the main menu and on
+the mod menu's tab rail. Only the visible strings changed; every `chicken*`
+identifier in the code is untouched.
 
 Taken off the menu while there: the Help, Changelogs and Discord buttons, the
 credits line, the "Welcome back" line, and the ping/FPS graph (which also pulled
@@ -670,9 +664,10 @@ placed.
 
 ## Colours and the texture pack
 
-The **texture pack is gone**: `getTexturePackImg()` resolved hats, accessories
-and weapons through four imgur tables, and the minimap had a photographic
-backdrop from the same host. All of it now resolves to the game's own art.
+The **texture pack is gone apart from the minimap**, which was asked for back.
+`getTexturePackImg()` resolved hats, accessories and weapons through four imgur
+tables; those now resolve to the game's own art. The minimap keeps its
+photographic backdrop.
 `emeraldSprites` survives as a plain set of weapon names, because
 `updateActionBar()` reads it to decide which weapons get a fourth XP tier — the
 images are gone, the names stay.
@@ -928,7 +923,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 427 checks.
+them with `npm test` — 419 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.

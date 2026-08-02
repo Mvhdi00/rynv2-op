@@ -1,4 +1,5 @@
-// chicken is a full client replacement with its own `io` object and its own
+// unX (the script formerly called chicken) is a full client replacement with
+// its own `io` object and its own
 // bundled msgpack, so it gets a protocol module rather than the hook shim.
 // It also targets two servers at once -- moomoo.io on the current protocol and
 // mohmoh on the 2019 one -- so the checks below cover both paths.
@@ -12,7 +13,7 @@ const { Encoder, Decoder } = vendor;
 const enc = new Encoder(), dec = new Decoder();
 
 const ROOT = path.join(__dirname, '..');
-const src = fs.readFileSync(path.join(ROOT, 'Chicken.user.js'), 'utf8');
+const src = fs.readFileSync(path.join(ROOT, 'UnX.user.js'), 'utf8');
 
 let fails = 0;
 const check = (cond, label) => {
@@ -281,35 +282,9 @@ check(!/rotate\(14deg\)/.test(src) && (src.match(/rotate\(-12deg\)/g) || []).len
       'and the whole thing is rotated along the direction of travel');
 
 // the mod menu gets the same scene
-check(/CHICKEN_COSMOS\.dressMenu\(this\.menu\);/.test(src), 'the mod menu is themed too');
-check((src.match(/document\.body\.appendChild\(this\.menu\);/g) || []).length === 1,
-      'and it is still only appended once');
-
-// the mod menu follows the RYN Client's design language
-check(/width: 1180px !important;/.test(src) && /height: 650px !important;/.test(src),
-      "it takes RYN's dimensions (1180x650, up from 700x475)");
-check(/--ryn-accent: #7A42F4;/.test(src) && /--ryn-accent2: #3A86FF;/.test(src),
-      "and RYN's accent pair");
-check(/family=Inter[^"]*Poppins/.test(src), "and its fonts, Inter with Poppins for headings");
-check(/width: 172px !important;/.test(src) && /left: 172px !important;/.test(src),
-      "a 172px rail, the width RYN uses");
-check(/border-left: 3px solid transparent !important;/.test(src)
-      && /border-left-color: var\(--ryn-accent\) !important;/.test(src),
-      'tabs marked by the 3px left accent border RYN marks its own with');
-check(/pointer-events: none"\] \{\n\s*opacity: 1;/.test(src),
-      "and the open one picked out by the flag the client already sets on it");
-check(/cubic-bezier\(\.34, 1\.4, \.64, 1\)/.test(src),
-      "the springy curve RYN opens with, on the panel and the switch knobs");
-check(/#ckScriptMenu\[style\*="opacity: 1"\] \{/.test(src),
-      'the open transition rides the inline opacity the client toggles');
-check(/@keyframes ryn-slide-in \{/.test(src) && /@keyframes ryn-shimmer \{/.test(src),
-      "pages slide in from the top and the title shimmers, as RYN's do");
-check(/#ckScriptMenu div\[id\^="toggle:id:"\]\[style\*="background-color: rgb\(33, 150, 243\)"\]/.test(src),
-      'the switches light up off the colour the client sets, so no behaviour changes');
-check(/background: rgba\(122, 66, 244, \.1\) !important;/.test(src),
-      "buttons in RYN's flat purple");
-check(!/ck-menusky/.test(src),
-      "no starfield behind it -- RYN's panel is plain glass over the game");
+// the mod menu is left at the client's own look
+check(!/dressMenu/.test(src) && !/ckScriptMenu/.test(src),
+      'the mod menu carries no theming of ours at all');
 
 check(!/innerText = "Not connected"/.test(src) && !/this\.menu\.appendChild\(this\.socketPing\)/.test(src),
       'the "Not connected" strip is gone');
@@ -342,13 +317,23 @@ check(/let i = false;/.test(src) && /let t = false;/.test(src),
       'the sprite builders take the game\'s own colours');
 check(!/var newHatImgs|var newAccImgs|var newWeaponImgs/.test(src),
       'the hat, accessory and weapon overrides are gone');
-check(!/i\.imgur\.com\/99Xb4Lm|i\.imgur\.com\/fgFsQJp/.test(src),
-      'so are the emerald weapon sprites and the minimap texture');
+check(!/i\.imgur\.com\/99Xb4Lm/.test(src), 'so are the emerald weapon sprites');
+check(/mapDisplay\.style\.backgroundImage = "url\('https:\/\/i\.imgur\.com\/fgFsQJp\.png'\)";/.test(src),
+      'but the minimap texture is kept, as asked');
 check(/var emeraldSprites = \{\n\s*"hand axe": true,/.test(src),
       'emeraldSprites survives as a plain name set, which is all updateActionBar needs of it');
 check(/if \(t == "acc"\) \{\n\s*return "\.\.\/\.\/img\/accessories/.test(src),
       "getTexturePackImg resolves to the game's own art only");
 
-console.log('\n' + (fails === 0 ? '=> ALL CHICKEN TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
+// --------------------------------------------------------------------------
+console.log('\n14. the rename');
+
+const meta = src.slice(0, src.indexOf('// ==/UserScript=='));
+check(/^\/\/ @name\s+unX$/m.test(meta), 'the script is called unX');
+check(!/>Chicken V4\.6\.2</.test(src), 'the old name is off the main menu');
+check(/>unX<\/span>/.test(src), 'and the new one is on it');
+check(/transform: translateX\(-50%\);">unX<\/div>/.test(src), 'and on the mod menu');
+
+console.log('\n' + (fails === 0 ? '=> ALL UNX TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
 process.exit(fails ? 1 : 0);
 

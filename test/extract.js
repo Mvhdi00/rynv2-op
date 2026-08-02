@@ -15,7 +15,7 @@ const LEMON_VIS = path.join(ROOT, 'LemonModVisuals.user.js');
 const X18K = path.join(ROOT, 'X18K.user.js');
 const ROBOTICS = path.join(ROOT, 'Robotics.user.js');
 const PETER = path.join(ROOT, 'PeterClient.user.js');
-const CHICKEN = path.join(ROOT, 'Chicken.user.js');
+const CHICKEN = path.join(ROOT, 'UnX.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
