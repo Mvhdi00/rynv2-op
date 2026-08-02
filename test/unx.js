@@ -16,6 +16,8 @@ const ROOT = path.join(__dirname, '..');
 const src = fs.readFileSync(path.join(ROOT, 'UnX.user.js'), 'utf8');
 
 let fails = 0;
+// checks that can only settle on a timer; awaited before the summary is printed
+const pending = [];
 const check = (cond, label) => {
   console.log((cond ? '  PASS  ' : '  FAIL  ') + label);
   if (!cond) fails++;
@@ -508,6 +510,55 @@ console.log('\n15. the bots run here now, not on a dead relay');
         'addBots opens a local relay instead of a dead glitch.me project');
   check(!/glitch\.me\/dc\?auth=/.test(src),
         'and "!c!dc bots" drops our own bots instead of asking nine dead hosts to');
+
+  // ------------------------------------------------------------------------
+  console.log('\n15b. the kill chat is two editable lines, not one fixed one');
+
+  check(!/autoGG Master Race/.test(src), 'the hardcoded "gg - autoGG Master Race" line is gone');
+  check(/id: "killChatMessage"/.test(src) && /id: "killCountMessage"/.test(src),
+        'both lines are text fields in the mod menu');
+  check(/value: "gg \{name\}"/.test(src) && /value: "\{kills\} idiots down"/.test(src),
+        'with sensible defaults you can overwrite');
+
+  B.setKills(7);
+  B.setLastKill('noob', Date.now());
+  check(B.formatKillChat('gg {name}', 'noob') === 'gg noob', '{name} is the player you just killed');
+  check(B.formatKillChat('{kills} idiots down', 'noob') === '7 idiots down', '{kills} is your running total');
+  check(B.formatKillChat('{KILLS} down {Name}', 'noob') === '7 down noob', 'the placeholders are case-insensitive');
+  check(B.formatKillChat('x'.repeat(60), '').length === 30, 'and the result is trimmed to the 30 the game allows');
+  check(B.formatKillChat('', 'noob') === '' && B.formatKillChat(null, 'noob') === '',
+        'an empty template sends nothing at all, so either line can be switched off');
+
+  B.sentChats.length = 0;
+  B.sendKillChat();
+  check(B.sentChats.length === 1 && B.sentChats[0] === 'gg noob',
+        'a kill sends the kill line straight away');
+
+  // the count line is deliberately delayed: the server rate-limits chat
+  pending.push(new Promise(r => setTimeout(r, 1100)).then(() => {
+    check(B.sentChats.length === 2 && B.sentChats[1] === '7 idiots down',
+          'and the count line a beat later, so the server does not drop it');
+  }));
+
+  B.setLastKill('stale', Date.now() - 5000);
+  check(B.formatKillChat('gg {name}', '') === 'gg', 'a name older than a second is not reused on the next kill');
+
+  const relay2 = makeRelay();
+  relay2.send(JSON.stringify({ type: 'add', ip: 'wss://test.moomoo.io', tokens: ['cf:z'] }));
+  relay2.sockets[0].ws.deliver(enc.encode(['io-init', [9, SEED, KEY_HEX, 1]]));
+  relay2.sockets[0].ws.deliver(enc.encode([tables.s2c.enc.C, [55]]));
+  relay2.sockets[0].ws.sent.length = 0;
+  relay2.send(JSON.stringify({ type: 'killChat', name: 'noob' }));
+  const botChat = relay2.sockets[0].ws.sent.map(readFrame).find(f => f.name === '6');
+  check(botChat && botChat.args[0] === 'gg noob',
+        'the bots chat the same kill line, which they never did before');
+
+  B.scriptMenu.toggles.killChatMessage = '';
+  relay2.sockets[0].ws.sent.length = 0;
+  relay2.send(JSON.stringify({ type: 'killChat', name: 'noob' }));
+  check(!relay2.sockets[0].ws.sent.length, 'and stay quiet when you blank the line');
+  B.scriptMenu.toggles.killChatMessage = 'gg {name}';
+
 }
 
 // --------------------------------------------------------------------------
@@ -529,6 +580,8 @@ console.log('\n16. the file carries no comments but its metadata block');
         'the file is ' + src.split('\n').length + ' lines, down from 35140');
 }
 
-console.log('\n' + (fails === 0 ? '=> ALL UNX TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
-process.exit(fails ? 1 : 0);
+Promise.all(pending).then(() => {
+  console.log('\n' + (fails === 0 ? '=> ALL UNX TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
+  process.exit(fails ? 1 : 0);
+});
 

@@ -737,6 +737,30 @@ second Turnstile widget alive off-screen and resets it once per bot. The widget
 is parked at `left:-10000px` rather than `display:none` because Turnstile
 refuses to render into a container whose `offsetParent` is null.
 
+## The kill chat
+
+The toggle sent one hardcoded line, `gg - autoGG Master Race`, and nothing else.
+It is now two lines you can edit, both in the mod menu next to the toggle:
+
+| Field | Default |
+| --- | --- |
+| **Kill Message** | `gg {name}` |
+| **Kill Count Message** | `{kills} idiots down` |
+
+`{name}` is whoever you just killed and `{kills}` is your running total; both
+placeholders are case-insensitive, and either field can be blanked to switch
+that line off. The result is trimmed to the 30 characters the game allows.
+
+The count line is sent ~900 ms after the kill line, because the server
+rate-limits chat and two lines in the same frame cost you the second one. The
+victim's name comes from the death packet, which arrives separately from the
+kill-counter update, so a name older than a second is treated as belonging to
+someone else's kill and dropped rather than misattributed.
+
+`botManager.killChat()` — which tells your bots to chat when an enemy dies — was
+never implemented on the local relay; it is now, and the bots send the Kill
+Message line. They deliberately do not repeat the count line.
+
 ### What still limits them
 
 - **One token per bot, minted one at a time.** Cloudflare treats a Turnstile
@@ -986,7 +1010,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 461 checks.
+them with `npm test` — 474 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.

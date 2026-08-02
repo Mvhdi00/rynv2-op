@@ -213,7 +213,7 @@ module.exports = {
     const pb = findLine(l, 'let chkReady = false;', pa);
     const proto = l.slice(pa, pb + 1).join('\n');
 
-    const ba = findLine(l, '    const BOT_PACKET_CAP = 85;');
+    const ba = findLine(l, '    let lastKillName = "";');
     const bb = findLine(l, '    class Bot {', ba);
     const bots = l.slice(ba, bb).join('\n');
 
@@ -225,7 +225,14 @@ const msgpack = { encode: v => _enc.encode(v), decode: b => _dec.decode(b) };
 let isMohMoh = false;
 const clientTranslate = new Map([['M', 'sp'], ['9', '33'], ['D', '2']]);
 let playerSID = 7;
-const scriptMenu = { toggles: { botNames: '' } };
+let player = { kills: 0 };
+const sentChats = [];
+function sendChat(m) { sentChats.push(m); }
+const scriptMenu = { toggles: {
+  botNames: '',
+  killChatMessage: 'gg {name}',
+  killCountMessage: '{kills} idiots down',
+} };
 
 class FakeSocket {
   constructor(url) { this.url = url; this.readyState = 1; this.binaryType = ''; this.sent = []; }
@@ -248,6 +255,9 @@ ${bots}
 
 module.exports = {
   CHKP, BotSocket, LocalRelay, FakeSocket, msgpack,
+  formatKillChat, sendKillChat, sentChats, scriptMenu,
+  setKills: n => { player.kills = n; },
+  setLastKill: (name, at) => { lastKillName = name; lastKillAt = at; },
   setMohMoh: v => { isMohMoh = v; },
   setNames: v => { scriptMenu.toggles.botNames = v; },
   setPlayerSID: v => { playerSID = v; },

@@ -6220,7 +6220,7 @@ class AI {
         if (player.kills > killCounter.innerText) {
             statsManager.addKills();
             if (scriptMenu.toggles.killChat) {
-                sendChat("gg - autoGG Master Race");
+                sendKillChat();
             }
         }
         killCounter.innerText = player.kills;
@@ -11047,6 +11047,25 @@ class AI {
         return (document.activeElement.tagName != "INPUT" || (document.activeElement.type != "number" && document.activeElement.type != "text")) && document.activeElement.id != "chickenChatBox" && allianceMenu.style.display != "block" && chatHolder.style.display != "flex";
     }
 
+    let lastKillName = "";
+    let lastKillAt = 0;
+
+    function formatKillChat(template, victim) {
+        return String(template == null ? "" : template)
+            .replace(/\{name\}/gi, victim || "")
+            .replace(/\{kills\}/gi, player && player.kills != null ? player.kills : 0)
+            .trim()
+            .slice(0, 30);
+    }
+
+    function sendKillChat() {
+        const victim = Date.now() - lastKillAt < 1000 ? lastKillName : "";
+        const first = formatKillChat(scriptMenu.toggles.killChatMessage, victim);
+        if (first) sendChat(first);
+        const second = formatKillChat(scriptMenu.toggles.killCountMessage, victim);
+        if (second) setTimeout(() => sendChat(second), 900);
+    }
+
     const BOT_PACKET_CAP = 85;
     const BOT_TRAP_ID = 15;
     const BOT_SPIKE_ID = 6;
@@ -11434,6 +11453,9 @@ class AI {
                 }
             } else if (msg.type === "chat") {
                 for (let i = 0; i < this.sockets.length; i++) this.sockets[i].chat(msg.message);
+            } else if (msg.type === "killChat") {
+                const line = formatKillChat(scriptMenu.toggles.killChatMessage, msg.name);
+                if (line) for (let i = 0; i < this.sockets.length; i++) this.sockets[i].chat(line);
             } else if (msg.type === "packet") {
                 const bot = this.sockets.find((b) => b.sid === msg.sid);
                 if (bot && msg.packetData) bot.send.apply(bot, [msg.packetData.type].concat(msg.packetData.data || []));
@@ -11667,6 +11689,8 @@ class AI {
             }
         }
         killChat(e) {
+            lastKillName = e || "";
+            lastKillAt = Date.now();
             for (let t = 0; t < this.bots.length; t++) {
                 let i = this.bots[t];
                 if (!i.disconnected) {
@@ -11899,6 +11923,20 @@ class AI {
                             label: "Kill Chat",
                             id: "killChat",
                             type: "toggle",
+                        },
+                        {
+                            label: "Kill Message",
+                            id: "killChatMessage",
+                            type: "text",
+                            size: 60,
+                            value: "gg {name}",
+                        },
+                        {
+                            label: "Kill Count Message",
+                            id: "killCountMessage",
+                            type: "text",
+                            size: 60,
+                            value: "{kills} idiots down",
                         },
                         {
                             label: "Chat Translation",
