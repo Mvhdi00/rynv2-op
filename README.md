@@ -1,6 +1,6 @@
 # moomoo.io userscripts, updated for the current client
 
-Nine scripts. Seven were current-generation clients that needed the new
+Ten scripts. Eight were current-generation clients that needed the new
 transport layer. Two (the LemonMod pair) are a full protocol generation behind
 and additionally needed their packet vocabulary mapped forward.
 
@@ -17,6 +17,8 @@ and additionally needed their packet vocabulary mapped forward.
 - **`Robotics.user.js`** (`Robotics Official` v5.5.6) — a fork of the Aurora
   source, so the same family again. A stray line in its metadata block stopped
   it from running at all.
+- **`PeterClient.user.js`** (`Peter Client` v11) — hook-based again, with a
+  couple of packet names still stuck in the 2019 vocabulary.
 - **`X18K.user.js`** (`x18k`) — another client replacement that hijacks
   `window.WebSocket`. Also shipped with a wildcard `@include` and a hidden
   token logger; both removed. **Do not run the original.**
@@ -591,6 +593,62 @@ So it fixes the protocol for you. It is not a promise that a given mod works.
 
 ---
 
+# PeterClient.user.js (`Peter Client` v11)
+
+Hook-style mod again, so the same `EXP` shim. Its own quirks were the way it
+got hold of msgpack and two packet names it never updated.
+
+## Why it did not run
+
+| Cause | Effect |
+| --- | --- |
+| msgpack via `<script>` injection | Instead of a `@require`, it appended `<script src="https://rawgit.com/…/msgpack.min.js">` to the body. rawgit.com has been offline since 2019, so `window.msgpack` stayed `undefined` and *every* send and receive in the file threw. The shim publishes a codec. |
+| No `@run-at` | The hook replaces `WebSocket.prototype.send`, and the game captures that reference at bundle load. Now `document-start`, with the body deferred to `DOMContentLoaded`. |
+| Plain msgpack transport | Same break as the rest — see [Why it broke](#why-it-broke). |
+| reCAPTCHA | Both bot paths called `window.grecaptcha.execute(...)` and built `?token=re:<token>`. `grecaptcha` is not on the page any more, so those threw; the server wants Turnstile's `cf:` tokens. |
+| Unguarded `.remove()` | `adCard.remove()` and `promoImgHolder.remove()` sit at module scope on elements the current page does not have. Either one throws and takes the whole client with it. |
+
+## Two names stuck in 2019
+
+The transport fix alone would not have made this one play, because parts of it
+were written against a build that used older packet names.
+
+**Outgoing.** Its move-dedup rule reads `else if (type == "f")`. The game sends
+that packet as `"9"`, with the same `[dir, auto]` arguments — so the rule never
+fired and the dedup never happened. `applyOutgoing()` now folds old names onto
+current ones through the shim's own `PACKET_MAP` before the rules run (`"f"` →
+`"9"`), and the branch matches the current name. That keeps `packet("f", …)`,
+which the client still calls, working too.
+
+**Incoming, in the bot handler.** It waits for `type == "1"` to read its own
+sid, and `type == "f"` for the flat player-field array. Those are the 2019
+names for setupGame and updatePlayers; the current server calls them `"C"` and
+`"a"`. Both moved forward. The argument shapes are the evidence: `data[0]` as a
+sid right after spawn, and `data[0]` as the strided player array.
+
+## What else changed
+
+| Area | Fix |
+| --- | --- |
+| Socket hook | `EXP.setHandler(…)` instead of assigning `WebSocket.prototype.send`, with `applyOutgoing()` extracted so `packet()` runs the same rules. |
+| `origPacket()` | Sent through `WS.nsend` specifically to skip the client's own rules. It still skips them — but it goes through `EXP.send` now, because an unframed packet is not something the current server accepts. |
+| `window.leave()` | Sends a packet named `"kys"`, which has no opcode. It is now dropped at the shim rather than put on a MAC-authenticated channel, where a junk frame ends the session. Asserted in the tests. |
+| Bots | `sendWS` frames through `EXP.send` with that socket's own key and sequence; `onmessage` decodes through `EXP.receive`; tokens come from `EXP.freshToken()`. |
+| DOM | The ad-card removals are null-guarded, and the menu intro — sixty lines of unguarded `getElementById("gameName")` writes — is wrapped in a presence check. |
+
+## Known limitations
+
+- `beautiful-sapphire-toad.glitch.me` and the two `connectFillBots` relays are
+  third-party bot/sync services, not part of the game. They speak plain msgpack
+  and are left alone (they still work through the shim's `window.msgpack`), but
+  Glitch ended free project hosting, so expect them to be dead. Note that
+  `connectFillBots` hands your server URL *and a valid captcha token* to those
+  relays; that is what the feature does.
+- A stale `scriptTags[i].src.includes("index-f3a4c1ad.js")` removal targets a
+  bundle filename from an older build. It is a no-op now; left as-is.
+
+---
+
 # Robotics.user.js (`Robotics Official` v5.5.6)
 
 A fork of the Aurora source — same `Altcha` class, same private-server proxy,
@@ -739,6 +797,12 @@ hijack itself: that the stand-in tolerates everything the game does to it, that
 the captured URL reaches the mod with its token intact, and that all 17 of its
 packet names resolve to real opcodes.
 
+Peter Client gets the same treatment, plus checks that the only remaining
+`window.msgpack` call sites are the ones talking to its own relay, that the
+packet it uses to troll the server is dropped instead of being put on a
+MAC-authenticated channel, and that both directions of its stale packet naming
+were moved forward.
+
 Robotics gets the shim-parity assertion, the same protocol comparison, and
 checks that the metadata block contains nothing executable, that no call site
 still reaches for the codec the script never defined, and that all three
@@ -753,7 +817,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 282 checks.
+them with `npm test` — 323 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
