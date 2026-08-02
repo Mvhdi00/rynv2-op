@@ -13,6 +13,7 @@ const AURORA = path.join(ROOT, 'Aurora.user.js');
 const LEMON = path.join(ROOT, 'LemonMod.user.js');
 const LEMON_VIS = path.join(ROOT, 'LemonModVisuals.user.js');
 const X18K = path.join(ROOT, 'X18K.user.js');
+const ROBOTICS = path.join(ROOT, 'Robotics.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -140,9 +141,13 @@ module.exports = {
     return require(write('exp_aurora.js', expModule(AURORA)));
   },
 
+  loadRobotics() {
+    return require(write('exp_robotics.js', expModule(ROBOTICS)));
+  },
+
   /**
-   * The External Client, AE86 and Aurora all carry the same EXP shim. Assert
-   * the copies have not drifted apart.
+   * Every hook-based script carries the same EXP shim. Assert the copies have
+   * not drifted apart.
    */
   shimsMatch() {
     const strip = f => {
@@ -152,7 +157,7 @@ module.exports = {
       return l.slice(a, b + 1).join('\n');
     };
     const ref = strip(EXTERNAL);
-    return [AE86, AURORA, LEMON, LEMON_VIS].every(f => strip(f) === ref);
+    return [AE86, AURORA, LEMON, LEMON_VIS, ROBOTICS].every(f => strip(f) === ref);
   },
 
   /** The Laffer remake's LAF shim, as a loadable CommonJS module. */

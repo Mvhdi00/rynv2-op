@@ -1,6 +1,6 @@
 # moomoo.io userscripts, updated for the current client
 
-Eight scripts. Six were current-generation clients that needed the new
+Nine scripts. Seven were current-generation clients that needed the new
 transport layer. Two (the LemonMod pair) are a full protocol generation behind
 and additionally needed their packet vocabulary mapped forward.
 
@@ -14,6 +14,9 @@ and additionally needed their packet vocabulary mapped forward.
   with several bugs of its own on top.
 - **`Aurora.user.js`** (`Aurora Client v5.5`) — same family again, plus an
   ALTCHA proof-of-work solver and a private-server redirect.
+- **`Robotics.user.js`** (`Robotics Official` v5.5.6) — a fork of the Aurora
+  source, so the same family again. A stray line in its metadata block stopped
+  it from running at all.
 - **`X18K.user.js`** (`x18k`) — another client replacement that hijacks
   `window.WebSocket`. Also shipped with a wildcard `@include` and a hidden
   token logger; both removed. **Do not run the original.**
@@ -588,6 +591,56 @@ So it fixes the protocol for you. It is not a promise that a given mod works.
 
 ---
 
+# Robotics.user.js (`Robotics Official` v5.5.6)
+
+A fork of the Aurora source — same `Altcha` class, same private-server proxy,
+same `WebsocketBot`, same socket hook, about 5,000 lines of extra features on
+top. So it gets the same `EXP` shim, byte for byte, and the tests assert that.
+
+## The one-character bug
+
+Between `@description` and `// ==/UserScript==` sat a line containing exactly:
+
+```
+a
+```
+
+Not a comment. The metadata block is only a comment because every line inside
+it starts with `//`; a bare `a` is executable JavaScript, and it is the *first
+statement in the file*. The script threw `ReferenceError: a is not defined`
+before anything else ran. Whatever else was wrong with it was academic.
+
+## What else was wrong
+
+| Cause | Effect |
+| --- | --- |
+| No `@run-at` | The hook does `WebSocket.prototype.send = …` at line 4335, but the game captures that reference when its bundle loads. At `document-idle` there is nothing left to hook. Now `document-start`, with the body deferred to `DOMContentLoaded` — it reads `document.head` and `getElementById` at load. |
+| `msgpack` never defined | Eight call sites use `msgpack.encode/decode` or `window.msgpack.…`, and there is no `@require` and no bundled codec anywhere in the file. Every one of them threw. The shim publishes `window.msgpack`. |
+| Plain msgpack transport | Same break as the rest — see [Why it broke](#why-it-broke). |
+| ALTCHA | `AltSolver` mints `alt:<payload>` tokens for bot connections; the server wants Turnstile `cf:` tokens. And the `Altcha` class allocated one Web Worker per CPU core in a `static {}` block, each pulling `js-sha256` from a CDN, for a challenge that no longer exists. |
+
+## What changed
+
+| Area | Fix |
+| --- | --- |
+| Socket hook | `WebSocket.prototype.nsend = send` / `send = hook` replaced by `EXP.setHandler(…)`. Worth noting why the original could not simply stay: the shim already defines `nsend`, so re-assigning it to the trampoline would have made `this.nsend(…)` recurse into itself. |
+| `applyOutgoing()` | The per-packet rules extracted out of the hook, so `packet()` runs them too — previously `packet()` re-entered the hook by calling `WS.send()`, which no longer works now that outgoing frames carry a MAC. |
+| Private-server auto-login | It wrapped `nsend` and msgpack-decoded the outgoing buffer looking for the spawn packet. Outgoing frames are not plain msgpack any more, so the trigger moved into `applyOutgoing()`, which already has the decoded name. |
+| `getMessage` / bot `onmessage` / bot sniffer | All three decode through `EXP.receive`, which maps numeric opcodes back to names. |
+| `client.sendWS` | Frames through `EXP.send` with the bot socket's own key, tables and sequence, taken from that socket's own `io-init`. |
+| Bot tokens | `EXP.freshToken()` — Turnstile tokens are single-use, so each bot asks for a new one. Best effort; Turnstile decides. |
+| ALTCHA pool | Allocated lazily, so the workers only spawn if a widget appears (it will not). |
+| `window.WebSocket` reassigned twice | Once for the private-server proxy, once for `WebsocketBot`. The game pins that property, so both fail; wrapped in `try/catch` with a warning rather than relying on non-strict silent failure. Consequence: the private-server redirect does not take effect. |
+
+## Known limitations
+
+- `ws://localhost:6767`, the "sync server" the mod talks to, is not part of the
+  game and is left as-is. It fails to connect unless you run one yourself, and
+  the code guards for that.
+- The `AltSolver` class is now dead code. Left in place rather than deleted.
+
+---
+
 # X18K.user.js (`x18k`)
 
 A full client replacement, like Revelation and the Laffer remake: it bundles a
@@ -686,6 +739,11 @@ hijack itself: that the stand-in tolerates everything the game does to it, that
 the captured URL reaches the mod with its token intact, and that all 17 of its
 packet names resolve to real opcodes.
 
+Robotics gets the shim-parity assertion, the same protocol comparison, and
+checks that the metadata block contains nothing executable, that no call site
+still reaches for the codec the script never defined, and that all three
+receive paths and both send paths go through the shim.
+
 x18k gets the same protocol comparison plus the takeover itself: that the stub
 queues an address arriving before the client is up and forwards one arriving
 after, that the page's `requestAnimFrame` assignment is swallowed, that the
@@ -695,7 +753,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 251 checks.
+them with `npm test` — 282 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
