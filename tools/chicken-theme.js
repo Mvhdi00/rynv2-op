@@ -203,60 +203,182 @@ window.CHICKEN_COSMOS = (function () {
   box-shadow: 0 0 0 2px rgba(120, 220, 255, .7), 0 0 14px rgba(120, 220, 255, .5);
 }
 
-/* ---------- the mod menu, same treatment ----------------------------- */
+/* ---------- the mod menu -------------------------------------------- */
+/* Everything the client sets on these lives in inline styles, so the overrides
+   have to be !important. Nothing is renamed and no element is moved, so every
+   toggle, slider and key bind keeps working. */
 #ckScriptMenu {
-  width: 780px !important;
-  height: 520px !important;
-  border-radius: 16px !important;
+  width: 920px !important;
+  height: 620px !important;
+  border-radius: 20px !important;
   overflow: hidden !important;
   isolation: isolate;
   color: #dbe4ff;
+  font-family: "Hammersmith One", "Segoe UI", system-ui, sans-serif;
   background:
-    radial-gradient(120% 90% at 12% 0%,   rgba(124, 92, 255, .26) 0%, transparent 55%),
-    radial-gradient(100% 80% at 88% 10%,  rgba(77, 216, 255, .18) 0%, transparent 50%),
-    linear-gradient(160deg, #06071c 0%, #090d28 50%, #12092b 100%) !important;
-  border: 1px solid rgba(150, 170, 255, .18);
+    radial-gradient(120% 90% at 10% 0%,   rgba(124, 92, 255, .30) 0%, transparent 55%),
+    radial-gradient(100% 80% at 90% 8%,   rgba(77, 216, 255, .20) 0%, transparent 50%),
+    radial-gradient(90%  90% at 50% 112%, rgba(255, 92, 190, .14) 0%, transparent 60%),
+    linear-gradient(160deg, #05061a 0%, #080c26 50%, #12092b 100%) !important;
+  border: 1px solid rgba(150, 170, 255, .20);
   box-shadow:
-    0 30px 90px rgba(0, 0, 0, .65),
-    0 0 0 1px rgba(255, 255, 255, .03) inset,
-    0 0 120px rgba(124, 92, 255, .12) inset;
+    0 40px 100px rgba(0, 0, 0, .7),
+    0 0 0 1px rgba(255, 255, 255, .04) inset,
+    0 0 140px rgba(124, 92, 255, .14) inset;
+  /* the client toggles inline opacity to open and close it; ride that */
+  transform: translate(-50%, -50%) scale(.955) !important;
+  transition: opacity .26s ease, transform .3s cubic-bezier(.2, .9, .25, 1.05) !important;
 }
-/* its own sky, behind the tabs and the settings list */
+#ckScriptMenu[style*="opacity: 1"] { transform: translate(-50%, -50%) scale(1) !important; }
+
+/* its own sky, behind the tab rail and the settings list */
 #ckScriptMenu > .ck-menusky {
   position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
 }
 #ckScriptMenu > .ck-menusky .ck-planet {
-  right: -70px; bottom: -110px; width: 200px; height: 200px; opacity: .38;
+  right: -80px; bottom: -120px; width: 220px; height: 220px; opacity: .34;
 }
-#ckScriptMenu > .ck-menusky .ck-planet::after { width: 310px; height: 72px; }
-#ckScriptMenu > *:not(.ck-menusky) { position: relative; z-index: 1; }
-#ckScriptMenu > div[style*="212.5px"] {
-  background: rgba(8, 11, 30, .55) !important;
-  border-right: 1px solid rgba(150, 170, 255, .14);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+#ckScriptMenu > .ck-menusky .ck-planet::after { width: 330px; height: 76px; }
+#ckScriptMenu > *:not(.ck-menusky) { z-index: 1; }
+
+/* --- the tab rail --- */
+#ckScriptMenu > div[style*="width: 212.5px"] {
+  width: 236px !important;
+  height: 100% !important;
+  background: linear-gradient(180deg, rgba(12, 16, 40, .78), rgba(8, 11, 30, .62)) !important;
+  border-right: 1px solid rgba(150, 170, 255, .16);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
-/* the rows the client builds for each setting */
-#ckScriptMenu div[style*="height: 40px"] {
-  border-radius: 9px !important;
-  transition: background .16s ease, box-shadow .16s ease;
+#ckScriptMenu > div[style*="left: 212.5px"] {
+  left: 236px !important;
+  width: calc(100% - 236px) !important;
+  padding-top: 6px;
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 220, 255, .35) transparent;
 }
-#ckScriptMenu div[style*="height: 40px"]:hover {
-  background-color: rgba(120, 220, 255, .10) !important;
-  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, .22);
+#ckScriptMenu > div[style*="left: 212.5px"]::-webkit-scrollbar { width: 8px; }
+#ckScriptMenu > div[style*="left: 212.5px"]::-webkit-scrollbar-thumb {
+  background: rgba(120, 220, 255, .3); border-radius: 4px;
 }
-#ckScriptMenu input, #ckScriptMenu select {
+
+/* --- the tabs --- */
+#ckScriptMenu div[id^="tab:"] {
+  width: calc(100% - 24px) !important;
+  left: 12px !important;
+  height: 34px !important;
+  border-radius: 10px !important;
+  background-color: transparent !important;
+  transition: background-color .18s ease, transform .18s ease, box-shadow .18s ease !important;
+  overflow: hidden;
+}
+#ckScriptMenu div[id^="tab:"]::before {          /* the accent bar */
+  content: ""; position: absolute; left: 0; top: 50%;
+  width: 3px; height: 0; border-radius: 3px;
+  background: linear-gradient(180deg, #6ee7ff, #4f8bff);
+  box-shadow: 0 0 10px rgba(110, 231, 255, .8);
+  transform: translateY(-50%);
+  transition: height .2s cubic-bezier(.2, .9, .25, 1.05);
+}
+#ckScriptMenu div[id^="tab:"]:hover {
+  background-color: rgba(255, 255, 255, .07) !important;
+  transform: translateX(2px);
+}
+#ckScriptMenu div[id^="tab:"]:hover::before { height: 16px; }
+/* the client marks the open tab by killing its pointer events */
+#ckScriptMenu div[id^="tab:"][style*="pointer-events: none"] {
+  background: linear-gradient(90deg, rgba(110, 231, 255, .20), rgba(79, 139, 255, .07)) !important;
+  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, .28);
+}
+#ckScriptMenu div[id^="tab:"][style*="pointer-events: none"]::before { height: 20px; }
+#ckScriptMenu div[id^="tab:"] img {
+  border-radius: 6px;
+  padding: 2px;
+  background: rgba(255, 255, 255, .07);
+  margin-left: 8px !important;
+}
+
+/* --- the setting rows --- */
+#ckScriptMenu div[style*="height: 40px"],
+#ckScriptMenu div[style*="padding-top: 25px"] {
+  border-radius: 12px !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .02)) !important;
+  box-shadow: inset 0 0 0 1px rgba(150, 170, 255, .10);
+  transition: background .18s ease, box-shadow .18s ease, transform .18s ease !important;
+}
+#ckScriptMenu div[style*="height: 40px"]:hover,
+#ckScriptMenu div[style*="padding-top: 25px"]:hover {
+  background: linear-gradient(180deg, rgba(120, 220, 255, .13), rgba(79, 139, 255, .05)) !important;
+  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, .30), 0 6px 18px rgba(0, 0, 0, .3);
+  transform: translateY(-1px);
+}
+
+/* --- the toggle switches --- */
+#ckScriptMenu div[id^="toggle:id:"] {
+  border-radius: 999px !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
+  transition: background-color .2s ease, box-shadow .2s ease !important;
+}
+#ckScriptMenu div[id^="toggle:id:"][style*="background-color: rgb(33, 150, 243)"] {
+  background: linear-gradient(180deg, #6ee7ff, #4f8bff) !important;
+  box-shadow: 0 0 16px rgba(79, 139, 255, .55), inset 0 0 0 1px rgba(255, 255, 255, .3);
+}
+#ckScriptMenu div[id^="toggle:id:"] > div {
+  transition: transform .22s cubic-bezier(.2, .9, .25, 1.4) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .4);
+}
+
+/* --- inputs, selects and the client's own buttons --- */
+#ckScriptMenu input, #ckScriptMenu select, #ckScriptMenu button {
   color: #e8efff !important;
   background: rgba(255, 255, 255, .06) !important;
   border: 1px solid rgba(150, 170, 255, .22) !important;
-  border-radius: 7px !important;
+  border-radius: 9px !important;
   outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease, transform .12s ease;
 }
 #ckScriptMenu select option { color: #0b1020; background: #dfe7ff; }
+#ckScriptMenu input:focus, #ckScriptMenu select:focus {
+  border-color: rgba(120, 220, 255, .65) !important;
+  box-shadow: 0 0 0 3px rgba(120, 220, 255, .16);
+}
+#ckScriptMenu button:hover { background: rgba(120, 220, 255, .16) !important; }
+#ckScriptMenu button:active { transform: translateY(1px); }
+
+/* the little value tags the client builds for list settings */
+#ckScriptMenu div[style*="border-radius: 6px; margin: 3px"] {
+  background: rgba(120, 220, 255, .16) !important;
+  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, .28);
+  transition: background .16s ease, transform .12s ease;
+}
+#ckScriptMenu div[style*="border-radius: 6px; margin: 3px"]:hover {
+  background: rgba(120, 220, 255, .28) !important;
+  transform: translateY(-1px);
+}
+
+/* rows fade in one after another when a tab opens */
+#ckScriptMenu > div[style*="left: 212.5px"] > * {
+  animation: ck-row .26s ease both;
+}
+#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(1)  { animation-delay: .02s; }
+#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(2)  { animation-delay: .04s; }
+#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(3)  { animation-delay: .06s; }
+#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(4)  { animation-delay: .08s; }
+#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(5)  { animation-delay: .10s; }
+#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(6)  { animation-delay: .12s; }
+#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(7)  { animation-delay: .14s; }
+#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(8)  { animation-delay: .16s; }
+#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(n+9) { animation-delay: .18s; }
+@keyframes ck-row {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 /* ---------- someone may be on reduce-motion -------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  .ck-sky-box *, .ck-sky-box::after, #ckMenu { animation: none !important; }
+  .ck-sky-box *, .ck-sky-box::after, #ckMenu,
+  #ckScriptMenu, #ckScriptMenu > div[style*="left: 212.5px"] > * { animation: none !important; transition: none !important; }
 }
 `;
 

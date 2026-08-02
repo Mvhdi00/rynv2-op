@@ -643,9 +643,20 @@ cycle. No canvas, no timers, no images, so it does not compete with the game's
 own render loop, and it all stops under `prefers-reduced-motion`.
 
 The card itself is glass over that sky, 760×380 (up from 650×450), with the
-title glowing cyan and the controls restyled to match. The **mod menu** gets the
-same scene — its own sky behind the tab column and the settings list, since the
-two are separate stacking contexts.
+title glowing cyan and the controls restyled to match.
+
+The **mod menu** was rebuilt on the same scene, 920×620 (up from 700×475): its
+own sky behind a full-height glass tab rail, tabs as pills with an accent bar
+that grows in on hover and stays lit on the open one, setting rows as cards that
+lift and glow under the cursor, switches on a cyan gradient with a springy knob,
+and rows fading in one after another when a tab opens. The panel itself scales
+in — the client toggles inline `opacity` to open and close it, so the transition
+rides that. The "Not connected" strip along the bottom of the rail is gone.
+
+None of it renames an id or moves an element: every override keys off something
+the client already sets, including the `pointer-events: none` it puts on the
+open tab and the `rgb(33, 150, 243)` it puts on an active switch. So every
+toggle, slider and key bind behaves exactly as before.
 
 Taken off the menu while there: the Help, Changelogs and Discord buttons, the
 credits line, the "Welcome back" line, and the ping/FPS graph (which also pulled
@@ -915,7 +926,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 415 checks.
+them with `npm test` — 424 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.

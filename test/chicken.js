@@ -282,10 +282,27 @@ check(!/rotate\(14deg\)/.test(src) && (src.match(/rotate\(-12deg\)/g) || []).len
 
 // the mod menu gets the same scene
 check(/CHICKEN_COSMOS\.dressMenu\(this\.menu\);/.test(src), 'the mod menu is themed too');
-check(/#ckScriptMenu \{/.test(src) && /#ckScriptMenu > \.ck-menusky \{/.test(src),
+check(/#ckScriptMenu > \.ck-menusky \{/.test(src),
       'with its own sky, since the two are separate stacking contexts');
 check((src.match(/document\.body\.appendChild\(this\.menu\);/g) || []).length === 1,
       'and it is still only appended once');
+check(/width: 920px !important;/.test(src) && /height: 620px !important;/.test(src),
+      'the mod menu is bigger than the 700x475 it was');
+check(/#ckScriptMenu\[style\*="opacity: 1"\] \{ transform: translate\(-50%, -50%\) scale\(1\)/.test(src),
+      'it scales in when opened -- the client toggles inline opacity, so ride that');
+check(/#ckScriptMenu div\[id\^="tab:"\]::before \{/.test(src),
+      'the tabs get a sliding accent bar');
+check(/pointer-events: none"\]::before \{ height: 20px; \}/.test(src),
+      "and the open tab is picked out by the flag the client already sets on it");
+check(/#ckScriptMenu div\[id\^="toggle:id:"\]\[style\*="background-color: rgb\(33, 150, 243\)"\]/.test(src),
+      'the switches light up off the colour the client sets, so no behaviour changes');
+check(/@keyframes ck-row \{/.test(src) && /nth-child\(n\+9\)/.test(src),
+      'and the rows fade in one after another when a tab opens');
+check(/width: 236px !important;/.test(src) && /left: 236px !important;/.test(src),
+      'the tab rail is wider, and the settings pane moved with it');
+check(/height: 100% !important;/.test(src), 'the rail runs the full height now');
+check(!/innerText = "Not connected"/.test(src) && !/this\.menu\.appendChild\(this\.socketPing\)/.test(src),
+      'the "Not connected" strip is gone');
 
 // --------------------------------------------------------------------------
 console.log('\n12. the bits taken off the menu');
