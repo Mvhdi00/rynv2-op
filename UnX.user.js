@@ -267,6 +267,84 @@ const CHKP = (function () {
         });
     }
 
+    let botSlot = null;
+    let botWidgetId = null;
+    let botToken = null;
+    let botChain = Promise.resolve(null);
+
+    function botContainer() {
+        if (botSlot && botSlot.isConnected) return botSlot;
+        botSlot = document.createElement("div");
+        botSlot.id = "chkBotTurnstile";
+        botSlot.style.cssText = "position:absolute;left:-10000px;top:0;width:300px;height:70px;";
+        (document.body || document.documentElement).appendChild(botSlot);
+        botWidgetId = null;
+        return botSlot;
+    }
+
+    function renderBotWidget() {
+        if (botWidgetId !== null) return true;
+        if (!window.turnstile || typeof window.turnstile.render != "function") return false;
+        try {
+            botWidgetId = window.turnstile.render(botContainer(), {
+                sitekey: SITEKEY,
+                theme: "dark",
+                callback: function (t) {
+                    botToken = t;
+                },
+                "error-callback": function () {
+                    botToken = null;
+                },
+                "expired-callback": function () {
+                    botToken = null;
+                },
+            });
+            return true;
+        } catch (e) {
+            console.error("[unx] bot turnstile render failed", e);
+            botWidgetId = null;
+            return false;
+        }
+    }
+
+    function awaitBotToken(timeoutMs) {
+        return new Promise(function (resolve) {
+            let waited = 0;
+            const poll = setInterval(function () {
+                renderBotWidget();
+                if (botToken) {
+                    clearInterval(poll);
+                    const t = botToken;
+                    botToken = null;
+                    resolve("cf:" + t);
+                    return;
+                }
+                waited += 150;
+                if (waited >= timeoutMs) {
+                    clearInterval(poll);
+                    resolve(null);
+                }
+            }, 150);
+        });
+    }
+
+    function freshToken() {
+        const run = function () {
+            loadApi();
+            botToken = null;
+            if (botWidgetId !== null && window.turnstile && typeof window.turnstile.reset == "function") {
+                try {
+                    window.turnstile.reset(botWidgetId);
+                } catch (e) {
+                    botWidgetId = null;
+                }
+            }
+            return awaitBotToken(25000);
+        };
+        botChain = botChain.then(run, run);
+        return botChain;
+    }
+
     return {
         headerLen: HEADER_LEN,
         modeSecure: MODE_SECURE,
@@ -275,6 +353,7 @@ const CHKP = (function () {
         hexToBytes: hexToBytes,
         token: token,
         requestToken: requestToken,
+        freshToken: freshToken,
     };
 })();
 
@@ -4986,12 +5065,7 @@ class AI {
                 }
             }
         } else if (e.toLowerCase() == "!c!dc bots") {
-            let s = ["large-shadowed-hoof", "cooperative-vanilla-hydrofoil", "lowly-discovered-agenda", "balanced-instinctive-mantis", "splashy-dusty-snout", "field-vivacious-mangosteen", "locrian-buttery-fur", "abstracted-prong-cod", "just-arrow-spark"];
-            for (let n = 0; n < s.length; n++) {
-                fetch(`https://${s[n]}.glitch.me/dc?auth=chickenModHasTheBestBotsTrust&server=${window.wsAddress.split("://")[1].split(".")[0]}`).catch((e) => {
-                    console.log(e);
-                });
-            }
+            botManager.removeBots(botManager.bots.reduce((n, b) => n + b.amount, 0));
             io.send("6", e.slice(0, 30));
         } else if (e != "!clan" || player.team) {
             if (e.startsWith(".bots ")) {
@@ -10972,6 +11046,438 @@ class AI {
     function keysActive() {
         return (document.activeElement.tagName != "INPUT" || (document.activeElement.type != "number" && document.activeElement.type != "text")) && document.activeElement.id != "chickenChatBox" && allianceMenu.style.display != "block" && chatHolder.style.display != "flex";
     }
+
+    const BOT_PACKET_CAP = 85;
+    const BOT_TRAP_ID = 15;
+    const BOT_SPIKE_ID = 6;
+
+    class BotSocket {
+        constructor(relay, slot) {
+            this.relay = relay;
+            this.slot = slot;
+            this.ws = null;
+            this.proto = null;
+            this.ready = false;
+            this.spawned = false;
+            this.dead = false;
+            this.name = "";
+            this.sid = null;
+            this.id = null;
+            this.x = 0;
+            this.y = 0;
+            this.dir = 0;
+            this.team = null;
+            this.health = 100;
+            this.age = 1;
+            this.upgradePoints = 0;
+            this.weaponIndex = 0;
+            this.itemIds = [];
+            this.players = [];
+            this.objects = [];
+            this.packets = 0;
+            this.windowStart = 0;
+            this.lastMoveDir = undefined;
+            this.attacking = false;
+            this.lastAim = null;
+            this.lastPlace = 0;
+            this.lastBreak = 0;
+            this.spawnedAt = 0;
+        }
+
+        send(name) {
+            if (!this.ws || this.ws.readyState !== 1 || !this.ready) return;
+            const now = Date.now();
+            if (now - this.windowStart >= 1000) {
+                this.windowStart = now;
+                this.packets = 0;
+            }
+            if (++this.packets >= BOT_PACKET_CAP) return;
+            const data = Array.prototype.slice.call(arguments, 1);
+            const wire = isMohMoh ? clientTranslate.get(name) || name : name;
+            if (this.proto && this.proto.mode === CHKP.modeSecure) {
+                const opcode = this.proto.tables.c2s.enc[wire];
+                if (opcode === undefined) return;
+                const payload = msgpack.encode([opcode, data, ++this.proto.seq]);
+                const frame = new Uint8Array(CHKP.headerLen + payload.length);
+                frame.set(CHKP.tag(this.proto.key, payload), 0);
+                frame.set(payload, CHKP.headerLen);
+                this.ws.send(frame);
+            } else {
+                this.ws.send(msgpack.encode([wire, data]));
+            }
+        }
+
+        connect(address, token, name) {
+            this.name = name;
+            let url = address;
+            if (token) url += "/?token=" + encodeURIComponent(token);
+            try {
+                this.ws = new WebSocket(url);
+            } catch (e) {
+                this.relay.botClosed(this);
+                return;
+            }
+            this.ws.binaryType = "arraybuffer";
+            this.ws.onmessage = (msg) => this.onMessage(msg);
+            this.ws.onclose = () => this.relay.botClosed(this);
+            this.ws.onerror = () => {};
+        }
+
+        close() {
+            this.ready = false;
+            if (this.ws && this.ws.readyState < 2) this.ws.close();
+        }
+
+        onMessage(msg) {
+            let parsed;
+            try {
+                parsed = msgpack.decode(new Uint8Array(msg.data));
+            } catch (e) {
+                return;
+            }
+            let type = parsed[0];
+            const args = parsed[1];
+            if (type == "io-init") {
+                this.proto =
+                    args[3] === CHKP.modeSecure
+                        ? {
+                              mode: CHKP.modeSecure,
+                              key: CHKP.hexToBytes(args[2]),
+                              tables: CHKP.buildTables(args[1] >>> 0),
+                              seq: 0,
+                          }
+                        : null;
+                this.ready = true;
+                this.spawn();
+                return;
+            }
+            if (this.proto && typeof type == "number") {
+                type = this.proto.tables.s2c.dec[type];
+                if (type === undefined) return;
+            }
+            this.handle(String(type), args || []);
+        }
+
+        spawn() {
+            this.send("M", {
+                name: this.name,
+                moofoll: 1,
+                skin: 0,
+            });
+        }
+
+        handle(type, args) {
+            switch (type) {
+                case "C":
+                    this.sid = args[0];
+                    this.spawned = true;
+                    this.dead = false;
+                    this.spawnedAt = Date.now();
+                    this.relay.emit({ type: "botSid", sid: this.sid });
+                    this.send("K", 1, 1);
+                    break;
+                case "D":
+                    if (args[1] && args[0]) {
+                        this.id = args[0][0];
+                        this.sid = args[0][1];
+                    }
+                    break;
+                case "a":
+                    this.readPlayers(args[0] || []);
+                    break;
+                case "H":
+                    this.readObjects(args[0] || []);
+                    break;
+                case "Q":
+                    this.objects = this.objects.filter((o) => o.sid !== args[0]);
+                    break;
+                case "R":
+                    this.objects = this.objects.filter((o) => o.owner !== args[0]);
+                    break;
+                case "O":
+                    if (args[0] === this.sid) this.health = args[1];
+                    break;
+                case "T":
+                    this.age = args[1] || this.age;
+                    break;
+                case "U":
+                    this.upgradePoints = args[0] || 0;
+                    break;
+                case "V":
+                    if (!args[1]) this.itemIds = args[0] || [];
+                    break;
+                case "P":
+                    this.dead = true;
+                    this.spawned = false;
+                    this.attacking = false;
+                    this.lastMoveDir = undefined;
+                    this.relay.emit({ type: "botSidRemove", sid: this.sid });
+                    break;
+                case "3":
+                    if (args[0] === this.sid) this.team = args[1];
+                    break;
+            }
+        }
+
+        readPlayers(flat) {
+            const list = [];
+            for (let i = 0; i + 12 < flat.length; i += 13) {
+                const p = {
+                    sid: flat[i],
+                    x: flat[i + 1],
+                    y: flat[i + 2],
+                    dir: flat[i + 3],
+                    team: flat[i + 7],
+                };
+                list.push(p);
+                if (p.sid === this.sid) {
+                    this.x = p.x;
+                    this.y = p.y;
+                    this.dir = p.dir;
+                }
+            }
+            this.players = list;
+        }
+
+        readObjects(flat) {
+            for (let i = 0; i + 7 < flat.length; i += 8) {
+                const sid = flat[i];
+                const obj = {
+                    sid: sid,
+                    x: flat[i + 1],
+                    y: flat[i + 2],
+                    id: flat[i + 6],
+                    owner: flat[i + 7],
+                };
+                const at = this.objects.findIndex((o) => o.sid === sid);
+                if (at >= 0) this.objects[at] = obj;
+                else this.objects.push(obj);
+            }
+            if (this.objects.length > 900) this.objects.splice(0, this.objects.length - 900);
+        }
+
+
+        friendly(sid, msg) {
+            if (sid === this.sid) return true;
+            if (this.relay.ownerSid !== null && sid === this.relay.ownerSid) return true;
+            if (this.relay.manager.botSids.indexOf(sid) >= 0) return true;
+            return false;
+        }
+
+        pickTarget(msg) {
+            const wanted = msg.targetSids || [];
+            const fromOwner = msg.targetType !== "bot";
+            const ox = fromOwner ? msg.ownerPos.x : this.x;
+            const oy = fromOwner ? msg.ownerPos.y : this.y;
+            let best = null;
+            let bestDist = Infinity;
+            for (let i = 0; i < this.players.length; i++) {
+                const p = this.players[i];
+                if (this.friendly(p.sid, msg)) continue;
+                if (msg.ownerTeam && p.team === msg.ownerTeam) continue;
+                if (wanted.length) {
+                    if (wanted.indexOf(p.sid) < 0) continue;
+                } else if (!msg.killOnSight) {
+                    continue;
+                }
+                const d = Math.hypot(p.x - ox, p.y - oy);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = p;
+                }
+            }
+            return best;
+        }
+
+        moveAngle(msg) {
+            const mode = msg.botMovement;
+            const owner = msg.ownerPos;
+            if (mode === "stop") return null;
+            if (mode === "mouse") {
+                const c = owner.cursorLocation;
+                if (!c) return null;
+                if (Math.hypot(c.x - this.x, c.y - this.y) < 40) return null;
+                return Math.atan2(c.y - this.y, c.x - this.x);
+            }
+            if (mode === "circle") {
+                const ring = msg.fixedCircles || [];
+                if (!ring.length) return null;
+                const a = ring[this.slot % ring.length];
+                const tx = owner.x + Math.cos(a) * msg.circleRad;
+                const ty = owner.y + Math.sin(a) * msg.circleRad;
+                if (Math.hypot(tx - this.x, ty - this.y) < 25) return null;
+                return Math.atan2(ty - this.y, tx - this.x);
+            }
+            const d = Math.hypot(owner.x - this.x, owner.y - this.y);
+            if (d <= msg.playerDist) return null;
+            return Math.atan2(owner.y - this.y, owner.x - this.x);
+        }
+
+        breakTarget(msg) {
+            if (msg.botModule !== 2 && msg.botModule !== 3) return null;
+            const radius = msg.breakingRad;
+            let best = null;
+            let bestDist = Infinity;
+            const pool =
+                msg.botModule === 2
+                    ? (msg.ownerPos.buildings || []).map((b) => ({ x: b.x, y: b.y }))
+                    : this.objects.filter((o) => o.owner >= 0 && o.owner !== this.sid && !this.friendly(o.owner, msg));
+            for (let i = 0; i < pool.length; i++) {
+                const o = pool[i];
+                const d = Math.hypot(o.x - this.x, o.y - this.y);
+                if (d > radius) continue;
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = o;
+                }
+            }
+            return best;
+        }
+
+        placeTrap(angle) {
+            const now = Date.now();
+            if (now - this.lastPlace < 900) return;
+            this.lastPlace = now;
+            const id = this.itemIds.indexOf(BOT_TRAP_ID) >= 0 ? BOT_TRAP_ID : BOT_SPIKE_ID;
+            this.send("z", id);
+            this.send("F", 1, angle);
+            this.send("z", this.weaponIndex, true);
+        }
+
+        tick(msg) {
+            if (!this.ready) return;
+            if (this.dead) {
+                if (Date.now() - this.spawnedAt > 1200) {
+                    this.spawnedAt = Date.now();
+                    this.spawn();
+                }
+                return;
+            }
+            if (!this.spawned) return;
+
+            const wanted = msg.primaryWeaponSelector;
+            if (wanted !== this.weaponIndex) {
+                this.weaponIndex = wanted;
+                this.send("z", wanted, true);
+            }
+
+            const move = this.moveAngle(msg);
+            if (move !== this.lastMoveDir) {
+                this.lastMoveDir = move;
+                this.send("9", move === null ? undefined : move);
+            }
+
+            const target = this.pickTarget(msg);
+            const wall = target ? null : this.breakTarget(msg);
+            const hit = target || wall;
+
+            if (hit) {
+                const aim = Math.atan2(hit.y - this.y, hit.x - this.x);
+                if (this.lastAim === null || Math.abs(aim - this.lastAim) > 0.02) {
+                    this.lastAim = aim;
+                    this.send("D", aim);
+                }
+                if (!this.attacking) {
+                    this.attacking = true;
+                    this.send("F", 1, aim);
+                }
+                if (msg.autoplace && target) this.placeTrap(aim);
+            } else if (this.attacking) {
+                this.attacking = false;
+                this.send("F", 0);
+            }
+        }
+
+        chat(message) {
+            this.send("6", String(message).slice(0, 30));
+        }
+    }
+
+    class LocalRelay {
+        constructor(slotName, manager) {
+            this.readyState = 0;
+            this.slotName = slotName;
+            this.manager = manager || botManager;
+            this.sockets = [];
+            this.ownerSid = null;
+            this.onopen = null;
+            this.onmessage = null;
+            this.onclose = null;
+            this.pending = 0;
+            setTimeout(() => {
+                this.readyState = 1;
+                if (this.onopen) this.onopen();
+            }, 0);
+        }
+
+        emit(obj) {
+            if (this.onmessage) this.onmessage({ data: JSON.stringify(obj) });
+        }
+
+        send(raw) {
+            let msg;
+            try {
+                msg = JSON.parse(raw);
+            } catch (e) {
+                return;
+            }
+            if (msg.type === "add") {
+                this.addBots(msg.ip, msg.tokens || []);
+            } else if (msg.type === "remove") {
+                this.removeBots(msg.amount || 0);
+            } else if (msg.type === "update") {
+                this.ownerSid = playerSID === undefined ? null : playerSID;
+                for (let i = 0; i < this.sockets.length; i++) {
+                    try {
+                        this.sockets[i].tick(msg.msg);
+                    } catch (e) {}
+                }
+            } else if (msg.type === "chat") {
+                for (let i = 0; i < this.sockets.length; i++) this.sockets[i].chat(msg.message);
+            } else if (msg.type === "packet") {
+                const bot = this.sockets.find((b) => b.sid === msg.sid);
+                if (bot && msg.packetData) bot.send.apply(bot, [msg.packetData.type].concat(msg.packetData.data || []));
+            }
+        }
+
+        addBots(address, tokens) {
+            const names = (scriptMenu.toggles.botNames || "").split(",").map((s) => s.trim()).filter(Boolean);
+            for (let i = 0; i < tokens.length; i++) {
+                const token = tokens[i];
+                if (!token) continue;
+                const bot = new BotSocket(this, this.sockets.length);
+                this.sockets.push(bot);
+                const name = names.length ? names[(this.sockets.length - 1) % names.length] : "unX";
+                bot.connect(address || window.wsAddress, token, name);
+            }
+            this.emit({ type: "canSendNow" });
+        }
+
+        removeBots(amount) {
+            for (let i = 0; i < amount && this.sockets.length; i++) {
+                const bot = this.sockets.pop();
+                if (bot.sid !== null) this.emit({ type: "botSidRemove", sid: bot.sid });
+                bot.close();
+            }
+            if (!this.sockets.length) this.close();
+        }
+
+        botClosed(bot) {
+            const at = this.sockets.indexOf(bot);
+            if (at >= 0) this.sockets.splice(at, 1);
+            if (bot.sid !== null) this.emit({ type: "botSidRemove", sid: bot.sid });
+            if (!this.sockets.length) this.close();
+        }
+
+        close() {
+            if (this.readyState === 3) return;
+            this.readyState = 3;
+            for (let i = 0; i < this.sockets.length; i++) this.sockets[i].close();
+            this.sockets = [];
+            if (this.onclose) this.onclose();
+        }
+    }
+
     class Bot {
         constructor(e, t, i) {
             this.manager = botManager;
@@ -11074,10 +11580,7 @@ class AI {
         getTokens(e) {
             let t = [];
             for (let i = 0; i < e; i++) {
-                let s = new Promise(async (e, t) => {
-                    e(await altKeyManager.getToken());
-                });
-                t.push(s);
+                t.push(CHKP.freshToken());
             }
             return Promise.all(t);
         }
@@ -11186,8 +11689,7 @@ class AI {
             let a = this.projects.filter((e) => !e.isActive);
             for (let l = 0; l < a.length && !(e <= 0); l++) {
                 let o = a[l];
-                let r = `wss://${o.link}.glitch.me/`;
-                let c = new WebSocket(r);
+                let c = new LocalRelay(o.link, this);
                 this.bots.push(new Bot(c, Math.min(e, 4), o.link));
                 e -= 4;
             }

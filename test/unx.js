@@ -212,8 +212,13 @@ check(/ui\.box\.remove\(\);\n\s*resolve\(token\(\)\);/.test(src),
 check(/render\(ui\.slot, finish\);/.test(src),
       "and the widget's own callback is what closes it, so there is no extra click");
 check(!/chkConnect/.test(src), 'no Connect button is left to press');
-check(!/waited >= limit/.test(src) && !/timeoutMs/.test(src),
-      'nothing times out while the player is solving it');
+// scoped to requestToken: the bot-token path below it is headless and does need
+// a timeout, but the panel a human is looking at must never give up on them
+{
+  const panel = src.slice(src.indexOf('function requestToken()'), src.indexOf('let botSlot = null;'));
+  check(!/waited/.test(panel) && !/timeoutMs/.test(panel),
+        'nothing times out while the player is solving it');
+}
 check(/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit/.test(src),
       'loading the Turnstile api itself if the page has not');
 check(!/position:fixed;bottom:12px;left:12px;z-index:2147483646/.test(src),
@@ -335,7 +340,178 @@ check(/>unX<\/span>/.test(src), 'and the new one is on it');
 check(/transform: translateX\(-50%\);">unX<\/div>/.test(src), 'and on the mod menu');
 
 // --------------------------------------------------------------------------
-console.log('\n15. the file carries no comments but its metadata block');
+console.log('\n15. the bots run here now, not on a dead relay');
+
+{
+  const B = extract.loadUnxBots();
+
+  // a relay that records what the bot layer reports back to botManager
+  function makeRelay() {
+    const manager = { botSids: [] };
+    const relay = new B.LocalRelay('slot', manager);
+    relay.events = [];
+    relay.onmessage = m => relay.events.push(JSON.parse(m.data));
+    return relay;
+  }
+
+  // stands a bot up through a real io-init handshake and returns it
+  function makeBot(relay, slot) {
+    const bot = new B.BotSocket(relay || makeRelay(), slot || 0);
+    bot.connect('wss://test.moomoo.io', 'cf:tok', 'unX');
+    bot.ws.deliver(enc.encode(['io-init', [3, SEED, KEY_HEX, 1]]));
+    return bot;
+  }
+
+  const SEED = 0x5EED1234;
+  const KEY_HEX = '00112233445566778899aabbccddeeff';
+  const key = Buffer.from(KEY_HEX, 'hex');
+  const tables = game.Po(SEED);
+
+  // decodes one frame the bot sent, checking the tag the way the server would
+  function readFrame(buf) {
+    const payload = buf.subarray(game.jt);
+    const want = Buffer.from(crypto.createHmac('sha256', key).update(payload).digest()).subarray(0, game.jt);
+    const body = dec.decode(payload);
+    return { tagOk: Buffer.compare(want, buf.subarray(0, game.jt)) === 0, name: tables.c2s.dec[body[0]], args: body[1], seq: body[2] };
+  }
+  const sentNames = bot => bot.ws.sent.map(b => readFrame(b).name);
+
+  const relay0 = makeRelay();
+  const bot = makeBot(relay0);
+
+  check(bot.ready === true, 'the bot builds its protocol state from its own io-init');
+  check(bot.proto.seq === 1 && bot.ws.sent.length === 1,
+        'and sends exactly one packet once the handshake lands');
+
+  const spawn = readFrame(bot.ws.sent[0]);
+  check(spawn.tagOk, 'the spawn frame carries a tag the server will accept');
+  check(spawn.name === 'M', 'and it is the spawn packet');
+  check(spawn.args[0] && typeof spawn.args[0].name === 'string',
+        'with a name, the way the client spawns');
+  check(spawn.seq === 1, 'the bot starts its own sequence at 1, not the main socket\'s');
+
+  // two bots must not share key material or sequence numbers
+  const other = makeBot(makeRelay());
+  other.ws.deliver(enc.encode(['io-init', [4, SEED ^ 0xff, KEY_HEX, 1]]));
+  check(other.proto.tables.c2s.enc.M !== bot.proto.tables.c2s.enc.M,
+        'a second bot with a different seed gets a different opcode table');
+
+  bot.ws.sent.length = 0;
+  bot.ws.deliver(enc.encode([tables.s2c.enc.C, [42]]));
+  check(bot.sid === 42 && bot.spawned === true, 'setupGame marks the bot spawned and records its sid');
+  check(relay0.events.some(e => e.type === 'botSid' && e.sid === 42),
+        'and the sid is reported up so the client knows this player is ours');
+
+  bot.ws.deliver(enc.encode([tables.s2c.enc.a, [[42, 100, 200, 0.5, 0, 0, 0, null, 0, 0, 0, 0, 0,
+                                                 99, 400, 200, 0, 0, 0, 0, null, 0, 0, 0, 0, 0]]]));
+  check(bot.x === 100 && bot.y === 200, 'the bot tracks its own position from the 13-field stride');
+  check(bot.players.length === 2, 'and sees the other player in the same update');
+
+  // --- targeting ---
+  const msg = {
+    ownerPos: { x: 100, y: 260, buildings: [], cursorLocation: { x: 0, y: 0 } },
+    ownerTeam: null, botModule: 0, botMovement: 'normal', targetType: 'bot',
+    circleRad: 300, playerDist: 200, breakingRad: 900, primaryWeaponSelector: 0,
+    targetSids: [], botNames: '', autoplace: false, killOnSight: true, fixedCircles: [],
+  };
+  check(bot.pickTarget(msg).sid === 99, 'with kill-on-sight the bot picks the nearest enemy');
+
+  relay0.manager.botSids = [99];
+  check(bot.pickTarget(msg) === null, 'but never one of our own bots');
+  relay0.manager.botSids = [];
+
+  relay0.ownerSid = 99;
+  check(bot.pickTarget(msg) === null, 'and never its owner');
+  relay0.ownerSid = null;
+
+  bot.players[1].team = 'AAA';
+  check(bot.pickTarget(Object.assign({}, msg, { ownerTeam: 'AAA' })) === null,
+        'and never a player on the owner\'s team');
+  bot.players[1].team = null;
+
+  check(bot.pickTarget(Object.assign({}, msg, { killOnSight: false })) === null,
+        'with kill-on-sight off and no target list it attacks nobody');
+  check(bot.pickTarget(Object.assign({}, msg, { killOnSight: false, targetSids: [99] })).sid === 99,
+        'but an explicit target sid still gets attacked');
+
+  // --- one AI tick ---
+  bot.ws.sent.length = 0;
+  bot.tick(msg);
+  const names = sentNames(bot);
+  check(names.includes('D'), 'a tick aims at the target');
+  check(names.includes('F'), 'and swings at it');
+  check(bot.ws.sent.every(b => readFrame(b).tagOk), 'every packet a tick sends is correctly tagged');
+
+  bot.ws.sent.length = 0;
+  bot.tick(msg);
+  check(!sentNames(bot).includes('F'), 'the attack is not re-sent while it is already swinging');
+
+  // movement: inside playerDist the bot holds still, outside it walks in
+  bot.ws.sent.length = 0;
+  bot.lastMoveDir = 12345;
+  bot.tick(Object.assign({}, msg, { ownerPos: { x: 100, y: 210, buildings: [] } }));
+  const held = bot.ws.sent.map(readFrame).find(f => f.name === '9');
+  check(held && held.args[0] == null, 'inside Player Distance it stops moving');
+
+  bot.ws.sent.length = 0;
+  bot.lastMoveDir = 12345;
+  bot.tick(Object.assign({}, msg, { ownerPos: { x: 100, y: 900, buildings: [] } }));
+  const walk = bot.ws.sent.map(readFrame).find(f => f.name === '9');
+  check(walk && typeof walk.args[0] === 'number', 'outside it, it walks towards the owner');
+
+  bot.ws.sent.length = 0;
+  bot.lastMoveDir = 12345;
+  bot.tick(Object.assign({}, msg, { botMovement: 'stop' }));
+  const stopped = bot.ws.sent.map(readFrame).find(f => f.name === '9');
+  check(stopped && stopped.args[0] == null, '"Stop Moving" really does stop it');
+
+  bot.ws.sent.length = 0;
+  bot.lastMoveDir = 12345;
+  bot.tick(Object.assign({}, msg, { botMovement: 'circle', fixedCircles: [0, 1.5, 3, 4.5] }));
+  check(bot.ws.sent.map(readFrame).some(f => f.name === '9' && typeof f.args[0] === 'number'),
+        '"Circle Player" steers onto the ring the client hands it');
+
+  // autoplace uses the client's own three-packet placement sequence
+  bot.ws.sent.length = 0;
+  bot.lastPlace = 0;
+  bot.itemIds = [15];
+  bot.tick(Object.assign({}, msg, { autoplace: true }));
+  const seq = sentNames(bot).join(',');
+  check(/z,F,z/.test(seq), 'auto-place sends select-item, swing, re-select-weapon like the client does');
+
+  // death and respawn
+  bot.ws.sent.length = 0;
+  bot.ws.deliver(enc.encode([tables.s2c.enc.P, []]));
+  check(bot.dead === true && bot.spawned === false, 'the bot notices it died');
+  check(relay0.events.some(e => e.type === 'botSidRemove'), 'and takes its sid back out of the list');
+  bot.spawnedAt = Date.now() - 5000;
+  bot.tick(msg);
+  check(sentNames(bot).includes('M'), 'and respawns on the next tick');
+
+  // --- the relay speaks the protocol botManager already sends ---
+  const relay = makeRelay();
+  check(relay.readyState === 1 || relay.readyState === 0, 'the relay stands in for the glitch socket');
+  relay.send(JSON.stringify({ type: 'add', ip: 'wss://test.moomoo.io', tokens: ['cf:a', 'cf:b'] }));
+  check(relay.sockets.length === 2, 'an "add" with two tokens opens two real connections');
+  check(relay.sockets[0].ws.url.includes('token=cf%3Aa'),
+        'each bot connects with its own token in the query string');
+  check(relay.sockets[0].ws.url !== relay.sockets[1].ws.url,
+        'and no two bots are handed the same one');
+  relay.send(JSON.stringify({ type: 'remove', amount: 1 }));
+  check(relay.sockets.length === 1, 'a "remove" drops one');
+  relay.send(JSON.stringify({ type: 'remove', amount: 1 }));
+  check(relay.readyState === 3, 'and the relay closes once its last bot is gone');
+
+  check(/CHKP\.freshToken\(\)/.test(src) && !/altKeyManager\.getToken\(\)/.test(src),
+        'tokens come from Turnstile now, not the dropped ALTCHA solver');
+  check(!/wss:\/\/\$\{o\.link\}\.glitch\.me/.test(src) && /new LocalRelay\(o\.link, this\)/.test(src),
+        'addBots opens a local relay instead of a dead glitch.me project');
+  check(!/glitch\.me\/dc\?auth=/.test(src),
+        'and "!c!dc bots" drops our own bots instead of asking nine dead hosts to');
+}
+
+// --------------------------------------------------------------------------
+console.log('\n16. the file carries no comments but its metadata block');
 
 {
   const acorn = require('acorn');

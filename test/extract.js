@@ -202,6 +202,61 @@ module.exports = {
   },
 
   /**
+   * unX's bot layer: the real per-bot game connection (BotSocket) and the
+   * stand-in for the dead glitch.me relay socket (LocalRelay), loaded with the
+   * same CHKP the shipped script uses.
+   */
+  loadUnxBots() {
+    const l = lines(CHICKEN);
+
+    const pa = findLine(l, 'const CHKP = (function () {');
+    const pb = findLine(l, 'let chkReady = false;', pa);
+    const proto = l.slice(pa, pb + 1).join('\n');
+
+    const ba = findLine(l, '    const BOT_PACKET_CAP = 85;');
+    const bb = findLine(l, '    class Bot {', ba);
+    const bots = l.slice(ba, bb).join('\n');
+
+    const src = `
+const { Encoder, Decoder } = require('./vendor_msgpack.js');
+const _enc = new Encoder(), _dec = new Decoder();
+const msgpack = { encode: v => _enc.encode(v), decode: b => _dec.decode(b) };
+
+let isMohMoh = false;
+const clientTranslate = new Map([['M', 'sp'], ['9', '33'], ['D', '2']]);
+let playerSID = 7;
+const scriptMenu = { toggles: { botNames: '' } };
+
+class FakeSocket {
+  constructor(url) { this.url = url; this.readyState = 1; this.binaryType = ''; this.sent = []; }
+  send(d) { this.sent.push(Buffer.from(d)); }
+  close() { this.readyState = 3; if (this.onclose) this.onclose({ code: 1000 }); }
+  deliver(data) { this.onmessage({ data }); }
+}
+global.WebSocket = FakeSocket;
+global.window = { turnstile: null, wsAddress: 'wss://test.moomoo.io' };
+global.document = {
+  createElement: () => ({ style: {}, appendChild() {} }),
+  documentElement: { appendChild() {} },
+  head: { appendChild() {} },
+  getElementById: () => null,
+};
+
+${proto}
+
+${bots}
+
+module.exports = {
+  CHKP, BotSocket, LocalRelay, FakeSocket, msgpack,
+  setMohMoh: v => { isMohMoh = v; },
+  setNames: v => { scriptMenu.toggles.botNames = v; },
+  setPlayerSID: v => { playerSID = v; },
+};
+`;
+    return require(write('unx_bots.js', src));
+  },
+
+  /**
    * Every hook-based script carries the same EXP shim. Assert the copies have
    * not drifted apart.
    */

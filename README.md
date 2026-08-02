@@ -700,21 +700,61 @@ refuses to write unless the two syntax trees are identical, positions aside. The
 program is therefore provably unchanged. The build runs it as its last step, so
 a rebuild cannot put the comments back.
 
+## The bots
+
+The upload contained **no bot code at all**. `addBots()` opened a socket to one
+of ten `*.glitch.me` relay projects and sent `{type:"add", ip, tokens}`; the
+relay made the real game connections, ran every bit of the AI, and streamed the
+results back as JSON. Glitch ended free project hosting, so all ten hosts return
+410 and nothing downstream of them could work.
+
+They are now implemented here, in the browser. Two new classes sit under the
+existing `botManager`:
+
+- **`BotSocket`** — a real connection to the game server. It does its own
+  `io-init` handshake, so it carries its **own** HMAC key, opcode tables and
+  sequence counter; nothing is shared with the main socket or with another bot.
+  It spawns, tracks itself and the players around it from the same 13-field
+  update stride the client reads, tracks objects on the 8-field stride, notices
+  its own death and respawns.
+- **`LocalRelay`** — a stand-in for the glitch socket. It accepts exactly the
+  JSON messages `botManager` already sends (`add`, `remove`, `update`, `chat`,
+  `packet`) and answers with exactly the events the `Bot` wrapper already
+  listens for (`botSid`, `botSidRemove`, `canSendNow`). So `botManager`, the
+  `Bot` class, the mod menu and every bot setting are **unchanged** — only the
+  transport under them moved from someone else's server to this tab.
+
+The AI the relay used to run is reimplemented from the same `update` payload:
+Follow Player / Circle Player / Follow Mouse / Stop Moving, autoaim nearest-to-
+player or nearest-to-bot, Bot Target Sids, Kill-On Sight, Auto Place Traps
+(which sends the client's own three-packet select–swing–reselect sequence), the
+Object Breaker modes, Primary Weapon and Bot Names. A bot will never target its
+owner, another of your bots, or anyone on your owner team.
+
+`getTokens()` called `altKeyManager.getToken()`, an ALTCHA solver for a
+challenge the server dropped. It now calls `CHKP.freshToken()`, which keeps a
+second Turnstile widget alive off-screen and resets it once per bot. The widget
+is parked at `left:-10000px` rather than `display:none` because Turnstile
+refuses to render into a container whose `offsetParent` is null.
+
+### What still limits them
+
+- **One token per bot, minted one at a time.** Cloudflare treats a Turnstile
+  token as single-use, so bots cannot share the one the main socket connected
+  with, and a widget solves one challenge at a time — `freshToken()` queues its
+  callers rather than handing the same token to several bots. Adding bots is
+  therefore serialised and not instant, and Cloudflare may start issuing
+  challenges (or refusing) if you ask for many in quick succession. This is a
+  server-side limit, not something the script can route around.
+- The bots run in your tab, so they share its CPU and your connection.
+
 ## Known limitations
 
-- **The bots do not work.** Not because of anything here: chicken has no bot
-  code of its own at all. It hands your server address and a captcha token to a
-  list of ten `*.glitch.me` relay projects and asks *them* to connect the bots.
-  Glitch ended free project hosting, so those ten projects are gone. Nothing in
-  the script can be fixed to bring them back — it would need a bot
-  implementation written from scratch.
 - The sing-along feature pulls from the same dead host; its fetch is now caught
   so it fails quietly instead of leaving an unhandled rejection in the console
   on every load.
 - `getChallenge()` / `validateChallenge()` / `createPayload()` and the worker
   pool are now dead code. Left in place rather than deleted.
-- Turnstile tokens are single-use, so the multi-bot path is not reliably
-  automatable — the same server-side limit that applies to every script here.
 
 ---
 
@@ -946,7 +986,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 423 checks.
+them with `npm test` — 461 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
