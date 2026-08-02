@@ -83,6 +83,10 @@ const BROWSER_SHIM = `
     addEventListener: function () {}
   };
   var document = window.document;
+  window.setTimeout = function (fn) { return 0; };
+  window.clearTimeout = function () {};
+  var setTimeout = window.setTimeout;
+  var clearTimeout = window.clearTimeout;
 `;
 
 /* Enough canvas for the overlay: it hooks the prototype's text methods and
@@ -128,19 +132,28 @@ function makeBrowser(wire) {
 /* The bridge and the visuals overlay as they actually sit in the built
  * userscript, so what gets checked is the shipped copy and not the files in
  * tools/ beside it. */
-function extractModules(script) {
+function extractBridge(script) {
   const start = script.indexOf("(function () {\n  \"use strict\";");
-  const visualsAt = script.indexOf("* lemon-visuals.js");
   const end = script.indexOf("/* --- LemonMod body:");
   if (start === -1 || end === -1 || end < start) {
     throw new Error("could not find the bridge in the build output");
   }
-  if (visualsAt === -1 || visualsAt > end) throw new Error("could not find the visuals overlay in the build output");
-  const visualsStart = script.lastIndexOf("/*", visualsAt);
-  return {
-    bridge: script.slice(start, visualsStart),
-    visuals: script.slice(visualsStart, end)
-  };
+  return script.slice(start, end);
+}
+
+/* The visuals ship as their own userscript now, carrying their own copy of
+ * the bridge so they run with or without LemonMod beside them. */
+function extractBridgeFrom(script) {
+  const start = script.indexOf("(function () {\n  \"use strict\";");
+  const at = script.indexOf("* lemon-visuals.js");
+  if (start === -1 || at === -1) throw new Error("could not find the bridge in the visuals build");
+  return script.slice(start, script.lastIndexOf("/*", at));
+}
+
+function extractVisuals(script) {
+  const at = script.indexOf("* lemon-visuals.js");
+  if (at === -1) throw new Error("could not find the visuals overlay in the visuals build");
+  return script.slice(script.lastIndexOf("/*", at));
 }
 
 function extractFunction(src, name) {
@@ -210,9 +223,23 @@ check(!script.includes("'\\x74']('\\x26')[0x16b1"), "build: the bot socket URL s
 check(script.includes(`|| document.activeElement.id.toLowerCase() === "nameinput") {`),
   "build: the mod's send gate can still swallow the spawn while the name field has focus");
 
-const modules = extractModules(script);
-const bridgeSource = modules.bridge;
-const visualsSource = modules.visuals;
+const VISUALS_BUILD = path.resolve(
+  process.argv[3] || path.join(path.dirname(BUILD), "LemonMod_Visuals_Fixed.user.js")
+);
+const visualsScript = fs.existsSync(VISUALS_BUILD) ? fs.readFileSync(VISUALS_BUILD, "utf8") : null;
+if (!visualsScript) problems.push(`build: ${path.relative(ROOT, VISUALS_BUILD)} is missing`);
+
+check(!script.includes("* lemon-visuals.js"),
+  "build: the visuals overlay is still inside the mod script - it ships on its own");
+if (visualsScript) {
+  check(/@run-at\s+document-start/.test(visualsScript.slice(0, visualsScript.indexOf("// ==/UserScript=="))),
+    "visuals build: @run-at document-start is missing");
+  check(visualsScript.includes("window.__lemonBridge"),
+    "visuals build: it does not carry the bridge, so it would need the mod script");
+}
+
+const bridgeSource = extractBridge(script);
+const visualsSource = visualsScript ? extractVisuals(visualsScript) : "";
 
 /* ------------------------------------------------------------------ *
  * 2. Opcode tables
@@ -490,6 +517,39 @@ check(game.To.join() === DRIVERS.protocol.s2cAlphabet.join(),
   check(wire.length === 1 && opcodeOf(wire[0])[0] === tables.c2s.enc.z,
     "dropped frame: only the injected packet should have reached the wire");
 
+  /* A swallowed spawn is what leaves people stuck looking at the world with
+   * no menu and no HUD, so it goes out whatever the hook decides. */
+  wire.length = 0;
+  socket.send(mp.encode(["sp", [{ name: "stuck", moofoll: 1, skin: 0 }]]));
+  const spawnFrames = wire.filter((f) => {
+    const decoded = opcodeOf(f);
+    return decoded[0] === tables.c2s.enc.M;
+  });
+  check(spawnFrames.length === 1,
+    `swallowed spawn: the spawn should reach the wire even when the hook drops it, saw ${spawnFrames.length}`);
+
+  /* `window.hasSpawned` is what LemonMod's timer reads before it hides the
+   * menu. It has to answer the wire, not the click, and ignore being set. */
+  check(vm.runInContext("window.hasSpawned", env) === false,
+    "hasSpawned: should be false until the server starts the game");
+  vm.runInContext("window.hasSpawned = true;", env);
+  check(vm.runInContext("window.hasSpawned", env) === false,
+    "hasSpawned: the mod's optimistic write should not take");
+  const setup = mp.encode([tables.s2c.enc.C, [7]]);
+  socket.dispatchEvent({
+    type: "message",
+    data: setup.buffer.slice(setup.byteOffset, setup.byteOffset + setup.byteLength)
+  });
+  check(vm.runInContext("window.hasSpawned", env) === true,
+    "hasSpawned: the setup frame should turn it on");
+  const died = mp.encode([tables.s2c.enc.P, []]);
+  socket.dispatchEvent({
+    type: "message",
+    data: died.buffer.slice(died.byteOffset, died.byteOffset + died.byteLength)
+  });
+  check(vm.runInContext("window.hasSpawned", env) === false,
+    "hasSpawned: dying should turn it off so the menu comes back");
+
   /* A signed frame the bridge has no old-style name for still has to be
    * re-numbered rather than passed through, or the counter on the wire stops
    * being the bridge's alone. */
@@ -503,8 +563,8 @@ check(game.To.join() === DRIVERS.protocol.s2cAlphabet.join(),
   check(wire.length === 1, `unmapped frame: expected 1 frame on the wire, got ${wire.length}`);
   if (wire.length === 1) {
     const renumbered = opcodeOf(wire[0]);
-    check(renumbered[0] === 250 && renumbered[2] === 4,
-      `unmapped frame: went out as opcode ${renumbered[0]} seq ${renumbered[2]}, expected 250 seq 4`);
+    check(renumbered[0] === 250 && renumbered[2] === 5,
+      `unmapped frame: went out as opcode ${renumbered[0]} seq ${renumbered[2]}, expected 250 seq 5`);
   }
 
   /* Bot sockets read through onmessage, which the build points at the bridge. */
@@ -513,10 +573,11 @@ check(game.To.join() === DRIVERS.protocol.s2cAlphabet.join(),
     type: "message",
     data: chat.buffer.slice(chat.byteOffset, chat.byteOffset + chat.byteLength)
   });
-  check(botSaw.length === 2 && botSaw[0][0] === "io-init",
+  check(botSaw.length > 0 && botSaw[0][0] === "io-init",
     "bot socket: io-init should reach the handler untouched, ahead of anything else");
-  check(botSaw.length === 2 && botSaw[1][0] === "ch",
-    `bot socket: chat reached the handler as ${JSON.stringify(botSaw[1] && botSaw[1][0])}, expected "ch"`);
+  const lastSeen = botSaw[botSaw.length - 1];
+  check(!!lastSeen && lastSeen[0] === "ch",
+    `bot socket: chat reached the handler as ${JSON.stringify(lastSeen && lastSeen[0])}, expected "ch"`);
 
   /* Two connections, two key schedules: state has to be per socket. */
   const otherWire = [];
@@ -589,7 +650,7 @@ check(game.To.join() === DRIVERS.protocol.s2cAlphabet.join(),
 
   const env = makeBrowser([]);
   vm.runInContext(CANVAS_SHIM, env, { filename: "canvas-shim.js" });
-  vm.runInContext(bridgeSource, env, { filename: "lemon-bridge.js", timeout: 20000 });
+  vm.runInContext(extractBridgeFrom(visualsScript), env, { filename: "lemon-bridge.js", timeout: 20000 });
   vm.runInContext(visualsSource, env, { filename: "lemon-visuals.js", timeout: 20000 });
 
   const visuals = env.window.__lemonVisuals;

@@ -122,6 +122,7 @@ but nothing in the client needs it. It is stripped from the build.
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
 LemonMod_Fixed.user.js    LemonMod v3.0 on the current protocol (see below)
+LemonMod_Visuals_Fixed.user.js  its visuals, rebuilt — a separate script
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -144,7 +145,7 @@ tools/verify-lemon.js     LemonMod_Fixed.user.js vs. the bundle's own crypto
 ```sh
 node tools/extract-drivers.js    # refresh drivers from src/game_*.js
 node tools/build-reup.js         # produce ReUp_Mix.user.js
-node tools/build-lemon.js        # produce LemonMod_Fixed.user.js
+node tools/build-lemon.js        # produce both LemonMod_*.user.js
 ```
 
 Every edit in `build-reup.js` is anchored to an exact string in the base
@@ -320,13 +321,56 @@ wire through `addEventListener("message")`.
 - **`!crash`** sends a deliberately malformed buffer. The bridge passes it
   through untouched rather than trying to make it work.
 
+## The stuck screen
+
+Clicking Play and being left with the world drawn, no menu and no HUD, with no
+way back, is LemonMod's own doing and it happens with or without this build:
+
+```js
+document.getElementById("enterGame").addEventListener("click", () => {
+  …; window.hasSpawned = true;
+});
+setInterval(() => {
+  if (window.hasSpawned && …) document.getElementById("mainMenu").style.display = "none";
+}, …);
+```
+
+`hasSpawned` goes true on the *click*, and a timer of the mod's then holds
+`#mainMenu` hidden for as long as it stays true. So any spawn that does not come
+back takes the menu with it — the HUD never arrives because the game never
+started, the menu is gone because the mod hid it, and Play cannot be pressed
+again. On the old game a spawn always came back, so nobody noticed.
+
+The bridge answers that flag from the wire instead. It is true once the server
+sends the setup frame that actually starts the game, false again on death or a
+dropped connection, and the mod's optimistic write on click is ignored. A spawn
+that fails now leaves the menu where it is, so you can press Play again.
+
+Two more things guard the same path:
+
+- **A swallowed spawn is sent anyway.** The mod's send hook drops every frame
+  while one of the inputs it lists has focus — `nameInput` among them, and the
+  current game starts on Enter *from that field*. The gate stays for ordinary
+  traffic; the spawn is exempt, and the name field is out of the list entirely.
+- **A spawn that goes unanswered says so.** Four seconds after a spawn with no
+  setup frame back, the reason goes to the console and into the menu's own
+  loading text: whether the handshake was seen, whether the transport was
+  signed, or whether the server simply did not answer. `__lemonBridge.status()`
+  has the same information at any time.
+
 ## The visuals, ported
 
 The Visuals script cannot run, but the three things it drew are self-contained,
-and `tools/lemon-visuals.js` rebuilds them on the current game. It ships inside
-`LemonMod_Fixed.user.js` with toggles — **Reload Bars**, **Shame Counter**,
-**Insta Marker** — added into LemonMod's own settings menu next to Radar, and
-remembered in `localStorage`.
+and `tools/lemon-visuals.js` rebuilds them on the current game. They ship as
+their own userscript, **`LemonMod_Visuals_Fixed.user.js`** — the original was a
+separate script too, and none of it belongs to the mod. It carries its own copy
+of the bridge, so it runs with or without LemonMod beside it: whichever loads
+first installs the bridge, the other finds it there.
+
+The toggles — **Reload Bars**, **Shame Counter**, **Insta Marker** — go into
+LemonMod's settings menu next to Radar when it is there, and into a small panel
+of their own when it is not. Either way they are remembered in `localStorage`.
+The insta marker needs LemonMod for its target; on its own it stays idle.
 
 | | |
 |---|---|

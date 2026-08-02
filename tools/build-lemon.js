@@ -36,6 +36,7 @@ const BASE = path.join(ROOT, "src/LemonMod_v3.0.js");
 const BRIDGE = path.join(ROOT, "tools/lemon-bridge.js");
 const VISUALS = path.join(ROOT, "tools/lemon-visuals.js");
 const OUT = path.join(ROOT, "LemonMod_Fixed.user.js");
+const VISUALS_OUT = path.join(ROOT, "LemonMod_Visuals_Fixed.user.js");
 
 let code = fs.readFileSync(BASE, "utf8");
 const bridge = fs.readFileSync(BRIDGE, "utf8");
@@ -196,10 +197,9 @@ const banner = `
  * bridge translates between LemonMod's old-protocol frames and the opcode
  * permutation plus truncated-HMAC transport the game uses now.
  *
- * After the bridge comes the visuals overlay, which rebuilds the three things
- * the separate "LemonMod - Visuals" script added - reload bars, the shame
- * counter, the insta marker. That script is a fork of the whole old bundle and
- * cannot be patched forward; these are ported onto the current game instead.
+ * The three things the separate "LemonMod - Visuals" script drew are rebuilt
+ * in LemonMod_Visuals_Fixed.user.js, which is its own script and does not need
+ * this one.
  * ------------------------------------------------------------------------- */
 `;
 
@@ -219,13 +219,58 @@ const postlude = `
 })();
 `;
 
-code = header + "\n" + banner + "\n" + bridge + "\n" + visuals + "\n" + prelude + body + postlude;
+code = header + "\n" + banner + "\n" + bridge + "\n" + prelude + body + postlude;
 applied.push("bridge: injected tools/lemon-bridge.js ahead of the mod");
-applied.push("visuals: injected tools/lemon-visuals.js (reload bars, shame counter, insta marker)");
 applied.push("boot: mod body deferred to DOMContentLoaded");
 
 fs.writeFileSync(OUT, code);
 
+/* ------------------------------------------------------------------ *
+ * 8. The visuals, as their own script
+ *
+ * Separate on purpose: it is the replacement for `LemonMod - Visuals`, which
+ * was its own userscript too, and nothing in it belongs to the mod. It carries
+ * its own copy of the bridge, so it runs with or without LemonMod beside it -
+ * whichever loads first installs the bridge and the other one finds it there.
+ * ------------------------------------------------------------------ */
+
+const visualsHeader = `// ==UserScript==
+// @name         ! LemonMod - Visuals (rebuilt) !
+// @namespace    https://lemonmod.com/
+// @author       LemonFlux - rebuilt for the current game
+// @description  Reload bars, shame counter and insta marker, drawn on the current moomoo.io
+// @version      v3.0-fix1
+// @icon         https://lemonmod.com/LemonMod.png
+// @match        *://*.moomoo.io/*
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==
+
+/* -------------------------------------------------------------------------
+ * The three things "LemonMod - Visuals" drew, rebuilt for the game in src/.
+ *
+ *   built by : tools/build-lemon.js   (from tools/lemon-visuals.js)
+ *   bridge   : tools/lemon-bridge.js
+ *   verified : tools/verify-lemon.js against drivers/game-drivers.json
+ *
+ * The original Visuals script is a fork of the whole old webpack bundle - it
+ * replaces the client instead of hooking it, and predates the current
+ * transport entirely, so it cannot be patched forward. This draws the same
+ * three things on the current game instead, off the wire.
+ *
+ * It stands on its own: install it with or without LemonMod. With LemonMod
+ * present, the toggles go into its settings menu and the insta marker follows
+ * the target it is tracking; without it, the toggles get their own small
+ * panel and the marker stays idle.
+ * ------------------------------------------------------------------------- */
+`;
+
+const visualsBuild = visualsHeader + "\n" + bridge + "\n" + visuals;
+fs.writeFileSync(VISUALS_OUT, visualsBuild);
+applied.push("visuals: written out as its own userscript, bridge included");
+
 console.log("built", path.relative(ROOT, OUT));
-console.log(`  ${(code.length / 1024).toFixed(0)} KB, ${code.split("\n").length} lines\n`);
+console.log(`  ${(code.length / 1024).toFixed(0)} KB, ${code.split("\n").length} lines`);
+console.log("built", path.relative(ROOT, VISUALS_OUT));
+console.log(`  ${(visualsBuild.length / 1024).toFixed(0)} KB, ${visualsBuild.split("\n").length} lines\n`);
 for (const step of applied) console.log("  + " + step);

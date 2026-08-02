@@ -449,11 +449,55 @@
     return result;
   };
 
-  /* The menu is built well after the page is, so wait for it - but not
-   * forever. Without it the toggles simply stay at their defaults. */
+  /* Standing on its own, without LemonMod's menu to sit in: a small panel of
+   * its own, in the same corner the game keeps its own counters. */
+  function addOwnPanel() {
+    if (document.getElementById("reloadBars")) return;
+    var panel = document.createElement("div");
+    panel.id = "lemonVisualsPanel";
+    panel.style.cssText = [
+      "position:fixed", "left:10px", "bottom:10px", "z-index:2147483646",
+      "background:rgba(0,0,0,.45)", "color:#fff", "padding:8px 10px",
+      "border-radius:6px", "font-family:Hammersmith One, sans-serif",
+      "font-size:14px", "line-height:1.6", "user-select:none"
+    ].join(";");
+
+    var title = document.createElement("div");
+    title.textContent = "Visuals";
+    title.style.cssText = "opacity:.7;font-size:12px;letter-spacing:1px";
+    panel.appendChild(title);
+
+    [["reloadBars", "Reload bars"], ["shameCounter", "Shame counter"], ["instaMarker", "Insta marker"]]
+      .forEach(function (pair) {
+        var label = document.createElement("label");
+        label.style.cssText = "display:block;cursor:pointer";
+        var input = document.createElement("input");
+        input.id = pair[0];
+        input.type = "checkbox";
+        input.style.cssText = "margin-right:6px;vertical-align:middle";
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(pair[1]));
+        panel.appendChild(label);
+        remember(pair[0], input);
+      });
+
+    (document.body || document.documentElement).appendChild(panel);
+  }
+
+  /* The mod's menu is built well after the page is, so wait for it - but not
+   * forever, and put up our own panel if it never arrives. */
   var attempts = 0;
   var settleToggles = setInterval(function () {
-    if (addToggles() || ++attempts > 60) clearInterval(settleToggles);
+    if (addToggles()) {
+      clearInterval(settleToggles);
+      return;
+    }
+    if (++attempts > 20) {
+      clearInterval(settleToggles);
+      try {
+        addOwnPanel();
+      } catch (e) {}
+    }
   }, 1000);
 
   window.__lemonVisuals = {
