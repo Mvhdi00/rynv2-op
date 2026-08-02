@@ -12,6 +12,7 @@ const AE86 = path.join(ROOT, 'AE86.user.js');
 const AURORA = path.join(ROOT, 'Aurora.user.js');
 const LEMON = path.join(ROOT, 'LemonMod.user.js');
 const LEMON_VIS = path.join(ROOT, 'LemonModVisuals.user.js');
+const X18K = path.join(ROOT, 'X18K.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -172,6 +173,57 @@ global.FakeNativeWebSocket = FakeWebSocket;
       + laf.slice(a, b + 1).join('\n')
       + '\nmodule.exports = { LAF, HijackedWebSocket: window.WebSocket, FakeWebSocket };\n';
     return require(write('laf.js', src));
+  },
+
+  /**
+   * x18k's document-start section (the X18P protocol core plus the socket stub
+   * and the render-loop guard) together with its patched io client, wired to
+   * the game's own msgpack codec and a fake socket.
+   */
+  loadX18k() {
+    const l = lines(X18K);
+
+    const pa = findLine(l, 'var X18P = (function() {');
+    const pb = findStart(l, "/* The client below needs the page's DOM", pa);
+    const head = l.slice(pa, pb).join('\n');
+
+    const ia = findStart(l, '        module.exports = {', findLine(l, '            ready: false,') - 4);
+    const ib = findLine(l, '        };', ia);
+    const io = l.slice(ia, ib).join('\n').replace(/^\s*module\.exports = \{/, '{');
+
+    const src = `
+const { Encoder, Decoder } = require('./vendor_msgpack.js');
+const _enc = new Encoder(), _dec = new Decoder();
+const msgpack = { encode: v => _enc.encode(v), decode: b => _dec.decode(b) };
+
+class FakeSocket {
+  constructor(url) { this.url = url; this.readyState = 0; this.binaryType = ''; this.sent = []; }
+  open() { this.readyState = 1; if (this.onopen) this.onopen(); }
+  deliver(data) { this.onmessage({ data }); }
+  close() { this.readyState = 3; if (this.onclose) this.onclose({ code: 1000 }); }
+}
+FakeSocket.prototype.send = function (d) { this.sent.push(Buffer.from(d)); };
+['CONNECTING','OPEN','CLOSING','CLOSED'].forEach((k, i) => { FakeSocket[k] = i; });
+global.window = { WebSocket: FakeSocket };
+const OriginalWebSocket = FakeSocket;
+
+${head}
+
+let packets = 0, packetInterval, pps = 0;
+
+const io = (${io}});
+
+module.exports = {
+  X18P, io, FakeSocket,
+  window: global.window,
+  stub: () => global.window.WebSocket,
+  proto: () => x18kProto,
+  pending: () => X18K_PENDING,
+  setConnect: fn => { X18K_CONNECT = fn; },
+  msgpack,
+};
+`;
+    return require(write('x18k.js', src));
   },
 
   /** The Laffer remake's io client object, as an expression. */

