@@ -32716,8 +32716,16 @@ class AI {
             }
         }
         async fetchSongChats() {
-            let e = await Promise.all(this.songChatPaths.map((e) => fetch(`https://pond-hallowed-blackcurrant.glitch.me/song-chats?filePath=${e}`).then((e) => e.json())));
-            this.songChats = e;
+            // The glitch.me host these came from is gone (410), and this was
+            // called with neither await nor catch, so every load ended with an
+            // unhandled "TypeError: Failed to fetch" in the console. The sing
+            // feature is dead either way; fail quietly and leave the list empty.
+            try {
+                let e = await Promise.all(this.songChatPaths.map((e) => fetch(`https://pond-hallowed-blackcurrant.glitch.me/song-chats?filePath=${e}`).then((e) => e.json())));
+                this.songChats = e;
+            } catch (t) {
+                this.songChats = [];
+            }
         }
         toggle() {
             this.songIndx = scriptMenu.toggles.songType;

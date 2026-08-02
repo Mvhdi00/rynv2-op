@@ -216,6 +216,11 @@ check(src.indexOf('clearTimeout(mainMenuManager.connectionTimeout);') > -1
       "the client's 30s reload is held off while the captcha is being solved");
 check(/Waiting for the captcha\.\.\./.test(src), 'and the loading text says what it is waiting for');
 
+// the sing-along feature fetches from a host that returns 410; without a catch
+// that lands in the console as an unhandled rejection on every load
+check(/async fetchSongChats\(\) \{\n[\s\S]{0,400}?try \{/.test(src),
+      'the dead song-chat fetch no longer throws an unhandled rejection');
+
 // --------------------------------------------------------------------------
 console.log('\n9b. the page teardown');
 

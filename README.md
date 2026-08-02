@@ -636,7 +636,9 @@ names still go out.
 
 - The bot feature routes through `*.glitch.me` relays, handing them your server
   address and a captcha token. Glitch ended free project hosting, so expect
-  those to be dead. Left as-is.
+  those to be dead. Left as-is. The sing-along feature pulls from the same dead
+  host; its fetch is now caught so it fails quietly instead of leaving an
+  unhandled rejection in the console on every load.
 - `getChallenge()` / `validateChallenge()` / `createPayload()` and the worker
   pool are now dead code. Left in place rather than deleted.
 - Turnstile tokens are single-use, so the multi-bot path is not reliably
@@ -872,7 +874,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 380 checks.
+them with `npm test` — 381 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
