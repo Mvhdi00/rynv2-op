@@ -185,7 +185,7 @@ check(/window\.superman = token;/.test(src),
 const altUses = (src.match(/`alt:/g) || []).length;
 check(altUses === 1 && /e\(window\.superman\);\n\s*return;/.test(src),
       'the only ALTCHA string left is in altKeyManager\'s already-unreachable branch');
-check(/CHKP\.waitForToken\(\)/.test(src), 'the connect waits for a Turnstile token');
+check(/CHKP\.requestToken\(\)/.test(src), 'the connect asks for a Turnstile token');
 check(/return captchaToken \? "cf:" \+ captchaToken : null;/.test(src),
       'and prefixes it "cf:" the way the server expects');
 check(/i \+= "\/\?token=" \+ encodeURIComponent\(e\);/.test(src), 'the token is encoded into the URL');
@@ -200,9 +200,18 @@ check(!/Object\.defineProperty\(window, "onGotTurnstileToken"/.test(src),
       "it no longer tries to wrap the page's Turnstile callback");
 check(/const SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";/.test(src),
       "it carries the game's own Turnstile sitekey");
-check(/window\.turnstile\.render\(container\(\), \{/.test(src), 'and renders a widget of its own');
-check(/el\.id = "chkTurnstile";/.test(src) && /document\.body \|\| document\.documentElement/.test(src),
-      'into its own container on the body, which the page teardown cannot take with it');
+check(/widgetId = window\.turnstile\.render\(slot, \{/.test(src), 'and renders a widget of its own');
+check(/slot\.id = "chkTurnstile";/.test(src) && /document\.body \|\| document\.documentElement/.test(src),
+      'into its own panel on the body, which the page teardown cannot take with it');
+
+// solving is manual, so it is an explicit step with a button rather than a
+// hidden wait that can time out under the player
+check(/button\.id = "chkConnect";/.test(src) && /button\.disabled = true;/.test(src),
+      'the panel carries a Connect button, disabled until the challenge is solved');
+check(/ui\.button\.onclick = function \(\) \{\n\s*if \(token\(\)\) finish\(\);/.test(src),
+      'and the client only goes on when that button is pressed');
+check(!/waited >= limit/.test(src) && !/timeoutMs/.test(src),
+      'nothing times out while the player is solving it');
 check(/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit/.test(src),
       'loading the Turnstile api itself if the page has not');
 check(!/position:fixed;bottom:12px;left:12px;z-index:2147483646/.test(src),
@@ -212,9 +221,9 @@ check(!/position:fixed;bottom:12px;left:12px;z-index:2147483646/.test(src),
 
 // a challenge that wants a click takes longer than the client's own reload timer
 check(src.indexOf('clearTimeout(mainMenuManager.connectionTimeout);') > -1
-      && src.indexOf('clearTimeout(mainMenuManager.connectionTimeout);') < src.indexOf('await CHKP.waitForToken()'),
-      "the client's 30s reload is held off while the captcha is being solved");
-check(/Waiting for the captcha\.\.\./.test(src), 'and the loading text says what it is waiting for');
+      && src.indexOf('clearTimeout(mainMenuManager.connectionTimeout);') < src.indexOf('await CHKP.requestToken()'),
+      "the client's 30s reload is called off while the captcha is being solved");
+check(/Verify to play/.test(src), 'and the menu says what it is waiting for');
 
 // the sing-along feature fetches from a host that returns 410; without a catch
 // that lands in the console as an unhandled rejection on every load

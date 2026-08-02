@@ -19,8 +19,9 @@
  *   2. ALTCHA replaced with Cloudflare Turnstile. api.moomoo.io/verify no
  *      longer serves a proof-of-work challenge, so executeRecaptcha() could
  *      only ever fail and the connect went out without a token.
- *   3. The captcha widget is this script's own, rendered into its own
- *      container. Reading the page's widget cannot work: the page passes its
+ *   3. The captcha is an explicit step: a panel with this script's own
+ *      Turnstile widget and a Connect button, and the client goes on when you
+ *      press it. Reading the page's widget cannot work -- the page passes its
  *      callback to turnstile.render() by value before this script runs, and
  *      this client tears the page's menu down anyway. Every teardown lookup is
  *      null-guarded.
@@ -215,12 +216,16 @@ const CHKP = (function () {
     /* --- Turnstile -------------------------------------------------------
      * ALTCHA is gone; the server verifies a Cloudflare Turnstile token now.
      *
-     * Reading the page's own widget is not reliable: the page hands its
-     * callback to turnstile.render() *by value* before this script runs, so
-     * wrapping window.onGotTurnstileToken afterwards never sees the token, and
-     * this client tears the page's menu down anyway. So render a widget of our
-     * own, with our own callback, and stop depending on the page entirely. The
-     * page's widget is still read first, in case it happens to have one.
+     * The page's own widget is not usable: the page hands its callback to
+     * turnstile.render() *by value* at bundle load, before this script runs, so
+     * wrapping window.onGotTurnstileToken afterwards never sees the token -- and
+     * this client tears the page's menu down, widget included. So render our
+     * own, in our own panel, with our own callback.
+     *
+     * The challenge often wants a click, and Cloudflare decides that, not us.
+     * So this is an explicit step rather than a hidden wait: a panel with the
+     * widget and a Connect button, and the client goes on only when you press
+     * it. Nothing times out under you.
      */
     const SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
     const API_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -241,35 +246,59 @@ const CHKP = (function () {
         (document.head || document.documentElement).appendChild(s);
     }
 
-    // Our own container, so nothing the client removes from the page can take
-    // it with it. Visible and captioned, because the challenge often wants a
-    // click and the client otherwise just sits there saying nothing.
-    function container() {
-        let el = document.getElementById("chkTurnstile");
-        if (el) return el;
+    // Our own panel, so nothing the client removes from the page can take it
+    // with it.
+    function buildPanel() {
         const box = document.createElement("div");
-        box.id = "chkTurnstileBox";
-        box.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483647;"
-            + "font:600 14px/1.3 'Hammersmith One',sans-serif;color:#fff;text-align:left;";
-        const label = document.createElement("div");
-        label.textContent = "Solve this to join";
-        label.style.cssText = "margin-bottom:6px;text-shadow:0 1px 3px #000;";
-        el = document.createElement("div");
-        el.id = "chkTurnstile";
-        box.appendChild(label);
-        box.appendChild(el);
+        box.id = "chkCaptcha";
+        box.style.cssText = [
+            "position:fixed", "left:50%", "top:50%", "transform:translate(-50%,-50%)",
+            "z-index:2147483647", "background:rgba(0,0,0,.82)", "border-radius:8px",
+            "padding:22px 26px", "text-align:center", "color:#fff",
+            "font:400 16px/1.4 'Hammersmith One',sans-serif",
+            "box-shadow:0 8px 32px rgba(0,0,0,.6)",
+        ].join(";");
+
+        const title = document.createElement("div");
+        title.textContent = "Verify to play";
+        title.style.cssText = "font-size:22px;margin-bottom:4px;";
+
+        const status = document.createElement("div");
+        status.textContent = "Tick the box below.";
+        status.style.cssText = "font-size:14px;opacity:.75;margin-bottom:14px;";
+
+        const slot = document.createElement("div");
+        slot.id = "chkTurnstile";
+        slot.style.cssText = "display:flex;justify-content:center;min-height:65px;";
+
+        const button = document.createElement("button");
+        button.id = "chkConnect";
+        button.textContent = "Connect";
+        button.disabled = true;
+        button.style.cssText = [
+            "margin-top:16px", "width:100%", "padding:10px 0", "border:0",
+            "border-radius:5px", "background:#8ecc51", "color:#fff",
+            "font:400 18px 'Hammersmith One',sans-serif", "opacity:.45",
+            "cursor:not-allowed",
+        ].join(";");
+
+        box.appendChild(title);
+        box.appendChild(status);
+        box.appendChild(slot);
+        box.appendChild(button);
         (document.body || document.documentElement).appendChild(box);
-        return el;
+        return { box: box, slot: slot, status: status, button: button };
     }
 
-    function render() {
+    function render(slot, onToken) {
         if (widgetId !== null || !window.turnstile || typeof window.turnstile.render != "function") return;
         try {
-            widgetId = window.turnstile.render(container(), {
+            widgetId = window.turnstile.render(slot, {
                 sitekey: SITEKEY,
-                theme: "light",
+                theme: "dark",
                 callback: function (t) {
                     captchaToken = t;
+                    onToken();
                 },
                 "error-callback": function () {
                     captchaToken = null;
@@ -284,48 +313,47 @@ const CHKP = (function () {
         }
     }
 
-    function readPageWidget() {
-        if (captchaToken || !window.turnstile || typeof window.turnstile.getResponse != "function") return;
-        try {
-            if (widgetId !== null) {
-                captchaToken = window.turnstile.getResponse(widgetId) || null;
-                if (captchaToken) return;
-            }
-            const el = document.getElementById("turnstileWidget");
-            if (el) captchaToken = window.turnstile.getResponse(el) || null;
-        } catch (e) {
-            /* no widget of that name */
-        }
-    }
-
     function token() {
-        readPageWidget();
+        if (!captchaToken && widgetId !== null && window.turnstile
+            && typeof window.turnstile.getResponse == "function") {
+            try {
+                captchaToken = window.turnstile.getResponse(widgetId) || null;
+            } catch (e) {
+                /* widget gone */
+            }
+        }
         return captchaToken ? "cf:" + captchaToken : null;
     }
 
-    // The challenge is solved asynchronously and may need a click, so wait for
-    // it rather than failing the connect outright.
-    function waitForToken(timeoutMs) {
+    // Resolves with the token when the player presses Connect. Deliberately has
+    // no timeout: solving is manual, so the client waits as long as it takes.
+    function requestToken() {
         loadApi();
         return new Promise(function (resolve) {
-            const now = token();
-            if (now) return resolve(now);
-            let waited = 0;
-            const limit = timeoutMs || 60000;
+            const ui = buildPanel();
+            let done = false;
+
+            const ready = function () {
+                ui.status.textContent = "Verified.";
+                ui.button.disabled = false;
+                ui.button.style.opacity = "1";
+                ui.button.style.cursor = "pointer";
+            };
+            const finish = function () {
+                if (done) return;
+                done = true;
+                clearInterval(poll);
+                ui.box.remove();
+                resolve(token());
+            };
+
+            ui.button.onclick = function () {
+                if (token()) finish();
+            };
+
             const poll = setInterval(function () {
-                render();
-                const t = token();
-                if (t) {
-                    clearInterval(poll);
-                    resolve(t);
-                    return;
-                }
-                waited += 200;
-                if (waited === 5000) console.warn("[chicken] still waiting on the Turnstile challenge -- tick the box at the bottom left");
-                if (waited >= limit) {
-                    clearInterval(poll);
-                    resolve(null);
-                }
+                render(ui.slot, ready);
+                if (!done && token()) ready();
             }, 200);
         });
     }
@@ -337,8 +365,7 @@ const CHKP = (function () {
         tag: tag,
         hexToBytes: hexToBytes,
         token: token,
-        waitForToken: waitForToken,
-        renderWidget: render,
+        requestToken: requestToken,
     };
 })();
 
@@ -26091,16 +26118,18 @@ class AI {
         async executeRecaptcha() {
             // ALTCHA is gone: api.moomoo.io/verify no longer serves a
             // proof-of-work challenge, and the server verifies Cloudflare
-            // Turnstile instead. CHKP renders a widget of its own (bottom
-            // left) rather than trying to read the page's -- see the module
-            // for why that does not work. window.superman keeps its meaning:
-            // the bot relays read it.
+            // Turnstile instead. CHKP puts up a panel with a widget of its
+            // own rather than trying to read the page's -- see the module for
+            // why that does not work. window.superman keeps its meaning: the
+            // bot relays read it.
             //
-            // The challenge can want a click, so hold off the 30s reload
-            // armed by nextLoadingStage() while we wait, and say what for.
+            // Solving is manual -- Cloudflare decides whether the challenge
+            // wants a click, and it usually does -- so this is an explicit
+            // step, and the 30s location.reload() armed by nextLoadingStage()
+            // has to be called off or it fires while you are still on it.
             clearTimeout(mainMenuManager.connectionTimeout);
-            mainMenuManager.loadingText.innerHTML = "Waiting for the captcha...";
-            let token = await CHKP.waitForToken();
+            mainMenuManager.loadingText.innerHTML = "Verify to play";
+            let token = await CHKP.requestToken();
             if (!token) {
                 errorEventManager.error("Turnstile token unavailable -- is the captcha blocked?");
                 return undefined;
