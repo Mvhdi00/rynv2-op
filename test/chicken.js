@@ -194,10 +194,29 @@ check(/i \+= "\/\?token=" \+ encodeURIComponent\(e\);/.test(src), 'the token is 
 // --------------------------------------------------------------------------
 console.log('\n9. the page teardown no longer destroys what it needs');
 
-check(/document\.body\.appendChild\(w\);/.test(src) && src.indexOf('pageEl("turnstileWidget")') < src.indexOf('dropEl("menuContainer")'),
-      'the Turnstile widget is moved out before #menuContainer is removed');
 check(!/document\.getElementById\("menuContainer"\)\.remove\(\)/.test(src),
       'nothing removes #menuContainer with the widget still inside it');
+check(/if \(!w \|\| !mc\.contains\(w\)\) \{\n\s*mc\.remove\(\);/.test(src),
+      'the container is only removed when the widget is not inside it');
+check(/for \(let node = w; node !== mc; node = node\.parentElement\)/.test(src),
+      "it strips the container down to the widget's ancestor chain instead");
+check(!/document\.body\.appendChild\(w\)/.test(src),
+      'the widget node itself is never re-parented, which would reload its iframe');
+check(/mc\.style\.cssText = "position:absolute;/.test(src) && !/position:fixed/.test(src),
+      'and it is positioned absolute, not fixed -- fixed leaves offsetParent null'
+      + ' and the page then refuses to render the widget at all');
+check(/#turnstileWidget is not laid out/.test(src),
+      'a warning is logged if the widget ends up unlaid-out, rather than hanging silently');
+
+// --------------------------------------------------------------------------
+console.log('\n10. the server list cannot hang the loading screen');
+
+check(/await Promise\.race\(\[/.test(src) && /new Promise\(\(done\) => setTimeout\(done, 100\)\),/.test(src),
+      'the cross-origin ping is raced against 100ms, the way the live client does it');
+check(!/const response = await fetch\(pingUrl\);/.test(src),
+      'the unbounded await on the ping fetch is gone');
+check(/\/servers\?v=1\.27`/.test(src) && !/\/servers\?v=1\.26`/.test(src),
+      'the server-list request asks for the version the live client asks for');
 for (const id of ['linksContainer2', 'menuCardHolder', 'gameName', 'loadingText', 'partyButton', 'joinPartyButton', 'settingsButton']) {
   check(!new RegExp('getElementById\\("' + id + '"\\)\\.remove\\(\\)').test(src),
         '#' + id + ' removal is guarded');

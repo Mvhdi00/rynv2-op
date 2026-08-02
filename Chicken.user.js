@@ -19,10 +19,17 @@
  *   2. ALTCHA replaced with Cloudflare Turnstile. api.moomoo.io/verify no
  *      longer serves a proof-of-work challenge, so executeRecaptcha() could
  *      only ever fail and the connect went out without a token.
- *   3. The Turnstile widget is moved out of #menuContainer before that
- *      container is removed -- it used to go with it, destroying the very
- *      thing the token comes from. Every teardown lookup is null-guarded too.
- *   4. The page's own render loop is stopped, so it cannot repaint the canvas
+ *   3. #menuContainer is no longer removed. The Turnstile widget lives inside
+ *      it, and the page refuses to render that widget unless it is laid out
+ *      (it checks offsetParent !== null) -- so removing the container, or
+ *      re-parenting the widget, means no captcha and no token, ever. The
+ *      container is stripped down to the widget instead. Every other teardown
+ *      lookup is null-guarded.
+ *   4. The server ping is raced against a 100ms timeout, the way the live
+ *      client does it. Without that, one unresponsive host in the server list
+ *      hangs Promise.all forever and the client sits on
+ *      "Connecting to moomoo servers..." and never gets any further.
+ *   5. The page's own render loop is stopped, so it cannot repaint the canvas
  *      over this client's frames.
  */
 
@@ -2690,12 +2697,22 @@ class VultrClient {
                 }
                 const pingUrl = `https://${serverAddress}/ping`;
                 const startTime = new Date().getTime();
+                // The ping is cross-origin and a dead host in the list can
+                // hang the fetch for minutes. Promise.all over every region
+                // then never settles, processServers() never resolves, and
+                // the client sits on "Connecting to moomoo servers..."
+                // forever. The game races the same fetch against 100ms; do
+                // the same.
                 try {
-                    const response = await fetch(pingUrl);
-                    const pingTime = new Date().getTime() - startTime;
-                    regionData.forEach((s) => {
-                        s.ping = pingTime;
-                    });
+                    await Promise.race([
+                        fetch(pingUrl).then(() => {
+                            const pingTime = new Date().getTime() - startTime;
+                            regionData.forEach((s) => {
+                                s.ping = pingTime;
+                            });
+                        }),
+                        new Promise((done) => setTimeout(done, 100)),
+                    ]);
                 } catch (error) {}
             };
             const processAllRegions = async () => {
@@ -25354,14 +25371,34 @@ class AI {
     dropEl("settingsButton");
     dropEl("leaderboardButton");
     // #turnstileWidget lives inside #menuContainer, and the token this client
-    // connects with comes from that widget -- so park it on the body before the
-    // container goes. Kept visible, in case the challenge wants a click.
-    if (pageEl("turnstileWidget")) {
+    // connects with comes from that widget. The page refuses to render the
+    // widget unless it is laid out (it checks offsetParent !== null), and
+    // moving the node would tear the iframe out from under Turnstile -- so
+    // neither remove the container nor re-parent the widget. Strip the
+    // container down to just the widget's ancestor chain and shrink it.
+    (function () {
+        const mc = pageEl("menuContainer");
         const w = pageEl("turnstileWidget");
-        w.style.cssText = "position:fixed;bottom:12px;left:12px;z-index:2147483646;";
-        document.body.appendChild(w);
-    }
-    dropEl("menuContainer");
+        if (!mc) return;
+        if (!w || !mc.contains(w)) {
+            mc.remove();
+            return;
+        }
+        for (let node = w; node !== mc; node = node.parentElement) {
+            for (const sib of Array.from(node.parentElement.children)) {
+                if (sib !== node) sib.remove();
+            }
+        }
+        mc.style.cssText = "position:absolute;left:12px;top:12px;width:auto;height:auto;"
+            + "padding:0;margin:0;background:none;z-index:2147483646;";
+    })();
+    // If the widget ends up unlaid-out the page will never render it and the
+    // connect will wait forever, so say so rather than hanging silently.
+    setTimeout(function () {
+        const w = pageEl("turnstileWidget");
+        if (!w) console.warn("[chicken] #turnstileWidget is gone; the captcha cannot be solved");
+        else if (w.offsetParent === null) console.warn("[chicken] #turnstileWidget is not laid out; the page will not render the captcha");
+    }, 3000);
     document.getElementById("leaderboard").style.fontSize = "26px";
     var actionBar = document.getElementById("actionBar");
     actionBar.style.position = "absolute";
@@ -25931,7 +25968,8 @@ class AI {
             return io.connected;
         }
         async processServers() {
-            let e = `${isSandbox ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io"}/servers?v=1.26`;
+            // the live client asks for v=1.27; 1.26 is this script's own stale copy
+            let e = `${isSandbox ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io"}/servers?v=1.27`;
             try {
                 let t = await fetch(e);
                 let i = await t.json();

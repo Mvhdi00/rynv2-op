@@ -614,6 +614,7 @@ names still go out.
 | Plain msgpack transport | Same break as the rest — see [Why it broke](#why-it-broke). Its `connect` also fired the callback from `onopen`, so it spawned before the keys existed. |
 | ALTCHA | `executeRecaptcha()` fetches `api.moomoo.io/verify`, brute-forces the proof-of-work in a worker pool, and returns `alt:<payload>`. That endpoint no longer serves a challenge, so the function could only throw — and the connect then went out with no token at all. |
 | It removed the captcha | `document.getElementById("menuContainer").remove()` at module scope. `#turnstileWidget` lives inside that container, so the teardown destroyed the very thing the token has to come from. |
+| The server ping had no timeout | `processServers()` awaits `fetch("https://<server>/ping")` for every region with no bound, inside a `Promise.all`. One unresponsive host and it never settles — the client sits on **"Connecting to moomoo servers…"** forever. The live client races the same fetch against 100 ms; this one did not. |
 | Unguarded teardown | Eleven `getElementById(...).remove()` / `.style` calls at module scope on elements the page may no longer have. One missing element and the client dies before drawing a frame. |
 
 ## What changed
@@ -624,7 +625,9 @@ names still go out.
 | `io.connect` | Reads the seed and key out of `io-init`, fires the connect callback **there** instead of on `onopen`, and maps incoming numeric opcodes back to names. Unmapped ones are ignored rather than thrown on. |
 | `io.send` | Frames as `tag ‖ msgpack([opcode, args, seq])` when the handshake negotiated it, and keeps the plain `msgpack([name, args])` form otherwise — which is what mohmoh still wants. Nothing goes out before `io-init` at all: the original only checked `readyState`, so the first packets went out unsigned. |
 | Captcha | `executeRecaptcha()` now waits for the page's own Turnstile token (wrapping `window.onGotTurnstileToken`, falling back to `turnstile.getResponse()`) and returns it with the `cf:` prefix. It still writes `window.superman`, which is what the bot relays read, so those pick up the right prefix for free. |
-| Turnstile widget | Moved onto `document.body` — visible, bottom-left — before `#menuContainer` is removed, so the challenge survives the teardown and can still be clicked if it asks. |
+| Turnstile widget | `#menuContainer` is no longer removed at all. The page refuses to render the widget unless it is laid out (`offsetParent !== null`), and re-parenting the node would reload its iframe out from under Turnstile — so the container is stripped down to the widget's ancestor chain and shrunk to a small `position: absolute` box in the corner. A warning is logged if the widget still ends up unlaid-out, instead of hanging silently. |
+| Server ping | Raced against 100 ms, the way the live client does it. |
+| Server list | Asks for `?v=1.27`, the version the live client asks for; this copy was still on `1.26`. |
 | Page teardown | All of it null-guarded through two small helpers. |
 | Page render loop | The page's own client keeps painting `#gameCanvas` every frame and would draw over this one. Its loop re-arms through `window.requestAnimFrame`, which nothing here uses, so that name is now an accessor that swallows the assignment and returns a no-op. |
 
@@ -868,7 +871,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 371 checks.
+them with `npm test` — 378 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
