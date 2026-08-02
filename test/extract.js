@@ -70,6 +70,97 @@ function botOnMessageHead() {
   return script.slice(a, b).join('\n');
 }
 
+/**
+ * Revelation's entry gate: Oh() (the play button's connect), the Turnstile
+ * callbacks and the widget/panel plumbing, wired to a fake DOM and a fake
+ * turnstile so the whole "press play -> solve -> connect" path can be driven.
+ */
+function revelationEntryModule() {
+  const a = findLine(script, 'function Oh() {');
+  const b = findLine(script, 'function gn(e) {', a);
+  const body = script.slice(a, b).join('\n');
+
+  return `
+global.window = global.window || {};
+// --- a DOM just real enough for the panel ---
+class El {
+  constructor(tag) {
+    this.tagName = tag; this.style = { cssText: '' }; this.children = [];
+    this.className = ''; this.id = ''; this.textContent = '';
+    this.parentNode = null; this.classList = { remove() {}, add() {} };
+  }
+  appendChild(c) { this.children.push(c); c.parentNode = this; return c; }
+  querySelector(sel) {
+    const want = sel.replace(/^\\./, '');
+    for (const c of this.children) if (c.className === want) return c;
+    return null;
+  }
+  // walk to the root: attaching a child before its parent is attached is
+  // normal, so this cannot be a snapshot taken at append time
+  get isConnected() {
+    for (let n = this; n; n = n.parentNode) if (n === body) return true;
+    return false;
+  }
+  // offsetParent is null for a detached node or one inside display:none; the
+  // panel is position:fixed and the slot is a plain child of it
+  get offsetParent() {
+    for (let n = this; n; n = n.parentNode) if (n.style.display === 'none') return null;
+    return this.isConnected ? body : null;
+  }
+}
+const body = new El('body');
+const head = new El('head');
+global.document = {
+  body, head,
+  documentElement: body,
+  createElement: t => new El(t),
+  getElementById: id => registry[id] || null,
+};
+const registry = {};
+
+// --- the globals the block closes over ---
+let ki = false;          // localhost/dev build
+const Eh = true, ls = true;   // production: a token is mandatory
+let ps = false, code = null, Fn = false;
+const Un = new El('button');
+const loading = [];
+function ms(e) { loading.push(e); }
+const connects = [];
+function gn(e) { connects.push(e); }
+window.captchaCallbackHook = function () { ps = true; };
+
+// --- a turnstile that only answers once someone solves our widget ---
+let solved = null, rendered = [];
+global.window.turnstile = {
+  render(el, opts) { rendered.push({ el, opts }); return 'wid' + rendered.length; },
+  getResponse() { return solved; },
+  reset() { solved = null; },
+};
+
+${body}
+
+module.exports = {
+  Oh, rvnRenderTurnstile, rvnSetupTurnstile, rvnCaptchaSlot,
+  onGotTurnstileToken: () => window.onGotTurnstileToken,
+  loading, connects, rendered, body,
+  state: () => ({ ps, code, Fn, pending: rvnPendingConnect }),
+  panel: () => rvnCaptchaBox,
+  widgetId: () => rvnTurnstileId,
+  // stands in for the player ticking the box
+  solve: t => { solved = t; window.onGotTurnstileToken(t); },
+  // the page's own widget, already filled in, the way the live page leaves it
+  addPageWidget: () => {
+    const w = new El('div');
+    w.id = 'turnstileWidget';
+    w.appendChild(new El('iframe'));
+    body.appendChild(w);
+    registry.turnstileWidget = w;
+    return w;
+  },
+};
+`;
+}
+
 /** The game's own protocol helpers, for differential comparison. */
 function gameProtoModule() {
   const g = lines(GAME);
@@ -133,6 +224,11 @@ module.exports = {
   },
   loadExternal() {
     return require(write('exp.js', expModule()));
+  },
+
+  /** Revelation's play-button / captcha entry gate, drivable end to end. */
+  loadRevelationEntry() {
+    return require(write('rvn_entry.js', revelationEntryModule()));
   },
 
   loadAe86() {

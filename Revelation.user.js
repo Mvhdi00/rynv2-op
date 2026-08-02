@@ -10965,16 +10965,27 @@ function Oh() {
     //      : gn());
     // The live server verifies a Cloudflare Turnstile token ("cf:" prefix).
     // ALTCHA ("alt:") is gone and is rejected at connect time.
-    if (!ps || Fn)
+    if (Fn)
         return;
     if (Eh || ls) {
-        // Production: a token is mandatory. Do not latch Fn until we actually
-        // have one, otherwise the first click permanently blocks entry.
-        if (!code)
-            return;
+        // Production: a token is mandatory, and `ps` and `code` are both set by
+        // the same event -- onGotTurnstileToken -- so if either is missing there
+        // simply is no token yet. Returning quietly here is what left the menu
+        // stuck on "Connecting..." with nothing else happening: put the
+        // challenge on screen instead and let its callback do the connecting.
+        // Fn is still not latched until we really have a token, so a second
+        // press cannot block entry permanently either.
+        if (!ps || !code) {
+            rvnPendingConnect = !0,
+                ms("Solve the captcha to play"),
+                rvnShowCaptchaPanel();
+            return
+        }
         Fn = !0,
             gn("cf:" + code);
     } else {
+        if (!ps)
+            return;
         Fn = !0,
             code ? gn("cf:" + code) : gn();
     }
@@ -10984,12 +10995,55 @@ let Vn = !1;
 const rvnTurnstileSiteKey = ki ? "1x00000000000000000000AA" : "0x4AAAAAAAMYHI96GFiJzMmp";
 let rvnTurnstileId = null
 , rvnTurnstileScriptAdded = !1
-, rvnTurnstileRetry = null;
+, rvnTurnstileRetry = null
+, rvnPendingConnect = !1
+, rvnCaptchaBox = null;
+
+// A challenge panel of our own. Reading the token off the page's own
+// #turnstileWidget cannot be relied on: this client hides the page's menu, so
+// the player never sees that widget to solve it, getResponse() stays empty
+// forever, and pressing play then did nothing at all.
+function rvnCaptchaSlot() {
+    if (rvnCaptchaBox && rvnCaptchaBox.isConnected)
+        return rvnCaptchaBox.querySelector(".rvn-slot");
+    const e = document.createElement("div");
+    e.id = "rvnCaptcha",
+        e.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147483647;background:rgba(0,0,0,.82);border-radius:8px;padding:22px 26px;text-align:center;color:#fff;font:400 16px/1.4 'Hammersmith One',sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.6)";
+    const t = document.createElement("div");
+    t.textContent = "Verify to play",
+        t.style.cssText = "font-size:22px;margin-bottom:10px";
+    // The slot stays in normal flow on purpose: turnstile refuses to render
+    // into a container whose offsetParent is null, and position:fixed on the
+    // slot itself would give us exactly that. The fixed box is its parent, so
+    // the slot's offsetParent is that box -- not null.
+    const i = document.createElement("div");
+    return i.className = "rvn-slot",
+        i.style.cssText = "display:flex;justify-content:center;min-height:65px",
+        e.appendChild(t),
+        e.appendChild(i),
+        (document.body || document.documentElement).appendChild(e),
+        rvnCaptchaBox = e,
+        i
+}
+function rvnShowCaptchaPanel() {
+    rvnCaptchaSlot(),
+        rvnCaptchaBox && (rvnCaptchaBox.style.display = "block"),
+        rvnLoadTurnstile(),
+        rvnRenderTurnstile()
+}
+function rvnHideCaptchaPanel() {
+    rvnCaptchaBox && (rvnCaptchaBox.style.display = "none")
+}
 
 window.onGotTurnstileToken = function(e) {
     code = e,
         window.captchaCallbackHook && window.captchaCallbackHook(),
-        Un && Un.classList.remove("disabled")
+        Un && Un.classList.remove("disabled"),
+        rvnHideCaptchaPanel(),
+        // the player already pressed play and has been waiting on this
+        rvnPendingConnect && (rvnPendingConnect = !1,
+                              ms("Connecting..."),
+                              Oh())
 }
 ;
 window.onTurnstileError = function() {
@@ -11040,15 +11094,11 @@ function rvnRenderTurnstile() {
         return !0;
     if (!rvnTurnstileReady())
         return !1;
-    let e = rvnTurnstileWidget();
-    if (e && e.childElementCount > 0)
-        return !1;
-    if (!e && Un && Un.parentNode) {
-        e = document.createElement("div"),
-            e.id = "turnstileWidget",
-            e.style.margin = "10px auto",
-            Un.parentNode.insertBefore(e, Un);
-    }
+    // Always our own slot. The old code bailed out whenever the page's
+    // #turnstileWidget already had a child -- which on the live page it always
+    // does -- so our widget was never rendered, no callback ever fired, and
+    // `code` and `ps` stayed unset.
+    const e = rvnCaptchaSlot();
     if (!e || e.offsetParent === null)
         return !1;
     try {

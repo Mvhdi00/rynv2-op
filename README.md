@@ -90,6 +90,32 @@ a `cf:` prefix. It also never called `captchaCallbackHook()`, so the internal
 | Bots | Each bot carries its own `proto` state from its own `io-init`, frames sends the same way, decodes numeric opcodes, and spawns on the handshake instead of a blind 111 ms timer. |
 | msgpack | Both `window.msgpack` call sites now use the script's bundled codecs. The `@require` pointed at rawgit.com, which shut down in 2019, so `window.msgpack` was `undefined` and the bot socket was dead on arrival. `@require` removed. |
 
+## The play button did nothing
+
+Reported after the transport fix: the menu loaded, but pressing play showed
+`Connecting...` and stopped there forever.
+
+`Oh()` — what the play button calls — returned quietly when it had no Turnstile
+token, leaving that message on screen with nothing behind it. The token never
+arrived because of how the widget was mounted: `rvnRenderTurnstile()` bailed out
+whenever the page's own `#turnstileWidget` already had a child, on the theory
+that we could read the token off the page's widget instead. On the live page
+that container is *always* filled, and this client hides the page's menu — so
+the player never saw that widget to solve it, `getResponse()` stayed empty, and
+`code` and `ps` were never set.
+
+Now: a challenge panel of our own (`#rvnCaptcha`, fixed and above the page, with
+the widget slot as a plain child so `offsetParent` is never null), rendered
+regardless of what the page left lying around. Pressing play without a token
+puts the panel up, says `Solve the captcha to play`, and records the intent;
+`onGotTurnstileToken` then hides the panel and performs the connect the player
+already asked for. The `Fn` latch is still only set once a token really exists,
+so no press can permanently block entry.
+
+`test/revelation-entry.js` drives the real `Oh()` and the real widget plumbing
+against a DOM stub, starting from a page that has already filled
+`#turnstileWidget`, and checks the whole press-play → solve → connect path.
+
 ## Known limitation: bots
 
 ALTCHA was a proof-of-work challenge, so the script could solve it locally and
@@ -1010,7 +1036,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 474 checks.
+them with `npm test` — 501 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
