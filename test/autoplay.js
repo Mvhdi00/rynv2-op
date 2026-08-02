@@ -27,6 +27,7 @@ for (const which of ['unx', 'sakuna']) {
   // --- it does nothing unless it should ---
   A.setPlayer({ sid: 1, alive: true, x2: 0, y2: 0 });
   A.setObjects([]);
+  A.setKeys(undefined);          // hands off the keyboard
   A.setEnemy(null);
   check(ap.dir() === undefined, 'with no enemy it leaves movement alone');
 
@@ -42,6 +43,11 @@ for (const which of ['unx', 'sakuna']) {
   A.setEnemy({ sid: 2, x2: undefined, y2: 0 });
   check(ap.dir() === undefined, 'an enemy with no position yet is ignored rather than aimed at');
   A.setEnemy({ sid: 2, x2: 200, y2: 0 });
+
+  // your own keys always win, which is how RYN stays out of your way
+  A.setKeys(1.2);
+  check(ap.dir() === undefined, 'while you are holding a movement key it does not steer');
+  A.setKeys(undefined);
 
   // --- the circle ---
   ap.reset();
@@ -148,7 +154,44 @@ for (const which of ['unx', 'sakuna']) {
 }
 
 // --------------------------------------------------------------------------
-console.log('\n=== both scripts wire it the same way ===');
+console.log("\n=== sakuna's per-tick sender ===");
+{
+  const A = extract.loadAutoPlay('sakuna');
+  const ap = A.autoPlay;
+  ap.reset();
+  A.sent.length = 0;
+  A.setPlayer({ sid: 1, alive: true, x2: 120, y2: 0 });
+  A.setObjects([]);
+  A.setKeys(undefined);
+  A.setEnemy({ sid: 2, x2: 200, y2: 0 });
+
+  check(ap.tick() === true, 'a tick with an enemy in view steers');
+  check(A.sent.length === 1 && A.sent[0][0] === '9',
+        'and puts a move packet on the wire through the script\'s own packet()');
+  check(typeof A.sent[0][1] === 'number', 'carrying the direction');
+
+  // walking on, the angle changes, so it keeps sending
+  A.setPlayer({ sid: 1, alive: true, x2: 130, y2: 30 });
+  ap.tick();
+  check(A.sent.length === 2, 'as we move round, it keeps steering every tick');
+
+  // standing still, the angle does not move, so it does not repeat itself
+  const before = A.sent.length;
+  ap.tick();
+  check(A.sent.length === before,
+        'but an unchanged angle is not re-sent, so it does not burn the packet budget');
+
+  // hands on the keyboard: it stops and forgets, so the next release re-sends
+  A.setKeys(0.5);
+  check(ap.tick() === false, 'holding a key stops it');
+  check(A.sent.length === before, 'and sends nothing');
+  A.setKeys(undefined);
+  ap.tick();
+  check(A.sent.length === before + 1, 'letting go picks it straight back up');
+}
+
+// --------------------------------------------------------------------------
+console.log('\n=== each script drives it from its own tick ===');
 {
   const fs = require('fs');
   const path = require('path');
@@ -156,17 +199,27 @@ console.log('\n=== both scripts wire it the same way ===');
   const unx = fs.readFileSync(path.join(ROOT, 'UnX.user.js'), 'utf8');
   const sak = fs.readFileSync(path.join(ROOT, 'Sakuna.user.js'), 'utf8');
 
-  check(/return unxAutoPlay\.dir\(\);/.test(unx),
-        'unX hands the wheel over only in the no-keys branch of getMoveDir');
-  check(/if \(dx != 0 \|\| dy != 0\) return angle;/.test(sak),
-        'and Sakuna keeps your keys ahead of it in its own getMoveDir');
+  // The first cut hooked getMoveDir(), which both scripts call only on key
+  // press and release -- so it produced one direction and then sat there. RYN
+  // runs its module every tick, and that is the whole difference.
+  check(!/return unxAutoPlay\.dir\(\);/.test(unx) && !/sakAutoPlay\.dir\(\) : angle/.test(sak),
+        'neither script hooks getMoveDir any more');
+  check(/function getMoveDir\(\) \{[\s\S]{0,400}?return undefined;/.test(unx),
+        "and unX's getMoveDir is back to exactly what it was");
 
-  // getMoveDir feeds lastMoveDir, which is what actually drives the move
-  // packet -- so anything that can throw in here costs you the ability to walk
-  check(/if \(scriptMenu\.toggles\.autoPlay\) \{\n\s*try \{/.test(unx),
-        'unX only calls into the module when the toggle is on, and inside a try');
-  check(/if \(box && box\.checked\) \{\n\s*try \{/.test(sak),
-        'and Sakuna does the same');
+  // unX has a real per-tick movement authority: manageTickBase builds an
+  // override and hands it to tickMovement, so auto play just supplies it
+  check(/let e = this\.autoPush\(\);\n\s*if \(typeof e != "number" && scriptMenu\.toggles\.autoPlay\)/.test(unx),
+        'unX supplies the same per-tick override its own autoPush does');
+  check(/e = unxAutoPlay\.dir\(\);/.test(unx), 'and it reaches tickMovement through it');
+  check(/typeof e != "number"/.test(unx), 'yielding to autoPush, which is the client\'s own mover');
+
+  // Sakuna has no single authority, so the module sends for itself, once a tick
+  check(/sakAutoPlay\.tick\(\);/.test(sak), 'Sakuna calls it once per game tick');
+  check(/packet\(code\.move, dir, 1\);/.test(sak), 'and it sends through the script\'s own packet()');
+
+  check(/try \{\n\s*e = unxAutoPlay\.dir\(\);/.test(unx), 'unX wraps the call');
+  check(/try \{\n\s*sakAutoPlay\.tick\(\);/.test(sak), 'and so does Sakuna');
   check(/auto play failed, leaving movement alone/.test(unx)
         && /auto play failed, leaving movement alone/.test(sak),
         'a failure there falls back to normal movement instead of killing it');

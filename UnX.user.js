@@ -9335,6 +9335,13 @@ class AI {
                 this.setPlayerWeapons();
                 autoHit.resetActivity();
                 let e = this.autoPush();
+                if (typeof e != "number" && scriptMenu.toggles.autoPlay) {
+                    try {
+                        e = unxAutoPlay.dir();
+                    } catch (autoPlayError) {
+                        console.error("[unx] auto play failed, leaving movement alone", autoPlayError);
+                    }
+                }
                 this.objBreakingTarget = undefined;
                 placer.tickBase();
                 instaManager.tickBase();
@@ -11283,9 +11290,10 @@ class AI {
         dir() {
             if (!scriptMenu.toggles.autoPlay) return undefined;
             if (!player || !player.alive) return undefined;
+            if (lastMoveDir !== undefined) return undefined;
+
             const target = game.enemies.nearest;
             if (!target) return undefined;
-
             const ex = target.x2;
             const ey = target.y2;
             if (typeof ex != "number" || typeof ey != "number") return undefined;
@@ -13907,13 +13915,6 @@ class AI {
             t += !!keys[i] * s[1];
         }
         if (e == 0 && t == 0) {
-            if (scriptMenu.toggles.autoPlay) {
-                try {
-                    return unxAutoPlay.dir();
-                } catch (autoPlayError) {
-                    console.error("[unx] auto play failed, leaving movement alone", autoPlayError);
-                }
-            }
             return undefined;
         } else {
             return UTILS.fixTo(Math.atan2(t, e), 2);

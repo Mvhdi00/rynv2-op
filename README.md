@@ -1079,7 +1079,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 644 checks.
+them with `npm test` — 659 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
@@ -1248,10 +1248,27 @@ An **enemy's** spikes deliberately do *not* block. RYN circles straight over
 them: they are a damage problem, not a movement one, and treating them as walls
 is what pins you into a corner. Your own and your team's buildings do block.
 
-It only steers while you are not steering. Both scripts hook it in the same
-place — the branch of `getMoveDir()` that runs when no movement key is held —
-so the moment you touch a key your input wins. RYN gates on
-`ModuleHandler.moveTo === "disable"` for the same reason.
+### It has to run every tick
+
+The first cut hooked `getMoveDir()`. Both scripts call that **only on key press
+and release**, so it produced one direction and then sat there — which is why it
+did not behave like RYN's. RYN runs its module from `postTick()`, every tick,
+and hands the result to its own movement system with `startMovement()`.
+
+Each script now drives it the same way, through its own machinery:
+
+- **unX** has a real per-tick movement authority. `manageTickBase()` builds a
+  movement override — normally from its own `autoPush()` — and hands it to
+  `tickMovement()`. Auto play simply supplies that override when `autoPush()`
+  did not, so it goes out every tick and yields to the client's own mover.
+- **Sakuna** has no single authority; it sends `packet(code.move, …)` from a
+  dozen places. So the module sends for itself, once per game tick from the tick
+  handler, through the script's own `packet()` — and only when the angle has
+  actually changed, so it does not spend the packet budget repeating itself.
+
+It only steers while you are not steering: unX checks `lastMoveDir`, Sakuna
+checks `getMoveDir()` — each script's own record of what you are holding. RYN
+gates on `ModuleHandler.moveTo === "disable"` for the same reason.
 
 RYN reads `pos.future ?? pos.current`. Neither of these scripts carries a
 position-prediction model, so both use the latest server position — which is
@@ -1275,7 +1292,7 @@ For the record, `tools/probe-unx.js` drives the real `getMoveDir()` in a browser
 and reports `undefined` with no keys and `-1.57` with W held, with the toggle
 off — identical to the original either way.
 
-`test/autoplay.js` runs the same 18 checks against both copies — the constants,
+`test/autoplay.js` runs the same 19 checks against both copies — the constants,
 the four cases where it must stay out of the way, the ring geometry, six ticks
 of walking to prove it circles rather than spirals, direction reversal, the
 enemy-spike exception, and the clearance threshold from both sides.

@@ -6710,9 +6710,20 @@ function qaz() {
 // blocked by a building -- so it works its way around obstacles instead of
 // walking into them.
 //
-// It only steers while you are not steering: the moment you touch a
-// movement key your input wins, exactly as RYN only runs when nothing else
-// owns movement.
+// RYN runs this from postTick(), every tick, and hands the result to its own
+// movement system with ModuleHandler.startMovement(). This script has no
+// single movement authority to hand an override to -- it sends
+// packet(code.move, ...) from a dozen places -- so tick() below does the
+// send itself, once per game tick, through the script's own packet().
+// (The first version hooked getMoveDir() instead, which the script only
+// calls on key press and release, so it produced one direction and then sat
+// there. That is why it did not behave like RYN's.)
+
+// the checkbox only exists once the menu is built
+function AUTOPLAY_BOX() {
+    const box = getEl("autoPlay");
+    return !!(box && box.checked);
+}
 
 const AUTOPLAY_RADIUS = 80;
 const AUTOPLAY_SPEED = 0.2;
@@ -6740,16 +6751,17 @@ const sakAutoPlay = {
         return false;
     },
 
-    // The move direction to hand the game this tick, or undefined to leave
-    // movement alone.
+    // The movement override for this tick, or undefined to leave movement
+    // to whatever else the client wants to do with it.
     dir() {
-        // the checkbox only exists once the menu is built
-        const box = getEl("autoPlay");
-        if (!box || !box.checked) return undefined;
+        if (!AUTOPLAY_BOX()) return undefined;
         if (!player || !player.alive) return undefined;
+        // your own keys win: getMoveDir() is the client's own reading of
+        // what you are holding, and it is undefined when you hold nothing
+        if (getMoveDir() !== undefined) return undefined;
+
         const target = (enemy.length ? near : null);
         if (!target) return undefined;
-
         const ex = target.x2;
         const ey = target.y2;
         if (typeof ex != "number" || typeof ey != "number") return undefined;
@@ -6769,6 +6781,22 @@ const sakAutoPlay = {
 
         return Math.atan2(ty - player.y2, tx - player.x2);
     },
+    // Once per game tick, the way RYN's postTick does it. Sends through the
+    // script's own packet(), and only when the angle has actually moved, so
+    // it does not spend the packet budget repeating itself.
+    lastSent: undefined,
+    tick() {
+        const dir = this.dir();
+        if (dir === undefined) {
+            this.lastSent = undefined;
+            return false;
+        }
+        if (this.lastSent === undefined || Math.abs(dir - this.lastSent) > 0.01) {
+            this.lastSent = dir;
+            packet(code.move, dir, 1);
+        }
+        return true;
+    },
 };
 
 function getMoveDir() {
@@ -6781,20 +6809,7 @@ function getMoveDir() {
     }
     const angle = Math.atan2(dy, dx);
 
-    // Nothing pressed: auto play gets the wheel, but only if it is actually
-    // switched on -- with it off this never calls into the module, so the
-    // no-keys path is exactly what it was before. A throw in there degrades
-    // to the same thing rather than taking movement down with it.
-    if (dx != 0 || dy != 0) return angle;
-    const box = getEl("autoPlay");
-    if (box && box.checked) {
-        try {
-            return sakAutoPlay.dir();
-        } catch (autoPlayError) {
-            console.error("[sakuna] auto play failed, leaving movement alone", autoPlayError);
-        }
-    }
-    return undefined;
+    return dx == 0 && dy == 0 ? undefined : angle;
 }
 
 function getSafeDir() {
@@ -8935,6 +8950,16 @@ function updatePlayers(data) {
                 antibull = true;
             }
             if (inGame) {
+            // Auto play drives itself once per game tick, the way RYN runs
+            // its module from postTick -- this script has no single movement
+            // authority to hand an override to. Wrapped, because this is the
+            // middle of the tick handler and a throw here would cost far
+            // more than the feature is worth.
+            try {
+                sakAutoPlay.tick();
+            } catch (autoPlayError) {
+                console.error("[sakuna] auto play failed, leaving movement alone", autoPlayError);
+            }
                 if (enemy.length) {
                     if(getEl("spiketick").checked){
                         let emyinTrap = newGameObjects.filter(e => e.trap && e.active && UTILS.getDist(e, near, 0, 99) <= (near.scale + e.getScale() + 5) && !near.findAllianceBySid(e));

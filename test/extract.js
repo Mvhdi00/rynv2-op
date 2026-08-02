@@ -311,7 +311,7 @@ module.exports = {
     const file = which === 'sakuna' ? SAKUNA : CHICKEN;
     const l = lines(file);
     const name = which === 'sakuna' ? 'sakAutoPlay' : 'unxAutoPlay';
-    const a = findStart(l, which === 'sakuna' ? 'const AUTOPLAY_RADIUS' : '    const AUTOPLAY_RADIUS');
+    const a = findStart(l, which === 'sakuna' ? 'function AUTOPLAY_BOX()' : '    const AUTOPLAY_RADIUS');
     let b = a;
     while (!/^\s*\};\s*$/.test(l[b])) b++;
     const body = l.slice(a, b + 1).join('\n');
@@ -321,10 +321,22 @@ let enemy = [], near = null;
 const boxes = { autoPlay: { checked: true } };
 function getEl(id) { return boxes[id] || null; }
 const setEnemy = e => { near = e; enemy = e ? [e] : []; };
+// the script's own reading of the keys you are holding
+let heldKeys;
+function getMoveDir() { return heldKeys; }
+const setKeys = v => { heldKeys = v; };
+// and its own packet sender, which the module drives directly
+const sent = [];
+const code = { move: '9' };
+function packet(type, a, b) { sent.push([type, a, b]); }
 ` : `
 const scriptMenu = { toggles: { autoPlay: true } };
 const game = { enemies: { nearest: null }, isFriendly: sid => sid === 1 };
 const setEnemy = e => { game.enemies.nearest = e; };
+// the client's own record of the movement key you are holding
+let lastMoveDir;
+const setKeys = v => { lastMoveDir = v; };
+const sent = [];
 `;
 
     const src = `
@@ -334,7 +346,7 @@ ${hostGlobals}
 ${body}
 module.exports = {
   autoPlay: ${name},
-  setEnemy,
+  setEnemy, setKeys, sent,
   setPlayer: p => { player = p; },
   setObjects: o => { gameObjects = o; },
   toggle: v => { ${which === 'sakuna' ? 'boxes.autoPlay.checked = v;' : 'scriptMenu.toggles.autoPlay = v;'} },
