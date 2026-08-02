@@ -311,7 +311,7 @@ console.log('\n13. natural colours and no texture pack');
 check(!/scriptMenu\.toggles\.hyperPerformance/.test(src),
       'nothing reads the Hyper Performance toggle any more');
 check(!/label: "Hyper Performance"/.test(src), 'and the toggle is gone from the menu');
-check(/if \(false\) \{                 \/\/ was the flat-yellow ground/.test(src),
+check(/if \(false\) \{\n\s*mainContext\.fillStyle = "#ffff00";/.test(src),
       'the flat-yellow ground branch is dead');
 check(/let i = false;/.test(src) && /let t = false;/.test(src),
       'the sprite builders take the game\'s own colours');
@@ -333,6 +333,25 @@ check(/^\/\/ @name\s+unX$/m.test(meta), 'the script is called unX');
 check(!/>Chicken V4\.6\.2</.test(src), 'the old name is off the main menu');
 check(/>unX<\/span>/.test(src), 'and the new one is on it');
 check(/transform: translateX\(-50%\);">unX<\/div>/.test(src), 'and on the mod menu');
+
+// --------------------------------------------------------------------------
+console.log('\n15. the file carries no comments but its metadata block');
+
+{
+  const acorn = require('acorn');
+  const found = [];
+  acorn.parse(src, { ecmaVersion: 'latest', allowReturnOutsideFunction: true, onComment: found });
+  const metaEnd = src.indexOf('\n', src.indexOf('// ==/UserScript==')) + 1;
+  const stray = found.filter(cm => cm.start >= metaEnd);
+  check(stray.length === 0,
+        'no comment survives past the metadata block' +
+        (stray.length ? ' (first at offset ' + stray[0].start + ')' : ''));
+  check(found.length > 0 && found.every(cm => cm.start < metaEnd),
+        'the metadata block itself is still there, comments and all');
+  check(/^\/\/ ==UserScript==/.test(src), 'and it is still the first thing in the file');
+  check(src.split('\n').length < 14000,
+        'the file is ' + src.split('\n').length + ' lines, down from 35140');
+}
 
 console.log('\n' + (fails === 0 ? '=> ALL UNX TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
 process.exit(fails ? 1 : 0);

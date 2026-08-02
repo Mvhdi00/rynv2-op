@@ -660,7 +660,7 @@ chart.js off jsDelivr on every load). The elements themselves are still built �
 the slide-out panels' close handlers reference them — they are just no longer
 placed.
 
-`npm run preview:chicken` renders it to a standalone HTML file you can open.
+`npm run preview:unx` renders it to a standalone HTML file you can open.
 
 ## Colours and the texture pack
 
@@ -676,6 +676,29 @@ The **"Hyper Performance"** toggle is removed. All it did was repaint every
 object flat `#0000ff`, the ground flat `#ffff00` and chat bubbles blue; if it
 was ever switched on it stayed on, saved in `localStorage`. Every branch now
 takes the game's own colours.
+
+## Why the file was 35,000 lines
+
+Almost none of it was code. The upload was 35,140 lines, of which **21,436 were
+a single commented-out `tmpBackgroundBuildings` array** — a block of dead map
+data the author left in, roughly 61% of the file on its own. Another ~400 lines
+were smaller commented-out fragments: an old `constructor()`, a changelog fetch
+against a dead glitch.me host, a server-list loop, a URL parser.
+
+Every comment outside the `// ==UserScript==` metadata block is now stripped,
+which takes the shipped file to **13,375 lines**. That is what a full client
+replacement actually costs — the whole moomoo game bundle (renderer, entity
+system, physics, UI) plus the mod's own features — as against the 200–800 lines
+of a hook-style mod like Peter Client, which loads the game from the page and
+only patches it.
+
+`tools/strip-comments.js` does the removal. It finds comments with acorn rather
+than by regex, so `//` inside a string, a template literal or a regex literal is
+left alone; it keeps each removed comment's newlines so line structure and
+automatic semicolon insertion are untouched; and it re-parses both versions and
+refuses to write unless the two syntax trees are identical, positions aside. The
+program is therefore provably unchanged. The build runs it as its last step, so
+a rebuild cannot put the comments back.
 
 ## Known limitations
 
@@ -923,7 +946,10 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 419 checks.
+them with `npm test` — 423 checks.
+
+unX is additionally re-parsed by the suite to prove that no comment survives
+past the metadata block and that the metadata block itself is intact.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.

@@ -7,5 +7,10 @@
     "build:unpatcher": "node tools/build-unpatcher.js",
     "preview:menu": "node tools/preview-menu.js menu-preview.html && node tools/shot.js menu-preview.html menu-preview.png",
     "preview:unx": "node tools/preview-chicken.js chicken-preview.html && node tools/shot.js chicken-preview.html chicken-preview.png"
+  },
+  "dependencies": {
+    "acorn": "^8.18.0",
+    "gifenc": "^1.0.3",
+    "pngjs": "^7.0.0"
   }
 }
