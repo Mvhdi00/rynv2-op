@@ -511,6 +511,23 @@ console.log('\n15. the bots run here now, not on a dead relay');
   check(!/glitch\.me\/dc\?auth=/.test(src),
         'and "!c!dc bots" drops our own bots instead of asking nine dead hosts to');
 
+  // The bot captcha has to be on screen: Turnstile in managed mode decides per
+  // request whether to show a checkbox, and nobody can tick one parked at
+  // left:-10000px. That is why no bot ever connected.
+  check(!/left:-10000px/.test(src), 'the bot captcha is no longer hidden off-screen');
+  check(/box\.id = "chkBotCaptcha"/.test(src) || /botBox\.id = "chkBotCaptcha"/.test(src),
+        'it has a panel of its own');
+  check(/position:fixed[\s\S]{0,200}chkBotCaptcha|chkBotCaptcha[\s\S]{0,400}position:fixed/.test(src),
+        'centred and above the page');
+  check(/botSlot\.style\.cssText = "display:flex/.test(src),
+        'with the widget slot in normal flow, so its offsetParent is never null');
+  check(/window\.turnstile\.render\(botSlot,/.test(src), 'and the widget renders into that slot');
+  check(/awaitBotToken\(120000\)/.test(src),
+        'the wait is long enough for a person to notice the panel and tick a box');
+  check(/botCancelled = true/.test(src), 'and there is a way out if you change your mind');
+  check(/bot\(s\) got no captcha token and were not connected/.test(src),
+        'a bot that got no token is reported instead of vanishing silently');
+
   // ------------------------------------------------------------------------
   console.log('\n15b. the kill chat is two editable lines, not one fixed one');
 

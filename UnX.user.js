@@ -267,26 +267,80 @@ const CHKP = (function () {
         });
     }
 
+    let botBox = null;
     let botSlot = null;
+    let botStatus = null;
     let botWidgetId = null;
     let botToken = null;
     let botChain = Promise.resolve(null);
+    let botQueued = 0;
+    let botSolved = 0;
+    let botCancelled = false;
 
-    function botContainer() {
-        if (botSlot && botSlot.isConnected) return botSlot;
+    function botPanel() {
+        if (botBox && botBox.isConnected) return botBox;
+        botBox = document.createElement("div");
+        botBox.id = "chkBotCaptcha";
+        botBox.style.cssText = [
+            "position:fixed", "left:50%", "top:50%", "transform:translate(-50%,-50%)",
+            "z-index:2147483647", "background:rgba(0,0,0,.82)", "border-radius:8px",
+            "padding:22px 26px", "text-align:center", "color:#fff",
+            "font:400 16px/1.4 'Hammersmith One',sans-serif",
+            "box-shadow:0 8px 32px rgba(0,0,0,.6)",
+        ].join(";");
+
+        const title = document.createElement("div");
+        title.textContent = "Verify to add bots";
+        title.style.cssText = "font-size:22px;margin-bottom:4px;";
+
+        botStatus = document.createElement("div");
+        botStatus.style.cssText = "font-size:14px;opacity:.75;margin-bottom:14px;";
+
         botSlot = document.createElement("div");
         botSlot.id = "chkBotTurnstile";
-        botSlot.style.cssText = "position:absolute;left:-10000px;top:0;width:300px;height:70px;";
-        (document.body || document.documentElement).appendChild(botSlot);
+        botSlot.style.cssText = "display:flex;justify-content:center;min-height:65px;";
+
+        const cancel = document.createElement("div");
+        cancel.textContent = "Cancel";
+        cancel.style.cssText = "margin-top:12px;font-size:14px;opacity:.7;cursor:pointer;text-decoration:underline;";
+        cancel.onclick = function () {
+            botCancelled = true;
+            hideBotPanel();
+        };
+
+        botBox.appendChild(title);
+        botBox.appendChild(botStatus);
+        botBox.appendChild(botSlot);
+        botBox.appendChild(cancel);
+        (document.body || document.documentElement).appendChild(botBox);
         botWidgetId = null;
-        return botSlot;
+        return botBox;
+    }
+
+    function botLabel() {
+        if (!botStatus) return;
+        const total = botQueued;
+        const at = Math.min(botSolved + 1, total);
+        botStatus.textContent = total > 1
+            ? "One challenge per bot -- " + at + " of " + total
+            : "Tick the box to add the bot.";
+    }
+
+    function showBotPanel() {
+        botPanel();
+        botBox.style.display = "block";
+        botLabel();
+    }
+
+    function hideBotPanel() {
+        if (botBox) botBox.style.display = "none";
     }
 
     function renderBotWidget() {
         if (botWidgetId !== null) return true;
         if (!window.turnstile || typeof window.turnstile.render != "function") return false;
         try {
-            botWidgetId = window.turnstile.render(botContainer(), {
+            botWidgetId = window.turnstile.render(botSlot, {
                 sitekey: SITEKEY,
                 theme: "dark",
                 callback: function (t) {
@@ -311,6 +365,11 @@ const CHKP = (function () {
         return new Promise(function (resolve) {
             let waited = 0;
             const poll = setInterval(function () {
+                if (botCancelled) {
+                    clearInterval(poll);
+                    resolve(null);
+                    return;
+                }
                 renderBotWidget();
                 if (botToken) {
                     clearInterval(poll);
@@ -329,9 +388,27 @@ const CHKP = (function () {
     }
 
     function freshToken() {
+        botQueued++;
+        if (botQueued === 1) {
+            botSolved = 0;
+            botCancelled = false;
+        }
+        const finish = function (result) {
+            botSolved++;
+            if (botSolved >= botQueued) {
+                botQueued = 0;
+                botSolved = 0;
+                hideBotPanel();
+            } else {
+                botLabel();
+            }
+            return result;
+        };
         const run = function () {
+            if (botCancelled) return finish(null);
             loadApi();
             botToken = null;
+            showBotPanel();
             if (botWidgetId !== null && window.turnstile && typeof window.turnstile.reset == "function") {
                 try {
                     window.turnstile.reset(botWidgetId);
@@ -339,7 +416,7 @@ const CHKP = (function () {
                     botWidgetId = null;
                 }
             }
-            return awaitBotToken(25000);
+            return awaitBotToken(120000).then(finish);
         };
         botChain = botChain.then(run, run);
         return botChain;
@@ -11599,13 +11676,23 @@ class AI {
 
         addBots(address, tokens) {
             const names = (scriptMenu.toggles.botNames || "").split(",").map((s) => s.trim()).filter(Boolean);
+            let missing = 0;
             for (let i = 0; i < tokens.length; i++) {
                 const token = tokens[i];
-                if (!token) continue;
+                if (!token) {
+                    missing++;
+                    continue;
+                }
                 const bot = new BotSocket(this, this.sockets.length);
                 this.sockets.push(bot);
                 const name = names.length ? names[(this.sockets.length - 1) % names.length] : "unX";
                 bot.connect(address || window.wsAddress, token, name);
+            }
+            if (missing) {
+                console.warn("[unx] " + missing + " of " + tokens.length + " bot(s) got no captcha token and were not connected");
+                if (typeof errorEventManager != "undefined" && errorEventManager) {
+                    errorEventManager.error(missing + "/" + tokens.length + " bots skipped: no captcha token");
+                }
             }
             this.emit({ type: "canSendNow" });
         }

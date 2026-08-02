@@ -759,9 +759,21 @@ owner, another of your bots, or anyone on your owner team.
 
 `getTokens()` called `altKeyManager.getToken()`, an ALTCHA solver for a
 challenge the server dropped. It now calls `CHKP.freshToken()`, which keeps a
-second Turnstile widget alive off-screen and resets it once per bot. The widget
-is parked at `left:-10000px` rather than `display:none` because Turnstile
-refuses to render into a container whose `offsetParent` is null.
+second Turnstile widget of its own and resets it once per bot.
+
+That widget was hidden off-screen at first, and **that is why no bot ever
+connected**. Turnstile in managed mode decides per request whether to show an
+interactive checkbox, and when it does somebody has to tick it — which nobody
+could, at `left:-10000px`. Every token came back null after the timeout,
+`addBots` skipped every null token, and the result was a long wait and no bots,
+with nothing said about it.
+
+The bot challenge now gets a visible panel of its own (`#chkBotCaptcha`),
+centred and above the page, with the widget slot in normal flow inside it so
+`offsetParent` is never null. It counts through the batch (`One challenge per
+bot — 2 of 4`), waits two minutes per token rather than 25 seconds, has a Cancel
+link, and closes itself when the batch is done. A bot that ends up with no token
+is now reported rather than silently dropped.
 
 ## Auto grind
 
@@ -1063,7 +1075,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 531 checks.
+them with `npm test` — 539 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
