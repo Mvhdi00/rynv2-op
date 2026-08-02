@@ -409,6 +409,7 @@ window.CHICKEN_COSMOS = (function () {
     }
 
     const CSS = `
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap");
 /* ---------- the sky, behind everything on the menu ------------------- */
 #mainMenu {
   background: none !important;
@@ -579,182 +580,257 @@ window.CHICKEN_COSMOS = (function () {
   box-shadow: 0 0 0 2px rgba(120, 220, 255, .7), 0 0 14px rgba(120, 220, 255, .5);
 }
 
-/* ---------- the mod menu -------------------------------------------- */
-/* Everything the client sets on these lives in inline styles, so the overrides
-   have to be !important. Nothing is renamed and no element is moved, so every
-   toggle, slider and key bind keeps working. */
+/* ---------- the mod menu, in the RYN Client's visual language --------
+ * Same tokens it uses: #7A42F4 into #3A86FF on near-black glass, Poppins for
+ * headings and Inter for body, a 172px rail whose active item is marked by a
+ * 3px accent border, flat hairline-separated rows, and the springy
+ * cubic-bezier(.34,1.4,.64,1) it opens and throws its switch knobs with.
+ *
+ * Everything the client sets lives in inline styles, so the overrides have to
+ * be !important. Nothing is renamed and no element moves, so every toggle,
+ * slider and key bind keeps working.
+ * ------------------------------------------------------------------------ */
 #ckScriptMenu {
-  width: 920px !important;
-  height: 620px !important;
+  --ryn-accent: #7A42F4;
+  --ryn-accent2: #3A86FF;
+  --ryn-text: #fff;
+  --ryn-dim: rgba(200, 200, 215, .4);
+  width: 1180px !important;
+  height: 650px !important;
+  max-width: 94vw !important;
+  max-height: 90vh !important;
   border-radius: 20px !important;
   overflow: hidden !important;
-  isolation: isolate;
-  color: #dbe4ff;
-  font-family: "Hammersmith One", "Segoe UI", system-ui, sans-serif;
-  background:
-    radial-gradient(120% 90% at 10% 0%,   rgba(124, 92, 255, .30) 0%, transparent 55%),
-    radial-gradient(100% 80% at 90% 8%,   rgba(77, 216, 255, .20) 0%, transparent 50%),
-    radial-gradient(90%  90% at 50% 112%, rgba(255, 92, 190, .14) 0%, transparent 60%),
-    linear-gradient(160deg, #05061a 0%, #080c26 50%, #12092b 100%) !important;
-  border: 1px solid rgba(150, 170, 255, .20);
-  box-shadow:
-    0 40px 100px rgba(0, 0, 0, .7),
-    0 0 0 1px rgba(255, 255, 255, .04) inset,
-    0 0 140px rgba(124, 92, 255, .14) inset;
+  background: rgba(25, 25, 25, .45) !important;
+  border: 1px solid rgba(255, 255, 255, .2) !important;
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, .2), inset 0 1px 1px rgba(255, 255, 255, .1);
+  font-family: "Inter", "Poppins", system-ui, sans-serif;
+  color: var(--ryn-text);
   /* the client toggles inline opacity to open and close it; ride that */
-  transform: translate(-50%, -50%) scale(.955) !important;
-  transition: opacity .26s ease, transform .3s cubic-bezier(.2, .9, .25, 1.05) !important;
+  transform: translate(-50%, -50%) scale(.98) translateY(-4px) !important;
+  transition: opacity .15s ease-in, transform .2s cubic-bezier(.34, 1.4, .64, 1) !important;
 }
-#ckScriptMenu[style*="opacity: 1"] { transform: translate(-50%, -50%) scale(1) !important; }
+#ckScriptMenu[style*="opacity: 1"] {
+  transform: translate(-50%, -50%) scale(1) translateY(0) !important;
+}
 
-/* its own sky, behind the tab rail and the settings list */
-#ckScriptMenu > .ck-menusky {
-  position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
-}
-#ckScriptMenu > .ck-menusky .ck-planet {
-  right: -80px; bottom: -120px; width: 220px; height: 220px; opacity: .34;
-}
-#ckScriptMenu > .ck-menusky .ck-planet::after { width: 330px; height: 76px; }
-#ckScriptMenu > *:not(.ck-menusky) { z-index: 1; }
-
-/* --- the tab rail --- */
+/* --- the rail --- */
 #ckScriptMenu > div[style*="width: 212.5px"] {
-  width: 236px !important;
+  width: 172px !important;
   height: 100% !important;
-  background: linear-gradient(180deg, rgba(12, 16, 40, .78), rgba(8, 11, 30, .62)) !important;
-  border-right: 1px solid rgba(150, 170, 255, .16);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(15, 15, 15, .3) !important;
+  border-right: 1px solid rgba(255, 255, 255, .1);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
 }
-#ckScriptMenu > div[style*="left: 212.5px"] {
-  left: 236px !important;
-  width: calc(100% - 236px) !important;
-  padding-top: 6px;
-  overflow-y: auto !important;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(120, 220, 255, .35) transparent;
+/* the client's own title, given the header treatment RYN puts on its page name */
+#ckScriptMenu div[style*="font-size: 25px"] {
+  font-family: "Poppins", sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  letter-spacing: .22em !important;
+  text-transform: uppercase;
+  top: 16px !important;
+  background: linear-gradient(90deg, #7A42F4, #3A86FF, #a07af4, #7A42F4);
+  background-size: 200% auto;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent !important;
+  animation: ryn-shimmer 5s linear infinite;
 }
-#ckScriptMenu > div[style*="left: 212.5px"]::-webkit-scrollbar { width: 8px; }
-#ckScriptMenu > div[style*="left: 212.5px"]::-webkit-scrollbar-thumb {
-  background: rgba(120, 220, 255, .3); border-radius: 4px;
-}
+@keyframes ryn-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 
-/* --- the tabs --- */
+/* --- the tabs, as RYN's .open-menu rows --- */
 #ckScriptMenu div[id^="tab:"] {
-  width: calc(100% - 24px) !important;
-  left: 12px !important;
-  height: 34px !important;
-  border-radius: 10px !important;
-  background-color: transparent !important;
-  transition: background-color .18s ease, transform .18s ease, box-shadow .18s ease !important;
-  overflow: hidden;
+  left: 0 !important;
+  width: 100% !important;
+  height: 60px !important;
+  border-radius: 0 !important;
+  border-left: 3px solid transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, .05) !important;
+  background: transparent !important;
+  padding: 0 14px !important;
+  gap: 10px;
+  opacity: .7;
+  color: var(--ryn-dim);
+  box-sizing: border-box;
+  transition: color 140ms, border-color 140ms, background 140ms, transform 100ms, opacity 100ms !important;
 }
-#ckScriptMenu div[id^="tab:"]::before {          /* the accent bar */
-  content: ""; position: absolute; left: 0; top: 50%;
-  width: 3px; height: 0; border-radius: 3px;
-  background: linear-gradient(180deg, #6ee7ff, #4f8bff);
-  box-shadow: 0 0 10px rgba(110, 231, 255, .8);
-  transform: translateY(-50%);
-  transition: height .2s cubic-bezier(.2, .9, .25, 1.05);
-}
+#ckScriptMenu div[id="tab:0"] { top: 58px !important; }
+#ckScriptMenu div[id="tab:1"] { top: 118px !important; }
+#ckScriptMenu div[id="tab:2"] { top: 178px !important; }
+#ckScriptMenu div[id="tab:3"] { top: 238px !important; }
+#ckScriptMenu div[id="tab:4"] { top: 298px !important; }
+#ckScriptMenu div[id="tab:5"] { top: 358px !important; }
+#ckScriptMenu div[id="tab:6"] { top: 418px !important; }
+#ckScriptMenu div[id="tab:7"] { top: 478px !important; }
+#ckScriptMenu div[id="tab:8"] { top: 538px !important; }
+#ckScriptMenu div[id="tab:9"] { top: 598px !important; }
+#ckScriptMenu div[id="tab:10"] { top: 658px !important; }
+#ckScriptMenu div[id="tab:11"] { top: 718px !important; }
+#ckScriptMenu div[id="tab:12"] { top: 778px !important; }
+#ckScriptMenu div[id="tab:13"] { top: 838px !important; }
+#ckScriptMenu div[id="tab:14"] { top: 898px !important; }
+#ckScriptMenu div[id="tab:15"] { top: 958px !important; }
 #ckScriptMenu div[id^="tab:"]:hover {
-  background-color: rgba(255, 255, 255, .07) !important;
-  transform: translateX(2px);
+  opacity: 1;
+  background: rgba(255, 255, 255, .04) !important;
+  border-left-color: rgba(122, 66, 244, .5) !important;
 }
-#ckScriptMenu div[id^="tab:"]:hover::before { height: 16px; }
+#ckScriptMenu div[id^="tab:"]:active { transform: scale(.96); opacity: .75; }
 /* the client marks the open tab by killing its pointer events */
 #ckScriptMenu div[id^="tab:"][style*="pointer-events: none"] {
-  background: linear-gradient(90deg, rgba(110, 231, 255, .20), rgba(79, 139, 255, .07)) !important;
-  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, .28);
+  opacity: 1;
+  background: rgba(122, 66, 244, .12) !important;
+  border-left-color: var(--ryn-accent) !important;
 }
-#ckScriptMenu div[id^="tab:"][style*="pointer-events: none"]::before { height: 20px; }
-#ckScriptMenu div[id^="tab:"] img {
-  border-radius: 6px;
-  padding: 2px;
-  background: rgba(255, 255, 255, .07);
-  margin-left: 8px !important;
+#ckScriptMenu div[id^="tab:"][style*="pointer-events: none"] img {
+  filter: drop-shadow(0 0 5px rgba(122, 66, 244, .9));
+}
+#ckScriptMenu div[id^="tab:"] img { margin-left: 0 !important; }
+#ckScriptMenu div[id^="tab:"] > div {
+  font-family: "Poppins", sans-serif !important;
+  font-size: 13px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; margin-left: 0 !important;
 }
 
-/* --- the setting rows --- */
-#ckScriptMenu div[style*="height: 40px"],
+/* --- the page --- */
+#ckScriptMenu > div[style*="left: 212.5px"] {
+  left: 172px !important;
+  width: calc(100% - 172px) !important;
+  padding: 14px 18px !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(122, 66, 244, .25) transparent;
+}
+#ckScriptMenu > div[style*="left: 212.5px"]::-webkit-scrollbar { width: 2px; }
+#ckScriptMenu > div[style*="left: 212.5px"]::-webkit-scrollbar-track { background: transparent; }
+#ckScriptMenu > div[style*="left: 212.5px"]::-webkit-scrollbar-thumb {
+  background: rgba(122, 66, 244, .25); border-radius: 2px;
+}
+#ckScriptMenu > div[style*="left: 212.5px"]:hover::-webkit-scrollbar-thumb {
+  background: rgba(122, 66, 244, .45);
+}
+
+/* --- rows: flat, hairline-separated, no cards --- */
+#ckScriptMenu div[style*="height: 40px"] {
+  min-height: 42px !important;
+  margin: 0 !important;
+  width: 100% !important;
+  padding: 6px 12px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, .03) !important;
+  box-sizing: border-box;
+  transition: background 150ms !important;
+}
+#ckScriptMenu div[style*="height: 40px"]:hover { background: rgba(122, 66, 244, .04) !important; }
+#ckScriptMenu div[style*="height: 40px"] > div:first-child {
+  font-size: 15px; font-weight: 500;
+  color: rgba(215, 215, 230, .8);
+  transition: color 150ms;
+}
+#ckScriptMenu div[style*="height: 40px"]:hover > div:first-child { color: #fff; }
+
+/* --- grouped settings become RYN's bordered section --- */
 #ckScriptMenu div[style*="padding-top: 25px"] {
-  border-radius: 12px !important;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .02)) !important;
-  box-shadow: inset 0 0 0 1px rgba(150, 170, 255, .10);
-  transition: background .18s ease, box-shadow .18s ease, transform .18s ease !important;
+  margin: 0 0 10px 0 !important;
+  width: 100% !important;
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, .07) !important;
+  border-radius: 7px !important;
+  transition: border-color 200ms !important;
 }
-#ckScriptMenu div[style*="height: 40px"]:hover,
 #ckScriptMenu div[style*="padding-top: 25px"]:hover {
-  background: linear-gradient(180deg, rgba(120, 220, 255, .13), rgba(79, 139, 255, .05)) !important;
-  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, .30), 0 6px 18px rgba(0, 0, 0, .3);
-  transform: translateY(-1px);
+  border-color: rgba(122, 66, 244, .22) !important;
 }
 
-/* --- the toggle switches --- */
+/* --- the switch --- */
 #ckScriptMenu div[id^="toggle:id:"] {
-  border-radius: 999px !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
-  transition: background-color .2s ease, box-shadow .2s ease !important;
-}
-#ckScriptMenu div[id^="toggle:id:"][style*="background-color: rgb(33, 150, 243)"] {
-  background: linear-gradient(180deg, #6ee7ff, #4f8bff) !important;
-  box-shadow: 0 0 16px rgba(79, 139, 255, .55), inset 0 0 0 1px rgba(255, 255, 255, .3);
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .05) !important;
+  border: 1px solid rgba(255, 255, 255, .1);
+  box-sizing: border-box;
+  transition: all 220ms !important;
 }
 #ckScriptMenu div[id^="toggle:id:"] > div {
-  transition: transform .22s cubic-bezier(.2, .9, .25, 1.4) !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .4);
+  background: rgba(255, 255, 255, .25) !important;
+  width: 20px !important; height: 20px !important;
+  transition: transform 220ms cubic-bezier(.34, 1.4, .64, 1), background 220ms !important;
+}
+#ckScriptMenu div[id^="toggle:id:"][style*="background-color: rgb(33, 150, 243)"] {
+  background: rgba(122, 66, 244, .18) !important;
+  border-color: rgba(122, 66, 244, .55);
+}
+#ckScriptMenu div[id^="toggle:id:"][style*="background-color: rgb(33, 150, 243)"] > div {
+  background: var(--ryn-accent) !important;
+  box-shadow: 0 0 7px rgba(122, 66, 244, .7);
 }
 
-/* --- inputs, selects and the client's own buttons --- */
-#ckScriptMenu input, #ckScriptMenu select, #ckScriptMenu button {
-  color: #e8efff !important;
-  background: rgba(255, 255, 255, .06) !important;
-  border: 1px solid rgba(150, 170, 255, .22) !important;
-  border-radius: 9px !important;
+/* --- buttons, inputs, key binds --- */
+#ckScriptMenu button {
+  padding: 5px 16px !important;
+  background: rgba(122, 66, 244, .1) !important;
+  border: 1px solid rgba(122, 66, 244, .35) !important;
+  border-radius: 5px !important;
+  font-family: "Poppins", sans-serif !important;
+  font-size: 11px !important; font-weight: 600; letter-spacing: .06em;
+  color: #fff !important; text-transform: uppercase;
+  cursor: pointer;
+  transition: all 140ms !important;
+}
+#ckScriptMenu button:hover {
+  background: rgba(122, 66, 244, .22) !important;
+  border-color: rgba(122, 66, 244, .6) !important;
+}
+#ckScriptMenu button:active { transform: scale(.97); }
+#ckScriptMenu input, #ckScriptMenu select {
+  background: rgba(255, 255, 255, .04) !important;
+  border: 1px solid rgba(255, 255, 255, .1) !important;
+  border-radius: 4px !important;
+  color: rgba(200, 175, 255, .9) !important;
+  font-family: "Poppins", sans-serif !important;
+  font-size: 12px !important;
   outline: none;
-  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease, transform .12s ease;
+  transition: all 140ms !important;
 }
-#ckScriptMenu select option { color: #0b1020; background: #dfe7ff; }
+#ckScriptMenu select option { color: #14141c; background: #e9e9f2; }
+#ckScriptMenu input:hover, #ckScriptMenu select:hover {
+  background: rgba(122, 66, 244, .12) !important;
+  border-color: rgba(122, 66, 244, .5) !important;
+}
 #ckScriptMenu input:focus, #ckScriptMenu select:focus {
-  border-color: rgba(120, 220, 255, .65) !important;
-  box-shadow: 0 0 0 3px rgba(120, 220, 255, .16);
+  border-color: var(--ryn-accent) !important;
+  box-shadow: 0 0 0 2px rgba(122, 66, 244, .2);
 }
-#ckScriptMenu button:hover { background: rgba(120, 220, 255, .16) !important; }
-#ckScriptMenu button:active { transform: translateY(1px); }
+#ckScriptMenu input[type="range"] { accent-color: var(--ryn-accent); }
 
-/* the little value tags the client builds for list settings */
+/* the value tags the client builds for list settings */
 #ckScriptMenu div[style*="border-radius: 6px; margin: 3px"] {
-  background: rgba(120, 220, 255, .16) !important;
-  box-shadow: inset 0 0 0 1px rgba(120, 220, 255, .28);
-  transition: background .16s ease, transform .12s ease;
+  background: rgba(122, 66, 244, .12) !important;
+  border: 1px solid rgba(122, 66, 244, .35);
+  border-radius: 5px !important;
+  font-family: "Poppins", sans-serif !important;
+  transition: all 140ms;
 }
 #ckScriptMenu div[style*="border-radius: 6px; margin: 3px"]:hover {
-  background: rgba(120, 220, 255, .28) !important;
-  transform: translateY(-1px);
+  background: rgba(122, 66, 244, .24) !important;
 }
 
-/* rows fade in one after another when a tab opens */
-#ckScriptMenu > div[style*="left: 212.5px"] > * {
-  animation: ck-row .26s ease both;
-}
-#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(1)  { animation-delay: .02s; }
-#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(2)  { animation-delay: .04s; }
-#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(3)  { animation-delay: .06s; }
-#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(4)  { animation-delay: .08s; }
-#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(5)  { animation-delay: .10s; }
-#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(6)  { animation-delay: .12s; }
-#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(7)  { animation-delay: .14s; }
-#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(8)  { animation-delay: .16s; }
-#ckScriptMenu > div[style*="left: 212.5px"] > *:nth-child(n+9) { animation-delay: .18s; }
-@keyframes ck-row {
-  from { opacity: 0; transform: translateY(6px); }
+/* pages slide in from the top when a tab opens, as RYN's do */
+#ckScriptMenu > div[style*="left: 212.5px"] > * { animation: ryn-slide-in 140ms ease-out both; }
+@keyframes ryn-slide-in {
+  from { opacity: 0; transform: translateY(-5px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ---------- someone may be on reduce-motion -------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .ck-sky-box *, .ck-sky-box::after, #ckMenu,
-  #ckScriptMenu, #ckScriptMenu > div[style*="left: 212.5px"] > * { animation: none !important; transition: none !important; }
+  #ckScriptMenu, #ckScriptMenu *,
+  #ckScriptMenu > div[style*="left: 212.5px"] > * { animation: none !important; transition: none !important; }
 }
 `;
 
@@ -786,16 +862,11 @@ window.CHICKEN_COSMOS = (function () {
         }
     }
 
-    // Same scene for the mod menu. It gets its own sky element because the two
-    // are separate stacking contexts.
+    // The mod menu is styled after the RYN Client instead: flat dark glass, no
+    // starfield behind it. All it needs from here is the id the rules hang off.
     function dressMenu(menu) {
         styles();
-        if (!menu || menu.querySelector(".ck-menusky")) return;
-        menu.id = "ckScriptMenu";
-        const sky = document.createElement("div");
-        sky.className = "ck-menusky ck-sky-box";
-        sky.innerHTML = SKY;
-        menu.insertBefore(sky, menu.firstChild);
+        if (menu) menu.id = "ckScriptMenu";
     }
 
     return { css: CSS, sky: SKY, install: install, dressMenu: dressMenu };

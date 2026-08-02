@@ -282,25 +282,35 @@ check(!/rotate\(14deg\)/.test(src) && (src.match(/rotate\(-12deg\)/g) || []).len
 
 // the mod menu gets the same scene
 check(/CHICKEN_COSMOS\.dressMenu\(this\.menu\);/.test(src), 'the mod menu is themed too');
-check(/#ckScriptMenu > \.ck-menusky \{/.test(src),
-      'with its own sky, since the two are separate stacking contexts');
 check((src.match(/document\.body\.appendChild\(this\.menu\);/g) || []).length === 1,
       'and it is still only appended once');
-check(/width: 920px !important;/.test(src) && /height: 620px !important;/.test(src),
-      'the mod menu is bigger than the 700x475 it was');
-check(/#ckScriptMenu\[style\*="opacity: 1"\] \{ transform: translate\(-50%, -50%\) scale\(1\)/.test(src),
-      'it scales in when opened -- the client toggles inline opacity, so ride that');
-check(/#ckScriptMenu div\[id\^="tab:"\]::before \{/.test(src),
-      'the tabs get a sliding accent bar');
-check(/pointer-events: none"\]::before \{ height: 20px; \}/.test(src),
-      "and the open tab is picked out by the flag the client already sets on it");
+
+// the mod menu follows the RYN Client's design language
+check(/width: 1180px !important;/.test(src) && /height: 650px !important;/.test(src),
+      "it takes RYN's dimensions (1180x650, up from 700x475)");
+check(/--ryn-accent: #7A42F4;/.test(src) && /--ryn-accent2: #3A86FF;/.test(src),
+      "and RYN's accent pair");
+check(/family=Inter[^"]*Poppins/.test(src), "and its fonts, Inter with Poppins for headings");
+check(/width: 172px !important;/.test(src) && /left: 172px !important;/.test(src),
+      "a 172px rail, the width RYN uses");
+check(/border-left: 3px solid transparent !important;/.test(src)
+      && /border-left-color: var\(--ryn-accent\) !important;/.test(src),
+      'tabs marked by the 3px left accent border RYN marks its own with');
+check(/pointer-events: none"\] \{\n\s*opacity: 1;/.test(src),
+      "and the open one picked out by the flag the client already sets on it");
+check(/cubic-bezier\(\.34, 1\.4, \.64, 1\)/.test(src),
+      "the springy curve RYN opens with, on the panel and the switch knobs");
+check(/#ckScriptMenu\[style\*="opacity: 1"\] \{/.test(src),
+      'the open transition rides the inline opacity the client toggles');
+check(/@keyframes ryn-slide-in \{/.test(src) && /@keyframes ryn-shimmer \{/.test(src),
+      "pages slide in from the top and the title shimmers, as RYN's do");
 check(/#ckScriptMenu div\[id\^="toggle:id:"\]\[style\*="background-color: rgb\(33, 150, 243\)"\]/.test(src),
       'the switches light up off the colour the client sets, so no behaviour changes');
-check(/@keyframes ck-row \{/.test(src) && /nth-child\(n\+9\)/.test(src),
-      'and the rows fade in one after another when a tab opens');
-check(/width: 236px !important;/.test(src) && /left: 236px !important;/.test(src),
-      'the tab rail is wider, and the settings pane moved with it');
-check(/height: 100% !important;/.test(src), 'the rail runs the full height now');
+check(/background: rgba\(122, 66, 244, \.1\) !important;/.test(src),
+      "buttons in RYN's flat purple");
+check(!/ck-menusky/.test(src),
+      "no starfield behind it -- RYN's panel is plain glass over the game");
+
 check(!/innerText = "Not connected"/.test(src) && !/this\.menu\.appendChild\(this\.socketPing\)/.test(src),
       'the "Not connected" strip is gone');
 

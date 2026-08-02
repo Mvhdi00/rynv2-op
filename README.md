@@ -645,13 +645,15 @@ own render loop, and it all stops under `prefers-reduced-motion`.
 The card itself is glass over that sky, 760×380 (up from 650×450), with the
 title glowing cyan and the controls restyled to match.
 
-The **mod menu** was rebuilt on the same scene, 920×620 (up from 700×475): its
-own sky behind a full-height glass tab rail, tabs as pills with an accent bar
-that grows in on hover and stays lit on the open one, setting rows as cards that
-lift and glow under the cursor, switches on a cyan gradient with a springy knob,
-and rows fading in one after another when a tab opens. The panel itself scales
-in — the client toggles inline `opacity` to open and close it, so the transition
-rides that. The "Not connected" strip along the bottom of the rail is gone.
+The **mod menu** follows the RYN Client's design language instead, at its
+dimensions: 1180×650 (up from 700×475), `#7A42F4` into `#3A86FF` on near-black
+glass, Inter with Poppins for headings, a 172px rail whose active item is marked
+by a 3px accent border, a shimmering title, flat hairline-separated rows,
+RYN's thin pill switches and flat purple buttons, and the
+`cubic-bezier(.34, 1.4, .64, 1)` it opens and throws its switch knobs with.
+Pages slide in from the top when a tab opens. No starfield behind it — RYN's
+panel is plain glass over the game. The "Not connected" strip along the bottom
+of the rail is gone.
 
 None of it renames an id or moves an element: every override keys off something
 the client already sets, including the `pointer-events: none` it puts on the
@@ -926,7 +928,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 424 checks.
+them with `npm test` — 427 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.
