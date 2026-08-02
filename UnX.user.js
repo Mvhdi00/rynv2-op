@@ -11259,6 +11259,54 @@ class AI {
     };
 
 
+    const AUTOPLAY_RADIUS = 80;
+    const AUTOPLAY_SPEED = 0.2;
+    const AUTOPLAY_CLEARANCE = 35;
+
+    const unxAutoPlay = {
+        direction: 1,
+
+        reset() {
+            this.direction = 1;
+        },
+
+        blocked(x, y) {
+            for (let i = 0; i < gameObjects.length; i++) {
+                const obj = gameObjects[i];
+                if (!obj.active) continue;
+                if (obj.dmg && obj.owner && !game.isFriendly(obj.owner.sid)) continue;
+                if (Math.hypot(x - obj.x, y - obj.y) < obj.scale + AUTOPLAY_CLEARANCE) return true;
+            }
+            return false;
+        },
+
+        dir() {
+            if (!scriptMenu.toggles.autoPlay) return undefined;
+            if (!player || !player.alive) return undefined;
+            const target = game.enemies.nearest;
+            if (!target) return undefined;
+
+            const ex = target.x2;
+            const ey = target.y2;
+            if (typeof ex != "number" || typeof ey != "number") return undefined;
+
+            const current = Math.atan2(player.y2 - ey, player.x2 - ex);
+            let next = current + AUTOPLAY_SPEED * this.direction;
+            let tx = ex + Math.cos(next) * AUTOPLAY_RADIUS;
+            let ty = ey + Math.sin(next) * AUTOPLAY_RADIUS;
+
+            if (this.blocked(tx, ty)) {
+                this.direction *= -1;
+                next = current + AUTOPLAY_SPEED * this.direction;
+                tx = ex + Math.cos(next) * AUTOPLAY_RADIUS;
+                ty = ey + Math.sin(next) * AUTOPLAY_RADIUS;
+            }
+
+            return Math.atan2(ty - player.y2, tx - player.x2);
+        },
+    };
+
+
     let lastKillName = "";
     let lastKillAt = 0;
 
@@ -12139,6 +12187,11 @@ class AI {
                         {
                             label: "Auto Grind",
                             id: "autoGrind",
+                            type: "toggle",
+                        },
+                        {
+                            label: "Auto Play",
+                            id: "autoPlay",
                             type: "toggle",
                         },
                         {
@@ -13854,7 +13907,7 @@ class AI {
             t += !!keys[i] * s[1];
         }
         if (e == 0 && t == 0) {
-            return undefined;
+            return unxAutoPlay.dir();
         } else {
             return UTILS.fixTo(Math.atan2(t, e), 2);
         }

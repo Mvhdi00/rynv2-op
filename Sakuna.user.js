@@ -6357,6 +6357,7 @@ background-position: center;
                 ${addNumber("Dist", "togglePlayerFollowerDist", 0, 999, 0, true)}
                 ${addCheck("Player Follower Enemy", "togglePlayerFollowerEnemy", false, true)}
                 ${addCheck("Movement Assist", "movementassist", true, true)}
+                ${addCheck("Auto Play", "autoPlay", false, true)}
                 ${addCheck("Movement Assist(cactus)", "movementassistcactus", true, true)}
                 ${addCheck("Auto Push", "autopush", true, true)}
                 ${addCheck("Spike Tick Move", "spiketickmove", false, true)}
@@ -6702,6 +6703,74 @@ function qaz() {
 
 }
 // INPUT UTILS:
+// ---- auto play ---------------------------------------------------------
+// A port of the RYN client's AutoPlay module. It circles the nearest enemy
+// at a fixed radius, stepping around the ring a fifth of a radian per tick,
+// and flips the direction of travel when the next point on the ring is
+// blocked by a building -- so it works its way around obstacles instead of
+// walking into them.
+//
+// It only steers while you are not steering: the moment you touch a
+// movement key your input wins, exactly as RYN only runs when nothing else
+// owns movement.
+
+const AUTOPLAY_RADIUS = 80;
+const AUTOPLAY_SPEED = 0.2;
+// RYN's clearance: the player's own radius. A point closer than
+// (object scale + this) to a building is one you cannot stand on.
+const AUTOPLAY_CLEARANCE = 35;
+
+const sakAutoPlay = {
+    direction: 1,
+
+    reset() {
+        this.direction = 1;
+    },
+
+    blocked(x, y) {
+        for (let i = 0; i < gameObjects.length; i++) {
+            const obj = gameObjects[i];
+            if (!obj.active) continue;
+            // An enemy's spikes are a damage problem, not a movement one.
+            // RYN deliberately circles straight over them -- treating them
+            // as walls is what pins you into a corner.
+            if (obj.dmg && obj.owner && !obj.isTeamObject(player)) continue;
+            if (Math.hypot(x - obj.x, y - obj.y) < obj.scale + AUTOPLAY_CLEARANCE) return true;
+        }
+        return false;
+    },
+
+    // The move direction to hand the game this tick, or undefined to leave
+    // movement alone.
+    dir() {
+        // the checkbox only exists once the menu is built
+        const box = getEl("autoPlay");
+        if (!box || !box.checked) return undefined;
+        if (!player || !player.alive) return undefined;
+        const target = (enemy.length ? near : null);
+        if (!target) return undefined;
+
+        const ex = target.x2;
+        const ey = target.y2;
+        if (typeof ex != "number" || typeof ey != "number") return undefined;
+
+        // where we sit on the ring around them right now
+        const current = Math.atan2(player.y2 - ey, player.x2 - ex);
+        let next = current + AUTOPLAY_SPEED * this.direction;
+        let tx = ex + Math.cos(next) * AUTOPLAY_RADIUS;
+        let ty = ey + Math.sin(next) * AUTOPLAY_RADIUS;
+
+        if (this.blocked(tx, ty)) {
+            this.direction *= -1;
+            next = current + AUTOPLAY_SPEED * this.direction;
+            tx = ex + Math.cos(next) * AUTOPLAY_RADIUS;
+            ty = ey + Math.sin(next) * AUTOPLAY_RADIUS;
+        }
+
+        return Math.atan2(ty - player.y2, tx - player.x2);
+    },
+};
+
 function getMoveDir() {
     let dx = 0;
     let dy = 0;
@@ -6712,7 +6781,10 @@ function getMoveDir() {
     }
     const angle = Math.atan2(dy, dx);
 
-    return dx == 0 && dy == 0 ? undefined : angle;
+    // Nothing pressed: auto play gets the wheel. The moment you touch a
+    // movement key the keys win, which is how RYN keeps it out of the way
+    // of your own input.
+    return dx == 0 && dy == 0 ? sakAutoPlay.dir() : angle;
 }
 
 function getSafeDir() {

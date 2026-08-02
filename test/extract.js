@@ -302,6 +302,49 @@ module.exports = {
     return require(write('chicken.js', src));
   },
 
+  /**
+   * The AutoPlay module out of either script, on a stubbed world. Both are the
+   * same port of RYN's module, so one loader serves both -- it just has to
+   * supply the accessors each host uses.
+   */
+  loadAutoPlay(which) {
+    const file = which === 'sakuna' ? SAKUNA : CHICKEN;
+    const l = lines(file);
+    const name = which === 'sakuna' ? 'sakAutoPlay' : 'unxAutoPlay';
+    const a = findStart(l, which === 'sakuna' ? 'const AUTOPLAY_RADIUS' : '    const AUTOPLAY_RADIUS');
+    let b = a;
+    while (!/^\s*\};\s*$/.test(l[b])) b++;
+    const body = l.slice(a, b + 1).join('\n');
+
+    const hostGlobals = which === 'sakuna' ? `
+let enemy = [], near = null;
+const boxes = { autoPlay: { checked: true } };
+function getEl(id) { return boxes[id] || null; }
+const setEnemy = e => { near = e; enemy = e ? [e] : []; };
+` : `
+const scriptMenu = { toggles: { autoPlay: true } };
+const game = { enemies: { nearest: null }, isFriendly: sid => sid === 1 };
+const setEnemy = e => { game.enemies.nearest = e; };
+`;
+
+    const src = `
+let player = { sid: 1, alive: true, x2: 0, y2: 0 };
+let gameObjects = [];
+${hostGlobals}
+${body}
+module.exports = {
+  autoPlay: ${name},
+  setEnemy,
+  setPlayer: p => { player = p; },
+  setObjects: o => { gameObjects = o; },
+  toggle: v => { ${which === 'sakuna' ? 'boxes.autoPlay.checked = v;' : 'scriptMenu.toggles.autoPlay = v;'} },
+  dropBox: () => { ${which === 'sakuna' ? 'delete boxes.autoPlay;' : 'scriptMenu.toggles.autoPlay = false;'} },
+  RADIUS: AUTOPLAY_RADIUS, SPEED: AUTOPLAY_SPEED, CLEARANCE: AUTOPLAY_CLEARANCE,
+};
+`;
+    return require(write('autoplay_' + (which || 'unx') + '.js', src));
+  },
+
   /** unX's auto grind -- the port of RYN's AutoGrind -- on stubbed game state. */
   loadUnxGrind() {
     const l = lines(CHICKEN);

@@ -1079,7 +1079,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 600 checks.
+them with `npm test` — 641 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
@@ -1224,3 +1224,44 @@ dedup and rate-limit treatment as the game's own — previously they bypassed al
 of it. `const originalSend = WebSocket.prototype.send` was removed: with the
 shim installed it captures the trampoline rather than the native method, and
 nothing calls it any more.
+
+
+---
+
+# Auto Play (unX and Sakuna)
+
+A port of the RYN client's `AutoPlay` module into both scripts, on request. It
+circle-strafes the nearest enemy:
+
+| | |
+| --- | --- |
+| Radius | 80 |
+| Step | 0.2 rad per tick |
+| Clearance | object scale + 35 (the player's own radius) |
+
+Each tick it takes your bearing from the enemy, steps `0.2` further around the
+ring, and walks toward that point. If the point is inside a building it
+**reverses the direction of travel** and tries the other way — which is what
+gets it around obstacles instead of grinding into them.
+
+An **enemy's** spikes deliberately do *not* block. RYN circles straight over
+them: they are a damage problem, not a movement one, and treating them as walls
+is what pins you into a corner. Your own and your team's buildings do block.
+
+It only steers while you are not steering. Both scripts hook it in the same
+place — the branch of `getMoveDir()` that runs when no movement key is held —
+so the moment you touch a key your input wins. RYN gates on
+`ModuleHandler.moveTo === "disable"` for the same reason.
+
+RYN reads `pos.future ?? pos.current`. Neither of these scripts carries a
+position-prediction model, so both use the latest server position — which is
+exactly the fallback RYN takes when no prediction is available.
+
+**unX**: mod menu, next to Auto Grind. **Sakuna**: the *Move* section, next to
+Movement Assist; the checkbox lookup is guarded because the menu does not exist
+at boot.
+
+`test/autoplay.js` runs the same 18 checks against both copies — the constants,
+the four cases where it must stay out of the way, the ring geometry, six ticks
+of walking to prove it circles rather than spirals, direction reversal, the
+enemy-spike exception, and the clearance threshold from both sides.

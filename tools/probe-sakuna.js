@@ -5,6 +5,9 @@
 //
 //   python3 -m http.server 8877 --directory tools &
 //   node tools/probe-sakuna.js
+const { chromium } = require('playwright');
+const fs = require('fs');
+
 (async () => {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const page = await browser.newPage();
