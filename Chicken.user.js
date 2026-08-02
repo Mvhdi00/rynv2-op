@@ -242,14 +242,23 @@ const CHKP = (function () {
     }
 
     // Our own container, so nothing the client removes from the page can take
-    // it with it. Visible, because a Turnstile challenge may want a click.
+    // it with it. Visible and captioned, because the challenge often wants a
+    // click and the client otherwise just sits there saying nothing.
     function container() {
         let el = document.getElementById("chkTurnstile");
         if (el) return el;
+        const box = document.createElement("div");
+        box.id = "chkTurnstileBox";
+        box.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483647;"
+            + "font:600 14px/1.3 'Hammersmith One',sans-serif;color:#fff;text-align:left;";
+        const label = document.createElement("div");
+        label.textContent = "Solve this to join";
+        label.style.cssText = "margin-bottom:6px;text-shadow:0 1px 3px #000;";
         el = document.createElement("div");
         el.id = "chkTurnstile";
-        el.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483647;";
-        (document.body || document.documentElement).appendChild(el);
+        box.appendChild(label);
+        box.appendChild(el);
+        (document.body || document.documentElement).appendChild(box);
         return el;
     }
 
@@ -312,7 +321,7 @@ const CHKP = (function () {
                     return;
                 }
                 waited += 200;
-                if (waited === 5000) console.warn("[chicken] still waiting on the Turnstile challenge -- look for the widget at the bottom left");
+                if (waited === 5000) console.warn("[chicken] still waiting on the Turnstile challenge -- tick the box at the bottom left");
                 if (waited >= limit) {
                     clearInterval(poll);
                     resolve(null);
