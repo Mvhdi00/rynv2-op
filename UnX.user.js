@@ -12203,6 +12203,11 @@ class AI {
                             type: "toggle",
                         },
                         {
+                            label: "Full FPS",
+                            id: "fullFps",
+                            type: "toggle",
+                        },
+                        {
                             label: "Kill Chat",
                             id: "killChat",
                             type: "toggle",
@@ -14167,6 +14172,10 @@ class AI {
     var fpsCount = 0;
     var fpsLast = 0;
     var fps = 0;
+    const unxFpsChannel = new MessageChannel();
+    unxFpsChannel.port1.onmessage = function () {
+        doUpdate();
+    };
     function doUpdate() {
         fpsCount++;
         if (Date.now() - fpsLast >= 1000) {
@@ -14178,7 +14187,11 @@ class AI {
         delta = (now = Date.now()) - lastUpdate;
         lastUpdate = now;
         updateGame();
-        window.requestAnimationFrame(doUpdate);
+        if (scriptMenu.toggles.fullFps) {
+            unxFpsChannel.port2.postMessage("");
+        } else {
+            window.requestAnimationFrame(doUpdate);
+        }
     }
     window.requestAnimationFrame =
         window.requestAnimationFrame ||

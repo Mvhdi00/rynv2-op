@@ -1079,7 +1079,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 659 checks.
+them with `npm test` — 672 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
@@ -1296,3 +1296,49 @@ off — identical to the original either way.
 the four cases where it must stay out of the way, the ring geometry, six ticks
 of walking to prove it circles rather than spirals, direction reversal, the
 enemy-spike exception, and the clearance threshold from both sides.
+
+
+---
+
+# Full FPS (unX, matching Sakuna)
+
+Sakuna has a **Full FPS** toggle; unX now has the same one, next to Auto Play.
+
+## What it actually does
+
+`requestAnimationFrame` is capped to the display refresh, so the render loop runs
+about 60 times a second. A `MessageChannel` message is a macrotask that fires
+immediately, so rescheduling the loop through one runs it as fast as the event
+loop allows:
+
+```js
+if (scriptMenu.toggles.fullFps) {
+    unxFpsChannel.port2.postMessage("");
+} else {
+    window.requestAnimationFrame(doUpdate);
+}
+```
+
+## Is it real? Measured, not guessed
+
+`tools/fps-bench.js` runs both loops in Chromium and also counts how many frames
+the compositor actually presented:
+
+```json
+{
+  "rafLoopsPerSec": 61,
+  "messageChannelLoopsPerSec": 4837,
+  "framesActuallyPresented": 63
+}
+```
+
+So: the loop genuinely runs about **80× more often** — that part is real, not a
+faked counter. But the screen still shows **~60 frames a second**, because the
+compositor presents at the refresh rate no matter how often you draw. The FPS
+number the mod displays is counting loop iterations, not displayed frames.
+
+What it buys is **latency**, not smoothness. `updateGame()` — and every piece of
+mod logic inside it — is re-evaluated in a fraction of a millisecond instead of
+waiting up to ~16 ms for the next frame, which matters for tick-timed features.
+What it costs is a pinned CPU core and ~4,800 canvas repaints a second that
+nobody ever sees. Both scripts therefore ship it **off**.
