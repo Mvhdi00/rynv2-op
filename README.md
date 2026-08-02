@@ -1,6 +1,6 @@
 # moomoo.io userscripts, updated for the current client
 
-Ten scripts. Eight were current-generation clients that needed the new
+Eleven scripts. Nine were current-generation clients that needed the new
 transport layer. Two (the LemonMod pair) are a full protocol generation behind
 and additionally needed their packet vocabulary mapped forward.
 
@@ -19,6 +19,9 @@ and additionally needed their packet vocabulary mapped forward.
   it from running at all.
 - **`PeterClient.user.js`** (`Peter Client` v11) — hook-based again, with a
   couple of packet names still stuck in the 2019 vocabulary.
+- **`Chicken.user.js`** (`chicken` v4.6.2) — a full client replacement that
+  targets moomoo.io *and* a private server still on the 2019 protocol, so both
+  paths had to keep working.
 - **`X18K.user.js`** (`x18k`) — another client replacement that hijacks
   `window.WebSocket`. Also shipped with a wildcard `@include` and a hidden
   token logger; both removed. **Do not run the original.**
@@ -593,6 +596,50 @@ So it fixes the protocol for you. It is not a promise that a given mod works.
 
 ---
 
+# Chicken.user.js (`chicken` v4.6.2)
+
+A full client replacement with its own `io` object and its own bundled msgpack,
+so it gets a protocol module (`CHKP`) rather than the hook-mod shim. What makes
+this one different: it targets **two** servers. moomoo.io runs the current
+protocol; `mohmoh.dev.tc` is a private server still on the 2019 one, and the
+script already carries a `clientTranslate` map for it. Both paths had to keep
+working, so the fix hangs off what `io-init` negotiates rather than off the
+hostname: mohmoh never sends `mode: 1`, so nothing there is framed and the old
+names still go out.
+
+## Why it did not run
+
+| Cause | Effect |
+| --- | --- |
+| Plain msgpack transport | Same break as the rest — see [Why it broke](#why-it-broke). Its `connect` also fired the callback from `onopen`, so it spawned before the keys existed. |
+| ALTCHA | `executeRecaptcha()` fetches `api.moomoo.io/verify`, brute-forces the proof-of-work in a worker pool, and returns `alt:<payload>`. That endpoint no longer serves a challenge, so the function could only throw — and the connect then went out with no token at all. |
+| It removed the captcha | `document.getElementById("menuContainer").remove()` at module scope. `#turnstileWidget` lives inside that container, so the teardown destroyed the very thing the token has to come from. |
+| Unguarded teardown | Eleven `getElementById(...).remove()` / `.style` calls at module scope on elements the page may no longer have. One missing element and the client dies before drawing a frame. |
+
+## What changed
+
+| Area | Fix |
+| --- | --- |
+| `CHKP` module (new, top of file) | Seeded PRNG, opcode-table builder, SHA-256, HMAC-SHA256, hex key parsing, and the Turnstile token capture. |
+| `io.connect` | Reads the seed and key out of `io-init`, fires the connect callback **there** instead of on `onopen`, and maps incoming numeric opcodes back to names. Unmapped ones are ignored rather than thrown on. |
+| `io.send` | Frames as `tag ‖ msgpack([opcode, args, seq])` when the handshake negotiated it, and keeps the plain `msgpack([name, args])` form otherwise — which is what mohmoh still wants. Nothing goes out before `io-init` at all: the original only checked `readyState`, so the first packets went out unsigned. |
+| Captcha | `executeRecaptcha()` now waits for the page's own Turnstile token (wrapping `window.onGotTurnstileToken`, falling back to `turnstile.getResponse()`) and returns it with the `cf:` prefix. It still writes `window.superman`, which is what the bot relays read, so those pick up the right prefix for free. |
+| Turnstile widget | Moved onto `document.body` — visible, bottom-left — before `#menuContainer` is removed, so the challenge survives the teardown and can still be clicked if it asks. |
+| Page teardown | All of it null-guarded through two small helpers. |
+| Page render loop | The page's own client keeps painting `#gameCanvas` every frame and would draw over this one. Its loop re-arms through `window.requestAnimFrame`, which nothing here uses, so that name is now an accessor that swallows the assignment and returns a no-op. |
+
+## Known limitations
+
+- The bot feature routes through `*.glitch.me` relays, handing them your server
+  address and a captcha token. Glitch ended free project hosting, so expect
+  those to be dead. Left as-is.
+- `getChallenge()` / `validateChallenge()` / `createPayload()` and the worker
+  pool are now dead code. Left in place rather than deleted.
+- Turnstile tokens are single-use, so the multi-bot path is not reliably
+  automatable — the same server-side limit that applies to every script here.
+
+---
+
 # PeterClient.user.js (`Peter Client` v11)
 
 Hook-style mod again, so the same `EXP` shim. Its own quirks were the way it
@@ -797,6 +844,10 @@ hijack itself: that the stand-in tolerates everything the game does to it, that
 the captured URL reaches the mod with its token intact, and that all 17 of its
 packet names resolve to real opcodes.
 
+chicken gets the protocol comparison against the game bundle *and* against
+Node's `crypto`, plus proof that its mohmoh path still emits plain, 2019-named
+msgpack while moomoo.io gets framed packets off the same code.
+
 Peter Client gets the same treatment, plus checks that the only remaining
 `window.msgpack` call sites are the ones talking to its own relay, that the
 packet it uses to troll the server is dropped instead of being put on a
@@ -817,7 +868,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 323 checks.
+them with `npm test` — 371 checks.
 
 None of them has been verified against the live server; that needs a
 browser and a real Turnstile token.

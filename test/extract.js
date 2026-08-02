@@ -15,6 +15,7 @@ const LEMON_VIS = path.join(ROOT, 'LemonModVisuals.user.js');
 const X18K = path.join(ROOT, 'X18K.user.js');
 const ROBOTICS = path.join(ROOT, 'Robotics.user.js');
 const PETER = path.join(ROOT, 'PeterClient.user.js');
+const CHICKEN = path.join(ROOT, 'Chicken.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -148,6 +149,56 @@ module.exports = {
 
   loadPeter() {
     return require(write('exp_peter.js', expModule(PETER)));
+  },
+
+  /**
+   * chicken's CHKP protocol module together with its patched `io` object,
+   * wired to the game's own msgpack codec and a fake socket.
+   */
+  loadChicken() {
+    const l = lines(CHICKEN);
+
+    const pa = findLine(l, 'const CHKP = (function () {');
+    const pb = findLine(l, 'let chkReady = false;', pa);
+    const proto = l.slice(pa, pb + 1).join('\n');
+
+    const ia = findLine(l, 'let io = new (class {');
+    const ib = findLine(l, '})();', ia);
+    const io = l.slice(ia, ib + 1).join('\n').replace(/^let io = /, 'const io = ');
+
+    const src = `
+const { Encoder, Decoder } = require('./vendor_msgpack.js');
+const _enc = new Encoder(), _dec = new Decoder();
+const msgpack = { encode: v => _enc.encode(v), decode: b => _dec.decode(b) };
+const profanityList = ['fuck'];
+const clientTranslate = new Map([['M', 'sp'], ['D', '2'], ['9', '33']]);
+
+class FakeSocket {
+  constructor(url) { this.url = url; this.readyState = 0; this.binaryType = ''; this.sent = []; }
+  open() { this.readyState = 1; if (this.onopen) this.onopen(); }
+  deliver(data) { this.onmessage({ data }); }
+  close() { this.readyState = 3; if (this.onclose) this.onclose({ code: 1000 }); }
+}
+FakeSocket.prototype.send = function (d) { this.sent.push(Buffer.from(d)); };
+['CONNECTING','OPEN','CLOSING','CLOSED'].forEach((k, i) => { FakeSocket[k] = i; });
+global.WebSocket = FakeSocket;
+global.window = { turnstile: null };
+global.document = { getElementById() { return null; } };
+global.location = { href: 'https://moomoo.io/' };
+
+${proto}
+
+${io}
+
+module.exports = {
+  CHKP, io, FakeSocket, msgpack,
+  window: global.window,
+  proto: () => chkProto,
+  ready: () => chkReady,
+  setHref: h => { global.location.href = h; },
+};
+`;
+    return require(write('chicken.js', src));
   },
 
   /**
