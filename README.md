@@ -35,7 +35,8 @@ and additionally needed their packet vocabulary mapped forward.
   all three removed. **Do not run the original.**
 
 Plus **`MooUnpatcher.user.js`** — install it once and run old mods unchanged,
-instead of patching them one at a time. See below.
+instead of patching them one at a time. Version 2 repairs the environment as
+well as the protocol, and names whatever is left over. See below.
 
 `reference/` holds the two game bundles they were ported against
 (`game-index.js` = file 1, `game-vendor.js` = file 2) for future diffing.
@@ -612,17 +613,76 @@ once an `onmessage` exists is the mod's, and only those get the rewritten copy.
 The game keeps seeing raw numeric opcodes; the mod sees the names it was
 written against. Both are asserted in the tests.
 
-## What it does not do
+That rule has one blind spot: a **full client replacement** is the *first*
+handler on its socket, because there is no game bundle underneath it, so the
+ordering rule mistakes it for the game and hands it raw opcodes. v2 adds a
+second, independent signal — a stack trace taken where the handler is
+installed. A frame from `chrome-extension://`, `moz-extension://` or a manager's
+`userscript.html` wrapper can only be a mod. It can only ever promote *game* to
+*mod* on positive evidence, so a manager that injects without leaving a trace
+(Violentmonkey's page mode) falls back to the ordering rule unchanged and
+nothing that worked before can start failing.
 
-- **Bugs specific to one mod.** A wrong `@run-at`, an unguarded
-  `getElementById` that throws on line 25, a dead CDN `@require`, a stale
-  connect URL. Those were four separate hand fixes in `ae86` alone.
-- **Full client replacements** that own the socket outright and decode with
-  their own bundled codec (Revelation, the Laffer remake). Hook-style mods —
-  where the real game is still running underneath — are the target.
+---
+
+# What v2 added: the other half of every hand fix
+
+The transport was never why most of these mods were dead. Each one repaired by
+hand in this project needed the *same handful* of non-protocol fixes as well,
+and a mod that throws on line 25 never reaches the socket at all. Those fixes
+are now shims, so they apply to any mod:
+
+| What breaks | What v2 does |
+|---|---|
+| `getElementById("adCard").parentNode` — the ad teardown every mod of this era opens with. The elements are gone; the mod dies before drawing a menu. | For a **closed list of 19 removed ids only**, hand back a real but hidden element, parented so `.parentNode.removeChild` and `.parentElement.style` work too. Hiding, removing or writing into it are exactly the no-ops the mod wanted. Extend with `window.UNPATCH_EXTRA_IDS`. |
+| `unsafeWindow`, `GM_getValue`, `GM_setValue`, `GM_addStyle`, … — undefined under `@grant none`, and a `ReferenceError` at the top level kills the *whole* script. | All of them shimmed, storage backed by `localStorage` under a namespaced key, plus the promise-shaped `GM.*` namespace. `unsafeWindow` is genuinely the page window under `@grant none`, so that one is a shim and not a workaround. |
+| A dead CDN `@require` for msgpack. | `window.msgpack`, `window.msgpack5()` and the `{Encoder, Decoder}` classes — three dialects, same two functions, so no mod has to care which library it was written against. |
+| A stale connect token. The bundle sends `?token=` + `"cf:" + turnstileToken`; a mod written against reCAPTCHA sends something else, the server closes the socket, and it looks exactly like being stuck on *Connecting*. | The socket URL is repaired on the way into the constructor: a token that is already `cf:` is left alone, a stale one is replaced, a missing one is added. |
+| The bundle freezes the constructor at boot — `Object.defineProperty(window, "WebSocket", {value: kn, writable: false, configurable: false})` — silently disabling any mod that wraps it. | `window.WebSocket` is installed as a **non-configurable accessor**, which turns that pin into a `TypeError` the bundle already swallows in its own `catch {}`. The property stays ours *and* stays assignable. |
+| A missing `@run-at document-start` in the mod. | Already handled, and now documented: the reference the game captured is ours either way, so a late mod's hook is still picked up. |
+
+## And when it still breaks, it says why
+
+The point of all this is that you stop reading a mod line by line to find out
+why it is dead. Every uncaught error is matched against the failure modes this
+family actually has:
+
+```
+[unpatch] a script threw: GM_setValue is not defined
+       -> "GM_setValue" is a userscript-manager API that does not exist under
+          "@grant none". The unpatcher shims it -- make sure it is ordered
+          ABOVE the mod.
+```
+
+and `unpatch.report()` prints everything the shim did — generation detected,
+packets framed, names it had to drop, shims installed, placeholders handed out,
+errors seen. That one object is usually enough to say what a mod needs.
+
+## What it still does not do
+
+- **Mods that scrape the game bundle** for its minified variable names. Those
+  break on every rebuild and need a real edit — the report says so by name.
 - **Payload shape changes**, as opposed to packet renames.
+- **Stacking on an already-repaired script.** A mod that frames its own packets
+  does not need this, and running both puts two sequence counters on one
+  socket. It keeps working, and warns once.
 
-So it fixes the protocol for you. It is not a promise that a given mod works.
+So it fixes the protocol *and* the environment for you. It is still not a
+promise that a given mod works — but when one does not, it tells you why.
+
+## How it is checked
+
+`test/unpatcher.js` drives it with two synthetic mods (one 2019-generation, one
+current) against a server built from the game bundle's own crypto, and asserts
+every shim above — 69 checks.
+
+A node harness with a hand-written fake DOM can only go so far, though: the
+fake is a *model* of the browser, and the model is the thing under test. So
+`tools/probe-unpatcher.js` loads the shim into a real Chromium, on a page that
+behaves the way moomoo.io does (ads already gone, `WebSocket` frozen after we
+load), and bolts on a synthetic mod that commits **all seven** boot mistakes at
+once — every one taken from a real script in this repo. It reports whether that
+mod survived. It does.
 
 ---
 
@@ -1079,7 +1139,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 680 checks.
+them with `npm test` — 728 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
