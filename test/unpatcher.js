@@ -85,7 +85,8 @@ global.window = {
     removeItem(k) { storage.delete(k); }
   },
   addEventListener(t, f) { (listeners[t] = listeners[t] || []).push(f); },
-  dispatch(t, ev) { (listeners[t] || []).forEach(f => f(ev)); }
+  dispatch(t, ev) { (listeners[t] || []).forEach(f => f(ev)); },
+  location: { hostname: 'sandbox.moomoo.io' }
 };
 global.WebSocket = FakeWebSocket;
 global.navigator = { clipboard: { writeText() { return Promise.resolve(); } } };
@@ -249,12 +250,24 @@ console.log('\n4. safety');
   U.WebSocket.prototype.nsend.call(sock, U.EXP.encode(['totally-unknown', [1]]));
   check(sock.sentRaw.length === 0, 'a name with no opcode is dropped');
 
-  // already-framed traffic must not be framed twice
-  const already = frameFromServerSide('K', [1], 4);
+  // Already-framed traffic must not be framed twice -- but it must be
+  // renumbered, or the game's counter and ours run side by side on one socket.
+  const already = frameFromServerSide('K', [1], 4000);
   sock.sentRaw.length = 0;
   U.WebSocket.prototype.nsend.call(sock, already);
-  check(sock.sentRaw.length === 1 && Buffer.from(sock.sentRaw[0]).equals(Buffer.from(already)),
-        'already-framed traffic passes through byte-for-byte');
+  check(sock.sentRaw.length === 1, 'already-framed traffic is not framed a second time');
+  {
+    const out = readFrame(sock.sentRaw[0]);
+    check(out.ok, 'and is re-signed correctly');
+    check(out.name === 'K' && JSON.stringify(out.args) === '[1]', 'with its opcode and arguments intact');
+    check(out.seq !== 4000, "but carrying the shim's sequence number, not the sender's");
+
+    // the point of it: an injected packet continues the same run
+    sock.sentRaw.length = 0;
+    U.WebSocket.prototype.nsend.call(sock, U.EXP.encode(['sp', [{ name: 'q' }]]));
+    check(readFrame(sock.sentRaw[0]).seq === out.seq + 1,
+          'so a mod packet injected next to the game traffic continues one run');
+  }
 
   // the aliases mods use must all resolve to the framing path, not to the hook
   const aliases = ['nsend', 'oldSend', 'staticSend'];
@@ -281,8 +294,12 @@ console.log('\n4. safety');
   sock.sentRaw.length = 0;
   U.WebSocket.prototype.send.call(sock, already);
 
-  check(sock.sentRaw.length === 1 && Buffer.from(sock.sentRaw[0]).equals(Buffer.from(already)),
-        'a mod that frames for itself still gets its frame out untouched');
+  check(sock.sentRaw.length === 1, 'a mod that frames for itself still gets its frame out');
+  {
+    const out = readFrame(sock.sentRaw[0]);
+    check(out.ok && out.name === '9' && JSON.stringify(out.args) === '[1.5]',
+          'unchanged except for the sequence, which is pulled into one run');
+  }
   check(U.said.warn.some(w => /does not need the unpatcher/.test(w)),
         'and is told it does not need the unpatcher');
 }
@@ -398,6 +415,16 @@ console.log('\n9. the connect URL');
         'a token that is already current is not touched');
   check(U.UNPATCH.fixUrl('https://api.moomoo.io/x') === 'https://api.moomoo.io/x',
         'and nothing that is not a socket URL is rewritten');
+
+  // The token is a credential. Mods in this family really do open sockets to
+  // hosts of their own -- jester talks to two glitch.me projects -- and those
+  // must never be handed the user's Turnstile solve.
+  check(U.UNPATCH.fixUrl('wss://beautiful-sapphire-toad.glitch.me') === 'wss://beautiful-sapphire-toad.glitch.me',
+        'a third-party socket is never given a token');
+  check(U.UNPATCH.fixUrl('wss://evil.example/?token=steal-me') === 'wss://evil.example/?token=steal-me',
+        'not even one that asks for a token by name');
+  check(U.UNPATCH.fixUrl('wss://private.server.tc/?token=re%3AOLD') === 'wss://private.server.tc/?token=cf%3ATOK',
+        'but a private moomoo server carrying a real captcha token still gets repaired');
 
   const sock = new w.WebSocket('wss://x.moomoo.io');
   check(sock.url === 'wss://x.moomoo.io?token=cf%3ATOK', 'a mod opening a socket gets the repaired URL');

@@ -637,7 +637,8 @@ are now shims, so they apply to any mod:
 | `getElementById("adCard").parentNode` — the ad teardown every mod of this era opens with. The elements are gone; the mod dies before drawing a menu. | For a **closed list of 19 removed ids only**, hand back a real but hidden element, parented so `.parentNode.removeChild` and `.parentElement.style` work too. Hiding, removing or writing into it are exactly the no-ops the mod wanted. Extend with `window.UNPATCH_EXTRA_IDS`. |
 | `unsafeWindow`, `GM_getValue`, `GM_setValue`, `GM_addStyle`, … — undefined under `@grant none`, and a `ReferenceError` at the top level kills the *whole* script. | All of them shimmed, storage backed by `localStorage` under a namespaced key, plus the promise-shaped `GM.*` namespace. `unsafeWindow` is genuinely the page window under `@grant none`, so that one is a shim and not a workaround. |
 | A dead CDN `@require` for msgpack. | `window.msgpack`, `window.msgpack5()` and the `{Encoder, Decoder}` classes — three dialects, same two functions, so no mod has to care which library it was written against. |
-| A stale connect token. The bundle sends `?token=` + `"cf:" + turnstileToken`; a mod written against reCAPTCHA sends something else, the server closes the socket, and it looks exactly like being stuck on *Connecting*. | The socket URL is repaired on the way into the constructor: a token that is already `cf:` is left alone, a stale one is replaced, a missing one is added. |
+| A stale connect token. The bundle sends `?token=` + `"cf:" + turnstileToken`; a mod written against reCAPTCHA sends something else, the server closes the socket, and it looks exactly like being stuck on *Connecting*. | The socket URL is repaired on the way into the constructor: a token that is already `cf:` is left alone, a stale one is replaced, a missing one is added. **Game sockets only** — a captcha token is a credential, and these mods really do open sockets to hosts of their own (jester talks to two `glitch.me` projects). Qualifying means the page's own registrable domain, or a URL already carrying an `alt:`/`re:`/`cf:` token so private servers still work. |
+| Two sequence counters on one socket. The bundle frames its own packets with `const n = ++Z.seq` and hands us the finished frame; the shim's `EXP.send` counts separately, so the moment a mod injects anything the two collide. | Already-framed traffic is renumbered into the shim's run — same opcode, same arguments, re-signed — instead of passing through. For a game-only stream both counters step together, so it costs nothing until it matters. |
 | The bundle freezes the constructor at boot — `Object.defineProperty(window, "WebSocket", {value: kn, writable: false, configurable: false})` — silently disabling any mod that wraps it. | `window.WebSocket` is installed as a **non-configurable accessor**, which turns that pin into a `TypeError` the bundle already swallows in its own `catch {}`. The property stays ours *and* stays assignable. |
 | A missing `@run-at document-start` in the mod. | Already handled, and now documented: the reference the game captured is ours either way, so a late mod's hook is still picked up. |
 
@@ -674,7 +675,7 @@ promise that a given mod works — but when one does not, it tells you why.
 
 `test/unpatcher.js` drives it with two synthetic mods (one 2019-generation, one
 current) against a server built from the game bundle's own crypto, and asserts
-every shim above — 69 checks.
+every shim above — 77 checks.
 
 A node harness with a hand-written fake DOM can only go so far, though: the
 fake is a *model* of the browser, and the model is the thing under test. So
@@ -683,6 +684,16 @@ behaves the way moomoo.io does (ads already gone, `WebSocket` frozen after we
 load), and bolts on a synthetic mod that commits **all seven** boot mistakes at
 once — every one taken from a real script in this repo. It reports whether that
 mod survived. It does.
+
+`tools/probe-mod.js <file>` does the same for **any** mod you hand it: it reads
+every id the mod looks up (including through a `getEl`-style wrapper), builds a
+page that has them, loads the unpatcher and then the mod, and reports what threw
+and on which line. Running it on `jester mod 11` — a 10,910-line hook mod whose
+msgpack `@require` still points at rawgit — reports no errors, `window.msgpack`
+present and the mod's socket hook installed. Two of the failures in its first
+run were the probe's fault, not the mod's (a missing `getEl` id, and a `<div>`
+where the page has a `<canvas>`); both are fixed, which is the point of running
+it rather than reading the file.
 
 ---
 
@@ -1139,7 +1150,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 728 checks.
+them with `npm test` — 736 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.

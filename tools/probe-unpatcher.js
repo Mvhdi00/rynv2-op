@@ -57,8 +57,13 @@ const BROKEN_MOD = `
   page.on('pageerror', e => logs.push('[pageerror] ' + (e.stack || e.message).split('\n').slice(0, 2).join(' | ')));
 
   // A blank page with none of the ad furniture -- i.e. moomoo.io as it is now.
-  await page.setContent('<!doctype html><html><head><title>probe</title></head><body>'
-    + '<div id="gameCanvas"></div></body></html>');
+  // Served *as* moomoo.io, because the shim decides what counts as a game
+  // socket from the page's own origin, and about:blank has none.
+  await page.route('**/*', route => route.fulfill({
+    status: 200, contentType: 'text/html',
+    body: '<!doctype html><html><head><title>probe</title></head><body><div id="gameCanvas"></div></body></html>'
+  }));
+  await page.goto('https://moomoo.io/');
 
   // 1. the unpatcher, at document-start
   await page.addScriptTag({ content: fs.readFileSync('/home/user/rynv2-op/MooUnpatcher.user.js', 'utf8') })
@@ -95,7 +100,12 @@ const BROKEN_MOD = `
     // the mod's own wrapper sees the URL it was given, so the repaired one has
     // to be read off the socket that actually got opened
     connectUrl: (function () {
-      try { return new WebSocket('wss://example.invalid/').url; } catch (e) { return 'threw: ' + e.message; }
+      try { return new WebSocket('wss://sgp.moomoo.io/').url; } catch (e) { return 'threw: ' + e.message; }
+    })(),
+    // the token is a credential: a socket the mod opens to its own host must
+    // never be handed the user's Turnstile solve
+    thirdPartyUrl: (function () {
+      try { return new WebSocket('wss://beautiful-sapphire-toad.glitch.me/').url; } catch (e) { return 'threw'; }
     })(),
     modWrapperSawUrl: window.__sawUrl,
     report: window.unpatch ? window.unpatch.report() : null,
@@ -116,6 +126,7 @@ const BROKEN_MOD = `
     && state.realIdStillNull
     && state.gameCanvasReal
     && /token=cf%3APROBE-TOKEN/.test(state.connectUrl || '')
+    && !/token=/.test(state.thirdPartyUrl || '')
     && !logs.some(l => l.startsWith('[pageerror]'));
 
   console.log('\n' + (ok ? '=> the broken mod booted clean' : '=> SOMETHING IS STILL BROKEN'));

@@ -6,6 +6,7 @@
     "deobfuscate": "DEOB_AFTER='function __lemonBoot() {' DEOB_UNTIL='} // end __lemonBoot' node tools/deobfuscate.js LemonMod.obfuscated.user.js LemonMod.user.js",
     "build:unpatcher": "node tools/build-unpatcher.js",
     "probe:unpatcher": "node tools/probe-unpatcher.js",
+    "probe:mod": "node tools/probe-mod.js",
     "preview:menu": "node tools/preview-menu.js menu-preview.html && node tools/shot.js menu-preview.html menu-preview.png",
     "preview:unx": "node tools/preview-chicken.js chicken-preview.html && node tools/shot.js chicken-preview.html chicken-preview.png"
   },

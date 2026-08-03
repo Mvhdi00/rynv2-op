@@ -703,6 +703,25 @@ const UNPATCH = (function () {
 
     let alreadyCurrentWarned = false;
 
+    // Re-stamp an already-framed packet with our sequence number and re-sign
+    // it. Returns the original bytes untouched if anything about it surprises
+    // us -- a packet that goes out with the wrong number is recoverable, one
+    // that does not go out at all is not.
+    function renumber(sock, bytes) {
+        const st = EXP.stateOf(sock);
+        if (!st || st.mode !== 1) return bytes;
+        try {
+            const parsed = EXP.decode(bytes.subarray(6));
+            if (!Array.isArray(parsed) || typeof parsed[0] !== "number") return bytes;
+            parsed[2] = ++st.seq;
+            const payload = EXP.encode(parsed)
+                , frame = new Uint8Array(6 + payload.length);
+            frame.set(EXP._internals.tag(st.key, payload), 0);
+            frame.set(payload, 6);
+            return frame;
+        } catch (e) { return bytes; }
+    }
+
     // Takes whatever a mod handed us and puts it on the wire correctly.
     function transmit(sock, data) {
         const bytes = toBytes(data);
@@ -710,6 +729,15 @@ const UNPATCH = (function () {
         if (!EXP.isSecure(sock)) return EXP.nativeSend.call(sock, bytes);
         log.handshake = true;
         if (isAlreadyFramed(sock, bytes)) {
+            // The game frames its own packets -- `const n = ++Z.seq` in the
+            // bundle -- and hands us the finished frame. Our own EXP.send has
+            // a second, independent counter, so passing this through untouched
+            // puts two numbering schemes on one socket and the moment a mod
+            // injects anything the two collide. Renumber it into our run
+            // instead: same opcode, same arguments, one sequence.
+            //
+            // For a game-only stream this is a no-op -- both counters start at
+            // zero and step together -- so it costs nothing until it matters.
             // A mod that frames its own packets already speaks the current
             // protocol -- it does not need this shim, and stacking the two
             // means two independent sequence counters on one socket. Passing
@@ -721,7 +749,7 @@ const UNPATCH = (function () {
                 console.warn("[unpatch] this mod already frames its own packets, so it does not need the "
                     + "unpatcher. Running both puts two sequence counters on one socket -- turn one of them off.");
             }
-            return EXP.nativeSend.call(sock, bytes);
+            return EXP.nativeSend.call(sock, renumber(sock, bytes));
         }
         try {
             const parsed = EXP.decode(bytes);
@@ -1089,10 +1117,33 @@ const UNPATCH = (function () {
     // A mod written against reCAPTCHA sends a token with no "cf:" prefix, or
     // no token at all, and the server closes the socket at once -- which from
     // the outside looks exactly like a mod stuck on "Connecting".
+    // A captcha token is a credential, so it goes to the game server and
+    // nowhere else. Mods in this family really do open sockets to third-party
+    // hosts of their own (jester talks to a couple of glitch.me projects), and
+    // appending the token to those would hand the user's Turnstile solve to
+    // someone else's server. Two ways to qualify, both narrow:
+    //   - the host is the page's own registrable domain or a subdomain of it
+    //   - or the URL already carries a moomoo captcha token ("alt:", "re:" or
+    //     "cf:"), which is unambiguous even on a private server
+    function isGameSocket(text) {
+        let host;
+        try { host = new URL(text).hostname.toLowerCase(); } catch (e) { return false; }
+        let page = "";
+        try { page = (window.location.hostname || "").toLowerCase(); } catch (e) {}
+        const domain = page.split(".").slice(-2).join(".");
+        if (domain && (host === domain || host.slice(-(domain.length + 1)) === "." + domain)) return true;
+        const found = /[?&]token=([^&]*)/.exec(text);
+        if (!found) return false;
+        let value = found[1];
+        try { value = decodeURIComponent(found[1]); } catch (e) {}
+        return /^(?:alt|re|cf):/.test(value);
+    }
+
     function fixUrl(url) {
         let text;
         try { text = String(url); } catch (e) { return url; }
         if (!/^wss?:\/\//i.test(text)) return url;
+        if (!isGameSocket(text)) return url;        // not ours to put a token on
         const tok = EXP.token();
         if (!tok) return url;                       // nothing better to offer
         const encoded = encodeURIComponent(tok);
