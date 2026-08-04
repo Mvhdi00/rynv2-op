@@ -149,6 +149,8 @@ fixed in place rather than having its features ported off it.
 | | five upgrades carry no `pre` | restored — upgrades need their prerequisite |
 | | `shieldAngle` widened to `PI/2` | back to the bundle's `PI/3` |
 | | `maxPlayers` 100 | 40 |
+| **Sandbox** | flat cap of 99 for every group | `sandboxLimit \|\| max(limit * 3, 99)` — 299 for mills, boosters, teleporters |
+| | tooltip counts against the normal limit | counts against the sandbox cap |
 
 The `bundle.js` line is why nothing worked at all: the game stopped shipping
 it, so the fork removed nothing and both clients ran at once.
@@ -186,6 +188,22 @@ map onto the new ones position for position — `sp`→`M`, `33`→`9`, `ch`→`
 That means the translation lives entirely in the socket module: the ~12k lines
 of game and mod code above it keep speaking the old names, and nothing else in
 the fork had to be touched.
+
+### Sandbox
+
+The bundle resolves the placement cap per group:
+
+```js
+inSandbox ? group.sandboxLimit || Math.max(group.limit * 3, 99) : group.limit
+```
+
+The fork capped everything at a flat 99 in the gate, and showed the plain
+non-sandbox limit in the item tooltip. So mills, boosters and teleporters
+stopped at 99 where the server allows 299, and the counter read `x/7` for a
+mill instead of `x/299`.
+
+The resource half of the bundle's `canBuild` needed no port — the fork's
+`hasRes` already returns `true` in sandbox.
 
 ### The rest of the audit
 

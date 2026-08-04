@@ -997,9 +997,10 @@ var webpackModules = [function(e, t, i) {
                         html: e.req[n] + "<span class='itemInfoReqVal'> x" + e.req[n + 1] + "</span>",
                         parent: ze
                     });
+                var lmt = r.inSandbox ? e.group.sandboxLimit || Math.max(e.group.limit * 3, 99) : e.group.limit;
                 e.group.limit && o.generateElement({
                     class: "itemInfoLmt",
-                    text: (A.itemCounts[e.group.id] || 0) + "/" + e.group.limit,
+                    text: (A.itemCounts[e.group.id] || 0) + "/" + lmt,
                     parent: ze
                 })
             } else
@@ -8545,7 +8546,7 @@ var webpackModules = [function(e, t, i) {
             var t = (this.scale + e.scale + (e.placeOffset || 0));
             var n = this.x2 + (t * Math.cos(r));
             var i = this.y2 + (t * Math.sin(r));
-            return this.canBuild(e) && (e.consume || u.checkItemLocation(n, i, e.scale, 0.6, e.id, false, this));
+            return this.canBuild(e) && !(e.consume && this.skin && this.skin.noEat) && (e.consume || u.checkItemLocation(n, i, e.scale, 0.6, e.id, false, this));
         },
             this.hasRes = function(e, t) {
             if (i.inSandbox) return true;
@@ -8562,7 +8563,8 @@ var webpackModules = [function(e, t, i) {
                         n += 2
         },
             this.canBuild = function(e) {
-            if (e.group.limit && this.itemCounts[e.group.id] >= (i.inSandbox ? 99 : e.group.limit)) return false;
+            var lmt = i.inSandbox ? e.group.sandboxLimit || Math.max(e.group.limit * 3, 99) : e.group.limit;
+            if (lmt && this.itemCounts[e.group.id] >= lmt) return false;
             return this.hasRes(e);
         },
             this.gather = function() {

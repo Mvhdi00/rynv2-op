@@ -985,6 +985,58 @@ edit(
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * 10. Sandbox placement limits
+ *
+ * The fork caps every group at a flat 99 in sandbox. The bundle resolves it
+ * per group:
+ *
+ *   inSandbox ? group.sandboxLimit || Math.max(group.limit * 3, 99)
+ *             : group.limit
+ *
+ * so mills, boosters and teleporters get 299 there, not 99. Both the gate and
+ * the counter in the item tooltip read it, and the fork had the flat cap in
+ * the gate and the plain limit in the tooltip.
+ *
+ * The resource half of the bundle's canBuild needs no port: the fork's hasRes
+ * already returns true in sandbox.
+ * ------------------------------------------------------------------ */
+
+const sandboxCap = (v) =>
+  `${v}.inSandbox ? e.group.sandboxLimit || Math.max(e.group.limit * 3, 99) : e.group.limit`;
+
+edit(
+  "sandbox: canBuild honours sandboxLimit instead of a flat 99",
+  `            if (e.group.limit && this.itemCounts[e.group.id] >= (i.inSandbox ? 99 : e.group.limit)) return false;
+            return this.hasRes(e);`,
+  `            var lmt = ${sandboxCap("i")};
+            if (lmt && this.itemCounts[e.group.id] >= lmt) return false;
+            return this.hasRes(e);`
+);
+
+edit(
+  "sandbox: the item tooltip counts against the sandbox cap",
+  `                e.group.limit && o.generateElement({
+                    class: "itemInfoLmt",
+                    text: (A.itemCounts[e.group.id] || 0) + "/" + e.group.limit,
+                    parent: ze
+                })`,
+  `                var lmt = ${sandboxCap("r")};
+                e.group.limit && o.generateElement({
+                    class: "itemInfoLmt",
+                    text: (A.itemCounts[e.group.id] || 0) + "/" + lmt,
+                    parent: ze
+                })`
+);
+
+/* The bundle also refuses to eat while wearing a noEat hat. The fork's table
+ * carries the flag but its buildItem never checked it. */
+edit(
+  "buildItem: honour the noEat hat flag",
+  `            return this.canBuild(e) && (e.consume || u.checkItemLocation(n, i, e.scale, 0.6, e.id, false, this));`,
+  `            return this.canBuild(e) && !(e.consume && this.skin && this.skin.noEat) && (e.consume || u.checkItemLocation(n, i, e.scale, 0.6, e.id, false, this));`
+);
+
 fs.writeFileSync(OUT, code);
 
 console.log(`wrote ${path.relative(ROOT, OUT)} (${code.length} bytes)`);

@@ -251,6 +251,31 @@ function table(pattern, scope) {
   if (!arrBad) note(`config: ${arrSeen} table(s) match the bundle`);
 }
 
+/* ---- 3c. sandbox placement caps -------------------------------------- */
+
+{
+  if (/inSandbox \? 99 :/.test(script)) fail("sandbox still uses a flat cap of 99");
+
+  const sites = script.match(/sandboxLimit \|\| Math\.max\(e\.group\.limit \* 3, 99\)/g) || [];
+  if (sites.length < 2) {
+    fail(`sandbox cap formula appears ${sites.length} time(s), expected the gate and the tooltip`);
+  }
+
+  /* Same formula the bundle uses, applied to the shipped groups. */
+  const cap = (g, sandbox) =>
+    sandbox ? (g.sandboxLimit || Math.max(g.limit * 3, 99)) : g.limit;
+
+  const gameSrc = indexLines.join("\n");
+  if (!/sandboxLimit \|\| Math\.max\([a-zA-Z.]+\.group\.limit \* 3, 99\)/.test(gameSrc)) {
+    fail("the bundle no longer uses the sandbox cap formula this build was written against");
+  }
+
+  const raised = drivers.itemGroups
+    .filter((g) => g.limit && cap(g, true) !== cap(g, false))
+    .map((g) => `${g.name} ${g.limit}→${cap(g, true)}`);
+  note(`sandbox: caps lift for ${raised.length} group(s) - ${raised.join(", ")}`);
+}
+
 /* ---- 4. entry ------------------------------------------------------- */
 
 {
