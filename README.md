@@ -20,12 +20,16 @@ The two clients are not the same kind of thing:
 
 The game shipped in `src/game_index.js` negotiates an opcode table per
 connection (`io-init[3] === 1`), permutes the c2s/s2c alphabets from a seed,
-and prefixes every client frame with 6 HMAC bytes. Luna 1.1 predates that
-transport entirely — it is a fork of the old webpack `bundle.js` and cannot
-connect to the current game at all.
+and prefixes every client frame with 6 HMAC bytes. Luna 1.1 sends plain
+msgpack with no seed, no sequence number and no signature, so as shipped it
+cannot connect to the current game.
 
 So Luna's code could not be merged in as code. Its features were ported across
 onto the RYN core instead, and everything else in RYN was left alone.
+
+(Luna is closer to current than that table suggests — its *opcode names* are
+already the ones the game uses, only the frame around them is stale. See
+[Luna](#luna-1) for the build that closes that gap.)
 
 ## What the mix changes
 
@@ -249,11 +253,80 @@ here.
 
 ---
 
+---
+
+## Luna
+
+`Luna_Fixed.user.js` is the third build: Luna 1.1 on the current transport.
+
+Luna is a bundle fork like luminary but a much later one, and the audit came
+back far cleaner. Its **opcode names are already current** — all 17 c2s and
+all 36 s2c match the shipped alphabets exactly, which is independent
+confirmation of the mapping the luminary build had to derive. Its weapons,
+hats, accessories, projectiles and item groups diff clean too, item groups
+included: it already carries the real limits and `sandboxLimit`.
+
+Luna also does not delete the game's script. It lets the real client run,
+replaces `window.WebSocket` to capture the address that client dials, and
+connects its own socket there — so discovery and the captcha are handled by
+the real client and never needed porting.
+
+### What was wrong
+
+| | Was | Is |
+|---|---|---|
+| **Packet** | plain `[name, args]` | `[opcode, args, seq]` behind a 6-byte truncated HMAC-SHA256, permuted from the `io-init` seed |
+| | play starts on `onopen` | play starts on `io-init`, after negotiation |
+| **Hook** | replaces `window.WebSocket` at document-idle | installs the stub at `document-start`, defers the client to `DOMContentLoaded` |
+| **Sandbox** | `inSandbox = process.env.VULTR_SCHEME === "mm_exp"` | hostname, the only signal that resolves in a browser |
+| | `canBuild` gated at the normal limits | the bundle's `sandboxLimit \|\| max(limit * 3, 99)` |
+| | placer read `sandboxLimit \|\| 99` | same per-group cap |
+| **Tables** | five upgrades carry no `pre` | restored |
+| **Config** | `maxPlayers`/`maxPlayersHard` `Infinity` | 40 / 50 |
+
+The hook row is the one that stops it dead. `window.WebSocket` is now frozen:
+
+```js
+const kn = window.WebSocket;
+Object.defineProperty(window, "WebSocket", { value: kn, writable: !1, configurable: !1 });
+```
+
+That runs during the client's own module execution. Module scripts are
+deferred, so it happens just before `DOMContentLoaded` — after a
+document-idle userscript would have run. The stub therefore goes in on its own
+at `document-start`, ahead of the freeze, and the rest of Luna waits for a DOM
+it can touch. The stub carries a prototype `send`, because the client reads
+`window.WebSocket.prototype.send` off it at module scope and calls it later.
+
+`inSandbox` is worth a note: Luna's is a server-side expression, always false
+in a browser. The shipped client's own is `Ut && {}.IS_SANDBOX`, equally dead
+— the one place it shows sandbox caps it uses the hostname instead, which is
+what this build keys off.
+
+`deathFadeout` is left at Luna's `0` rather than the bundle's `3000`. It is a
+deliberate change and client-side only, so nothing disagrees with the server
+over it.
+
+### Verification
+
+```sh
+node tools/build-luna.js
+node tools/verify-luna.js
+node --check Luna_Fixed.user.js
+```
+
+Same frame-code comparison as the luminary build, plus every table, every
+config scalar, the sandbox caps, and the ordering that keeps the stub ahead of
+the freeze.
+
+---
+
 ## Layout
 
 ```
 ReUp_Mix.user.js          the ReUp Mix build output
 Luminary_Fixed.user.js    the luminary build output
+Luna_Fixed.user.js        the Luna build output
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -266,6 +339,8 @@ tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/build-luminary.js   src/Luminary_v3.js   -> Luminary_Fixed.user.js
 tools/verify-luminary.js  built script vs. the game bundle's own frame code
+tools/build-luna.js       src/Luna_Client_1.1.js -> Luna_Fixed.user.js
+tools/verify-luna.js      built script vs. the game bundle's own frame code
 ```
 
 ## Build
