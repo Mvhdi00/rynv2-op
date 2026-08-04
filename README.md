@@ -117,13 +117,17 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+ReUp_Mix.user.js          the build output — this is the script to install
+Whiteout_Abdo.user.js     the Whiteout client, repaired against the same bundle
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
+src/Whiteout_Abdo_v4.js   Whiteout v4 as received, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
+tools/verify-whiteout.js  Whiteout's tables + transport vs. the game bundle
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
@@ -156,6 +160,111 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
+
+---
+
+# Whiteout (hanabira / nexoos)
+
+`Whiteout_Abdo.user.js` is the Whiteout v4 client — a second, unrelated
+userscript — repaired against the same bundles in `src/`. It is not built from
+RYN and shares no code with the mix; it is checked in here because it is
+verified against the same drivers.
+
+Unlike RYN, Whiteout does not rewrite the game bundle. It lets the bundle run,
+kills its render loop (`window.requestAnimFrame`), draws `gameCanvas` itself,
+and rides the bundle's socket. Everything below follows from that.
+
+## What was broken
+
+### The transport
+
+Whiteout spoke the old wire format: `msgpack([type, args])` with single-letter
+opcodes, sent raw. The shipped game negotiates a per-connection opcode
+permutation on `io-init`, numbers every client frame with a sequence counter,
+and prefixes it with 6 bytes of truncated HMAC-SHA256. Nothing Whiteout sent
+was parseable by the server, and nothing the server sent was parseable by
+Whiteout — `s2c` types arrive as permuted integers, and its handler table is
+keyed by letters.
+
+The client now carries the bundle's transport verbatim: SHA-256, the HMAC
+construction, the seeded Fisher-Yates that derives both alphabets from the
+`io-init` seed, and a msgpack codec written to match `src/game_vendor.js`
+byte-for-byte. Every socket gets its own crypto context, so the bot sockets
+are framed correctly too.
+
+Outgoing frames are re-signed with a single counter owned by the client, so the
+sequence stays contiguous across both the bundle's packets and Whiteout's own
+— dropping a packet in the filter no longer leaves a hole in the sequence.
+
+### The entry point
+
+Two separate problems, both fatal before a frame was ever sent.
+
+**The hook was installed too late.** The bundle captures
+`WebSocket.prototype.send` and the `WebSocket` constructor at module scope
+(`src/game_index.js:34-35`), before any `document-end` userscript runs. A
+prototype patch applied afterwards is never called, so `WS` was never assigned
+and the message listener was never attached. The script is now `@run-at
+document-start`: it patches the prototype and the constructor before the bundle
+reads them, captures `io-init` from the constructor hook (which fires before
+the bundle assigns `onmessage`), and defers its own body until `window.config`
+and the game DOM exist.
+
+**The body threw at load.** `adCard.remove()` on line 2573 — `#adCard` and
+`#promoImgHolder` no longer exist in the page, so this was a `TypeError` at top
+level that killed every statement after it. The `$(...)` calls near the end
+were a second one: jQuery is not on the page any more. Both are gone; DOM
+lookups that may miss are guarded, and the jQuery calls are plain
+`querySelectorAll`.
+
+### Everything else
+
+| | |
+|---|---|
+| **msgpack** | Was fetched from Greasy Fork at runtime with a `<script>` tag. Now inlined, and checked against `src/game_vendor.js`. |
+| **Argument shapes** | Whiteout appends internal flags and caller labels to its packets (`packet("9", dir, 1, "sendMoveDir")`). Only `"D"` was trimmed before sending. The wire layer now shapes every opcode to the arity the bundle uses, padding with nil, so traffic matches the vanilla client. |
+| **Bot sockets** | Sent the pre-permutation opcodes `a`/`G`/`d` (move / select / attack) and read `setupGame` as `"1"`. Remapped to `9`/`z`/`F` and `C`. |
+| **`skin: "__proto__"`** | The old cyan-skin exploit, sent on every spawn — including from the bots, unconditionally. Spawn now clamps to a real index. See below. |
+| **Sprite paths** | `.././img/`, `./../img/` and absolute `https://moomoo.io/img/` were mixed; the bundle uses `./img/`. Unified. |
+| **Item limits** | Sandbox was hardcoded to 299/99/296 at four sites. Replaced with the bundle's rule, `sandboxLimit \|\| max(limit * 3, 99)` in sandbox and `limit` outside it, and the three missing `sandboxLimit` fields were added to the group table. |
+| **`tmpObj` leaks** | `addPlayerToList` read `tmpObj` — never declared in that scope. It threw on the first `updatePlayers`, i.e. immediately after spawn. A second site assigned to an undeclared `tmpObj` inside the projectile loop. |
+| **`receiveChat`** | Dereferenced the sender before checking it resolved, so a message from an unknown sid threw. |
+| **`packet("B")`** | `B` is not a c2s opcode; the call was a no-op prank payload. Removed. |
+| **Userscript banner** | The bundle detects extension managers and injects a `#userscript-warning` bar. Removed on sight. |
+
+### One deliberate behaviour change
+
+Whiteout sent `skin: "__proto__"` when the player picked the 11th skin colour —
+a colour it adds client-side that the server's table does not have. That is a
+long-patched exploit, and a bad value on the one packet that has to succeed. The
+spawn packet now clamps `skin` to the range the bundle actually ships, captured
+before Whiteout extends the list. The extra colour still renders locally; it is
+no longer sent. **If you want the exploit back, it is one line in the `"M"`
+branch of `outgoing`.**
+
+## Verification
+
+```sh
+node --check Whiteout_Abdo.user.js
+node tools/verify-whiteout.js
+```
+
+`verify-whiteout.js` instantiates the client's `Items` and `Store` classes in a
+sandbox and diffs them field-by-field against `drivers/game-drivers.json`, then
+checks the transport constants, the sprite paths, and that every opcode the
+client sends or handles exists in the bundle's alphabets.
+
+Current state: item groups (14), weapons (16), items (23), projectiles (6),
+hats (46) and accessories (21) match the bundle on every field including
+`name`, `desc` and `src`; 17 outgoing opcodes and 34 `s2c` handlers all
+resolve; signature width, transport mode, table salt and both alphabets are
+present.
+
+Beyond the static check, the transport was exercised in a headless browser
+against the bundle's own codec: frames the client emits are decoded and their
+HMACs re-derived with the functions lifted out of `src/game_index.js` and
+`src/game_vendor.js`, and the client is driven through connect, spawn, a full
+`s2c` message sweep, real keyboard and mouse input, and every menu control.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
