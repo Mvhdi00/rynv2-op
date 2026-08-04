@@ -113,6 +113,28 @@ function LEMONMOD_0x2159e6(_0xfa6633) {
   `/* removed: the two XHR helpers the kill switch used */`
 );
 
+/* The same beacon the Visuals script carried, in the main script too. The
+ * numeric keys, the decoy Math.min/Math.max over a pile of huge floats, and
+ * the base64 are all cover for one line: key 31 returns
+ * https://ksw2-center.glitch.me/mm_aib_1 and key 9012 fetches it, with init()
+ * at the bottom firing it on load, before anything else runs.
+ *
+ * The rotate override key 31 is wrapped around is real — it clamps rotation
+ * values that would otherwise crash the canvas — so that stays and only the
+ * fetch goes. */
+{
+  /* The base64 is read out of the source rather than retyped here, so a
+   * typo cannot quietly turn this edit into a no-op. */
+  const m = /return atob\("([A-Za-z0-9+/=]+)"\);\n  \},\n  9012: \(\) => \{\n    fetch\(LEMONMOD_0x399801\[31\]\(\)\);\n  \},/.exec(code);
+  if (!m) throw new Error("anchor not found: glitch.me beacon");
+  const url = Buffer.from(m[1], "base64").toString();
+  if (!/^https?:\/\//.test(url)) throw new Error(`beacon anchor decoded to something unexpected: ${url}`);
+  edit("remove the glitch.me beacon (" + url + ")", m[0],
+    `return null;
+  },
+  9012: () => {},`);
+}
+
 /* The version ping, and the forced redirect to the author's download page
  * that followed a version it did not like. */
 edit(
@@ -120,6 +142,28 @@ edit(
   `if (LEMONMOD_0x7ec22c("https://lemonmod.com/lemonModUpdate/latest.php"), !LEMONMOD_0x211e6c) console.clear();`,
   `/* removed: latest.php version ping */
 if (!LEMONMOD_0x211e6c) console.clear();`
+);
+
+/* With the ping gone the "latest version" string stays "ERROR", which sends
+ * startup down the branch that sets the page title to "LemonMod Error!" before
+ * the real title lands 800ms later. There is no remote version to compare
+ * against any more, so the build's own version is the latest one. */
+edit(
+  "treat the build's own version as current",
+  `var LEMONMOD_0x2708b = "ERROR";`,
+  `var LEMONMOD_0x2708b = LEMONMOD_0x110d60;`
+);
+
+/* The XHR helper the ping used, now unreferenced. */
+edit(
+  "remove the version-ping fetcher",
+  `function LEMONMOD_0x7ec22c(_0x140590) {
+  var _0x126967 = new XMLHttpRequest();
+  _0x126967.onreadystatechange = function () {
+    LEMONMOD_0x2708b = _0x126967.responseText;
+  }, _0x126967.open("GET", _0x140590, !![]), _0x126967.send(null);
+}`,
+  `/* removed: the XHR helper behind the version ping */`
 );
 
 edit(
@@ -167,11 +211,48 @@ edit(
  * carrying your address and a referer, on a schedule that maps to what you
  * are doing in game. The audio elements stay so the sound code keeps its
  * shape; they just have no source. */
-editAll("blank sound base URL", `"https://lemonmod.com/sound/"`, `""`);
-editAll("blank sound URLs", `https://lemonmod.com/sound/`, ``);
-editAll("blank notification icons", `https://lemonmod.com/img/`, ``);
-editAll("blank update-path assets", `https://lemonmod.com/lemonModUpdate/`, ``);
+/* Blanked to empty strings rather than trimmed to a filename: the
+ * notification helper skips its illustration block when the image argument is
+ * falsy, so an empty string is clean where a relative "Katana.png" would be a
+ * broken-image icon pointing at moomoo.io. */
+edit(
+  "drop the remote menu logo",
+  `<div class=\\"circle\\"><img src=\\"https://lemonmod.com/lemonModUpdate/lemon.png\\" alt=\\"LemonMod v3.0\\" width=\\"300\\" height=\\"300\\"></div>`,
+  `<div class=\\"circle\\"></div>`
+);
+edit(
+  "drop the remote map image",
+  `  $("#mapDisplay").css({
+    "background": "url(https://lemonmod.com/img/map.png)"
+  });`,
+  `  /* removed: map background served from lemonmod.com */`
+);
+{
+  const re = /https:\/\/lemonmod\.com\/(?:img|sound|lemonModUpdate)\/[A-Za-z0-9._-]*/g;
+  const hits = (code.match(re) || []).length;
+  if (hits < 20) throw new Error(`expected the asset URLs to be widespread, found ${hits}`);
+  code = code.replace(re, "");
+  applied.push(`blank remote asset URLs (x${hits})`);
+}
 edit("drop remote cursor", `$("#gameCanvas").css("cursor", "url(https://lemonmod.com/cursor.cur), default")`, `$("#gameCanvas").css("cursor", "default")`);
+editAll("drop src-less Audio elements", `new Audio("")`, `new Audio()`, 6);
+
+/* A synchronous XHR to code.jquery.com, in the middle of startup, whose
+ * response is never read — the surrounding log lines claim it evaluates the
+ * result, but nothing does. It blocks the main thread on a third-party round
+ * trip, and if that host is unreachable for any reason — an ad blocker, a
+ * filtered network, CSP, offline — it throws, and everything below it in the
+ * startup path never runs. That includes the settings menu.
+ *
+ * jQuery is a shim in this build, so there was nothing to fetch even if the
+ * response had been used. */
+edit(
+  "remove the blocking synchronous jQuery fetch",
+  `  _0x172b9e.open("GET", window.location.protocol + "//code.jquery.com/jquery-3.3.1.slim.min.js", ![]);
+  _0x172b9e.send();`,
+  `  /* removed: blocking sync XHR to code.jquery.com whose response was
+   * never read, and which took the rest of startup with it when it failed */`
+);
 
 /* ================================================================== *
  * 2. The Visuals gate
@@ -521,6 +602,56 @@ editAll(
   4
 );
 
+/* The UI setup block — the one that clones #chatButton and #storeButton into
+ * the mod's own menu and console buttons — was wrapped in a catch that blanked
+ * document.body on a 100ms interval, alerted, and reloaded. One missing
+ * element anywhere in a hundred lines cost you the whole page, a reload loop,
+ * and no way to read what went wrong.
+ *
+ * Eleven of the twelve ids it reaches for are confirmed present (the game
+ * bundle creates them, or the block itself does). The twelfth, #gameName, is
+ * static page markup and is touched by the very last statement, so losing it
+ * costs a heading colour. None of that is worth a blank page. */
+edit(
+  "stop a UI setup failure from blanking the page and reloading",
+  `  } catch (_0xc2794f) {
+    setInterval(() => {
+      try {
+        document.body.innerHTML = "";
+      } catch (_0x470bfa) {}
+    }, 100), alert("LemonMod failed to load. Please try again with CTRL+R."), location.reload();
+  }`,
+  `  } catch (_0xc2794f) {
+    /* was: blank the page every 100ms, alert, reload */
+    console.error("[LemonMix] menu setup stopped early:", _0xc2794f);
+  }`
+);
+
+/* The whole settings menu is built behind a flag that a polling loop sets,
+ * and the loop only sets it on readyState "interactive". "complete" falls
+ * through and does nothing.
+ *
+ * So the menu gets built only if the script starts polling during the narrow
+ * window between DOMContentLoaded and load. Start a moment later — a slow
+ * userscript manager, a warm cache, document-idle firing after the page has
+ * settled — and readyState is already "complete", the flag is never set, and
+ * the menu silently never appears. It is a race the original won often enough
+ * to ship. */
+edit(
+  "build the menu when the document is already complete, not just interactive",
+  `      case "interactive":
+        _0x3177fa = 1;
+        break;
+      case "complete":
+        break;`,
+  `      case "interactive":
+      /* was: "complete" fell through without setting the flag, so a script
+       * that started after the page had finished never built the menu */
+      case "complete":
+        _0x3177fa = 1;
+        break;`
+);
+
 /* ================================================================== *
  * 4c. Three references that were already broken
  *
@@ -711,6 +842,20 @@ LemonMix.RingSprite = "data:image/svg+xml;base64," + btoa(
 ${injector}
 `;
 
+/* The two halves of this script need opposite timings.
+ *
+ * The injector has to run at document-start: it claims the bundle <script>
+ * before the browser executes it, and there is no second chance at that.
+ *
+ * The mod body must not. It reads #enterGame and #nameInput straight off the
+ * document at load — the original shipped with no @run-at at all, so a
+ * userscript manager gave it document-idle and the page was already built. At
+ * document-start those lookups return null and the first .addEventListener on
+ * one throws, which takes out everything below it: no menu, no visuals, and a
+ * game that runs perfectly normally because the injector already did its half.
+ *
+ * So the body is deferred to DOMContentLoaded, which is what document-idle
+ * effectively gave it before. */
 const body = `
 /* ================================================================== *
  * LemonMod v3.0
@@ -719,8 +864,19 @@ const body = `
  * and patched by tools/build-lemonmix.js. The identifier names are the ones
  * the obfuscator left behind; they are meaningless, but they are stable, so
  * every edit in the build script can be anchored to an exact string.
+ *
+ * Deferred to DOMContentLoaded: this half reaches for #enterGame and friends
+ * at load, and at document-start they do not exist yet.
  * ================================================================== */
+function LemonMixMain() {
 ${code}
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", LemonMixMain, { once: true });
+} else {
+  LemonMixMain();
+}
 `;
 
 const out = header + "\n(function() {\n" + prelude + body + "\n})();\n";

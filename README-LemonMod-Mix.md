@@ -98,7 +98,8 @@ All of it silent in the originals, and none of it optional:
 | what | where |
 |---|---|
 | **Remote code.** `crCheck.php` fetched on every load; if it answered `1`, `cr.php` was fetched and `eval`'d. | main |
-| **A beacon** to `https://ksw2-center.glitch.me/mm_aib_1`, base64'd and hidden in an object of decoy numeric keys, fired from `init()` on load. | Visuals |
+| **A beacon** to `https://ksw2-center.glitch.me/mm_aib_1`, base64'd and hidden in an object of decoy numeric keys behind a `Math.min`/`Math.max` over a pile of huge floats, fired from `init()` on load. | **both** |
+| **A blocking synchronous XHR** to `code.jquery.com` mid-startup whose response was never read. See [the bugs](#bugs-fixed-along-the-way) — this one did more than waste a round trip. | main |
 | **Death telemetry** — an XHR on every death carrying your health, the damage taken, your weapons, hat, clan and several menu settings. | main |
 | **A version ping** to `latest.php`, and a forced `location.replace` to the author's download page when it disagreed with the build. | main |
 | **A remote stylesheet** from the same host — another way to put content on the page after the fact. | main |
@@ -119,9 +120,37 @@ sending them. The raw sender is a no-op.
 
 ## Bugs fixed along the way
 
-These predate the merge. They are visible now because the packet layer works,
-so the code paths carrying them get reached.
+Most of these predate the merge. They are visible now because the packet layer
+works, so the code paths carrying them get reached.
 
+The first four are why the first build of this script showed nothing in game —
+you got a working game and no mod. Each one silently ends startup partway
+through, and everything below it never runs.
+
+- **The script ran too early.** This build needs `@run-at document-start` so
+  the injector can claim the bundle `<script>` before the browser executes it.
+  But the mod body reads `#enterGame` off the document at load, and at
+  document-start that is `null` — so `null.addEventListener` threw and took
+  every line below it with it. The original shipped with no `@run-at` at all,
+  which got it document-idle and a page that already existed. The body is now
+  deferred to `DOMContentLoaded`; only the injector runs early.
+- **A blocking synchronous XHR to `code.jquery.com`**, halfway through
+  startup, whose response is never read — the log lines around it claim it
+  evaluates the result, but nothing does. If that host is slow it stalls the
+  main thread; if it is unreachable at all — ad blocker, filtered network,
+  CSP, offline — it *throws*, and the settings menu below it never gets built.
+  jQuery is a shim here, so there was nothing to fetch even if the response
+  had been used.
+- **The menu was built behind a readyState race.** A polling loop sets the
+  flag the whole settings menu waits on, and it only set it on
+  `"interactive"`; `"complete"` fell through and did nothing. Start a moment
+  late — a slow userscript manager, a warm cache — and the flag never gets
+  set and the menu silently never appears.
+- **Any error in UI setup blanked the page.** The block that clones
+  `#chatButton` and `#storeButton` into the mod's own buttons was wrapped in a
+  catch that cleared `document.body` every 100ms, alerted, and reloaded. One
+  missing element in a hundred lines cost you the whole page, a reload loop,
+  and nothing to read. It now logs and carries on.
 - **`dns()` was never defined.** The developer console builds its commands
   around it and the katana/musket/stick quick-equip helpers call it directly,
   so `!km`, `!pm` and `!sh` threw a `ReferenceError` instead of equipping
@@ -152,6 +181,7 @@ src/lemonmix-injector.js       bundle rewrite hooks + injector
 tools/deobfuscate-lemonmod.js  shipped script -> src/LemonMod_v3.0.js
 tools/build-lemonmix.js        src/* -> LemonMod_Mix.user.js
 tools/verify-lemonmix.js       build vs. the shipped game bundle
+tools/loadtest-lemonmix.js     does the mod actually come up in a headless page
 tools/check-hooks.js           bundle-rewrite hooks vs. the game bundle
 ```
 
@@ -163,7 +193,7 @@ node tools/build-lemonmix.js
 
 Every edit is anchored to an exact string in `src/LemonMod_v3.0.js`, and an
 anchor that is missing or ambiguous fails the build rather than producing a
-half-patched script. 33 edits currently apply.
+half-patched script. 39 edits currently apply.
 
 Regenerating the deobfuscated source is reproducible and not part of the
 normal build:
@@ -179,7 +209,25 @@ node tools/deobfuscate-lemonmod.js <shipped-script.js> src/LemonMod_v3.0.js
 node --check LemonMod_Mix.user.js
 node tools/check-hooks.js LemonMod_Mix.user.js    # needs: npm i --no-save terser
 node tools/verify-lemonmix.js                     # needs terser too
+node tools/loadtest-lemonmix.js                   # needs: npm i --no-save jsdom
 ```
+
+### The load test
+
+`loadtest-lemonmix.js` exists because the protocol checks below were not
+enough. The first build passed every one of them and still showed nothing in
+game: it threw on `null.addEventListener` before it ever reached a menu, and
+no check noticed, because no check ran the script.
+
+So this one runs it, in a headless page built from the element ids the game
+bundle itself reaches for — a missing element here means the mod expects
+something the game does not provide, not that the harness is thin. It reports
+whether the script evaluates, whether all ten of the mod's own UI elements get
+built, whether anything cleared the page, and any error thrown from a timer.
+It runs at both `document-start` and `document-idle`, because the two halves
+of the script want opposite timings.
+
+### The protocol checks
 
 `verify-lemonmix.js` does not read the tables and compare them by eye. It
 lifts the **real transport** out of `src/game_index.js` — the seeded
@@ -197,14 +245,26 @@ translation layer, and takes the resulting frames apart:
   dispatch table, with both directions round-tripping
 - the rewritten bundle re-parsed, with all six injection points present
 - the 16 weapon reload speeds diffed against the shipped table
-- 10 call-home paths shown to be absent from the code
+- 14 call-home paths shown to be absent from the code
 
-Current state: **6/6 hooks bind**, and all of the above passes.
+Current state: **6/6 hooks bind**, the mod builds all ten of its UI elements at
+both load timings, and every check above passes.
 
 ---
 
 ## Notes
 
+- **On the file getting smaller.** The shipped script is 3.1 MB; this build is
+  around 0.6 MB. None of that is missing logic — the shipped file was
+  javascript-obfuscator output, and most of its bulk was the obfuscation
+  itself: a rotated string array, ~300 proxy functions each declaring sixty-odd
+  dummy parameters, call sites passing sixty-odd hex numbers to reach one of
+  them, every integer written as an arithmetic expression, and an opaque
+  `"abcde" === "fghij"` wrapped around most statements. Folding that away is
+  what `tools/deobfuscate-lemonmod.js` does, and it is reproducible: running it
+  on the shipped script reproduces `src/LemonMod_v3.0.js` byte for byte. The
+  logic is all still there — 6,860 lines of it — and the build adds the msgpack
+  codec, the transport primitives, the runtime and the injector on top.
 - Multibox bots are the one thing in the script that still builds frames by
   hand, because they open sockets outside the game's `io` object. They use the
   transport primitives sliced straight out of `src/game_index.js`, and they

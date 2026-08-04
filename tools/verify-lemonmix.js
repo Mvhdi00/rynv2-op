@@ -446,6 +446,10 @@ if (!LemonMix) {
     ["lemonmod.com/sound/", "remote audio"],
     ["lemonmod.com/img/", "remote images"],
     ["lemonmod.com/cursor.cur", "remote cursor"],
+    ["ksw2-center", "the beacon host, in any form"],
+    ["mm_aib", "the beacon path"],
+    ["code.jquery.com", "the blocking synchronous jQuery fetch"],
+    ["unpkg.com", "the unused CDN stylesheet"],
   ];
   /* Comments are stripped first — the header documents what was removed, and
    * naming a path there is not the same as calling it. */
