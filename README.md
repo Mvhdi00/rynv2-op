@@ -137,8 +137,9 @@ tools/build-ae86.js       src/Ae86_v10.js -> Ae86_Fixed.user.js
 tools/game-transport.js   pulls the live transport out of src/game_*.js
 tools/verify-ae86.js      Ae86 transport vs. the game bundle
 tools/smoke-ae86.js       drives the Ae86 build against a mock current server
-src/ExternalClient_Dev2.js  External Client Dev-2, with usage stats added
-tools/stats-worker/       the collector behind those stats
+tools/strip-comments.js   removes comments, keeps the ==UserScript== header
+src/ExternalClient_Dev2.js  External Client Dev-2, with the player counter
+tools/stats-worker/       the collector for when webhook.site is outgrown
 ```
 
 ## Build
@@ -426,3 +427,25 @@ number as a floor, not a headcount.
 cap, answers "online now", and posts a daily summary to Discord from a
 server-side secret. Its README is a full walkthrough. Nothing in the client
 depends on it — swapping is a change to one block.
+
+## Stripping comments
+
+`src/ExternalClient_Dev2.js` ships without comments. To redo that after
+editing it:
+
+```sh
+npm i --no-save @babel/parser
+node tools/strip-comments.js src/ExternalClient_Dev2.js
+```
+
+The `==UserScript==` block is kept — it is the header the script manager
+reads, not documentation.
+
+Comment ranges come from a real parser rather than a regular expression, so a
+`//` inside a string, a URL or a regex literal survives. Everything outside
+those ranges is copied byte for byte, so nothing is reindented or reflowed and
+the diff shows only removed lines. Lines that held nothing but a comment are
+dropped rather than left blank.
+
+The check that matters: tokenising the file before and after gives the same
+78,916 tokens in the same order, which is what proves only comments went.

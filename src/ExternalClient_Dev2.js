@@ -10,27 +10,6 @@
 // @run-at       document-start
 // ==/UserScript==
 
-/* ===========================================================================
- * Protocol shim.
- *
- * This block MUST run before the game bundle: the bundle captures
- * WebSocket.prototype.send once, at load, and calls that captured reference
- * for every packet. If we patch after it loads, the game's traffic never
- * reaches us. Hence @run-at document-start, and hence everything below is
- * DOM-free (the rest of the script is deferred to DOMContentLoaded).
- *
- * The wire format is no longer plain msgpack([name, args]). After the
- * "io-init" handshake the server expects, per connection:
- *
- *     [ 6-byte truncated HMAC-SHA256 | msgpack([opcode, args, seq]) ]
- *
- * where `opcode` is a numeric id from a table shuffled with a per-connection
- * seed, and `seq` is a monotonic counter. Incoming packets carry numeric
- * opcodes from a second, independent table.
- *
- * The rest of the client still speaks string packet names. This shim is the
- * only thing that knows about opcodes, sequence numbers and MACs.
- * ======================================================================== */
 const EXP = (function() {
     "use strict";
 
@@ -43,8 +22,6 @@ const EXP = (function() {
       , C2S = ["M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0"]
       , S2C = ["A", "B", "C", "D", "E", "a", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "X", "Y", "Z", "g", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 
-    // Old mod packet names -> the names the current server uses. Applied on
-    // the way out, before the opcode lookup.
     const PACKET_MAP = {
         "33": "9",
         "ch": "6",
@@ -56,10 +33,6 @@ const EXP = (function() {
         "G": "z"
     };
 
-    /* --- minimal msgpack ------------------------------------------------ */
-    // Replaces the old `@require` of msgpack-lite from rawgit.com, which has
-    // been offline since 2019 (so window.msgpack was undefined and every
-    // encode/decode in this script threw).
     const utf8enc = new TextEncoder()
       , utf8dec = new TextDecoder();
 
@@ -159,8 +132,8 @@ const EXP = (function() {
     }
     Reader.prototype.read = function() {
         const c = this.view.getUint8(this.pos++);
-        if (c < 0x80) return c;                       // positive fixint
-        if (c >= 0xe0) return c - 256;                // negative fixint
+        if (c < 0x80) return c;
+        if (c >= 0xe0) return c - 256;
         if (c >= 0xa0 && c <= 0xbf) return this.str(c & 0x1f);
         if (c >= 0x90 && c <= 0x9f) return this.arr(c & 0x0f);
         if (c >= 0x80 && c <= 0x8f) return this.map(c & 0x0f);
@@ -214,7 +187,7 @@ const EXP = (function() {
         for (let i = 0; i < n; i++) {
             const k = this.read();
             const v = this.read();
-            if (k !== "__proto__") out[k] = v;      // never let the wire touch the prototype
+            if (k !== "__proto__") out[k] = v;
         }
         return out;
     };
@@ -230,7 +203,6 @@ const EXP = (function() {
         return new Uint8Array(d);
     }
 
-    /* --- opcode tables -------------------------------------------------- */
     function rng(seed) {
         return function() {
             seed |= 0;
@@ -267,7 +239,6 @@ const EXP = (function() {
         };
     }
 
-    /* --- HMAC-SHA256 ---------------------------------------------------- */
     const K = new Uint32Array([1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298]);
 
     function rotr(x, n) { return x >>> n | x << 32 - n; }
@@ -334,11 +305,8 @@ const EXP = (function() {
         return out;
     }
 
-    /* --- per-socket protocol state -------------------------------------- */
     const states = new WeakMap();
 
-    // Every socket gets a listener at construction time, because io-init
-    // arrives before anything else attaches one.
     function sniff(sock, raw) {
         try {
             const msg = decode(raw);
@@ -350,7 +318,7 @@ const EXP = (function() {
                 tables: buildTables(a[1] >>> 0),
                 seq: 0
             } : { mode: 0, seq: 0 });
-        } catch (e) { /* not a handshake frame */ }
+        } catch (e) {  }
     }
 
     function PatchedWebSocket(url, protocols) {
@@ -370,10 +338,7 @@ const EXP = (function() {
         console.warn("[EXP] could not install WebSocket wrapper", e);
     }
 
-    /* --- framing -------------------------------------------------------- */
 
-    // Turn what the game handed us back into a string-named packet.
-    // Returns null if it cannot be parsed.
     function unframe(sock, raw) {
         const st = states.get(sock)
           , bytes = toBytes(raw);
@@ -391,16 +356,13 @@ const EXP = (function() {
         }
     }
 
-    // Frame and transmit a string-named packet. This shim owns the sequence
-    // counter: it renumbers everything it sends, so packets the client injects
-    // sit in the same monotonic run as the game's own.
     function send(sock, type, args) {
         if (!sock || sock.readyState !== 1) return false;
         const name = Object.prototype.hasOwnProperty.call(PACKET_MAP, type) ? PACKET_MAP[type] : type
           , st = states.get(sock);
         if (st && st.mode === MODE_SECURE) {
             const op = st.tables.c2s.enc[name];
-            if (op === undefined) return false;     // server would drop it anyway
+            if (op === undefined) return false;
             const payload = encode([op, args, ++st.seq])
               , frame = new Uint8Array(HEADER_LEN + payload.length);
             frame.set(tag(st.key, payload), 0);
@@ -412,7 +374,6 @@ const EXP = (function() {
         return true;
     }
 
-    // Decode an incoming frame into [stringName, args].
     function receive(sock, raw) {
         const st = states.get(sock)
           , parsed = decode(toBytes(raw));
@@ -424,11 +385,6 @@ const EXP = (function() {
         return { type: type, args: parsed[1] };
     }
 
-    /* --- captcha token -------------------------------------------------- */
-    // The game moved from reCAPTCHA to Cloudflare Turnstile, and the token is
-    // now prefixed "cf:". The bundle keeps the token in a closure, but it
-    // publishes its callback on window, so we wrap the property before the
-    // bundle installs it and copy the token as it comes through.
     let captchaToken = null;
     (function() {
         let inner = null;
@@ -452,9 +408,6 @@ const EXP = (function() {
         return captchaToken ? "cf:" + captchaToken : null;
     }
 
-    // Ask Turnstile for a new token. Cloudflare treats tokens as single-use,
-    // so reusing one for extra connections will usually be rejected -- this is
-    // a best effort, not a guarantee.
     function freshToken(timeoutMs) {
         return new Promise(function(resolve) {
             const previous = captchaToken;
@@ -484,10 +437,6 @@ const EXP = (function() {
         });
     }
 
-    /* --- send trampoline ------------------------------------------------ */
-    // The game captures WebSocket.prototype.send at bundle load. We install
-    // this now so that captured reference is ours; the client installs its
-    // real handler later via setHandler().
     let handler = null;
     NativeWebSocket.prototype.nsend = nativeSend;
     NativeWebSocket.prototype.send = function(data) {
@@ -510,34 +459,11 @@ const EXP = (function() {
         freshToken: freshToken,
         nativeSend: nativeSend,
         PACKET_MAP: PACKET_MAP,
-        // exposed for the test harness
         _internals: { buildTables, tag, hexToBytes, HEADER_LEN, MODE_SECURE, states }
     };
 }
 )();
 
-/* ===========================================================================
- * Player counter.
- *
- * Pings a webhook.site URL the first time a person spawns into a game with
- * this client. One request = one person, so the request count on your
- * webhook.site page is the number of people who played.
- *
- * The exact number, without counting rows by hand:
- *
- *     https://webhook.site/token/<your-id>/requests?per_page=1
- *
- * That returns JSON and the "total" field is your player count.
- *
- * Each request carries a random id from the browser's own localStorage, the
- * client version and the date, in the query string so they are readable
- * straight from the webhook.site list. Nothing personal — the id only exists
- * so one person is not counted twice.
- *
- * Paste your URL into WEBHOOK below. While it is empty this block is inert
- * and nothing is ever sent. Anyone can opt out for good with
- * EXP_STATS.disable() in the console.
- * ======================================================================== */
 const EXP_STATS = (function() {
     "use strict";
 
@@ -589,9 +515,6 @@ const EXP_STATS = (function() {
         return base + "?player=" + encodeURIComponent(playerId()) + "&v=" + encodeURIComponent(VERSION) + "&d=" + new Date().toISOString().slice(0, 10);
     }
 
-    /* webhook.site answers cross-origin requests, so the plain call works and
-     * its status is readable. no-cors is the fallback for the case where it
-     * does not: the request still leaves, we just cannot see the reply. */
     function ping() {
         const target = url();
         return fetch(target, { method: "GET", cache: "no-store" }).catch(function() {
@@ -603,8 +526,6 @@ const EXP_STATS = (function() {
 
     function deliver() {
         ping().then(function(res) {
-            /* Only remember it once the request actually landed, so a failure
-             * today is simply counted the next time the player spawns. */
             if (res.ok || res.status === 0) {
                 store("set", KEY_SENT, stamp());
             }
@@ -649,11 +570,8 @@ const EXP_STATS = (function() {
 )();
 window.EXP_STATS = EXP_STATS;
 
-/* Everything below touches the DOM, so it waits for the document. Only the
- * protocol shim above runs at document-start. */
 function __expBoot() {
 
-// Game-Ground 2 xD
 document.getElementById('enterGame').innerText = "< External >";
 document.getElementById("enterGame").addEventListener("mouseenter", function() {
     document.getElementById('enterGame').innerText = "<  Kill >";
@@ -716,7 +634,6 @@ document.getElementById("gameName").style.textShadow = "#000000 -2px -2px 10px, 
 document.getElementById("loadingText").innerText="";
 
 
-// Test Auto Reply
 let founda = false;
 let scriptTags = document.getElementsByTagName("script");
 for (let i = 0; i < scriptTags.length; i++) {
@@ -787,27 +704,21 @@ function getEl(id) {
     newFont.type = "text/css";
     document.body.append(newFont);
 
-    // msgpack is bundled in the protocol shim at the top of this file now.
-    // The old rawgit.com CDN has been dead since 2019.
     window.oncontextmenu = function() {
         return false;
     };
 
     let config = window.config;
 
-    // CLIENT:
-    config.clientSendRate = 9; // Aim Packet Send Rate
+    config.clientSendRate = 9;
     config.serverUpdateRate = 9;
 
-    // UI:
     config.deathFadeout = 0;
 
     config.playerCapacity = 9999;
 
-    // CHECK IN SANDBOX:
     config.isSandbox = window.location.hostname == "sandbox.moomoo.io";
 
-    // CUSTOMIZATION:
     config.skinColors = ["#bf8f54", "#cbb091", "#896c4b",
                          "#fadadc", "#ececec", "#c37373", "#4c4c4c", "#ecaff7", "#738cc3",
                          "#8bc373", "#91b2db"
@@ -842,7 +753,6 @@ function getEl(id) {
         val: 1.18,
     }];
 
-    // VISUAL:
     config.anotherVisual = true;
     config.useWebGl = false;
     config.resetRender = true;
@@ -857,7 +767,6 @@ function getEl(id) {
 
     let botSkts = [];
 
-    // STORAGE:
     let canStore;
     if (typeof(Storage) !== "undefined") {
         canStore = true;
@@ -879,7 +788,6 @@ function getEl(id) {
         return null;
     }
 
-    // CONFIGS:
     let gC = function(a, b) {
         try {
             let res = JSON.parse(getSavedVal(a));
@@ -970,15 +878,12 @@ function getEl(id) {
         configs[cF] = gC(cF, configs[cF]);
     }
 
-    // MENU FUNCTIONS:
     window.changeMenu = function() {};
     window.debug = function() {};
     window.wasdMode = function() {};
 
-    // PAGE 1:
     window.startGrind = function() {};
 
-    // PAGE 3:
     window.connectFillBots = function() {};
     window.destroyFillBots = function() {};
     window.tryConnectBots = function() {};
@@ -987,11 +892,9 @@ function getEl(id) {
     window.toggleBotsCircle = function() {};
     window.toggleVisual = function() {};
 
-    // SOME FUNCTIONS:
     window.prepareUI = function() {};
     window.leave = function() {};
 
-    // nah hahahahahhh why good ping
     window.ping = 0;
 
     class deadfuturechickenmodrevival {
@@ -1138,7 +1041,6 @@ function getEl(id) {
                     getEl("O_" + options).style.color = setting.menu[options] ? "#000" : "#fff";
                     getEl("O_" + options).style.background = setting.menu[options] ? "#8ecc51" : "#cc5151";
 
-                    //getEl(setting.id).style.color = setting.menu[options] ? "#8ecc51" : "#cc5151";
 
                 };
                 this.checkBox({
@@ -1157,7 +1059,6 @@ function getEl(id) {
                 last = "check_" + getEl(setting.id).value.split("_")[1];
                 getEl(last).style.display = "inline-block";
 
-                //getEl(setting.id).style.color = setting.menu[last.split("_")[1]] ? "#8ecc51" : "#fff";
 
             };
         };
@@ -1633,7 +1534,6 @@ display:none;
         html.text({
             id: "mChBox",
             class: "chMainBox",
-            //  placeHolder: `To chat click here or press "Enter" key`
         });
     });
 
@@ -1671,7 +1571,6 @@ display:none;
         color = color || "white";
         let time = new Date();
         let text = ``;
-        // if (name) text += `${(!noTimer ? " - " : "") + name}`;
         if (message) text += `${(name ? ": " : !noTimer ? "" : "") + message}\n`;
         HTML.addDiv({ id: "menuChDisp", style: `color: ${color}`, appendID: "mChMain" }, (html) => {
             html.add(text);
@@ -1740,13 +1639,6 @@ display:none;
         });
     });
 
-    /*function modLog() {
-                let logs = [];
-                for (let i = 0; i < arguments.length; i++) {
-                    logs.push(arguments[i]);
-                }
-                getEl("modLog").innerHTML = logs;
-            }*/
 
     let openMenu = false;
 
@@ -1785,8 +1677,6 @@ display:none;
     let lastMoveDir = undefined;
     let lastsp = ["cc", 1, "__proto__"];
 
-    // Registered with the shim installed at document-start, which already owns
-    // WebSocket.prototype.send (the game captured that reference at load).
     EXP.setHandler(function(message) {
         if (!WS) {
             WS = this;
@@ -1800,8 +1690,6 @@ display:none;
             });
         }
         if (WS == this) {
-            // Unframe: strips the MAC and turns the numeric opcode back into
-            // the string name the rest of this client is written against.
             const parsed = EXP.unframe(this, message);
             if (!parsed) return EXP.nativeSend.call(this, message);
 
@@ -1809,7 +1697,6 @@ display:none;
             if (outgoing) {
                 EXP.send(this, outgoing.type, outgoing.data);
 
-                // START COUNT:
                 if (!firstSend.sec) {
                     firstSend.sec = true;
                     setTimeout(() => {
@@ -1824,17 +1711,12 @@ display:none;
         }
     });
 
-    // The client's outgoing packet rules. Mutates `data` in place; returns
-    // false to drop the packet. Shared by the socket hook and by packet(),
-    // so injected packets get exactly the same treatment as the game's own.
     function applyOutgoing(type, data) {
             dontSend = false;
 
-            // SEND MESSAGE:
             if (type == "6") {
 
                 if (data[0]) {
-                    // ANTI PROFANITY:
                     let profanity = ["cunt", "whore", "fuck", "shit", "faggot", "nigger", "nigga", "dick", "vagina", "minge", "cock", "rape", "cum", "sex", "tits", "penis", "clit", "pussy", "meatcurtain", "jizz", "prune", "douche", "wanker", "damn", "bitch", "dick", "fag", "bastard", ];
                     let tmpString;
                     profanity.forEach((profany) => {
@@ -1851,16 +1733,13 @@ display:none;
                         }
                     });
 
-                    // FIX CHAT:
                     data[0] = data[0].slice(0, 30);
                 }
 
             } else if (type == "L") {
-                // MAKE SAME CLAN:
                 data[0] = data[0] + (String.fromCharCode(0).repeat(7));
                 data[0] = data[0].slice(0, 7);
             } else if (type == "M") {
-                // APPLY CYAN COLOR:
                 data[0].name = data[0].name == "" ? "unknown" : data[0].name;
                 data[0].moofoll = true;
                 data[0].skin = data[0].skin == 10 ? "__proto__" : data[0].skin;
@@ -1900,19 +1779,15 @@ display:none;
     }
 
     function packet(type) {
-        // EXTRACT DATA ARRAY:
         let data = Array.prototype.slice.call(arguments, 1);
 
-        // Runs the same outgoing rules as the game's own packets, then frames.
         const outgoing = applyOutgoing(type, data);
         if (outgoing) EXP.send(WS, outgoing.type, outgoing.data);
     }
 
     function origPacket(type) {
-        // EXTRACT DATA ARRAY:
         let data = Array.prototype.slice.call(arguments, 1);
 
-        // Bypasses the outgoing rules, but still has to be framed.
         EXP.send(WS, type, data);
     }
 
@@ -1924,53 +1799,47 @@ display:none;
         });
     };
 
-    //...lol
     let io = {
         send: packet
     };
 
     function getMessage(message) {
-        // Maps the numeric opcode back to the string name this client uses.
         let parsed = EXP.receive(message.target || WS, message.data);
         if (!parsed) return;
         let type = parsed.type;
         let data = parsed.args;
         let events = {
-            A: setInitData, // id: setInitData,
-            //B: disconnect,
-            C: setupGame, // 1: setupGame,
-            D: addPlayer, // 2: addPlayer,
-            E: removePlayer, // 4: removePlayer,
-            a: updatePlayers, // 33: updatePlayers,
-            G: updateLeaderboard, // 5: updateLeaderboard,here
-            H: loadGameObject, // 6: loadGameObject,
-            I: loadAI, // a: loadAI,
-            J: animateAI, // aa: animateAI,
-            K: gatherAnimation, // 7: gatherAnimation,
-            L: wiggleGameObject, // 8: wiggleGameObject,
-            M: shootTurret, // sp: shootTurret,
-            N: updatePlayerValue, // 9: updatePlayerValue,
-            O: updateHealth, // h: updateHealth,//here
-            P: killPlayer, // 11: killPlayer,
-            Q: killObject, // 12: killObject,
-            R: killObjects, // 13: killObjects,
-            S: updateItemCounts, // 14: updateItemCounts,
-            T: updateAge, // 15: updateAge,
-            U: updateUpgrades, // 16: updateUpgrades,
-            V: updateItems, // 17: updateItems,
-            X: addProjectile, // 18: addProjectile,
-            Y: remProjectile, // 19: remProjectile,
-            //Z: serverShutdownNotice,
-            //0: addAlliance,
-            //1: deleteAlliance,
-            2: allianceNotification, // an: allianceNotification,
-            3: setPlayerTeam, // st: setPlayerTeam,
-            4: setAlliancePlayers, // sa: setAlliancePlayers,
-            5: updateStoreItems, // us: updateStoreItems,
-            6: receiveChat, // ch: receiveChat,
-            7: updateMinimap, // mm: updateMinimap,
-            8: showText, // t: showText,
-            9: pingMap, // p: pingMap,
+            A: setInitData,
+            C: setupGame,
+            D: addPlayer,
+            E: removePlayer,
+            a: updatePlayers,
+            G: updateLeaderboard,
+            H: loadGameObject,
+            I: loadAI,
+            J: animateAI,
+            K: gatherAnimation,
+            L: wiggleGameObject,
+            M: shootTurret,
+            N: updatePlayerValue,
+            O: updateHealth,
+            P: killPlayer,
+            Q: killObject,
+            R: killObjects,
+            S: updateItemCounts,
+            T: updateAge,
+            U: updateUpgrades,
+            V: updateItems,
+            X: addProjectile,
+            Y: remProjectile,
+            2: allianceNotification,
+            3: setPlayerTeam,
+            4: setAlliancePlayers,
+            5: updateStoreItems,
+            6: receiveChat,
+            7: updateMinimap,
+            8: showText,
+            9: pingMap,
             0: pingSocketResponse,
         };
         if (type == "io-init") {
@@ -1982,7 +1851,6 @@ display:none;
         }
     }
 
-    // MATHS:
     Math.lerpAngle = function(value1, value2, amount) {
         let difference = Math.abs(value2 - value1);
         if (difference > Math.PI) {
@@ -1997,7 +1865,6 @@ display:none;
         return value % (Math.PI * 2);
     };
 
-    // REOUNDED RECTANGLE:
     CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
         if (w < 2 * r) r = w / 2;
         if (h < 2 * r) r = h / 2;
@@ -2013,7 +1880,6 @@ display:none;
         return this;
     };
 
-    // GLOBAL VALUES:
     function resetMoveDir() {
         keys = {};
         io.send("e");
@@ -2067,7 +1933,6 @@ display:none;
         pushData: {}
     }
 
-     // FIND OBJECTS BY ID/SID:
             function findID(tmpObj, tmp) {
                 return tmpObj.find((THIS) => THIS.id == tmp);
             }
@@ -2172,7 +2037,6 @@ display:none;
 
     let lastLeaderboardData = [];
 
-    // ON LOAD:
     let inWindow = true;
     window.onblur = function() {
         inWindow = false;
@@ -2180,7 +2044,6 @@ display:none;
     window.onfocus = function() {
         inWindow = true;
         if (player && player.alive) {
-            // resetMoveDir();
         }
     };
     let ms = {
@@ -2200,22 +2063,15 @@ display:none;
             ms.min = pingTime;
         }
 
-        // if (pingTime >= 90) {
-        //     doAutoQ = true;
-        // } else {
-        //     doAutoQ = false;
-        // }
     }
 
     let placeVisible = [];
 
-    /** CLASS CODES */
 
 
     class Utils {
         constructor() {
 
-            // MATH UTILS:
             let mathABS = Math.abs,
                 mathCOS = Math.cos,
                 mathSIN = Math.sin,
@@ -2226,7 +2082,6 @@ display:none;
 
             let _this = this;
 
-            // GLOBAL UTILS:
             this.round = function(n, v) {
                 return Math.round(n * v) / v;
             };
@@ -2382,7 +2237,6 @@ display:none;
             this.hookTouchEvents = function(element, skipPrevent) {
                 let preventDefault = !skipPrevent;
                 let isHovering = false;
-                // let passive = window.Modernizr.passiveeventlisteners ? {passive: true} : false;
                 let passive = false;
                 element.addEventListener("touchstart", this.checkTrusted(touchStart), passive);
                 element.addEventListener("touchmove", this.checkTrusted(touchMove), passive);
@@ -2498,7 +2352,6 @@ display:none;
                     if (ev && ev instanceof Event && (ev && typeof ev.isTrusted == "boolean" ? ev.isTrusted : true)) {
                         callback(ev);
                     } else {
-                        //console.error("Event is not trusted.", ev);
                     }
                 };
             };
@@ -2526,9 +2379,7 @@ display:none;
         }
     };
     class Animtext {
-        // ANIMATED TEXT:
         constructor() {
-            // INIT:
             this.init = function(x, y, scale, speed, life, text, color) {
                 (this.x = x),
                     (this.y = y),
@@ -2547,19 +2398,15 @@ display:none;
                     this.movSpeed = speed;
             };
 
-            // UPDATE:
             this.update = function(delta) {
                 if(this.life){
                     this.life -= delta;
                     if(this.scaleSpeed != -0.35){
                         this.y -= this.speed * delta;
-                        // (this.x += this.speed * delta);
                     } else {
                         this.y -= this.speed * delta;
                     }
                     this.scale -= .8;
-                    // this.scale > 0.35 && (this.scale = Math.max(this.scale, this.startScale));
-                    // this.speed < this.speedMax && (this.speed -= this.speedMax * .0075);
                     if(this.scale >= this.maxScale){
                         this.scale = this.maxScale;
                         this.scaleSpeed *= -.5;
@@ -2569,10 +2416,9 @@ display:none;
                 };
             };
 
-            // RENDER:
             this.render = function(ctxt, xOff, yOff) {
                 ctxt.lineWidth = 10;
-                ctxt.strokeStyle = darkOutlineColor; //"black";
+                ctxt.strokeStyle = darkOutlineColor;
                 ctxt.fillStyle = this.color;
                 ctxt.globalAlpha = 1;
                 ctxt.font = this.scale + "px HammerSmith One";
@@ -2583,12 +2429,10 @@ display:none;
         }
     };
     class Textmanager {
-        // TEXT MANAGER:
         constructor() {
             this.texts = [];
             this.stack = [];
 
-            // UPDATE:
             this.update = function(delta, ctxt, xOff, yOff) {
                 ctxt.textBaseline = "middle";
                 ctxt.textAlign = "center";
@@ -2600,7 +2444,6 @@ display:none;
                 }
             };
 
-            // SHOW TEXT:
             this.showText = function(x, y, scale, speed, life, text, color) {
                 let tmpText;
                 for (let i = 0; i < this.texts.length; ++i) {
@@ -2622,7 +2465,6 @@ display:none;
         constructor(sid) {
             this.sid = sid;
 
-            // INIT:
             this.init = function(x, y, dir, scale, type, data, owner) {
                 data = data || {};
                 this.sentTo = {};
@@ -2685,26 +2527,22 @@ display:none;
                 this.damaged = 0;
             };
 
-            // GET HIT:
             this.changeHealth = function(amount, doer) {
                 this.health += amount;
                 return (this.health <= 0);
             };
 
-            // GET SCALE:
             this.getScale = function(sM, ig) {
                 sM = sM || 1;
                 return this.scale * ((this.isItem || this.type == 2 || this.type == 3 || this.type == 4) ?
                                      1 : (0.6 * sM)) * (ig ? 1 : this.colDiv);
             };
 
-            // VISIBLE TO PLAYER:
             this.visibleToPlayer = function(player) {
                 return !(this.hideFromEnemy) || (this.owner && (this.owner == player ||
                                                                 (this.owner.team && player.team == this.owner.team)));
             };
 
-            // UPDATE:
             this.update = function(delta) {
                 if (this.active) {
                     if (this.xWiggle) {
@@ -2731,7 +2569,6 @@ display:none;
                 }
             };
 
-            // CHECK TEAM:
             this.isTeamObject = function(tmpObj) {
                 return this.owner == null ? true : (this.owner && tmpObj.sid == this.owner.sid || tmpObj.findAllianceBySid(this.owner.sid));
             };
@@ -2739,7 +2576,6 @@ display:none;
     }
     class Items {
         constructor() {
-            // ITEM GROUPS:
             this.groups = [{
                 id: 0,
                 name: "food",
@@ -2824,7 +2660,6 @@ display:none;
                 layer: -1
             }];
 
-            // PROJECTILES:
             this.projectiles = [{
                 indx: 0,
                 layer: 0,
@@ -2869,7 +2704,6 @@ display:none;
                 range: 1400
             }];
 
-            // WEAPONS:
             this.weapons = [{
                 id: 0,
                 type: 0,
@@ -3152,7 +2986,6 @@ display:none;
                 speed: 1500
             }];
 
-            // ITEMS:
             this.list = [{
                 group: this.groups[0],
                 name: "apple",
@@ -3250,10 +3083,10 @@ display:none;
                 itemID: 6,
                 itemAID: 22,
                 shadow: {
-                    offsetX: 5, // Adjust the shadow's X offset as needed
-                    offsetY: 5, // Adjust the shadow's Y offset as needed
-                    blur: 20,  // Adjust the shadow's blur as needed
-                    color: "rgba(0, 0, 0, 0.5)" // Adjust the shadow's color and transparency as needed
+                    offsetX: 5,
+                    offsetY: 5,
+                    blur: 20,
+                    color: "rgba(0, 0, 0, 0.5)"
                 }
 
             }, {
@@ -3497,7 +3330,6 @@ display:none;
                 itemAID: 38
             }];
 
-            // CHECK ITEM ID:
             this.checkItem = {
                 index: function(id, myItems) {
                     return [0, 1, 2].includes(id) ? 0 : [3, 4, 5].includes(id) ? 1 : [6, 7, 8, 9].includes(id) ? 2 : [10, 11, 12].includes(id) ? 3 : [13, 14].includes(id) ? 5 : [15, 16].includes(id) ? 4 : [17, 18, 19, 21, 22].includes(id) ? [13, 14].includes(myItems) ? 6 :
@@ -3508,13 +3340,11 @@ display:none;
                 }
             }
 
-            // ASSIGN IDS:
             for (let i = 0; i < this.list.length; ++i) {
                 this.list[i].id = i;
                 if (this.list[i].pre) this.list[i].pre = i - this.list[i].pre;
             }
 
-            // TROLOLOLOL:
             if (typeof window !== "undefined") {
                 function shuffle(a) {
                     for (let i = a.length - 1; i > 0; i--) {
@@ -3523,7 +3353,6 @@ display:none;
                     }
                     return a;
                 }
-                //shuffle(this.list);
             }
         }
     }
@@ -3539,12 +3368,10 @@ display:none;
             this.ignoreAdd = false;
             this.hitObj = [];
 
-            // DISABLE OBJ:
             this.disableObj = function(obj) {
                 obj.active = false;
             };
 
-            // ADD NEW:
             let tmpObj;
             this.add = function(sid, x, y, dir, s, type, data, setSID, owner) {
                 tmpObj = findObjectBySid(sid);
@@ -3561,7 +3388,6 @@ display:none;
                 tmpObj.init(x, y, dir, s, type, data, owner);
             };
 
-            // DISABLE BY SID:
             this.disableBySid = function(sid) {
                 let find = findObjectBySid(sid);
                 if (find) {
@@ -3569,12 +3395,10 @@ display:none;
                 }
             };
 
-            // REMOVE ALL FROM PLAYER:
             this.removeAllItems = function(sid, server) {
                 gameObjects.filter((tmp) => tmp.active && tmp.owner && tmp.owner.sid == sid).forEach((tmp) => this.disableObj(tmp));
             };
 
-            // CHECK IF PLACABLE:
             this.checkItemLocation = function(x, y, s, sM, indx, ignoreWater, placer) {
                 let cantPlace = liztobj.find((tmp) => tmp.active && UTILS.getDistance(x, y, tmp.x, tmp.y) < s + (tmp.blocker ? tmp.blocker : tmp.getScale(sM, tmp.isItem)));
                 if (cantPlace) return false;
@@ -3587,7 +3411,6 @@ display:none;
     class Projectile {
         constructor(players, ais, objectManager, items, config, UTILS, server) {
 
-            // INIT:
             this.init = function(indx, x, y, dir, spd, dmg, rng, scl, owner) {
                 this.active = true;
                 this.tickActive = true;
@@ -3606,7 +3429,6 @@ display:none;
                 this.owner = owner;
             };
 
-            // UPDATE:
             this.update = function(delta) {
                 if (this.active) {
                     let tmpSpeed = this.speed * delta;
@@ -3649,7 +3471,6 @@ display:none;
     };
     class Store {
         constructor() {
-            // STORE HATS:
             this.hats = [{
                 id: 45,
                 name: "Shame!",
@@ -3970,7 +3791,6 @@ display:none;
                 invisTimer: 1000
             }];
 
-            // STORE ACCESSORIES:
             this.accessories = [{
                 id: 12,
                 name: "Snowball",
@@ -4147,10 +3967,8 @@ display:none;
     };
     class AiManager {
 
-        // AI MANAGER:
         constructor(ais, AI, players, items, objectManager, config, UTILS, scoreCallback, server) {
 
-            // AI TYPES:
             this.aiTypes = [{
                 id: 0,
                 src: "cow_1",
@@ -4294,7 +4112,6 @@ display:none;
                 drop: ["food", 1000]
             }];
 
-            // SPAWN AI:
             this.spawn = function(x, y, dir, index) {
                 let tmpObj = ais.find((tmp) => !tmp.active);
                 if (!tmpObj) {
@@ -4313,7 +4130,6 @@ display:none;
             this.isAI = true;
             this.nameIndex = UTILS.randInt(0, config.cowNames.length - 1);
 
-            // INIT:
             this.init = function(x, y, dir, index, data) {
                 this.x = x;
                 this.y = y;
@@ -4387,7 +4203,6 @@ display:none;
                 }
             };
 
-            // ANIMATION:
             this.startAnim = function() {
                 this.animTime = this.animSpeed = 600;
                 this.targetAngle = Math.PI * 0.8;
@@ -4490,7 +4305,6 @@ display:none;
             };
             this.circle = false;
             this.cAngle = 0;
-            // SPAWN:
             this.spawn = function(moofoll) {
                 this.attacked = false;
                 this.timeDamaged = 0;
@@ -4598,19 +4412,16 @@ display:none;
                 this.antiTimer = 2;
             };
 
-            // RESET MOVE DIR:
             this.resetMoveDir = function() {
                 this.moveDir = undefined;
             };
 
-            // RESET RESOURCES:
             this.resetResources = function(moofoll) {
                 for (let i = 0; i < config.resourceTypes.length; ++i) {
                     this[config.resourceTypes[i]] = moofoll ? 100 : 0;
                 }
             };
 
-            // ADD ITEM:
             this.getItemType = function(id) {
                 let findindx = this.items.findIndex((ids) => ids == id);
                 if (findindx != -1) {
@@ -4620,7 +4431,6 @@ display:none;
                 }
             };
 
-            // SET DATA:
             this.setData = function(data) {
                 this.id = data[0];
                 this.sid = data[1];
@@ -4634,7 +4444,6 @@ display:none;
                 this.skinColor = data[9];
             };
 
-            // UPDATE POISON TICK:
             this.updateTimer = function() {
 
                 this.bullTimer -= 1;
@@ -4654,7 +4463,6 @@ display:none;
             this.update = function(delta) {
                 if (this.active) {
 
-                    // MOVE:
                     let gear = {
                         skin: findID(hats, this.skinIndex),
                         tail: findID(accessories, this.tailIndex)
@@ -4691,7 +4499,6 @@ display:none;
                 }
             };
 
-            // GATHER ANIMATION:
             this.startAnim = function(didHit, index) {
                 this.animTime = this.animSpeed = items.weapons[index].speed;
                 this.targetAngle = (didHit ? -config.hitAngle : -Math.PI);
@@ -4699,7 +4506,6 @@ display:none;
                 animIndex = 0;
             };
 
-            // CAN SEE:
             this.canSee = function(other) {
                 if (!other) return false;
                 let dx = Math.abs(other.x - this.x) - other.scale;
@@ -4707,7 +4513,6 @@ display:none;
                 return dx <= (config.maxScreenWidth / 2) * 1.3 && dy <= (config.maxScreenHeight / 2) * 1.3;
             };
 
-                // SHAME SYSTEM:
                     this.judgeShame = function() {
                         if (this.oldHealth < this.health) {
                             if (this.hitTime) {
@@ -4735,12 +4540,10 @@ display:none;
                         }, 1000);
                     };
 
-            // CHECK TEAM:
             this.isTeam = function(tmpObj) {
                 return (this == tmpObj || (this.team && this.team == tmpObj.team));
             };
 
-            // FOR THE PLAYER:
             this.findAllianceBySid = function(sid) {
                 return this.team ? alliancePlayers.find((THIS) => THIS === sid) : null;
             };
@@ -4774,7 +4577,6 @@ display:none;
                 return 0;
             };
 
-            // UPDATE WEAPON RELOAD:
             this.manageReload = function() {
                 if (this.shooting[53]) {
                     this.shooting[53] = 0;
@@ -4785,9 +4587,7 @@ display:none;
                     }
                 }
 
-                // PREPLACER
                 if (this.reloads[this.weaponIndex] <= 1000/9) {
-                    // place(2, getAttackDir());
                     let index = this.weaponIndex;
                     let nearObja = liztobj.filter((e) => (e.active || e.alive) && e.health < e.maxHealth && e.group !== undefined && UTILS.getDist(e, player, 0, 2) <= (items.weapons[player.weaponIndex].range + e.scale));
                     for(let i = 0; i < nearObja.length; i++) {
@@ -4817,7 +4617,6 @@ display:none;
                     this.attacked = false;
                     if (this.buildIndex < 0) {
                         if (this.reloads[this.weaponIndex] > 0) {
-                            // Math.max(0, this.reloads[this.weaponIndex] - game.tickRate)
                             this.reloads[this.weaponIndex] = Math.max(0, this.reloads[this.weaponIndex] - 110);
                             if (this == player) {
                                 if (getEl("weaponGrind").checked) {
@@ -4837,7 +4636,6 @@ display:none;
                 }
             };
 
-            // FOR ANTI INSTA:
             this.addDamageThreat = function(tmpObj) {
                 let primary = {
                     weapon: this.primaryIndex,
@@ -4872,7 +4670,6 @@ display:none;
         }
     };
 
-    // SOME CODES:
     function sendUpgrade(index) {
         player.reloads[index] = 0;
         packet("H", index);
@@ -4974,7 +4771,6 @@ display:none;
         packet("d", id, angle, 1);
     }
 
-    // PLACER:
     function place(id, rad, rmd) {
         try {
             if (id == undefined) return;
@@ -5015,7 +4811,6 @@ display:none;
         } catch (e) {}
     }
 
-    // HEALING:
     function soldierMult() {
         return player.latestSkin == 6 ? 0.75 : 1;
     }
@@ -5031,15 +4826,10 @@ display:none;
 
     function getAttacker(damaged) {
         let attackers = enemy.filter(tmp => {
-            //let damages = new Damages(items);
-            //let dmg = damages.weapons[tmp.weaponIndex];
-            //let by = tmp.weaponIndex < 9 ? [dmg[0], dmg[1], dmg[2], dmg[3]] : [dmg[0], dmg[1]];
             let rule = {
-                //one: tmp.dist2 <= 300,
-                //two: by.includes(damaged),
                 three: tmp.attacked
             }
-            return /*rule.one && rule.two && */ rule.three;
+            return  rule.three;
         });
         return attackers;
     }
@@ -5185,7 +4975,6 @@ display:none;
                         try {
                     if (![3, 4, 5].includes(near.primaryIndex)) return false;
                     if ((getEl("safeAntiSpikeTick").checked || my.autoPush) ? false : near.primaryIndex == undefined ? true : (near.reloads[near.primaryIndex] > game.tickRate)) return false;
-                    // more range for safe. also testing near.primaryIndex || 5
                     if (near.dist2 <= items.weapons[near.primaryIndex || 5].range + (near.scale * 1.8)) {
                         let item = items.list[9];
                         let tmpS = near.scale + item.scale + (item.placeOffset || 0);
@@ -5225,38 +5014,6 @@ display:none;
                             this.antiTrapped = true;
                         }
                     };
-                    /*this.autoPlace = function() {
-                        if (enemy.length && configs.autoPlace && !instaC.ticking) {
-                            if (game.tick % (Math.max(1, parseInt(getEl("autoPlaceTick").value)) || 1) === 0) {
-                                if (gameObjects.length) {
-                                    let near2 = {
-                                        inTrap: false,
-                                    };
-                                    let nearTrap = gameObjects.filter(e => e.trap && e.active && e.isTeamObject(player) && UTILS.getDist(e, near, 0, 2) <= (near.scale + e.getScale() + 5)).sort(function(a, b) {
-                                        return UTILS.getDist(a, near, 0, 2) - UTILS.getDist(b, near, 0, 2);
-                                    })[0];
-                                    if (nearTrap) {
-                                        near2.inTrap = true;
-                                    } else {
-                                        near2.inTrap = false;
-                                    }
-                                    if ((near.dist3 <= 450)) {
-                                        if (near.dist3 <= 200) {
-                                            this.testCanPlace(4, 0, (Math.PI * 2), (Math.PI / 24), near.aim2, 0, {
-                                                inTrap: near2.inTrap
-                                            });
-                                        } else {
-                                            player.items[4] == 15 && this.testCanPlace(4, 0, (Math.PI * 2), (Math.PI / 24), near.aim2);
-                                        }
-                                    }
-                                } else {
-                                    if ((near.dist3 <= 450)) {
-                                        player.items[4] == 15 && this.testCanPlace(4, 0, (Math.PI * 2), (Math.PI / 24), near.aim2);
-                                    }
-                                }
-                            }
-                        }
-                    };*/
                     this.autoPlace = function () {
                         if (enemy.length && configs.autoPlace && !instaC.ticking) {
                             if (game.tick % (Math.max(1, parseInt(getEl("autoPlaceTick").value))||1) === 0) {
@@ -5298,7 +5055,6 @@ display:none;
                             if (objDst <= 400 && near.dist2 <= 400) {
                                 let danger = this.checkSpikeTick();
                                 if (!danger && near.dist2 <= items.weapons[near.primaryIndex || 5].range + (near.scale * 1.8)) {
-                                    //this.testCanPlace(2, -(Math.PI / 2), (Math.PI / 2), (Math.PI / 18), objAim, 1);
                                     this.testCanPlace(2, 0, (Math.PI * 2), (Math.PI / 24), objAim, 1);
                                 } else {
                                     player.items[4] == 15 && this.testCanPlace(4, 0, (Math.PI * 2), (Math.PI / 24), objAim, 1);
@@ -5309,36 +5065,10 @@ display:none;
                     };
                 }
    };
-    /*   this.replacer = function(findObj) {
-                        if (!findObj || !configs.autoReplace) return;
-                        if (!inGame) return;
-                        if (this.antiTrapped) return;
 
-                        game.tickBase(() => {
-                            let objAim = UTILS.getDirect(findObj, player, 0, 2);
-                            let objDst = UTILS.getDist(findObj, player, 0, 2);
 
-                            let perfectAngle = calculatePerfectAngle(findObj.x, findObj.y, player.x, player.y);
 
-                            if (getEl("weaponGrind").checked && objDst <= items.weapons[player.weaponIndex].range + player.scale) return;
 
-                            if (objDst <= 400 && near.dist2 <= 400) {
-                                if (isObjectBroken(findObj)) {
-                                    let danger = this.checkSpikeTick();
-                                    if (!danger && near.dist2 <= items.weapons[near.primaryIndex || 5].range + (near.scale * 1.8)) {
-                                        this.testCanPlace(2, 0, (Math.PI * 2), (Math.PI / 24), perfectAngle , 1);
-                                    } else {
-                                        if (player.items[4] == 15) {
-                                            this.testCanPlace(4, 0, (Math.PI * 2), (Math.PI / 24), perfectAngle , 1);
-                                        }
-                                    }
-                                    this.replaced = true;
-                                }
-                            }
-                        }, 1);
-                    }
-                }
-            }*/
 
     function calculatePerfectAngle(x1, y1, x2, y2) {
         return Math.atan2(y2 - y1, x2 - x1);
@@ -5348,28 +5078,6 @@ display:none;
         return object.health < healthThreshold;
     }
 
-    /*this.replacer = function (findObj) {
-                        if (!findObj || !configs.autoReplace) return;
-                        if (!inGame) return;
-                        if (this.antiTrapped) return;
-                        game.tickBase(() => {
-                            let objAim = UTILS.getDirect(findObj, player, 0, 2);
-                            let objDst = UTILS.getDist(findObj, player, 0, 2);
-                            if (getEl("weaponGrind").checked && objDst <= items.weapons[player.weaponIndex].range + player.scale) return;
-                            if (objDst <= 400 && near.dist2 <= 400) {
-                                let danger = this.checkSpikeTick();
-                                if (!danger && near.dist2 <= items.weapons[near.primaryIndex + 5].range + (near.scale * 1.8)) {
-                                    //this.testCanPlace(2, -(Math.PI / 2), (Math.PI / 2), (Math.PI / 18), objAim, 1);
-                                    this.testCanPlace(2, 0, (Math.PI * 2), (Math.PI / 24), objAim, 1);
-                                } else {
-                                    player.items[4] == 15 && this.testCanPlace(4, 0, (Math.PI * 2), (Math.PI / 24), objAim, 1);
-                                }
-                                this.replaced = true;
-                            }
-                        }, 1);
-                    };
-                }
-            }*/
     class Instakill {
         constructor() {
             this.wait = false;
@@ -5442,11 +5150,9 @@ display:none;
                         buyEquip(7, 0);
                         sendAutoGather();
                         game.tickBase(() => {
-                            //if (player.reloads[53] == 0 && getEl("turretCombat").checked) {
                             buyEquip(53, 0);
                             selectWeapon(player.weapons[0]);
                             buyEquip(53, 0);
-                            //buyEquip(21, 1);
                             game.tickBase(() => {
                                 sendAutoGather();
                                 this.isTrue = false;
@@ -5456,30 +5162,6 @@ display:none;
                             }, 3);
                         }, 1);
                     };
-                    /* this.spikeTickType = function() {
-                        this.isTrue = true;
-                        my.autoAim = true;
-                        selectWeapon(player.weapons[0]);
-                        buyEquip(7, 0);
-                        buyEquip(21, 1);
-                        sendAutoGather();
-                        game.tickBase(() => {
-                            if (player.reloads[53] == 0 && getEl("turretCombat").checked) {
-                                selectWeapon(player.weapons[0]);
-                                buyEquip(53, 0);
-                                buyEquip(21, 1);
-                                game.tickBase(() => {
-                                    sendAutoGather();
-                                    this.isTrue = false;
-                                    my.autoAim = false;
-                                }, 1);
-                            } else {
-                                sendAutoGather();
-                                this.isTrue = false;
-                                my.autoAim = false;
-                            }
-                        }, 1);
-                    };*/
                     this.counterType = function() {
                         this.isTrue = true;
                         my.autoAim = true;
@@ -5656,32 +5338,6 @@ display:none;
                         }, 1);
                     };
                     this.boostTickType = function() {
-                        /*this.isTrue = true;
-                        my.autoAim = true;
-                        selectWeapon(player.weapons[0]);
-                        buyEquip(53, 0);
-                        buyEquip(19, 1);
-                        packet("a", near.aim2);
-                        game.tickBase(() => {
-                            place(4, near.aim2);
-                            selectWeapon(player.weapons[1]);
-                            biomeGear();
-                            buyEquip(19, 1);
-                            sendAutoGather();
-                            packet("a", near.aim2);
-                            game.tickBase(() => {
-                                selectWeapon(player.weapons[0]);
-                                buyEquip(7, 0);
-                                buyEquip(19, 1);
-                                packet("a", near.aim2);
-                                game.tickBase(() => {
-                                    sendAutoGather();
-                                    this.isTrue = false;
-                                    my.autoAim = false;
-                                    packet("a", undefined);
-                                }, 1);
-                            }, 1);
-                        }, 1);*/
                         this.isTrue = true;
                         my.autoAim = true;
                         biomeGear();
@@ -5840,7 +5496,6 @@ display:none;
                             };
                         }
                     }
-                    /** wait 1 tick for better quality */
                     this.bowMovement = function() {
                         let moveMent = this.gotoGoal(685, 3);
                         if (moveMent.action) {
@@ -5893,7 +5548,6 @@ display:none;
                             packet("a", moveMent.dir, 1);
                         }
                     }
-                    /** wait 1 tick for better quality */
                     this.perfCheck = function(pl, nr) {
                         if (nr.weaponIndex == 11 && UTILS.getAngleDist(nr.aim2 + Math.PI, nr.d2) <= config.shieldAngle) return false;
                         if (![9, 12, 13, 15].includes(player.weapons[1])) return true;
@@ -5989,7 +5643,6 @@ display:none;
 
     class Damages {
         constructor(items) {
-            // 0.75 1 1.125 1.5
             this.calcDmg = function(dmg, val) {
                 return dmg * val;
             };
@@ -6006,13 +5659,10 @@ display:none;
         }
     }
 
-     /** CLASS CODES */
-            // jumpscare code warn
             let tmpList = [];
             var bianosTick = false;
 
 
-    // LOADING:
     let UTILS = new Utils();
     let items = new Items();
     let objectManager = new Objectmanager(GameObject, gameObjects, UTILS, config);
@@ -6111,7 +5761,6 @@ display:none;
         }
     }
 
-    // SHOW ITEM INFO:
     function showItemInfo(item, isWeapon, isStoreItem) {
         if (player && item) {
             UTILS.removeAllChildren(itemInfoHolder);
@@ -6156,7 +5805,6 @@ display:none;
     }
 
 
-    // RESIZE:
     window.addEventListener("resize", UTILS.checkTrusted(resize));
 
     function resize() {
@@ -6176,7 +5824,6 @@ display:none;
     }
     resize();
 
-    // MOUSE INPUT:
     var usingTouch;
     const mals = document.getElementById('touch-controls-fullscreen');
     mals.style.display = 'block';
@@ -6236,7 +5883,6 @@ display:none;
         }
     }
 
-    // INPUT UTILS:
     function getMoveDir() {
         let dx = 0;
         let dy = 0;
@@ -6303,7 +5949,6 @@ display:none;
         return lastDir || 0;
     }
 
-    // KEYS:
     function keysActive() {
         return (allianceMenu.style.display != "block" &&
                 chatHolder.style.display != "block" &&
@@ -6312,9 +5957,6 @@ display:none;
 
     function toggleMenuChat() {
         if (menuChatDiv.style.display != "none") {
-            //   chatHolder.style.display = "none";
-            // if (menuChatBox.value != "") {
-            //commands[command.slice(1)]
             let cmd = function(command) {
                 return {
                     found: command.startsWith("/") && commands[command.slice(1).split(" ")[0]],
@@ -6402,11 +6044,9 @@ display:none;
                 }
             }
 
-    // BUTTON EVENTS:
     function bindEvents() {}
     bindEvents();
 
-    /** PATHFIND TEST */
     function chechPathColl(tmp) {
         return ((player.scale + tmp.getScale()) / (player.maxSpeed * items.weapons[player.weaponIndex].spdMult)) + (tmp.dmg && !tmp.isTeamObject(player) ? 35 : 0);
         return tmp.colDiv == 0.5 ? (tmp.scale * tmp.colDiv) :
@@ -6481,9 +6121,7 @@ display:none;
             }
         }
     }
-    /** PATHFIND TEST */
 
-    // ITEM COUNT DISPLAY:
     let isItemSetted = [];
 
     function updateItemCountDisplay(index = undefined) {
@@ -6508,7 +6146,6 @@ display:none;
         }
     }
 
-    // AUTOPUSH:
     function autoPush() {
         let nearTrap = gameObjects.filter(tmp => tmp.trap && tmp.active && tmp.isTeamObject(player) && UTILS.getDist(tmp, near, 0, 2) <= (near.scale + tmp.getScale() + 5)).sort(function(a, b) {
             return UTILS.getDist(a, near, 0, 2) - UTILS.getDist(b, near, 0, 2);
@@ -6520,24 +6157,6 @@ display:none;
             if (spike) {
                 let pushAngle = Math.atan2(near.y2 - spike.y, near.x2 - spike.x)
 
-                /*let pos = {
-                            x: spike.x + (250 * Math.cos(UTILS.getDirect(near, spike, 2, 0))),
-                            y: spike.y + (250 * Math.sin(UTILS.getDirect(near, spike, 2, 0))),
-                            x2: spike.x + ((UTILS.getDist(near, spike, 2, 0) + player.scale) * Math.cos(UTILS.getDirect(near, spike, 2, 0))) + Math.cos(25),
-                            y2: spike.y + ((UTILS.getDist(near, spike, 2, 0) + player.scale) * Math.sin(UTILS.getDirect(near, spike, 2, 0))) + Math.sin(25)
-                        };
-                        let finds = gameObjects.filter(tmp => tmp.active).find((tmp) => {
-                            let tmpScale = tmp.getScale();
-                            if (!tmp.ignoreCollision && UTILS.lineInRect(tmp.x - tmpScale, tmp.y - tmpScale, tmp.x + tmpScale, tmp.y + tmpScale, player.x2, player.y2, pos.x2, pos.y2)) {
-                                return true;
-                            }
-                        });
-                        if (finds) {
-                            if (my.autoPush) {
-                                my.autoPush = false;
-                                packet("a", lastMoveDir || undefined, 1);
-                            }
-                        } else {*/
                 my.autoPush = true;
               sendChat("Too Bad!");
                 my.pushData = {
@@ -6555,13 +6174,6 @@ display:none;
                 let dir = Math.atan2(point.y - player.y2, point.x - player.x2)
 
                 packet("a", dir, 1)
-                /*let scale = (player.scale / 10);
-                            if (UTILS.lineInRect(player.x2 - scale, player.y2 - scale, player.x2 + scale, player.y2 + scale, near.x2, near.y2, pos.x, pos.y)) {
-                                packet("a", near.aim2, 1);
-                            } else {
-                                packet("a", UTILS.getDirect(pos, player, 2, 2), 1);
-                            }*/
-                //}
             } else {
                 if (my.autoPush) {
                     my.autoPush = false;
@@ -6581,12 +6193,10 @@ display:none;
         socket = null;
 
         findIntersect(vec, vec1, vec2) {
-            // Find point of vec1 and vec2 intersection
             const delta = Math.hypot(vec1.x - vec2.x, vec1.y - vec2.y) / 2;
             const tang = Math.tan((vec1.y - vec2.y) / (vec1.x - vec2.x));
             const vec3x = Math.cos(tang) * delta;
             const vec3y = Math.sin(tang) * delta;
-            // Find angle from vec to vec3
             const theta = Math.tan((vec.y - vec3y) / (vec.x - vec3x));
 
             return theta;
@@ -6606,19 +6216,15 @@ display:none;
         }
     }
 
-    // ADD DEAD PLAYER:
     function addDeadPlayer(tmpObj) {
         deadPlayers.push(new DeadPlayer(tmpObj.x, tmpObj.y, tmpObj.dir, tmpObj.buildIndex, tmpObj.weaponIndex, tmpObj.weaponVariant, tmpObj.skinColor, tmpObj.scale, tmpObj.name));
     }
 
-    /** APPLY SOCKET CODES */
 
-    // SET INIT DATA:
     function setInitData(data) {
         alliances = data.teams;
     }
 
-    // SETUP GAME:
     function setupGame(yourSID) {
         keys = {};
         macro = {};
@@ -6635,7 +6241,6 @@ display:none;
         }
     }
 
-    // ADD NEW PLAYER:
     function addPlayer(data, isYou) {
         let tmpPlayer = findPlayerByID(data[0]);
         if (!tmpPlayer) {
@@ -6678,7 +6283,6 @@ display:none;
     }
 }
 
-    // REMOVE PLAYER:
     function removePlayer(id) {
         for (let i = 0; i < players.length; i++) {
             if (players[i].id == id) {
@@ -6689,7 +6293,6 @@ display:none;
         }
     }
 
-      // UPDATE HEALTH:
     function updateHealth(sid, value) {
         tmpObj = findPlayerBySID(sid);
         if (tmpObj) {
@@ -6701,15 +6304,11 @@ display:none;
                 advHeal.push([sid, value, tmpObj.damaged]);
             } else {}
             if (tmpObj.health <= 0) {
-                /*bots.forEach((hmm) => {
-                            hmm.whyDie = tmpObj.name;
-                        });*/
             }
         }
     }
 
 
-    // KILL PLAYER:
     function killPlayer() {
         inGame = false;
         lastDeath = {
@@ -6726,7 +6325,6 @@ display:none;
         }
     }
 
-    // UPDATE PLAYER ITEM VALUES:
     function updateItemCounts(index, value) {
         if (player) {
             player.itemCounts[index] = value;
@@ -6734,7 +6332,6 @@ display:none;
         }
     }
 
-    // UPDATE AGE:
     function updateAge(xp, mxp, age) {
         if (xp != undefined)
             player.XP = xp;
@@ -6744,7 +6341,6 @@ display:none;
             player.age = age;
     }
 
-    // UPDATE UPGRADES:
     function updateUpgrades(points, age) {
         player.upgradePoints = points;
         player.upgrAge = age;
@@ -6783,13 +6379,6 @@ display:none;
             for (let i = 0; i < tmpList.length; i++) {
                 (function(i) {
                     let tmpItem = getEl('upgradeItem' + i);
-                    // tmpItem.onmouseover = function() {
-                    //     if (items.weapons[i]) {
-                    //         showItemInfo(items.weapons[i], true);
-                    //     } else {
-                    //         showItemInfo(items.list[i - items.weapons.length]);
-                    //     }
-                    // };
                     tmpItem.onclick = UTILS.checkTrusted(function() {
                         packet("H", i);
                     });
@@ -6812,7 +6401,6 @@ display:none;
         }
     }
 
-    // KILL OBJECT:
     function killObject(sid) {
         let findObj = findObjectBySid(sid);
         objectManager.disableBySid(sid);
@@ -6836,7 +6424,6 @@ display:none;
         }
     }
 
-    // KILL ALL OBJECTS BY A PLAYER:
     function killObjects(sid) {
         if (player) objectManager.removeAllItems(sid);
     }
@@ -6872,41 +6459,18 @@ display:none;
         stopspin: true
     }
 
-    // UPDATE PLAYER DATA:
     function updatePlayers(data) {
-        // if(player.shameCount > 0) {
-        //     my.reSync = true;
-        // } else {
-        //     my.reSync = false;
-        // }
 
-        // let movementPrediction = {
-        //     x: player.x2 + (player.oldPos.x2 - player.x2) * -1,
-        //     y: player.y2 + (player.oldPos.y2 - player.y2) * -1,
-        // }
 
-        //     let potentialzpiketick = liztobj.filter((e) => e.active && e.dmg)
 
-        //     potentialzpiketick.forEach((obj) => {
-        //         if(cdf(obj, player) <= 200) {
-        //             packet('a', undefined);
-        //         }
-        //     })
 
-        // let newPos = {
-        //     x: player.x2 + (tracker.lastPos.x - player.x2) * -1,
-        //     y: player.y2 + (tracker.lastPos.y - player.y2) * -1,
-        // }
 
         function getAngleDifference(angle1, angle2) {
-            // Normalize the angles to be between 0 and 2π
             angle1 = angle1 % (2 * Math.PI);
             angle2 = angle2 % (2 * Math.PI);
 
-            // Calculate the absolute difference between the angles
             let diff = Math.abs(angle1 - angle2);
 
-            // Adjust the difference to be between 0 and π
             if (diff > Math.PI) {
                 diff = (2 * Math.PI) - diff;
             }
@@ -6914,56 +6478,15 @@ display:none;
             return diff;
         }
 
-        //     function smartMove(oneTickMove) {
-        //         let dir = player.moveDir;
-
-        //         let found = false
-        //         let buildings = liztobj.sort((a, b) => Math.hypot(player.y2 - a.y, player.x2 - a.x) - Math.hypot(player.y2 - b.y, player.x2 - b.x))
-        //         let spikes = buildings.filter(obj => obj.dmg && cdf(player, obj) < 250 && !obj.isTeamObject(player) && obj.active)
-
-        //         let newPos = {
-        //             x: player.x2 + (player.x2 - player.oldPos.x2) * 1.2 + (Math.cos(dir) * 50),
-        //             y: player.y2 + (player.y2 - player.oldPos.y2) * 1.2 + (Math.sin(dir) * 50),
-        //         }
-
-        //         for (let i = 0; i < spikes.length; i++) {
-        //             if (cdf(spikes[i], newPos) < spikes[i].scale + player.scale + 3) {
-        //                 found = Math.atan2(player.y2 - spikes[i].y, player.x2 - spikes[i].x)
-        //             }
-        //         }
 
 
 
 
 
-        //         if (found != false && !traps.inTrap) {
-        //             packet("a", undefined);
-        //         } else {
-        //             packet("a", dir);
-        //         }
-        //         player.oldPos.x2 = player.x2;
-        //         player.oldPos.y2 = player.y2;
-        //     }
-        //     function detectEnemySpikeCollisions(tmpObj) {
-        //         let buildings = liztobj.sort((a, b) => Math.hypot(tmpObj.y - a.y, tmpObj.x - a.x) - Math.hypot(tmpObj.y - b.y, tmpObj.x - b.x));
-        //         let spikes = buildings.filter(obj => obj.dmg && cdf(player, obj) < 200 && !obj.isTeamObject(player) && obj.active);
-        //         //here you calculate last vel / delta, add that to current pos, if touch spike do the heh
-        //         let enemy = {
-        //             // x: tmpObj.x + (player.oldPos.x2 - tmpObj.x) * -2,
-        //             // y: tmpObj.y + (player.oldPos.y2 - tmpObj.y) * -2,
-        //             x: player.x2 + (player.oldPos.x2 - player.x2) * -1,
-        //             y: player.y2 + (player.oldPos.y2 - player.y2) * -1,
-        //         }
-        //         let found = false;
-        //         for (let i = 0; i < spikes.length; i++) {
-        //             if (cdf(enemy, spikes[i]) < player.scale + spikes[i].scale) {
-        //                 found = true;
-        //             }
-        //         }
 
-        //         // player.oldPos.x2 = tmpObj.x2;
-        //         // player.oldPos.y2 = tmpObj.y2;
-        //     }
+
+
+
 
         game.tick++;
         enemy = [];
@@ -7072,8 +6595,6 @@ display:none;
                             traps.dist = UTILS.getDist(nearTrap, tmpObj, 0, 2);
                             traps.aim = UTILS.getDirect(spike ? spike : nearTrap, tmpObj, 0, 2);
 
-                            // traps.dist = UTILS.getDist(nearTrap, tmpObj, 0, 2);
-                            // traps.aim = UTILS.getDirect(nearTrap, tmpObj, 0, 2);
                             traps.protect(caf(nearTrap, tmpObj) - Math.PI);
                             traps.inTrap = true;
                             traps.info = nearTrap;
@@ -7153,19 +6674,12 @@ display:none;
             }
             i += 13;
         }
-        /*projectiles.forEach((proj) => {
-                    tmpObj = proj;
-                    if (tmpObj.active) {
-                        tmpObj.tickUpdate(game.tickSpeed);
-                    }
-                });*/
         if (player && player.alive) {
             if (enemy.length) {
                 near = enemy.sort(function(tmp1, tmp2) {
                     return tmp1.dist2 - tmp2.dist2;
                 })[0];
             } else {
-                    // console.log("no enemy");
                     }
                     if (game.tickQueue[game.tick]) {
                         game.tickQueue[game.tick].forEach((action) => {
@@ -7460,11 +6974,9 @@ display:none;
                             if (near.reloads[53] == 0) {
                                 player.empAnti = true;
                                 player.soldierAnti = false;
-                                //modLog("EmpAnti");
                             } else {
                                 player.empAnti = false;
                                 player.soldierAnti = true;
-                                //modLog("SoldierAnti");
                             }
                         }
                     }
@@ -7616,13 +7128,6 @@ display:none;
                                 selectWeapon(player.weapons[fastSpeed]);
                             }
                         }
-                        // if(useWasd) {
-                        //     if (!autos.stopspin) {
-                        //         setTimeout(()=>{
-                        //             autos.stopspin = true;
-                        //         }, 375);
-                        //     }
-                        // }
                     } else {
                         my.reloaded = false;
                         if(useWasd) {
@@ -7767,8 +7272,6 @@ display:none;
                         accChanger();
                     }
                 }
-                //lastMoveDir = getSafeDir();
-                //packet("a", lastMoveDir, 1);
                 if (configs.autoPush && enemy.length && !traps.inTrap && !instaC.ticking) {
                     autoPush();
                 } else {
@@ -7882,7 +7385,7 @@ display:none;
         }
     }
     for(var i1 = 0; i1 < liztobj.length; i1++) {
-        if (liztobj[i1].active && liztobj[i1].health > 0 && UTILS.getDist(liztobj[i1], player, 0, 2) < 150 && getEl("antipush").checked) { // || liztobj[i1].buildHealth <= items.weapons[nearEnemy.weaponIndex].dmg)
+        if (liztobj[i1].active && liztobj[i1].health > 0 && UTILS.getDist(liztobj[i1], player, 0, 2) < 150 && getEl("antipush").checked) {
 
             if(liztobj[i1].name.includes("spike") && liztobj[i1]){
                 if(liztobj[i1].owner.sid != player.sid && clicks.left == false && tmpObj.reloads[tmpObj.secondaryIndex] == 0){
@@ -7903,7 +7406,6 @@ display:none;
         context.closePath();
         context.globalAlpha = 1;
     }
-    // UPDATE LEADERBOARD:
     function updateLeaderboard(data) {
         lastLeaderboardData = data;
         return;
@@ -7931,37 +7433,16 @@ display:none;
         }
     }
 
-    // LOAD GAME OBJECT:
     function loadGameObject(data) {
         for (let i = 0; i < data.length;) {
             objectManager.add(data[i], data[i + 1], data[i + 2], data[i + 3], data[i + 4],
                               data[i + 5], items.list[data[i + 6]], true, (data[i + 7] >= 0 ? {
                 sid: data[i + 7]
             } : null));
-            // sid, x, y, dir, s, type, data, setSID, owner
-            /*let dist = UTILS.getDist({
-                        x: data[i + 1],
-                        y: data[i + 2]
-                    }, player, 0, 2);
-                    let aim = UTILS.getDirect({
-                        x: data[i + 1],
-                        y: data[i + 2]
-                    }, player, 0, 2);
-                    find = findObjectBySid(data[i]);
-                    if (data[i + 6] == 15) {
-                        if (find && !find.isTeamObject(player)) {
-                            if (dist <= 100) {
-                                traps.dist = dist;
-                                traps.aim = aim;
-                                traps.protect(aim);
-                            }
-                        }
-                    }*/
             i += 8;
         }
     }
 
-    // ADD AI:
     function loadAI(data) {
         for (let i = 0; i < ais.length; ++i) {
             ais[i].forcePos = !ais[i].visible;
@@ -8001,13 +7482,11 @@ display:none;
         }
     }
 
-    // ANIMATE AI:
     function animateAI(sid) {
         tmpObj = findAIBySID(sid);
         if (tmpObj) tmpObj.startAnim();
     }
 
-    // GATHER ANIMATION:
     function gatherAnimation(sid, didHit, index) {
         tmpObj = findPlayerBySID(sid);
         if (tmpObj) {
@@ -8015,14 +7494,11 @@ display:none;
             tmpObj.gatherIndex = index;
             tmpObj.gathering = 1;
 
-            // if(player.damageThreat >= 100 && cdf(player, tmpObj) <= 300)
-            //     healer();
 
             if (didHit) {
                 let tmpObjects = objectManager.hitObj;
                 objectManager.hitObj = [];
                 game.tickBase(() => {
-                    // refind
                     tmpObj = findPlayerBySID(sid);
                     let val = items.weapons[index].dmg * (config.weaponVariants[tmpObj[(index < 9 ? "prima" : "seconda") + "ryVariant"]].val) * (items.weapons[index].sDmg || 1) * (tmpObj.skinIndex == 40 ? 3.3 : 1);
                     tmpObjects.forEach((healthy) => {
@@ -8033,7 +7509,6 @@ display:none;
         }
     }
 
-    // WIGGLE GAME OBJECT:
     function wiggleGameObject(dir, sid) {
         tmpObj = findObjectBySid(sid);
         if (tmpObj) {
@@ -8045,7 +7520,6 @@ display:none;
         }
     }
 
-    // SHOOT TURRET:
     function shootTurret(sid, dir) {
         tmpObj = findObjectBySid(sid);
         if (tmpObj) {
@@ -8059,7 +7533,6 @@ display:none;
         }
     }
 
-    // UPDATE PLAYER VALUE:
             function updatePlayerValue(index, value, updateView) {
                 if (player) {
                     player[index] = value;
@@ -8083,7 +7556,6 @@ display:none;
 
 
 
-    // ACTION BAR:
     function updateItems(data, wpn) {
         if (data) {
             if (wpn) {
@@ -8102,8 +7574,6 @@ display:none;
             let tmpI = items.weapons.length + i;
             let actionBarItem = getEl("actionBarItem" + tmpI);
             actionBarItem.style.display = player.items.indexOf(items.list[i].id) >= 0 ? "inline-block" : "none";
-            // Add shadow to the element
-            // actionBarItem.style.boxShadow = "2px 2px 5px rgba(0, 0, 0, 0.5)";
             document.getElementsByTagName('button').style.boxShadow = "2px 2px 5px rgba(0, 0, 0, 0.5)";
 
         }
@@ -8111,8 +7581,6 @@ display:none;
         for (let i = 0; i < items.weapons.length; i++) {
             let actionBarItem = getEl("actionBarItem" + i);
             actionBarItem.style.display = player.weapons[items.weapons[i].type] == items.weapons[i].id ? "inline-block" : "none";
-            // Add shadow to the element
-            // actionBarItem.style.boxShadow = "2px 2px 5px rgba(0, 0, 0, 0.5)";
             document.getElementsByTagName('button').style.boxShadow = "2px 2px 5px rgba(0, 0, 0, 0.5)";
         }
 
@@ -8123,13 +7591,11 @@ display:none;
         }
     }
 
-    // ADD PROJECTILE:
     function addProjectile(x, y, dir, range, speed, indx, layer, sid) {
         projectileManager.addProjectile(x, y, dir, range, speed, indx, null, null, layer, inWindow).sid = sid;
         runAtNextTick.push(Array.prototype.slice.call(arguments));
     }
 
-    // REMOVE PROJECTILE:
     function remProjectile(sid, range) {
         for (let i = 0; i < projectiles.length; ++i) {
             if (projectiles[i].sid == sid) {
@@ -8148,7 +7614,6 @@ display:none;
         }
     }
 
-    // lol this useless,,, fr
     let noob = false;
     let serverReady = true;
     var isProd = location.hostname !== "127.0.0.1" && !location.hostname.startsWith("192.168.");
@@ -8169,7 +7634,6 @@ display:none;
             addMenuChText(`${player.name}[${player.sid}]`, 'EEEEEEEEEEE', "white");
         }
         if (data == "yeswearesyncer") {
-            // let delay = Date.now() - wsDelay;
             withSync = true;
             if (player) {
                 textManager.showText(player.x, player.y, 35, 0.1, 500, "Sync: " + window.pingTime + "ms", "#fff");
@@ -8182,7 +7646,6 @@ display:none;
         gameTitle.innerText = "Moo Moo";
     };
 
-    // SHOW ALLIANCE MENU:
     function allianceNotification(sid, name) {
         let findBotSID = findSID(bots, sid);
         if (findBotSID) {}
@@ -8201,7 +7664,6 @@ display:none;
         alliancePlayers = data;
     }
 
-   // STORE MENU:
             function updateStoreItems(type, id, index) {
                 if (index) {
                     if (!type)
@@ -8212,7 +7674,7 @@ display:none;
                 } else {
                     if (!type)
                         player.skins[id] = 1,
-                            id == 7 && (my.reSync = true); // testing perfect bulltick...
+                            id == 7 && (my.reSync = true);
                     else {
                         player.latestSkin = id;
                     }
@@ -8220,9 +7682,8 @@ display:none;
             }
 
 
-           // SEND MESSAGE:
 function receiveChat(sid, message) {
-    if (/img/i.test(message)) return; // Anti img kick
+    if (/img/i.test(message)) return;
     if (/iframe/i.test(message)) return;
     let kawaii = false;
     let tmpPlayer = findPlayerBySID(sid);
@@ -8239,27 +7700,19 @@ function receiveChat(sid, message) {
    }
 }
 
-    // MINIMAP:
     function updateMinimap(data) {
         minimapData = data;
     }
 
-    // SHOW ANIM TEXT:
     function showText(x, y, value, type) {
-        // if (config.anotherVisual) {
         textManager.stack.push({
             x: x,
             y: y,
             value: value
         });
-        // } else {
-        //     textManager.showText(x, y, 50, 0.18, useWasd ? 500 : 1500, Math.abs(value), (value >= 0) ? "#fff" : "#8ecc51");
-        // }
     }
 
-    /** APPLY SOCKET CODES */
 
-    // BOT:
     let bots = [];
     let ranLocation = {
         x: UTILS.randInt(35, 14365),
@@ -8376,19 +7829,16 @@ function receiveChat(sid, message) {
                 this.circlee = 0;
             };
 
-            // RESET MOVE DIR:
             this.resetMoveDir = function() {
                 this.moveDir = undefined;
             };
 
-            // RESET RESOURCES:
             this.resetResources = function(moofoll) {
                 for (let i = 0; i < config.resourceTypes.length; ++i) {
                     this[config.resourceTypes[i]] = moofoll ? 100 : 0;
                 }
             };
 
-            // SET DATA:
             this.setData = function(data) {
                 this.id = data[0];
                 this.sid = data[1];
@@ -8403,7 +7853,6 @@ function receiveChat(sid, message) {
             };
 
 
-       // SHAME SYSTEM:
             this.judgeShame = function() {
                 if (this.oldHealth < this.health) {
                     if (this.hitTime) {
@@ -8422,12 +7871,10 @@ function receiveChat(sid, message) {
                 }
             };
 
-            // CHECK TEAM
             this.isTeam = function (tmpObj) {
                 return (this == tmpObj || (this.team && this.team == tmpObj.team));
 
             };
-            // UPDATE WEAPON RELOAD:
             this.manageReloadaa = function() {
                 if (this.shooting[53]) {
                     this.shooting[53] = 0;
@@ -8471,7 +7918,6 @@ function receiveChat(sid, message) {
     class BotObject {
         constructor(sid) {
             this.sid = sid;
-            // INIT:
             this.init = function(x, y, dir, scale, type, data, owner) {
                 data = data || {};
                 this.active = true;
@@ -8490,7 +7936,6 @@ function receiveChat(sid, message) {
     };
     class BotObjManager {
         constructor(botObj, fOS) {
-            // DISABLE OBJ:
             this.disableObj = function(obj) {
                 obj.active = false;
                 if (config.anotherVisual) {} else {
@@ -8498,7 +7943,6 @@ function receiveChat(sid, message) {
                 }
             };
 
-            // ADD NEW:
             let tmpObj;
             this.add = function(sid, x, y, dir, s, type, data, setSID, owner) {
                 tmpObj = fOS(sid);
@@ -8515,7 +7959,6 @@ function receiveChat(sid, message) {
                 tmpObj.init(x, y, dir, s, type, data, owner);
             };
 
-            // DISABLE BY SID:
             this.disableBySid = function(sid) {
                 let find = fOS(sid);
                 if (find) {
@@ -8523,7 +7966,6 @@ function receiveChat(sid, message) {
                 }
             };
 
-            // REMOVE ALL FROM PLAYER:
             this.removeAllItems = function(sid, server) {
                 botObj.filter((tmp) => tmp.active && tmp.owner && tmp.owner.sid == sid).forEach((tmp) => this.disableObj(tmp));
             };
@@ -8536,7 +7978,6 @@ function receiveChat(sid, message) {
         let bot;
         console.log(WS);
         let t = WS.url.split("wss://")[1].split("?")[0];
-        // `id` is already a full "cf:<token>" string from EXP.freshToken().
         bot = id && new WebSocket("wss://" + t + "?token=" + encodeURIComponent(id));
         let botPlayer = new Map();
         botSkts.push([botPlayer]);
@@ -8560,10 +8001,7 @@ function receiveChat(sid, message) {
         bot.binaryType = "arraybuffer";
         bot.first = true;
         bot.sendWS = function(type) {
-            // EXTRACT DATA ARRAY:
             let data = Array.prototype.slice.call(arguments, 1);
-            // Framed with this bot's own key/tables/sequence, learned from the
-            // bot socket's own io-init.
             EXP.send(bot, type, data);
         };
         bot.spawn = function() {
@@ -8724,8 +8162,6 @@ function receiveChat(sid, message) {
             let type = parsed.type;
             let data = parsed.args;
             if (type == "io-init") {
-                // The shim has recorded this bot's key/tables by now, so the
-                // spawn packet can be framed correctly.
                 bot.spawn();
             }
             if (type == "1") {
@@ -8802,7 +8238,6 @@ function receiveChat(sid, message) {
                 }
 
                 if (enemy.length) {
-                    //console.log(enemy)
                     botPlayer.near = enemy.sort(function(tmp1, tmp2) {
                         return tmp1.dist2 - tmp2.dist2;
                     })[0];
@@ -8857,14 +8292,12 @@ function receiveChat(sid, message) {
                         bot.fastGear();
                     } else if((a != undefined ? a : 0) > 296 && botPlayer.millPlace) {
                         botPlayer.millPlace = false;
-                        // bot.sendWS("K", 1);
                         bot.fastGear();
                     } else {
                         if (botPlayer.inGame) {
                             if (botObj.length > 0) {
                                 let buldingtoawdoin = botObj.filter((e) => e.active && e.isItem && UTILS.getDist(e, player, 0, 2) <= (600));
                                 if (getEl("mode").value == 'fuckemup') {
-                                    // if (getEl("mode").value == "clear") {
                                     bot.selectWeapon(botPlayer.weapons[1]);
                                     let gotoDist = UTILS.getDist(buldingtoawdoin[0], botPlayer, 0, 2);
                                     let gotoAim = UTILS.getDirect(buldingtoawdoin[0], botPlayer, 0, 2);
@@ -8920,7 +8353,7 @@ function receiveChat(sid, message) {
                                     bot.sendWS("a", Math.atan2(y - botPlayer.y, x - botPlayer.x));
 
                                     const dist = Math.hypot(x - botPlayer.x, y - botPlayer.y);
-                                    if (dist > 22) // 22 is player speed without booster hat
+                                    if (dist > 22)
                                         return;
                                 }
                             }
@@ -8948,7 +8381,6 @@ function receiveChat(sid, message) {
                                 }
                                 bot.buye(11, 1);
                                 if (breakObjects.length > 0 && getEl("mode").value == 'clear') {
-                                    // if (getEl("mode").value == "clear") {
                                     bot.selectWeapon(botPlayer.weapons[1]);
                                     let gotoDist = UTILS.getDist(breakObjects[0], botPlayer, 0, 2);
                                     let gotoAim = UTILS.getDirect(breakObjects[0], botPlayer, 0, 2);
@@ -9245,7 +8677,6 @@ function receiveChat(sid, message) {
         };
     }
 
-    // RENDER LEAF:
     function renderLeaf(x, y, l, r, ctxt) {
         let endX = x + (l * Math.cos(r));
         let endY = y + (l * Math.sin(r));
@@ -9261,7 +8692,6 @@ function receiveChat(sid, message) {
         ctxt.stroke();
     }
 
-    // RENDER CIRCLE:
     function renderCircle(x, y, scale, tmpContext, dontStroke, dontFill) {
         tmpContext = tmpContext || mainContext;
         tmpContext.beginPath();
@@ -9278,7 +8708,6 @@ function receiveChat(sid, message) {
         if (!dontStroke) tmpContext.stroke();
     }
 
-    // RENDER STAR SHAPE:
     function renderStar(ctxt, spikes, outer, inner) {
         let rot = Math.PI / 2 * 3;
         let x, y;
@@ -9319,7 +8748,6 @@ function receiveChat(sid, message) {
         ctxt.closePath();
     }
 
-    // RENDER RECTANGLE:
     function renderRect(x, y, w, h, ctxt, dontStroke, dontFill) {
         if (!dontFill) ctxt.fillRect(x - (w / 2), y - (h / 2), w, h);
         if (!dontStroke) ctxt.strokeRect(x - (w / 2), y - (h / 2), w, h);
@@ -9330,7 +8758,6 @@ function receiveChat(sid, message) {
         if (!dontStroke) ctxt.strokeRect(x - (w / 2), y - (h / 2), w, h);
     }
 
-    // RENDER RECTCIRCLE:
     function renderRectCircle(x, y, s, sw, seg, ctxt, dontStroke, dontFill) {
         ctxt.save();
         ctxt.translate(x, y);
@@ -9342,7 +8769,6 @@ function receiveChat(sid, message) {
         ctxt.restore();
     }
 
-    // RENDER BLOB:
     function renderBlob(ctxt, spikes, outer, inner) {
         let rot = Math.PI / 2 * 3;
         let x, y;
@@ -9360,7 +8786,6 @@ function receiveChat(sid, message) {
         ctxt.closePath();
     }
 
-    // RENDER TRIANGLE:
     function renderTriangle(s, ctx) {
         ctx = ctx || mainContext;
         let h = s * (Math.sqrt(3) / 2);
@@ -9373,7 +8798,6 @@ function receiveChat(sid, message) {
         ctx.closePath();
     }
 
-    // PREPARE MENU BACKGROUND:
     function prepareMenuBackground() {
         let tmpMid = config.mapScale / 2;
         let attempts = 0;
@@ -9395,7 +8819,6 @@ function receiveChat(sid, message) {
         }
     }
     const speed = 35;
-    // RENDER PLAYERS:
     function renderDeadPlayers(xOffset, yOffset) {
         mainContext.fillStyle = "#91b2db";
         const currentTime = Date.now();
@@ -9430,7 +8853,6 @@ function receiveChat(sid, message) {
             }
         });
     }
-    // RENDER PLAYERS:
     function renderPlayers(xOffset, yOffset, zIndex) {
         mainContext.globalAlpha = 1;
         mainContext.fillStyle = "#91b2db";
@@ -9443,7 +8865,6 @@ function receiveChat(sid, message) {
                     tmpDir = (!configs.showDir && !useWasd && tmpObj == player) ? configs.attackDir ? getVisualDir() : getSafeDir() : (tmpObj.dir||0);
                     mainContext.save();
                     mainContext.translate(tmpObj.x - xOffset, tmpObj.y - yOffset);
-                    // RENDER PLAYER:
                     mainContext.rotate(tmpDir + tmpObj.dirPlus);
                     renderPlayer(tmpObj, mainContext);
                     mainContext.restore();
@@ -9452,7 +8873,6 @@ function receiveChat(sid, message) {
             }
         }
     }
-    // RENDER DEAD PLAYER:
     function renderDeadPlayer(obj, ctxt) {
         ctxt = ctxt || mainContext;
         ctxt.lineWidth = outlineWidth;
@@ -9460,9 +8880,7 @@ function receiveChat(sid, message) {
         let handAngle = (Math.PI / 4) * (items.weapons[obj.weaponIndex].armS||1);
         let oHandAngle = (obj.buildIndex < 0)?(items.weapons[obj.weaponIndex].hndS||1):1;
         let oHandDist = (obj.buildIndex < 0)?(items.weapons[obj.weaponIndex].hndD||1):1;
-        // TAIL/CAPE:
         renderTail2(13, ctxt, obj);
-        // WEAPON BELLOW HANDS:
         if (obj.buildIndex < 0 && !items.weapons[obj.weaponIndex].aboveHand) {
             renderTool(items.weapons[obj.weaponIndex], config.weaponVariants[obj.weaponVariant || 0].src || "", obj.scale, 0, ctxt);
             if (items.weapons[obj.weaponIndex].projectile != undefined && !items.weapons[obj.weaponIndex].hideProjectile) {
@@ -9470,12 +8888,10 @@ function receiveChat(sid, message) {
                                  items.projectiles[items.weapons[obj.weaponIndex].projectile], mainContext);
             }
         }
-        // HANDS:
         ctxt.fillStyle = "#ececec";
         renderCircle(obj.scale * Math.cos(handAngle), (obj.scale * Math.sin(handAngle)), 14);
         renderCircle((obj.scale * oHandDist) * Math.cos(-handAngle * oHandAngle),
                      (obj.scale * oHandDist) * Math.sin(-handAngle * oHandAngle), 14);
-        // WEAPON ABOVE HANDS:
         if (obj.buildIndex < 0 && items.weapons[obj.weaponIndex].aboveHand) {
             renderTool(items.weapons[obj.weaponIndex], config.weaponVariants[obj.weaponVariant || 0].src || "", obj.scale, 0, ctxt);
             if (items.weapons[obj.weaponIndex].projectile != undefined && !items.weapons[obj.weaponIndex].hideProjectile) {
@@ -9483,18 +8899,14 @@ function receiveChat(sid, message) {
                                  items.projectiles[items.weapons[obj.weaponIndex].projectile], mainContext);
             }
         }
-        // BUILD ITEM:
         if (obj.buildIndex >= 0) {
             var tmpSprite = getItemSprite(items.list[obj.buildIndex]);
             ctxt.drawImage(tmpSprite, obj.scale - items.list[obj.buildIndex].holdOffset, -tmpSprite.width / 2);
         }
-        // BODY:
         renderCircle(0, 0, obj.scale, ctxt);
-        // SKIN
         renderSkin2(48, ctxt, null, obj)
     }
 
-    // RENDER PLAYER:
     function renderPlayer(obj, ctxt) {
         ctxt = ctxt || mainContext;
         ctxt.lineWidth = outlineWidth;
@@ -9505,12 +8917,10 @@ function receiveChat(sid, message) {
 
         let katanaMusket = (obj == player && obj.weapons[0] == 3 && obj.weapons[1] == 15);
 
-        // TAIL/CAPE:
         if (obj.tailIndex > 0) {
             renderTailTextureImage(obj.tailIndex, ctxt, obj);
         }
 
-        // WEAPON BELLOW HANDS:
         if (obj.buildIndex < 0 && !items.weapons[obj.weaponIndex].aboveHand) {
             renderTool(items.weapons[katanaMusket ? 4 : obj.weaponIndex], config.weaponVariants[obj.weaponVariant].src, obj.scale, 0, ctxt);
             if (items.weapons[obj.weaponIndex].projectile != undefined && !items.weapons[obj.weaponIndex].hideProjectile) {
@@ -9519,13 +8929,11 @@ function receiveChat(sid, message) {
             }
         }
 
-        // HANDS:
         ctxt.fillStyle = config.skinColors[obj.skinColor];
         renderCircle(obj.scale * Math.cos(handAngle), (obj.scale * Math.sin(handAngle)), 14);
         renderCircle((obj.scale * oHandDist) * Math.cos(-handAngle * oHandAngle),
                      (obj.scale * oHandDist) * Math.sin(-handAngle * oHandAngle), 14);
 
-        // WEAPON ABOVE HANDS:
         if (obj.buildIndex < 0 && items.weapons[obj.weaponIndex].aboveHand) {
             renderTool(items.weapons[obj.weaponIndex], config.weaponVariants[obj.weaponVariant].src, obj.scale, 0, ctxt);
             if (items.weapons[obj.weaponIndex].projectile != undefined && !items.weapons[obj.weaponIndex].hideProjectile) {
@@ -9534,16 +8942,13 @@ function receiveChat(sid, message) {
             }
         }
 
-        // BUILD ITEM:
         if (obj.buildIndex >= 0) {
             var tmpSprite = getItemSprite(items.list[obj.buildIndex]);
             ctxt.drawImage(tmpSprite, obj.scale - items.list[obj.buildIndex].holdOffset, -tmpSprite.width / 2);
         }
 
-        // BODY:
         renderCircle(0, 0, obj.scale, ctxt);
 
-        // SKIN:
         if (obj.skinIndex > 0) {
             ctxt.rotate(Math.PI / 2);
             renderTextureSkin(obj.skinIndex, ctxt, null, obj);
@@ -9551,7 +8956,6 @@ function receiveChat(sid, message) {
 
     }
 
-    // RENDER NORMAL SKIN
     var skinSprites2 = {};
     var skinPointers2 = {};
     function renderSkin2(index, ctxt, parentSkin, owner) {
@@ -9562,7 +8966,6 @@ function receiveChat(sid, message) {
                 this.isLoaded = true;
                 this.onload = null;
             };
-            //tmpImage.src = "https://moomoo.io/img/hats/hat_" + index + ".png";
             tmpImage.src = "https://moomoo.io/img/hats/hat_" + index + ".png";
             skinSprites2[index] = tmpImage;
             tmpSkin = tmpImage;
@@ -9587,7 +8990,6 @@ function receiveChat(sid, message) {
         }
     }
 
-    // RENDER SKIN:
     function renderTextureSkin(index, ctxt, parentSkin, owner) {
         if (!(tmpSkin = skinSprites[index + (txt ? "lol" : 0)])) {
             var tmpImage = new Image();
@@ -9652,7 +9054,6 @@ function receiveChat(sid, message) {
             }
         }
     }
-    // RENDER SKINS:
     let skinSprites = {};
     let skinPointers = {};
     let tmpSkin;
@@ -9689,7 +9090,6 @@ function receiveChat(sid, message) {
         }
     }
 
-    // RENDER TAIL:
     var FlareZAcc = {
         21: "https://i.imgur.com/4ddZert.png",
         19: "https://i.imgur.com/sULkUZT.png",
@@ -9725,7 +9125,7 @@ function receiveChat(sid, message) {
                     this.onload = null
             }
                 ,
-                tmpImage.src = setTailTextureImage(index, "acc"),//".././img/accessories/access_" + index + ".png";
+                tmpImage.src = setTailTextureImage(index, "acc"),
                 accessSprites[index + (txt ? "lol" : 0)] = tmpImage,
                 tmpSkin = tmpImage;
         }
@@ -9819,7 +9219,6 @@ function receiveChat(sid, message) {
         }
     }
 
-    // RENDER TOOL:
     let toolSprites = {};
     function renderTool(obj, variant, x, y, ctxt) {
         let tmpSrc = obj.src + (variant || "");
@@ -9836,7 +9235,6 @@ function receiveChat(sid, message) {
             ctxt.drawImage(tmpSprite, x + obj.xOff - (obj.length / 2), y + obj.yOff - (obj.width / 2), obj.length, obj.width);
     }
 
-    // RENDER PROJECTILES:
     function renderProjectiles(layer, xOffset, yOffset) {
         for (let i = 0; i < projectiles.length; i++) {
             tmpObj = projectiles[i];
@@ -9853,8 +9251,7 @@ function receiveChat(sid, message) {
         };
     }
 
-    // RENDER PROJECTILE:
-    let projectileSprites = {};//fz iz zexy
+    let projectileSprites = {};
 
     function renderProjectile(x, y, obj, ctxt, debug) {
         if (obj.src) {
@@ -9876,7 +9273,6 @@ function receiveChat(sid, message) {
         }
     }
 
-    // RENDER AI:
     let aiSprites = {};
 
     function renderAI(obj, ctxt) {
@@ -9898,10 +9294,8 @@ function receiveChat(sid, message) {
         }
     }
 
-    // RENDER WATER BODIES:
     function renderWaterBodies(xOffset, yOffset, ctxt, padding) {
 
-        // MIDDLE RIVER:
         let tmpW = config.riverWidth + padding;
         let tmpY = (config.mapScale / 2) - yOffset - (tmpW / 2);
         if (tmpY < maxScreenHeight && tmpY + tmpW > 0) {
@@ -9909,7 +9303,6 @@ function receiveChat(sid, message) {
         }
     }
 
-    // RENDER GAME OBJECTS:
     let gameObjectSprites = {};
 
     function getResSprite(obj) {
@@ -9925,10 +9318,6 @@ function receiveChat(sid, message) {
             tmpContext.rotate(UTILS.randFloat(0, Math.PI));
             tmpContext.strokeStyle = outlineColor;
             tmpContext.lineWidth = outlineWidth;
-            // if (isNight) {
-            //     tmpContext.shadowBlur = blurScale;
-            //     tmpContext.shadowColor = `rgba(0, 0, 0, ${obj.alpha})`;
-            // }
             if (obj.type == 0) {
                 let tmpScale;
                 let tmpCount = 8;
@@ -9952,8 +9341,6 @@ function receiveChat(sid, message) {
                     tmpContext.fill();
                     tmpContext.stroke();
 
-                    //tmpContext.shadowBlur = null;
-                    //tmpContext.shadowColor = null;
 
                     tmpContext.fillStyle = "#89a54c";
                     renderCircle(0, 0, obj.scale * 0.55, tmpContext);
@@ -9965,8 +9352,6 @@ function receiveChat(sid, message) {
                     tmpContext.fill();
                     tmpContext.stroke();
 
-                    //tmpContext.shadowBlur = null;
-                    //tmpContext.shadowColor = null;
 
                     tmpContext.fillStyle = biomeID ? "#6a64af" : "#c15555";
                     let tmpRange;
@@ -9997,7 +9382,6 @@ function receiveChat(sid, message) {
         return tmpSprite;
     }
 
-    // GET ITEM SPRITE:
     let itemSprites = [];
 
     function getItemSprite(obj, asIcon) {
@@ -10331,7 +9715,6 @@ function receiveChat(sid, message) {
     function getObjSprite(obj) {
         let tmpSprite = objSprites[obj.id];
         if (!tmpSprite) {
-            // let blurScale = isNight ? 20 : 0;
             let tmpCanvas = document.createElement("canvas");
             tmpCanvas.width = tmpCanvas.height = obj.scale * 2.5 + outlineWidth + (items.list[obj.id].spritePadding || 0) + 0;
             let tmpContext = tmpCanvas.getContext("2d");
@@ -10339,10 +9722,6 @@ function receiveChat(sid, message) {
             tmpContext.rotate(Math.PI / 2);
             tmpContext.strokeStyle = outlineColor;
             tmpContext.lineWidth = outlineWidth;
-            // if (isNight) {
-            //     tmpContext.shadowBlur = 20;
-            //     tmpContext.shadowColor = `rgba(0, 0, 0, ${Math.min(0.3, obj.alpha)})`;
-            // }
             if (obj.name == "spikes" || obj.name == "greater spikes" || obj.name == "poison spikes" || obj.name == "spinning spikes") {
                 tmpContext.fillStyle = obj.name == "poison spikes" ? "#7b935d" : "#939393";
                 let tmpScale = obj.scale * 0.6;
@@ -10368,7 +9747,6 @@ function receiveChat(sid, message) {
         return tmpSprite;
     }
 
-    // GET MARK SPRITE:
     function getMarkSprite(obj, tmpContext, tmpX, tmpY) {
         let center = {
             x: screenWidth / 2,
@@ -10470,14 +9848,12 @@ function receiveChat(sid, message) {
         tmpContext.restore();
     }
 
-    // OBJECT ON SCREEN:
     function isOnScreen(x, y, s) {
         return (x + s >= 0 && x - s <= maxScreenWidth && y + s >= 0 && (y,
                                                                         s,
                                                                         maxScreenHeight));
     }
 
-    // RENDER GAME OBJECTS:
     function renderGameObjects(layer, xOffset, yOffset) {
         let tmpSprite;
         let tmpX;
@@ -10521,12 +9897,10 @@ function receiveChat(sid, message) {
                 }
                 if (layer == 3 && !useWasd) {
                     if (tmpObj.health < tmpObj.maxHealth) {
-                        // HEALTH HOLDER:
                         mainContext.fillStyle = darkOutlineColor;
                         mainContext.roundRect(tmpX - config.healthBarWidth / 2 - config.healthBarPad, tmpY - config.healthBarPad, config.healthBarWidth + config.healthBarPad * 2, 17, 8);
                         mainContext.fill();
 
-                        // HEALTH BAR:
                         mainContext.fillStyle = tmpObj.isTeamObject(player) ? "#8ecc51" : "#cc5151";
                         mainContext.roundRect(tmpX - config.healthBarWidth / 2, tmpY, config.healthBarWidth * (tmpObj.health / tmpObj.maxHealth), 17 - config.healthBarPad * 2, 7);
                         mainContext.fill();
@@ -10535,7 +9909,6 @@ function receiveChat(sid, message) {
             }
         });
 
-        // PLACE VISIBLE:
         if (layer == 0) {
             if (placeVisible.length) {
                 placeVisible.forEach((places) => {
@@ -10551,7 +9924,6 @@ function receiveChat(sid, message) {
         getMarkSprite(tmpObj, mainContext, tmpX, tmpY);
     }
 
-    // RENDER MINIMAP:
     class MapPing {
         constructor(color, scale) {
             this.init = function(x, y) {
@@ -10596,7 +9968,6 @@ function receiveChat(sid, message) {
         if (player && player.alive) {
             mapContext.clearRect(0, 0, mapDisplay.width, mapDisplay.height);
 
-            // RENDER PINGS:
             mapContext.lineWidth = 4;
             for (let i = 0; i < mapPings.length; ++i) {
                 tmpPing = mapPings[i];
@@ -10604,7 +9975,6 @@ function receiveChat(sid, message) {
                 tmpPing.update(mapContext, delta);
             }
 
-            // RENDER BREAK TRACKS:
             mapContext.globalAlpha = 1;
             mapContext.fillStyle = "#ff0000";
             if (breakTrackers.length) {
@@ -10619,7 +9989,6 @@ function receiveChat(sid, message) {
                 }
             }
 
-            // RENDER PLAYERS:
             mapContext.globalAlpha = 1;
             mapContext.fillStyle = "#fff";
             renderCircle((player.x / config.mapScale) * mapDisplay.width,
@@ -10633,7 +10002,6 @@ function receiveChat(sid, message) {
                 }
             }
 
-            // RENDER BOTS:
             if (bots.length) {
                 bots.forEach((tmp) => {
                     if (tmp.inGame) {
@@ -10645,7 +10013,6 @@ function receiveChat(sid, message) {
                 });
             }
 
-            // DEATH LOCATION:
             if (lastDeath) {
                 mapContext.fillStyle = "#fc5553";
                 mapContext.font = "34px HammerSmith One";
@@ -10655,7 +10022,6 @@ function receiveChat(sid, message) {
                                     (lastDeath.y / config.mapScale) * mapDisplay.height);
             }
 
-            // MAP MARKER:
             if (mapMarker) {
                 mapContext.fillStyle = "#fff";
                 mapContext.font = "34px HammerSmith One";
@@ -10667,7 +10033,6 @@ function receiveChat(sid, message) {
         }
     }
 
-      // ICONS:
             let crossHairs = ["https://cdn.discordapp.com/attachments/1233117653716172952/1235681807262027866/image-from-rawpixel-id-14718496-png_1.png?ex=66373c1c&is=6635ea9c&hm=ab0a218822ebb30965197d2268459c4f8335d369e31255e4c62a133a3cadbcc9&", "https://cdn.discordapp.com/attachments/1233117653716172952/1235681807262027866/image-from-rawpixel-id-14718496-png_1.png?ex=66373c1c&is=6635ea9c&hm=ab0a218822ebb30965197d2268459c4f8335d369e31255e4c62a133a3cadbcc9&"];
             let crossHairSprites = {};
             let iconSprites = {};
@@ -10700,7 +10065,6 @@ function receiveChat(sid, message) {
             return Infinity;
         }
     }
-    // UPDATE GAME:
     function updateGame() {
         if(gameObjects.length && inGame) {
             gameObjects.forEach((tmp) => {
@@ -10714,35 +10078,31 @@ function receiveChat(sid, message) {
                         if(UTILS.getDistance(tmp.x, tmp.y, player.x, player.y) >= 1200) {
                             tmp.render = false;
                             const index = liztobj.indexOf(tmp);
-                            if (index > -1) { // only splice array when item is found
-                                liztobj.splice(index, 1); // 2nd parameter means remove one item only
+                            if (index > -1) {
+                                liztobj.splice(index, 1);
                             }
                         }
                     } else if(UTILS.getDistance(tmp.x, tmp.y, player.x, player.y) >= 1200) {
                         tmp.render = false;
                         const index = liztobj.indexOf(tmp);
-                        if (index > -1) { // only splice array when item is found
-                            liztobj.splice(index, 1); // 2nd parameter means remove one item only
+                        if (index > -1) {
+                            liztobj.splice(index, 1);
                         }
                     } else {
                         tmp.render = false;
                         const index = liztobj.indexOf(tmp);
-                        if (index > -1) { // only splice array when item is found
-                            liztobj.splice(index, 1); // 2nd parameter means remove one item only
+                        if (index > -1) {
+                            liztobj.splice(index, 1);
                         }
                     }
                 }
             })
-            // gameObjects = gameObjects.filter(e => UTILS.getDistance(e.x, e.y, player.x, player.y) <= 1000)
         }
 
-        // if (config.resetRender) {
         mainContext.beginPath();
         mainContext.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
-        // }
         mainContext.globalAlpha = 1;
 
-        // MOVE CAMERA:
         if (player) {
             if (false) {
                 camX = player.x;
@@ -10763,7 +10123,6 @@ function receiveChat(sid, message) {
             camX = config.mapScale / 2 + config.riverWidth;
             camY = config.mapScale / 2;
         }
-        // PATHFINDER LINE
         if (pathFind.active) {
             if (pathFind.array && (pathFind.chaseNear ? enemy.length : true)) {
                 mainContext.lineWidth = player.scale / 5;
@@ -10788,7 +10147,6 @@ function receiveChat(sid, message) {
                 mainContext.stroke();
             }
         }
-        // INTERPOLATE PLAYERS AND AI:
         let lastTime = now - (1000 / config.serverUpdateRate);
         let tmpDiff;
         for (let i = 0; i < players.length + ais.length; ++i) {
@@ -10818,11 +10176,9 @@ function receiveChat(sid, message) {
             }
         }
 
-        // RENDER CORDS:
         let xOffset = camX - (maxScreenWidth / 2);
         let yOffset = camY - (maxScreenHeight / 2);
 
-        // RENDER BACKGROUND:
         if (config.snowBiomeTop - yOffset <= 0 && config.mapScale - config.snowBiomeTop - yOffset >= maxScreenHeight) {
             mainContext.fillStyle = "#b6db66";
             mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
@@ -10847,7 +10203,6 @@ function receiveChat(sid, message) {
                                  maxScreenHeight - (config.mapScale - config.snowBiomeTop - yOffset));
         }
 
-        // RENDER WATER AREAS:
         if (!firstSetup) {
             waterMult += waterPlus * config.waveSpeed * delta;
             if (waterMult >= config.waveMax) {
@@ -10863,25 +10218,20 @@ function receiveChat(sid, message) {
             renderWaterBodies(xOffset, yOffset, mainContext, (waterMult - 1) * 250);
         }
 
-        // RENDER DEAD PLAYERS:
         mainContext.globalAlpha = 1;
         mainContext.strokeStyle = outlineColor;
         renderDeadPlayers(xOffset, yOffset);
 
-        // RENDER BOTTOM LAYER:
         mainContext.globalAlpha = 1;
         mainContext.strokeStyle = outlineColor;
         renderGameObjects(-1, xOffset, yOffset);
 
-        // RENDER PROJECTILES:
         mainContext.globalAlpha = 1;
         mainContext.lineWidth = outlineWidth;
         renderProjectiles(0, xOffset, yOffset);
 
-        // RENDER PLAYERS:
         renderPlayers(xOffset, yOffset, 0);
 
-        // RENDER AI:
         mainContext.globalAlpha = 1;
         for (let i = 0; i < ais.length; ++i) {
             tmpObj = ais[i];
@@ -10895,7 +10245,6 @@ function receiveChat(sid, message) {
             }
         }
 
-        // RENDER GAME OBJECTS (LAYERED):
         renderGameObjects(0, xOffset, yOffset);
         renderProjectiles(1, xOffset, yOffset);
         renderGameObjects(1, xOffset, yOffset);
@@ -10903,7 +10252,6 @@ function receiveChat(sid, message) {
         renderGameObjects(2, xOffset, yOffset);
         renderGameObjects(3, xOffset, yOffset);
 
-        // MAP BOUNDARIES:
         mainContext.fillStyle = "#000";
         mainContext.globalAlpha = 0.09;
         if (xOffset <= 0) {
@@ -10925,12 +10273,10 @@ function receiveChat(sid, message) {
                                  (maxScreenWidth - tmpX) - tmpMin, maxScreenHeight - (config.mapScale - yOffset));
         }
 
-        // RENDER DAY/NIGHT TIME:
         mainContext.globalAlpha = 1;
         mainContext.fillStyle = "rgba(0, 5, 80, 0.55)";
         mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
 
-        // RENDER PLAYER AND AI UI:
         mainContext.strokeStyle = darkOutlineColor;
         mainContext.globalAlpha = 1;
 
@@ -10939,20 +10285,11 @@ function receiveChat(sid, message) {
             if (tmpObj.visible && tmpObj.showName === 'NOOO') {
                 mainContext.strokeStyle = darkOutlineColor;
 
-                // NAME AND HEALTH:
 
-                //                         let izbot = false;
 
-                //                         bots.forEach((bot) => {
-                //                             if (tmpObj.sid == bot.sid) izbot = true
-                //                             else izbot = false;
-                //                         });
 
-                let tmpText = (tmpObj.team ? "[" + tmpObj.team + "] " : "") + (tmpObj.name || ""); //+ (tmpObj.isPlayer ? " {" + tmpObj.sid + "}" : "");
+                let tmpText = (tmpObj.team ? "[" + tmpObj.team + "] " : "") + (tmpObj.name || "");
                 if (tmpText != "" && tmpObj.name != "Trash Slave") {
-                    // bots.forEach((bot) => {
-                    //     if (tmpObj.sid == bot.sid) return;
-                    // });
 
                     mainContext.font = (tmpObj.nameScale || 30) + "px HammerSmith One";
                     mainContext.fillStyle = "#fff";
@@ -10978,19 +10315,16 @@ function receiveChat(sid, message) {
                         let tmpS = tmpObj.scale * 2.2;
                         mainContext.drawImage((crossHairSprites[1]), tmpObj.x - xOffset - tmpS / 2, tmpObj.y - yOffset - tmpS / 2, tmpS, tmpS);
                     }
-                    // izbot = false;
                 }
                 if (tmpObj.health > 0) {
 
                     if(tmpObj.name != "Trash Slave") {
-                        // HEALTH HOLDER:
                         mainContext.fillStyle = darkOutlineColor;
                         mainContext.roundRect(tmpObj.x - xOffset - config.healthBarWidth - config.healthBarPad,
                                               (tmpObj.y - yOffset + tmpObj.scale) + config.nameY, (config.healthBarWidth * 2) +
                                               (config.healthBarPad * 2), 17, 8);
                         mainContext.fill();
 
-                        // HEALTH BAR:
                         mainContext.fillStyle = (tmpObj == player || (tmpObj.team && tmpObj.team == player.team)) ? "#8ecc51" : "#cc5151";
                         mainContext.roundRect(tmpObj.x - xOffset - config.healthBarWidth,
                                               (tmpObj.y - yOffset + tmpObj.scale) + config.nameY + config.healthBarPad,
@@ -11006,7 +10340,7 @@ function receiveChat(sid, message) {
                             turret: (2500 - tmpObj.reloads[53]) / 2500
                         };
                         if (!tmpObj.currentReloads) {
-                            tmpObj.currentReloads = { // Initialize currentReloads if not already set
+                            tmpObj.currentReloads = {
                                 primary: targetReloads.primary,
                                 secondary: targetReloads.secondary,
                                 turret: targetReloads.turret
@@ -11023,7 +10357,7 @@ function receiveChat(sid, message) {
                         const centerY = tmpObj.y - yOffset;
                         const barRadius = 35;
                         const barWidth = 15;
-                        const totalAngle = (Math.PI*2)/3; // Half circle
+                        const totalAngle = (Math.PI*2)/3;
                         const secondaryStartAngle = -Math.PI / 2 + Math.PI / 3 + tmpObj.dir - Math.PI/2;
                         const secondaryEndAngle = secondaryStartAngle + (totalAngle * tmpObj.currentReloads.secondary);
                         const primaryStartAngle = Math.PI / 2 + tmpObj.dir - Math.PI/2;
@@ -11063,7 +10397,6 @@ function receiveChat(sid, message) {
                         mainContext.restore();
 
                         if(tmpObj.name != "Trash Slave") {
-                            // SHAME COUNT:
                             mainContext.globalAlpha = 1;
                             mainContext.font = "24px HammerSmith One";
                             mainContext.fillStyle = "#fff";
@@ -11078,7 +10411,6 @@ function receiveChat(sid, message) {
                             mainContext.fillText('[' + (tmpObj.skinIndex == 45 && tmpObj.shameTimer > 0 ? tmpObj.shameTimer : tmpObj.shameCount) + '/' + Math.round(tmpObj.pinge) + '/' + tmpObj.lastshamecount + ']', tmpX, tmpObj.y - yOffset - tmpObj.scale - config.nameY + 175);
                         }
 
-                        // PLAYER TRACER:
                         if (!tmpObj.isTeam(player)) {
                             let center = {
                                 x: screenWidth / 2,
@@ -11142,7 +10474,6 @@ function receiveChat(sid, message) {
 
         if (player) {
 
-            // AUTOPUSH LINE:
             if (my.autoPush && my.pushData) {
                 mainContext.lineWidth = 5;
                 mainContext.globalAlpha = 1;
@@ -11191,10 +10522,8 @@ function receiveChat(sid, message) {
 
         mainContext.globalAlpha = 1;
 
-        // RENDER ANIM TEXTS:
         textManager.update(delta, mainContext, xOffset, yOffset);
 
-        // RENDER CHAT MESSAGES:
         for (let i = 0; i < players.length; ++i) {
             tmpObj = players[i];
             if (tmpObj.visible) {
@@ -11294,11 +10623,9 @@ function receiveChat(sid, message) {
 
         mainContext.globalAlpha = 1;
 
-        // RENDER MINIMAP:
         renderMinimap(delta);
     }
 
-    // UPDATE & ANIMATE:
     window.requestAnimFrame = function() {
         return null;
     }
@@ -11312,7 +10639,6 @@ function receiveChat(sid, message) {
     })();
 
     function doUpdate() {
-        //rape modulus
         now = performance.now();
         delta = now - lastUpdate;
         lastUpdate = now;
@@ -11365,7 +10691,6 @@ function receiveChat(sid, message) {
             }
         }
     };
-    // REMOVED!!! so they cant abuse :)
     let projects = [
         "adorable-eight-guppy",
         "galvanized-bittersweet-windshield"
@@ -11409,10 +10734,6 @@ function receiveChat(sid, message) {
         botSkts = [];
     };
     window.tryConnectBots = async function() {
-        // reCAPTCHA is gone; the server verifies Cloudflare Turnstile tokens
-        // now. Turnstile cannot be solved programmatically the way the old
-        // proof-of-work challenge could, and its tokens are single-use, so
-        // only the first bot is likely to be accepted.
         for (let i = 0; i < (bots.length < 3 ? 3 : 4); i++) {
             const token = await EXP.freshToken();
             if (!token) {
@@ -11449,7 +10770,6 @@ function receiveChat(sid, message) {
     };
     window.prepareUI = function(tmpObj) {
         resize();
-        // CHAT STUFF:
         var chatBox = document.getElementById("chatBox");
         var chatHolder = document.getElementById("chatHolder");
         var suggestBox = document.createElement("div");
@@ -11491,7 +10811,6 @@ function receiveChat(sid, message) {
             chatHolder.style.display = "none";
         }
 
-        // ACTION BAR:
         UTILS.removeAllChildren(actionBar);
 
         for (let i = 0; i < (items.weapons.length + items.list.length); ++i) {
@@ -11535,9 +10854,6 @@ function receiveChat(sid, message) {
                     };
                     tmpSprite.src = "./../img/weapons/" + items.weapons[i].src + ".png";
                     let tmpUnit = getEl('actionBarItem' + i);
-                    // tmpUnit.onmouseover = UTILS.checkTrusted(function () {
-                    //     showItemInfo(items.weapons[i], true);
-                    // });
                     tmpUnit.onclick = UTILS.checkTrusted(function () {
                         selectWeapon(tmpObj.weapons[items.weapons[i].type]);
                     });
@@ -11552,9 +10868,6 @@ function receiveChat(sid, message) {
                     tmpContext.fillRect(-tmpScale / 2, -tmpScale / 2, tmpScale, tmpScale);
                     getEl('actionBarItem' + i).style.backgroundImage = "url(" + tmpCanvas.toDataURL() + ")";
                     let tmpUnit = getEl('actionBarItem' + i);
-                    // tmpUnit.onmouseover = UTILS.checkTrusted(function () {
-                    //     showItemInfo(items.list[i - items.weapons.length]);
-                    // });
                     tmpUnit.onclick = UTILS.checkTrusted(function () {
                         selectToBuild(tmpObj.items[tmpObj.getItemType(i - items.weapons.length)]);
                     });
@@ -11565,7 +10878,6 @@ function receiveChat(sid, message) {
     };
     window.profineTest = function(data) {
         if (data) {
-            // VALIDATE NAME:
             let name = data + "";
             name = name.slice(0, config.maxNameLength);
 
@@ -11574,7 +10886,7 @@ function receiveChat(sid, message) {
     }
 }(1)
 
-} // end __expBoot
+}
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", __expBoot, { once: true });
