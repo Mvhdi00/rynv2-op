@@ -266,6 +266,12 @@ LemonMix._Visuals = {
   prevPrimary: {},    // value before the last advance, for the fork's 111ms lerp
   prevSecondary: {},
   weapons: {},        // sid -> { primary, secondary }
+  pos: {},            // sid -> { x, y }, only so a shot can be traced to a shooter
+  health: {},         // sid -> last known health, to spot a hit
+  clown: {},          // sid -> 0..7, the clown-hat revive counter
+  lastHit: {},        // sid -> tick of the last health drop
+  tick: 0,            // advanced once per updatePlayers, the fork's clock
+  mySid: null,
   target: null,       // sid highlighted by the insta ring
 
   colors: {
@@ -311,14 +317,51 @@ LemonMix._Visuals = {
       break;
      }
 
+     case "C":                           // setupGame(yourSID)
+      this.mySid = args[0];
+      break;
+
+     case "O": {                         // updateHealth(sid, value)
+      const sid = args[0];
+      const health = args[1];
+      if (sid === undefined) break;
+      if (this.health[sid] !== undefined && health < this.health[sid]) {
+        this.lastHit[sid] = this.tick;
+      }
+      this.health[sid] = health;
+      break;
+     }
+
+     case "X": {                         // addProjectile(x, y, dir, range, speed, ...)
+      this._shotFired(args[0], args[1], args[2], args[4]);
+      break;
+     }
+
      case "a": {                         // updatePlayers, flat groups of 13
       const flat = args[0];
       if (!flat || !flat.length) break;
+      this.tick++;
       for (let i = 0; i < flat.length; i += 13) {
         const sid = flat[i];
         const buildIndex = flat[i + 4];
         const weaponIndex = flat[i + 5];
+        const skinIndex = flat[i + 9];
         const slot = this._slot(sid);
+        this.pos[sid] = { x: flat[i + 1], y: flat[i + 2] };
+
+        /* The clown hat revives you at seven hits taken inside two ticks of
+         * each other; the counter decays by two when you go a tick unhit. */
+        if (skinIndex === 45) {
+          this.clown[sid] = 7;
+        } else {
+          if (this.clown[sid] === undefined) this.clown[sid] = 0;
+          if (this.lastHit[sid] !== undefined) {
+            if (this.tick - this.lastHit[sid] < 2) this.clown[sid]++;
+            else this.clown[sid] = Math.max(0, this.clown[sid] - 2);
+            delete this.lastHit[sid];
+          }
+        }
+
         this.prevPrimary[sid] = this.primary[sid];
         this.prevSecondary[sid] = this.secondary[sid];
         if (weaponIndex < 9) {
@@ -342,6 +385,45 @@ LemonMix._Visuals = {
       }
       break;
      }
+    }
+  },
+
+  /* A projectile packet does not say who fired it, so the fork worked it out:
+   * a shot leaves the shooter about 80 units along its heading, so back that
+   * off and look for a player near the result whose secondary weapon fires a
+   * projectile at exactly this speed. Same method here, driven off the
+   * positions the updatePlayers packet already carries. */
+  _shotFired(x, y, dir, speed) {
+    if (x === undefined || dir === undefined) return;
+    const originX = x - 80 * Math.cos(dir);
+    const originY = y - 80 * Math.sin(dir);
+
+    let best = null;
+    let bestDist = Infinity;
+    for (const sid in this.pos) {
+      const slot = this.weapons[sid];
+      if (!slot || slot.secondary === undefined) continue;
+      const weapon = LEMONMIX_WEAPONS[slot.secondary];
+      if (!weapon || weapon.projectileSpeed !== speed) continue;
+      const p = this.pos[sid];
+      const d = (p.x - originX) * (p.x - originX) + (p.y - originY) * (p.y - originY);
+      if (d < bestDist) {
+        bestDist = d;
+        best = sid;
+      }
+    }
+    if (best !== null && Math.sqrt(bestDist) < 60) this.secondary[best] = 0;
+  },
+
+  /* The `<n/7>` the fork appended to every other player's name. */
+  _clownTag(player) {
+    try {
+      if (!player || player.sid === undefined) return "";
+      if (player.skinIndex === undefined || player.skinIndex === null) return "";
+      if (this.mySid !== null && player.sid === this.mySid) return "";
+      return " <" + (this.clown[player.sid] || 0) + "/7>";
+    } catch (e) {
+      return "";
     }
   },
 

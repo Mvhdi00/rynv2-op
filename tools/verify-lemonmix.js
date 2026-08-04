@@ -402,6 +402,7 @@ if (!LemonMix) {
         ["packetIn", "LemonMix._in("],
         ["packetOut", "LemonMix._out("],
         ["captureTurnstile", "LemonMix._turnstile="],
+        ["clownCounter", "LemonMix._Visuals._clownTag("],
         ["playerOverlay", "LemonMix._Visuals._draw("],
       ];
       for (const [name, mark] of marks) {
@@ -427,8 +428,62 @@ if (!LemonMix) {
     if (mine[i].speed !== game.weapons[i].speed) {
       fail(`weapons: "${game.weapons[i].name}" speed=${mine[i].speed}, game has ${game.weapons[i].speed}`);
     }
+    /* Ranged weapons need their projectile speed too: it is the only way a
+     * projectile packet can be traced back to whoever fired it. */
+    const proj = game.weapons[i].projectile !== undefined ? game.projectiles[game.weapons[i].projectile] : null;
+    const want = proj && proj.speed !== undefined ? proj.speed : undefined;
+    if (mine[i].projectileSpeed !== want) {
+      fail(`weapons: "${game.weapons[i].name}" projectileSpeed=${mine[i].projectileSpeed}, game has ${want}`);
+    }
   }
-  note(`weapons: ${mine.length} reload speeds match the shipped table`);
+  note(`weapons: ${mine.length} reload speeds and projectile speeds match the shipped table`);
+}
+
+/* The Visuals state machine, driven the way the packet stream drives it. The
+ * fork tracked all of this by patching four functions inside its copy of the
+ * bundle; here it is rebuilt from packets, so it is worth checking it lands on
+ * the same numbers. */
+{
+  const V = LemonMix._Visuals;
+  const player = (sid, x, y, skin, weapon) => {
+    const row = new Array(13).fill(0);
+    row[0] = sid; row[1] = x; row[2] = y; row[4] = -1; row[5] = weapon; row[9] = skin;
+    return row;
+  };
+
+  LemonMix._in("C", [7]);
+  LemonMix._in("D", [[0, 42, "enemy", 0, 0, 0, 100, 100, 1, 0]]);
+
+  /* A musket (weapon 15, projectile speed 3.6) fired by sid 42, which the
+   * projectile packet does not name — it has to be worked out from where the
+   * shot appeared. */
+  LemonMix._in("a", [player(42, 1000, 1000, 0, 15)]);
+  LemonMix._in("a", [player(42, 1000, 1000, 0, 15)]);
+  LemonMix._in("X", [1080, 1000, 0, 1000, 3.6, 5, 0, 99]);
+  if (V.secondary[42] !== 0) {
+    fail(`visuals: a musket shot 80 units in front of sid 42 did not reset its reload (${V.secondary[42]})`);
+  }
+
+  /* Two hits inside two ticks advance the clown counter; the hat pins it. */
+  LemonMix._in("O", [42, 80]); LemonMix._in("a", [player(42, 1000, 1000, 0, 15)]);
+  LemonMix._in("O", [42, 60]); LemonMix._in("a", [player(42, 1000, 1000, 0, 15)]);
+  if (!V.clown[42]) fail("visuals: the clown counter did not move after two hits");
+  if (V._clownTag({ sid: 42, skinIndex: 0 }) !== ` <${V.clown[42]}/7>`) {
+    fail(`visuals: clown tag rendered as ${JSON.stringify(V._clownTag({ sid: 42, skinIndex: 0 }))}`);
+  }
+  if (V._clownTag({ sid: 7, skinIndex: 0 }) !== "") {
+    fail("visuals: the clown tag should not be drawn on your own name");
+  }
+  LemonMix._in("a", [player(42, 1000, 1000, 45, 15)]);
+  if (V.clown[42] !== 7) fail(`visuals: the clown hat should pin the counter at 7, got ${V.clown[42]}`);
+
+  /* Reload advance and the gather reset. */
+  LemonMix._in("K", [42, true, 0]);
+  if (V.primary[42] !== 0) fail("visuals: a gather did not reset the primary reload");
+  for (let i = 0; i < 6; i++) LemonMix._in("a", [player(42, 1000, 1000, 0, 0)]);
+  if (V.primary[42] !== 1) fail(`visuals: the primary reload did not refill (${V.primary[42]})`);
+
+  note("visuals: reload bars, shot tracing and the clown counter behave as the fork did");
 }
 
 /* ------------------------------------------------------------------ *

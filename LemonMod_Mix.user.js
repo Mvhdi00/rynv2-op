@@ -1901,6 +1901,12 @@ LemonMix._Visuals = {
   prevPrimary: {},    // value before the last advance, for the fork's 111ms lerp
   prevSecondary: {},
   weapons: {},        // sid -> { primary, secondary }
+  pos: {},            // sid -> { x, y }, only so a shot can be traced to a shooter
+  health: {},         // sid -> last known health, to spot a hit
+  clown: {},          // sid -> 0..7, the clown-hat revive counter
+  lastHit: {},        // sid -> tick of the last health drop
+  tick: 0,            // advanced once per updatePlayers, the fork's clock
+  mySid: null,
   target: null,       // sid highlighted by the insta ring
 
   colors: {
@@ -1946,14 +1952,51 @@ LemonMix._Visuals = {
       break;
      }
 
+     case "C":                           // setupGame(yourSID)
+      this.mySid = args[0];
+      break;
+
+     case "O": {                         // updateHealth(sid, value)
+      const sid = args[0];
+      const health = args[1];
+      if (sid === undefined) break;
+      if (this.health[sid] !== undefined && health < this.health[sid]) {
+        this.lastHit[sid] = this.tick;
+      }
+      this.health[sid] = health;
+      break;
+     }
+
+     case "X": {                         // addProjectile(x, y, dir, range, speed, ...)
+      this._shotFired(args[0], args[1], args[2], args[4]);
+      break;
+     }
+
      case "a": {                         // updatePlayers, flat groups of 13
       const flat = args[0];
       if (!flat || !flat.length) break;
+      this.tick++;
       for (let i = 0; i < flat.length; i += 13) {
         const sid = flat[i];
         const buildIndex = flat[i + 4];
         const weaponIndex = flat[i + 5];
+        const skinIndex = flat[i + 9];
         const slot = this._slot(sid);
+        this.pos[sid] = { x: flat[i + 1], y: flat[i + 2] };
+
+        /* The clown hat revives you at seven hits taken inside two ticks of
+         * each other; the counter decays by two when you go a tick unhit. */
+        if (skinIndex === 45) {
+          this.clown[sid] = 7;
+        } else {
+          if (this.clown[sid] === undefined) this.clown[sid] = 0;
+          if (this.lastHit[sid] !== undefined) {
+            if (this.tick - this.lastHit[sid] < 2) this.clown[sid]++;
+            else this.clown[sid] = Math.max(0, this.clown[sid] - 2);
+            delete this.lastHit[sid];
+          }
+        }
+
         this.prevPrimary[sid] = this.primary[sid];
         this.prevSecondary[sid] = this.secondary[sid];
         if (weaponIndex < 9) {
@@ -1977,6 +2020,45 @@ LemonMix._Visuals = {
       }
       break;
      }
+    }
+  },
+
+  /* A projectile packet does not say who fired it, so the fork worked it out:
+   * a shot leaves the shooter about 80 units along its heading, so back that
+   * off and look for a player near the result whose secondary weapon fires a
+   * projectile at exactly this speed. Same method here, driven off the
+   * positions the updatePlayers packet already carries. */
+  _shotFired(x, y, dir, speed) {
+    if (x === undefined || dir === undefined) return;
+    const originX = x - 80 * Math.cos(dir);
+    const originY = y - 80 * Math.sin(dir);
+
+    let best = null;
+    let bestDist = Infinity;
+    for (const sid in this.pos) {
+      const slot = this.weapons[sid];
+      if (!slot || slot.secondary === undefined) continue;
+      const weapon = LemonMix.Weapons[slot.secondary];
+      if (!weapon || weapon.projectileSpeed !== speed) continue;
+      const p = this.pos[sid];
+      const d = (p.x - originX) * (p.x - originX) + (p.y - originY) * (p.y - originY);
+      if (d < bestDist) {
+        bestDist = d;
+        best = sid;
+      }
+    }
+    if (best !== null && Math.sqrt(bestDist) < 60) this.secondary[best] = 0;
+  },
+
+  /* The `<n/7>` the fork appended to every other player's name. */
+  _clownTag(player) {
+    try {
+      if (!player || player.sid === undefined) return "";
+      if (player.skinIndex === undefined || player.skinIndex === null) return "";
+      if (this.mySid !== null && player.sid === this.mySid) return "";
+      return " <" + (this.clown[player.sid] || 0) + "/7>";
+    } catch (e) {
+      return "";
     }
   },
 
@@ -2318,7 +2400,8 @@ LemonMix.Weapons = [
  },
  {
   "name": "hunting bow",
-  "speed": 600
+  "speed": 600,
+  "projectileSpeed": 1.6
  },
  {
   "name": "great hammer",
@@ -2329,11 +2412,13 @@ LemonMix.Weapons = [
  },
  {
   "name": "crossbow",
-  "speed": 700
+  "speed": 700,
+  "projectileSpeed": 2.5
  },
  {
   "name": "repeater crossbow",
-  "speed": 230
+  "speed": 230,
+  "projectileSpeed": 2
  },
  {
   "name": "mc grabby",
@@ -2341,7 +2426,8 @@ LemonMix.Weapons = [
  },
  {
   "name": "musket",
-  "speed": 1500
+  "speed": 1500,
+  "projectileSpeed": 3.6
  }
 ];
 
@@ -2524,6 +2610,12 @@ const Logger = {
      * position in the draw order, appended instead of replaced — and still
      * inside the game's own `health > 0` guard.
      */
+    /* The clown-hat revive counter, appended to every other player's name.
+     * The fork edited the same expression where the game composes the name. */
+    Hook.replace("clownCounter",
+      /const (\w+)=\((\w+)\.team\?"\["\+\2\.team\+"\] ":""\)\+\(\2\.name\|\|""\);/,
+      'const $1=($2.team?"["+$2.team+"] ":"")+($2.name||"")+window.LemonMix._Visuals._clownTag($2);');
+
     Hook.replace("playerOverlay",
       /(\w+)\.roundRect\((\w+)\.x-(\w+)-(\w+)\.healthBarWidth,\2\.y-(\w+)\+\2\.scale\+\4\.nameY\+\4\.healthBarPad,\4\.healthBarWidth\*2\*\(\2\.health\/\2\.maxHealth\),17-\4\.healthBarPad\*2,7\),\1\.fill\(\)\)/,
       "$1.roundRect($2.x-$3-$4.healthBarWidth,$2.y-$5+$2.scale+$4.nameY+$4.healthBarPad,$4.healthBarWidth*2*($2.health/$2.maxHealth),17-$4.healthBarPad*2,7),$1.fill(),window.LemonMix._Visuals._draw($1,$2,$4,$3,$5))");

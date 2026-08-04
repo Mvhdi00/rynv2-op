@@ -168,6 +168,12 @@ const Logger = {
      * position in the draw order, appended instead of replaced — and still
      * inside the game's own `health > 0` guard.
      */
+    /* The clown-hat revive counter, appended to every other player's name.
+     * The fork edited the same expression where the game composes the name. */
+    Hook.replace("clownCounter",
+      /const (\w+)=\((\w+)\.team\?"\["\+\2\.team\+"\] ":""\)\+\(\2\.name\|\|""\);/,
+      'const $1=($2.team?"["+$2.team+"] ":"")+($2.name||"")+window.LemonMix._Visuals._clownTag($2);');
+
     Hook.replace("playerOverlay",
       /(\w+)\.roundRect\((\w+)\.x-(\w+)-(\w+)\.healthBarWidth,\2\.y-(\w+)\+\2\.scale\+\4\.nameY\+\4\.healthBarPad,\4\.healthBarWidth\*2\*\(\2\.health\/\2\.maxHealth\),17-\4\.healthBarPad\*2,7\),\1\.fill\(\)\)/,
       "$1.roundRect($2.x-$3-$4.healthBarWidth,$2.y-$5+$2.scale+$4.nameY+$4.healthBarPad,$4.healthBarWidth*2*($2.health/$2.maxHealth),17-$4.healthBarPad*2,7),$1.fill(),window.LemonMix._Visuals._draw($1,$2,$4,$3,$5))");

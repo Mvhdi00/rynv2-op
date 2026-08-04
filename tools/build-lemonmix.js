@@ -732,8 +732,17 @@ if (!/var\s+yn\s*=|,\s*yn\s*=/.test(codec) || !/kn\s*=\s*function/.test(codec)) 
 /* The weapon speeds the reload bars key off, and the protocol constants the
  * bot sockets need, both taken from the extracted drivers rather than typed
  * out again — tools/verify-lemonmix.js diffs them back. */
+/* `speed` drives the reload bars; `projectileSpeed` is how a projectile packet
+ * gets traced back to the player who fired it, since the packet does not say. */
 const weaponTable = JSON.stringify(
-  DRIVERS.weapons.map(w => ({ name: w.name, speed: w.speed })),
+  DRIVERS.weapons.map(w => {
+    const row = { name: w.name, speed: w.speed };
+    if (w.projectile !== undefined) {
+      const p = DRIVERS.projectiles[w.projectile];
+      if (p && p.speed !== undefined) row.projectileSpeed = p.speed;
+    }
+    return row;
+  }),
   null,
   1
 );
@@ -795,9 +804,16 @@ const header = `// ==UserScript==
  */
 `;
 
-const runtime = fs.readFileSync(RUNTIME, "utf8")
-  .replace("LEMONMIX_WEAPONS", "LemonMix.Weapons")
-  .replace("LEMONMIX_RING_SPRITE", "LemonMix.RingSprite");
+/* replaceAll, not replace: a second use of a placeholder would otherwise be
+ * left as a bare identifier and only show up as a ReferenceError at runtime,
+ * on whatever code path happened to touch it. */
+let runtime = fs.readFileSync(RUNTIME, "utf8")
+  .replaceAll("LEMONMIX_WEAPONS", "LemonMix.Weapons")
+  .replaceAll("LEMONMIX_RING_SPRITE", "LemonMix.RingSprite");
+{
+  const leftover = runtime.match(/\bLEMONMIX_[A-Z_]+\b/g);
+  if (leftover) throw new Error("unsubstituted placeholders in the runtime: " + [...new Set(leftover)].join(", "));
+}
 
 const injector = fs.readFileSync(INJECTOR, "utf8");
 

@@ -75,14 +75,36 @@ the send sites and the dispatch table in `src/game_index.js`, and
 
 ### Visuals: rewrite the bundle instead of forking it
 
-The reload bars and the insta-target ring are appended to the game's own
-health-bar draw, in the same statement the fork edited, still inside its
-`health > 0` guard. The reload state the fork tracked by patching four
-functions inside its copy is rebuilt from the packet stream instead, so only
-the drawing needs a hook.
+Worth being precise about what that file actually was. It is 307 KB, and
+**302 KB of it is a copy of the old game bundle** — the game itself, forked so
+a few lines could be edited. LemonMod's own visual code in there is 23 lines:
+
+| what the 23 lines did | where it lives now |
+|---|---|
+| reload bar drawing | `LemonMix._Visuals._reloadBars`, appended to the game's health-bar draw by the `playerOverlay` hook |
+| bar colours | `LemonMix._Visuals.colors` / `_barColor` |
+| insta-target ring | `LemonMix._Visuals._targetRing` |
+| reload reset on a melee hit | `_packet`, case `K` |
+| reload advance per tick | `_packet`, case `a` |
+| reload reset on a shot | `_shotFired`, from case `X` |
+| turret reload | `_packet`, cases `a` and `X` |
+| clown-hat `<n/7>` counter | `_clownTag` + the `clownCounter` hook, fed by cases `O` and `a` |
+| state init on spawn | `_packet`, case `D` |
+| the gate cookies | gone — there is no second file to gate on |
+
+The reload state the fork tracked by patching four functions inside its copy is
+rebuilt from the packet stream, so only the drawing needs a hook. A projectile
+packet does not say who fired it, so the shooter is worked out the same way the
+fork did: a shot leaves its owner about 80 units along its heading, so back
+that off and look for a player near the result whose secondary weapon fires at
+exactly that projectile speed.
 
 Nothing is forked, so nothing goes stale except individual hooks — and an
 orphaned hook is a build failure, not a silent one.
+
+One cosmetic difference: the fork drew the bar backing with its own
+`rigidRRect`/`rigidLRect` canvas helpers, which square off one pair of corners.
+This uses `roundRect` for both.
 
 ### No gate
 
@@ -245,9 +267,12 @@ translation layer, and takes the resulting frames apart:
   dispatch table, with both directions round-tripping
 - the rewritten bundle re-parsed, with all six injection points present
 - the 16 weapon reload speeds diffed against the shipped table
+- the Visuals state machine driven through a real packet sequence: a musket
+  shot traced back to its shooter, the clown counter advancing on hits and
+  pinning at 7 under the hat, the reload refilling after a gather
 - 14 call-home paths shown to be absent from the code
 
-Current state: **6/6 hooks bind**, the mod builds all ten of its UI elements at
+Current state: **7/7 hooks bind**, the mod builds all ten of its UI elements at
 both load timings, and every check above passes.
 
 ---
@@ -256,15 +281,25 @@ both load timings, and every check above passes.
 
 - **On the file getting smaller.** The shipped script is 3.1 MB; this build is
   around 0.6 MB. None of that is missing logic — the shipped file was
-  javascript-obfuscator output, and most of its bulk was the obfuscation
-  itself: a rotated string array, ~300 proxy functions each declaring sixty-odd
-  dummy parameters, call sites passing sixty-odd hex numbers to reach one of
-  them, every integer written as an arithmetic expression, and an opaque
-  `"abcde" === "fghij"` wrapped around most statements. Folding that away is
-  what `tools/deobfuscate-lemonmod.js` does, and it is reproducible: running it
-  on the shipped script reproduces `src/LemonMod_v3.0.js` byte for byte. The
-  logic is all still there — 6,860 lines of it — and the build adds the msgpack
-  codec, the transport primitives, the runtime and the injector on top.
+  javascript-obfuscator output, and almost all of its bulk was the obfuscation
+  itself. Measured:
+
+  | | |
+  |---|---|
+  | every string chunked two characters at a time into hex escapes — `'\x69\x6e' + '\x6e\x65' + …` — across 13,989 strings | **1,456 KB of padding** (1,758 KB encoded for 302 KB of actual text) |
+  | integers written as arithmetic expressions | 166 KB |
+  | proxy call sites passing sixty-odd hex numbers to select one | 100 KB |
+  | the rotated string array and its two decoders | 45 KB |
+  | proxy function signatures declaring sixty-odd dummy parameters | 16 KB |
+  | 1,052 opaque `"abcde" === "fghij"` predicates and the branches they made dead | the rest |
+
+  Two of those strings are the entire mod menu (367 KB encoded, ~60 KB of real
+  HTML) and its stylesheet (465 KB encoded). Folding all of it away is what
+  `tools/deobfuscate-lemonmod.js` does, and it is reproducible: running it on
+  the shipped script reproduces `src/LemonMod_v3.0.js` byte for byte. Every one
+  of the 117 strings in the obfuscator's array is present in the output except
+  44, all of which are the obfuscator's own junk — 3-character tokens like
+  `"uMj"` used for the fake comparisons, and the array's rotation counters.
 - Multibox bots are the one thing in the script that still builds frames by
   hand, because they open sockets outside the game's `io` object. They use the
   transport primitives sliced straight out of `src/game_index.js`, and they
