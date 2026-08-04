@@ -6,7 +6,7 @@ const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
 const SOURCE = path.join(ROOT, "src", "Ae86_v10.js");
-const BOOTSTRAP = path.join(ROOT, "src", "ae86-bootstrap.js");
+const BOOTSTRAP = path.join(ROOT, "src", "moomoo-bootstrap.js");
 const DRIVERS = path.join(ROOT, "drivers", "game-drivers.json");
 const OUTPUT = path.join(ROOT, "Ae86_Fixed.user.js");
 
@@ -88,13 +88,33 @@ function checkBootstrapAgainstDrivers(bootstrap) {
     }
 }
 
+function configureBootstrap(bootstrap, options) {
+    const settings = [
+        [/var CLIENT = "[^"]*";/, `var CLIENT = "${options.client}";`],
+        [/var GLOBAL = "[^"]*";/, `var GLOBAL = "${options.global}";`],
+        [/var WITH_MENU = (?:true|false);/, `var WITH_MENU = ${options.menu};`]
+    ];
+    for (const [pattern, replacement] of settings) {
+        if (!pattern.test(bootstrap)) {
+            fail("bootstrap is missing its config line: " + pattern);
+        }
+        bootstrap = bootstrap.replace(pattern, replacement);
+    }
+    return bootstrap;
+}
+
 function build() {
     const raw = readSource();
     const body = stripMetadata(raw);
     checkBundleShape(body);
 
-    const bootstrap = fs.readFileSync(BOOTSTRAP, "utf8");
+    let bootstrap = fs.readFileSync(BOOTSTRAP, "utf8");
     checkBootstrapAgainstDrivers(bootstrap);
+    bootstrap = configureBootstrap(bootstrap, {
+        client: "Ae86",
+        global: "Ae86Net",
+        menu: true
+    });
 
     const parts = [
         META,
@@ -105,7 +125,7 @@ function build() {
         body.trim(),
         "}",
         "",
-        "__ae86Boot(__ae86Bundle);",
+        "__bootClient(__ae86Bundle);",
         ""
     ];
 

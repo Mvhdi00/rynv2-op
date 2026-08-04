@@ -1,11 +1,16 @@
 (function() {
     "use strict";
 
+    /* Rewritten per client by the build. */
+    var CLIENT = "Ae86";
+    var GLOBAL = "Ae86Net";
+    var WITH_MENU = true;
+
     var W = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
-    if (W.__AE86_BOOT__) {
+    if (W["__BOOT_" + CLIENT]) {
         return;
     }
-    W.__AE86_BOOT__ = true;
+    W["__BOOT_" + CLIENT] = true;
 
     var SIGNATURE_BYTES = 6;
     var ENCRYPTED_MODE = 1;
@@ -95,15 +100,17 @@
     var turnstileToken = null;
     var turnstilePromise = null;
 
+    var TAG = "[" + CLIENT + "]";
+
     function log() {
         var args = Array.prototype.slice.call(arguments);
-        args.unshift("[Ae86]");
+        args.unshift(TAG);
         console.log.apply(console, args);
     }
 
     function warn() {
         var args = Array.prototype.slice.call(arguments);
-        args.unshift("[Ae86]");
+        args.unshift(TAG);
         console.warn.apply(console, args);
     }
 
@@ -770,7 +777,7 @@
             log("loaded " + serverList.length + " servers from " + SERVER_LIST_URL);
             return serverList;
         }).catch(function(error) {
-            console.error("[Ae86] failed to load server list:", error);
+            console.error(TAG + " failed to load server list:", error);
             serverList = [];
             return serverList;
         });
@@ -893,7 +900,7 @@
                 type: "message"
             });
         } catch (error) {
-            console.error("[Ae86] message handler failed:", error);
+            console.error(TAG + " message handler failed:", error);
         }
     }
 
@@ -914,7 +921,7 @@
                     type: "open"
                 });
             } catch (error) {
-                console.error("[Ae86] open handler failed:", error);
+                console.error(TAG + " open handler failed:", error);
             }
         }
         flush(socket, state);
@@ -994,7 +1001,37 @@
         nativeSend.call(socket, encode([letter, args]));
     }
 
+    /* A client may open sockets of its own to somewhere that is not a game
+     * server. Those must pass through untouched: rewriting one would point it
+     * at moomoo, and translating its frames would corrupt them. */
+    function isGameSocket(url) {
+        var host;
+        try {
+            host = new URL(String(url), W.location.href).hostname;
+        } catch (error) {
+            return false;
+        }
+        if (host === W.location.hostname || host === "localhost" || host === "127.0.0.1") {
+            return true;
+        }
+        if (host === BASE_URL || host.endsWith("." + BASE_URL)) {
+            return true;
+        }
+        if (serverList) {
+            for (var i = 0; i < serverList.length; i++) {
+                if (serverAddress(serverList[i]) === host) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     function PatchedWebSocket(url, protocols) {
+        if (!isGameSocket(url)) {
+            log("passing through a non-game socket: " + String(url).split("?")[0]);
+            return protocols === undefined ? new NativeWebSocket(url) : new NativeWebSocket(url,protocols);
+        }
         var target = rewriteSocketUrl(url);
         status.socketUrl = target.split("?")[0] + (turnstileToken ? " (+token)" : " (no token)");
         log("connecting to " + status.socketUrl);
@@ -1287,7 +1324,12 @@
         W.loadedScript = true;
     }
 
+    /* The clients call into the host SDK without checking past the first
+     * property — window.FRVR && window.FRVR.tracker.levelStart(...) throws if
+     * tracker is missing, and that call sits directly in luminary's spawn
+     * path. Every surface the game and the clients touch is stubbed. */
     function stubFrvr() {
+        var noop = function() {};
         if (!W.FRVR) {
             W.FRVR = {
                 ads: {
@@ -1295,10 +1337,23 @@
                         if (typeof callback === "function") {
                             callback();
                         }
+                        return Promise.resolve();
                     }
                 },
+                tracker: {
+                    levelStart: noop,
+                    levelEnd: noop,
+                    levelUp: noop,
+                    event: noop,
+                    track: noop
+                },
                 bootstrapper: {
-                    complete: function() {}
+                    complete: noop
+                },
+                profile: {
+                    name: function() {
+                        return "";
+                    }
                 },
                 channelCharacteristics: {
                     allowNavigation: true
@@ -1456,7 +1511,7 @@
             try {
                 W.captchaCallback("");
             } catch (error) {
-                console.error("[Ae86] captcha gate failed:", error);
+                console.error(TAG + " captcha gate failed:", error);
             }
         });
     }
@@ -1590,6 +1645,9 @@
      * a real event, and it bails out while a text field has focus so it does
      * not eat a character being typed into chat. */
     function installMenuHotkey() {
+        if (!WITH_MENU) {
+            return;
+        }
         W.addEventListener("keydown", function(event) {
             if (event.key !== MENU_HOTKEY || event.ctrlKey || event.altKey || event.metaKey) {
                 return;
@@ -1604,7 +1662,7 @@
     }
 
     function buildMenu() {
-        if (menuBuilt || document.getElementById("ae86Menu")) {
+        if (!WITH_MENU || menuBuilt || document.getElementById("ae86Menu")) {
             return;
         }
         if (!document.body) {
@@ -1746,7 +1804,7 @@
     W.WebSocket = PatchedWebSocket;
     W.XMLHttpRequest = PatchedXHR;
 
-    W.__ae86Boot = function(bundle) {
+    W.__bootClient = function(bundle) {
         Promise.all([loadServers(), domReady()]).then(function(results) {
             W.vultr = {
                 servers: results[0]
@@ -1757,7 +1815,7 @@
                 log("client bundle started");
             } catch (error) {
                 started = false;
-                console.error("[Ae86] bundle failed to start:", error);
+                console.error(TAG + " bundle failed to start:", error);
             }
             /* Built even when the client did not start, so the panel is
              * always there to say the script itself is alive. */
@@ -1778,7 +1836,7 @@
         });
     };
 
-    W.Ae86Net = {
+    W[GLOBAL] = {
         signatureBytes: SIGNATURE_BYTES,
         encryptedMode: ENCRYPTED_MODE,
         tableSalt: TABLE_SALT,

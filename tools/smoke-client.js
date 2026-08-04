@@ -8,6 +8,7 @@ const {createRequire} = require("module");
 const {ROOT, extractGameTransport, loadGameCodec} = require("./game-transport");
 
 const target = process.argv[2] || path.join(ROOT, "Ae86_Fixed.user.js");
+const MENU = !/Luminary/i.test(path.basename(target));
 
 function loadPlaywright() {
     const candidates = [__filename, "/opt/node22/lib/node_modules/playwright/index.js", "/usr/lib/node_modules/playwright/index.js", "/usr/local/lib/node_modules/playwright/index.js"];
@@ -103,7 +104,7 @@ async function waitFor(predicate, timeout, step) {
 }
 
 async function main() {
-    console.log("smoke-ae86: " + path.relative(ROOT, target));
+    console.log("smoke: " + path.relative(ROOT, target));
 
     if (!fs.existsSync(target)) {
         console.log("  FAIL  built script exists");
@@ -120,6 +121,8 @@ async function main() {
     const tables = game.Po(SEED >>> 0);
 
     const received = [];
+    const allSockets = [];
+    const foreignRequests = new Set();
     let handshakeSent = false;
     let socketUrl = null;
     let badSignature = null;
@@ -131,6 +134,15 @@ async function main() {
     });
     const context = await browser.newContext();
     const page = await context.newPage();
+
+    page.on("request", request => {
+        try {
+            const host = new URL(request.url()).hostname;
+            if (!/(^|\.)moomoo\.io$/.test(host) && host !== "challenges.cloudflare.com") {
+                foreignRequests.add(host);
+            }
+        } catch (error) {}
+    });
 
     page.on("pageerror", error => {
         console.log("  note  page error: " + String(error).split("\n")[0]);
@@ -171,6 +183,7 @@ async function main() {
                 ws.send(Buffer.from(codec.encoder.encode([tables.s2c.enc["Z"], [125]])));
             }
         });
+        allSockets.push(ws.url());
         socketUrl = ws.url();
         handshakeSent = true;
         ws.send(Buffer.from(codec.encoder.encode(["io-init", [1, SEED >>> 0, KEY_HEX, game.Ht]])));
@@ -268,6 +281,10 @@ async function main() {
     check("every frame maps to a current c2s opcode", received.length > 0 && received.every(frame => game.bo.includes(frame.letter)), JSON.stringify(received.map(f => f.letter)));
 
     console.log("\nMenu");
+    if (!MENU) {
+        console.log("  skip  this build ships no bootstrap menu");
+    }
+    if (MENU) {
     const menu = await waitFor(() => page.evaluate(() => Boolean(document.getElementById("ae86Menu"))), 20000);
     check("menu is rendered", menu);
     const rows = await page.evaluate(() => {
@@ -307,6 +324,19 @@ async function main() {
     });
     check("the hotkey is inert while typing in chat", typed.value === "\\" && typed.still, JSON.stringify(typed));
 
+    }
+
+    console.log("\nOutbound");
+    const strays = allSockets.filter(u => {
+        try {
+            return !/(^|\.)moomoo\.io$/.test(new URL(u).hostname);
+        } catch (error) {
+            return true;
+        }
+    });
+    check("every websocket goes to a game server", strays.length === 0, JSON.stringify(strays));
+    check("no third-party host is contacted for anything but assets", ![...foreignRequests].some(h => /glitch\.me|webhook|discord\.com\/api|telegram|\.workers\.dev/.test(h)), JSON.stringify([...foreignRequests]));
+
     console.log("\nServer to client");
     const sawPing = await waitFor(() => Promise.resolve(received.some(frame => frame.letter === "0")), 20000);
     check("client sent the ping opcode 0", sawPing);
@@ -331,10 +361,10 @@ async function main() {
 
     console.log("");
     if (failures > 0) {
-        console.log("smoke-ae86: " + failures + " check(s) failed");
+        console.log("smoke: " + failures + " check(s) failed");
         process.exit(1);
     }
-    console.log("smoke-ae86: all checks passed");
+    console.log("smoke: all checks passed");
 }
 
 main().catch(error => {

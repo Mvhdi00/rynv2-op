@@ -122,11 +122,12 @@ but nothing in the client needs it. It is stripped from the build.
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
 Ae86_Fixed.user.js        the Ae86 build output (see below)
+Luminary_Fixed.user.js    the luminary build output (see below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/Ae86_v10.js           Ae86 client v10, as shipped (input)
-src/ae86-bootstrap.js     Ae86 transport + entry shim (input)
+src/moomoo-bootstrap.js   shared transport + entry shim (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
@@ -134,9 +135,11 @@ tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/build-ae86.js       src/Ae86_v10.js -> Ae86_Fixed.user.js
+tools/build-luminary.js   src/Luminary_v3.js -> Luminary_Fixed.user.js
+src/Luminary_v3.js        luminary v3, as shipped (input)
 tools/game-transport.js   pulls the live transport out of src/game_*.js
 tools/verify-ae86.js      Ae86 transport vs. the game bundle
-tools/smoke-ae86.js       drives the Ae86 build against a mock current server
+tools/smoke-client.js     drives a built client against a mock current server
 tools/strip-comments.js   removes comments, keeps the ==UserScript== header
 src/ExternalClient_Dev2.js  External Client Dev-2, with the player counter
 src/Whiteout_v4.js        Whiteout v4, with the rage range added
@@ -311,7 +314,7 @@ bootstrap's protocol constants stop matching `drivers/game-drivers.json`.
 ```sh
 node --check Ae86_Fixed.user.js
 node tools/verify-ae86.js
-node tools/smoke-ae86.js       # needs: npm i --no-save playwright
+node tools/smoke-client.js       # needs: npm i --no-save playwright
 ```
 
 `verify-ae86.js` pulls the real transport out of `src/game_index.js` and the
@@ -564,3 +567,99 @@ The multiplier is read from the menu field when it exists, because Whiteout's
 `html.text()` builder drops unknown attributes and so cannot report changes.
 The checkbox is read the same way. Chat commands write to both, so the two
 never disagree.
+
+---
+
+# luminary v3 — fixed
+
+Build output: **`Luminary_Fixed.user.js`**
+
+Another fork of the 2020 bundle, and it fails in exactly the same places Ae86
+did — its c2s opcode set is byte-identical, all seventeen of
+`sp 33 2 7 5 6 c ch 8 9 10 11 12 13c 14 pp rmd`, so
+`src/moomoo-bootstrap.js` drops in unchanged.
+
+```sh
+node tools/build-luminary.js
+node --check Luminary_Fixed.user.js
+node tools/smoke-client.js Luminary_Fixed.user.js
+```
+
+## What was wrong
+
+**The header stopped it running at all.**
+
+```
+// @match         ://*.moomoo.io/*
+```
+
+An empty scheme is not a valid match pattern, so the rule is rejected, and
+with no valid rule the script never runs on any page. There was no `@run-at`
+either, and the shim has to be installed before the page loads. Both are
+corrected in the build.
+
+**The transport is the plain 2020 protocol**, same as Ae86: `encode([type,
+args])` with no opcode table, no signature and no sequence number, an
+`io-init` handler that reads `args[0]` and throws the seed, key and mode away,
+string-keyed dispatch that meets numeric opcodes as `undefined`, and a ready
+callback on `onopen` instead of on `io-init`. The bootstrap replaces all of
+it.
+
+**The stock-bundle removal has rotted into a hazard.** The client re-fetches
+the page with a synchronous XHR, drops any script whose src ends in
+`bundle.js`, and swaps in the parsed tree:
+
+```js
+[...doc.getElementsByTagName("script")].find(e => e?.src.endsWith("bundle.js"))?.remove();
+document.replaceChild(document.importNode(doc.documentElement, true), document.documentElement);
+```
+
+The game has not shipped as `bundle.js` for years, so nothing is removed — and
+because a cloned script node has not "already started", importing the tree
+*re-executes the real bundle*. The build removes the block and lets the
+bootstrap block the entry at document-start instead.
+
+**Server discovery and the captcha** are the same dead `vultr` global,
+`/serverData` endpoint and `grecaptcha` gate the bootstrap already handles.
+
+## The third-party socket
+
+```js
+let project = new WebSocket(`${wssws}://steep-goofy-raven.glitch.me`);
+```
+
+Opened on every load, with no toggle and no notice, to a host that is not the
+game. Directly above it sits the author's comment: `//this is nothing lol
+trust`.
+
+What it actually does, in full:
+
+- **Outbound** — one call site, and its payload is the constant
+  `["dosync","ratio"]`, sent only when the user runs the `sync` command.
+- **Inbound** — if the server sends the string `"sync"`, the client sets a flag
+  and **types into game chat**.
+
+So it does not appear to exfiltrate anything: no name, no game state, no
+storage. Two things are still true. Whoever runs that Glitch project sees your
+IP and that you are running this mod, every session. And the inbound direction
+is a channel from a stranger's server into your client — trivial today, but a
+Glitch subdomain can be claimed by anyone once the original project is
+abandoned, at which point that channel belongs to whoever claims it.
+
+The build leaves the feature intact but **off**. `project` becomes an inert
+stub whose `send` is a no-op, so every call site still works, and
+`enableSyncServer()` from the console opens the real socket for anyone who
+wants the sync feature.
+
+Nothing else in the file phones anywhere. There is no `fetch`, no
+`sendBeacon`, no `eval`. All three `XMLHttpRequest` uses are same-origin — the
+page re-fetch, `/serverData`, and the server ping — and the only `new
+Function` is webpack's standard `return this` global shim. Every external host
+referenced is an asset CDN: imgur and the Discord CDN for textures, YouTube
+for music, `icones.pro` for icons, `bcbits` for the script icon.
+
+## Checks
+
+`smoke-client.js` now asserts, for any build, that **every websocket it opens
+goes to a game server** and that no third-party host is contacted for anything
+but assets. Both builds pass.

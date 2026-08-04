@@ -235,7 +235,7 @@ async function main() {
     section("Structure");
     check("userscript metadata block", built.startsWith("// ==UserScript==") && built.includes("\n// ==/UserScript=="));
     check("runs at document-start", /@run-at\s+document-start/.test(built));
-    check("bundle is wrapped and booted", built.includes("\nfunction __ae86Bundle() {") && built.includes("\n__ae86Boot(__ae86Bundle);"));
+    check("bundle is wrapped and booted", built.includes("\nfunction __ae86Bundle() {") && built.includes("\n__bootClient(__ae86Bundle);"));
     check("original metadata block removed from the bundle", built.indexOf("// ==/UserScript==") === built.lastIndexOf("// ==/UserScript=="));
     check("legacy io-client module still present", built.includes("'./src/js/libs/io-client.js':function("));
 
