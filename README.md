@@ -368,8 +368,15 @@ state object — is `{waitHeal, botJoin, stop, atck, nearDst}`.
 ## The menu
 
 Because none of that is discoverable, the build adds a small black-and-white
-panel at the top left. Commands, value commands, held keys and tap keys, with
-a `-` to collapse it.
+panel at the top left. It **opens by itself** as soon as the client loads —
+there is nothing to press to summon it. `-` collapses it to its title bar and
+`\` hides and shows the whole thing, ignored while a text field has focus so
+it does not eat a character typed into chat. `Ae86Net.menu()` rebuilds it from
+the console if it is somehow missing.
+
+It holds the commands, the value commands, the held keys and the tap keys.
+It is built even when the client itself fails to start, so its presence
+always answers "did the script load at all".
 
 It does not reimplement anything — it drives the client's own paths:
 

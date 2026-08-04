@@ -1586,10 +1586,41 @@
         "#ae86Menu .note{padding:4px 8px;color:#777;font-size:10px;border-top:1px solid #444}"
     ].join("");
 
+    var MENU_HOTKEY = "\\";
     var menuBuilt = false;
+    var menuRoot = null;
+
+    function toggleMenu() {
+        if (!menuRoot) {
+            buildMenu();
+            return;
+        }
+        menuRoot.style.display = menuRoot.style.display === "none" ? "" : "none";
+    }
+
+    /* The client's own key handling never sees this: it is a real listener on
+     * a real event, and it bails out while a text field has focus so it does
+     * not eat a character being typed into chat. */
+    function installMenuHotkey() {
+        W.addEventListener("keydown", function(event) {
+            if (event.key !== MENU_HOTKEY || event.ctrlKey || event.altKey || event.metaKey) {
+                return;
+            }
+            var active = document.activeElement;
+            if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) {
+                return;
+            }
+            event.preventDefault();
+            toggleMenu();
+        }, true);
+    }
 
     function buildMenu() {
-        if (menuBuilt || !document.body || document.getElementById("ae86Menu")) {
+        if (menuBuilt || document.getElementById("ae86Menu")) {
+            return;
+        }
+        if (!document.body) {
+            setTimeout(buildMenu, 200);
             return;
         }
         menuBuilt = true;
@@ -1600,6 +1631,7 @@
 
         var root = document.createElement("div");
         root.id = "ae86Menu";
+        menuRoot = root;
 
         var head = document.createElement("div");
         head.className = "hd";
@@ -1700,11 +1732,11 @@
 
         var note = document.createElement("div");
         note.className = "note";
-        note.textContent = "ON/OFF shows what you last sent.";
+        note.textContent = "ON/OFF = last sent. [ \\ ] hides this panel.";
         root.appendChild(note);
 
         document.body.appendChild(root);
-        log("menu ready");
+        log("menu ready — press \\ to hide or show it");
     }
 
     function domReady() {
@@ -1719,6 +1751,7 @@
     }
 
     captureKeyListeners();
+    installMenuHotkey();
     neutralizeStockBundle();
     stubFrvr();
     installChallengeShims();
@@ -1730,12 +1763,18 @@
             W.vultr = {
                 servers: results[0]
             };
+            var started = true;
             try {
                 bundle();
                 log("client bundle started");
-                setTimeout(buildMenu, 0);
             } catch (error) {
+                started = false;
                 console.error("[Ae86] bundle failed to start:", error);
+            }
+            /* Built even when the client did not start, so the panel is
+             * always there to say the script itself is alive. */
+            setTimeout(buildMenu, 0);
+            if (!started) {
                 return;
             }
             if (document.readyState === "complete") {

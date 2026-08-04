@@ -287,6 +287,26 @@ async function main() {
     const chatAfter = received.filter(f => f.letter === "6").length;
     check("a command is handled by the client, not broadcast as chat", chatAfter === chatBefore, "chat frames " + chatBefore + " -> " + chatAfter);
 
+    await page.keyboard.press("Backslash");
+    const hidden = await page.evaluate(() => document.getElementById("ae86Menu").style.display === "none");
+    check("the hotkey hides the panel", hidden);
+    await page.keyboard.press("Backslash");
+    const shown = await page.evaluate(() => document.getElementById("ae86Menu").style.display !== "none");
+    check("the hotkey brings it back", shown);
+    await page.evaluate(() => {
+        const box = document.getElementById("chatBox");
+        box.focus();
+        box.value = "";
+    });
+    await page.keyboard.press("Backslash");
+    const typed = await page.evaluate(() => {
+        const box = document.getElementById("chatBox");
+        const still = document.getElementById("ae86Menu").style.display !== "none";
+        box.blur();
+        return {value: box.value, still: still};
+    });
+    check("the hotkey is inert while typing in chat", typed.value === "\\" && typed.still, JSON.stringify(typed));
+
     console.log("\nServer to client");
     const sawPing = await waitFor(() => Promise.resolve(received.some(frame => frame.letter === "0")), 20000);
     check("client sent the ping opcode 0", sawPing);
