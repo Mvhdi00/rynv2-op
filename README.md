@@ -355,39 +355,59 @@ bugs in the build:
 
 ---
 
-# External Client — usage stats
+# External Client — player counter
 
-`src/ExternalClient_Dev2.js` carries an `EXP_STATS` block that answers "how
-many people run this". Three anonymous events: `load` per page load, `play`
-per spawn, and `alive` every five minutes so "online now" is answerable. The
-only thing sent is a random id from the client's own `localStorage`, the event
-name and the version.
+`src/ExternalClient_Dev2.js` posts one line to a Discord webhook the first
+time a person spawns into a game with it. **One message = one person**, so the
+number of messages in the channel is the number of people who played.
 
-`ENDPOINT` at the top of the block is empty by default, and while it is empty
-nothing is ever sent. Point it at the Worker in `tools/stats-worker` to turn
-it on. Users can opt out for good with `EXP_STATS.disable()`, and the client
-says so in the console on startup.
+To read the count: open the channel, search for `EXTPLAYER`, and Discord
+prints "N Results" above the list. That N is the answer.
 
-The id is the point of the design: without it, one player refreshing all
-evening reads as a crowd.
+## Setting it up
 
-## Why not put a Discord webhook in the script
+1. Discord: **Server Settings → Integrations → Webhooks → New Webhook**, pick
+   a channel, **Copy Webhook URL**.
+2. In `src/ExternalClient_Dev2.js`, put it in `WEBHOOK` at the top of the
+   `EXP_STATS` block.
+3. Install the script.
 
-It was the obvious first idea and it does not survive contact with the
-numbers:
+While `WEBHOOK` is empty the block is inert and nothing is ever sent.
 
-- Discord rate-limits a webhook at roughly 30 requests a minute, returns 429
-  past that, and drops the message. The busier the client gets, the worse the
-  undercount — backwards from what you want.
-- The webhook URL would sit in a public userscript. Anyone who reads it can
-  flood the channel or delete the webhook.
-- A wall of messages is not a count.
-- Nothing de-duplicates refreshes.
+| Setting | What it does |
+|---|---|
+| `WEBHOOK` | the Discord webhook URL |
+| `HOW_OFTEN` | `"ever"` — one message per person, ever. `"daily"` — one per person per day, i.e. daily actives |
+| `TAG` | the word you search for to get the count |
+| `SPREAD_MS` | how far first spawns are scattered in time |
 
-The Worker fixes all four: it counts rather than logs, de-duplicates by id,
-keeps the webhook server-side as a secret, and posts one summary a day.
+Console helpers: `EXP_STATS.disable()` opts out for good, `.enable()` undoes
+it, `.reset()` makes this browser count again.
 
-If the script is on Greasy Fork, its stats page already gives daily and total
-installs plus daily update checks — a decent stand-in for daily actives, for
-no code at all. It cannot tell you who actually spawns into a game, which is
-what `play` adds.
+## What it sends
+
+A random id from the browser's own `localStorage`, the client version and the
+date. Nothing else — no names, no chat, no game state, no IP. The id exists so
+one person is not counted twice, and never leaves that browser except as that
+one line.
+
+## Two limits worth knowing
+
+- **The webhook URL ships inside a public userscript and cannot be hidden
+  there.** Anyone reading the script can post to it or delete it, so give it a
+  channel of its own where that only costs you noise.
+- **Discord drops messages past roughly 30 a minute.** First spawns are
+  therefore delayed by a random slice of `SPREAD_MS` to spread bursts, and a
+  429 is retried once using Discord's own `retry_after`. A message that still
+  fails is not marked as sent, so that player is counted on their next spawn
+  instead of being lost.
+
+Ad blockers also block requests to `discord.com` for some users. Read the
+number as a floor, not a headcount.
+
+## If you outgrow it
+
+`tools/stats-worker/` holds a Cloudflare Worker on D1 that counts instead of
+logging, answers "online now", keeps the webhook server-side as a secret, and
+posts one summary a day. Its README is a full walkthrough. Nothing in the
+client depends on it — swapping is a change to one block.

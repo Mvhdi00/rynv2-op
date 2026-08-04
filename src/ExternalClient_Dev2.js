@@ -517,41 +517,42 @@ const EXP = (function() {
 )();
 
 /* ===========================================================================
- * Usage stats.
+ * Player counter.
  *
- * Counts how many people run the client. Three events, all anonymous:
+ * Posts one line to a Discord webhook the first time a person spawns into a
+ * game with this client. One message = one person, so the number of messages
+ * in the channel is the number of people who played.
  *
- *     load   once per page load
- *     play   once per spawn into a game
- *     alive  every 5 minutes while the tab is open, so "online now" is
- *            answerable
+ * To read the count: open the channel, search for EXTPLAYER, and Discord
+ * prints "N Results" above the list. That N is your player count.
  *
- * The only thing sent is a random id kept in localStorage, the event name and
- * the client version. No names, no chat, no game state, nothing tied to a
- * person. The id exists so a single player refreshing twenty times counts as
- * one player rather than twenty.
+ * Nothing personal is sent — a random id from the browser's own localStorage,
+ * the client version and the date. The id only exists so one person is not
+ * counted twice.
  *
- * Set ENDPOINT to your collector (see tools/stats-worker). With it empty the
- * whole block is inert and nothing is ever sent.
+ * Paste your webhook URL into WEBHOOK below. While it is empty this block is
+ * inert and nothing is ever sent. Anyone can opt out for good with
+ * EXP_STATS.disable() in the console.
  *
- * Anyone can turn it off for good from the console:
- *
- *     EXP_STATS.disable()
- *
- * Failures are swallowed. If the collector is down, blocked or slow, the
- * client behaves exactly as if this block were not here.
+ * Two things to know about the webhook URL, since it ships inside a public
+ * userscript and cannot be hidden there: anyone who reads the script can post
+ * to it or delete it, so put it in a channel of its own. And Discord drops
+ * messages past ~30 a minute, so first spawns are delayed by a random slice
+ * of a minute to spread bursts out.
  * ======================================================================== */
 const EXP_STATS = (function() {
     "use strict";
 
-    const ENDPOINT = "";
+    const WEBHOOK = "";
+    const HOW_OFTEN = "ever";
     const VERSION = "Dev-2";
-    const KEY_ID = "exp_stats_id";
-    const KEY_OFF = "exp_stats_off";
-    const HEARTBEAT_MS = 5 * 60 * 1000;
-    const MIN_GAP_MS = 1000;
+    const NAME = "External Client";
+    const TAG = "EXTPLAYER";
+    const SPREAD_MS = 45000;
 
-    let lastSend = 0;
+    const KEY_ID = "exp_player_id";
+    const KEY_SENT = "exp_player_sent";
+    const KEY_OFF = "exp_player_off";
 
     function store(action, key, value) {
         try {
@@ -562,78 +563,110 @@ const EXP_STATS = (function() {
         return null;
     }
 
-    function isEnabled() {
-        return Boolean(ENDPOINT) && store("get", KEY_OFF) !== "1";
+    function stamp() {
+        return HOW_OFTEN === "daily" ? new Date().toISOString().slice(0, 10) : "ever";
     }
 
-    function clientId() {
+    function isEnabled() {
+        return Boolean(WEBHOOK) && store("get", KEY_OFF) !== "1";
+    }
+
+    function alreadyCounted() {
+        return store("get", KEY_SENT) === stamp();
+    }
+
+    function playerId() {
         let id = store("get", KEY_ID);
         if (!id) {
             try {
-                id = crypto.randomUUID();
+                id = crypto.randomUUID().slice(0, 8);
             } catch (e) {
-                id = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+                id = Math.random().toString(36).slice(2, 10);
             }
             store("set", KEY_ID, id);
         }
         return id;
     }
 
-    /* text/plain keeps this a CORS-simple request, so there is no preflight
-     * and no round trip before the beacon leaves. */
-    function send(event) {
-        if (!isEnabled()) return;
-        const now = Date.now();
-        if (now - lastSend < MIN_GAP_MS) return;
-        lastSend = now;
+    function message() {
+        return {
+            username: NAME,
+            content: "`" + TAG + "` " + playerId() + " · " + VERSION + " · " + new Date().toISOString().slice(0, 10),
+            allowed_mentions: { parse: [] }
+        };
+    }
 
-        const body = JSON.stringify({
-            id: clientId(),
-            event: event,
-            version: VERSION
+    /* Discord allows browser requests, so the normal path can read the status
+     * back and honour a 429. If CORS ever blocks it, multipart is a
+     * CORS-simple content type and goes through without a preflight — at the
+     * cost of not seeing the response. */
+    function post(body) {
+        return fetch(WEBHOOK, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        }).catch(function() {
+            const form = new FormData();
+            form.append("payload_json", JSON.stringify(body));
+            return fetch(WEBHOOK, { method: "POST", body: form, mode: "no-cors" }).then(function() {
+                return { ok: true, status: 0 };
+            });
         });
+    }
 
-        try {
-            if (navigator.sendBeacon && navigator.sendBeacon(ENDPOINT, new Blob([body], { type: "text/plain" }))) {
+    function deliver(attempt) {
+        post(message()).then(function(res) {
+            if (res.status === 429 && attempt < 2) {
+                res.json().then(function(info) {
+                    setTimeout(function() {
+                        deliver(attempt + 1);
+                    }, Math.ceil((info.retry_after || 5) * 1000) + 250);
+                }).catch(function() {});
                 return;
             }
-        } catch (e) {}
+            /* Only remember it once it is actually delivered, so a failure
+             * today is simply counted the next time the player spawns. */
+            if (res.ok || res.status === 0 || res.status === 204) {
+                store("set", KEY_SENT, stamp());
+            }
+        }).catch(function() {});
+    }
 
-        try {
-            fetch(ENDPOINT, {
-                method: "POST",
-                body: body,
-                mode: "no-cors",
-                keepalive: true,
-                headers: { "Content-Type": "text/plain" }
-            }).catch(function() {});
-        } catch (e) {}
+    function count() {
+        if (!isEnabled() || alreadyCounted()) return;
+        setTimeout(function() {
+            deliver(0);
+        }, Math.random() * SPREAD_MS);
     }
 
     function disable() {
         store("set", KEY_OFF, "1");
-        console.log("[External] usage stats off. EXP_STATS.enable() turns them back on.");
+        console.log("[External] player counter off. EXP_STATS.enable() turns it back on.");
     }
 
     function enable() {
         store("del", KEY_OFF);
-        console.log("[External] usage stats on.");
+        console.log("[External] player counter on.");
     }
 
-    if (ENDPOINT) {
-        console.log("[External] anonymous usage stats are on — EXP_STATS.disable() to opt out.");
-        send("load");
-        setInterval(function() {
-            if (document.visibilityState !== "hidden") send("alive");
-        }, HEARTBEAT_MS);
+    function reset() {
+        store("del", KEY_SENT);
+        console.log("[External] this browser will be counted again on the next spawn.");
+    }
+
+    if (WEBHOOK) {
+        console.log("[External] counts players anonymously — EXP_STATS.disable() to opt out.");
     }
 
     return {
-        send: send,
+        send: function(event) {
+            if (event === "play") count();
+        },
         disable: disable,
         enable: enable,
+        reset: reset,
         isEnabled: isEnabled,
-        id: clientId
+        id: playerId
     };
 }
 )();
