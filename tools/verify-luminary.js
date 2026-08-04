@@ -142,32 +142,113 @@ const shimImpl = (() => {
   }
 }
 
-/* ---- 3. item groups ------------------------------------------------- */
+/* ---- 3. every data table, field by field ---------------------------- */
+
+/* Slice a balanced literal starting at the first bracket after `at`. */
+function literalAt(src, at) {
+  const start = src.indexOf("[", at);
+  const body = src.slice(start);
+  let depth = 0, quote = null;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (quote) {
+      if (c === "\\") { i++; continue; }
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") { quote = c; continue; }
+    if (c === "[") depth++;
+    else if (c === "]") { depth--; if (depth === 0) return body.slice(0, i + 1); }
+  }
+  throw new Error("unterminated literal");
+}
+
+function table(pattern, scope) {
+  const at = script.search(pattern);
+  if (at === -1) return null;
+  return vm.runInNewContext("(" + literalAt(script, at) + ")", Object.assign({ Math }, scope || {}));
+}
 
 {
-  const at = script.indexOf("e.exports.groups = [{");
-  if (at === -1) fail("item groups table not found in the built script");
-  else {
-    const body = script.slice(script.indexOf("[", at));
-    let depth = 0, end = -1;
-    for (let i = 0; i < body.length; i++) {
-      if (body[i] === "[") depth++;
-      else if (body[i] === "]") { depth--; if (depth === 0) { end = i; break; } }
+  const groups = table(/e\.exports\.groups\s*=\s*\[/);
+  const scope = { e: { exports: { groups: groups || drivers.itemGroups } } };
+
+  const tables = [
+    ["itemGroups", groups, drivers.itemGroups],
+    ["weapons", table(/[te]\.weapons\s*=\s*\[/), drivers.weapons],
+    ["projectiles", table(/[te]\.projectiles\s*=\s*\[/), drivers.projectiles],
+    ["items", table(/e\.exports\.list\s*=\s*\[/, scope), drivers.items],
+    ["hats", table(/e\.exports\.hats\s*=\s*\[/), drivers.hats],
+    ["accessories", table(/e\.exports\.accessories\s*=\s*\[/), drivers.accessories],
+  ];
+
+  for (const [name, mine, game] of tables) {
+    if (!mine) { fail(`${name}: table not found in the built script`); continue; }
+    if (mine.length !== game.length) {
+      fail(`${name}: ${mine.length} entries, bundle has ${game.length}`);
+      continue;
     }
-    const groups = vm.runInNewContext("(" + body.slice(0, end + 1) + ")", {});
-    let bad = 0;
-    for (let i = 0; i < drivers.itemGroups.length; i++) {
-      const a = groups[i], b = drivers.itemGroups[i];
-      if (!a) { bad++; continue; }
-      for (const f of ["id", "name", "place", "limit", "sandboxLimit", "layer"]) {
-        if (JSON.stringify(a[f]) !== JSON.stringify(b[f])) {
-          fail(`itemGroups[${i}] ${b.name}.${f}: script ${JSON.stringify(a[f])}, game ${JSON.stringify(b[f])}`);
+    let bad = 0, extra = 0;
+    for (let i = 0; i < game.length; i++) {
+      const a = mine[i], b = game[i];
+      for (const f of Object.keys(b)) {
+        const av = f === "group" ? JSON.stringify(a[f] && a[f].id) : JSON.stringify(a[f]);
+        const bv = f === "group" ? JSON.stringify(b[f] && b[f].id) : JSON.stringify(b[f]);
+        if (av !== bv) {
+          fail(`${name}[${i}] ${b.name || b.src || i}.${f}: script ${av}, bundle ${bv}`);
           bad++;
         }
       }
+      /* Fields the fork added are fine - its own code reads them - as long as
+       * nothing the bundle ships is missing or altered. */
+      for (const f of Object.keys(a)) if (!(f in b)) extra++;
     }
-    if (!bad) note(`tables: all ${drivers.itemGroups.length} item groups match the shipped bundle`);
+    if (!bad) {
+      note(`tables: ${name} (${game.length}) match the bundle` + (extra ? `, ${extra} fork-only field(s) kept` : ""));
+    }
   }
+}
+
+/* ---- 3b. config scalars --------------------------------------------- */
+
+{
+  const mod = script.slice(script.indexOf("var webpackModules = ["), script.indexOf("e.exports.groups"));
+  const mine = {};
+  for (const m of mod.matchAll(/e\.exports\.(\w+)\s*=\s*([^,\n]+?)(?=,\s*\n|,\s*$)/g)) {
+    try {
+      mine[m[1]] = vm.runInNewContext("(" + m[2] + ")", { Math, location: { href: "https://moomoo.io/" } });
+    } catch {}
+  }
+
+  let bad = 0, seen = 0;
+  for (const k of Object.keys(drivers.config)) {
+    const g = drivers.config[k];
+    if (g === null || typeof g === "object") continue;   // arrays checked below
+    if (!(k in mine)) continue;                          // not in the fork's config module
+    if (k === "inSandbox") continue;                     // runtime expression on both sides
+    seen++;
+    if (JSON.stringify(mine[k]) !== JSON.stringify(g)) {
+      fail(`config.${k}: script ${JSON.stringify(mine[k])}, bundle ${JSON.stringify(g)}`);
+      bad++;
+    }
+  }
+  if (!bad) note(`config: ${seen} scalars match the bundle`);
+
+  let arrBad = 0, arrSeen = 0;
+  for (const k of Object.keys(drivers.config)) {
+    const g = drivers.config[k];
+    if (g === null || typeof g !== "object") continue;
+    const at = script.search(new RegExp("e\\.exports\\." + k + "\\s*=\\s*[\\[{]"));
+    if (at === -1) continue;
+    arrSeen++;
+    let v;
+    try { v = vm.runInNewContext("(" + literalAt(script, at) + ")", { Math }); } catch { continue; }
+    if (JSON.stringify(v) !== JSON.stringify(g)) {
+      fail(`config.${k} differs from the bundle`);
+      arrBad++;
+    }
+  }
+  if (!arrBad) note(`config: ${arrSeen} table(s) match the bundle`);
 }
 
 /* ---- 4. entry ------------------------------------------------------- */

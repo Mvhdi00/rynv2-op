@@ -27,6 +27,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const vm = require("vm");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE = path.join(ROOT, "src/Luminary_v3.js");
@@ -886,6 +887,102 @@ edit(
   const start = code.indexOf("[", at);
   code = code.slice(0, start) + rendered + code.slice(start + end + 1);
   applied.push("tables: item group limits restored from the shipped bundle");
+}
+
+/* ------------------------------------------------------------------ *
+ * 8. Item table
+ *
+ * The fork's items agree with the bundle on everything it kept, but it
+ * dropped two fields:
+ *
+ *   turnSpeed  the three windmills. The fork spins objects with
+ *              `this.turnSpeed && (this.dir += this.turnSpeed * delta)`, so
+ *              without it mills sit still.
+ *   pre        castle wall, poison/spinning spikes, faster/power mill. The
+ *              fork has the machinery (it normalises `pre` to an absolute
+ *              index on load) and gates the upgrade menu on it, so without
+ *              the values those upgrades offer themselves with no
+ *              prerequisite.
+ *
+ * Rebuilt from the shipped table, keeping the fields the fork added on top
+ * (`consume` on the foods, which its own HUD reads).
+ * ------------------------------------------------------------------ */
+
+{
+  const at = code.indexOf("e.exports.list = [{");
+  if (at === -1) throw new Error("anchor not found: item list table");
+  const start = code.indexOf("[", at);
+  const body = code.slice(start);
+  let depth = 0, quote = null, end = -1;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (quote) {
+      if (c === "\\") { i++; continue; }
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") { quote = c; continue; }
+    if (c === "[") depth++;
+    else if (c === "]") { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end === -1) throw new Error("unterminated item list table");
+
+  const forkItems = vm.runInNewContext("(" + body.slice(0, end + 1) + ")", {
+    e: { exports: { groups: DRIVERS.itemGroups } },
+    Math,
+  });
+  if (forkItems.length !== DRIVERS.items.length) {
+    throw new Error(`item count drift: fork has ${forkItems.length}, bundle has ${DRIVERS.items.length}`);
+  }
+
+  const kept = [];
+  const rendered = "[" + DRIVERS.items.map((game, i) => {
+    const fork = forkItems[i] || {};
+    if (fork.name !== game.name) {
+      throw new Error(`item ${i} is "${fork.name}" in the fork and "${game.name}" in the bundle`);
+    }
+    const fields = [];
+    for (const k of Object.keys(game)) {
+      if (k === "group") fields.push(`\n            group: e.exports.groups[${game.group.id}]`);
+      else fields.push(`\n            ${k}: ${J(game[k])}`);
+    }
+    for (const k of Object.keys(fork)) {
+      if (k === "group" || k in game) continue;
+      kept.push(`${game.name}.${k}`);
+      fields.push(`\n            ${k}: ${J(fork[k])}`);
+    }
+    return "{" + fields.join(",") + "\n        }";
+  }).join(", ") + "]";
+
+  code = code.slice(0, start) + rendered + code.slice(start + end + 1);
+  applied.push(`tables: item list rebuilt from the bundle (kept ${kept.join(", ")})`);
+}
+
+/* ------------------------------------------------------------------ *
+ * 9. Config scalars
+ *
+ * shieldAngle is a deliberate change in the fork - the comment on it reads
+ * "was divided by 3" - but the server still resolves shield coverage at
+ * PI/3, so a client at PI/2 mispredicts every block. maxPlayers was left at
+ * the old lobby size.
+ * ------------------------------------------------------------------ */
+
+{
+  const shield = DRIVERS.config.shieldAngle;
+  if (Math.abs(shield - Math.PI / 3) > 1e-12) {
+    throw new Error(`bundle shieldAngle is ${shield}, expected PI/3`);
+  }
+  edit(
+    "config: shieldAngle back to the bundle's PI/3",
+    `            e.exports.shieldAngle = Math.PI / 2, // was divided by 3`,
+    `            e.exports.shieldAngle = Math.PI / 3,`
+  );
+
+  edit(
+    `config: maxPlayers ${DRIVERS.config.maxPlayers} to match the bundle`,
+    `            e.exports.maxPlayers = 100,`,
+    `            e.exports.maxPlayers = ${DRIVERS.config.maxPlayers},`
+  );
 }
 
 fs.writeFileSync(OUT, code);

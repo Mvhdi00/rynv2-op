@@ -145,6 +145,10 @@ fixed in place rather than having its features ported off it.
 | **Menu** | `#enterGame` had no `disabled` class | the page ships it disabled; the build clears it |
 | | — | overlays only the current client owns are neutralised |
 | **Tables** | every placement `limit` flattened to 99 | real limits + `sandboxLimit` |
+| | mills carry no `turnSpeed` | restored — mills spin again |
+| | five upgrades carry no `pre` | restored — upgrades need their prerequisite |
+| | `shieldAngle` widened to `PI/2` | back to the bundle's `PI/3` |
+| | `maxPlayers` 100 | 40 |
 
 The `bundle.js` line is why nothing worked at all: the game stopped shipping
 it, so the fork removed nothing and both clients ran at once.
@@ -183,6 +187,28 @@ That means the translation lives entirely in the socket module: the ~12k lines
 of game and mod code above it keep speaking the old names, and nothing else in
 the fork had to be touched.
 
+### The rest of the audit
+
+Everything else was diffed field by field against the bundle and came back
+clean: weapons (16), hats (46), accessories (21), item groups (14), all 44
+config scalars and all 7 config tables (`weaponVariants`, `skinColors`,
+`resourceTypes`, the scale tables). Items match too once the two dropped
+fields are back.
+
+The fork keeps a few fields the bundle does not ship — `consume` on the three
+foods, `range`/`speed` on one projectile — and those stay, because its own
+code reads them and nothing on the wire depends on them.
+
+`shieldAngle` is the one deliberate change reverted. The fork's own comment
+reads *"was divided by 3"*, so widening it was intentional, but the server
+still resolves shield coverage at `PI/3` — a client at `PI/2` mispredicts
+every block. Change it back in the source if you want the fork's behaviour.
+
+Not carried over: `MAX_ATTACK`, `MAX_SPEED`, `MAX_TURN_SPEED`,
+`MAX_SPAWN_DELAY` and `DAY_INTERVAL`. The fork never reads any of them, and in
+the shipped client `DAY_INTERVAL` only appears in two expressions whose results
+are discarded.
+
 ### Verification
 
 ```sh
@@ -195,8 +221,9 @@ node --check Luminary_Fixed.user.js
 `src/game_index.js` and the shipped shim out of the built userscript, then runs
 them side by side over 500 random seeds and payloads. The permuted opcode
 tables and every signature byte agree. It also checks that all 17 opcodes the
-fork sends translate, that all 36 handlers it registers are reachable, and that
-the item groups match the bundle.
+fork sends translate, that all 36 handlers it registers are reachable, that
+every data table and config value matches the bundle field by field, and that
+the entry and menu fixes are all still in place.
 
 What that does **not** cover is a live connection — the wire format is verified
 against the shipped client, but no packet has been put on a real server from
