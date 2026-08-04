@@ -113,19 +113,116 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+# Whiteout
+
+A second client in this repo, and a separate build: **`Whiteout_Fixed.user.js`**,
+produced from `src/Whiteout_Abdo.js` by `tools/fix-whiteout.js`.
+
+Whiteout had the same problem Luna has — it was written against the wire format
+the game used before the current transport — but unlike Luna it is a userscript
+that rides on top of the live bundle rather than a fork of an old one, so it
+could be brought forward instead of ported.
+
+## What was wrong
+
+**The wire format.** Whiteout read and wrote plain msgpack `[letterOpcode, args]`
+in both directions. The current bundle negotiates a transport in `io-init`:
+
+```
+io-init -> [socketId, tableSeed, hmacKeyHex, mode]
+```
+
+and when `mode === 1`, every client frame becomes
+
+```
+[6 bytes of HMAC-SHA256(key, payload)][payload]
+payload = msgpack([permutedOpcode, args, sequence])
+```
+
+with both opcode alphabets permuted per connection from `tableSeed`, and server
+frames carrying the permuted number where the letter used to be. Whiteout was
+decoding signed frames as if the signature were part of the message, and then
+re-encoding plaintext over a connection the server expects to be signed. The
+spawn packet goes through that same path, which is why entry failed before
+anything else got a chance to.
+
+**The hook never bound.** The bundle does
+
+```js
+const kn = window.WebSocket, Ri = window.WebSocket.prototype.send;
+```
+
+as it loads, and sends every frame through that captured `Ri`. Whiteout had no
+`@run-at`, so it ran at document-end — after the bundle had already taken its
+copy. Its outgoing hook was never called.
+
+**io-init was never seen.** The socket was captured on the first *outgoing*
+packet, but nothing is sent until the player presses Play, long after `io-init`
+has come and gone. Even with the framing fixed there would have been no key.
+
+**msgpack came off greasyfork** via a `<script>` appended to `document.body` —
+impossible at document-start, and a race against the first packet even at
+document-end.
+
+## What the fix does
+
+The transport is not reimplemented. `tools/fix-whiteout.js` slices the msgpack
+codec out of `src/game_vendor.js` and the signing, hashing and opcode-permutation
+functions out of `src/game_index.js`, both verbatim, and builds a `WhiteoutNet`
+prologue around them. Frames are therefore built by the same code the game builds
+them with — `tools/verify-whiteout.js` checks that byte for byte.
+
+| | Before | After |
+|---|---|---|
+| Frame format | plain msgpack | permuted opcode, sequence, HMAC prefix |
+| msgpack | fetched from greasyfork | bundled from the game's vendor chunk |
+| Hook timing | document-end (too late) | document-start trampoline |
+| Socket capture | on first send | on `io-init`, from a constructor hook |
+| Sequence numbers | — | one gate, gap-free across drops |
+
+The script runs at document-start now, so the body — which reads `window.config`,
+published on the bundle's last line — is wrapped and run on `DOMContentLoaded`,
+exactly where document-end used to put it. Only the transport runs early.
+
+Every outgoing frame passes through one gate, so dropping a packet in the
+client's filter does not leave a hole in the sequence the server is counting.
+
+### Also corrected
+
+- **`window.leave`** sent an opcode called `"kys"` with a joke payload, on the
+  theory that an unparseable packet gets you dropped. Nothing outside the
+  alphabet can be encoded now, so it was a no-op; it closes the socket instead.
+- **The bot section** was still on the opcode set from two protocols ago — `"a"`
+  for movement, `"G"` for item select, `"d"` for attack, where the current
+  alphabet has `"9"`, `"z"` and `"F"`, and `"1"` for setupGame where it is now
+  `"C"`. It also gets its own crypto state, since it is a second connection with
+  its own `io-init`. Note that this whole section sits inside a block comment in
+  the base client (`/** APPLY SOCKET CODES`) and does not run as shipped; the
+  edits are there so it is correct if it is ever uncommented.
+- **`packet("B")`** in `receiveChat` is a booby trap a remote player can spring
+  by saying the right thing — `"B"` is a *server* opcode, so sending it broke
+  your own connection. It has no client encoding, so it is now dropped. Left in
+  place, and asserted as dropped by the verifier, rather than quietly deleted.
+
+---
+
 ## Layout
 
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
+ReUp_Mix.user.js          ReUp Mix build output — the script to install
+Whiteout_Fixed.user.js    Whiteout build output — the script to install
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
+src/Whiteout_Abdo.js      Whiteout client (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
-tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-reup.js       src/RYN_Client_v4.js  -> ReUp_Mix.user.js
+tools/fix-whiteout.js     src/Whiteout_Abdo.js  -> Whiteout_Fixed.user.js
+tools/verify-whiteout.js  built client's transport vs. the game bundle
 ```
 
 ## Build
@@ -133,11 +230,15 @@ tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```sh
 node tools/extract-drivers.js    # refresh drivers from src/game_*.js
 node tools/build-reup.js         # produce ReUp_Mix.user.js
+node tools/fix-whiteout.js       # produce Whiteout_Fixed.user.js
 ```
 
-Every edit in `build-reup.js` is anchored to an exact string in the base
-client, and an anchor that is missing or ambiguous fails the build. Dropping in
-a newer RYN will surface as a build error rather than a half-merged script.
+Every edit in both builds is anchored to an exact string in its base client,
+and an anchor that is missing or ambiguous fails the build. Dropping in a newer
+base will surface as a build error rather than a half-converted script.
+`fix-whiteout.js` additionally parses its own output before writing it — large
+stretches of the Whiteout source sit inside block comments, so an edit that
+landed in one and carried a comment terminator would take dead code live.
 
 ## Verification
 
@@ -145,9 +246,18 @@ a newer RYN will surface as a build error rather than a half-merged script.
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
 node --check ReUp_Mix.user.js
+
+node tools/verify-whiteout.js                  # Whiteout_Fixed.user.js
 ```
 
-Current state of the build:
+`verify-whiteout.js` reconstructs the bundle's own `O.send` from
+`src/game_index.js` and compares it against the built client frame by frame,
+rather than only checking that the file parses. It covers the hooks, the
+`io-init` handshake, byte-identical signed frames, sequence numbering across a
+dropped packet, round trips in both directions, opcode coverage against both
+alphabets, and the full entry path from spawn to wire. 25/25 checks pass.
+
+Current state of the ReUp Mix build:
 
 - **Drivers** — hats (46), accessories (21), weapons (16), items (23), item
   groups (14) and 42 scalar config keys all match `src/game_index.js`. The
