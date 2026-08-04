@@ -339,7 +339,84 @@ check(
 net.gate = null;
 
 /* ------------------------------------------------------------------ *
- * 7. The client only sends opcodes this protocol has
+ * 7. The two ways the stream used to desync
+ *
+ * Both of these produced the same symptom - you get into the game and then
+ * freeze - and both were timing-dependent, so they came and went.
+ * ------------------------------------------------------------------ */
+
+console.log("\ndesync");
+
+/* The client body only installs its filter on DOMContentLoaded, but the game
+ * connects on its own schedule and starts pinging the moment it does. Frames
+ * sent in that window used to go out untouched, carrying the game's sequence
+ * numbers; the moment the filter appeared our counter started again at 1 and
+ * collided with them. Everything has to be re-numbered from the first frame. */
+{
+  const early = new Socket("wss://example.invalid");
+  early.emit("message", { data: ref.encoder.encode(ioInit) });
+  const theirs = ref.gameInit([7, SEED, KEY_HEX, 1]);
+  sent.length = 0;
+  net.gate = null;
+
+  early.send(ref.gameSend(theirs, "0", []));
+  early.send(ref.gameSend(theirs, "0", []));
+
+  const nums = sent.map(e => ref.decoder.decode(Buffer.from(e.bytes).subarray(ref.jt))[2]);
+  check(
+    "frames sent before the filter exists are still re-numbered",
+    JSON.stringify(nums) === JSON.stringify([1, 2]),
+    `sequence went ${JSON.stringify(nums)}`
+  );
+
+  const next = net.encodeOut(early, "9", [0]);
+  check(
+    "the filter picks up the count where the relay left it",
+    ref.decoder.decode(next.subarray(ref.jt))[2] === 3
+  );
+}
+
+/* A reconnect gives the client a second socket. The first one used to be
+ * latched forever, so the client kept decoding against a connection that had
+ * already gone away and simply stopped hearing the server. */
+{
+  let bound = [];
+  net.whenMain(s => bound.push(s));
+
+  const first = new Socket("wss://example.invalid");
+  first.readyState = 1;
+  first.emit("message", { data: ref.encoder.encode(ioInit) });
+  const boundToFirst = bound[bound.length - 1] === first;
+
+  /* A second connection while the first is still up must not steal it - that
+   * is what the bot socket looks like. */
+  const sibling = new Socket("wss://example.invalid");
+  sibling.readyState = 1;
+  sibling.emit("message", { data: ref.encoder.encode(ioInit) });
+  const keptFirst = bound[bound.length - 1] === first;
+
+  /* Once it closes, the next connection to negotiate takes over. */
+  first.readyState = 3;
+  const second = new Socket("wss://example.invalid");
+  second.readyState = 1;
+  second.emit("message", { data: ref.encoder.encode(ioInit) });
+  const movedToSecond = bound[bound.length - 1] === second;
+
+  /* A repeat of io-init on the connection already bound must not hand it over
+   * again, or the client stacks a second set of listeners on it. */
+  const beforeRepeat = bound.length;
+  second.emit("message", { data: ref.encoder.encode(ioInit) });
+
+  check("the live connection is handed to the client", boundToFirst);
+  check("a second connection does not steal the live one", keptFirst);
+  check("a reconnect rebinds to the new connection", movedToSecond);
+  check("a repeated io-init does not rebind the same connection", bound.length === beforeRepeat);
+
+  net.whenMain(null);
+}
+
+/* ------------------------------------------------------------------ *
+ * 8. The client only sends opcodes this protocol has
  * ------------------------------------------------------------------ */
 
 console.log("\nopcode coverage");
@@ -370,7 +447,7 @@ check(
 );
 
 /* ------------------------------------------------------------------ *
- * 8. Nothing is left on the plaintext path
+ * 9. Nothing is left on the plaintext path
  * ------------------------------------------------------------------ */
 
 console.log("\nleftovers");

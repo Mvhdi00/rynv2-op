@@ -203,6 +203,38 @@ exactly where document-end used to put it. Only the transport runs early.
 Every outgoing frame passes through one gate, so dropping a packet in the
 client's filter does not leave a hole in the sequence the server is counting.
 
+### Two ways the stream desynced
+
+Both showed up the same way — you get into the game and then freeze — and both
+depended on timing, so they came and went between attempts.
+
+**Frames sent before the filter existed.** The client body only installs its
+filter on `DOMContentLoaded`, but the game connects on its own schedule and
+starts pinging (`O.send("0")`) the moment it does. Frames sent in that window
+went out untouched, carrying the game's own sequence numbers; when the filter
+appeared, the client's counter started again at 1 and collided with them.
+Whether it happened at all depended on whether the server list resolved before
+`DOMContentLoaded` fired. Every frame is re-numbered from the first one now,
+filter or no filter, and the same applies to the filter's fall-through for
+sockets that are not the game connection.
+
+**Reconnects.** The first socket to negotiate was latched as the game
+connection forever. On a reconnect the client kept decoding against a socket
+that had already closed and simply stopped hearing the server. The binding now
+moves to the new connection once the old one is no longer open — but only then,
+so a second concurrent socket cannot steal it, and a repeated `io-init` on the
+connection already bound does not stack a second set of listeners on it.
+
+### Movement
+
+The filter drops the game's own move packet (`["9", [angle]]`) on purpose: it
+carries neither the force flag nor the caller tag the client tags its own with.
+Whiteout replaces movement rather than passing it along — `sendMoveDir()` runs
+from `updatePlayers`, the per-tick server handler, and sends
+`packet("9", dir, 1, "sendMoveDir")` from its own key state. That only works if
+incoming frames are being decoded, which is why a desynced or dead connection
+reads as being stuck rather than as being disconnected.
+
 ### Also corrected
 
 - **`window.leave`** sent an opcode called `"kys"` with a joke payload, on the
@@ -271,7 +303,7 @@ node tools/verify-whiteout.js                  # Whiteout_Fixed.v4.js
 rather than only checking that the file parses. It covers the hooks, the
 `io-init` handshake, byte-identical signed frames, sequence numbering across a
 dropped packet, round trips in both directions, opcode coverage against both
-alphabets, and the full entry path from spawn to wire. 25/25 checks pass.
+alphabets, and the full entry path from spawn to wire, and the two desync cases above. 31/31 checks pass.
 
 Current state of the ReUp Mix build:
 

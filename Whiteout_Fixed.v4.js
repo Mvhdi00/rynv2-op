@@ -1717,6 +1717,16 @@ function Ro(e) {
         nativeSend.call(socket, bytes);
     };
 
+    api.relay = function (socket, message) {
+        var frame = api.decodeOut(socket, message);
+        if (!frame) {
+            api.nativeSend(socket, message);
+            return;
+        }
+        var bytes = api.encodeOut(socket, frame[0], frame[1]);
+        if (bytes) nativeSend.call(socket, bytes);
+    };
+
     api.send = function (socket, type, args) {
         if (!socket) return;
         var packet = {
@@ -1744,7 +1754,8 @@ function Ro(e) {
             } catch (e) {
                 return;
             }
-            if (!frame || frame[0] !== "io-init" || main !== null) return;
+            if (!frame || frame[0] !== "io-init" || main === socket) return;
+            if (main !== null && main.readyState <= 1) return;
             main = socket;
             api.main = socket;
             if (typeof onMain === "function") {
@@ -1772,7 +1783,7 @@ function Ro(e) {
 
     NativeSocket.prototype.send = function (message) {
         if (typeof api.gate === "function") return api.gate.call(this, message);
-        api.nativeSend(this, message);
+        api.relay(this, message);
     };
     NativeSocket.prototype.nsend = function (message) {
         api.nativeSend(this, message);
@@ -4096,7 +4107,7 @@ WhiteoutNet.gate = function (message) {
             secPacket++;
         }
     } else {
-        this.nsend(message);
+        WhiteoutNet.relay(this, message);
     }
 };
 
@@ -11351,7 +11362,7 @@ function keyDown(event) {
                                 secPacket++;
                             }
                         } else {
-                            this.nsend(message);
+                            WhiteoutNet.relay(this, message);
                         }
                     };
                 } else {
@@ -12009,7 +12020,7 @@ function keyDown(event) {
                                 secPacket++;
                             }
                         } else {
-                            this.nsend(message);
+                            WhiteoutNet.relay(this, message);
                         }
                     };
                 }
@@ -22296,7 +22307,7 @@ menuDiv.style.visibility = "hidden";
 window.sendPacket = packet;
 
 const WhiteoutBuild = {
-    "builtAt": "2026-08-04T09:07:00.628Z",
+    "builtAt": "2026-08-04T09:16:53.766Z",
     "liftedFrom": {
         "codec": "src/game_vendor.js",
         "transport": "src/game_index.js"

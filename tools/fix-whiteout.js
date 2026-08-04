@@ -315,6 +315,16 @@ ${protocol}
         nativeSend.call(socket, bytes);
     };
 
+    api.relay = function (socket, message) {
+        var frame = api.decodeOut(socket, message);
+        if (!frame) {
+            api.nativeSend(socket, message);
+            return;
+        }
+        var bytes = api.encodeOut(socket, frame[0], frame[1]);
+        if (bytes) nativeSend.call(socket, bytes);
+    };
+
     api.send = function (socket, type, args) {
         if (!socket) return;
         var packet = {
@@ -342,7 +352,8 @@ ${protocol}
             } catch (e) {
                 return;
             }
-            if (!frame || frame[0] !== "io-init" || main !== null) return;
+            if (!frame || frame[0] !== "io-init" || main === socket) return;
+            if (main !== null && main.readyState <= 1) return;
             main = socket;
             api.main = socket;
             if (typeof onMain === "function") {
@@ -370,7 +381,7 @@ ${protocol}
 
     NativeSocket.prototype.send = function (message) {
         if (typeof api.gate === "function") return api.gate.call(this, message);
-        api.nativeSend(this, message);
+        api.relay(this, message);
     };
     NativeSocket.prototype.nsend = function (message) {
         api.nativeSend(this, message);
@@ -518,6 +529,19 @@ editAll(
                                 if (!binary) return;
                                 WhiteoutNet.nativeSend(this, binary);`,
   2
+);
+
+/* The filter's fall-through, for a socket that is not the game connection.
+ * It used to write the frame out untouched, which is only right for a socket
+ * that never negotiated - on one that did, passing the game's own frame
+ * through leaves its sequence number in the stream alongside ours. Relaying
+ * re-signs when there is a connection state and passes through when there
+ * is not. */
+editRe(
+  "hook: relay frames from other sockets instead of passing them through",
+  /^( *)this\.nsend\(message\);$/gm,
+  "$1WhiteoutNet.relay(this, message);",
+  3
 );
 
 /* The packet log keeps a copy of each frame. It is only ever read back for
