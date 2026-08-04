@@ -115,12 +115,24 @@ but nothing in the client needs it. It is stripped from the build.
 
 # Whiteout
 
-A second client in this repo, and a separate build: **`Whiteout_Fixed.v4.1.js`**,
+A second client in this repo, and a separate build: **`Whiteout_Fixed.v4.js`**,
 produced from `src/Whiteout_Abdo.js` by `tools/fix-whiteout.js`. The build is
 named for its version rather than ending in `.user.js`, so a script manager will
 not offer to install it on sight — open it and paste the contents into a new
 script instead. `tools/fix-whiteout.js` takes the name from one `VERSION`
 constant that also fills in the header's `@version`, so the two cannot drift.
+
+The build carries no commentary of its own. The header is the base client's,
+unchanged, apart from the one line the fix cannot work without:
+
+```
+// @run-at       document-start
+```
+
+Everything explaining the change lives in `tools/fix-whiteout.js` and in this
+file. The code lifted out of the game bundles arrives with no comments either,
+so the only comment line in the build that is not in `src/Whiteout_Abdo.js` is
+the `@run-at` directive above.
 
 Whiteout had the same problem Luna has — it was written against the wire format
 the game used before the current transport — but unlike Luna it is a userscript
@@ -214,7 +226,7 @@ client's filter does not leave a hole in the sequence the server is counting.
 
 ```
 ReUp_Mix.user.js          ReUp Mix build output — the script to install
-Whiteout_Fixed.v4.1.js    Whiteout build output — the script to install
+Whiteout_Fixed.v4.js    Whiteout build output — the script to install
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -225,7 +237,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js  -> ReUp_Mix.user.js
-tools/fix-whiteout.js     src/Whiteout_Abdo.js  -> Whiteout_Fixed.v4.1.js
+tools/fix-whiteout.js     src/Whiteout_Abdo.js  -> Whiteout_Fixed.v4.js
 tools/verify-whiteout.js  built client's transport vs. the game bundle
 ```
 
@@ -234,7 +246,7 @@ tools/verify-whiteout.js  built client's transport vs. the game bundle
 ```sh
 node tools/extract-drivers.js    # refresh drivers from src/game_*.js
 node tools/build-reup.js         # produce ReUp_Mix.user.js
-node tools/fix-whiteout.js       # produce Whiteout_Fixed.v4.1.js
+node tools/fix-whiteout.js       # produce Whiteout_Fixed.v4.js
 ```
 
 Every edit in both builds is anchored to an exact string in its base client,
@@ -251,7 +263,7 @@ node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
 node --check ReUp_Mix.user.js
 
-node tools/verify-whiteout.js                  # Whiteout_Fixed.v4.1.js
+node tools/verify-whiteout.js                  # Whiteout_Fixed.v4.js
 ```
 
 `verify-whiteout.js` reconstructs the bundle's own `O.send` from

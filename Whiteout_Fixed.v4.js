@@ -1,28 +1,16 @@
 // ==UserScript==
-// @name         Whiteout (fixed transport)
-// @namespace    whiteout-fixed
+// @name         whiteout abdo
 // @match        *://*.moomoo.io/*
 // @grant        none
-// @version      v4.1
-// @description  whiteout abdo, rebuilt against the current moomoo protocol
+// @version      v4
+// @description
 // @icon         https://img.freepik.com/free-photo/abstract-surface-textures-white-concrete-stone-wall_74190-8189.jpg
 // @author       hanabira (combat and some UI) and nexoos (menu)
 // @run-at       document-start
 // ==/UserScript==
 
-/* ==================================================================
- * Whiteout transport
- *
- * The moomoo bundle negotiates a per-connection transport in io-init and then
- * signs and permutes every frame. The codec below is lifted verbatim out of
- * src/game_vendor.js and the signing / permutation out of src/game_index.js,
- * so frames are built by the same code the game builds them with.
- *
- * Regenerate with: node tools/fix-whiteout.js
- * ================================================================== */
 const WhiteoutNet = (function () {
 
-/* ---- msgpack codec, verbatim from the game's vendor bundle ---- */
 var se = 4294967295;
 function Ur(t, e, r) {
     var i = r / 4294967296
@@ -1474,7 +1462,6 @@ var Jr = 16
     t
 }();
 
-/* ---- transport, verbatim from the game's index bundle ---- */
 
 const Io = 1
   , jt = 6
@@ -1611,8 +1598,6 @@ function Ro(e) {
     var NativeSocket = window.WebSocket;
     var nativeSend = NativeSocket.prototype.send;
 
-    /* One crypto state per connection: the game socket and the bot socket each
-     * negotiate their own key, opcode tables and sequence. */
     var states = new WeakMap();
     var main = null;
     var onMain = null;
@@ -1624,9 +1609,6 @@ function Ro(e) {
         return null;
     }
 
-    /* Packets the client originates are handed to the outgoing filter as this
-     * marker rather than as bytes, so they are signed and numbered exactly
-     * once, on the way out, like the game's own. */
     function isLogical(v) {
         return !!v && typeof v === "object" && v.__whiteout === true;
     }
@@ -1634,7 +1616,6 @@ function Ro(e) {
     var api = {
         signatureBytes: jt,
         encryptedMode: Ht,
-        /* Replaced by the client body. Called with the socket as `this`. */
         gate: null
     };
 
@@ -1646,8 +1627,6 @@ function Ro(e) {
         return states.get(socket) || null;
     };
 
-    /* io-init: [socketId, tableSeed, hmacKeyHex, mode]. Anything other than
-     * the encrypted mode leaves the socket on the plaintext framing. */
     api.initState = function (socket, args) {
         var state = null;
         if (args && args[3] === Ht) {
@@ -1662,9 +1641,6 @@ function Ro(e) {
         return state;
     };
 
-    /* Server -> client. Once the tables are up the opcode arrives as the
-     * permuted number; translate it back to the letter the handler table in
-     * getMessage is keyed on. */
     api.decodeIn = function (socket, data) {
         var bytes = toBytes(data);
         if (!bytes) return null;
@@ -1689,8 +1665,6 @@ function Ro(e) {
         return [ type, args ];
     };
 
-    /* Client -> server, on the way into the filter: unwrap a frame back to its
-     * letter opcode and arguments. */
     api.decodeOut = function (socket, message) {
         if (isLogical(message)) return [ message.type, message.args ];
         var bytes = toBytes(message);
@@ -1721,10 +1695,6 @@ function Ro(e) {
         return [ plain[0], plain[1] || [] ];
     };
 
-    /* Client -> server, on the way out: permute the opcode, number the frame
-     * and prefix the truncated HMAC, exactly as the bundle's own send does.
-     * Returns null for an opcode the connection has no encoding for, which is
-     * also what the game does with one. */
     api.encodeOut = function (socket, type, args) {
         var list = Array.isArray(args) ? args : [ args ];
         var state = states.get(socket);
@@ -1739,7 +1709,6 @@ function Ro(e) {
         return frame;
     };
 
-    /* Straight to the wire, skipping the client's outgoing filter. */
     api.nativeSend = function (socket, message) {
         var bytes = isLogical(message)
             ? api.encodeOut(socket, message.type, message.args)
@@ -1748,7 +1717,6 @@ function Ro(e) {
         nativeSend.call(socket, bytes);
     };
 
-    /* Send a logical packet through the client's outgoing filter. */
     api.send = function (socket, type, args) {
         if (!socket) return;
         var packet = {
@@ -1763,8 +1731,6 @@ function Ro(e) {
         api.nativeSend(socket, packet);
     };
 
-    /* The game socket is the first one to be told what transport to speak. The
-     * bot socket connects later and the client already holds its reference. */
     api.whenMain = function (fn) {
         onMain = fn;
         if (main && typeof fn === "function") fn(main);
@@ -1789,9 +1755,6 @@ function Ro(e) {
         });
     }
 
-    /* Hooking the constructor as well as send() is what makes io-init
-     * reachable: the socket has to be watched from the moment it exists, not
-     * from the first packet the client happens to send over it. */
     function HookedSocket(url, protocols) {
         var socket = protocols === undefined
             ? new NativeSocket(url)
@@ -1807,15 +1770,10 @@ function Ro(e) {
     HookedSocket.CLOSING = NativeSocket.CLOSING;
     HookedSocket.CLOSED = NativeSocket.CLOSED;
 
-    /* A permanent trampoline. The bundle captures prototype.send as it loads
-     * and never looks at it again, so the hook has to be installed once, here,
-     * and the client body swaps its filter in behind it later. */
     NativeSocket.prototype.send = function (message) {
         if (typeof api.gate === "function") return api.gate.call(this, message);
         api.nativeSend(this, message);
     };
-    /* The base client sends through .nsend when it wants to skip its own
-     * filter; keep that meaning it did before the trampoline existed. */
     NativeSocket.prototype.nsend = function (message) {
         api.nativeSend(this, message);
     };
@@ -2266,8 +2224,7 @@ newFont.href = "https://fonts.googleapis.com/css?family=Ubuntu:700";
 newFont.type = "text/css";
 document.body.append(newFont);
 
-/* msgpack is bundled in the transport above, taken from the game's own
-   vendor bundle, so there is no remote script to wait on. */
+
 window.oncontextmenu = function () {
     return false;
 };
@@ -3420,8 +3377,6 @@ let autoAcceptEnabled = false;
 
 let WS = undefined;
 let socketID = undefined;
-/* io-init lands before the client has any reason to send anything, so the
-   socket is taken from the transport rather than from the first send. */
 WhiteoutNet.whenMain(function (socket) {
     WS = socket;
     socket.addEventListener("message", function (msg) {
@@ -18232,7 +18187,6 @@ function remProjectile(sid, range) {
             if (type == "io-init") {
                 bot.spawn();
             }
-            // setupGame; "1" was its opcode two protocols ago.
             if (type == "C") {
                 botSID = data[0];
                 console.log(botSID)
@@ -22341,9 +22295,8 @@ menuDiv.style.visibility = "hidden";
 
 window.sendPacket = packet;
 
-/* What this build was made against. See tools/fix-whiteout.js. */
 const WhiteoutBuild = {
-    "builtAt": "2026-08-04T08:48:06.730Z",
+    "builtAt": "2026-08-04T09:07:00.628Z",
     "liftedFrom": {
         "codec": "src/game_vendor.js",
         "transport": "src/game_index.js"
@@ -22456,7 +22409,6 @@ setInterval(() => {
 }, 300000)
 }
 
-/* document-start for the transport, document-end timing for the client. */
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", whiteoutMain, { once: true });
 } else {

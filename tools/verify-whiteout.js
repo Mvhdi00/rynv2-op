@@ -8,7 +8,7 @@
  * bundle's own send path is reconstructed here from src/game_index.js and the
  * two are compared byte for byte.
  *
- *   node tools/verify-whiteout.js [Whiteout_Fixed.v4.1.js]
+ *   node tools/verify-whiteout.js [Whiteout_Fixed.v4.js]
  */
 
 const fs = require("fs");
@@ -16,7 +16,7 @@ const path = require("path");
 const vm = require("vm");
 
 const ROOT = path.resolve(__dirname, "..");
-const TARGET = path.resolve(process.argv[2] || path.join(ROOT, "Whiteout_Fixed.v4.1.js"));
+const TARGET = path.resolve(process.argv[2] || path.join(ROOT, "Whiteout_Fixed.v4.js"));
 const VENDOR = path.join(ROOT, "src/game_vendor.js");
 const INDEX = path.join(ROOT, "src/game_index.js");
 
