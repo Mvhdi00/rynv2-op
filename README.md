@@ -331,10 +331,30 @@ Both pass on the current build.
 
 ## What the client actually is
 
-Ae86 v10 has **no menu and no hotkeys**. There is no settings panel to open,
-no keybind to press, and the string "Ae86" does not appear anywhere in its
-code. Every feature is a **chat command prefixed `!!`**, matched against the
-message you send:
+Ae86 v10 has **no settings panel** — nothing opens on load, and the string
+"Ae86" appears nowhere in its code. That is not the same as having no
+features. It has a full placement engine, driven by held keys and chat
+commands rather than a menu.
+
+Everything routes through one primitive, `place(group, angle)`, which selects
+the item, swings, and switches back to the weapon. Tracing its call sites
+against the item groups in `drivers/game-drivers.json`:
+
+| Placed group | What it is | Where it fires |
+|---|---|---|
+| 0 | food | held-key heal, and a loop that places several in a row |
+| 2 | spikes | insta combos, and the update loop |
+| 3 | mill | **two mills at spread angles** around a target inside 94 units — the mill trap, from the update loop |
+| 4 | mine | combo placement |
+| 5 → 1 | trap, falling back to walls | combo placement |
+
+So auto-place, auto-mill, auto-heal, auto-spike and auto-trap are all present
+and run from the game loop.
+
+**Keys.** `q` places food. `f`, `v` and `h` are held — each raises a combo flag
+on keydown and clears it on keyup. `B`, `G` and `L` are toggles.
+
+**Chat commands**, matched against `"!!" + name`:
 
 ```
 !!join      !!atck      !!combat    !!grind     !!heals
@@ -342,13 +362,12 @@ message you send:
 !!antikik   !!speed <n> !!set <n>   !!test <n>
 ```
 
-Each one toggles a flag and prints a short confirmation on screen. `botConfig`
-— the client's own state object — is exactly `{waitHeal, botJoin, stop, atck,
-nearDst}`, which is the whole feature surface.
+Each prints a short confirmation on screen. `botConfig` — the client's own
+state object — is `{waitHeal, botJoin, stop, atck, nearDst}`.
 
-This is worth stating plainly because the obvious reading of "it connects but
-the mod does nothing" is that the mod is broken. Nothing opens on load by
-design; type a command into chat and it responds.
+Worth stating because "it connects but the mod does nothing" reads as a broken
+build, when in fact nothing is meant to appear on load: hold a key or type a
+command.
 
 ## Diagnosing a live failure
 
