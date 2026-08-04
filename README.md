@@ -139,6 +139,7 @@ tools/verify-ae86.js      Ae86 transport vs. the game bundle
 tools/smoke-ae86.js       drives the Ae86 build against a mock current server
 tools/strip-comments.js   removes comments, keeps the ==UserScript== header
 src/ExternalClient_Dev2.js  External Client Dev-2, with the player counter
+src/Whiteout_v4.js        Whiteout v4, with the rage range added
 tools/stats-worker/       the collector for when webhook.site is outgrown
 ```
 
@@ -520,3 +521,46 @@ dropped rather than left blank.
 
 The check that matters: tokenising the file before and after gives the same
 78,916 tokens in the same order, which is what proves only comments went.
+
+---
+
+# Whiteout v4 — rage range
+
+Whiteout's placer does not have one range. It has a ladder of distances, each
+firing a different response, all measured against `nearHacker`:
+
+| Distance | Response |
+|---|---|
+| 270 | enemy already in a trap → spike on the perfect angle |
+| 250 | pit trap at ±60° (skipped in chase-placer mode) |
+| 190 | pit trap at a random angle (140 chasing, 400 in sandbox) |
+| 150 / 130 | two rear spikes plus a boost pad |
+| 130 with a boost pad, 100 without | three spikes, rear and ±60° |
+| 125 | predictive pit trap ahead of the target |
+| `30 + spike.scale + 40` — 119 normal, 122 greater | bounce-onto-spike combo |
+
+The **rage range** setting multiplies every one of them, so the placer starts
+laying traps and spikes from further out.
+
+```
+.t -rage        toggle
+.s -rage -3     set the multiplier and turn it on
+```
+
+There is also a checkbox and a multiplier field in the menu, next to the
+placement tick, and `rageRange(3)` from the console.
+
+At x3 the ladder becomes 810 / 750 / 570 / 450 / 375 / 300. Off, every number
+is exactly what it was.
+
+**What it does not change.** Where the item lands is fixed by the game:
+`checkPlace` puts it at `player.scale + item.scale` from you — 84 for a spike,
+85 for a pit trap, 87 for a greater spike. Rage changes *when* the placer
+decides to act, not how far it can reach. Set it high and it will start
+dropping traps at people who are still a screen away, which costs resources
+and is very visible; that is the trade, not a bug.
+
+The multiplier is read from the menu field when it exists, because Whiteout's
+`html.text()` builder drops unknown attributes and so cannot report changes.
+The checkbox is read the same way. Chat commands write to both, so the two
+never disagree.
