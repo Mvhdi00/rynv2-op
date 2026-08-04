@@ -36,7 +36,7 @@ function pageHtml() {
     const checks = CHECKBOX_IDS.map(id => `<input id="${id}" type="checkbox">`).join("\n");
     return `<!doctype html>
 <html><head><title>moomoo.io</title>
-<style>body{margin:0}#enterGame{position:fixed;left:20px;top:20px;width:200px;height:40px;background:#8ecc51}</style>
+<style>body{margin:0}#enterGame{position:fixed;left:420px;top:320px;width:200px;height:40px;background:#8ecc51}</style>
 <script type="module" crossorigin src="/assets/index-deadbeef.js"></script>
 </head><body>
 <canvas id="gameCanvas" width="1920" height="1080"></canvas>
@@ -266,6 +266,26 @@ async function main() {
     const spawnFrame = received.find(frame => frame.letter === "M");
     check("spawn payload is the current shape", Boolean(spawnFrame && spawnFrame.args && spawnFrame.args[0] && typeof spawnFrame.args[0].name === "string" && "moofoll" in spawnFrame.args[0] && "skin" in spawnFrame.args[0]), spawnFrame ? JSON.stringify(spawnFrame.args) : "");
     check("every frame maps to a current c2s opcode", received.length > 0 && received.every(frame => game.bo.includes(frame.letter)), JSON.stringify(received.map(f => f.letter)));
+
+    console.log("\nMenu");
+    const menu = await waitFor(() => page.evaluate(() => Boolean(document.getElementById("ae86Menu"))), 20000);
+    check("menu is rendered", menu);
+    const rows = await page.evaluate(() => {
+        const el = document.getElementById("ae86Menu");
+        return el ? [...el.querySelectorAll(".row")].map(r => r.firstChild.textContent) : [];
+    });
+    check("menu lists the chat commands", rows.includes("!!atck") && rows.includes("!!heals"), rows.length + " rows");
+    check("menu lists the key features", rows.some(r => r.includes("[q]")) && rows.some(r => r.includes("[h]")), JSON.stringify(rows.slice(-7)));
+
+    const chatBefore = received.filter(f => f.letter === "6").length;
+    await page.evaluate(() => {
+        const row = [...document.getElementById("ae86Menu").querySelectorAll(".row")]
+            .find(r => r.firstChild.textContent === "!!atck");
+        row.click();
+    });
+    await wait(600);
+    const chatAfter = received.filter(f => f.letter === "6").length;
+    check("a command is handled by the client, not broadcast as chat", chatAfter === chatBefore, "chat frames " + chatBefore + " -> " + chatAfter);
 
     console.log("\nServer to client");
     const sawPing = await waitFor(() => Promise.resolve(received.some(frame => frame.letter === "0")), 20000);

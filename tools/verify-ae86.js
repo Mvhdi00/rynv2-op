@@ -99,6 +99,9 @@ function loadBootstrap(built) {
     const sandbox = {
         window: windowStub,
         document: documentStub,
+        EventTarget: class {
+            addEventListener() {}
+        },
         console: {
             log: function() {},
             warn: function() {},

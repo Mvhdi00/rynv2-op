@@ -365,6 +365,30 @@ on keydown and clears it on keyup. `B`, `G` and `L` are toggles.
 Each prints a short confirmation on screen. `botConfig` — the client's own
 state object — is `{waitHeal, botJoin, stop, atck, nearDst}`.
 
+## The menu
+
+Because none of that is discoverable, the build adds a small black-and-white
+panel at the top left. Commands, value commands, held keys and tap keys, with
+a `-` to collapse it.
+
+It does not reimplement anything — it drives the client's own paths:
+
+- **Commands** go through the chat box. The client checks outgoing chat for
+  `!!` itself and only forwards what is *not* a command to the server, so
+  running one this way handles it locally and broadcasts nothing. The smoke
+  test asserts exactly that: clicking `!!atck` produces no chat frame.
+- **Keys** are harder, because the client wraps its key handlers in a trusted
+  event check and a dispatched event would be ignored. The bootstrap therefore
+  wraps `addEventListener` before the client loads and keeps the handlers it
+  registers, then calls them directly. Held keys become on/off rows; tap keys
+  fire a keydown and a keyup.
+
+`ON`/`OFF` reflects what you last sent, not state read back out of the client
+— the flags live in a closure with no accessor.
+
+`window.Ae86Net.key(type, key)` and `.command(text)` expose the same two
+mechanisms from the console.
+
 Worth stating because "it connects but the mod does nothing" reads as a broken
 build, when in fact nothing is meant to appear on load: hold a key or type a
 command.

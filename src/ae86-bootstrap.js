@@ -1461,6 +1461,240 @@
         });
     }
 
+    var COMMANDS = ["join", "atck", "combat", "grind", "heals", "dir", "spin", "bull", "change", "texture", "antikik"];
+    var VALUE_COMMANDS = ["speed", "set", "test"];
+    var HOLD_KEYS = [["f", "combo F"], ["v", "combo V"], ["h", "combo H"]];
+    var TAP_KEYS = [["q", "place food"], ["B", "toggle B"], ["G", "toggle G"], ["L", "toggle L"]];
+    var KEY_CODES = {
+        q: 81,
+        f: 70,
+        v: 86,
+        h: 72,
+        B: 66,
+        G: 71,
+        L: 76,
+        Enter: 13
+    };
+
+    var capturedKeys = {
+        keydown: [],
+        keyup: []
+    };
+
+    /* Installed before the client registers anything. The client wraps its key
+     * handlers in a trusted-event check, so a dispatched event would be
+     * ignored; holding the listeners lets the menu call them directly with an
+     * event the check accepts. */
+    function captureKeyListeners() {
+        var nativeAdd = EventTarget.prototype.addEventListener;
+        EventTarget.prototype.addEventListener = function(type, listener, options) {
+            if ((type === "keydown" || type === "keyup") && typeof listener === "function") {
+                capturedKeys[type].push({
+                    target: this,
+                    fn: listener
+                });
+            }
+            return nativeAdd.call(this, type, listener, options);
+        };
+    }
+
+    function fireKey(type, key) {
+        var code = Object.prototype.hasOwnProperty.call(KEY_CODES, key) ? KEY_CODES[key] : key.toUpperCase().charCodeAt(0);
+        var target = document.body || document.documentElement;
+        var event = {
+            type: type,
+            key: key,
+            code: key === "Enter" ? "Enter" : "Key" + key.toUpperCase(),
+            keyCode: code,
+            which: code,
+            charCode: 0,
+            altKey: false,
+            ctrlKey: false,
+            metaKey: false,
+            shiftKey: key.length === 1 && key !== key.toLowerCase(),
+            repeat: false,
+            isTrusted: true,
+            bubbles: true,
+            cancelable: true,
+            target: target,
+            srcElement: target,
+            currentTarget: W,
+            preventDefault: function() {},
+            stopPropagation: function() {},
+            stopImmediatePropagation: function() {}
+        };
+        var list = capturedKeys[type];
+        for (var i = 0; i < list.length; i++) {
+            try {
+                list[i].fn.call(list[i].target, event);
+            } catch (error) {}
+        }
+    }
+
+    /* The client handles "!!" messages itself and only forwards the rest to
+     * the server, so running one through its own chat path keeps it local. */
+    function runCommand(text) {
+        var box = document.getElementById("chatBox");
+        var holder = document.getElementById("chatHolder");
+        if (!box || !holder) {
+            return false;
+        }
+        var wasHidden = holder.style.display;
+        holder.style.display = "block";
+        box.value = text;
+        fireKey("keydown", "Enter");
+        box.value = "";
+        if (holder.style.display === "block" && wasHidden !== "block") {
+            holder.style.display = wasHidden || "none";
+        }
+        return true;
+    }
+
+    var MENU_CSS = [
+        "#ae86Menu{position:fixed;top:10px;left:10px;z-index:2147483000;width:210px;",
+        "background:#000;color:#fff;border:1px solid #fff;font:11px/1.5 Consolas,monospace;",
+        "user-select:none}",
+        "#ae86Menu .hd{display:flex;justify-content:space-between;align-items:center;",
+        "padding:5px 8px;border-bottom:1px solid #fff;font-weight:bold;letter-spacing:1px;cursor:default}",
+        "#ae86Menu .hd b{cursor:pointer;padding:0 4px}",
+        "#ae86Menu .bd{max-height:70vh;overflow-y:auto}",
+        "#ae86Menu .sec{padding:4px 8px 2px;border-bottom:1px solid #444;color:#aaa;letter-spacing:1px}",
+        "#ae86Menu .row{display:flex;justify-content:space-between;align-items:center;",
+        "padding:3px 8px;cursor:pointer}",
+        "#ae86Menu .row:hover{background:#fff;color:#000}",
+        "#ae86Menu .pill{border:1px solid currentColor;padding:0 5px;font-size:10px}",
+        "#ae86Menu .on{background:#fff;color:#000}",
+        "#ae86Menu .row:hover .on{background:#000;color:#fff}",
+        "#ae86Menu .val{display:flex;gap:4px;padding:3px 8px;align-items:center}",
+        "#ae86Menu .val input{width:52px;background:#000;color:#fff;border:1px solid #fff;",
+        "font:11px Consolas,monospace;padding:1px 3px}",
+        "#ae86Menu .val button{flex:1;background:#000;color:#fff;border:1px solid #fff;",
+        "font:11px Consolas,monospace;cursor:pointer;padding:1px 0}",
+        "#ae86Menu .val button:hover{background:#fff;color:#000}",
+        "#ae86Menu .note{padding:4px 8px;color:#777;font-size:10px;border-top:1px solid #444}"
+    ].join("");
+
+    var menuBuilt = false;
+
+    function buildMenu() {
+        if (menuBuilt || !document.body || document.getElementById("ae86Menu")) {
+            return;
+        }
+        menuBuilt = true;
+
+        var style = document.createElement("style");
+        style.textContent = MENU_CSS;
+        document.head.appendChild(style);
+
+        var root = document.createElement("div");
+        root.id = "ae86Menu";
+
+        var head = document.createElement("div");
+        head.className = "hd";
+        head.innerHTML = "<span>AE86</span>";
+        var collapse = document.createElement("b");
+        collapse.textContent = "-";
+        head.appendChild(collapse);
+        root.appendChild(head);
+
+        var body = document.createElement("div");
+        body.className = "bd";
+        root.appendChild(body);
+
+        collapse.onclick = function() {
+            var hidden = body.style.display === "none";
+            body.style.display = hidden ? "" : "none";
+            collapse.textContent = hidden ? "-" : "+";
+        };
+
+        function section(title) {
+            var el = document.createElement("div");
+            el.className = "sec";
+            el.textContent = title;
+            body.appendChild(el);
+        }
+
+        function row(label, onClick) {
+            var el = document.createElement("div");
+            el.className = "row";
+            var name = document.createElement("span");
+            name.textContent = label;
+            var pill = document.createElement("span");
+            pill.className = "pill";
+            pill.textContent = "OFF";
+            el.appendChild(name);
+            el.appendChild(pill);
+            el.onclick = function() {
+                onClick(pill);
+            };
+            body.appendChild(el);
+            return pill;
+        }
+
+        function flip(pill) {
+            var on = pill.textContent === "ON";
+            pill.textContent = on ? "OFF" : "ON";
+            pill.className = on ? "pill" : "pill on";
+            return !on;
+        }
+
+        section("COMMANDS");
+        COMMANDS.forEach(function(name) {
+            row("!!" + name, function(pill) {
+                if (runCommand("!!" + name)) {
+                    flip(pill);
+                }
+            });
+        });
+
+        section("VALUES");
+        VALUE_COMMANDS.forEach(function(name) {
+            var wrap = document.createElement("div");
+            wrap.className = "val";
+            var input = document.createElement("input");
+            input.value = name === "speed" ? "1" : "0";
+            var button = document.createElement("button");
+            button.textContent = "!!" + name;
+            button.onclick = function() {
+                runCommand("!!" + name + " " + input.value);
+            };
+            wrap.appendChild(input);
+            wrap.appendChild(button);
+            body.appendChild(wrap);
+        });
+
+        section("HOLD");
+        HOLD_KEYS.forEach(function(pair) {
+            row(pair[1] + " [" + pair[0] + "]", function(pill) {
+                fireKey(flip(pill) ? "keydown" : "keyup", pair[0]);
+            });
+        });
+
+        section("PRESS");
+        TAP_KEYS.forEach(function(pair) {
+            row(pair[1] + " [" + pair[0] + "]", function(pill) {
+                fireKey("keydown", pair[0]);
+                setTimeout(function() {
+                    fireKey("keyup", pair[0]);
+                }, 30);
+                pill.textContent = "HIT";
+                pill.className = "pill on";
+                setTimeout(function() {
+                    pill.textContent = "OFF";
+                    pill.className = "pill";
+                }, 200);
+            });
+        });
+
+        var note = document.createElement("div");
+        note.className = "note";
+        note.textContent = "ON/OFF shows what you last sent.";
+        root.appendChild(note);
+
+        document.body.appendChild(root);
+        log("menu ready");
+    }
+
     function domReady() {
         if (document.readyState !== "loading") {
             return Promise.resolve();
@@ -1472,6 +1706,7 @@
         });
     }
 
+    captureKeyListeners();
     neutralizeStockBundle();
     stubFrvr();
     installChallengeShims();
@@ -1486,6 +1721,7 @@
             try {
                 bundle();
                 log("client bundle started");
+                setTimeout(buildMenu, 0);
             } catch (error) {
                 console.error("[Ae86] bundle failed to start:", error);
                 return;
@@ -1519,6 +1755,9 @@
         buildTables: buildTables,
         serverListUrl: SERVER_LIST_URL,
         status: status,
+        menu: buildMenu,
+        key: fireKey,
+        command: runCommand,
         servers: function() {
             return serverList;
         },
