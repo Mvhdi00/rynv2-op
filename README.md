@@ -6,6 +6,12 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+> There is a second, independent build in this repo:
+> **[LemonMod Mix](README-LemonMod-Mix.md)** — `! LemonMod v3.0 !` and
+> `! LemonMod - Visuals !` merged into one script, moved onto the current
+> protocol, with the install gate and every call-home path removed.
+> Build output: `LemonMod_Mix.user.js`.
+
 ---
 
 ## Why RYN is the base
@@ -127,6 +133,10 @@ tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
+
+The LemonMod Mix build shares `drivers/`, `src/game_*.js` and
+`tools/check-hooks.js` with this one; its own files are listed in
+[README-LemonMod-Mix.md](README-LemonMod-Mix.md).
 
 ## Build
 
