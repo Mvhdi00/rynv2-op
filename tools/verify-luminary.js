@@ -205,6 +205,22 @@ const shimImpl = (() => {
   if (!/luminaryTurnstileHost/.test(script)) fail("no laid-out host for the turnstile widget");
   else note("captcha: turnstile renders into its own host, not the hidden menu node");
 
+  /* The page ships #enterGame with class="disabled" and the current client is
+   * what takes it off, on the turnstile token. The fork shares that element
+   * but knows nothing about the class, so the menu renders dead. */
+  if (!/classList\.remove\("disabled"\)/.test(script)) {
+    fail("#enterGame keeps the page's disabled class, so the play button never responds");
+  } else note("menu: the page's disabled class is cleared off #enterGame");
+
+  const dead = script.match(/var dead = (\[[^\]]*\]);/);
+  if (!dead) fail("overlays the current client owns are not neutralised");
+  else {
+    const list = JSON.parse(dead[1]);
+    const used = list.filter((id) => new RegExp(`getElementById\\("${id}"\\)`).test(source));
+    if (used.length) fail(`neutralising elements the fork actually uses: ${used.join(", ")}`);
+    else note(`menu: ${list.length} overlay(s) the current client owns are neutralised`);
+  }
+
   const stubs = script.match(/var legacy = (\[[^\]]*\]);/);
   if (!stubs) fail("legacy element stubs missing from the entry");
   else {

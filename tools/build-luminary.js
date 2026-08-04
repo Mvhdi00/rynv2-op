@@ -196,6 +196,27 @@ document.replaceChild(document.importNode(doc.documentElement, true), document.d
     }
 })();
 
+(function() {
+    var dead = ${J(["touch-controls-fullscreen", "touch-controls-left", "touch-controls-right", "pre-content-container", "userscript-warning"])};
+    var apply = function() {
+        for (var i = 0; i < dead.length; i++) {
+            var el = document.getElementById(dead[i]);
+            if (el) {
+                el.style.display = "none";
+                el.style.pointerEvents = "none";
+            }
+        }
+        var play = document.getElementById("enterGame");
+        if (play && play.classList.contains("disabled")) {
+            play.classList.remove("disabled");
+            play.style.pointerEvents = "auto";
+        }
+    };
+    apply();
+    setInterval(apply, 500);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply);
+})();
+
 var luminaryTurnstile = (function() {
     var SITEKEY = ${J(P.turnstileSitekey)};
     var token = null, widget = null, loading = false, host = null, signalled = false;

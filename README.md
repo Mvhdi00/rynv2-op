@@ -142,6 +142,8 @@ fixed in place rather than having its features ported off it.
 | **Captcha** | reCAPTCHA | Cloudflare Turnstile, `?token=cf:<token>` |
 | **Boot** | `ht` flips when the page's reCAPTCHA tag calls `window.captchaCallback` | the build calls it once Turnstile is up |
 | | widget renders into `#turnstileWidget` | renders into its own laid-out host |
+| **Menu** | `#enterGame` had no `disabled` class | the page ships it disabled; the build clears it |
+| | — | overlays only the current client owns are neutralised |
 | **Tables** | every placement `limit` flattened to 99 | real limits + `sandboxLimit` |
 
 The `bundle.js` line is why nothing worked at all: the game stopped shipping
@@ -156,6 +158,14 @@ never lifts. Rendering Turnstile into `#turnstileWidget` would not have helped
 either — that node lives inside the menu, which stays `display:none` until
 that same callback runs, so the widget would never lay out and never issue a
 token.
+
+Then the menu came up dead. Both clients share `#enterGame`, but the page now
+ships it with `class="disabled"` and the current client is what takes the class
+off, on the turnstile token. The fork predates that class entirely, so it bound
+its handler to a button CSS had switched off. The build clears the class, and
+neutralises the handful of overlays the current client owns and the fork never
+touches — `touch-controls-*` among them, which the current client uses as its
+full-screen mouse capture layer.
 
 One more boot hazard: the fork reads `#featuredYoutube` unguarded, two lines
 before it initialises `lt`/`ht`. The current client never touches that element,
