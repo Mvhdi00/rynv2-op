@@ -137,6 +137,8 @@ tools/build-ae86.js       src/Ae86_v10.js -> Ae86_Fixed.user.js
 tools/game-transport.js   pulls the live transport out of src/game_*.js
 tools/verify-ae86.js      Ae86 transport vs. the game bundle
 tools/smoke-ae86.js       drives the Ae86 build against a mock current server
+src/ExternalClient_Dev2.js  External Client Dev-2, with usage stats added
+tools/stats-worker/       the collector behind those stats
 ```
 
 ## Build
@@ -350,3 +352,42 @@ bugs in the build:
 - **No stock bundle was blocked.** If the shipped page changes its entry path,
   the blocker misses it, both clients load, and they fight over the same DOM
   and open two sockets. The bootstrap warns on `load` when it blocked nothing.
+
+---
+
+# External Client — usage stats
+
+`src/ExternalClient_Dev2.js` carries an `EXP_STATS` block that answers "how
+many people run this". Three anonymous events: `load` per page load, `play`
+per spawn, and `alive` every five minutes so "online now" is answerable. The
+only thing sent is a random id from the client's own `localStorage`, the event
+name and the version.
+
+`ENDPOINT` at the top of the block is empty by default, and while it is empty
+nothing is ever sent. Point it at the Worker in `tools/stats-worker` to turn
+it on. Users can opt out for good with `EXP_STATS.disable()`, and the client
+says so in the console on startup.
+
+The id is the point of the design: without it, one player refreshing all
+evening reads as a crowd.
+
+## Why not put a Discord webhook in the script
+
+It was the obvious first idea and it does not survive contact with the
+numbers:
+
+- Discord rate-limits a webhook at roughly 30 requests a minute, returns 429
+  past that, and drops the message. The busier the client gets, the worse the
+  undercount — backwards from what you want.
+- The webhook URL would sit in a public userscript. Anyone who reads it can
+  flood the channel or delete the webhook.
+- A wall of messages is not a count.
+- Nothing de-duplicates refreshes.
+
+The Worker fixes all four: it counts rather than logs, de-duplicates by id,
+keeps the webhook server-side as a secret, and posts one summary a day.
+
+If the script is on Greasy Fork, its stats page already gives daily and total
+installs plus daily update checks — a decent stand-in for daily actives, for
+no code at all. It cannot tell you who actually spawns into a game, which is
+what `play` adds.
