@@ -357,28 +357,42 @@ bugs in the build:
 
 # External Client — player counter
 
-`src/ExternalClient_Dev2.js` posts one line to a Discord webhook the first
-time a person spawns into a game with it. **One message = one person**, so the
-number of messages in the channel is the number of people who played.
-
-To read the count: open the channel, search for `EXTPLAYER`, and Discord
-prints "N Results" above the list. That N is the answer.
+`src/ExternalClient_Dev2.js` pings a webhook.site URL the first time a person
+spawns into a game with it. **One request = one person**, so the request count
+on your webhook.site page is the number of people who played.
 
 ## Setting it up
 
-1. Discord: **Server Settings → Integrations → Webhooks → New Webhook**, pick
-   a channel, **Copy Webhook URL**.
-2. In `src/ExternalClient_Dev2.js`, put it in `WEBHOOK` at the top of the
-   `EXP_STATS` block.
+1. Open **webhook.site**. It hands you a URL the moment the page loads:
+   `https://webhook.site/8f2b41d9-7ce0-...`
+2. Copy it into `WEBHOOK` at the top of the `EXP_STATS` block in
+   `src/ExternalClient_Dev2.js`.
 3. Install the script.
 
 While `WEBHOOK` is empty the block is inert and nothing is ever sent.
 
+## Reading the count
+
+Leave the webhook.site tab open and requests appear live. For the exact
+number without counting rows, open:
+
+```
+https://webhook.site/token/<your-id>/requests?per_page=1
+```
+
+`<your-id>` is the part after `webhook.site/` in your URL. The response is
+JSON and its `total` field is your player count.
+
+Each request looks like this, so the list is readable at a glance:
+
+```
+?player=a3f9c2e1&v=Dev-2&d=2026-08-04
+```
+
 | Setting | What it does |
 |---|---|
-| `WEBHOOK` | the Discord webhook URL |
-| `HOW_OFTEN` | `"ever"` — one message per person, ever. `"daily"` — one per person per day, i.e. daily actives |
-| `TAG` | the word you search for to get the count |
+| `WEBHOOK` | your webhook.site URL |
+| `HOW_OFTEN` | `"ever"` — one request per person, ever. `"daily"` — one per person per day, i.e. daily actives |
 | `SPREAD_MS` | how far first spawns are scattered in time |
 
 Console helpers: `EXP_STATS.disable()` opts out for good, `.enable()` undoes
@@ -387,27 +401,28 @@ it, `.reset()` makes this browser count again.
 ## What it sends
 
 A random id from the browser's own `localStorage`, the client version and the
-date. Nothing else — no names, no chat, no game state, no IP. The id exists so
-one person is not counted twice, and never leaves that browser except as that
-one line.
+date, in the query string. Nothing else — no names, no chat, no game state.
+The id exists so one person is not counted twice, and never leaves that
+browser except as that one line.
 
-## Two limits worth knowing
+Delivery is only recorded once the request actually lands, so a player whose
+ping fails is counted on their next spawn rather than lost. A blocked
+cross-origin request falls back to a `no-cors` send, which still arrives.
 
-- **The webhook URL ships inside a public userscript and cannot be hidden
-  there.** Anyone reading the script can post to it or delete it, so give it a
-  channel of its own where that only costs you noise.
-- **Discord drops messages past roughly 30 a minute.** First spawns are
-  therefore delayed by a random slice of `SPREAD_MS` to spread bursts, and a
-  429 is retried once using Discord's own `retry_after`. A message that still
-  fails is not marked as sent, so that player is counted on their next spawn
-  instead of being lost.
+## The limit to watch
 
-Ad blockers also block requests to `discord.com` for some users. Read the
+**webhook.site's free tier keeps only a bounded number of recent requests and
+drops the URL after about a week of inactivity.** Check their current limits
+before you rely on the number. This matters for exactly one reason: once you
+pass the cap, `total` stops being your all-time player count and becomes a
+rolling window over the most recent requests. Under the cap it is exact.
+
+Ad blockers also block requests to `webhook.site` for some users. Read the
 number as a floor, not a headcount.
 
 ## If you outgrow it
 
-`tools/stats-worker/` holds a Cloudflare Worker on D1 that counts instead of
-logging, answers "online now", keeps the webhook server-side as a secret, and
-posts one summary a day. Its README is a full walkthrough. Nothing in the
-client depends on it — swapping is a change to one block.
+`tools/stats-worker/` holds a Cloudflare Worker on D1 that counts without a
+cap, answers "online now", and posts a daily summary to Discord from a
+server-side secret. Its README is a full walkthrough. Nothing in the client
+depends on it — swapping is a change to one block.

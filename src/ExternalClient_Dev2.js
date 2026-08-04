@@ -519,26 +519,24 @@ const EXP = (function() {
 /* ===========================================================================
  * Player counter.
  *
- * Posts one line to a Discord webhook the first time a person spawns into a
- * game with this client. One message = one person, so the number of messages
- * in the channel is the number of people who played.
+ * Pings a webhook.site URL the first time a person spawns into a game with
+ * this client. One request = one person, so the request count on your
+ * webhook.site page is the number of people who played.
  *
- * To read the count: open the channel, search for EXTPLAYER, and Discord
- * prints "N Results" above the list. That N is your player count.
+ * The exact number, without counting rows by hand:
  *
- * Nothing personal is sent — a random id from the browser's own localStorage,
- * the client version and the date. The id only exists so one person is not
- * counted twice.
+ *     https://webhook.site/token/<your-id>/requests?per_page=1
  *
- * Paste your webhook URL into WEBHOOK below. While it is empty this block is
- * inert and nothing is ever sent. Anyone can opt out for good with
+ * That returns JSON and the "total" field is your player count.
+ *
+ * Each request carries a random id from the browser's own localStorage, the
+ * client version and the date, in the query string so they are readable
+ * straight from the webhook.site list. Nothing personal — the id only exists
+ * so one person is not counted twice.
+ *
+ * Paste your URL into WEBHOOK below. While it is empty this block is inert
+ * and nothing is ever sent. Anyone can opt out for good with
  * EXP_STATS.disable() in the console.
- *
- * Two things to know about the webhook URL, since it ships inside a public
- * userscript and cannot be hidden there: anyone who reads the script can post
- * to it or delete it, so put it in a channel of its own. And Discord drops
- * messages past ~30 a minute, so first spawns are delayed by a random slice
- * of a minute to spread bursts out.
  * ======================================================================== */
 const EXP_STATS = (function() {
     "use strict";
@@ -546,9 +544,7 @@ const EXP_STATS = (function() {
     const WEBHOOK = "";
     const HOW_OFTEN = "ever";
     const VERSION = "Dev-2";
-    const NAME = "External Client";
-    const TAG = "EXTPLAYER";
-    const SPREAD_MS = 45000;
+    const SPREAD_MS = 5000;
 
     const KEY_ID = "exp_player_id";
     const KEY_SENT = "exp_player_sent";
@@ -588,45 +584,28 @@ const EXP_STATS = (function() {
         return id;
     }
 
-    function message() {
-        return {
-            username: NAME,
-            content: "`" + TAG + "` " + playerId() + " · " + VERSION + " · " + new Date().toISOString().slice(0, 10),
-            allowed_mentions: { parse: [] }
-        };
+    function url() {
+        const base = WEBHOOK.split("?")[0].replace(/\/+$/, "");
+        return base + "?player=" + encodeURIComponent(playerId()) + "&v=" + encodeURIComponent(VERSION) + "&d=" + new Date().toISOString().slice(0, 10);
     }
 
-    /* Discord allows browser requests, so the normal path can read the status
-     * back and honour a 429. If CORS ever blocks it, multipart is a
-     * CORS-simple content type and goes through without a preflight — at the
-     * cost of not seeing the response. */
-    function post(body) {
-        return fetch(WEBHOOK, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-        }).catch(function() {
-            const form = new FormData();
-            form.append("payload_json", JSON.stringify(body));
-            return fetch(WEBHOOK, { method: "POST", body: form, mode: "no-cors" }).then(function() {
+    /* webhook.site answers cross-origin requests, so the plain call works and
+     * its status is readable. no-cors is the fallback for the case where it
+     * does not: the request still leaves, we just cannot see the reply. */
+    function ping() {
+        const target = url();
+        return fetch(target, { method: "GET", cache: "no-store" }).catch(function() {
+            return fetch(target, { method: "GET", mode: "no-cors", cache: "no-store" }).then(function() {
                 return { ok: true, status: 0 };
             });
         });
     }
 
-    function deliver(attempt) {
-        post(message()).then(function(res) {
-            if (res.status === 429 && attempt < 2) {
-                res.json().then(function(info) {
-                    setTimeout(function() {
-                        deliver(attempt + 1);
-                    }, Math.ceil((info.retry_after || 5) * 1000) + 250);
-                }).catch(function() {});
-                return;
-            }
-            /* Only remember it once it is actually delivered, so a failure
+    function deliver() {
+        ping().then(function(res) {
+            /* Only remember it once the request actually landed, so a failure
              * today is simply counted the next time the player spawns. */
-            if (res.ok || res.status === 0 || res.status === 204) {
+            if (res.ok || res.status === 0) {
                 store("set", KEY_SENT, stamp());
             }
         }).catch(function() {});
@@ -634,9 +613,7 @@ const EXP_STATS = (function() {
 
     function count() {
         if (!isEnabled() || alreadyCounted()) return;
-        setTimeout(function() {
-            deliver(0);
-        }, Math.random() * SPREAD_MS);
+        setTimeout(deliver, Math.random() * SPREAD_MS);
     }
 
     function disable() {
