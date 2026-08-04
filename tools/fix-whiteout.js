@@ -2,7 +2,7 @@
 /*
  * fix-whiteout.js
  *
- * Builds Whiteout_Fixed.user.js from src/Whiteout_Abdo.js.
+ * Builds Whiteout_Fixed.v4.1.js from src/Whiteout_Abdo.js.
  *
  * The "whiteout abdo" client speaks the old moomoo wire format: every frame is
  * a plain msgpack `[letterOpcode, args]` in both directions. The game in
@@ -41,7 +41,10 @@ const ROOT = path.resolve(__dirname, "..");
 const BASE = path.join(ROOT, "src/Whiteout_Abdo.js");
 const VENDOR = path.join(ROOT, "src/game_vendor.js");
 const INDEX = path.join(ROOT, "src/game_index.js");
-const OUT = path.join(ROOT, "Whiteout_Fixed.user.js");
+/* One source of truth, so the name on disk and the @version in the header
+ * cannot drift apart. */
+const VERSION = "v4.1";
+const OUT = path.join(ROOT, `Whiteout_Fixed.${VERSION}.js`);
 
 /* Normalised to LF on the way in, so the anchors below and the code spliced in
  * from the bundles are all in the same line endings. */
@@ -145,7 +148,7 @@ const header = `// ==UserScript==
 // @namespace    whiteout-fixed
 // @match        *://*.moomoo.io/*
 // @grant        none
-// @version      v4.1
+// @version      ${VERSION}
 // @description  whiteout abdo, rebuilt against the current moomoo protocol
 // @icon         https://img.freepik.com/free-photo/abstract-surface-textures-white-concrete-stone-wall_74190-8189.jpg
 // @author       hanabira (combat and some UI) and nexoos (menu)
@@ -822,7 +825,7 @@ if (/window\.msgpack/.test(code)) {
  * terminator would close it early and take dead code live. That shows up here
  * rather than in the browser. */
 {
-  const tmp = OUT.replace(/\.user\.js$/, ".syntax-check.js");
+  const tmp = OUT.replace(/\.js$/, ".syntax-check.js");
   fs.writeFileSync(tmp, code);
   const { status, stderr } = require("child_process").spawnSync(process.execPath, ["--check", tmp], {
     encoding: "utf8",

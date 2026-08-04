@@ -22343,7 +22343,7 @@ window.sendPacket = packet;
 
 /* What this build was made against. See tools/fix-whiteout.js. */
 const WhiteoutBuild = {
-    "builtAt": "2026-08-04T08:42:01.481Z",
+    "builtAt": "2026-08-04T08:48:06.730Z",
     "liftedFrom": {
         "codec": "src/game_vendor.js",
         "transport": "src/game_index.js"
