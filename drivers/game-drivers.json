@@ -1,5 +1,5 @@
 {
-  "extractedAt": "2026-07-31T23:50:43.068Z",
+  "extractedAt": "2026-08-04T19:31:36.251Z",
   "source": {
     "index": "src/game_index.js",
     "vendor": "src/game_vendor.js"
@@ -65,6 +65,9 @@
       "9",
       "0"
     ],
+    "turnstileSitekey": "0x4AAAAAAAMYHI96GFiJzMmp",
+    "serverListVersion": "1.27",
+    "apiHost": "https://api.moomoo.io",
     "hmac": "sha256-truncated",
     "codec": "msgpack"
   },

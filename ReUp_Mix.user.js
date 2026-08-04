@@ -22018,12 +22018,12 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-01T00:04:56.759Z",
+      "builtAt": "2026-08-04T19:36:35.181Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
       },
-      "extractedAt": "2026-07-31T23:50:43.068Z",
+      "extractedAt": "2026-08-04T19:31:36.251Z",
       "protocol": {
           "signatureBytes": 6,
           "encryptedMode": 1,
@@ -22085,6 +22085,9 @@ window.grbtp = 35;
               "9",
               "0"
           ],
+          "turnstileSitekey": "0x4AAAAAAAMYHI96GFiJzMmp",
+          "serverListVersion": "1.27",
+          "apiHost": "https://api.moomoo.io",
           "hmac": "sha256-truncated",
           "codec": "msgpack"
       },

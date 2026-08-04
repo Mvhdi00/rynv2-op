@@ -103,12 +103,36 @@ function extractProtocol() {
     return JSON.parse(m[1]);
   };
 
+  /* api host — the last arm of the sandbox/dev/live ternary. */
+  const apiHost = (() => {
+    const m = INDEX.match(/=\s*"(https:\/\/api\.[\w.-]*moomoo\.io)"/);
+    if (!m) throw new Error("api host not found");
+    return m[1];
+  })();
+
+  /* The live sitekey is the second arm of the localhost ternary. */
+  const sitekey = (() => {
+    const m = INDEX.match(/We\s*\?\s*"1x0{20}AA"\s*:\s*"([^"]+)"/);
+    if (!m) throw new Error("turnstile sitekey not found");
+    return m[1];
+  })();
+
+  /* `${mt}/servers?v=1.27` — the version the server list is asked for. */
+  const listVersion = (() => {
+    const m = INDEX.match(/\$\{[A-Za-z_$][\w$]*\}\/servers\?v=([\d.]+)/);
+    if (!m) throw new Error("server list version not found");
+    return m[1];
+  })();
+
   return {
     signatureBytes: num("jt"),   // HMAC prefix length on every c2s frame
     encryptedMode: num("Ht"),    // io-init[3] value that switches the table on
     tableSalt: num("Io"),        // mixed into the seed before permuting
     c2sAlphabet: arr("bo"),
     s2cAlphabet: arr("To"),
+    turnstileSitekey: sitekey,
+    serverListVersion: listVersion,
+    apiHost,
     hmac: "sha256-truncated",
     codec: VENDOR.includes("msgpack") || /encodeSharedRef/.test(VENDOR)
       ? "msgpack"

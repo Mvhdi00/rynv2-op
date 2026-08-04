@@ -113,19 +113,86 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+---
+
+## Luminary
+
+`Luminary_Fixed.user.js` is a second, unrelated build: the luminary
+userscript (onion / dreadful, based on wespire) brought onto the current
+protocol.
+
+Like Luna, luminary is a fork of the old webpack `bundle.js` — it deletes the
+game's own script and runs its own copy of the client. Unlike Luna, its data
+tables have not drifted: hats, accessories, weapons and items all diff clean
+against `drivers/game-drivers.json`. Only the wire moved, so the fork could be
+fixed in place rather than having its features ported off it.
+
+### What was wrong
+
+| | Was | Is |
+|---|---|---|
+| **Entry** | `@match ://*.moomoo.io/*`, no `@run-at` | scheme-qualified match, `document-start` |
+| | removes `<script src=…bundle.js>` | removes the `/assets/index-*.js` + `vendor-*.js` modules and their `modulepreload` links |
+| **Packet** | `[name, args]`, plain | `[opcode, args, seq]` behind a 6-byte truncated HMAC-SHA256 |
+| | — | opcode alphabets permuted per connection from the `io-init` seed |
+| | play starts on `onopen` | play starts on `io-init`, after negotiation |
+| **Opcodes** | old names (`sp`, `33`, `ch`, …) | current names (`M`, `9`, `6`, …) |
+| **Discovery** | `vultr` global, `/serverData` | `api.moomoo.io/servers` |
+| | servers by index, `ip_<hash>.moomoo.io:8008/?gameIndex=` | servers by name, `<key>.<region>.moomoo.io` |
+| **Captcha** | reCAPTCHA | Cloudflare Turnstile, `?token=cf:<token>` |
+| **Tables** | every placement `limit` flattened to 99 | real limits + `sandboxLimit` |
+
+The `bundle.js` line is why nothing worked at all: the game stopped shipping
+it, so the fork removed nothing and both clients ran at once.
+
+### The opcode rename
+
+Both alphabets were renamed wholesale but **not reordered**, so the old names
+map onto the new ones position for position — `sp`→`M`, `33`→`9`, `ch`→`6`,
+`c`→`F`, `13c`→`c`, and so on for all 17 c2s and 36 s2c opcodes.
+
+That means the translation lives entirely in the socket module: the ~12k lines
+of game and mod code above it keep speaking the old names, and nothing else in
+the fork had to be touched.
+
+### Verification
+
+```sh
+node tools/build-luminary.js
+node tools/verify-luminary.js
+node --check Luminary_Fixed.user.js
+```
+
+`verify-luminary.js` slices the game's own frame code out of
+`src/game_index.js` and the shipped shim out of the built userscript, then runs
+them side by side over 500 random seeds and payloads. The permuted opcode
+tables and every signature byte agree. It also checks that all 17 opcodes the
+fork sends translate, that all 36 handlers it registers are reachable, and that
+the item groups match the bundle.
+
+What that does **not** cover is a live connection — the wire format is verified
+against the shipped client, but no packet has been put on a real server from
+here.
+
+---
+
 ## Layout
 
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
+ReUp_Mix.user.js          the ReUp Mix build output
+Luminary_Fixed.user.js    the luminary build output
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
+src/Luminary_v3.js        luminary userscript (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-luminary.js   src/Luminary_v3.js   -> Luminary_Fixed.user.js
+tools/verify-luminary.js  built script vs. the game bundle's own frame code
 ```
 
 ## Build
