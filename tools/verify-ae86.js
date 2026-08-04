@@ -41,12 +41,35 @@ function loadBootstrap(built) {
     }
     const prelude = built.slice(0, cut);
 
+    const nullElement = {
+        style: {},
+        offsetParent: {},
+        appendChild: function() {},
+        setAttribute: function() {},
+        removeAttribute: function() {},
+        getAttribute: function() {
+            return null;
+        }
+    };
     const documentStub = {
         readyState: "complete",
-        documentElement: {},
+        documentElement: nullElement,
+        head: nullElement,
+        body: nullElement,
+        addEventListener: function() {},
+        createElement: function() {
+            return Object.create(nullElement);
+        },
+        querySelector: function() {
+            return null;
+        },
+        getElementById: function() {
+            return null;
+        }
+    };
+    const windowStub = {
         addEventListener: function() {}
     };
-    const windowStub = {};
 
     class FakeWebSocket {
         static CONNECTING = 0;

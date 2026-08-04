@@ -121,6 +121,7 @@ async function main() {
 
     const received = [];
     let handshakeSent = false;
+    let socketUrl = null;
     let badSignature = null;
     let badSequence = null;
     let expectedSeq = 0;
@@ -170,6 +171,7 @@ async function main() {
                 ws.send(Buffer.from(codec.encoder.encode([tables.s2c.enc["Z"], [125]])));
             }
         });
+        socketUrl = ws.url();
         handshakeSent = true;
         ws.send(Buffer.from(codec.encoder.encode(["io-init", [1, SEED >>> 0, KEY_HEX, game.Ht]])));
     });
@@ -195,6 +197,20 @@ async function main() {
             status: 200,
             contentType: "application/javascript",
             body: "window.__stockBundleRan = true;"
+        });
+    });
+
+    await page.route("https://challenges.cloudflare.com/**", route => {
+        route.fulfill({
+            status: 200,
+            contentType: "application/javascript",
+            body: `window.turnstile = {
+                ready: function (cb) { cb(); },
+                render: function (el, opts) { setTimeout(function () { opts.callback("SMOKE-TOKEN"); }, 10); return "w1"; },
+                reset: function () {},
+                remove: function () {},
+                getResponse: function () { return "SMOKE-TOKEN"; }
+            };`
         });
     });
 
@@ -230,6 +246,7 @@ async function main() {
     console.log("\nHandshake");
     const connected = await waitFor(() => Promise.resolve(handshakeSent), 20000);
     check("client opened a socket and the server sent io-init", connected);
+    check("socket url carries the cf: challenge token the live server requires", Boolean(socketUrl && /[?&]token=cf%3ASMOKE-TOKEN/.test(socketUrl)), String(socketUrl));
 
     const wired = await waitFor(() => page.evaluate(() => {
         const button = document.getElementById("enterGame");

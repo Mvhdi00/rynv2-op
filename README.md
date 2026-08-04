@@ -268,10 +268,24 @@ Four separate things stopped the script from ever reaching a socket.
   threw inside the connect callback and killed everything after it, including
   the enter-game binding. The bootstrap maps names back onto Ae86's keys,
   pairing them by the latitude/longitude the two tables share.
-- **reCAPTCHA.** Ae86 will not connect until `window.grecaptcha.execute()`
-  resolves. The live site dropped reCAPTCHA for Turnstile. The bootstrap
-  supplies a resolved stub and releases the gate; the shipped game likewise
-  connects with no token when it has none.
+- **The challenge token.** Ae86 will not connect until
+  `window.grecaptcha.execute()` resolves, and the live site dropped reCAPTCHA
+  for Cloudflare Turnstile. A stub is not enough — the server *requires* a
+  token. `Fi()` in the shipped bundle only connects when one is present:
+
+  ```js
+  Sa || pi ? ue && Lt("cf:" + ue) : ue ? Lt("cf:" + ue) : Lt()
+  ```
+
+  `Sa` is true off localhost, so in production the whole call is guarded on
+  `ue`, the Turnstile token, and the socket is opened with
+  `?token=cf:<token>`. Connecting without one is closed with code 4001.
+
+  So the bootstrap runs the real challenge: it loads Cloudflare's
+  `api.js?render=explicit`, renders the widget with the sitekey the bundle
+  carries, and holds Ae86's `grecaptcha.execute()` promise open until the
+  token arrives — which is exactly the point Ae86 already waits at. The token
+  is then appended to the socket URL in the game's own `cf:` form.
 
 Addresses are rebuilt from the live list with the game's own
 `key.region.moomoo.io` formula, so Ae86's old `ip-…` and port handling no
@@ -305,8 +319,34 @@ total and one-to-one against the alphabets in `drivers/game-drivers.json`.
 
 `smoke-ae86.js` runs the built script in Chromium against a mock server that
 speaks the current protocol — permuted opcodes, signed frames and all. It
-asserts the stock bundle stays blocked, the client completes the `io-init`
-handshake, its spawn arrives as a correctly signed and sequenced `M` with the
-current payload shape, and that it decodes and renders replies on `0` and `Z`.
+asserts the stock bundle stays blocked, the socket URL carries the `cf:`
+token, the client completes the `io-init` handshake, its spawn arrives as a
+correctly signed and sequenced `M` with the current payload shape, and that it
+decodes and renders replies on `0` and `Z`.
 
 Both pass on the current build.
+
+## Diagnosing a live failure
+
+The build logs each stage to the console under `[Ae86]` — the blocked stock
+bundle, the server count, the Turnstile token, the socket URL and whether it
+carried a token, the `io-init` mode and opcode counts, and the close code on
+any disconnect. A refusal is called out explicitly:
+
+```
+[Ae86] server refused the connection (4001) — the turnstile token was
+missing, stale or rejected
+```
+
+`window.Ae86Net.status` holds the same information as an object, and
+`window.Ae86Net.servers()` / `.token()` expose what the shim resolved.
+
+Two failures are worth naming because they are environmental rather than
+bugs in the build:
+
+- **Turnstile is blocked.** Ad and tracker blockers commonly block
+  `challenges.cloudflare.com`. Without it there is no token and the server
+  refuses the socket. The bootstrap warns when the API script fails to load.
+- **No stock bundle was blocked.** If the shipped page changes its entry path,
+  the blocker misses it, both clients load, and they fight over the same DOM
+  and open two sockets. The bootstrap warns on `load` when it blocked nothing.

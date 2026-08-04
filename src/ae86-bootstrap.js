@@ -77,6 +77,36 @@
     var SERVER_LIST_URL = API_BASE + "/servers?v=1.27";
     var BASE_URL = "moomoo.io";
 
+    var TURNSTILE_API = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    var TURNSTILE_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
+    var TURNSTILE_TEST_SITEKEY = "1x00000000000000000000AA";
+    var TURNSTILE_TIMEOUT = 15000;
+    var TOKEN_PREFIX = "cf:";
+
+    var status = {
+        blockedScripts: [],
+        servers: 0,
+        token: null,
+        socketUrl: null,
+        ioInit: null,
+        lastClose: null
+    };
+
+    var turnstileToken = null;
+    var turnstilePromise = null;
+
+    function log() {
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift("[Ae86]");
+        console.log.apply(console, args);
+    }
+
+    function warn() {
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift("[Ae86]");
+        console.warn.apply(console, args);
+    }
+
     function toBytes(value) {
         if (value instanceof Uint8Array) {
             return value;
@@ -736,6 +766,8 @@
         }).then(function(list) {
             var raw = Array.isArray(list) ? list : list && list.servers || [];
             serverList = adaptServers(raw);
+            status.servers = serverList.length;
+            log("loaded " + serverList.length + " servers from " + SERVER_LIST_URL);
             return serverList;
         }).catch(function(error) {
             console.error("[Ae86] failed to load server list:", error);
@@ -823,7 +855,10 @@
         try {
             new URL(candidate);
         } catch (error) {
-            return (secure ? "wss://" : "ws://") + parsed.hostname;
+            candidate = (secure ? "wss://" : "ws://") + parsed.hostname;
+        }
+        if (turnstileToken) {
+            candidate += "?token=" + encodeURIComponent(TOKEN_PREFIX + turnstileToken);
         }
         return candidate;
     }
@@ -910,9 +945,13 @@
                 state.tables = buildTables(args[1] >>> 0);
                 state.key = hexToBytes(args[2]);
                 state.seq = 0;
+                status.ioInit = "signed";
+                log("io-init: signed transport, " + Object.keys(state.tables.c2s.enc).length + " c2s / " + Object.keys(state.tables.s2c.enc).length + " s2c opcodes");
             } else {
                 state.tables = null;
                 state.key = null;
+                status.ioInit = "plain";
+                log("io-init: plain transport");
             }
             openTransport(socket, state);
             deliver(socket, state, ["io-init", args]);
@@ -956,7 +995,10 @@
     }
 
     function PatchedWebSocket(url, protocols) {
-        var socket = protocols === undefined ? new NativeWebSocket(rewriteSocketUrl(url)) : new NativeWebSocket(rewriteSocketUrl(url),protocols);
+        var target = rewriteSocketUrl(url);
+        status.socketUrl = target.split("?")[0] + (turnstileToken ? " (+token)" : " (no token)");
+        log("connecting to " + status.socketUrl);
+        var socket = protocols === undefined ? new NativeWebSocket(target) : new NativeWebSocket(target,protocols);
         var state = new TransportState();
         Object.defineProperty(socket, "onopen", {
             configurable: true,
@@ -1003,10 +1045,18 @@
                 openTransport(socket, state);
             }, IO_INIT_TIMEOUT);
         });
-        nativeAddEventListener.call(socket, "close", function() {
+        nativeAddEventListener.call(socket, "close", function(event) {
             if (state.timer !== null) {
                 clearTimeout(state.timer);
                 state.timer = null;
+            }
+            status.lastClose = event.code;
+            if (event.code === 4001) {
+                warn("server refused the connection (4001) — the turnstile token was missing, stale or rejected");
+            } else if (!state.ready) {
+                warn("socket closed before io-init, code " + event.code);
+            } else {
+                log("socket closed, code " + event.code);
             }
         });
         return socket;
@@ -1184,16 +1234,32 @@
     PatchedXHR.LOADING = 3;
     PatchedXHR.DONE = 4;
 
+    function isStockEntry(node) {
+        var src = node.getAttribute("src") || "";
+        var type = node.getAttribute("type") || "";
+        if (src) {
+            if (/challenges\.cloudflare\.com/.test(src)) {
+                return false;
+            }
+            if (/\/assets\/[\w-]*index[\w-]*\.js/.test(src)) {
+                return true;
+            }
+            if (type === "module" && /^(\/|\.\/|https?:\/\/[^/]*moomoo\.io\/)/.test(src)) {
+                return true;
+            }
+            return false;
+        }
+        return type === "module" && /(^|\W)import\s*[({"']/.test(node.textContent || "");
+    }
+
     function neutralizeStockBundle() {
         var block = function(node) {
-            if (!node || node.tagName !== "SCRIPT") {
+            if (!node || node.tagName !== "SCRIPT" || !isStockEntry(node)) {
                 return;
             }
-            var src = node.getAttribute("src") || "";
-            var type = node.getAttribute("type") || "";
-            if (!/\/assets\/index-[\w-]+\.js/.test(src) && !(type === "module" && /\/assets\//.test(src))) {
-                return;
-            }
+            var src = node.getAttribute("src") || "(inline module)";
+            status.blockedScripts.push(src);
+            log("blocked the stock game bundle: " + src);
             node.type = "text/ae86-blocked";
             node.removeAttribute("src");
             if (node.parentNode) {
@@ -1212,8 +1278,11 @@
             childList: true,
             subtree: true
         });
-        document.addEventListener("DOMContentLoaded", function() {
+        W.addEventListener("load", function() {
             observer.disconnect();
+            if (status.blockedScripts.length === 0) {
+                warn("no stock game bundle was blocked — if the page loaded its own client too, the two will fight over the same page");
+            }
         });
         W.loadedScript = true;
     }
@@ -1241,7 +1310,122 @@
         }
     }
 
-    function stubChallenges() {
+    function isLocalHost() {
+        var host = W.location.hostname;
+        return host === "localhost" || host === "127.0.0.1";
+    }
+
+    function loadTurnstileApi() {
+        if (W.turnstile && typeof W.turnstile.render === "function") {
+            return Promise.resolve(true);
+        }
+        return new Promise(function(resolve) {
+            if (!document.querySelector('script[src^="https://challenges.cloudflare.com/turnstile/"]')) {
+                var script = document.createElement("script");
+                script.src = TURNSTILE_API;
+                script.async = true;
+                script.defer = true;
+                script.onerror = function() {
+                    warn("turnstile api script failed to load — a blocker or tracking protection is stopping it");
+                };
+                (document.head || document.documentElement).appendChild(script);
+            }
+            var waited = 0;
+            var timer = setInterval(function() {
+                waited += 100;
+                if (W.turnstile && typeof W.turnstile.render === "function") {
+                    clearInterval(timer);
+                    resolve(true);
+                    return;
+                }
+                if (waited >= TURNSTILE_TIMEOUT) {
+                    clearInterval(timer);
+                    resolve(false);
+                }
+            }, 100);
+        });
+    }
+
+    function turnstileContainer() {
+        var element = document.getElementById("turnstileWidget");
+        if (!element) {
+            element = document.createElement("div");
+            element.id = "turnstileWidget";
+            (document.body || document.documentElement).appendChild(element);
+        }
+        if (element.offsetParent === null) {
+            element.style.position = "fixed";
+            element.style.left = "12px";
+            element.style.bottom = "12px";
+            element.style.zIndex = "2147483646";
+            element.style.display = "block";
+            element.style.visibility = "visible";
+        }
+        return element;
+    }
+
+    function ensureToken() {
+        if (turnstileToken) {
+            return Promise.resolve(turnstileToken);
+        }
+        if (turnstilePromise) {
+            return turnstilePromise;
+        }
+        turnstilePromise = loadTurnstileApi().then(function(ready) {
+            if (!ready) {
+                status.token = "unavailable";
+                warn("continuing without a turnstile token — the server will refuse the connection");
+                return "";
+            }
+            return new Promise(function(resolve) {
+                var settled = false;
+                var finish = function(value) {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    resolve(value);
+                };
+                setTimeout(function() {
+                    if (!settled) {
+                        status.token = "timeout";
+                        warn("turnstile did not produce a token in time");
+                    }
+                    finish("");
+                }, TURNSTILE_TIMEOUT);
+                try {
+                    W.turnstile.render(turnstileContainer(), {
+                        sitekey: isLocalHost() ? TURNSTILE_TEST_SITEKEY : TURNSTILE_SITEKEY,
+                        theme: "light",
+                        callback: function(token) {
+                            turnstileToken = token;
+                            status.token = "acquired";
+                            log("turnstile token acquired");
+                            finish(token);
+                        },
+                        "error-callback": function() {
+                            turnstileToken = null;
+                            status.token = "error";
+                            warn("turnstile reported an error");
+                            finish("");
+                        },
+                        "expired-callback": function() {
+                            turnstileToken = null;
+                            turnstilePromise = null;
+                            status.token = "expired";
+                        }
+                    });
+                } catch (error) {
+                    status.token = "render-failed";
+                    warn("turnstile render failed:", error);
+                    finish("");
+                }
+            });
+        });
+        return turnstilePromise;
+    }
+
+    function installChallengeShims() {
         if (!W.grecaptcha) {
             W.grecaptcha = {
                 ready: function(callback) {
@@ -1250,44 +1434,31 @@
                     }
                 },
                 execute: function() {
-                    return Promise.resolve("");
+                    return ensureToken();
                 },
                 render: function() {
                     return 0;
                 },
                 reset: function() {},
                 getResponse: function() {
-                    return "";
-                }
-            };
-        }
-        if (!W.turnstile) {
-            W.turnstile = {
-                ready: function(callback) {
-                    if (typeof callback === "function") {
-                        callback();
-                    }
-                },
-                render: function() {
-                    return "0";
-                },
-                reset: function() {},
-                remove: function() {},
-                getResponse: function() {
-                    return "";
+                    return turnstileToken || "";
                 }
             };
         }
     }
 
     function releaseChallengeGate() {
-        if (typeof W.captchaCallback === "function") {
+        if (typeof W.captchaCallback !== "function") {
+            warn("the client never installed captchaCallback — it will not start a connection");
+            return;
+        }
+        ensureToken().then(function() {
             try {
                 W.captchaCallback("");
             } catch (error) {
                 console.error("[Ae86] captcha gate failed:", error);
             }
-        }
+        });
     }
 
     function domReady() {
@@ -1303,7 +1474,7 @@
 
     neutralizeStockBundle();
     stubFrvr();
-    stubChallenges();
+    installChallengeShims();
     W.WebSocket = PatchedWebSocket;
     W.XMLHttpRequest = PatchedXHR;
 
@@ -1314,6 +1485,7 @@
             };
             try {
                 bundle();
+                log("client bundle started");
             } catch (error) {
                 console.error("[Ae86] bundle failed to start:", error);
                 return;
@@ -1345,7 +1517,14 @@
         hmacSha256: hmacSha256,
         frameSignature: frameSignature,
         buildTables: buildTables,
-        serverListUrl: SERVER_LIST_URL
+        serverListUrl: SERVER_LIST_URL,
+        status: status,
+        servers: function() {
+            return serverList;
+        },
+        token: function() {
+            return turnstileToken;
+        }
     };
 }
 )();
