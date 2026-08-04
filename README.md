@@ -329,6 +329,27 @@ decodes and renders replies on `0` and `Z`.
 
 Both pass on the current build.
 
+## What the client actually is
+
+Ae86 v10 has **no menu and no hotkeys**. There is no settings panel to open,
+no keybind to press, and the string "Ae86" does not appear anywhere in its
+code. Every feature is a **chat command prefixed `!!`**, matched against the
+message you send:
+
+```
+!!join      !!atck      !!combat    !!grind     !!heals
+!!dir       !!spin      !!bull      !!change    !!texture
+!!antikik   !!speed <n> !!set <n>   !!test <n>
+```
+
+Each one toggles a flag and prints a short confirmation on screen. `botConfig`
+— the client's own state object — is exactly `{waitHeal, botJoin, stop, atck,
+nearDst}`, which is the whole feature surface.
+
+This is worth stating plainly because the obvious reading of "it connects but
+the mod does nothing" is that the mod is broken. Nothing opens on load by
+design; type a command into chat and it responds.
+
 ## Diagnosing a live failure
 
 The build logs each stage to the console under `[Ae86]` — the blocked stock
