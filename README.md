@@ -140,10 +140,28 @@ fixed in place rather than having its features ported off it.
 | **Discovery** | `vultr` global, `/serverData` | `api.moomoo.io/servers` |
 | | servers by index, `ip_<hash>.moomoo.io:8008/?gameIndex=` | servers by name, `<key>.<region>.moomoo.io` |
 | **Captcha** | reCAPTCHA | Cloudflare Turnstile, `?token=cf:<token>` |
+| **Boot** | `ht` flips when the page's reCAPTCHA tag calls `window.captchaCallback` | the build calls it once Turnstile is up |
+| | widget renders into `#turnstileWidget` | renders into its own laid-out host |
 | **Tables** | every placement `limit` flattened to 99 | real limits + `sandboxLimit` |
 
 The `bundle.js` line is why nothing worked at all: the game stopped shipping
 it, so the fork removed nothing and both clients ran at once.
+
+The boot rows are why it then hung on *Loading…*. The fork gates connecting on
+`lt && ht`; `lt` comes from `window.onload`, but `ht` only flips when
+`window.captchaCallback()` fires, and the page used to fire that from its
+reCAPTCHA `<script>` tag. Nothing calls it now. Since the fork hides the
+loading screen inside the connect callback, no connection means the screen
+never lifts. Rendering Turnstile into `#turnstileWidget` would not have helped
+either — that node lives inside the menu, which stays `display:none` until
+that same callback runs, so the widget would never lay out and never issue a
+token.
+
+One more boot hazard: the fork reads `#featuredYoutube` unguarded, two lines
+before it initialises `lt`/`ht`. The current client never touches that element,
+so if the page dropped it the whole script would abort before it could do
+anything. The build diffs the element ids the fork reads against the ones the
+shipped client reads and stubs anything in the gap.
 
 ### The opcode rename
 

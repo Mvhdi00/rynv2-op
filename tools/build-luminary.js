@@ -70,6 +70,19 @@ if (P.s2cAlphabet.length !== OLD_S2C.length) {
 
 const J = (v) => JSON.stringify(v);
 
+/* Elements the fork reads out of the page that the current client never
+ * touches. Anything in that gap may have been dropped from the HTML along
+ * with the code that used it, and the fork reads most of them unguarded at
+ * boot - one missing node aborts the whole script before it can hide the
+ * loading screen. `itemCounts*` are excluded: the fork builds those itself,
+ * so a stub would shadow the real node. */
+const LEGACY_IDS = (() => {
+  const idsIn = (src) => new Set([...src.matchAll(/getElementById\("([^"]+)"\)/g)].map((m) => m[1]));
+  const fork = idsIn(code);
+  const game = idsIn(fs.readFileSync(path.join(ROOT, "src/game_index.js"), "utf8"));
+  return [...fork].filter((id) => !game.has(id) && !/^itemCounts\d+$/.test(id)).sort();
+})();
+
 /* ------------------------------------------------------------------ *
  * 1. Userscript header
  *
@@ -172,11 +185,28 @@ doc.close();
 });
 document.replaceChild(document.importNode(doc.documentElement, true), document.documentElement);
 
+(function() {
+    var legacy = ${J(LEGACY_IDS)};
+    for (var i = 0; i < legacy.length; i++) {
+        if (document.getElementById(legacy[i])) continue;
+        var el = document.createElement("div");
+        el.id = legacy[i];
+        el.style.display = "none";
+        (document.body || document.documentElement).appendChild(el);
+    }
+})();
+
 var luminaryTurnstile = (function() {
     var SITEKEY = ${J(P.turnstileSitekey)};
-    var token = null, widget = null, loading = false;
+    var token = null, widget = null, loading = false, host = null, signalled = false;
+    var started = Date.now();
     var ready = function() {
         return !!(window.turnstile && typeof window.turnstile.render === "function");
+    };
+    var signal = function() {
+        if (signalled || typeof window.captchaCallback !== "function") return;
+        signalled = true;
+        window.captchaCallback();
     };
     var load = function() {
         if (loading || ready()) return;
@@ -187,24 +217,44 @@ var luminaryTurnstile = (function() {
         s.defer = true;
         (document.head || document.documentElement).appendChild(s);
     };
+    var mount = function() {
+        if (host) return host;
+        if (!document.body) return null;
+        host = document.createElement("div");
+        host.id = "luminaryTurnstileHost";
+        host.style.cssText = "position:fixed;right:10px;bottom:10px;z-index:2147483000";
+        document.body.appendChild(host);
+        return host;
+    };
     var render = function() {
-        if (widget !== null || !ready()) return;
-        var el = document.getElementById("turnstileWidget");
-        if (!el || el.offsetParent === null) return;
+        if (widget !== null || !ready() || !mount()) return;
         try {
-            widget = window.turnstile.render(el, {
+            widget = window.turnstile.render(host, {
                 sitekey: SITEKEY,
                 theme: "light",
-                callback: function(t) { token = t; },
-                "error-callback": function() { token = null; },
-                "expired-callback": function() { token = null; }
+                callback: function(t) {
+                    token = t;
+                    host.style.display = "none";
+                },
+                "error-callback": function() {
+                    token = null;
+                },
+                "expired-callback": function() {
+                    token = null;
+                    host.style.display = "";
+                    try { window.turnstile.reset(widget); } catch (e) {}
+                }
             });
         } catch (e) {
             widget = null;
         }
     };
-    var tick = function() { load(); render(); };
-    setInterval(tick, 500);
+    var tick = function() {
+        load();
+        render();
+        if (ready() || Date.now() - started > 8000) signal();
+    };
+    setInterval(tick, 250);
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", tick);
     } else {
@@ -213,13 +263,11 @@ var luminaryTurnstile = (function() {
     return {
         get: function() { return token; },
         wait: function(cb) {
-            tick();
             if (token) return cb(token);
             var n = 0;
             var iv = setInterval(function() {
-                tick();
                 if (token) { clearInterval(iv); cb(token); }
-                else if (++n > 80) { clearInterval(iv); cb(null); }
+                else if (++n > 240) { clearInterval(iv); cb(null); }
             }, 250);
         }
     };

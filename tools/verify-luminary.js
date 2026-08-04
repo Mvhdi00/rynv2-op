@@ -188,6 +188,31 @@ const shimImpl = (() => {
 
   if (/grecaptcha/.test(script)) fail("still calls reCAPTCHA");
   if (!script.includes(drivers.protocol.turnstileSitekey)) fail("turnstile sitekey missing");
+
+  /* `ht` only flips when window.captchaCallback fires, and the page used to
+   * fire it from the reCAPTCHA script tag. Nothing calls it now unless the
+   * build does, and without it w() never connects and the loading screen
+   * never lifts. */
+  if (!/window\.captchaCallback\(\)/.test(script)) {
+    fail("nothing drives window.captchaCallback, so ht never flips and w() never connects");
+  } else note("boot: the build drives window.captchaCallback itself");
+
+  /* #turnstileWidget sits inside the menu, which stays display:none until the
+   * connect callback runs - a widget rendered into it would never lay out. */
+  if (/getElementById\("turnstileWidget"\)/.test(script)) {
+    fail("renders turnstile into the menu's hidden #turnstileWidget");
+  }
+  if (!/luminaryTurnstileHost/.test(script)) fail("no laid-out host for the turnstile widget");
+  else note("captcha: turnstile renders into its own host, not the hidden menu node");
+
+  const stubs = script.match(/var legacy = (\[[^\]]*\]);/);
+  if (!stubs) fail("legacy element stubs missing from the entry");
+  else {
+    const list = JSON.parse(stubs[1]);
+    const stillUsed = list.filter((id) => !new RegExp(`getElementById\\("${id}"\\)`).test(source));
+    if (stillUsed.length) fail(`stubbing ids the fork never reads: ${stillUsed.join(", ")}`);
+    else note(`boot: ${list.length} legacy element(s) stubbed if the page no longer ships them (${list.join(", ")})`);
+  }
   if (/:8008\/\?gameIndex=/.test(script)) fail("socket url still carries the old port and gameIndex");
   if (/vultr\.servers/.test(script)) fail("still reads the vultr global the old page defined");
   const listOk =

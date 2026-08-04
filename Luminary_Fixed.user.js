@@ -109,11 +109,28 @@ doc.close();
 });
 document.replaceChild(document.importNode(doc.documentElement, true), document.documentElement);
 
+(function() {
+    var legacy = ["featuredYoutube"];
+    for (var i = 0; i < legacy.length; i++) {
+        if (document.getElementById(legacy[i])) continue;
+        var el = document.createElement("div");
+        el.id = legacy[i];
+        el.style.display = "none";
+        (document.body || document.documentElement).appendChild(el);
+    }
+})();
+
 var luminaryTurnstile = (function() {
     var SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
-    var token = null, widget = null, loading = false;
+    var token = null, widget = null, loading = false, host = null, signalled = false;
+    var started = Date.now();
     var ready = function() {
         return !!(window.turnstile && typeof window.turnstile.render === "function");
+    };
+    var signal = function() {
+        if (signalled || typeof window.captchaCallback !== "function") return;
+        signalled = true;
+        window.captchaCallback();
     };
     var load = function() {
         if (loading || ready()) return;
@@ -124,24 +141,44 @@ var luminaryTurnstile = (function() {
         s.defer = true;
         (document.head || document.documentElement).appendChild(s);
     };
+    var mount = function() {
+        if (host) return host;
+        if (!document.body) return null;
+        host = document.createElement("div");
+        host.id = "luminaryTurnstileHost";
+        host.style.cssText = "position:fixed;right:10px;bottom:10px;z-index:2147483000";
+        document.body.appendChild(host);
+        return host;
+    };
     var render = function() {
-        if (widget !== null || !ready()) return;
-        var el = document.getElementById("turnstileWidget");
-        if (!el || el.offsetParent === null) return;
+        if (widget !== null || !ready() || !mount()) return;
         try {
-            widget = window.turnstile.render(el, {
+            widget = window.turnstile.render(host, {
                 sitekey: SITEKEY,
                 theme: "light",
-                callback: function(t) { token = t; },
-                "error-callback": function() { token = null; },
-                "expired-callback": function() { token = null; }
+                callback: function(t) {
+                    token = t;
+                    host.style.display = "none";
+                },
+                "error-callback": function() {
+                    token = null;
+                },
+                "expired-callback": function() {
+                    token = null;
+                    host.style.display = "";
+                    try { window.turnstile.reset(widget); } catch (e) {}
+                }
             });
         } catch (e) {
             widget = null;
         }
     };
-    var tick = function() { load(); render(); };
-    setInterval(tick, 500);
+    var tick = function() {
+        load();
+        render();
+        if (ready() || Date.now() - started > 8000) signal();
+    };
+    setInterval(tick, 250);
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", tick);
     } else {
@@ -150,13 +187,11 @@ var luminaryTurnstile = (function() {
     return {
         get: function() { return token; },
         wait: function(cb) {
-            tick();
             if (token) return cb(token);
             var n = 0;
             var iv = setInterval(function() {
-                tick();
                 if (token) { clearInterval(iv); cb(token); }
-                else if (++n > 80) { clearInterval(iv); cb(null); }
+                else if (++n > 240) { clearInterval(iv); cb(null); }
             }, 250);
         }
     };
