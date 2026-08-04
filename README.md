@@ -6,6 +6,10 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+This repo also carries a second, unrelated build: **`Ae86_Fixed.user.js`**, the
+Ae86 v10 client repaired against the same game bundles. See
+[Ae86 v10](#ae86-v10).
+
 ---
 
 ## Why RYN is the base
@@ -117,15 +121,22 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ae86_Fixed.user.js        the Ae86 build output (see below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
+src/Ae86_v10.js           Ae86 client v10, as shipped (input)
+src/ae86-bootstrap.js     Ae86 transport + entry shim (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-ae86.js       src/Ae86_v10.js -> Ae86_Fixed.user.js
+tools/game-transport.js   pulls the live transport out of src/game_*.js
+tools/verify-ae86.js      Ae86 transport vs. the game bundle
+tools/smoke-ae86.js       drives the Ae86 build against a mock current server
 ```
 
 ## Build
@@ -177,3 +188,125 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ae86 v10
+
+Build output: **`Ae86_Fixed.user.js`**
+
+Ae86 is the same *kind* of thing as Luna: not a userscript that patches the
+live bundle, but a fork of the whole moomoo.io bundle that replaces it. Unlike
+Luna it is a recent enough fork that its data tables still line up with the
+shipped game — hats, accessories, weapons, items and the DOM ids it binds all
+match `src/game_index.js` in both content and order. What had rotted was the
+transport and the way the script gets off the ground.
+
+Rather than rewrite the bundle, the fix wraps it. `src/ae86-bootstrap.js`
+runs at `document-start`, installs the current transport underneath Ae86's
+socket, and hands the untouched bundle its old world back.
+
+## What was broken
+
+### The packet layer
+
+Ae86 speaks the plain 2020 protocol: msgpack `[type, args]` on the wire, with
+letter opcodes like `sp`, `33`, `ch`. The shipped game negotiates a per
+connection opcode permutation and signs every client frame:
+
+| | Ae86 v10 | current game |
+|---|---|---|
+| c2s frame | `msgpack([type, args])` | 6 HMAC bytes + `msgpack([opcode, args, seq])` |
+| c2s opcode | `"sp"`, `"33"`, `"ch"` … | a number, permuted per connection from the io-init seed |
+| s2c opcode | the same letters | a number, from a separately seeded permutation |
+| `io-init` | reads `args[0]` and drops the rest | `[socketId, seed, key, mode]`, all four used |
+| ready signal | fires on `onopen` | fires on `io-init` |
+
+Every one of those is wrong for the live server. Numeric s2c opcodes hit
+`handlers[type]` as `undefined`; unsigned c2s frames are rejected; and firing
+ready on `onopen` means the client would send its spawn before it had a table
+to encode it with.
+
+The shim sits on `WebSocket` and translates both directions. It builds the
+tables with the game's own seeded shuffle, signs with the game's own truncated
+HMAC-SHA256, and holds the `open` event back until `io-init` lands — which is
+exactly when the shipped game calls its own ready callback.
+
+**The opcode sets still correspond one-to-one.** Both alphabets are the same
+size as Ae86's (17 c2s, 36 s2c), the handler registration order is unchanged,
+and every handler's arity matches position for position. The names were
+rotated; the protocol was not. So the translation is a pair of static maps
+rather than a rewrite:
+
+| Ae86 | now | | Ae86 | now |
+|---|---|---|---|---|
+| `sp` spawn | `M` | | `id` init | `A` |
+| `2` aim | `D` | | `1` setup game | `C` |
+| `33` move | `9` | | `2` add player | `D` |
+| `c` attack | `F` | | `33` update players | `a` |
+| `5` select item | `z` | | `6` load object | `H` |
+| `6` upgrade | `H` | | `7` gather anim | `K` |
+| `13c` store | `c` | | `18` add projectile | `X` |
+| `ch` chat | `6` | | `t` show text | `8` |
+| `14` ping map | `S` | | `pp` ping reply | `0` |
+| `pp` ping | `0` | | … 36 in total | |
+
+### Entry
+
+Four separate things stopped the script from ever reaching a socket.
+
+- **The stock bundle.** Ae86 replaces the game, but as a userscript it loads
+  *alongside* it. Two clients then bind the same DOM ids and open two sockets.
+  The bootstrap blocks the shipped module entry before it executes — which
+  also means the game's userscript-manager detector never runs.
+- **The server list.** Ae86 reads a global `vultr` that the old page inlined,
+  and refreshes it from `/serverData`. Neither exists now; the list moved to
+  `https://api.moomoo.io/servers?v=1.27`. The bootstrap fetches it, seeds
+  `window.vultr` before the bundle starts, and answers the `/serverData` XHR.
+- **The region table.** Ae86's `regionInfo` is keyed by old Vultr ids
+  (`vultr:9`); the API now returns names (`eu-west`). `regionInfo[region].name`
+  threw inside the connect callback and killed everything after it, including
+  the enter-game binding. The bootstrap maps names back onto Ae86's keys,
+  pairing them by the latitude/longitude the two tables share.
+- **reCAPTCHA.** Ae86 will not connect until `window.grecaptcha.execute()`
+  resolves. The live site dropped reCAPTCHA for Turnstile. The bootstrap
+  supplies a resolved stub and releases the gate; the shipped game likewise
+  connects with no token when it has none.
+
+Addresses are rebuilt from the live list with the game's own
+`key.region.moomoo.io` formula, so Ae86's old `ip-…` and port handling no
+longer decides where the socket goes.
+
+## Build
+
+```sh
+node tools/build-ae86.js       # src/Ae86_v10.js -> Ae86_Fixed.user.js
+```
+
+The bundle is copied through byte for byte inside a wrapper function; nothing
+in the 12 MB of obfuscated client is edited. The build fails if the input's
+metadata block, its `io-client`, `app` or `msgpack-lite` modules, or the
+bootstrap's protocol constants stop matching `drivers/game-drivers.json`.
+
+## Verification
+
+```sh
+node --check Ae86_Fixed.user.js
+node tools/verify-ae86.js
+node tools/smoke-ae86.js       # needs: npm i --no-save playwright
+```
+
+`verify-ae86.js` pulls the real transport out of `src/game_index.js` and the
+real codec out of `src/game_vendor.js` and checks the shim against them: the
+permuted tables for ten seeds, the truncated HMAC for two key sizes across
+payload lengths 0–196, and msgpack agreement in both directions over a corpus
+covering every wire type the protocol uses. It also checks both opcode maps are
+total and one-to-one against the alphabets in `drivers/game-drivers.json`.
+
+`smoke-ae86.js` runs the built script in Chromium against a mock server that
+speaks the current protocol — permuted opcodes, signed frames and all. It
+asserts the stock bundle stays blocked, the client completes the `io-init`
+handshake, its spawn arrives as a correctly signed and sequenced `M` with the
+current payload shape, and that it decodes and renders replies on `0` and `Z`.
+
+Both pass on the current build.
