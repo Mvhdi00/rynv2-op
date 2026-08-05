@@ -659,6 +659,46 @@ WebSocket.prototype.send = new Proxy(originalSend, {
               }
               this.socket.send(n)`],
 
+      /* The game replaced ALTCHA with Cloudflare Turnstile. x18k only ungreys
+       * Enter Game inside an ALTCHA statechange handler, so on the current menu
+       * that event never arrives and the button stays disabled. This renders a
+       * Turnstile widget with the game's sitekey, publishes the token, and
+       * enables the button — falling back to enabling it after a few seconds so
+       * a captcha failure cannot leave you locked out of your own menu. */
+      ["entry: Enter Game ungreyed via Cloudflare Turnstile instead of ALTCHA",
+        "const yx = document.getElementById(\"botCount\");",
+        `(function () {
+    const SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
+    function ungrey() {
+        const b = document.getElementById("enterGame");
+        if (b) { b.classList.remove("disabled"); b.innerText = "Enter Game"; }
+    }
+    function ready(token) { window.__x18kCfToken = token; ungrey(); }
+    const poll = setInterval(function () {
+        if (window.__x18kCfToken) { clearInterval(poll); return; }
+        if (!window.turnstile || !document.body) return;
+        clearInterval(poll);
+        const host = document.createElement("div");
+        host.style.cssText = "position:fixed;left:-9999px;top:-9999px;";
+        document.body.appendChild(host);
+        try {
+            window.turnstile.render(host, {
+                sitekey: SITEKEY,
+                callback: ready,
+                "error-callback": ungrey
+            });
+        } catch (e) { ungrey(); }
+    }, 250);
+    setTimeout(ungrey, 8000);
+})();
+const yx = document.getElementById("botCount");`],
+
+      /* Bot sockets carried the ALTCHA payload under an alt: prefix; the
+       * current server expects the Turnstile token under cf:. */
+      ["entry: bot sockets use the cf: Turnstile token",
+        'encodeURIComponent("alt:" + V0)',
+        'encodeURIComponent(window.__x18kCfToken ? "cf:" + window.__x18kCfToken : "alt:" + V0)'],
+
       ["transport: session dropped on close",
         "              this.socket && this.socket.close(), this.socket = null, this.connected = !1",
         "              this.socket && this.socket.close(), this.socket = null, this.connected = !1, __x18kTransportSession = null"],

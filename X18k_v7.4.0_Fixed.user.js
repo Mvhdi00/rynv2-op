@@ -19409,11 +19409,35 @@ function gx() {
     const t = document.querySelectorAll(".pageContent");
     t.forEach(e => e.style.display = "none")
 }
+(function () {
+    const SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
+    function ungrey() {
+        const b = document.getElementById("enterGame");
+        if (b) { b.classList.remove("disabled"); b.innerText = "Enter Game"; }
+    }
+    function ready(token) { window.__x18kCfToken = token; ungrey(); }
+    const poll = setInterval(function () {
+        if (window.__x18kCfToken) { clearInterval(poll); return; }
+        if (!window.turnstile || !document.body) return;
+        clearInterval(poll);
+        const host = document.createElement("div");
+        host.style.cssText = "position:fixed;left:-9999px;top:-9999px;";
+        document.body.appendChild(host);
+        try {
+            window.turnstile.render(host, {
+                sitekey: SITEKEY,
+                callback: ready,
+                "error-callback": ungrey
+            });
+        } catch (e) { ungrey(); }
+    }, 250);
+    setTimeout(ungrey, 8000);
+})();
 const yx = document.getElementById("botCount");
 let xx;
 const wx = async t => new Promise(e => setTimeout(e, t));
 const bx = (e, t) => {
-    const n = q3.url.split("token=")[0] + "token=" + encodeURIComponent("alt:" + V0);
+    const n = q3.url.split("token=")[0] + "token=" + encodeURIComponent(window.__x18kCfToken ? "cf:" + window.__x18kCfToken : "alt:" + V0);
     let c = new WebSocket(n);
     c.binaryType = "arraybuffer";
     c.botType = t;
