@@ -34,7 +34,7 @@ and additionally needed their packet vocabulary mapped forward.
   home-address harvester, a disguised password prompt and per-frame telemetry;
   all three removed. **Do not run the original.**
 
-- **`Annihilator.user.js`** (`v0.8.9`) — hook mod. Two metadata mistakes, each
+- **`Annihilator.v0.8.9.js`** (`v0.8.9`) — hook mod. Two metadata mistakes, each
   fatal on its own, meant not one line of it ever ran. See below.
 
 Plus **`MooUnpatcher.user.js`** — install it once and run old mods unchanged,
@@ -700,7 +700,7 @@ it rather than reading the file.
 
 ---
 
-# Annihilator.user.js (v0.8.9)
+# Annihilator.v0.8.9.js (v0.8.9)
 
 A hook mod in the usual shape, so it gets the usual `EXP` shim. What is
 specific to it is that **not a single line of it ever ran**, for two separate
@@ -744,9 +744,19 @@ and `origPacket()` still skips them the way `WS.nsend` did.
 never was — the shim drops it rather than putting an unresolvable name on a
 signed channel. That is the mod's own joke, left as found.
 
+## Comments
+
+This one is built rather than edited: `node tools/build-annihilator.js` applies
+the metadata fixes, the shim and the three seams to
+`reference/annihilator-original.js`. The shim goes in **comment-free**, and the
+seams are pure code, so nothing in the shipped file is annotation that was not
+in the author's original — their banner and their chat-command reference are
+untouched. `tools/strip-comments.js` now exports `stripComments()` for that,
+and still refuses to write unless the syntax tree is unchanged.
+
 ## Checked
 
-`test/annihilator.js` — 30 checks: both metadata mistakes, that the bundled
+`test/annihilator.js` — 33 checks: both metadata mistakes, that the bundled
 shim is byte-identical to every other copy, that no part of the mod still
 encodes for itself or calls `nsend`, that `packet()` still filters and
 `origPacket()` still does not, and a round trip on the wire against the game
@@ -754,7 +764,7 @@ bundle's own crypto — spawn framed, HMAC verified server-side, sequence
 numbered, and an incoming opcode arriving under the name the mod's events table
 is keyed by.
 
-`node tools/probe-mod.js --standalone Annihilator.user.js` boots it in a real
+`node tools/probe-mod.js --standalone Annihilator.v0.8.9.js` boots it in a real
 Chromium with no errors.
 
 ---
@@ -1212,7 +1222,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 765 checks.
+them with `npm test` — 768 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.

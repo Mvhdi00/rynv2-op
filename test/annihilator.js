@@ -12,7 +12,7 @@ const { EXP, FakeWebSocket } = extract.loadAnnihilator();
 const enc = new Encoder(), dec = new Decoder();
 
 const ROOT = path.join(__dirname, '..');
-const src = fs.readFileSync(path.join(ROOT, 'Annihilator.user.js'), 'utf8');
+const src = fs.readFileSync(path.join(ROOT, 'Annihilator.v0.8.9.js'), 'utf8');
 
 let fails = 0;
 const check = (cond, label) => {
@@ -46,12 +46,27 @@ check(meta.split('\n').every(l => l === '' || l.startsWith('//')),
 // --------------------------------------------------------------------------
 console.log('\n2. the shim');
 
-check(extract.shimsMatch(),
-      'the bundled shim is byte-identical to the one every other hook mod carries');
+// This copy ships comment-free, so it cannot be compared byte-for-byte with
+// the others. Strip both and the code has to be identical -- and the stripper
+// refuses to write unless the syntax tree is unchanged, so "identical after
+// stripping" is a statement about the program, not about the text.
+{
+  const { stripComments } = require('../tools/strip-comments.js');
+  const mine = extract.shimOf('Annihilator.v0.8.9.js');
+  const ref = stripComments(extract.shimOf('ExternalClient.user.js'), { metadata: false }).out;
+  check(mine === ref, 'the bundled shim is the same code every other hook mod carries');
+  check(!/\/\//.test(mine.replace(/https?:\/\//g, '')) && !/\/\*/.test(mine),
+        'and carries no comments of its own');
+}
 check(shimStart < src.indexOf('EXP.setHandler('),
       'and is installed before anything that uses it');
 check(/window\.msgpack = \{ encode: encode, decode: decode \}/.test(src),
       'it publishes window.msgpack, replacing the dead @require');
+
+// The author's own comments are not mine to delete -- the chat-command
+// reference at the top is how you actually use this thing.
+check(/\.a -chat -/.test(src), "the author's command reference survives");
+check(/█/.test(src), 'as does their banner');
 
 // --------------------------------------------------------------------------
 console.log('\n3. no part of the mod still speaks the old transport');

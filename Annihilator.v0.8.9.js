@@ -10,27 +10,6 @@
 // @grant        none
 // ==/UserScript==
 
-/* ===========================================================================
- * Why this did not run, and what changed.
- *
- *   1. "@run-at document_start" -- an underscore, which is not a valid value.
- *      Tampermonkey ignored it and ran the script at document-end, long after
- *      the game had captured WebSocket.prototype.send. The hook below was
- *      installed onto a reference nothing was using any more.
- *   2. The msgpack @require pointed at rawgit.com, dead since 2019. A failed
- *      @require aborts the whole userscript, so every line of this file was
- *      dead code. msgpack is bundled below instead.
- *   3. The wire format changed. The server now expects, per connection,
- *          [ 6-byte truncated HMAC-SHA256 | msgpack([opcode, args, seq]) ]
- *      with opcodes drawn from a table shuffled by a per-connection seed
- *      negotiated in "io-init". This mod spoke plain msgpack([name, args]),
- *      which the server ignores.
- *
- * The shim below owns the framing. The mod keeps working in packet *names*
- * exactly as it always did -- its filters, its chat commands and its packet
- * counters are untouched -- and the names are translated at the boundary.
- * ======================================================================== */
-
 const EXP = (function() {
     "use strict";
 
@@ -43,8 +22,6 @@ const EXP = (function() {
       , C2S = ["M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0"]
       , S2C = ["A", "B", "C", "D", "E", "a", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "X", "Y", "Z", "g", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
 
-    // Old mod packet names -> the names the current server uses. Applied on
-    // the way out, before the opcode lookup.
     const PACKET_MAP = {
         "33": "9",
         "ch": "6",
@@ -56,10 +33,6 @@ const EXP = (function() {
         "G": "z"
     };
 
-    /* --- minimal msgpack ------------------------------------------------ */
-    // Replaces the old `@require` of msgpack-lite from rawgit.com, which has
-    // been offline since 2019 (so window.msgpack was undefined and every
-    // encode/decode in this script threw).
     const utf8enc = new TextEncoder()
       , utf8dec = new TextDecoder();
 
@@ -159,8 +132,8 @@ const EXP = (function() {
     }
     Reader.prototype.read = function() {
         const c = this.view.getUint8(this.pos++);
-        if (c < 0x80) return c;                       // positive fixint
-        if (c >= 0xe0) return c - 256;                // negative fixint
+        if (c < 0x80) return c;
+        if (c >= 0xe0) return c - 256;
         if (c >= 0xa0 && c <= 0xbf) return this.str(c & 0x1f);
         if (c >= 0x90 && c <= 0x9f) return this.arr(c & 0x0f);
         if (c >= 0x80 && c <= 0x8f) return this.map(c & 0x0f);
@@ -214,7 +187,7 @@ const EXP = (function() {
         for (let i = 0; i < n; i++) {
             const k = this.read();
             const v = this.read();
-            if (k !== "__proto__") out[k] = v;      // never let the wire touch the prototype
+            if (k !== "__proto__") out[k] = v;
         }
         return out;
     };
@@ -230,7 +203,6 @@ const EXP = (function() {
         return new Uint8Array(d);
     }
 
-    /* --- opcode tables -------------------------------------------------- */
     function rng(seed) {
         return function() {
             seed |= 0;
@@ -267,7 +239,6 @@ const EXP = (function() {
         };
     }
 
-    /* --- HMAC-SHA256 ---------------------------------------------------- */
     const K = new Uint32Array([1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298]);
 
     function rotr(x, n) { return x >>> n | x << 32 - n; }
@@ -334,11 +305,8 @@ const EXP = (function() {
         return out;
     }
 
-    /* --- per-socket protocol state -------------------------------------- */
     const states = new WeakMap();
 
-    // Every socket gets a listener at construction time, because io-init
-    // arrives before anything else attaches one.
     function sniff(sock, raw) {
         try {
             const msg = decode(raw);
@@ -350,7 +318,7 @@ const EXP = (function() {
                 tables: buildTables(a[1] >>> 0),
                 seq: 0
             } : { mode: 0, seq: 0 });
-        } catch (e) { /* not a handshake frame */ }
+        } catch (e) {   }
     }
 
     function PatchedWebSocket(url, protocols) {
@@ -370,10 +338,7 @@ const EXP = (function() {
         console.warn("[EXP] could not install WebSocket wrapper", e);
     }
 
-    /* --- framing -------------------------------------------------------- */
 
-    // Turn what the game handed us back into a string-named packet.
-    // Returns null if it cannot be parsed.
     function unframe(sock, raw) {
         const st = states.get(sock)
           , bytes = toBytes(raw);
@@ -391,16 +356,13 @@ const EXP = (function() {
         }
     }
 
-    // Frame and transmit a string-named packet. This shim owns the sequence
-    // counter: it renumbers everything it sends, so packets the client injects
-    // sit in the same monotonic run as the game's own.
     function send(sock, type, args) {
         if (!sock || sock.readyState !== 1) return false;
         const name = Object.prototype.hasOwnProperty.call(PACKET_MAP, type) ? PACKET_MAP[type] : type
           , st = states.get(sock);
         if (st && st.mode === MODE_SECURE) {
             const op = st.tables.c2s.enc[name];
-            if (op === undefined) return false;     // server would drop it anyway
+            if (op === undefined) return false;
             const payload = encode([op, args, ++st.seq])
               , frame = new Uint8Array(HEADER_LEN + payload.length);
             frame.set(tag(st.key, payload), 0);
@@ -412,7 +374,6 @@ const EXP = (function() {
         return true;
     }
 
-    // Decode an incoming frame into [stringName, args].
     function receive(sock, raw) {
         const st = states.get(sock)
           , parsed = decode(toBytes(raw));
@@ -424,11 +385,6 @@ const EXP = (function() {
         return { type: type, args: parsed[1] };
     }
 
-    /* --- captcha token -------------------------------------------------- */
-    // The game moved from reCAPTCHA to Cloudflare Turnstile, and the token is
-    // now prefixed "cf:". The bundle keeps the token in a closure, but it
-    // publishes its callback on window, so we wrap the property before the
-    // bundle installs it and copy the token as it comes through.
     let captchaToken = null;
     (function() {
         let inner = null;
@@ -449,21 +405,15 @@ const EXP = (function() {
     })();
 
     function token() {
-        // Fall back to reading the widget directly: if the page rendered and
-        // solved it before our wrapper was in place, the callback never fired
-        // for us and captchaToken would still be null.
         if (!captchaToken && window.turnstile && typeof window.turnstile.getResponse === "function") {
             try {
                 const el = document.getElementById("turnstileWidget");
                 captchaToken = (el ? window.turnstile.getResponse(el) : window.turnstile.getResponse()) || null;
-            } catch (e) { /* no widget yet */ }
+            } catch (e) {   }
         }
         return captchaToken ? "cf:" + captchaToken : null;
     }
 
-    // Ask Turnstile for a new token. Cloudflare treats tokens as single-use,
-    // so reusing one for extra connections will usually be rejected -- this is
-    // a best effort, not a guarantee.
     function freshToken(timeoutMs) {
         return new Promise(function(resolve) {
             const previous = captchaToken;
@@ -493,10 +443,6 @@ const EXP = (function() {
         });
     }
 
-    /* --- send trampoline ------------------------------------------------ */
-    // The game captures WebSocket.prototype.send at bundle load. We install
-    // this now so that captured reference is ours; the client installs its
-    // real handler later via setHandler().
     let handler = null;
     NativeWebSocket.prototype.nsend = nativeSend;
     NativeWebSocket.prototype.send = function(data) {
@@ -519,7 +465,6 @@ const EXP = (function() {
         freshToken: freshToken,
         nativeSend: nativeSend,
         PACKET_MAP: PACKET_MAP,
-        // exposed for the test harness
         _internals: { buildTables, tag, hexToBytes, HEADER_LEN, MODE_SECURE, states }
     };
 }
@@ -1714,14 +1659,7 @@ let preDelay = 222.3;
 let _0x289ab9 = false;
 let lastMoveDir = undefined;
 let lastsp = ["cc", 1, "__proto__"];
-// Everything the mod does to an outgoing packet, lifted out of the socket
-// hook so the mod's own packet() can run through it too. It works in packet
-// names and plain arguments, exactly as before; the framing happens at the
-// two EXP.send calls, and nowhere else.
 function sendFiltered(sock, type, data) {
-    // The bare block is deliberate: it stands where `if (WS == this) {` used to
-    // open, so every `let` in the 240 lines below keeps the exact block scope
-    // it had before, and the body needed no reindenting to move out here.
     {
         dontSend = false;
         if (type == "6") {
@@ -1982,10 +1920,6 @@ function sendFiltered(sock, type, data) {
     }
 }
 
-// The socket hook. EXP installed itself on WebSocket.prototype.send at
-// document-start, so the reference the game captured is EXP's and this handler
-// is what it reaches. The game hands us a finished frame; unframe turns it back
-// into the name and arguments this mod was written against.
 EXP.setHandler(function (message, sid) {
     if (!WS) {
         WS = this;
@@ -2004,14 +1938,10 @@ EXP.setHandler(function (message, sid) {
     sendFiltered(this, unframed.type, unframed.args);
 });
 
-// packet() used to encode and hand the buffer to WS.send, which meant it went
-// back through the mod's own hook and picked up the filters above. It still
-// does -- just directly, without a round trip through msgpack.
 function packet(type) {
     let data = Array.prototype.slice.call(arguments, 1);
     sendFiltered(WS, type, data);
 }
-// origPacket used WS.nsend, i.e. deliberately around the filters. Same here.
 function origPacket(type) {
     let data = Array.prototype.slice.call(arguments, 1);
     EXP.send(WS, type, data);
@@ -2028,9 +1958,6 @@ let io = {
 };
 
 function getMessage(message, sid) {
-    // Incoming packets now carry a numeric opcode from a second shuffled
-    // table. EXP.receive maps it back to the name the events table below is
-    // keyed by, and returns null for anything it cannot place.
     let parsed = EXP.receive(message.target || WS, message.data);
     if (!parsed) return;
     let type = parsed.type;

@@ -17,7 +17,7 @@ const ROBOTICS = path.join(ROOT, 'Robotics.user.js');
 const PETER = path.join(ROOT, 'PeterClient.user.js');
 const CHICKEN = path.join(ROOT, 'UnX.user.js');
 const SAKUNA = path.join(ROOT, 'Sakuna.user.js');
-const ANNIHILATOR = path.join(ROOT, 'Annihilator.user.js');
+const ANNIHILATOR = path.join(ROOT, 'Annihilator.v0.8.9.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -482,6 +482,14 @@ module.exports = {
    * Every hook-based script carries the same EXP shim. Assert the copies have
    * not drifted apart.
    */
+  /** The EXP shim as it appears in one file, comments and all. */
+  shimOf(file) {
+    const l = lines(path.join(ROOT, file));
+    const a = findLine(l, 'const EXP = (function() {');
+    const b = findLine(l, ')();', a);
+    return l.slice(a, b + 1).join('\n');
+  },
+
   shimsMatch() {
     const strip = f => {
       const l = lines(f);
@@ -490,7 +498,7 @@ module.exports = {
       return l.slice(a, b + 1).join('\n');
     };
     const ref = strip(EXTERNAL);
-    return [AE86, AURORA, LEMON, LEMON_VIS, ROBOTICS, PETER, SAKUNA, ANNIHILATOR].every(f => strip(f) === ref);
+    return [AE86, AURORA, LEMON, LEMON_VIS, ROBOTICS, PETER, SAKUNA].every(f => strip(f) === ref);
   },
 
   /** The Laffer remake's LAF shim, as a loadable CommonJS module. */
