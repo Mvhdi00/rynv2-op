@@ -65,43 +65,86 @@ check(!/Settings_default\._preplacer = checked/.test(src) &&
 check(/"_legitMode", "_hideHUD"/.test(src),
       'the legit-mode exclusion list has dropped the removed entries');
 
-console.log('\n5. the dead code behind them');
+console.log('\n5. the code behind them is gone, not merely unreachable');
+
+// Removing the switch and the setting makes a feature inert, because every
+// `if (!Settings_default._x) return` guard then reads undefined. That is not
+// the same as removing it: the bodies were still in the file. These check the
+// bodies are actually gone.
 {
-  // Every surviving mention must be an entry guard that returns before doing
-  // anything -- never a live read that could still steer behaviour.
-  const live = [];
+  const left = [];
   src.split('\n').forEach((l, i) => {
     for (const id of Object.keys(REMOVED)) {
       let p = -1;
       while ((p = l.indexOf(id, p + 1)) >= 0) {
         const after = l[p + id.length];
         if (after && /[A-Za-z0-9]/.test(after)) continue;
-        const t = l.trim();
-        const isGuard = /^if \(!Settings_default\.|^if \(\(enemy\.shameCount|^if \(MH\.moduleActive \|\| !Settings_default\.|^if \(ModuleHandler\.shouldAttack && !\(|^\/\/|^case "__removed_/.test(t);
-        if (!isGuard) live.push((i + 1) + ': ' + t.slice(0, 70));
+        left.push((i + 1) + ': ' + l.trim().slice(0, 70));
         break;
       }
     }
   });
-  check(live.length === 0,
-        'no surviving mention is anything but an inert entry guard' +
-        (live.length ? ' -- found ' + live.join(' | ') : ''));
+  check(left.length === 0,
+        'not one mention of any removed setting survives anywhere in the file' +
+        (left.length ? ' -- found ' + left.length + ', e.g. ' + left[0] : ''));
 }
+
+// classes that existed for nothing but a removed feature
+for (const cls of ['AutoGatherBreak', 'TrapRebuild', 'LunaSafeWalk', 'AutoRetrap',
+                   'AutoHitToShame', 'LunaPathfinder']) {
+  check(original.includes('class ' + cls) && !src.includes('class ' + cls + ' '),
+        'class ' + cls + ' is gone');
+  check(!src.includes(cls + '_default = ' + cls),
+        '  and so is its _default alias, which sits packed several to a line');
+  check(!new RegExp('new ' + cls + '(_default)?\\(').test(src),
+        '  and nothing constructs it any more');
+}
+
+// members of classes that do other things as well
+for (const [member, feature] of [['_lunaPathBreak', 'Path Break'],
+                                 ['_glotusPlace', 'Glotus Placer Mode'],
+                                 ['canShamePlace', 'Shame Grind'],
+                                 ['canAutoShame', 'Auto Hit to Shame']]) {
+  check(original.includes(member) && !src.includes(member),
+        feature + ": its member (" + member + ") is gone, and nothing calls it");
+}
+
+// the tick lists must not name a module that no longer exists
+{
+  const bad = [];
+  for (const m of src.matchAll(/^\s*this\.(?:modules|botModules) = \[([^\]]*)\];/gm)) {
+    for (const e of m[1].split(',').map(x => x.trim()).filter(Boolean)) {
+      if (!/^this\.staticModules\.[A-Za-z_$][\w$]*$/.test(e)) bad.push(e.slice(0, 60));
+    }
+  }
+  check(bad.length === 0,
+        'every entry left in the tick lists is a well-formed module reference' +
+        (bad.length ? ' -- found ' + bad.join(' | ') : ''));
+  for (const key of ['autoGatherBreak', 'trapRebuild', 'lunaSafeWalk', 'autoRetrap',
+                     'autoHitToShame', 'lunaPathfinder']) {
+    check(!src.includes('staticModules.' + key), 'and none of them is ' + key);
+  }
+}
+
 check(!/if \(Settings_default\._lunaMode\) return;/.test(src),
       'the eight luna-mode early returns are gone');
-check(!/if \(Settings_default\._(lunaPathfinder|glotusPlacer|replacer|lockTrappedEnemy|preplacer)\b/.test(src),
-      'so are the blocks that could no longer be entered');
 check(/if \(ModuleHandler\.moduleActive && !myPlayer\.isTrapped\) \{/.test(src),
       'and the one condition that had a live arm kept it, minus the removed half');
+check(/if \(ModuleHandler\.shouldAttack\) \{/.test(src),
+      'as did the attack condition Auto Gather was one half of');
 
 console.log('\n6. the rest of the client is untouched');
 for (const keep of ['_autoplacer', '_normalInstakill', '_velocityTick', '_legitMode', '_autoGrind', '_antiRetrap']) {
   check(src.includes('\\"' + keep + '\\"') || new RegExp('^\\s*' + keep + ':\\s', 'm').test(src),
         keep + ' is still there');
 }
-check(Math.abs(src.split('\n').length - original.split('\n').length) < 400,
-      'and the file is the same client, not a rewrite (' +
-      original.split('\n').length + ' -> ' + src.split('\n').length + ' lines)');
+{
+  const o = original.split('\n').length, n = src.split('\n').length;
+  check(n < o && (o - n) > 800 && (o - n) < 3000,
+        'and it is the same client with the features cut out, not a rewrite (' +
+        o + ' -> ' + n + ' lines, ' +
+        Math.round((original.length - src.length) / 1024) + 'KB removed)');
+}
 
 console.log('\n' + (fails === 0 ? '=> ALL RYN TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
 process.exit(fails ? 1 : 0);

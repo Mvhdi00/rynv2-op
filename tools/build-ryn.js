@@ -10,6 +10,22 @@
  */
 const fs = require('fs');
 const path = require('path');
+const acorn = require('acorn');
+
+// Every structural cut below is verified immediately: if the file stops
+// parsing, the build stops and names the step. A brace miscounted in one
+// removal silently corrupts the boundaries of every removal after it, which is
+// exactly the failure this catches.
+let lastGood = null;
+function mustParse(step) {
+  try { acorn.parse(src, { ecmaVersion: 'latest' }); lastGood = step; }
+  catch (e) {
+    console.error('build-ryn: "' + step + '" left the file unparseable');
+    console.error('  ' + e.message);
+    console.error('  last step that parsed cleanly: ' + (lastGood || '(none)'));
+    process.exit(1);
+  }
+}
 
 const ROOT = path.join(__dirname, '..');
 const ORIGINAL = process.argv[2] || path.join(ROOT, 'reference', 'ryn-original.js');
@@ -181,10 +197,11 @@ swap(`       case "_placerRetrapCombo":
           Settings_default._replacer = checked;
           Settings_default._autoRetrap = checked;
           SaveSettings();
-`, `       case "__removed_placerRetrapCombo":
-        {
-`, 'the Retrap combo switch case');
-dead += 3;
+          break;
+        }
+
+`, '', 'the Retrap combo switch case');
+dead += 4;
 dead += dropLine('settings._lunaMode = false;');
 dead += dropLine('settings._lunaExactPlacer = false;');
 dead += dropLine('settings._lockTrappedEnemy = false;');
@@ -194,9 +211,213 @@ swap('"_legitMode", "_lunaMode", "_lunaExactPlacer", "_hideHUD"',
      '"_legitMode", "_hideHUD"', 'the LEGIT_MODE_EXCLUDE entries');
 dead += 2;
 
+/* --- 4. the feature code itself -------------------------------------------
+ * Steps 1-3 left the features inert but still present: an entry guard that
+ * returns immediately, and a body behind it nothing can reach. This takes the
+ * bodies out -- whole classes where the class IS the feature, single members
+ * where it is one part of a class that does other things, and the registration
+ * and tick-list entries that would otherwise name something that no longer
+ * exists.
+ */
+
+// Delete a `{ ... }` body starting at `open`, by brace balance, ignoring
+// braces inside strings, template literals, comments and regex-ish contexts.
+function endOfBlock(open) {
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === '`') {          // skip the string
+      const q = c;
+      for (i++; i < src.length; i++) {
+        if (src[i] === '\\') { i++; continue; }
+        if (src[i] === q) break;
+      }
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '/') { i = src.indexOf('\n', i); if (i < 0) i = src.length; continue; }
+    if (c === '/' && src[i + 1] === '*') { i = src.indexOf('*/', i) + 1; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (!depth) return i + 1; }
+  }
+  return -1;
+}
+
+function cut(startIdx, endIdx) {
+  let from = startIdx;
+  const bol = src.lastIndexOf('\n', startIdx);
+  if (bol >= 0 && src.slice(bol + 1, startIdx).trim() === '') from = bol;
+  let to = endIdx;
+  if (src[to] === '\n') to++;
+  src = src.slice(0, from) + src.slice(to);
+}
+
+function dropClass(name) {
+  const re = new RegExp('^[ \\t]*class ' + name + '\\b[^{]*\\{', 'm');
+  const m = re.exec(src);
+  if (!m) { console.error('dropClass: no class ' + name); process.exit(1); }
+  const end = endOfBlock(m.index + m[0].length - 1);
+  if (end < 0) { console.error('dropClass: unbalanced ' + name); process.exit(1); }
+  cut(m.index, end);
+  return 1;
+}
+
+// A method of a class: `<indent>name(args) {`
+function dropMethod(name) {
+  const re = new RegExp('^[ \\t]*' + name + '\\s*\\([^)]*\\)\\s*\\{', 'm');
+  const m = re.exec(src);
+  if (!m) { console.error('dropMethod: no method ' + name); process.exit(1); }
+  const end = endOfBlock(m.index + m[0].length - 1);
+  if (end < 0) { console.error('dropMethod: unbalanced ' + name); process.exit(1); }
+  cut(m.index, end);
+  return 1;
+}
+
+// An arrow-function const: `<indent>const name = (...) => {`
+function dropArrowConst(name, times) {
+  let n = 0;
+  for (;;) {
+    const re = new RegExp('^[ \\t]*const ' + name + '\\s*=\\s*\\([^)]*\\)\\s*=>\\s*\\{', 'm');
+    const m = re.exec(src);
+    if (!m) break;
+    const end = endOfBlock(m.index + m[0].length - 1);
+    if (end < 0) { console.error('dropArrowConst: unbalanced ' + name); process.exit(1); }
+    // include a trailing semicolon if there is one
+    let e = end;
+    if (src[e] === ';') e++;
+    cut(m.index, e);
+    n++;
+    if (times && n >= times) break;
+  }
+  if (!n) { console.error('dropArrowConst: never found ' + name); process.exit(1); }
+  return n;
+}
+
+let excised = 0;
+
+// classes that exist for nothing but a removed feature
+for (const cls of ['AutoGatherBreak', 'TrapRebuild', 'LunaSafeWalk', 'AutoRetrap',
+                   'AutoHitToShame', 'LunaPathfinder']) {
+  excised += dropClass(cls);
+  mustParse('drop class ' + cls);
+}
+
+// the aliases those classes are registered under, and the registrations
+// These are packed several to a line --
+//   const AutoPlay_default = AutoPlay;  const AutoGatherBreak_default = ...
+// -- so the fragment comes out, not the line. A line-anchored pattern silently
+// matched none of them, and the probe caught it as "AutoGatherBreak is not
+// defined": exactly the kind of thing a parse check cannot see, because the
+// file was still perfectly valid JavaScript.
+for (const cls of ['AutoGatherBreak', 'TrapRebuild', 'LunaSafeWalk', 'LunaPathfinder']) {
+  const frag = 'const ' + cls + '_default = ' + cls + ';';
+  if (src.indexOf(frag) < 0) { console.error('build-ryn: no alias for ' + cls); process.exit(1); }
+  src = src.split(frag + '  ').join('').split(frag).join('');
+  excised++;
+}
+mustParse('drop the class aliases');
+for (const reg of ['autoHitToShame: new AutoHitToShame(client2),',
+                   'autoRetrap: new AutoRetrap(client2),',
+                   'autoGatherBreak: new AutoGatherBreak_default(client2),',
+                   'trapRebuild: new TrapRebuild_default(client2),',
+                   'lunaPathfinder: new LunaPathfinder_default(client2),',
+                   'lunaSafeWalk: new LunaSafeWalk_default(client2),']) {
+  excised += dropLine(reg);
+}
+
+// and their places in the tick list. Splicing these out of the text by hand
+// glued neighbours together -- "shameSpamthis.staticModules.spikeSyncHammer" --
+// so the array is taken apart on its separators, filtered, and put back.
+{
+  const GONE_KEYS = new Set(['autoGatherBreak', 'trapRebuild', 'lunaSafeWalk',
+                             'autoRetrap', 'autoHitToShame', 'lunaPathfinder']);
+  src = src.replace(/^(\s*this\.(?:modules|botModules) = \[)([^\]]*)(\];)$/gm,
+    (whole, head, body, tail) => {
+      const kept = body.split(',')
+        .map(e => e.trim())
+        .filter(Boolean)
+        .filter(e => {
+          const m = e.match(/^this\.staticModules\.([A-Za-z_$][\w$]*)$/);
+          if (!m) return true;                 // leave anything unfamiliar alone
+          if (!GONE_KEYS.has(m[1])) return true;
+          excised++;
+          return false;
+        });
+      return head + ' ' + kept.join(', ') + ' ' + tail;
+    });
+}
+mustParse('prune the tick lists');
+
+// members of classes that do other things too
+// The last read of the Auto Gather module. It was already null-safe --
+// `_agb && _agb._on` -- so it was harmless once the module went, but harmless
+// is not the same as gone. Fold it to what it now evaluates to.
+swap(`      const _agb = _mh.staticModules.autoGatherBreak;
+      const _autogathering = _agb && _agb._on || _mh.autoattack || _mh.forceWeapon !== null;`,
+     `      const _autogathering = _mh.autoattack || _mh.forceWeapon !== null;`,
+     'the last Auto Gather module read');
+excised++;
+mustParse('fold the Auto Gather read');
+
+excised += dropMethod('_lunaPathBreak');           // Path Break, inside Autobreak
+mustParse('drop _lunaPathBreak');
+swap('const enemyFirst = () => reachable(fallback) ? fallback : this._lunaPathBreak();',
+     'const enemyFirst = () => fallback;', 'the _lunaPathBreak call site');
+excised++;
+
+excised += dropMethod('_glotusPlace');             // Glotus Placer Mode, inside AutoPlacer
+mustParse('drop _glotusPlace');
+// The two shame helpers sit next to each other inside AutoPlacer and are both
+// going, so they come out as one region: from the head of canShamePlace to the
+// line that closes canAutoShame at the same indent. Boundaries are taken from
+// the text rather than computed by brace balance -- and the removed region is
+// checked to contain exactly what was meant, so an overrun is a build failure
+// instead of something quietly missing later.
+{
+  const lines = src.split('\n');
+  const head = lines.findIndex(l => /^\s*const canShamePlace\s*=\s*\(\)\s*=>\s*\{/.test(l));
+  if (head < 0) { console.error('build-ryn: no canShamePlace'); process.exit(1); }
+  const indent = lines[head].match(/^\s*/)[0];
+  const second = lines.findIndex((l, i) => i > head && /^\s*const canAutoShame\s*=\s*\(\)\s*=>\s*\{/.test(l));
+  if (second < 0) { console.error('build-ryn: no canAutoShame after canShamePlace'); process.exit(1); }
+  let end = -1;
+  for (let i = second + 1; i < lines.length; i++) {
+    if (lines[i] === indent + '};') { end = i; break; }
+  }
+  if (end < 0) { console.error('build-ryn: canAutoShame never closes'); process.exit(1); }
+
+  const region = lines.slice(head, end + 1).join('\n');
+  const sane = region.includes('_shameGrind') && region.includes('_autoShame')
+    && !region.includes('class ')
+    && (region.match(/^\s*const can(ShamePlace|AutoShame)\s*=/gm) || []).length === 2
+    && (end - head) < 40;
+  if (!sane) {
+    console.error('build-ryn: the shame-helper region is not what was expected');
+    console.error(region.slice(0, 300));
+    process.exit(1);
+  }
+  lines.splice(head, end - head + 1);
+  src = lines.join('\n');
+  excised += 2;
+}
+mustParse('drop the shame helpers');
+dropLine('// تشتغل بدل منطق RYN لما يكون Settings._glotusPlacer مفعّلاً. أبسط بكثير');
+excised++;
+
+// Exact Placer is gone, so its "not exact" arm is the only arm: unwrap it.
+swap(`            if (!Settings_default._lunaExactPlacer) {`, `            {`,
+     'the Exact Placer branch');
+excised++;
+
+// Auto Gather is gone, so the second half of this can never be true
+swap('if (ModuleHandler.shouldAttack && !(Settings_default._autoGather && ModuleHandler.staticModules.autoGatherBreak._on && !ModuleHandler._comboAttack)) {',
+     'if (ModuleHandler.shouldAttack) {', 'the Auto Gather attack condition');
+excised++;
+
+
 fs.writeFileSync(OUT, src);
 console.log('wrote', path.relative(ROOT, OUT));
 console.log('  dead sites removed   :', dead);
+console.log('  feature code excised :', excised);
 console.log('  menu options removed :', removedOptions);
 console.log('  settings keys removed:', removedKeys, '/', REMOVE.length);
 console.log('  bytes:', before, '->', src.length);
