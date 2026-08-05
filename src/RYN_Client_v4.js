@@ -380,7 +380,7 @@ window.grbtp = 35;
     range: 65,
     gather: 1,
     speed: 300,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 1,
     itemType: 0,
@@ -399,7 +399,7 @@ window.grbtp = 35;
     range: 70,
     gather: 2,
     speed: 400,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 2,
     itemType: 0,
@@ -420,7 +420,7 @@ window.grbtp = 35;
     range: 75,
     gather: 4,
     speed: 400,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 3,
     itemType: 0,
@@ -440,7 +440,7 @@ window.grbtp = 35;
     range: 110,
     gather: 1,
     speed: 300,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 4,
     itemType: 0,
@@ -462,7 +462,7 @@ window.grbtp = 35;
     range: 118,
     gather: 1,
     speed: 300,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 5,
     itemType: 0,
@@ -484,7 +484,7 @@ window.grbtp = 35;
     range: 142,
     gather: 1,
     speed: 700,
-    knockback: 100
+    knockback: 55.6
   }, {
     id: 6,
     itemType: 0,
@@ -506,7 +506,7 @@ window.grbtp = 35;
     range: 110,
     gather: 1,
     speed: 300,
-    knockback: 204
+    knockback: 111.1
   }, {
     id: 7,
     itemType: 0,
@@ -529,7 +529,7 @@ window.grbtp = 35;
     hitSlow: .1,
     spdMult: 1.13,
     speed: 100,
-    knockback: 80
+    knockback: 44.4
   }, {
     id: 8,
     itemType: 0,
@@ -549,7 +549,7 @@ window.grbtp = 35;
     range: 70,
     gather: 7,
     speed: 400,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 9,
     itemType: 1,
@@ -573,7 +573,7 @@ window.grbtp = 35;
     spdMult: .75,
     speed: 600,
     range: 1e3,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 10,
     itemType: 1,
@@ -594,7 +594,7 @@ window.grbtp = 35;
     sDmg: 7.5,
     gather: 1,
     speed: 400,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 11,
     itemType: 1,
@@ -641,7 +641,7 @@ window.grbtp = 35;
     spdMult: .7,
     speed: 700,
     range: 1200,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 13,
     itemType: 1,
@@ -669,7 +669,7 @@ window.grbtp = 35;
     spdMult: .7,
     speed: 230,
     range: 1200,
-    knockback: 60
+    knockback: 33.3
   }, {
     id: 14,
     itemType: 1,
@@ -691,7 +691,7 @@ window.grbtp = 35;
     range: 125,
     gather: 0,
     speed: 700,
-    knockback: 100
+    knockback: 55.6
   }, {
     id: 15,
     itemType: 1,
@@ -723,7 +723,7 @@ window.grbtp = 35;
     spdMult: .6,
     speed: 1500,
     range: 1400,
-    knockback: 60
+    knockback: 33.3
   } ];
   const ItemGroups = {
     [1]: {
@@ -2060,7 +2060,7 @@ window.grbtp = 35;
         rate: 2500
       },
       spdMult: .7,
-      knockback: 60
+      knockback: 33.3
     },
     [20]: {
       index: 40,
@@ -3764,7 +3764,7 @@ window.grbtp = 35;
       return 0;
     }
     getMaxKnockback() {
-      let knockback = 60;
+      let knockback = 33.3;
       const {primary: primary, secondary: secondary} = this.weapon;
       if (primary != null) {
         knockback += DataHandler_default.getWeapon(primary).knockback;
@@ -3802,7 +3802,7 @@ window.grbtp = 35;
       }
       if (this.isReloaded(2, 1)) {
         if (this.collidingEntity(target, 700 + hitScale)) {
-          output += 60;
+          output += 33.3;
         }
       }
       return output;
@@ -12406,7 +12406,7 @@ window.grbtp = 35;
         const pos3 = spikeCollider.pos.current;
         const angleToEnemy = pos1.angle(pos2);
         const distanceToSpike2 = pos2.distance(pos3);
-        const turretKnockback = 60;
+        const turretKnockback = 33.3;
         const primaryKnockback = DataHandler_default.getWeapon(primary).knockback;
         const knockback = primaryKnockback + turretKnockback;
         const collisionScale = spikeCollider.collisionScale + nearestEnemySpikeCollider.collisionScale;
@@ -12472,7 +12472,7 @@ window.grbtp = 35;
         const pos3 = spikeCollider.pos.current;
         const angleToEnemy = pos1.angle(pos2);
         const distanceToSpike2 = pos2.distance(pos3);
-        const turretKnockback = 60;
+        const turretKnockback = 33.3;
         const {knockback: primaryKnockback, range: primaryRange} = DataHandler_default.getWeapon(primary);
         const {knockback: secondaryKnockback, range: secondaryRange} = DataHandler_default.getWeapon(secondary);
         const weaponRange = Math.min(primaryRange, secondaryRange) + nearestEnemySpikeCollider.hitScale;
@@ -12618,7 +12618,7 @@ window.grbtp = 35;
         const angleToTrap = pos12.angle(pos3);
         const middleAngle = findMiddleAngle(angleToEnemy, angleToTrap);
         const distanceToSpike2 = pos2.distance(pos4);
-        const turretKnockback = 60;
+        const turretKnockback = 33.3;
         const primaryKnockback = DataHandler_default.getWeapon(primary).knockback;
         const knockback = primaryKnockback + turretKnockback;
         const collisionRange = spikeCollider.collisionScale + nearestEnemySpikeCollider.collisionScale + knockback;
