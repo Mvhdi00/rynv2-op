@@ -117,15 +117,22 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Dune_Mod_Fixed.user.js    Dune's mod 0.1.0, repaired
+Cowgame_Fixed.user.js     cowgame v7, repaired
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
+src/mods/                 the two old-bundle mods, unmodified (input)
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/mod-transport.js    emits the protocol-correct io-client + prologue
+tools/fix-mods.js         src/mods/*.js -> *_Fixed.user.js
+tools/verify-transport.js emitted transport vs. the game bundle's own
+tools/verify-mods.js      built mods: handshake + table diff
 ```
 
 ## Build
@@ -177,3 +184,149 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Old-bundle mod repairs
+
+Two other mods live here — **Dune's mod 0.1.0** and **cowgame v7** — and they
+are the same kind of thing Luna is: forks of the pre-2024 webpack `bundle.js`,
+shipped as userscripts that hijack the page's WebSocket and run their own copy
+of the game. Neither one broke because of anything it does. The game moved out
+from under both of them, in four places.
+
+Build output: **`Dune_Mod_Fixed.user.js`**, **`Cowgame_Fixed.user.js`**
+
+## What was wrong
+
+### 1. The packet layer
+
+Both mods still had the original io-client:
+
+```js
+send:      socket.send(msgpack.encode([name, args]))
+onmessage: events[parsed[0]].apply(undefined, parsed[1])
+io-init:   socketId = data[0]
+```
+
+The current server negotiates the transport in `io-init`, which now carries
+`[socketId, seed, keyHex, mode]`. When `mode === 1` — which is what the live
+server sends — every client frame has to be:
+
+```
+[ 6-byte truncated HMAC-SHA256 over the body ] [ msgpack([opcode, args, seq]) ]
+```
+
+`opcode` is the packet name's index in a per-connection permutation of a fixed
+17-entry alphabet, seeded from `seed`; server frames come back numbered out of
+the matching 36-entry alphabet. So the unpatched mods sent frames with no
+signature, no sequence and a string where an integer belonged — all dropped —
+and every packet they received landed on `events[<number>]`, which is
+`undefined`, so `events[type].apply(...)` threw on the first server message.
+
+The io-client in both is now a re-implementation of the bundle's own `Co`,
+`Oi`, `Po`, `Vt`, `Ao`, `Eo` and `Ro`.
+
+### 2. Entry
+
+The old io-client fires the connect callback from `onopen`. That is before
+`io-init` arrives, so `enterGame()` sent the spawn packet before there was an
+opcode table to encode it with. Even with the signing fixed, the player would
+connect and never spawn. The shipped bundle calls back from `io-init` instead —
+guarded so it fires exactly once — and so do these now.
+
+### 3. The WebSocket lock
+
+This is why the mods appeared to do nothing at all rather than merely
+misbehave. The bundle now runs an anti-userscript pass at load:
+
+```js
+Object.defineProperty(window, "WebSocket",
+    { value: <native>, writable: false, configurable: false })
+```
+
+Both mods hook `window.WebSocket` by plain assignment, from inside the bundle,
+at `document-end` (cowgame) or `document-idle` (Dune) — after the lock. The
+assignment silently does nothing and the mod never sees a connection.
+
+The fix is to get there first. Each script now has a `document-start` prologue
+that captures the native constructor, installs its own hook, and locks the
+property itself; the bundle reads `window.WebSocket` into a local *before* it
+locks it, and its lock is inside a `try/catch`, so an already-locked property
+is a no-op it swallows either way.
+
+The mod body still runs at DOM-ready, because it resolves `#enterGame` and
+friends at module scope. That leaves a window where the game's server lookup —
+a `fetch` — can construct the socket before the mod has registered, so the
+prologue queues the address and replays it on registration rather than falling
+back to a native socket and quietly handing the connection to the vanilla
+client.
+
+### 4. Table drift
+
+| | Was | Game |
+|---|---|---|
+| Dune: `clientSendRate` | 20 | 5 |
+| Dune: `maxPlayers` / `maxPlayersHard` | 50 / 60 | 40 / 50 |
+| cowgame: `maxPlayers` / `maxPlayersHard` | 60 / 70 | 40 / 50 |
+| cowgame: `skinColors` | 11 entries | 10 |
+| cowgame: weapon 3 "short sword" `src` / `yOff` | `samurai_1` / 59 | `sword_1` / 46 |
+| both: `MAX_ATTACK`, `MAX_SPAWN_DELAY`, `MAX_SPEED`, `MAX_TURN_SPEED`, `DAY_INTERVAL` | absent | present |
+
+`clientSendRate` is the live one: at 20 the mod put out four times the movement
+frames the server expects for the same input. The extra skin colour is an index
+the server has no entry for. Short sword had picked up the katana's sprite and
+offset — index 3 carrying index 4's values.
+
+The five `MAX_*` keys are mirrored for parity only; the bundle multiplies them
+by a factor it currently pins to `0`, so they are inert today.
+
+### Dead references
+
+- Dune `@require`d msgpack from greasyfork and cowgame from **rawgit.com**,
+  which has been shut down since 2019. Neither is used: the only consumer is
+  the io-client, and it resolves msgpack-lite out of the bundle itself. Both
+  lines are dropped.
+- cowgame gated its **entire body** on `window.r`, supplied by a
+  `@require`d `cow.js` on a CodeSandbox host. With that host gone `window.r` is
+  `undefined` and the very first statement throws, so nothing ran. The check is
+  kept where the data is present and skipped where it is not.
+- cowgame's chat profanity filter was keyed on `type == "ch"` and its clan-name
+  padding on `type == "8"`. Both packets were renamed (`"6"` and `"L"`), which
+  cowgame already sends — so neither branch had been running. Retargeted.
+
+## Building the repaired mods
+
+```sh
+node tools/fix-mods.js          # src/mods/*.js -> *_Fixed.user.js
+node tools/verify-transport.js  # emitted crypto/opcode tables vs. the bundle's own
+node tools/verify-mods.js       # end-to-end handshake + table diff
+node --check Dune_Mod_Fixed.user.js
+node --check Cowgame_Fixed.user.js
+```
+
+`verify-transport.js` lifts the game's `Po`/`Eo`/`Ro`/`Vt`/`Ao` straight out of
+`src/game_index.js`, runs them in a sandbox next to the emitted ones, and
+compares: 13,568 opcode-table entries across 256 seeds, plus SHA-256, HMAC and
+the 6-byte truncation over message lengths that straddle both the SHA block
+boundary and the HMAC key boundary. This matters because a signature computed
+with the wrong key schedule, or a table off by one swap, looks exactly like a
+working client until the server drops every frame — which is the state the mods
+were already in.
+
+`verify-mods.js` loads the rebuilt io-client out of each built userscript with
+the bundle's own msgpack-lite, drives a real handshake through it, and takes the
+resulting frame apart against the game's opcode table and HMAC. It also confirms
+the callback is withheld until `io-init`, that the sequence advances per frame,
+that a numeric server opcode reaches the right handler, that an unhandled opcode
+does not throw, that the session is dropped on close, and that every packet name
+either mod sends exists in the game's c2s alphabet.
+
+## Still there, deliberately
+
+The bundle's anti-userscript pass does three other things, none of which stops
+the mods working and none of which is touched:
+
+- a red banner if it detects a userscript manager,
+- a `debugger` statement on a 1s interval (only bites with devtools open),
+- F12 / Ctrl-Shift-I / Ctrl-U keydown suppression.
