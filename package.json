@@ -7,6 +7,7 @@
     "build:unpatcher": "node tools/build-unpatcher.js",
     "probe:unpatcher": "node tools/probe-unpatcher.js",
     "probe:mod": "node tools/probe-mod.js",
+    "bench:glow": "node tools/glow-bench.js",
     "build:caramila": "node tools/build-caramila.js",
     "build:annihilator": "node tools/build-annihilator.js",
     "preview:menu": "node tools/preview-menu.js menu-preview.html && node tools/shot.js menu-preview.html menu-preview.png",

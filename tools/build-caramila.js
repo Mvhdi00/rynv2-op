@@ -311,7 +311,91 @@ swap(`            let currentMode = location.host.replace(/\\.moomoo\\.io/, "");
                 if (server.port) pingHost += ":" + server.port;
                 let requestPingUrl = \`https://\${pingHost}/ping\`;`);
 
-/* --- seam 7: the sync toggle only worked one way --------------------------
+/* --- seam 7: the thing eating the frame rate ------------------------------
+ * Three places set shadowBlur AND a canvas filter around a player draw, and
+ * none of them is behind a switch:
+ *
+ *     ctxt.shadowBlur = 18;
+ *     ctxt.filter = "brightness(0.85) saturate(1.1)";
+ *     renderCircle(0, 0, obj.scale, ctxt);
+ *
+ * shadowBlur is a Gaussian pass over everything drawn under it. `filter` is
+ * worse: it drops the 2D context onto a slow path that allocates an offscreen
+ * surface, rasterises into it, filters, then composites. Two of these run per
+ * player from renderPlayer, a third from renderPlayers, and renderPlayer also
+ * draws hats, accessories and both hands -- so a busy screen multiplies this
+ * by every player on it, every frame.
+ *
+ * The ghost overlay does the same but is already behind isC("Ghost"), so it is
+ * left alone. These three get a switch of their own in the Visuals tab.
+ * configs[id] starts at localStorage.getItem(id) === "true", so a toggle
+ * nobody has touched is off -- which is the right default for something that
+ * costs this much and only changes how things look.
+ */
+swap(`        dc.BoxF("Render Ghost", "Shows Ghost overlay", "Ghost");`,
+`        dc.BoxF("Render Ghost", "Shows Ghost overlay", "Ghost");
+        dc.BoxF("Player Glow", "Drop shadow and colour filter on every player. Looks nicer, costs a lot of FPS", "playerGlow");`);
+
+swap(`        mainContext.shadowColor = "rgba(0,0,0,0.85)";
+        mainContext.shadowBlur = 18;
+
+        mainContext.filter = "brightness(0.85) saturate(1.1)";
+        renderPlayer(tmpObj, mainContext);
+        mainContext.filter = "none";
+        mainContext.shadowBlur = 0;`,
+`        const glowOn = isC("playerGlow").checked;
+        if (glowOn) {
+            mainContext.shadowColor = "rgba(0,0,0,0.85)";
+            mainContext.shadowBlur = 18;
+            mainContext.filter = "brightness(0.85) saturate(1.1)";
+        }
+        renderPlayer(tmpObj, mainContext);
+        if (glowOn) {
+            mainContext.filter = "none";
+            mainContext.shadowBlur = 0;
+        }`);
+
+swap(`    // Inner circle + outer shadow
+    ctxt.shadowColor = "rgba(0,0,0,0.85)";
+    ctxt.shadowBlur = 18;
+    ctxt.filter = "brightness(0.85) saturate(1.1)";
+    renderCircle(0, 0, obj.scale, ctxt);
+    ctxt.filter = "none";
+    ctxt.shadowBlur = 0;`,
+`    // Inner circle + outer shadow
+    const glowInner = isC("playerGlow").checked;
+    if (glowInner) {
+        ctxt.shadowColor = "rgba(0,0,0,0.85)";
+        ctxt.shadowBlur = 18;
+        ctxt.filter = "brightness(0.85) saturate(1.1)";
+    }
+    renderCircle(0, 0, obj.scale, ctxt);
+    if (glowInner) {
+        ctxt.filter = "none";
+        ctxt.shadowBlur = 0;
+    }`);
+
+swap(`    // Inner slightly darker circle + outer shadow
+    ctxt.shadowColor = "rgba(0,0,0,0.85)";
+    ctxt.shadowBlur = 18;
+    ctxt.filter = "brightness(0.85) saturate(1.1)";
+    renderCircle(0, 0, obj.scale, ctxt);
+    ctxt.filter = "none";
+    ctxt.shadowBlur = 0;`,
+`    // Inner slightly darker circle + outer shadow
+    const glowDarker = isC("playerGlow").checked;
+    if (glowDarker) {
+        ctxt.shadowColor = "rgba(0,0,0,0.85)";
+        ctxt.shadowBlur = 18;
+        ctxt.filter = "brightness(0.85) saturate(1.1)";
+    }
+    renderCircle(0, 0, obj.scale, ctxt);
+    if (glowDarker) {
+        ctxt.filter = "none";
+        ctxt.shadowBlur = 0;
+    }`);
+
+/* --- seam 8: the sync toggle only worked one way --------------------------
  * The mod talks to two servers of its own. sync-script-users sends a fixed
  * handshake and receives other users' positions; robotics-ahh.fly.dev gets
  * sendPlayerInfo() on a timer, carrying your name, sid, server, ping and live

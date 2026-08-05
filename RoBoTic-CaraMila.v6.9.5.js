@@ -2540,6 +2540,7 @@ UI.InnerHtml('tabContent', (ui) => {
         dc.BoxF("Smoother Camera", "Makes camera move slower", "CAmera");
         dc.BoxF("Render Grid", "Shows grid overlay", "grid");
                 dc.BoxF("Render Ghost", "Shows Ghost overlay", "Ghost");
+        dc.BoxF("Player Glow", "Drop shadow and colour filter on every player. Looks nicer, costs a lot of FPS", "playerGlow");
 
         dc.BoxF("Render Direction", "Shows real direction", "renderDir", {
             option: true,
@@ -13152,13 +13153,17 @@ function renderPlayers(xOffset, yOffset, zIndex) {
         mainContext.translate(tmpObj.x - xOffset, tmpObj.y - yOffset);
         mainContext.rotate(tmpObj.smoothDir + tmpObj.dirPlus);
 
-        mainContext.shadowColor = "rgba(0,0,0,0.85)";
-        mainContext.shadowBlur = 18;
-
-        mainContext.filter = "brightness(0.85) saturate(1.1)";
+        const glowOn = isC("playerGlow").checked;
+        if (glowOn) {
+            mainContext.shadowColor = "rgba(0,0,0,0.85)";
+            mainContext.shadowBlur = 18;
+            mainContext.filter = "brightness(0.85) saturate(1.1)";
+        }
         renderPlayer(tmpObj, mainContext);
-        mainContext.filter = "none";
-        mainContext.shadowBlur = 0;
+        if (glowOn) {
+            mainContext.filter = "none";
+            mainContext.shadowBlur = 0;
+        }
 
         mainContext.restore();
     }
@@ -13176,12 +13181,17 @@ function renderDeadPlayer(obj, ctxt) {
     }
 
     // Inner circle + outer shadow
-    ctxt.shadowColor = "rgba(0,0,0,0.85)";
-    ctxt.shadowBlur = 18;
-    ctxt.filter = "brightness(0.85) saturate(1.1)";
+    const glowInner = isC("playerGlow").checked;
+    if (glowInner) {
+        ctxt.shadowColor = "rgba(0,0,0,0.85)";
+        ctxt.shadowBlur = 18;
+        ctxt.filter = "brightness(0.85) saturate(1.1)";
+    }
     renderCircle(0, 0, obj.scale, ctxt);
-    ctxt.filter = "none";
-    ctxt.shadowBlur = 0;
+    if (glowInner) {
+        ctxt.filter = "none";
+        ctxt.shadowBlur = 0;
+    }
 }
 
 // RENDER PLAYER
@@ -13210,12 +13220,17 @@ function renderPlayer(obj, ctxt) {
     }
 
     // Inner slightly darker circle + outer shadow
-    ctxt.shadowColor = "rgba(0,0,0,0.85)";
-    ctxt.shadowBlur = 18;
-    ctxt.filter = "brightness(0.85) saturate(1.1)";
+    const glowDarker = isC("playerGlow").checked;
+    if (glowDarker) {
+        ctxt.shadowColor = "rgba(0,0,0,0.85)";
+        ctxt.shadowBlur = 18;
+        ctxt.filter = "brightness(0.85) saturate(1.1)";
+    }
     renderCircle(0, 0, obj.scale, ctxt);
-    ctxt.filter = "none";
-    ctxt.shadowBlur = 0;
+    if (glowDarker) {
+        ctxt.filter = "none";
+        ctxt.shadowBlur = 0;
+    }
 
     if (obj.skinIndex > 0) {
         ctxt.rotate(Math.PI / 2);

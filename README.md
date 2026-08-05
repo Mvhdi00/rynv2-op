@@ -40,7 +40,8 @@ and additionally needed their packet vocabulary mapped forward.
 - **`RoBoTic-CaraMila.v6.9.5.js`** (`v6.9.5`) — hook mod, 15,610 lines. No
   `@run-at` at all, a `@require` it never used, ALTCHA code for a captcha the
   game replaced, a verification box with nowhere to appear, an empty server
-  browser, and a privacy switch that only worked one way. See below.
+  browser, a privacy switch that only worked one way, and an ungated canvas
+  filter costing 8× on every player draw. See below.
 
 Plus **`MooUnpatcher.user.js`** — install it once and run old mods unchanged,
 instead of patching them one at a time. Version 2 repairs the environment as
@@ -797,6 +798,39 @@ nothing in the console. Driven against controlled responses in a real browser:
 | always 500 | both | empty list, **logged** |
 | returns `{}` instead of an array | both | empty list, **logged** |
 
+## The frame rate
+
+Three places wrapped a player draw in both a shadow and a canvas filter, none
+of them behind a switch:
+
+```js
+ctxt.shadowBlur = 18;
+ctxt.filter = "brightness(0.85) saturate(1.1)";
+renderCircle(0, 0, obj.scale, ctxt);
+```
+
+`shadowBlur` is a Gaussian pass over everything drawn under it. `filter` is
+worse: it drops the 2D context onto a path that allocates an offscreen surface,
+rasterises into it, filters, then composites. Two of these run per player from
+`renderPlayer` and a third from `renderPlayers`, and `renderPlayer` also draws
+hats, accessories and both hands — so a busy screen multiplies it by every
+player on it, every frame.
+
+`tools/glow-bench.js` draws the same shapes in a real browser with and without:
+
+| players | glow off | glow on | cost |
+|---|---|---|---|
+| 1 | 0.02 ms | 0.07 ms | 2.9× |
+| 10 | 0.09 ms | 0.61 ms | 6.8× |
+| 20 | 0.16 ms | 1.19 ms | 7.3× |
+| 40 | 0.29 ms | **2.33 ms** | **8×** |
+
+It is now a **Player Glow** switch in the Visuals tab. `BoxF` starts a setting
+from `localStorage.getItem(id) === "true"`, so one nobody has touched is off —
+the right way round for something that only changes how things look. The ghost
+overlay does the same thing and is left alone, because it was already behind
+`isC("Ghost")`.
+
 ## Primary Sync only worked one way
 
 The mod talks to two servers of its own: one sends a fixed handshake and
@@ -814,7 +848,7 @@ feature removed.
 
 ## Checked
 
-`test/caramila.js` — 54 checks, including a round trip on the wire against the
+`test/caramila.js` — 61 checks, including a round trip on the wire against the
 game bundle's own crypto, and that the original really did send regardless of
 the setting.
 
@@ -1412,7 +1446,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 840 checks.
+them with `npm test` — 847 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.

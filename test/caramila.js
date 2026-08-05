@@ -155,7 +155,45 @@ check(/\$\{server\.key\}\.\$\{server\.region\}\.moomoo\.io\/ping\/`/.test(origin
       'which the original did not: no port, trailing slash');
 
 // --------------------------------------------------------------------------
-console.log('\n7. Primary Sync now works in both directions');
+console.log('\n7. the thing that was eating the frame rate');
+
+// shadowBlur is a Gaussian pass over everything drawn under it; canvas filter
+// is worse, dropping the 2D context onto a path that allocates an offscreen
+// surface, rasterises, filters and composites. The original ran both around
+// every player draw with no switch at all. tools/glow-bench.js measures it at
+// roughly 8x the cost of the same draw without them.
+{
+  const ungated = [];
+  const lines = src.split('\n');
+  lines.forEach((l, i) => {
+    if (!/filter = "brightness/.test(l)) return;
+    // walk back for the nearest gate
+    let gate = null;
+    for (let j = i; j > i - 40 && j >= 0; j--) {
+      const t = lines[j].trim();
+      if (/^if \(.*(glow|Ghost)/.test(t)) { gate = t; break; }
+    }
+    if (!gate) ungated.push(i + 1);
+  });
+  check(ungated.length === 0,
+        'every canvas filter around a player draw is behind a switch' +
+        (ungated.length ? ' (ungated at line ' + ungated.join(', ') + ')' : ''));
+}
+check(/dc\.BoxF\("Player Glow"/.test(src), 'and there is a Player Glow switch in the Visuals tab');
+check(/costs a lot of FPS/.test(src), 'whose description says what it costs');
+check((src.match(/isC\("playerGlow"\)\.checked/g) || []).length === 3,
+      'all three player-draw sites read it');
+check(!/playerGlow/.test(original), 'none of which the original had');
+check(!/playerGlow:/.test(src),
+      'it is deliberately absent from the configs defaults, so BoxF starts it at '
+      + 'localStorage false -- off unless you turn it on, which is the right way '
+      + 'round for something that only changes how things look');
+// the ghost overlay does the same thing but was already opt-in; left alone
+check(/if \(isC\("Ghost"\)\.checked && playerGhost\.active/.test(src),
+      "the ghost overlay's own glow is untouched, since it was already behind a toggle");
+
+// --------------------------------------------------------------------------
+console.log('\n8. Primary Sync now works in both directions');
 
 // The mod streams name, sid, server, ping and live x2/y2 to a server of its
 // own. That is its advertised feature, not something smuggled in -- but the
@@ -169,7 +207,7 @@ check(!/if \(!configs\.serverSync\) return;/.test(original),
       'which the original did not do: it reported the setting inside the payload and sent anyway');
 
 // --------------------------------------------------------------------------
-console.log('\n8. the wire, against the game bundle\'s own crypto');
+console.log('\n9. the wire, against the game bundle\'s own crypto');
 
 const SEED = 0x1234BEEF, KEY_HEX = 'ff00aa5511bb66cc22dd77ee33990088';
 const tables = game.Po(SEED);
