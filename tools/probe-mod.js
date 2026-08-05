@@ -23,6 +23,17 @@ const target = args.find(a => !a.startsWith('--'));
 if (!target) { console.error('usage: node tools/probe-mod.js [--standalone] <mod.user.js>'); process.exit(2); }
 const src = fs.readFileSync(target, 'utf8');
 
+// Ids moomoo has removed from its page. Creating these would make the probe a
+// friendlier place than the real thing and hide the single commonest failure
+// in this whole family -- getEl("adCard").remove() on an element that is not
+// there. Kept in step with the unpatcher's own list, which is where it came
+// from.
+const GONE = new Set(JSON.parse(
+  /const GONE_IDS = (\[[\s\S]*?\]);/.exec(
+    fs.readFileSync(__dirname + '/../MooUnpatcher.user.js', 'utf8')
+  )[1].replace(/'/g, '"').replace(/,\s*\]/, ']')
+));
+
 // Every id the mod asks for, so a missing element is never the reason it dies
 // here when it would not be the reason on the real page. Most of these mods
 // wrap getElementById in a one-line helper (`getEl`, `byId`, `$id`, ...), so
@@ -33,7 +44,7 @@ const WRAPPERS = /(?:getElementById|getEl|getE|byId|\$id|getID|elem|gid)\(\s*[`"
 const ids = [...new Set([
   ...[...src.matchAll(WRAPPERS)].map(m => m[1]),
   ...[...src.matchAll(/querySelector\(\s*[`"']#([\w-]+)/g)].map(m => m[1]),
-])].filter(id => /^[A-Za-z][\w-]*$/.test(id));
+])].filter(id => /^[A-Za-z][\w-]*$/.test(id)).filter(id => !GONE.has(id));
 
 // Globals the mod publishes on window. "No errors" is not the same as "ran" --
 // a deferred boot that never fires throws nothing at all. If a mod assigns to

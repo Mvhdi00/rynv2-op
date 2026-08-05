@@ -2109,13 +2109,13 @@ function findProjectileBySid(sid) {
     return findSID(gameObjects, sid);
 }
 let gameName = getEl("gameName");
-gameName.innerText = "MooMoo.io";
+if (gameName) gameName.innerText = "MooMoo.io";
 let adCard = getEl("adCard");
-adCard.remove();
+if (adCard) adCard.remove();
 let promoImgHolder = getEl("promoImgHolder");
-promoImgHolder.remove();
+if (promoImgHolder) promoImgHolder.remove();
 let chatButton = getEl("chatButton");
-chatButton.remove();
+if (chatButton) chatButton.remove();
 let gameCanvas = getEl("gameCanvas");
 let mainContext = gameCanvas.getContext("2d");
 let mapDisplay = getEl("mapDisplay");
@@ -7411,7 +7411,7 @@ function keyDown(event) {
             macro[event.key] = 1;
             if (keyNum == 27) {
                 openMenu = !openMenu;
-                $("#menuDiv").toggle();
+                menuDiv.style.left = openMenu ? "20px" : "-200000px";
             } else if (keyNum == 69) {
                 sendAutoGather();
             } else if (keyNum == 67) {

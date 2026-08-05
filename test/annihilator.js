@@ -111,7 +111,36 @@ check(!/WebSocket\.prototype\.send\s*=/.test(modCode),
       'and the mod no longer installs its own prototype hook -- the shim owns it');
 
 // --------------------------------------------------------------------------
-console.log('\n5. the three seams');
+console.log('\n5. the menu, and the page furniture that is gone');
+
+// Escape is meant to open the mod menu and never could. Two independent
+// reasons, and adding jQuery would have fixed only the first:
+//   - $("#menuDiv").toggle() was the one jQuery call in 12,000 lines, and
+//     moomoo ships no jQuery, so Escape threw and took the rest of the
+//     keydown handler with it;
+//   - the menu is display:block already. What hides it is left:-200000px, set
+//     where it is built. .toggle() flips *display*, so it would have turned an
+//     off-screen visible menu into an off-screen hidden one.
+check(!/\$\(/.test(src), 'not one jQuery call is left');
+check(/menuDiv\.style\.left = openMenu \? "20px" : "-200000px";/.test(src),
+      'Escape moves the menu on and off screen, which is what actually hides it');
+check(/left: -200000px/.test(src), 'the parked position is still where it started');
+{
+  const kd = src.slice(src.indexOf('function keyDown(event)'));
+  check(/openMenu = !openMenu;\s*menuDiv\.style\.left/.test(kd),
+        'and follows the openMenu flag the handler already keeps');
+}
+
+// getEl("adCard").remove() on an element moomoo deleted is a TypeError, and
+// this block runs early enough to take everything after it down.
+check(/if \(adCard\) adCard\.remove\(\);/.test(src), 'the adCard teardown is guarded');
+check(/if \(promoImgHolder\) promoImgHolder\.remove\(\);/.test(src), 'so is promoImgHolder');
+check(/if \(gameName\) gameName\.innerText/.test(src), 'and gameName');
+check(/if \(chatButton\) chatButton\.remove\(\);/.test(src), 'and chatButton');
+check(!/^adCard\.remove\(\);$/m.test(src), 'with no unguarded copy left behind');
+
+// --------------------------------------------------------------------------
+console.log('\n6. the three seams');
 
 check(/EXP\.setHandler\(function \(message, sid\) \{/.test(src),
       'outgoing traffic arrives through the shim handler');
@@ -141,7 +170,7 @@ check(/if \(!parsed\) return;/.test(src),
       'and an opcode the shim cannot place is dropped rather than crashing the handler');
 
 // --------------------------------------------------------------------------
-console.log('\n6. the wire, against the game bundle\'s own crypto');
+console.log('\n7. the wire, against the game bundle\'s own crypto');
 
 const SEED = 0x5AFE5EED, KEY_HEX = '0f1e2d3c4b5a69788796a5b4c3d2e1f0';
 const tables = game.Po(SEED);

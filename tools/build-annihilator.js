@@ -129,6 +129,53 @@ function origPacket(type) {
     EXP.send(WS, type, data);
 }`);
 
+/* --- seam 5: page furniture that no longer exists --------------------------
+ * getEl("adCard").remove() and friends. moomoo deleted those elements, so
+ * these are TypeErrors on a live page -- and this block sits early enough to
+ * take everything after it down with it. The mod only wants them gone, and
+ * they already are, so a null check is the whole fix. gameName and chatButton
+ * get the same treatment: neither is worth dying for.
+ */
+expect('let gameName = getEl("gameName");\ngameName.innerText = "MooMoo.io";');
+src = src.replace(`let gameName = getEl("gameName");
+gameName.innerText = "MooMoo.io";
+let adCard = getEl("adCard");
+adCard.remove();
+let promoImgHolder = getEl("promoImgHolder");
+promoImgHolder.remove();
+let chatButton = getEl("chatButton");
+chatButton.remove();`,
+`let gameName = getEl("gameName");
+if (gameName) gameName.innerText = "MooMoo.io";
+let adCard = getEl("adCard");
+if (adCard) adCard.remove();
+let promoImgHolder = getEl("promoImgHolder");
+if (promoImgHolder) promoImgHolder.remove();
+let chatButton = getEl("chatButton");
+if (chatButton) chatButton.remove();`);
+
+/* --- seam 4: the menu toggle ----------------------------------------------
+ * Escape is supposed to open the mod menu, and it never could.
+ *
+ * `$("#menuDiv").toggle()` is the only jQuery call in the whole file, and
+ * moomoo does not ship jQuery -- so Escape threw "$ is not defined" and took
+ * the rest of the keydown handler with it.
+ *
+ * Adding jQuery would not have fixed it either. The menu is built correctly
+ * and is display:block; what hides it is `left: -200000px`, set where it is
+ * created. jQuery's .toggle() flips *display*, so it would have turned an
+ * off-screen visible menu into an off-screen hidden one and back.
+ *
+ * openMenu is already flipped on the line above, so the toggle just has to
+ * follow it: park the menu or bring it back to the left margin. `top: 20px`
+ * is already set at creation, so 20px matches it.
+ */
+expect('                openMenu = !openMenu;\n                $("#menuDiv").toggle();');
+src = src.replace(`                openMenu = !openMenu;
+                $("#menuDiv").toggle();`,
+`                openMenu = !openMenu;
+                menuDiv.style.left = openMenu ? "20px" : "-200000px";`);
+
 /* --- seam 3: incoming ------------------------------------------------------ */
 expect(`function getMessage(message, sid) {
     let data = new Uint8Array(message.data);

@@ -759,6 +759,37 @@ and `origPacket()` still skips them the way `WS.nsend` did.
 never was — the shim drops it rather than putting an unresolvable name on a
 signed channel. That is the mod's own joke, left as found.
 
+## The menu could never open
+
+Escape is meant to toggle the mod menu. It never could, for two independent
+reasons, and adding jQuery would have fixed only the first:
+
+- `$("#menuDiv").toggle()` is the **only** jQuery call in 12,000 lines, and
+  moomoo ships no jQuery. Escape threw `$ is not defined` and took the rest of
+  the keydown handler with it.
+- The menu is already `display: block`. What hides it is `left: -200000px`, set
+  where it is built. jQuery's `.toggle()` flips *display* — so it would have
+  turned an off-screen visible menu into an off-screen hidden one and back.
+
+Both facts came from booting it and reading the computed style, not from
+reading the source: `menuLeft: "-200000px"`, `menuDisplay: "block"`,
+`jQueryPresent: false`, and 669 characters of menu content sitting there
+correctly built. The toggle now follows the `openMenu` flag the handler
+already keeps, and moves the menu instead of hiding it.
+
+## `getEl("adCard").remove()`
+
+The commonest failure in this whole family, and it is in here too — early
+enough to take everything after it down with it. `adCard` and `promoImgHolder`
+are elements moomoo deleted. The mod only wants them gone and they already
+are, so a null check is the entire fix; `gameName` and `chatButton` got the
+same treatment.
+
+The probe could not see this, because it was creating **every** id the mod
+looks up — including the ones that no longer exist, which made it a friendlier
+place than the real page. It now skips the ids on the unpatcher's own
+`GONE_IDS` list, and catches this class where before it reported a clean boot.
+
 ## Comments
 
 This one is built rather than edited: `node tools/build-annihilator.js` applies
@@ -771,7 +802,7 @@ and still refuses to write unless the syntax tree is unchanged.
 
 ## Checked
 
-`test/annihilator.js` — 41 checks: both metadata mistakes, that the bundled
+`test/annihilator.js` — 50 checks: both metadata mistakes, that the bundled
 shim is byte-identical to every other copy, that no part of the mod still
 encodes for itself or calls `nsend`, that `packet()` still filters and
 `origPacket()` still does not, and a round trip on the wire against the game
@@ -1248,7 +1279,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 777 checks.
+them with `npm test` — 786 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.
