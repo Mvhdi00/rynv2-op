@@ -118,7 +118,7 @@ for (const id of REMOVE) {
  */
 let removedKeys = 0;
 for (const id of REMOVE) {
-  const re = new RegExp('^\\s*' + id + ':\\s*[^,\\n]+,\\s*$\\n?', 'm');
+  const re = new RegExp('^[ \\t]*' + id + ':[ \\t]*[^,\\n]+,[ \\t]*$\\n?', 'm');
   if (re.test(src)) { src = src.replace(re, ''); removedKeys++; }
 }
 
@@ -273,6 +273,18 @@ function dropMethod(name) {
 }
 
 // An arrow-function const: `<indent>const name = (...) => {`
+// `const name = function () {` or `const name = () => {`
+function dropArrowConstOrFunction(name) {
+  const re = new RegExp('^[ \\t]*const ' + name + '\\s*=\\s*(?:function\\s*)?\\([^)]*\\)\\s*(?:=>\\s*)?\\{', 'm');
+  const m = re.exec(src);
+  if (!m) { console.error('dropArrowConstOrFunction: no ' + name); process.exit(1); }
+  let end = endOfBlock(m.index + m[0].length - 1);
+  if (end < 0) { console.error('unbalanced ' + name); process.exit(1); }
+  if (src[end] === ';') end++;
+  cut(m.index, end);
+  return 1;
+}
+
 function dropArrowConst(name, times) {
   let n = 0;
   for (;;) {
@@ -413,6 +425,36 @@ swap('if (ModuleHandler.shouldAttack && !(Settings_default._autoGather && Module
      'if (ModuleHandler.shouldAttack) {', 'the Auto Gather attack condition');
 excised++;
 
+
+/* --- 5. the leftovers a name-level audit found --------------------------
+ * Checking only the settings ids said the job was done. Sweeping for the
+ * feature *names* instead turned up a display-name table, an orphaned worker
+ * body, and three members whose only caller had already been deleted. None of
+ * them could run, but "cannot run" is not "removed".
+ */
+
+// The menu's display-name table, and the optionMap rows that pair an English
+// string with a key in it. Nothing renders these now, but they still name the
+// removed features.
+for (const [key, label] of [['replacer', 'Replacer'], ['shame_grind', 'Shame Grind'],
+                            ['shame_tick', 'Shame Tick'], ['preplacer', 'PrePlacer'],
+                            ['auto_retrap', 'Auto Retrap']]) {
+  const entry = new RegExp('^[ \\t]*' + key + ': "' + label + '",?[ \\t]*$\\n?', 'm');
+  if (!entry.test(src)) { console.error('build-ryn: no label entry ' + key); process.exit(1); }
+  src = src.replace(entry, '');
+  excised++;
+  // and its row in optionMap: [ "Auto Retrap", t.auto_retrap ],
+  const row = new RegExp('\\[ "[^"]*", t\\.' + key + ' \\], ?');
+  if (row.test(src)) { src = src.replace(row, ''); excised++; }
+}
+mustParse('drop the display-name entries');
+
+// Three orphans are deliberately left in place: _lunaPfWorkerBody (the Luna
+// pathfinder's worker source), _glotusAngles/_glotusCount (two unused fields)
+// and _glotusCanKnockbackSpike (a method with no caller). Cutting them by
+// brace balance moved a boundary elsewhere in the file -- the parse check
+// above caught it every time -- and none of them is reachable or named in any
+// user-visible surface, so leaving them beats a cut I cannot prove is right.
 
 fs.writeFileSync(OUT, src);
 console.log('wrote', path.relative(ROOT, OUT));

@@ -133,7 +133,37 @@ check(/if \(ModuleHandler\.moduleActive && !myPlayer\.isTrapped\) \{/.test(src),
 check(/if \(ModuleHandler\.shouldAttack\) \{/.test(src),
       'as did the attack condition Auto Gather was one half of');
 
-console.log('\n6. the rest of the client is untouched');
+console.log('\n6. the display names, and what is knowingly left');
+
+// Checking only the settings ids said the job was done. Sweeping for the
+// feature NAMES found a display-name table that still listed five of them.
+for (const [key, label] of [['replacer', 'Replacer'], ['shame_grind', 'Shame Grind'],
+                            ['shame_tick', 'Shame Tick'], ['preplacer', 'PrePlacer'],
+                            ['auto_retrap', 'Auto Retrap']]) {
+  check(original.includes(key + ': "' + label + '"') && !src.includes(key + ': "' + label + '"'),
+        'the display name for ' + label + ' is gone');
+  check(!new RegExp('t\\.' + key + ' \\]').test(src), '  and its optionMap row with it');
+}
+
+// No label from the screenshots may survive anywhere, in any form.
+{
+  const labels = Object.values(REMOVED);
+  const alive = labels.filter(l => src.includes('"' + l + '"') || src.includes('>' + l + '<'));
+  check(alive.length === 0,
+        'not one of the 17 names appears anywhere in the file' +
+        (alive.length ? ' -- found ' + alive.join(', ') : ''));
+}
+
+// Three orphans are knowingly left: unreachable, uncalled, and named nowhere a
+// user can see. Cutting them by brace balance moved a boundary elsewhere in
+// the file, so they stay rather than ship a cut that could not be proved. This
+// records that as a decision, not an oversight.
+for (const orphan of ['_lunaPfWorkerBody', '_glotusCanKnockbackSpike']) {
+  const uses = (src.split(orphan).length - 1);
+  check(uses === 1, orphan + ' survives as a definition with no caller (' + uses + ' mention)');
+}
+
+console.log('\n7. the rest of the client is untouched');
 for (const keep of ['_autoplacer', '_normalInstakill', '_velocityTick', '_legitMode', '_autoGrind', '_antiRetrap']) {
   check(src.includes('\\"' + keep + '\\"') || new RegExp('^\\s*' + keep + ':\\s', 'm').test(src),
         keep + ' is still there');
