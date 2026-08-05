@@ -23091,6 +23091,7 @@ function f247(p732, p733, p734) {
                     };
                 }
 
+
                 /* Null until io-init lands, and null again on close, so a
                  * reconnect can never reuse a stale table or sequence number. */
                 var session = null;

@@ -34,6 +34,11 @@ const DRIVERS = JSON.parse(
   fs.readFileSync(path.join(ROOT, "drivers/game-drivers.json"), "utf8")
 );
 
+/* x18k is a fork of a newer, flat bundle: no webpack module to load, its
+ * io-client is an inline object, and its codec is two bundle classes. It gets
+ * its own harness below rather than being forced through the module path. */
+const FLAT = new Set(["X18k_v7.4.0_Fixed.user.js"]);
+
 const BUILT = [
   "Dune_Mod_Fixed.user.js",
   "Cowgame_Fixed.user.js",
@@ -44,6 +49,7 @@ const BUILT = [
   "Lolfly_v4_MS_Fixed.user.js",
   "Operator_Rageok_v1.4_Fixed.user.js",
   "Chicken_v3_Fixed.user.js",
+  "X18k_v7.4.0_Fixed.user.js",
 ];
 
 const TARGETS = process.argv.length > 2
@@ -279,6 +285,111 @@ function checkTransport(src) {
   }
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Flat-bundle transport (x18k)
+ * ------------------------------------------------------------------ */
+function checkFlatTransport(src) {
+  /* The spliced-in primitives, then the io-client object they serve. */
+  const primStart = src.indexOf("const __x18kTransport = (function () {");
+  if (primStart === -1) throw new Error("x18k transport block not found");
+  const objStart = src.indexOf("var T = {", primStart);
+  if (objStart === -1) throw new Error("x18k io-client object not found");
+  const objEnd = B.matchBrace(src, src.indexOf("{", objStart));
+  const block = src.slice(primStart, objEnd + 1) + ";";
+
+  /* x18k ships its own self-contained msgpack as a fallback at the top of the
+   * file; reusing it means the test encodes exactly what the mod would. */
+  const shimStart = src.indexOf("var msgpack = { encode:");
+  const shimEnd = B.matchBrace(src, src.indexOf("{", shimStart));
+  const shim = src.slice(shimStart, shimEnd + 1) + ";";
+
+  const sent = [];
+  let socket = null;
+  class FakeSocket {
+    constructor(address) { this.address = address; this.readyState = 1; socket = this; }
+    send(frame) { sent.push(frame); }
+    close() { this.readyState = 3; }
+  }
+
+  const sandbox = B.baseSandbox({
+    WebSocket: FakeSocket,
+    TextEncoder, TextDecoder,
+    /* Everything the send path touches outside the io-client itself. */
+    q3: null, Wt: {}, He: 0, We: 0, np: 0, v: 0, Dn: null, ni: 0, ui: 0,
+    St: 0, qt: 0, A: 0, ee: 0, Hy: () => "", b: () => {},
+    window: {},
+  });
+  vm.createContext(sandbox);
+  vm.runInContext(shim + "\nvar sl = msgpack, ol = msgpack;\n" + block + "\n__T = T;", sandbox);
+
+  const io = sandbox.__T;
+  const msgpack = sandbox.msgpack;
+
+  const seed = 0x9e3779b9;
+  const keyHex = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+  const key = game.Ro(keyHex);
+  const tables = game.Po(seed >>> 0);
+
+  let callbacks = 0;
+  const received = [];
+  io.connect("wss://example.invalid", function (err) { if (!err) callbacks++; }, {
+    C: (...args) => received.push(["C", args]),
+  });
+
+  socket.onopen();
+  report("connect callback withheld until io-init", callbacks === 0);
+
+  socket.onmessage({ data: msgpack.encode(["io-init", [7, seed, keyHex, game.Ht]]) });
+  report("connect callback fired on io-init", callbacks === 1);
+  report("socketId taken from io-init", io.socketId === 7);
+
+  sent.length = 0;
+  io.send("M", { name: "test", moofoll: 1, skin: 0 });
+  report("spawn packet produced a frame", sent.length === 1);
+
+  if (sent.length === 1) {
+    const frame = new Uint8Array(sent[0]);
+    const sig = frame.subarray(0, game.jt);
+    const body = frame.subarray(game.jt);
+    report(`frame carries a ${game.jt}-byte prefix`, frame.length > game.jt);
+    report("prefix is the game's truncated HMAC over the body",
+      bytesEqual(sig, game.Eo(key, body)), "signature mismatch");
+    const decoded = msgpack.decode(body);
+    report(`opcode "M" encoded as ${tables.c2s.enc.M}`,
+      decoded[0] === tables.c2s.enc.M, `got ${decoded[0]}`);
+    report("arguments preserved", JSON.stringify(decoded[1][0].name) === '"test"');
+    report("sequence starts at 1", decoded[2] === 1);
+  }
+
+  /* The mod drops duplicate aim packets. A sequence number must not be spent on
+   * one it never sends, or the server sees gaps. */
+  sent.length = 0;
+  io.send("9", 1.0, 0);
+  io.send("9", 1.0, 0);
+  const seqs = sent.map((f) => msgpack.decode(new Uint8Array(f).subarray(game.jt))[2]);
+  report("no sequence burned on a dropped packet",
+    seqs.length >= 1 && seqs.every((q, i) => q === seqs[0] + i), JSON.stringify(seqs));
+
+  received.length = 0;
+  socket.onmessage({ data: msgpack.encode([tables.s2c.enc.C, [1, 2, 3]]) });
+  report("numeric s2c opcode dispatched to its handler",
+    received.length === 1 && received[0][0] === "C", JSON.stringify(received));
+
+  let threw = false;
+  try { socket.onmessage({ data: msgpack.encode([tables.s2c.enc.Z, []]) }); } catch (e) { threw = true; }
+  report("unhandled opcode does not throw", !threw);
+
+  io.close();
+  sent.length = 0;
+  io.connect("wss://example.invalid", function () {}, {});
+  socket.onopen();
+  io.send("e");
+  report("session dropped on close (no stale table reused before io-init)",
+    sent.length === 1 && msgpack.decode(new Uint8Array(sent[0]))[0] === "e",
+    "expected an unkeyed frame after reconnect");
+}
+
 /* ------------------------------------------------------------------ *
  * Table drift
  * ------------------------------------------------------------------ */
@@ -342,8 +453,12 @@ console.log("");
 for (const target of TARGETS) {
   const src = fs.readFileSync(target, "utf8");
   console.log(path.relative(ROOT, target));
-  checkTransport(src);
-  checkTables(src, ACCEPTED[path.basename(target)] || []);
+  if (FLAT.has(path.basename(target))) {
+    checkFlatTransport(src);
+  } else {
+    checkTransport(src);
+    checkTables(src, ACCEPTED[path.basename(target)] || []);
+  }
   console.log("");
 }
 

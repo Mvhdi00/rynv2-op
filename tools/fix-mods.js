@@ -126,7 +126,7 @@ function Patcher(label, code) {
     if (parts.length === 1) throw new Error(`[${label}] anchor not found: ${name}`);
     if (parts.length > 2)
       throw new Error(`[${label}] anchor is ambiguous (${parts.length - 1} hits): ${name}`);
-    code = parts[0] + replace + parts[1];
+    code = parts[0] + (typeof replace === "function" ? replace(find) : replace) + parts[1];
     applied.push(name);
   }
 
@@ -553,6 +553,116 @@ WebSocket.prototype.send = new Proxy(originalSend, {
     steps: { transport: false, hook: false, wrap: false },
     header: null,
     edits: [SKIN_COLORS_FIX, NEW_KEYS_FIX],
+  },
+
+  {
+    /* ----------------------------------------------------------------
+     * x18k is not a webpack fork like the rest — it is a fork of a much newer,
+     * flat bundle, so there is no io-client module to swap. Its `T` object is
+     * the io-client, inlined, and its send path carries a lot of the mod's own
+     * per-opcode logic that has to survive intact. So this one is patched
+     * surgically at four sites instead of having a module replaced.
+     *
+     * Its connect flow is already current: it builds `wss://<host>` and appends
+     * ?token=, matching the shipped bundle, and it handles the `alt:` token. It
+     * simply never learned the keyed transport.
+     * ---------------------------------------------------------------- */
+    name: "x18k v7.4.0",
+    src: "src/mods/X18k_v7.4.0.js",
+    out: "X18k_v7.4.0_Fixed.user.js",
+    steps: { transport: false, hook: false, wrap: false },
+    header: `// ==UserScript==
+// @name         x18k (fixed)
+// @namespace    http://tampermonkey.net/
+// @version      7.4.1
+// @description  best!
+// @author       New priv _no share -
+// @match        https://*.moomoo.io/*
+// @grant        none
+// @icon         http://moomoo.io/img/icons/crown.png
+// @noframes
+// ==/UserScript==`,
+    edits: [
+      /* The primitives go in immediately above the io-client object. */
+      ["transport: keyed-opcode primitives spliced in above the io-client",
+        "      sl = new ar,\n      ol = new Ir,\n      T = {",
+        () => "      sl = new ar,\n      ol = new Ir;\n" +
+              T.transportModule(DRIVERS.protocol, "__x18kTransport") +
+              "      var T = {"],
+
+      /* io-init carried only the socket id. It now also carries the seed, the
+       * HMAC key and the mode; and the connect callback moves here from onopen,
+       * because on open there is still no opcode table to encode the spawn
+       * packet with. `n` is the callback, but the decoded array shadows it
+       * inside onmessage, so it is aliased first. */
+      ["entry: io-init negotiated, callback moved off onopen, numeric s2c decoded",
+        `this.socket = new WebSocket(e), q3 = this.socket, this.socket.binaryType = "arraybuffer", this.socket.onmessage = function(e) {
+                      var t = new Uint8Array(e.data);
+                      const n = ol.decode(t),
+                            i = n[0];
+                      var t = n[1];
+                      i == "io-init" ? o.socketId = t[0] : s[i].apply(void 0, t)
+                  }, this.socket.onopen = function() {
+                      o.connected = !0, n()
+                  }`,
+        `this.socket = new WebSocket(e), q3 = this.socket, this.socket.binaryType = "arraybuffer";
+                  const __cb = n;
+                  let __entered = !1;
+                  this.socket.onmessage = function(e) {
+                      var t = new Uint8Array(e.data);
+                      const n = ol.decode(t);
+                      let i = n[0];
+                      var t = n[1];
+                      if (i == "io-init") {
+                          o.socketId = t[0];
+                          __x18kTransportSession = t[3] === __x18kTransport.MODE_KEYED ? {
+                              key: __x18kTransport.hexToBytes(t[2]),
+                              tables: __x18kTransport.buildTables(t[1] >>> 0),
+                              seq: 0
+                          } : null;
+                          if (!__entered) { __entered = !0; __cb(); }
+                          return;
+                      }
+                      if (__x18kTransportSession && typeof i == "number") {
+                          i = __x18kTransportSession.tables.s2c.dec[i];
+                          if (i === undefined) return;
+                      }
+                      if (s[i]) s[i].apply(void 0, t)
+                  }, this.socket.onopen = function() {
+                      o.connected = !0
+                  }`],
+
+      /* The body was encoded at the top of send and sent at the bottom, with a
+       * dozen early returns in between. Building it up front would burn a
+       * sequence number on every packet the mod then decides to drop, so the
+       * frame is now built where it is actually sent. */
+      ["transport: frame built at the send site, not before the early returns",
+        `const t = Array.prototype.slice.call(arguments, 1),
+                    n = sl.encode([e, t]);`,
+        `const t = Array.prototype.slice.call(arguments, 1);`],
+
+      ["transport: outbound frames signed and given a sequence number",
+        "              this.socket && this.socket.send(n)",
+        `              if (!this.socket) return;
+              let n;
+              if (__x18kTransportSession) {
+                  const __op = __x18kTransportSession.tables.c2s.enc[e];
+                  /* A name the current server has no opcode for. Dropping it
+                     here beats sending a frame it will treat as malformed. */
+                  if (__op === undefined) return;
+                  const __body = sl.encode([__op, t, ++__x18kTransportSession.seq]);
+                  n = new Uint8Array(__x18kTransport.SIG_BYTES + __body.length);
+                  n.set(__x18kTransport.signFrame(__x18kTransportSession.key, __body), 0);
+                  n.set(__body, __x18kTransport.SIG_BYTES);
+              } else {
+                  n = sl.encode([e, t]);
+              }
+              this.socket.send(n)`],
+
+      ["transport: session dropped on close",
+        "              this.socket && this.socket.close(), this.socket = null, this.connected = !1",
+        "              this.socket && this.socket.close(), this.socket = null, this.connected = !1, __x18kTransportSession = null"],
+    ],
   },
 
   {

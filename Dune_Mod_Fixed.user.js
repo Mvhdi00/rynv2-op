@@ -17882,6 +17882,7 @@ let tC = 0;
                     };
                 }
 
+
                 /* Null until io-init lands, and null again on close, so a
                  * reconnect can never reuse a stale table or sequence number. */
                 var session = null;
