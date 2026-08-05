@@ -13285,6 +13285,15 @@ window.grbtp = 35;
   }
   const VelocityTick_default = VelocityTick;
   class SpikeTick {
+      /* Cap on how far a hit is treated as throwing a player. Past this the
+       * prediction stops being worth acting on, and every client that does this
+       * lands on roughly the same number. */
+      static MAX_TRAVEL=170;
+      static RANK={
+          contact: 0,
+          knock: 1,
+          bounce: 2
+      };
       moduleName="spikeTick";
       client;
       useTurret=false;
@@ -13306,6 +13315,81 @@ window.grbtp = 35;
           });
           return enemyOwnTrap;
       }
+      _isHostileHazard(object, victim) {
+          const {PlayerManager: PlayerManager2} = this.client;
+          const isPlayerObject = object instanceof PlayerObject;
+          const isCactus = !isPlayerObject && object.isCactus;
+          const isSpike = isPlayerObject && object.itemGroup === 2;
+          if (!isSpike && !isCactus) return false;
+          // A player's own spikes do not hurt them, so they are not a target.
+          return !isPlayerObject || PlayerManager2.isEnemyByID(object.ownerID, victim);
+      }
+      /* Sweeps the victim along `angle` for up to `reach` units and returns the
+       * nearest hazard they would come to rest against, or null. */
+      _landsOn(victim, angle, reach) {
+          const {ObjectManager: ObjectManager2} = this.client;
+          const from = victim.pos.future ?? victim.pos.current;
+          let best = null;
+          ObjectManager2.grid2D.query(from.x, from.y, 3, id => {
+              const object = ObjectManager2.objects.get(id);
+              if (!object || !this._isHostileHazard(object, victim)) return;
+              const to = object.pos.current;
+              const contact = object.collisionScale + victim.collisionScale;
+              const distance = from.distance(to);
+              if (distance > reach + contact) return;
+              const travel = Math.min(distance, reach);
+              const x = from.x + travel * Math.cos(angle);
+              const y = from.y + travel * Math.sin(angle);
+              if (Math.hypot(x - to.x, y - to.y) > contact) return;
+              if (best === null || distance < best.distance) {
+                  best = {
+                      object: object,
+                      distance: distance,
+                      damage: object.getDamage()
+                  };
+              }
+          });
+          return best;
+      }
+      /* True when a hazard also sits behind the victim, so the knockback off the
+       * one they land on carries them straight back into another. */
+      _pinnedBehind(victim, angle, reach) {
+          return this._landsOn(victim, reverseAngle(angle), reach) !== null;
+      }
+      /* Ranks the ways this tick can land, best first:
+       *   bounce  - they are thrown onto a hazard with another one behind them
+       *   knock   - the hit alone throws them onto a hazard
+       *   contact - they are already on one, which is all this module used to do
+       */
+      _resolveTarget(myPlayer, EnemyManager2, primary) {
+          const weaponRange = DataHandler_default.getWeapon(primary).range;
+          const inReach = victim => victim && myPlayer.collidingEntity(victim, weaponRange + victim.hitScale, true);
+          const candidates = [];
+          for (const victim of [ EnemyManager2.nearestEnemy, EnemyManager2.enemySpikeCollider ]) {
+              if (inReach(victim) && !candidates.includes(victim)) candidates.push(victim);
+          }
+          let best = null;
+          for (const victim of candidates) {
+              const angle = (myPlayer.pos.future ?? myPlayer.pos.current).angle(victim.pos.future ?? victim.pos.current);
+              const reach = Math.min(myPlayer.getActualMaxKnockback(victim) || 0, SpikeTick.MAX_TRAVEL);
+              const landing = reach > 0 ? this._landsOn(victim, angle, reach) : null;
+              let mode = null;
+              if (landing && this._pinnedBehind(victim, angle, reach)) mode = "bounce"; else if (landing) mode = "knock"; else if (victim === EnemyManager2.enemySpikeCollider) mode = "contact";
+              if (mode === null) continue;
+              const rank = SpikeTick.RANK[mode];
+              const damage = landing ? landing.damage : 0;
+              if (best === null || rank > best.rank || rank === best.rank && damage > best.damage) {
+                  best = {
+                      victim: victim,
+                      angle: angle,
+                      mode: mode,
+                      rank: rank,
+                      damage: damage
+                  };
+              }
+          }
+          return best;
+      }
       postTick() {
           const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
           if (ModuleHandler.moduleActive || !Settings_default._spikeTick) {
@@ -13316,7 +13400,6 @@ window.grbtp = 35;
           const isPrimary = primary !== 8;
           const primaryReloaded = reloading.isReloaded(0);
           const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
-          const spikeCollider = EnemyManager2.enemySpikeCollider;
           const nearestEnemy = EnemyManager2.nearestEnemy;
 
           if (this.useBreakTrapFollowup) {
@@ -13382,19 +13465,15 @@ window.grbtp = 35;
               }
           }
 
-          if (!isPrimary || !primaryReloaded || spikeCollider === null) {
+          if (!isPrimary || !primaryReloaded) {
               return;
           }
-          const weaponRange = DataHandler_default.getWeapon(primary).range;
-          const range = weaponRange + spikeCollider.hitScale;
-          if (!myPlayer.collidingEntity(spikeCollider, range, true)) {
+          const resolved = this._resolveTarget(myPlayer, EnemyManager2, primary);
+          if (resolved === null) {
               return;
           }
-          const pos1 = myPlayer.pos.future;
-          const pos2 = spikeCollider.pos.future;
-          const angle = pos1.angle(pos2);
           ModuleHandler.moduleActive = true;
-          ModuleHandler.useAngle = angle;
+          ModuleHandler.useAngle = resolved.angle;
           ModuleHandler.forceHat = 7;
           ModuleHandler.forceWeapon = 0;
           ModuleHandler.shouldAttack = true;
