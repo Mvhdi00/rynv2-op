@@ -17,6 +17,7 @@ const ROBOTICS = path.join(ROOT, 'Robotics.user.js');
 const PETER = path.join(ROOT, 'PeterClient.user.js');
 const CHICKEN = path.join(ROOT, 'UnX.user.js');
 const SAKUNA = path.join(ROOT, 'Sakuna.user.js');
+const ANNIHILATOR = path.join(ROOT, 'Annihilator.user.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -252,6 +253,10 @@ module.exports = {
     return require(write('exp_sakuna.js', expModule(SAKUNA)));
   },
 
+  loadAnnihilator() {
+    return require(write('exp_annihilator.js', expModule(ANNIHILATOR)));
+  },
+
   /**
    * chicken's CHKP protocol module together with its patched `io` object,
    * wired to the game's own msgpack codec and a fake socket.
@@ -485,7 +490,7 @@ module.exports = {
       return l.slice(a, b + 1).join('\n');
     };
     const ref = strip(EXTERNAL);
-    return [AE86, AURORA, LEMON, LEMON_VIS, ROBOTICS, PETER, SAKUNA].every(f => strip(f) === ref);
+    return [AE86, AURORA, LEMON, LEMON_VIS, ROBOTICS, PETER, SAKUNA, ANNIHILATOR].every(f => strip(f) === ref);
   },
 
   /** The Laffer remake's LAF shim, as a loadable CommonJS module. */

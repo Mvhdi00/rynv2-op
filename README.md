@@ -34,6 +34,9 @@ and additionally needed their packet vocabulary mapped forward.
   home-address harvester, a disguised password prompt and per-frame telemetry;
   all three removed. **Do not run the original.**
 
+- **`Annihilator.user.js`** (`v0.8.9`) — hook mod. Two metadata mistakes, each
+  fatal on its own, meant not one line of it ever ran. See below.
+
 Plus **`MooUnpatcher.user.js`** — install it once and run old mods unchanged,
 instead of patching them one at a time. Version 2 repairs the environment as
 well as the protocol, and names whatever is left over. See below.
@@ -697,6 +700,65 @@ it rather than reading the file.
 
 ---
 
+# Annihilator.user.js (v0.8.9)
+
+A hook mod in the usual shape, so it gets the usual `EXP` shim. What is
+specific to it is that **not a single line of it ever ran**, for two separate
+reasons, either of which was fatal on its own.
+
+## `@run-at document_start`
+
+An underscore. `document_start` is not a value Tampermonkey accepts, so it
+ignored the line and fell back to the default — `document-end`. By then the
+game bundle had already taken its own reference to `WebSocket.prototype.send`,
+and the mod's hook was installed onto a function nothing was calling any more.
+The mod loaded, drew its menu, and silently sent nothing.
+
+## `@require https://rawgit.com/...`
+
+rawgit.com shut down in 2019. A `@require` that fails **aborts the whole
+userscript** before its first statement — so even with the `@run-at` fixed, the
+file was dead code. msgpack is bundled now, as it is in every other script here.
+
+## The three seams
+
+The mod worked in packet *names* and encoded them itself. That job now belongs
+to the shim, which meant rewiring exactly three places and leaving the other
+12,000 lines alone:
+
+| Was | Is |
+|---|---|
+| `WebSocket.prototype.send = function (message, sid) {…}` | `EXP.setHandler(function (message, sid) {…})`, which `EXP.unframe`s what the game hands it |
+| `window.msgpack.encode([type, data]); this.nsend(binary)` | `EXP.send(sock, type, data)` |
+| `getMessage`: `window.msgpack.decode(...)` | `EXP.receive(message.target \|\| WS, message.data)` |
+
+The filter body — 240 lines of chat commands, packet counters and
+`dontSend` logic — moved out of the socket hook into `sendFiltered(sock, type,
+data)` **unchanged**, including a bare `{ }` block standing where
+`if (WS == this) {` used to open, so every `let` inside keeps the exact block
+scope it had. That matters because the mod's own `packet()` used to reach those
+filters by going back through `WS.send`; now it calls `sendFiltered` directly,
+and `origPacket()` still skips them the way `WS.nsend` did.
+
+`window.leave` sends a packet named `"kys"`, which is not a real packet and
+never was — the shim drops it rather than putting an unresolvable name on a
+signed channel. That is the mod's own joke, left as found.
+
+## Checked
+
+`test/annihilator.js` — 30 checks: both metadata mistakes, that the bundled
+shim is byte-identical to every other copy, that no part of the mod still
+encodes for itself or calls `nsend`, that `packet()` still filters and
+`origPacket()` still does not, and a round trip on the wire against the game
+bundle's own crypto — spawn framed, HMAC verified server-side, sequence
+numbered, and an incoming opcode arriving under the name the mod's events table
+is keyed by.
+
+`node tools/probe-mod.js --standalone Annihilator.user.js` boots it in a real
+Chromium with no errors.
+
+---
+
 # UnX.user.js (`chicken` v4.6.2, shipped as **unX**)
 
 A full client replacement with its own `io` object and its own bundled msgpack,
@@ -1150,7 +1212,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 736 checks.
+them with `npm test` — 765 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.

@@ -12,8 +12,15 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 
-const target = process.argv[2];
-if (!target) { console.error('usage: node tools/probe-mod.js <mod.user.js>'); process.exit(2); }
+const args = process.argv.slice(2);
+// A mod that carries its own transport shim must be probed WITHOUT the
+// unpatcher: both declare `const EXP` at top level, so loading the two in one
+// page is a SyntaxError before either runs. That is not a probe artefact --
+// it is exactly what happens if you install both, which is why the unpatcher
+// is only for mods that have not been repaired.
+const standalone = args.includes('--standalone');
+const target = args.find(a => !a.startsWith('--'));
+if (!target) { console.error('usage: node tools/probe-mod.js [--standalone] <mod.user.js>'); process.exit(2); }
 const src = fs.readFileSync(target, 'utf8');
 
 // Every id the mod asks for, so a missing element is never the reason it dies
@@ -67,26 +74,43 @@ const CONFIG = {
     }
   }, ids.concat(['gameCanvas', 'mapDisplay', 'storeHolder', 'chatBox', 'menuCardHolder']));
 
-  await page.addScriptTag({ content: fs.readFileSync('/home/user/rynv2-op/MooUnpatcher.user.js', 'utf8') })
-    .catch(e => errors.push('[unpatcher] ' + e.message));
+  if (!standalone) {
+    await page.addScriptTag({ content: fs.readFileSync('/home/user/rynv2-op/MooUnpatcher.user.js', 'utf8') })
+      .catch(e => errors.push('[unpatcher] ' + e.message));
+  }
 
-  // the bundle: window.config, and the constructor freeze it does at boot
+  // What the bundle publishes for the mod to read.
   await page.evaluate((cfg) => {
     window.config = cfg;
     window.turnstile = { getResponse: () => 'PROBE-TOKEN', render: () => {}, reset: () => {} };
+  }, CONFIG);
+
+  // The constructor freeze the bundle does at boot. Where it goes depends on
+  // when the mod runs: a document-start mod (--standalone, carrying its own
+  // shim) is installed BEFORE the bundle, so the freeze comes after it. A mod
+  // with no @run-at loads after the bundle, so the freeze comes first -- which
+  // is the harder case, and the one the unpatcher exists to absorb.
+  const harden = () => page.evaluate(() => {
     try {
       const captured = window.WebSocket;
       Object.defineProperty(window, 'WebSocket', { value: captured, writable: false, configurable: false });
-    } catch (e) { /* refused, as intended */ }
-  }, CONFIG);
+      window.__frozen = 'succeeded';
+    } catch (e) { window.__frozen = 'refused'; }
+  });
 
+  if (!standalone) await harden();
   const before = errors.length;
   await page.addScriptTag({ content: src }).catch(e => errors.push('[mod inject] ' + e.message));
+  if (standalone) await harden();
   await page.waitForTimeout(2500);
 
   const state = await page.evaluate(() => ({
+    // Either the mod hooked prototype.send itself, or it installed a handler
+    // on a transport shim of its own. Both count as "the socket is wired up".
     modHookedSend: WebSocket.prototype.send.toString().length > 120,
     msgpackPresent: typeof window.msgpack === 'object' && typeof window.msgpack.decode === 'function',
+    shimPresent: typeof EXP === 'object' && typeof EXP.send === 'function',
+    constructorFreeze: window.__frozen,
     report: window.unpatch ? window.unpatch.report() : null,
   }));
 
@@ -105,7 +129,8 @@ const CONFIG = {
   console.log('\n--- state ---');
   console.log(JSON.stringify(state, null, 2));
 
-  const ok = errors.length === before && state.modHookedSend && state.msgpackPresent;
+  const ok = errors.length === before && state.msgpackPresent
+    && (state.modHookedSend || state.shimPresent);
   console.log('\n' + (ok ? '=> the mod booted and its socket hook is installed'
                          : '=> the mod did NOT boot cleanly'));
   await browser.close();

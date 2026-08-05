@@ -166,12 +166,12 @@ const UNPATCH = (function () {
             //
             // For a game-only stream this is a no-op -- both counters start at
             // zero and step together -- so it costs nothing until it matters.
-            // A mod that frames its own packets already speaks the current
-            // protocol -- it does not need this shim, and stacking the two
-            // means two independent sequence counters on one socket. Passing
-            // the frame through untouched keeps it working, but say so once:
-            // running the unpatcher under an already-repaired script is the
-            // one configuration that is worse than not running it at all.
+            //
+            // The other way to arrive here is a mod that frames its own
+            // packets, i.e. one that already speaks the current protocol and
+            // does not need this shim at all. Renumbering keeps it working,
+            // but say so once: running the unpatcher under an already-repaired
+            // script is the one configuration worse than not running it.
             if (!alreadyCurrentWarned && WebSocket.prototype.send !== shimSend) {
                 alreadyCurrentWarned = true;
                 console.warn("[unpatch] this mod already frames its own packets, so it does not need the "
