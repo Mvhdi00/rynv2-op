@@ -46,6 +46,17 @@ const ids = [...new Set([
   ...[...src.matchAll(/querySelector\(\s*[`"']#([\w-]+)/g)].map(m => m[1]),
 ])].filter(id => /^[A-Za-z][\w-]*$/.test(id)).filter(id => !GONE.has(id));
 
+// ...but never an id the mod builds for itself. getElementById returns the
+// first match in document order, so a div the probe planted early shadows the
+// real element the mod creates later -- which is how a <canvas id="pingCanvas">
+// turned into a div with no getContext.
+const selfMade = new Set([
+  ...[...src.matchAll(/\.id\s*=\s*["'`]([^"'`]+)["'`]/g)].map(m => m[1]),
+  ...[...src.matchAll(/\bid\s*[:=]\s*["'`]([^"'`]+)["'`]/g)].map(m => m[1]),
+  ...[...src.matchAll(/id\s*=\s*\\?["']([\w-]+)\\?["']/g)].map(m => m[1]),
+]);
+const plant = ids.filter(id => !selfMade.has(id));
+
 // Globals the mod publishes on window. "No errors" is not the same as "ran" --
 // a deferred boot that never fires throws nothing at all. If a mod assigns to
 // window and none of those names exist afterwards, its body never executed.
@@ -73,13 +84,34 @@ const CONFIG = {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const page = await browser.newPage();
   const errors = [], warnings = [];
-  page.on('pageerror', e => errors.push(e.message + ' @ ' + (e.stack || '').split('\n')[1]));
+  // A blocked fetch is this sandbox having no network, not a fault in the mod.
+  const ENVIRONMENTAL = /Failed to fetch|ERR_(?:TUNNEL|NAME|INTERNET|CONNECTION|PROXY)/;
+  page.on('pageerror', e => {
+    if (ENVIRONMENTAL.test(e.message)) return;
+    errors.push(e.message + ' @ ' + (e.stack || '').split('\n')[1]);
+  });
   page.on('console', m => {
     const t = m.text();
     if (m.type() === 'warning' || m.type() === 'error') warnings.push(t);
   });
 
-  await page.setContent('<!doctype html><html><head><title>probe</title></head><body></body></html>');
+  // Served *as* moomoo.io. On an about:blank-style origin localStorage throws
+  // "Access is denied for this document", which is not something the mod would
+  // ever hit on the real page -- and these mods all keep their settings there.
+  // Only the navigation itself is served. Answering the mod's own fetches with
+  // this HTML made JSON.parse choke on "<!doctype", which is a fault in the
+  // probe, not the mod -- everything else is refused so it looks like the
+  // offline sandbox it is.
+  await page.route('**/*', route => {
+    if (route.request().resourceType() === 'document') {
+      return route.fulfill({
+        status: 200, contentType: 'text/html',
+        body: '<!doctype html><html><head><title>probe</title></head><body></body></html>'
+      });
+    }
+    return route.abort();
+  });
+  await page.goto('https://moomoo.io/');
 
   // Building the page BEFORE the mod loads models a mod that runs at
   // document-end. A document-start mod sees none of this -- no body, no ids,
@@ -95,7 +127,7 @@ const CONFIG = {
       el.id = id;
       document.body.appendChild(el);
     }
-  }, ids.concat(['gameCanvas', 'mapDisplay', 'storeHolder', 'chatBox', 'menuCardHolder']));
+  }, plant.concat(['gameCanvas', 'mapDisplay', 'storeHolder', 'chatBox', 'menuCardHolder']));
 
   const publishConfig = () => page.evaluate((cfg) => {
     window.config = cfg;

@@ -37,6 +37,10 @@ and additionally needed their packet vocabulary mapped forward.
 - **`Annihilator.v0.8.9.js`** (`v0.8.9`) — hook mod. Two metadata mistakes, each
   fatal on its own, meant not one line of it ever ran. See below.
 
+- **`RoBoTic-CaraMila.v6.9.5.js`** (`v6.9.5`) — hook mod, 15,610 lines. No
+  `@run-at` at all, a `@require` it never used, ALTCHA code for a captcha the
+  game replaced, and a privacy switch that only worked one way. See below.
+
 Plus **`MooUnpatcher.user.js`** — install it once and run old mods unchanged,
 instead of patching them one at a time. Version 2 repairs the environment as
 well as the protocol, and names whatever is left over. See below.
@@ -700,6 +704,73 @@ it rather than reading the file.
 
 ---
 
+# RoBoTic-CaraMila.v6.9.5.js (v6.9.5)
+
+A hook mod of the usual shape, so it gets the usual `EXP` shim and the same
+deferred boot as Annihilator — `node tools/build-caramila.js` rebuilds it from
+`reference/caramila-original.js`. Four things are specific to it.
+
+## No `@run-at` at all
+
+Not a typo this time, simply absent, which means `document-end`. The game
+captures `WebSocket.prototype.send` at bundle load, so by the time this
+installed its hook it was decorating a function nothing called. It ran, drew its
+menu, and sent nothing.
+
+## A `@require` it never used
+
+Two CDN requires: msgpack-lite, replaced by the bundled shim, and **three.js
+r134** — `THREE.` appears **zero** times in 15,610 lines. Both dropped.
+
+## ALTCHA
+
+The mod hides moomoo's old ALTCHA widget and clicks its checkbox once a second.
+moomoo replaced ALTCHA with Cloudflare Turnstile, so `getEl("altcha")` is null
+and `altcha.style.display` is a TypeError. The game solves Turnstile itself, so
+there is nothing left to click: the dereference is guarded and the poll retires
+itself.
+
+The ad elements are handled the way the unpatcher handles them — `getEl` returns
+a hidden stub for a closed list of ids moomoo deleted, and null for everything
+else. `altcha` is deliberately **not** on that list, because it has to stay null
+for the poll to notice and stop.
+
+## Primary Sync only worked one way
+
+The mod talks to two servers of its own: one sends a fixed handshake and
+receives other users' positions, the other gets `sendPlayerInfo()` on a timer
+carrying your **name, sid, server, ping and live x2/y2**. That is the advertised
+"Primary Sync" feature — seeing other people running this mod — and it is the
+author's, not something smuggled in.
+
+But the switch for it only governed what came back. `configs.serverSync` decides
+whether the mod *uses* the data, and it is even reported inside the outgoing
+payload, yet nothing checked it before sending: turn Primary Sync off and your
+name and coordinates kept going out. It is checked now, before the socket test,
+so off also stops it dialling out. That is the toggle doing what it says, not a
+feature removed.
+
+## Checked
+
+`test/caramila.js` — 36 checks, including a round trip on the wire against the
+game bundle's own crypto, and that the original really did send regardless of
+the setting.
+
+`node tools/probe-mod.js --standalone RoBoTic-CaraMila.v6.9.5.js` boots it clean
+with 10 of 10 published globals, and its menu — 7 tabs, themed, ~330 lines of
+its own CSS — renders and opens on Escape.
+
+Three probe faults surfaced while doing this, all of which made it a friendlier
+place than the real page, and all now fixed: it served its own HTML to the mod's
+`fetch`, so `JSON.parse` choked on `<!doctype`; it planted ids the mod creates
+itself, so a `<canvas id="pingCanvas">` was shadowed by a `<div>` with no
+`getContext`; and it ran on an opaque origin where `localStorage` throws "Access
+is denied", which these mods all use for settings. It now serves only the
+navigation, plants only ids the mod does *not* create, and runs as
+`https://moomoo.io/`.
+
+---
+
 # Annihilator.v0.8.9.js (v0.8.9)
 
 A hook mod in the usual shape, so it gets the usual `EXP` shim. What is
@@ -1279,7 +1350,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 786 checks.
+them with `npm test` — 822 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.

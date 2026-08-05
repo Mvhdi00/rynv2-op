@@ -18,6 +18,7 @@ const PETER = path.join(ROOT, 'PeterClient.user.js');
 const CHICKEN = path.join(ROOT, 'UnX.user.js');
 const SAKUNA = path.join(ROOT, 'Sakuna.user.js');
 const ANNIHILATOR = path.join(ROOT, 'Annihilator.v0.8.9.js');
+const CARAMILA = path.join(ROOT, 'RoBoTic-CaraMila.v6.9.5.js');
 const GAME = path.join(ROOT, 'reference/game-index.js');
 const VENDOR = path.join(ROOT, 'reference/game-vendor.js');
 
@@ -255,6 +256,10 @@ module.exports = {
 
   loadAnnihilator() {
     return require(write('exp_annihilator.js', expModule(ANNIHILATOR)));
+  },
+
+  loadCaramila() {
+    return require(write('exp_caramila.js', expModule(CARAMILA)));
   },
 
   /**

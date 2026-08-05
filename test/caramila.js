@@ -1,0 +1,152 @@
+// RoBoTic CaraMila v6.9.5 is a hook mod of the usual shape and gets the usual
+// EXP shim. What is specific to it: it had no @run-at at all, it carried two
+// CDN requires of which one is unused, it still drives the ALTCHA captcha the
+// game replaced, and its own "Primary Sync" switch only worked one way.
+const fs = require('fs');
+const path = require('path');
+const extract = require('./extract.js');
+
+const { game, msgpack: vendor } = extract.load();
+const { Encoder, Decoder } = vendor;
+const { EXP, FakeWebSocket } = extract.loadCaramila();
+const enc = new Encoder(), dec = new Decoder();
+
+const ROOT = path.join(__dirname, '..');
+const src = fs.readFileSync(path.join(ROOT, 'RoBoTic-CaraMila.v6.9.5.js'), 'utf8');
+const original = fs.readFileSync(path.join(ROOT, 'reference', 'caramila-original.js'), 'utf8');
+
+let fails = 0;
+const check = (cond, label) => {
+  console.log((cond ? '  PASS  ' : '  FAIL  ') + label);
+  if (!cond) fails++;
+};
+
+const shimStart = src.indexOf('const EXP = (function() {');
+const shimEnd = src.indexOf('\n)();\n', shimStart) + 5;
+const modCode = src.slice(0, shimStart) + src.slice(shimEnd);
+
+// --------------------------------------------------------------------------
+console.log('\n1. metadata');
+
+const meta = src.slice(0, src.indexOf('// ==/UserScript=='));
+check(/^\/\/ @run-at\s+document-start$/m.test(meta),
+      'it runs at document-start; the original had no @run-at at all, so it ran '
+      + 'after the bundle had already taken WebSocket.prototype.send');
+check(!/@require/.test(meta), 'both CDN requires are gone');
+check(/three\.min\.js/.test(original) && !/THREE\./.test(original),
+      'and one of them was three.js, which the original never used once');
+check(meta.split('\n').every(l => l === '' || l.startsWith('//')),
+      'the metadata block is still all comments');
+
+// --------------------------------------------------------------------------
+console.log('\n2. the shim, and when things run');
+
+{
+  const { stripComments } = require('../tools/strip-comments.js');
+  const mine = extract.shimOf('RoBoTic-CaraMila.v6.9.5.js');
+  const ref = stripComments(extract.shimOf('ExternalClient.user.js'), { metadata: false }).out;
+  check(mine === ref, 'the bundled shim is the same code every other hook mod carries');
+}
+const bootAt = src.indexOf('function __carBoot() {');
+check(bootAt > 0 && shimStart < bootAt,
+      'the body is deferred and the shim is outside it, so the shim is early and the body is not');
+check(src.indexOf('document.body.appendChild(menuDiv)') > bootAt,
+      'the DOM work waits, since at document-start there is no body to append to');
+{
+  const starter = src.slice(src.indexOf('(function __carStart(tries)'));
+  check(/document\.readyState === "loading"/.test(starter) && /getElementById\("gameUI"\)/.test(starter),
+        'and waits for both the document and gameUI');
+  check(/tries < 400/.test(starter), 'with a bounded poll');
+}
+
+// --------------------------------------------------------------------------
+console.log('\n3. the transport');
+
+check(!/msgpack\./.test(modCode), 'nothing in the mod encodes or decodes for itself');
+check(!/\.nsend\(/.test(modCode), 'and nothing calls nsend');
+check(!/WebSocket\.prototype\.send\s*=/.test(modCode), 'the shim owns prototype.send');
+check(/EXP\.setHandler\(function \(message\) \{/.test(src), 'outgoing goes through the handler');
+check(/if \(this\.isModSocket\) return EXP\.nativeSend\.call\(this, message\);/.test(src),
+      "the mod's own server sockets are still let through untouched -- their traffic is JSON");
+check(/if \(WS != this\) return EXP\.nativeSend\.call\(this, message\);/.test(src),
+      'as is the second one, which never marks itself');
+check(/sendFiltered\(this, unframed\.type, unframed\.args\);/.test(src),
+      "and game packets reach the mod's own filters by name");
+check(/if \(!dontSend\) \{\s*EXP\.send\(sock, type, data\);/.test(src), 'the send is framed by the shim');
+check(/let parsed = EXP\.receive\(message\.target \|\| WS, message\.data\);/.test(src),
+      'incoming comes back through the shim');
+check(/if \(type == "io-init"\)/.test(src),
+      'and io-init still arrives by name, so socketID keeps working');
+
+// --------------------------------------------------------------------------
+console.log('\n4. the page, and the captcha the game replaced');
+
+check(/const GONE_IDS = \[/.test(src), 'getEl hands back a hidden stub for ids moomoo deleted');
+check(/if \(GONE_IDS\.indexOf\(id\) === -1\) return el;/.test(src),
+      'and null for every other id, so feature tests still tell the truth');
+check(/"adCard", "ad-container", "wideAdCard"/.test(src), 'the ad elements this mod reaches for are on the list');
+check(!/"altcha"/.test(src.slice(src.indexOf('const GONE_IDS'), src.indexOf('const goneStubs'))),
+      'altcha deliberately is not, so its polling loop can retire instead of clicking a stub forever');
+check(/if \(altcha\) altcha\.style\.display = 'none';/.test(src),
+      'the ALTCHA teardown is guarded; moomoo moved to Turnstile and getEl("altcha") is null');
+check(/if \(!altcha \|\| !altchaButton\) return clearInterval\(annoyingAltchaStuff\);/.test(src),
+      'and the once-a-second poll stops itself');
+
+// --------------------------------------------------------------------------
+console.log('\n5. Primary Sync now works in both directions');
+
+// The mod streams name, sid, server, ping and live x2/y2 to a server of its
+// own. That is its advertised feature, not something smuggled in -- but the
+// switch for it only governed what came back.
+check(/dc\.BoxF\("Primary Sync"/.test(src), 'the setting exists in the menu, as it always did');
+check(/function sendPlayerInfo\(\) \{\s*if \(!configs\.serverSync\) return;/.test(src),
+      'and nothing goes out when it is off');
+check(/if \(!configs\.serverSync\) return;[\s\S]{0,200}socket\.readyState === WebSocket\.OPEN/.test(src),
+      'the check is before the socket test, so off also means it stops dialling out');
+check(!/if \(!configs\.serverSync\) return;/.test(original),
+      'which the original did not do: it reported the setting inside the payload and sent anyway');
+
+// --------------------------------------------------------------------------
+console.log('\n6. the wire, against the game bundle\'s own crypto');
+
+const SEED = 0x1234BEEF, KEY_HEX = 'ff00aa5511bb66cc22dd77ee33990088';
+const tables = game.Po(SEED);
+const key = game.Ro(KEY_HEX);
+
+const sock = new FakeWebSocket('wss://x.moomoo.io');
+sock.readyState = 1;
+EXP._internals.states.set(sock, { mode: 1, key, tables: game.Po(SEED), seq: 0 });
+
+function readFrame(buf) {
+  const b = Buffer.from(buf);
+  const ok = Buffer.from(game.Eo(key, b.subarray(6))).equals(b.subarray(0, 6));
+  const d = dec.decode(new Uint8Array(b.subarray(6)));
+  return { ok, name: tables.c2s.dec[d[0]], args: d[1], seq: d[2] };
+}
+
+sock.sentRaw.length = 0;
+EXP.send(sock, 'M', [{ name: 'probe', moofoll: 1, skin: 0 }]);
+check(sock.sentRaw.length === 1, 'a spawn packet goes out');
+{
+  const f = readFrame(sock.sentRaw[0]);
+  check(f.ok, 'the server-side HMAC verifies');
+  check(f.name === 'M' && f.seq === 1, 'as the right opcode, with the first sequence number');
+}
+{
+  const names = [...new Set(
+    [...src.matchAll(/(?:packet|io\.send)\(\s*"([^"]+)"/g)].map(m => m[1])
+  )];
+  const bad = names.filter(n => tables.c2s.enc[n] === undefined);
+  check(names.length >= 8, 'the mod sends a real vocabulary (' + names.length + ' names)');
+  check(bad.length === 0, 'and every one resolves to an opcode' + (bad.length ? ' (bad: ' + bad.join(', ') + ')' : ''));
+}
+{
+  const framed = enc.encode([tables.s2c.enc['O'], [5, 90]]);
+  const got = EXP.receive(sock, framed);
+  check(got && got.type === 'O' && JSON.stringify(got.args) === '[5,90]',
+        'and an incoming opcode comes back as the name its events table is keyed by');
+  check(/O: updateHealth/.test(src), 'which is how that table is written');
+}
+
+console.log('\n' + (fails === 0 ? '=> ALL CARAMILA TESTS PASSED' : '=> ' + fails + ' FAILURE(S)'));
+process.exit(fails ? 1 : 0);
