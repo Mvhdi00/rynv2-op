@@ -117,13 +117,13 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
-*_Fixed.user.js           the five repaired mods
+*_Fixed.user.js           the seven repaired mods
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
-src/mods/                 the five old-bundle mods, unmodified (input)
+src/mods/                 the seven old-bundle mods, unmodified (input)
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
@@ -189,7 +189,7 @@ understood.
 
 # Old-bundle mod repairs
 
-Five other mods live here, and they are the same kind of thing Luna is: forks
+Seven other mods live here, and they are the same kind of thing Luna is: forks
 of the pre-2024 webpack `bundle.js`, shipped as userscripts that hijack the
 page's WebSocket and run their own copy of the game. None of them broke because
 of anything they do. The game moved out from under all of them, in four places.
@@ -200,9 +200,11 @@ of anything they do. The game moved out from under all of them, in four places.
 | `src/mods/Cowgame_v7.js` | `Cowgame_Fixed.user.js` |
 | `src/mods/Lrx_v5.js` | `Lrx_v5_Fixed.user.js` |
 | `src/mods/S_Client_v8.2.js` | `S_Client_v8.2_Fixed.user.js` |
+| `src/mods/Lolfly_v4.js` | `Lolfly_v4_Fixed.user.js` |
+| `src/mods/Lrx_2023.js` | `Lrx_2023_Fixed.user.js` |
 | `src/mods/Chicken_v3.js` | `Chicken_v3_Fixed.user.js` |
 
-Four are beautified and keep webpack's named module ids; Chicken v3 is the
+Six are beautified and keep webpack's named module ids; Chicken v3 is the
 minified asset, where the module map is an array and ids are its indices.
 `tools/mod-bundle.js` handles both so the fixer and the verifier do not each
 need two code paths.
@@ -211,7 +213,7 @@ need two code paths.
 
 ### 1. The packet layer
 
-All five still had the original io-client:
+All seven still had the original io-client:
 
 ```js
 send:      socket.send(msgpack.encode([name, args]))
@@ -237,7 +239,7 @@ and every packet they received landed on `events[<number>]`, which is
 The io-client in each is now a re-implementation of the bundle's own `Co`,
 `Oi`, `Po`, `Vt`, `Ao`, `Eo` and `Ro`. Each mod keeps its own send-path
 additions across the rewrite — the two-window rate limiter and chat filter in
-the Emre-descended four, Chicken's packet counter, and Chicken's deliberately
+the Emre-descended six, Chicken's packet counter, and Chicken's deliberately
 inert `close()`.
 
 ### 2. Entry
@@ -282,10 +284,10 @@ client.
 |---|---|---|
 | Dune: `clientSendRate` | 20 | 5 |
 | `maxPlayers` / `maxPlayersHard` | 50/60, 60/70, 50/50 | 40 / 50 |
-| cowgame, lrx, S Client: `skinColors` | 11 entries | 10 |
-| cowgame, lrx, S Client: weapon 3 "short sword" `src` / `yOff` | `samurai_1` / 59 | `sword_1` / 46 |
-| lrx: `maxAge` | 9 | 100 |
-| lrx: `cowNames` | 1 entry | 45 |
+| all but Dune and Chicken: `skinColors` | 11 entries | 10 |
+| cowgame, lrx v5, S Client: weapon 3 "short sword" `src` / `yOff` | `samurai_1` / 59 | `sword_1` / 46 |
+| lrx v5: `maxAge` | 9 | 100 |
+| lrx v5: `cowNames` | 1 entry | 45 |
 | Chicken: hat 45 "Shame!" `dontSell` | absent | `true` |
 | all: `MAX_ATTACK`, `MAX_SPAWN_DELAY`, `MAX_SPEED`, `MAX_TURN_SPEED`, `DAY_INTERVAL` | absent | present |
 
@@ -310,18 +312,23 @@ reports description drift as a note rather than a failure for that reason.
 
 ### Dead references
 
-- Dune `@require`d msgpack from greasyfork, and cowgame, lrx and S Client from
-  **rawgit.com**, which has been shut down since 2019. None of them is used:
-  the only consumer is the io-client, and it resolves msgpack-lite out of the
-  bundle itself. All four lines are dropped. (Chicken never had one — it always
-  used the bundled copy.)
+- Dune `@require`d msgpack from greasyfork, and cowgame, lrx v5, S Client,
+  Lolfly and Lrx 2023 from **rawgit.com**, which has been shut down since 2019
+  (Lolfly listed both). None of them is used: the only consumer is the
+  io-client, and it resolves msgpack-lite out of the bundle itself. Every one
+  of those lines is dropped. (Chicken never had one — it always used the
+  bundled copy.)
+- Lolfly also `@require`d jQuery over plain **http**, which the browser blocks
+  as mixed content on the https game page — and it does use jQuery, in its menu
+  and in an injected `<script>`. Switched to https. Its jquery-ui and
+  jquery-confirm requires are unused and are dropped.
 - cowgame gated its **entire body** on `window.r`, supplied by a
   `@require`d `cow.js` on a CodeSandbox host. With that host gone `window.r` is
   `undefined` and the very first statement throws, so nothing ran. The check is
   kept where the data is present and skipped where it is not.
-- The chat profanity filter in cowgame, lrx and S Client was keyed on
+- The chat profanity filter in the six Emre-descended mods was keyed on
   `type == "ch"` and their clan-name padding on `type == "8"`. Both packets were
-  renamed (`"6"` and `"L"`), which all three already send — so neither branch
+  renamed (`"6"` and `"L"`), which all of them already send — so neither branch
   had been running. Retargeted.
 
 ## Building the repaired mods
@@ -329,7 +336,7 @@ reports description drift as a note rather than a failure for that reason.
 ```sh
 node tools/fix-mods.js          # src/mods/*.js -> *_Fixed.user.js
 node tools/verify-transport.js  # emitted crypto/opcode tables vs. the bundle's own
-node tools/verify-mods.js       # end-to-end handshake + table diff, all five
+node tools/verify-mods.js       # end-to-end handshake + table diff, all seven
 for f in *_Fixed.user.js; do node --check "$f"; done
 ```
 

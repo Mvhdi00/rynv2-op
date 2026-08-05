@@ -369,6 +369,66 @@ if (!__sig || !__gm || (__gm.script.name == __sig[0] && __gm.script.author == __
   },
 
   {
+    /* ---------------------------------------------------------------- */
+    name: "Lolfly v4",
+    src: "src/mods/Lolfly_v4.js",
+    out: "Lolfly_v4_Fixed.user.js",
+    connectFn: "connectSocket",
+    header: `// ==UserScript==
+// @name         Lolfly v4 (fixed)
+// @author       ryan8402
+// @description  Solo diviértete
+// @version      001
+// @match        *://moomoo.io/*
+// @match        *://*.moomoo.io/*
+// @icon         https://pa1.narvii.com/6564/396626249978b4faee638d4b3b05549fe1443b3f_hq.gif
+// @require      https://code.jquery.com/jquery-3.3.1.min.js
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==`,
+    notes: [
+      "header: dropped both msgpack @requires (rawgit is gone; bundle carries msgpack-lite)",
+      "header: jQuery @require switched from http to https (mixed content is blocked on the game page)",
+      "header: dropped the unused jquery-ui and jquery-confirm @requires",
+    ],
+    hook: `window.OriginalWebSocket = window.WebSocket;
+            window.WebSocket = class {
+                constructor(wsAddress) {
+                    connectSocket(wsAddress);
+                };
+            }`,
+    prepare: (p) => ({ msgpackExpr: NAMED_MSGPACK, extras: liftEmreSendExtras(p) }),
+    edits: [MAX_PLAYERS_FIX, SKIN_COLORS_FIX, NEW_KEYS_FIX],
+  },
+
+  {
+    /* ---------------------------------------------------------------- */
+    name: "Lrx 2023",
+    src: "src/mods/Lrx_2023.js",
+    out: "Lrx_2023_Fixed.user.js",
+    connectFn: "connectSocket",
+    header: `// ==UserScript==
+// @name         Lrx (fixed)
+// @author       Emre & BlockKidd
+// @description  like eat humans
+// @version      1.1
+// @match        *://moomoo.io/*
+// @match        *://*.moomoo.io/*
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==`,
+    notes: ["header: dropped the rawgit msgpack @require (host is gone; bundle carries msgpack-lite)"],
+    hook: `window.OriginalWebSocket = window.WebSocket;
+            window.WebSocket = class {
+                constructor(wsAddress) {
+                    connectSocket(wsAddress);
+                };
+            }`,
+    prepare: (p) => ({ msgpackExpr: NAMED_MSGPACK, extras: liftEmreSendExtras(p) }),
+    edits: [MAX_PLAYERS_FIX, SKIN_COLORS_FIX, NEW_KEYS_FIX],
+  },
+
+  {
     /* ----------------------------------------------------------------
      * Chicken is the minified asset, so the module map is an array and the
      * factory parameters are mangled: `e` is module, `t` exports, `n` require.

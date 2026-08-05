@@ -39,6 +39,8 @@ const BUILT = [
   "Cowgame_Fixed.user.js",
   "Lrx_v5_Fixed.user.js",
   "S_Client_v8.2_Fixed.user.js",
+  "Lolfly_v4_Fixed.user.js",
+  "Lrx_2023_Fixed.user.js",
   "Chicken_v3_Fixed.user.js",
 ];
 
