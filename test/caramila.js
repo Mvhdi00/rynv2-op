@@ -128,7 +128,34 @@ check(src.indexOf('getEl("turnstileWidget")') < src.indexOf("setupCard.style.dis
       'the move happens before setupCard is hidden, inside the window the game polls in');
 
 // --------------------------------------------------------------------------
-console.log('\n6. Primary Sync now works in both directions');
+console.log('\n6. the server browser came up empty');
+
+// getServers() has no catch anywhere above it, so anything that goes wrong in
+// there leaves the panel silently blank -- which is what it did.
+check(/servers\?v=1\.26/.test(original) && !/servers\?v=1\.27/.test(original),
+      'the original pinned v=1.26 on sandbox and sent no version at all on production; '
+      + 'the game asks for ?v=1.27');
+check(/"1\.27", ""/.test(src),
+      'it now asks for exactly what the game asks for, then falls back to the bare URL');
+{
+  const g = src.slice(src.indexOf('async function getServers()'));
+  const block = g.slice(0, 1600);
+  check(/if \(!response\.ok\) continue;/.test(block),
+        'a refused response moves on to the next shape rather than being parsed');
+  check(/if \(Array\.isArray\(data\) && data\.length\)/.test(block),
+        'and a response that is not a non-empty array does not count as success');
+  check(/return \[\];/.test(block) && /console\.error\("\[caramila\]/.test(block),
+        'when nothing works it returns an empty list and says so, instead of throwing '
+        + 'into a panel that just stays blank');
+  check(/if \(server\.port\) pingHost \+= ":" \+ server\.port;/.test(block),
+        'the ping URL carries the port, the way the game builds it');
+  check(!/moomoo\.io\/ping\/`/.test(block), 'and has lost the trailing slash it had');
+}
+check(/\$\{server\.key\}\.\$\{server\.region\}\.moomoo\.io\/ping\/`/.test(original),
+      'which the original did not: no port, trailing slash');
+
+// --------------------------------------------------------------------------
+console.log('\n7. Primary Sync now works in both directions');
 
 // The mod streams name, sid, server, ping and live x2/y2 to a server of its
 // own. That is its advertised feature, not something smuggled in -- but the
@@ -142,7 +169,7 @@ check(!/if \(!configs\.serverSync\) return;/.test(original),
       'which the original did not do: it reported the setting inside the payload and sent anyway');
 
 // --------------------------------------------------------------------------
-console.log('\n7. the wire, against the game bundle\'s own crypto');
+console.log('\n8. the wire, against the game bundle\'s own crypto');
 
 const SEED = 0x1234BEEF, KEY_HEX = 'ff00aa5511bb66cc22dd77ee33990088';
 const tables = game.Po(SEED);

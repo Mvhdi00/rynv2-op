@@ -255,7 +255,63 @@ swap(`        inputCard.appendChild(inputSection);`,
             }, 250);
         })();`);
 
-/* --- seam 6: the sync toggle only worked one way --------------------------
+/* --- seam 6: the server browser came up empty -----------------------------
+ * getServers() has no catch anywhere above it, so anything that goes wrong in
+ * here leaves the panel silently blank -- which is exactly what it does.
+ *
+ * Its request differs from the game's in two ways. The game asks for
+ * `${api}/servers?v=1.27`; this asks for /servers with no version at all on
+ * production, and pins ?v=1.26 on sandbox. That version is not decorative:
+ * another unpatcher doing the rounds carries a fetch hook whose only job is to
+ * rewrite v=1.26 to v=1.27, so somebody else hit this too. And the ping URL
+ * drops the port -- the game builds key.region.moomoo.io[:port]/ping, this
+ * builds key.region.moomoo.io/ping/.
+ *
+ * There is no network from where this is built, so which URLs the live API
+ * accepts cannot be settled here. The defensible thing is to send exactly what
+ * the working client sends, fall back to the bare URL if that is refused, and
+ * never let a failure turn into a blank panel with nothing in the console.
+ */
+swap(`            let currentMode = location.host.replace(/\\.moomoo\\.io/, "");
+            let getRequestUrl = () => {
+                if (/(sandbox|dev)/.test(currentMode)) {
+                    return \`https://api-\${currentMode}.moomoo.io/servers?v=1.26\`;
+                }
+                return "https://api.moomoo.io/servers";
+            };
+
+            let response = await fetch(getRequestUrl());
+            let servers = await response.json();
+
+            await Promise.all(servers.map(async server => {
+                let requestPingUrl = \`https://\${server.key}.\${server.region}.moomoo.io/ping/\`;`,
+`            let currentMode = location.host.replace(/\\.moomoo\\.io/, "");
+            let apiBase = /(sandbox|dev)/.test(currentMode)
+                ? \`https://api-\${currentMode}.moomoo.io\`
+                : "https://api.moomoo.io";
+
+            let servers = null;
+            for (const version of ["1.27", ""]) {
+                try {
+                    let response = await fetch(apiBase + "/servers" + (version ? "?v=" + version : ""));
+                    if (!response.ok) continue;
+                    let data = await response.json();
+                    if (Array.isArray(data) && data.length) { servers = data; break; }
+                } catch (error) { /* try the next shape */ }
+            }
+            if (!servers) {
+                console.error("[caramila] could not load the server list from " + apiBase +
+                    "/servers -- the browser will be empty. If the game itself still lists " +
+                    "servers, the version parameter has moved again.");
+                return [];
+            }
+
+            await Promise.all(servers.map(async server => {
+                let pingHost = \`\${server.key}.\${server.region}.moomoo.io\`;
+                if (server.port) pingHost += ":" + server.port;
+                let requestPingUrl = \`https://\${pingHost}/ping\`;`);
+
+/* --- seam 7: the sync toggle only worked one way --------------------------
  * The mod talks to two servers of its own. sync-script-users sends a fixed
  * handshake and receives other users' positions; robotics-ahh.fly.dev gets
  * sendPlayerInfo() on a timer, carrying your name, sid, server, ping and live

@@ -39,8 +39,8 @@ and additionally needed their packet vocabulary mapped forward.
 
 - **`RoBoTic-CaraMila.v6.9.5.js`** (`v6.9.5`) — hook mod, 15,610 lines. No
   `@run-at` at all, a `@require` it never used, ALTCHA code for a captcha the
-  game replaced, a verification box with nowhere to appear, and a privacy
-  switch that only worked one way. See below.
+  game replaced, a verification box with nowhere to appear, an empty server
+  browser, and a privacy switch that only worked one way. See below.
 
 Plus **`MooUnpatcher.user.js`** — install it once and run old mods unchanged,
 instead of patching them one at a time. Version 2 repairs the environment as
@@ -768,6 +768,35 @@ starts inside the hidden card as it really does:
 | before | `true` | **`false`** |
 | after | `false` | **`true`** |
 
+## The server browser came up empty
+
+`getServers()` has no `catch` anywhere above it, so anything that goes wrong in
+there leaves the panel silently blank — no list, no error, nothing.
+
+Its request differs from the game's in two ways:
+
+| | the game | the mod |
+|---|---|---|
+| server list | `${api}/servers?v=1.27` | `/servers` with no version (and `?v=1.26` pinned on sandbox) |
+| ping URL | `key.region.moomoo.io`**`:port`**`/ping` | `key.region.moomoo.io/ping/` |
+
+That version parameter is not decorative: another unpatcher doing the rounds
+carries a `fetch` hook whose only job is to rewrite `v=1.26` to `v=1.27`, so
+somebody else hit this too.
+
+There is no network from where this is built, so *which* URLs the live API
+accepts cannot be settled here — and guessing would be the wrong move. What it
+does instead is send exactly what the working client sends, fall back to the
+bare URL if that is refused, and never turn a failure into a blank panel with
+nothing in the console. Driven against controlled responses in a real browser:
+
+| API behaviour | requests made | result |
+|---|---|---|
+| `?v=1.27` works | `/servers?v=1.27` | 1 server, nothing logged |
+| only the bare URL works | `?v=1.27`, then `/servers` | 1 server, nothing logged |
+| always 500 | both | empty list, **logged** |
+| returns `{}` instead of an array | both | empty list, **logged** |
+
 ## Primary Sync only worked one way
 
 The mod talks to two servers of its own: one sends a fixed handshake and
@@ -785,7 +814,7 @@ feature removed.
 
 ## Checked
 
-`test/caramila.js` — 46 checks, including a round trip on the wire against the
+`test/caramila.js` — 54 checks, including a round trip on the wire against the
 game bundle's own crypto, and that the original really did send regardless of
 the setting.
 
@@ -1383,7 +1412,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 832 checks.
+them with `npm test` — 840 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.

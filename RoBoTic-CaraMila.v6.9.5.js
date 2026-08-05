@@ -1409,18 +1409,30 @@ let mainContext = gameCanvas.getContext("2d");
 
         async function getServers() {
             let currentMode = location.host.replace(/\.moomoo\.io/, "");
-            let getRequestUrl = () => {
-                if (/(sandbox|dev)/.test(currentMode)) {
-                    return `https://api-${currentMode}.moomoo.io/servers?v=1.26`;
-                }
-                return "https://api.moomoo.io/servers";
-            };
+            let apiBase = /(sandbox|dev)/.test(currentMode)
+                ? `https://api-${currentMode}.moomoo.io`
+                : "https://api.moomoo.io";
 
-            let response = await fetch(getRequestUrl());
-            let servers = await response.json();
+            let servers = null;
+            for (const version of ["1.27", ""]) {
+                try {
+                    let response = await fetch(apiBase + "/servers" + (version ? "?v=" + version : ""));
+                    if (!response.ok) continue;
+                    let data = await response.json();
+                    if (Array.isArray(data) && data.length) { servers = data; break; }
+                } catch (error) { /* try the next shape */ }
+            }
+            if (!servers) {
+                console.error("[caramila] could not load the server list from " + apiBase +
+                    "/servers -- the browser will be empty. If the game itself still lists " +
+                    "servers, the version parameter has moved again.");
+                return [];
+            }
 
             await Promise.all(servers.map(async server => {
-                let requestPingUrl = `https://${server.key}.${server.region}.moomoo.io/ping/`;
+                let pingHost = `${server.key}.${server.region}.moomoo.io`;
+                if (server.port) pingHost += ":" + server.port;
+                let requestPingUrl = `https://${pingHost}/ping`;
                 let startTime = Date.now();
                 try {
                     await fetch(requestPingUrl);
