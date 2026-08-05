@@ -79,5 +79,39 @@ function t(name,got,want){ const ok=got===want; ok?pass++:fail++; console.log(` 
   const st=new SpikeTick(makeClient(objs)); st.client=makeClient(objs);
   t("nearest hazard on the line is chosen", Math.round(st._landsOn(enemy,0,170).distance), 90);
 }
+
+/* ---- damage scoring ---------------------------------------------------- */
+function touchingStub(objs){
+  const cl=makeClient(objs);
+  const st=new SpikeTick(cl); st.client=cl; return st;
+}
+// 8. a hazard in contact is reported with its damage
+{
+  const objs=[spike(80,0,49,45)];               // spinning spikes, touching (35+49=84 > 80)
+  const st=touchingStub(objs);
+  const victim={collisionScale:35,hitScale:35,
+    pos:{previous:P(0,0),current:P(0,0),future:P(0,0)},
+    collidingObject(o){const r=this.collisionScale+o.collisionScale;return this.pos.current.distance(o.pos.current)<=r}};
+  t("contact damage is reported", st._touchingDamage(victim), 45);
+}
+// 9. a hazard out of contact contributes nothing
+{
+  const objs=[spike(300,0,49,45)];
+  const st=touchingStub(objs);
+  const victim={collisionScale:35,hitScale:35,
+    pos:{previous:P(0,0),current:P(0,0),future:P(0,0)},
+    collidingObject(o){const r=this.collisionScale+o.collisionScale;return this.pos.current.distance(o.pos.current)<=r}};
+  t("a distant hazard adds no contact damage", st._touchingDamage(victim), 0);
+}
+// 10. the victim's own spike never counts as contact
+{
+  const objs=[spike(80,0,49,45)];
+  const cl=makeClient(objs); cl.PlayerManager.isEnemyByID=()=>false;
+  const st=new SpikeTick(cl); st.client=cl;
+  const victim={collisionScale:35,hitScale:35,
+    pos:{previous:P(0,0),current:P(0,0),future:P(0,0)},
+    collidingObject(){return true}};
+  t("the victim's own spike adds no contact damage", st._touchingDamage(victim), 0);
+}
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);

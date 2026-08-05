@@ -13281,11 +13281,6 @@ window.grbtp = 35;
        * prediction stops being worth acting on, and every client that does this
        * lands on roughly the same number. */
       static MAX_TRAVEL=170;
-      static RANK={
-          contact: 0,
-          knock: 1,
-          bounce: 2
-      };
       moduleName="spikeTick";
       client;
       useTurret=false;
@@ -13315,6 +13310,20 @@ window.grbtp = 35;
           if (!isSpike && !isCactus) return false;
           // A player's own spikes do not hurt them, so they are not a target.
           return !isPlayerObject || PlayerManager2.isEnemyByID(object.ownerID, victim);
+      }
+      /* Damage of the hazard the victim is standing on right now, which the hit
+       * stacks with if it lands on this tick. Certain, unlike the sweep below. */
+      _touchingDamage(victim) {
+          const {ObjectManager: ObjectManager2} = this.client;
+          const at = victim.pos.current;
+          let damage = 0;
+          ObjectManager2.grid2D.query(at.x, at.y, 2, id => {
+              const object = ObjectManager2.objects.get(id);
+              if (!object || !this._isHostileHazard(object, victim)) return;
+              if (!victim.collidingObject(object)) return;
+              damage = Math.max(damage, object.getDamage());
+          });
+          return damage;
       }
       /* Sweeps the victim along `angle` for up to `reach` units and returns the
        * nearest hazard they would come to rest against, or null. */
@@ -13348,10 +13357,13 @@ window.grbtp = 35;
       _pinnedBehind(victim, angle, reach) {
           return this._landsOn(victim, reverseAngle(angle), reach) !== null;
       }
-      /* Ranks the ways this tick can land, best first:
-       *   bounce  - they are thrown onto a hazard with another one behind them
-       *   knock   - the hit alone throws them onto a hazard
-       *   contact - they are already on one, which is all this module used to do
+      /* Picks the reachable enemy this tick adds the most damage to.
+       *
+       * Contact damage is what they are already standing on and is certain the
+       * moment the hit lands; sweep damage is what the knockback would throw
+       * them onto and is a prediction. Being pinned — a hazard ahead and another
+       * behind — doubles the sweep's share, because the bounce off the first
+       * carries them into the second.
        */
       _resolveTarget(myPlayer, EnemyManager2, primary) {
           const weaponRange = DataHandler_default.getWeapon(primary).range;
@@ -13365,18 +13377,18 @@ window.grbtp = 35;
               const angle = (myPlayer.pos.future ?? myPlayer.pos.current).angle(victim.pos.future ?? victim.pos.current);
               const reach = Math.min(myPlayer.getActualMaxKnockback(victim) || 0, SpikeTick.MAX_TRAVEL);
               const landing = reach > 0 ? this._landsOn(victim, angle, reach) : null;
-              let mode = null;
-              if (landing && this._pinnedBehind(victim, angle, reach)) mode = "bounce"; else if (landing) mode = "knock"; else if (victim === EnemyManager2.enemySpikeCollider) mode = "contact";
-              if (mode === null) continue;
-              const rank = SpikeTick.RANK[mode];
-              const damage = landing ? landing.damage : 0;
-              if (best === null || rank > best.rank || rank === best.rank && damage > best.damage) {
+              const pinned = landing !== null && this._pinnedBehind(victim, angle, reach);
+              const contact = this._touchingDamage(victim);
+              const swept = landing ? landing.damage * (pinned ? 2 : 1) : 0;
+              const damage = contact + swept;
+              if (damage <= 0) continue;
+              if (best === null || damage > best.damage) {
                   best = {
                       victim: victim,
                       angle: angle,
-                      mode: mode,
-                      rank: rank,
-                      damage: damage
+                      damage: damage,
+                      contact: contact,
+                      pinned: pinned
                   };
               }
           }
@@ -13425,8 +13437,10 @@ window.grbtp = 35;
               if (turretReloaded) {
                   ModuleHandler.moduleActive = true;
                   ModuleHandler.forceHat = 53;
+                  return;
               }
-              return;
+              // Nothing to fire, so fall through rather than spend the tick —
+              // the enemy may be making contact on this one.
           }
           if (EnemyManager2.shouldIgnoreModule()) {
               return;
@@ -20131,7 +20145,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-05T21:28:27.862Z",
+      "builtAt": "2026-08-05T21:34:20.516Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
