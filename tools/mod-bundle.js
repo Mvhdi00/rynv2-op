@@ -135,8 +135,20 @@ function namedModule(src, id) {
 }
 
 /* Minified bundles: the map is the array argument to the bootstrap IIFE, so
- * ids are positions in it. Split it at top level. */
+ * ids are positions in it. Split it at top level.
+ *
+ * Memoised: callers ask repeatedly and these files run to a megabyte each, so
+ * rescanning per question dominated the verifier's runtime. */
+const arrayModulesCache = new Map();
+
 function arrayModules(src) {
+  if (arrayModulesCache.has(src)) return arrayModulesCache.get(src);
+  const spans = scanArrayModules(src);
+  arrayModulesCache.set(src, spans);
+  return spans;
+}
+
+function scanArrayModules(src) {
   const boot = src.search(/\}\(\s*\[\s*function/);
   if (boot === -1) return null;
   const open = src.indexOf("[", boot);

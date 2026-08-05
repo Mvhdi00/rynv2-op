@@ -76,12 +76,13 @@ const SHORT_SWORD_FIX = [
   `$1${DRIVERS.weapons[3].src}$2${DRIVERS.weapons[3].yOff}$3`,
 ];
 
-/* These three vary only by indentation and by the --largeserver branch's
- * constant across the Emre-descended mods, so they are written once as
- * patterns rather than four times as literals. */
+/* These three vary across the family only by indentation, by the --largeserver
+ * branch's constant, and by whether the bundle was minified — the minified ones
+ * write `e.exports` where the beautified ones write `module.exports`. Written
+ * once as patterns rather than seven times as literals. */
 const MAX_PLAYERS_FIX = [
   `config: maxPlayers -> ${DRIVERS.config.maxPlayers}`,
-  /(module\.exports\.maxPlayers = [^;\n]*\?[^:\n]*: )\d+;/,
+  /(\w+\.exports\.maxPlayers = [^;\n]*\?[^:\n]*: )\d+;/,
   `$1${DRIVERS.config.maxPlayers};`,
 ];
 
@@ -90,14 +91,14 @@ const MAX_PLAYERS_FIX = [
  * undefined. */
 const SKIN_COLORS_FIX = [
   "config: skinColors trimmed to the game's 10",
-  /module\.exports\.skinColors = \[[^\]]*\];/,
-  `module.exports.skinColors = ${skinColorsLiteral};`,
+  /(\w+\.exports\.skinColors = )\[[^\]]*\](;?)/,
+  `$1${skinColorsLiteral}$2`,
 ];
 
 const NEW_KEYS_FIX = [
   "config: added the bundle's MAX_* / DAY_INTERVAL keys",
-  /( *)module\.exports\.mapPingTime = 2200;/,
-  (m, indent) => m + "\n" + newConfigKeys("module.exports", ";", indent),
+  /( *)(\w+)\.exports\.mapPingTime = 2200;/,
+  (m, indent, target) => m + "\n" + newConfigKeys(target + ".exports", ";", indent),
 ];
 
 /* ------------------------------------------------------------------ *
@@ -430,6 +431,132 @@ if (!__sig || !__gm || (__gm.script.name == __sig[0] && __gm.script.author == __
 
   {
     /* ----------------------------------------------------------------
+     * A re-wrapped Lolfly, distinct from src/mods/Lolfly_v4.js: same base,
+     * different packaging, mangled identifiers, and two WebSocket.prototype.send
+     * proxies bolted on top of the bundle.
+     * ---------------------------------------------------------------- */
+    name: "Lolfly v4 (MihailSurviv build)",
+    src: "src/mods/Lolfly_v4_MS.js",
+    out: "Lolfly_v4_MS_Fixed.user.js",
+    connectFn: "f581",
+    header: `// ==UserScript==
+// @name         Lolfly v4 — MihailSurviv build (fixed)
+// @author       ryan8402, MihailSurviv.
+// @description  checked for a logger, but it doesn't exist
+// @version      001
+// @match        *://moomoo.io/*
+// @match        *://*.moomoo.io/*
+// @icon         https://pa1.narvii.com/6564/396626249978b4faee638d4b3b05549fe1443b3f_hq.gif
+// @require      https://code.jquery.com/jquery-3.3.1.min.js
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==`,
+    notes: [
+      "header: dropped both msgpack @requires (bundle carries msgpack-lite)",
+      "header: jQuery @require switched from http to https (mixed content is blocked on the game page)",
+      "header: dropped the unused jquery-ui and jquery-confirm @requires",
+    ],
+    hook: `window.OriginalWebSocket = window.WebSocket;
+    window.WebSocket = class {
+      constructor(p1618) {
+        f581(p1618);
+      }
+    };`,
+    io: {
+      msgpackExpr: NAMED_MSGPACK,
+      /* Counters for the anti-kick lifted out of the proxy below. */
+      preamble: `                var antiKickWindow = Date.now();
+                var antiKickCount = 0;`,
+      /* Peadox anti-kick, moved here from the WebSocket.prototype.send proxy it
+       * used to live in. That proxy msgpack-decoded every outbound frame, which
+       * a signed frame is not — it would have shredded the transport. Here the
+       * packet name is already in hand and nothing has been encoded yet. */
+      extras: `                        if (Date.now() - antiKickWindow > 500) {
+                            antiKickCount = 0;
+                            antiKickWindow = Date.now();
+                        }
+                        if (antiKickCount > 45 && type !== "0") return;
+                        if (type !== "0") antiKickCount++;`,
+    },
+    edits: [
+      /* Two proxies wrapped WebSocket.prototype.send, both of them decoding
+       * every outbound frame as bare msgpack. Under the keyed transport a frame
+       * is 6 HMAC bytes followed by the payload, so neither could decode it and
+       * both would have corrupted whatever they re-encoded. The rename table was
+       * a guess at the current opcodes in the first place; the io-client now
+       * carries the real one, negotiated per connection. */
+      ["entry: removed the FreeUnpatcher send proxy (guessed opcodes, shreds signed frames)",
+        `const FreeUnpatcherForYourNewMods = {
+    "f": "9",
+    "a": "9",
+    "d": "F",
+    "G": "z"
+}
+let originalSend = WebSocket.prototype.send;
+WebSocket.prototype.send = new Proxy(originalSend, {
+    apply: ((target, websocket, argsList) => {
+        let decoded = msgpack.decode(new Uint8Array(argsList[0]));
+        if (FreeUnpatcherForYourNewMods.hasOwnProperty(decoded[0])) {
+            decoded[0] = FreeUnpatcherForYourNewMods[decoded[0]];
+        };
+        return target.apply(websocket, [msgpack.encode(decoded)]);
+    }),
+});`,
+        `/* removed: the "FreeUnpatcher" send proxy. It renamed four opcodes by
+   guesswork and msgpack-decoded every outbound frame; the current transport
+   negotiates its opcode table per connection and signs each frame, so the
+   proxy could neither read nor safely rewrite one. */`],
+      ["entry: removed the Peadox anti-kick send proxy (moved into the io-client)",
+        `window.WebSocket.prototype.send = new Proxy(window.WebSocket.prototype.send, {
+  apply: function () {
+    let v371 = msgpack.decode(new Uint8Array(arguments[2][0]));
+    console.log(+new Date() - v370, vA12.length, v371);
+    if (+new Date() - v370 > 500) {
+      vA12 = [];
+      v370 = +new Date();
+    }
+    if (vA12.length > 45 && v371[0] != "0") {
+      return console.log("[Peadox]: Anti kick Stopped client from sending request");
+    }
+    if (v371[0] != "0") {
+      vA12.push(v371);
+    }
+    return Reflect.apply(...arguments);
+  }
+});`,
+        `/* removed: the Peadox anti-kick send proxy — same problem, it decoded every
+   outbound frame as bare msgpack. The rate limit it enforced now lives in the
+   io-client's send path, where the packet name is available before the frame
+   is built and signed. */`],
+      MAX_PLAYERS_FIX,
+      SKIN_COLORS_FIX,
+      NEW_KEYS_FIX,
+    ],
+  },
+
+  {
+    /* ----------------------------------------------------------------
+     * Already carries a correct keyed transport and its own document-start
+     * WebSocket capture with an address queue — verified against the game
+     * before anything was changed, and every transport check passes on the
+     * file as shipped. Only its tables had drifted, so that is all that is
+     * touched here.
+     *
+     * maxPlayers is left at Infinity and deathFadeout at 0: the first only
+     * feeds the server-browser "x / y" readout, the second only the death
+     * fade. Both look like deliberate choices rather than drift, and neither
+     * crosses the wire.
+     * ---------------------------------------------------------------- */
+    name: "operator rageok.",
+    src: "src/mods/Operator_Rageok_v1.4.js",
+    out: "Operator_Rageok_v1.4_Fixed.user.js",
+    steps: { transport: false, hook: false, wrap: false },
+    header: null,
+    edits: [SKIN_COLORS_FIX, NEW_KEYS_FIX],
+  },
+
+  {
+    /* ----------------------------------------------------------------
      * Chicken is the minified asset, so the module map is an array and the
      * factory parameters are mangled: `e` is module, `t` exports, `n` require.
      * ---------------------------------------------------------------- */
@@ -573,15 +700,18 @@ function reindent(text, column) {
 
 for (const mod of MODS) {
   const p = Patcher(mod.name, fs.readFileSync(path.join(ROOT, mod.src), "utf8"));
+  /* One mod already carries a correct transport and its own document-start
+   * capture, so it opts out of those steps and takes only the table edits. */
+  const steps = Object.assign({ transport: true, hook: true, wrap: true }, mod.steps);
 
-  const io = mod.prepare ? mod.prepare(p) : mod.io;
-  rewriteHeader(p, mod.header);
+  const io = steps.transport ? (mod.prepare ? mod.prepare(p) : mod.io) : null;
+  if (mod.header) rewriteHeader(p, mod.header);
   for (const note of mod.notes || []) p.applied.push(note);
 
-  replaceIoClient(p, io);
-  rewireSocketHook(p, mod.hook, mod.connectFn);
+  if (steps.transport) replaceIoClient(p, io);
+  if (steps.hook) rewireSocketHook(p, mod.hook, mod.connectFn);
   for (const [name, find, replace] of mod.edits) p.edit(name, find, replace);
-  wrapForDomReady(p, mod.name);
+  if (steps.wrap) wrapForDomReady(p, mod.name);
 
   fs.writeFileSync(path.join(ROOT, mod.out), p.code);
   console.log(mod.out);

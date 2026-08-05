@@ -41,12 +41,22 @@ const BUILT = [
   "S_Client_v8.2_Fixed.user.js",
   "Lolfly_v4_Fixed.user.js",
   "Lrx_2023_Fixed.user.js",
+  "Lolfly_v4_MS_Fixed.user.js",
+  "Operator_Rageok_v1.4_Fixed.user.js",
   "Chicken_v3_Fixed.user.js",
 ];
 
 const TARGETS = process.argv.length > 2
   ? process.argv.slice(2).map((p) => path.resolve(p))
   : BUILT.map((f) => path.join(ROOT, f));
+
+/* Config keys a mod diverges on deliberately. Both of these are client-render
+ * only — maxPlayers feeds the server-browser "x / y" readout, deathFadeout the
+ * death fade — so neither can desync anything with the server, and rewriting
+ * them would undo a choice the author made on purpose. */
+const ACCEPTED = {
+  "Operator_Rageok_v1.4_Fixed.user.js": ["maxPlayers", "maxPlayersHard", "deathFadeout"],
+};
 
 /* How to reach each module: by webpack id where the bundle kept them, by
  * content where it did not. */
@@ -103,8 +113,9 @@ function checkTransport(src) {
    * array index, and the emitted line says which. */
   const lookup = body.match(/var msgpack = (.+);/);
   if (!lookup) throw new Error("rebuilt io-client has no msgpack lookup");
-  const byIndex = lookup[1].match(/^\w+\((\d+)\)$/);
-  const byName = lookup[1].match(/^\w+\("([^"]+)"\)$/);
+  const byIndex = lookup[1].match(/^\w+\(\s*(\d+)\s*\)$/);
+  const byName = lookup[1].match(/^\w+\(\s*"([^"]+)"\s*\)$/);
+  if (!byIndex && !byName) throw new Error("unrecognised msgpack lookup: " + lookup[1]);
   const msgpack = req(byIndex ? Number(byIndex[1]) : byName[1]);
 
   /* A handshake exactly as the server sends it. */
@@ -140,7 +151,13 @@ function checkTransport(src) {
        * require of the config module. */
       e: m, t: m.exports, n: () => ({}),
       __webpack_require__: () => ({}),
-      window: { OriginalWebSocket: FakeSocket, packetSent: 0 },
+      window: { OriginalWebSocket: FakeSocket, packetSent: 0, WebSocket: FakeSocket },
+      /* Some io-clients reach for a bare OriginalWebSocket rather than the
+       * window property. */
+      OriginalWebSocket: FakeSocket,
+      WebSocket: FakeSocket,
+      performance: { now: () => 0, timeOrigin: 0 },
+      packets: 0, packetInterval: undefined, pps: 0,
       /* The Emre-descended mods keep their rate limiter in the userscript
        * scope outside the bundle; the module closes over these at runtime. */
       firstSend: {}, minPacket: 0, secPacket: 0,
@@ -265,7 +282,7 @@ function checkTransport(src) {
 /* ------------------------------------------------------------------ *
  * Table drift
  * ------------------------------------------------------------------ */
-function checkTables(src) {
+function checkTables(src, accepted = []) {
   const req = B.createLoader(src);
   const config = req(B.findModuleId(src, MODULES.config));
   const items = req(B.findModuleId(src, MODULES.items));
@@ -280,7 +297,7 @@ function checkTables(src) {
     if (!(k in config)) { drift.push(`config: missing "${k}"`); continue; }
     /* inSandbox is a build-time flag in the bundle and a host check in the
      * mods; both are false in a browser on the live game. */
-    if (k === "inSandbox") continue;
+    if (k === "inSandbox" || accepted.includes(k)) continue;
     if (!same(config[k], v)) drift.push(`config.${k}: mod=${JSON.stringify(config[k])} game=${JSON.stringify(v)}`);
   }
 
@@ -326,7 +343,7 @@ for (const target of TARGETS) {
   const src = fs.readFileSync(target, "utf8");
   console.log(path.relative(ROOT, target));
   checkTransport(src);
-  checkTables(src);
+  checkTables(src, ACCEPTED[path.basename(target)] || []);
   console.log("");
 }
 
