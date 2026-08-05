@@ -1697,7 +1697,7 @@ window.grbtp = 35;
   const Commands_default = _buildCommandsHtml(window._translations_cache || {});
   const Home_default = '<div class="menu-page opened" data-id="0">\r\n\r\n  <div style="margin-bottom:16px;">\r\n    <div class="page-title">RYN CLIENT</div>\r\n    <div class="page-description">The full automation suite for moomoo.io — combat, bots, and total customization.</div>\r\n  </div>\r\n\r\n</div>';
   const Keybinds_default = '<div class="menu-page" data-id="1">\r\n    <div class="page-title">Keybinds</div>\r\n    <p class="page-description">Setup keybinds for items, weapons and hats</p>\r\n\r\n    \x3c!-- Items & Weapons --\x3e\r\n    <div class="section">\r\n        <div class="section-title">Items & Weapons</div>\r\n        <div class="section-content split">\r\n\r\n            <div class="content-split">\r\n                <div class="content-option">\r\n                    <span class="option-title">Food</span>\r\n                    <button id="_food" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Wall</span>\r\n                    <button id="_wall" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Spike</span>\r\n                    <button id="_spike" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Windmill</span>\r\n                    <button id="_windmill" class="hotkeyInput"></button>\r\n                </div>\r\n            </div>\r\n\r\n            <div class="content-split">\r\n                <div class="content-option">\r\n                    <span class="option-title">Farm</span>\r\n                    <button id="_farm" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Trap</span>\r\n                    <button id="_trap" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Turret</span>\r\n                    <button id="_turret" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Spawn</span>\r\n                    <button id="_spawn" class="hotkeyInput"></button>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    \x3c!-- Controls & Movement --\x3e\r\n    <div class="section">\r\n        <div class="section-title">Controls & Movement</div>\r\n        <div class="section-content">\r\n\r\n            <div class="content-split">\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Lock bot position</span>\r\n                    <button id="_lockBotPosition" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Shop</span>\r\n                    <button id="_toggleShop" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Clan</span>\r\n                    <button id="_toggleClan" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Menu</span>\r\n                    <button id="_toggleMenu" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Instakill</span>\r\n                    <button id="_instakill" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    \x3c!-- Bot Controls --\x3e\r\n    <div class="section">\r\n        <div class="section-title">Bot Controls</div>\r\n        <div class="section-content">\r\n            <div class="content-split">\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Auto Farm</span>\r\n                    <button id="_botAutoFarm" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Bot Auto-Attack</span>\r\n                    <button id="_botAutoAttack" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Spawn Bot</span>\r\n                    <button id="_spawnBot" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Kill All Bots</span>\r\n                    <button id="_killAllBots" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Repel Alts</span>\r\n                    <button id="_repelAlts" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Scatter Bots</span>\r\n                    <button id="_scatterBots" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Freeze Bots</span>\r\n                    <button id="_freezeBots" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n                \r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    \x3c!-- Spectate --\x3e\r\n    <div class="section">\r\n        <div class="section-title">Spectate</div>\r\n        <div class="section-content">\r\n            <div class="content-split">\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Camera Up</span>\r\n                    <button id="_spectateCamUp" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Camera Down</span>\r\n                    <button id="_spectateCamDown" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Camera Left</span>\r\n                    <button id="_spectateCamLeft" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Camera Right</span>\r\n                    <button id="_spectateCamRight" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Next Player</span>\r\n                    <button id="_spectateNext" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Previous Player</span>\r\n                    <button id="_spectatePrev" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Respawn</span>\r\n                    <button id="_spectateRespawn" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <div class="section-title">Quick Actions</div>\r\n        <div class="section-content">\r\n            <div class="content-split">\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Quad Spikes</span>\r\n                    <button id="_fourSpikes" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Quad Traps</span>\r\n                    <button id="_fourTraps" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Automill</span>\r\n                    <button id="_autoMillKey" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Boost Spike Rush</span>\r\n                    <button id="_boostSpikes" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Dash Movement</span>\r\n                    <button id="_dashMovementKey" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Auto Grind</span>\r\n                    <button id="_autoGrindKey" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Toggle Autoplacer</span>\r\n                    <button id="_autoplacerKey" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n                <div class="content-option">\r\n                    <span class="option-title">Name Song &#127926;</span>\r\n                    <button id="_nameSong" class="hotkeyInput"></button>\r\n                </div>\r\n\r\n            </div>\r\n        </div>\r\n    </div>\r\n</div>';
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it \u2014 you do not have to hit the switch.</p>\r\n\r\n    <!-- Master -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Master<span class=\"sec-sub\">One switch that silences every automatic action below.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_disableAutoTickCombat\">Manual Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_disableAutoTickCombat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Instakills -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_normalInstakill\">Normal Instakill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_normalInstakill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_velocityTick\">Velocity tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_velocityTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Attacks using turret + diamond polearm in one tick</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_comboApproach\">Combo Approach</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_comboApproach\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Walks you to velocity tick range and parks you there, instead of waiting for the enemy to cross the 25px window. Brakes with Tank Gear for fine adjustment and Emp Helmet for medium. Yields movement to any other module.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick\">Spike tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick_breakTrap\">Spike tick: break trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick_breakTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">When the enemy stands on their own trap: breaks it with a Great Hammer one-shot, places a spike on the closest open angle, then follows up with Bull Helmet.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTick\">Knockback tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTickHammer\">Knockback tick hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTickHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTickTrap\">Knockback tick trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTickTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_kbPredictInsta\">KB Predict Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_kbPredictInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Spikes & Traps -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_glotusPlacer\">Glotus Placer Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_glotusPlacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Swaps the placer for the original Glotus one, ported line for line. Much simpler: it takes the best placement angles then keeps a spike only if the enemy was trapped, or the spike touches them or their trap, or knockback would throw them onto an existing spike. Turn it off to go back to the RYN placer.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_preplacer\">Pre Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_preplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Pre-places spikes and traps on the angles the enemy would escape or get knocked into, before they move. Needs Auto Retrap on.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_replacer\">Re Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_replacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Bans an angle for 18 ticks after a successful place, so it stops re-placing in the same spot. Needs Auto Retrap on.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaExactPlacer\">Exact Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaExactPlacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Strict spike acceptance. When ON it skips 6 placement rules (seals exit, double spike, bounce onto spike, touching a trapped enemy...). Turn it OFF for the original permissive placing.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoplacer radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement accuracy</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_placeAttempts\" type=\"range\" min=\"1\" max=\"10\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoRetrap\">Auto Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Re-traps an enemy the moment they break out. 627 lines of placement logic that shipped disabled. Try it on its own first.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placerRetrapCombo\">Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placerRetrapCombo\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapRebuild\">Trap Rebuild</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapRebuild\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">\u00d9\u0084\u00d9\u0088 \u00d8\u00a7\u00d9\u0086\u00d9\u0083\u00d8\u00b3\u00d8\u00b1 \u00d9\u0081\u00d8\u00ae\u00d9\u0083 \u00d9\u0088\u00d8\u00a7\u00d9\u0084\u00d8\u00a7\u00d8\u00b3\u00d8\u00aa\u00d8\u00a8\u00d8\u00a7\u00d9\u0082 \u00d9\u0085\u00d8\u00a7 \u00d8\u00ba\u00d8\u00b7\u00d8\u00a7\u00d9\u0087\u00d8\u008c \u00d9\u008a\u00d8\u00b9\u00d9\u008a\u00d8\u00af \u00d8\u00a8\u00d9\u0086\u00d8\u00a7\u00d8\u00a1\u00d9\u0087 \u00d8\u00a8\u00d9\u0086\u00d9\u0081\u00d8\u00b3 \u00d8\u00a7\u00d9\u0084\u00d9\u0085\u00d9\u0083\u00d8\u00a7\u00d9\u0086. \u00d8\u00b4\u00d8\u00a8\u00d9\u0083\u00d8\u00a9 \u00d8\u00a7\u00d8\u00ad\u00d8\u00aa\u00d9\u008a\u00d8\u00a7\u00d8\u00b7\u00d9\u008a\u00d8\u00a9.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lockTrappedEnemy\">Lock Trapped Enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lockTrappedEnemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Skips the knockback tick while the enemy is already trapped by you. Turn it OFF to always knockback tick.</span>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Defense -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Watches for incoming sync damage and answers with Bull Helmet.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Gear -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Swaps gear by combat distance instead of a fixed choice.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Movement -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Pushes a trapped enemy onto a nearby spike using your body. Sends no packets.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n                <span class=\"option-description\">Distance used by auto push before activating</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaSafeWalk\">SafeWalk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaSafeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN SAFEWALK: \u00d9\u008a\u00d8\u00aa\u00d9\u0081\u00d8\u00a7\u00d8\u00af\u00d9\u0089 \u00d8\u00b3\u00d8\u00a8\u00d8\u00a7\u00d9\u008a\u00d9\u0083\u00d8\u00a7\u00d8\u00aa \u00d8\u00a7\u00d9\u0084\u00d8\u00b9\u00d8\u00af\u00d9\u0088 \u00d9\u0088\u00d8\u00a7\u00d9\u0084\u00d8\u00b5\u00d8\u00a8\u00d8\u00a7\u00d8\u00b1 \u00d8\u00a7\u00d8\u00ab\u00d9\u0086\u00d8\u00a7\u00d8\u00a1 \u00d8\u00a7\u00d9\u0084\u00d8\u00ad\u00d8\u00b1\u00d9\u0083\u00d8\u00a9</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaPathfinder\">Pathfinder</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaPathfinder\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">A* \u00d8\u00a8\u00d9\u0080Web Worker. \u00d9\u008a\u00d8\u00ad\u00d8\u00aa\u00d8\u00a7\u00d8\u00ac AutoPlay \u00d8\u00b4\u00d8\u00ba\u00d8\u00a7\u00d9\u0084.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_pathBreak\">Path Break</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_pathBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">\u00d9\u008a\u00d9\u0083\u00d8\u00b3\u00d8\u00b1 \u00d9\u0081\u00d8\u00ae\u00d9\u0088\u00d8\u00ae\u00d9\u0083/\u00d8\u00b3\u00d8\u00a8\u00d8\u00a7\u00d9\u008a\u00d9\u0083\u00d8\u00a7\u00d8\u00aa\u00d9\u0083 \u00d8\u00a8\u00d8\u00b3 \u00d9\u0084\u00d9\u0085\u00d8\u00a7 \u00d8\u00a7\u00d9\u0084\u00d8\u00b6\u00d8\u00b1\u00d8\u00a8\u00d8\u00a9 \u00d8\u00aa\u00d9\u0082\u00d8\u00aa\u00d9\u0084\u00d9\u0087\u00d8\u00a7 \u00e2\u0080\u0094 \u00d9\u0081\u00d8\u00a7\u00d9\u0084\u00d8\u00a7\u00d8\u00b3\u00d8\u00aa\u00d8\u00a8\u00d8\u00a7\u00d9\u0082 \u00d9\u008a\u00d8\u00ad\u00d8\u00b7 \u00d8\u00a8\u00d8\u00af\u00d9\u008a\u00d9\u0084 \u00d8\u00a8\u00d9\u0086\u00d9\u0081\u00d8\u00b3 \u00d8\u00a7\u00d9\u0084\u00d8\u00aa\u00d9\u008a\u00d9\u0083. \u00d9\u008a\u00d8\u00ad\u00d8\u00aa\u00d8\u00a7\u00d8\u00ac Autobreak + Preplacer.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_lunaMode\">Luna Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lunaMode\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Luna placement system. When ON it disables the classic modules: Spike Trap, Teammate Spike Trap, Placement Defense, Trap Animal, Anti Trap Protect, Anti Trap Star and Dash Movement. Turn it OFF to get the original spike placing behaviour back.</span>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Shame -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Shame<span class=\"sec-sub\">Forcing the enemy heal counter up until it kills them.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameGrind\">Shame Grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameTick\">Shame Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShame\">Auto Hit to Shame</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShame\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Max Shame</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoShameLimit\" type=\"range\" min=\"1\" max=\"8\" step=\"1\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameSpam\">Shame Spam</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameSpam\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Utility -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGather\">Auto Gather</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGather\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN: \u00d9\u0088\u00d8\u00b6\u00d8\u00b9 \u00d8\u00a7\u00d9\u0084\u00d8\u00b6\u00d8\u00b1\u00d8\u00a8 \u00d8\u00a7\u00d9\u0084\u00d8\u00aa\u00d9\u0084\u00d9\u0082\u00d8\u00a7\u00d8\u00a6\u00d9\u008a \u00d9\u0088\u00d9\u0082\u00d8\u00aa \u00d8\u00a7\u00d9\u0084\u00d9\u0083\u00d8\u00b3\u00d8\u00b1 \u00d8\u00a8\u00d8\u00af\u00d9\u0084 \u00d8\u00a7\u00d8\u00b1\u00d8\u00b3\u00d8\u00a7\u00d9\u0084 \u00d8\u00b6\u00d8\u00b1\u00d8\u00a8\u00d8\u00a7\u00d8\u00aa = \u00d9\u008a\u00d9\u0088\u00d9\u0081\u00d9\u0091\u00d8\u00b1 \u00d8\u00a8\u00d8\u00a7\u00d9\u0083\u00d9\u008a\u00d8\u00aa\u00d8\u00a7\u00d8\u00aa \u00d9\u0084\u00d9\u0084\u00d9\u0081\u00d8\u00ae\u00d9\u0088\u00d8\u00ae \u00d9\u0081\u00d8\u00aa\u00d8\u00b5\u00d9\u008a\u00d8\u00b1 \u00d8\u00a7\u00d8\u00b3\u00d8\u00b1\u00d8\u00b9. \u00d9\u008a\u00d8\u00ad\u00d8\u00aa\u00d8\u00a7\u00d8\u00ac Autobreak.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN autoPlay: \u00d9\u008a\u00d8\u00af\u00d9\u0088\u00d8\u00b1 \u00d8\u00ad\u00d9\u0088\u00d9\u0084 \u00d8\u00a7\u00d9\u0084\u00d8\u00b9\u00d8\u00af\u00d9\u0088 \u00d8\u00a8\u00d9\u0086\u00d8\u00b5\u00d9\u0081 \u00d9\u0082\u00d8\u00b7\u00d8\u00b1 80 \u00d9\u0088\u00d9\u008a\u00d8\u00b9\u00d9\u0083\u00d8\u00b3 \u00d8\u00a7\u00d9\u0084\u00d8\u00a7\u00d8\u00aa\u00d8\u00ac\u00d8\u00a7\u00d9\u0087 \u00d9\u0084\u00d9\u0088 \u00d8\u00a7\u00d9\u0086\u00d8\u00b3\u00d8\u00af. \u00d9\u008a\u00d9\u0085\u00d8\u00b3\u00d9\u0083 \u00d8\u00ad\u00d8\u00b1\u00d9\u0083\u00d8\u00aa\u00d9\u0083.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it — you do not have to hit the switch.</p>\r\n\r\n    <!-- Master -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Master<span class=\"sec-sub\">One switch that silences every automatic action below.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_disableAutoTickCombat\">Manual Mode</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_disableAutoTickCombat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Instakills -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_normalInstakill\">Normal Instakill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_normalInstakill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_velocityTick\">Velocity tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_velocityTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Attacks using turret + diamond polearm in one tick</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_comboApproach\">Combo Approach</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_comboApproach\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Walks you to velocity tick range and parks you there, instead of waiting for the enemy to cross the 25px window. Brakes with Tank Gear for fine adjustment and Emp Helmet for medium. Yields movement to any other module.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick\">Spike tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick_breakTrap\">Spike tick: break trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick_breakTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">When the enemy stands on their own trap: breaks it with a Great Hammer one-shot, places a spike on the closest open angle, then follows up with Bull Helmet.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTick\">Knockback tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTickHammer\">Knockback tick hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTickHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_knockbackTickTrap\">Knockback tick trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_knockbackTickTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_kbPredictInsta\">KB Predict Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_kbPredictInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Spikes & Traps -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoplacer radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement accuracy</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_placeAttempts\" type=\"range\" min=\"1\" max=\"10\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Defense -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Watches for incoming sync damage and answers with Bull Helmet.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Gear -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Swaps gear by combat distance instead of a fixed choice.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Movement -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Pushes a trapped enemy onto a nearby spike using your body. Sends no packets.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n                <span class=\"option-description\">Distance used by auto push before activating</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Shame -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Shame<span class=\"sec-sub\">Forcing the enemy heal counter up until it kills them.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shameSpam\">Shame Spam</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shameSpam\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Utility -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">RYN autoPlay: ÙØ¯ÙØ± Ø­ÙÙ Ø§ÙØ¹Ø¯Ù Ø¨ÙØµÙ ÙØ·Ø± 80 ÙÙØ¹ÙØ³ Ø§ÙØ§ØªØ¬Ø§Ù ÙÙ Ø§ÙØ³Ø¯. ÙÙØ³Ù Ø­Ø±ÙØªÙ.</span>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\r\n    <div class=\"page-title\">Visuals</div>\r\n    <p class=\"page-description\">Choose what gets drawn on screen. Turn off anything you do not need for a cleaner view.</p>\r\n\r\n    <!-- Tracers -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Tracers</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enemies</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_enemyTracersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_enemyTracers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Teammates</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_teammateTracersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_teammateTracers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Animals</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_animalTracersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_animalTracers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Notifications</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_notificationTracersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_notificationTracers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Markers -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Markers</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Items</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemMarkersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemMarkers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Teammates</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_teammateMarkersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_teammateMarkers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enemies</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_enemyMarkersColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_enemyMarkers\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Names -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Names</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Name</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_myNameColor\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Player HUD -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Player HUD</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon Reload Bar</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_weaponReloadBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_weaponReloadBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Turret Reload Bar</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_playerTurretReloadBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_playerTurretReloadBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Render HP</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_renderHP\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Position Prediction</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_positionPrediction\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Structures -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Structures</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placed Turret Reload Bar</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_objectTurretReloadBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_objectTurretReloadBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Mine/Clan)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Chat Log</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_chatLog\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Enemy)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarEnemyColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBarEnemy\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- myPlayer -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">myPlayer</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Display player angle</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_displayPlayerAngle\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <!-- Hitboxes -->\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Hitboxes</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Collision hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_collisionHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Possible placement</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_possiblePlacement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Misc_default = '<div class="menu-page" data-id="4">\r\n    <div class="page-title">Misc</div>\r\n    <p class="page-description">Customize misc settings, add autochat messages, reset settings</p>\r\n\r\n    \x3c!-- Legit Mode --\x3e\r\n    <div class="section">\r\n        <h2 class="section-title">Legit Mode</h2>\r\n        <div class="section-content">\r\n            <div class="content-option">\r\n                <span class="option-title">Legit Mode</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_legitMode" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class="option-description">يطفي كل ميزات الهاك دفعة وحدة (أوتوماتيك/إنستاكِل/تريسرز/بليسر...) وتلعب كلاعب عادي 100%. يحفظ حالة كل ميزة ويرجّعها بالضبط لما تطفيه.</span>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    \x3c!-- Other --\x3e\r\n    <div class="section">\r\n        <h2 class="section-title">Other</h2>\r\n\r\n        <div class="section-content">\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Kill Message</span>\r\n                <div class="option-content">\r\n                    <input id="_killMessageText" class="input" type="text" maxlength="30">\r\n                    <label class="switch-checkbox">\r\n                        <input id="_killMessage" type="checkbox">\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Provoke on Kill</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_deathProvoke" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Autospawn</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_autospawn" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Spectate on Death</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_spectate" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Ghost Mode</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_ghostMode" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class="option-description">On death, instantly respawn and play as a faded ghost. You keep full vision and can roam anywhere. WARNING: you are a live player — others still see you and can kill you. Overrides Spectate.</span>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Ghost Mode Opacity</span>\r\n                <label class="slider">\r\n                    <span class="slider-value"></span>\r\n                    <input id="_ghostOpacity" type="range" step="0.05" min="0.1" max="1">\r\n                </label>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Spectate Hide HUD</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_spectateHideHUD" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class="option-description">Hides resources, gold, item bar, age and leaderboard while spectating. Restored on respawn.</span>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Ghost Body</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_spectateGhost" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class="option-description">Draws your dead body as a transparent ghost while spectating.</span>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Ghost Opacity</span>\r\n                <label class="slider">\r\n                    <span class="slider-value"></span>\r\n                    <input id="_spectateGhostOpacity" type="range" step="0.05" min="0.1" max="1">\r\n                </label>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Autoaccept</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_autoaccept" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Hide game HUD</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_hideHUD" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Low Quality Mode</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_lowQuality" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <h2 class="section-title">Auto Chat</h2>\r\n        <div class="section-content">\r\n            <div class="content-option">\r\n                <span class="option-title">Enable</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_autoChat" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Interval</span>\r\n                <label class="slider">\r\n                    <span class="slider-value"></span>\r\n                    <input id="_autoChatInterval" type="range" step="1" min="1" max="60">\r\n                </label>\r\n            </div>\r\n            <div id="autoChatMsgList">\r\n            </div>\r\n            <div class="content-option">\r\n                <button id="addAutoChatMsg" class="option-button">+ Add Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <h2 class="section-title">Bot Auto Chat</h2>\r\n        <div class="section-content">\r\n            <div class="content-option">\r\n                <span class="option-title">Enable Player Chat</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_autoBotChat" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div id="autoBotChatMsgList">\r\n            </div>\r\n            <div class="content-option">\r\n                <button id="addAutoBotChatMsg" class="option-button">+ Add Player Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n\r\n    \x3c!-- Menu --\x3e\r\n    \x3c!-- <div class="section">\r\n        <h2 class="section-title">Menu</h2>\r\n\r\n        <div class="section-content">\r\n\r\n            <div class="content-option">\r\n                <span class="option-title">Transparency</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_menuTransparency" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div> --\x3e\r\n\r\n</div>';
   const Bots_default = '<div class="menu-page" data-id="5">\r\n    <div class="page-title">Bots</div>\r\n    <p class="page-description">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class="section">\r\n        <div class="section-title">Controller</div>\r\n        <div class="section-content">\r\n            <div class="content-option">\r\n                <span class="option-title">Follow cursor</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_followCursor" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Stop movement radius</span>\r\n                <label class="slider">\r\n                    <span class="slider-value"></span>\r\n                    <input id="_movementRadius" type="range" step="25" min="25" max="250">\r\n                </label>\r\n            </div>\r\n            <div class="content-option" style="flex-direction:column;align-items:flex-start;gap:8px;">\r\n                <span class="option-title" style="margin-bottom:2px;">Formation</span>\r\n                <div id="_formationGrid" style="display:flex;flex-wrap:wrap;gap:6px;width:100%;"></div>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Circle rotation</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_circleRotation" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Circle radius</span>\r\n                <label class="slider">\r\n                    <span class="slider-value"></span>\r\n                    <input id="_circleRadius" type="range" step="25" min="50" max="600">\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Bots own clan</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_botIndividualClans" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Auto random bot names</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_autoRandomBotNames" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class="content-option">\r\n                <span class="option-title">Attack Sync Delay</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_botAttackStagger" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div><div class="content-option">\r\n                <span class="option-title">Sync Delay Step</span>\r\n                <label class="slider">\r\n                    <span class="slider-value"></span>\r\n                    <input id="_botAttackStaggerMs" type="range" step="5" min="5" max="250">\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id="bot-container" class="section-content"></div>\r\n        <div id="dynamic-bot-list" style="display:flex;flex-direction:column;gap:8px;margin-top:8px;"></div>\r\n        <div class="content-option" style="margin-top:10px;justify-content:center;">\r\n            <button id="add-bot-dynamic" class="option-button" style="display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <div class="section-title">Bot Weapons</div>\r\n        <div class="section-content" style="padding:14px 16px;gap:16px;display:flex;flex-direction:column;">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:\'\';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid="-1"],.bot-sec-weapon-btn[data-swid="-1"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            \x3c!-- Primary --\x3e\r\n            <div>\r\n                <div class="wpn-label">Primary Weapon</div>\r\n                <div class="wpn-grid" id="bot-weapon-selector">\r\n                    <div class="bot-weapon-btn" data-wid="-1" title="Copy from me"><span class="wpn-name">Copy from me</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="0" title="Tool Hammer"><span class="wpn-name">Tool Hammer</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="1" title="Hand Axe"><span class="wpn-name">Hand Axe</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="2" title="Great Axe"><span class="wpn-name">Great Axe</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="3" title="Short Sword"><span class="wpn-name">Short Sword</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="4" title="Katana"><span class="wpn-name">Katana</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="5" title="Polearm"><span class="wpn-name">Polearm</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="6" title="Bat"><span class="wpn-name">Bat</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="7" title="Daggers"><span class="wpn-name">Daggers</span></div>\r\n                    <div class="bot-weapon-btn" data-wid="8" title="Stick"><span class="wpn-name">Stick</span></div>\r\n                    </div>\r\n                <div class="wpn-selected-bar"><div class="wpn-selected-dot"></div><span class="wpn-selected-text" id="bot-weapon-label">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            \x3c!-- Secondary --\x3e\r\n            <div>\r\n                <div class="wpn-label">Secondary Weapon</div>\r\n                <div class="wpn-grid" id="bot-sec-weapon-selector">\r\n                    <div class="bot-sec-weapon-btn" data-swid="-1" title="Copy from me"><span class="wpn-name">Copy from me</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="9" title="Hunting Bow"><span class="wpn-name">Hunting Bow</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="10" title="Great Hammer"><span class="wpn-name">Great Hammer</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="11" title="Wooden Shield"><span class="wpn-name">Wooden Shield</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="12" title="Crossbow"><span class="wpn-name">Crossbow</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="13" title="Repeater Crossbow"><span class="wpn-name">Repeater Crossbow</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="14" title="Mc Grabby"><span class="wpn-name">Mc Grabby</span></div>\r\n                    <div class="bot-sec-weapon-btn" data-swid="15" title="Musket"><span class="wpn-name">Musket</span></div>\r\n                    </div>\r\n                <div class="wpn-selected-bar"><div class="wpn-selected-dot"></div><span class="wpn-selected-text" id="bot-sec-weapon-label">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class="content-option" style="margin-top:2px;">\r\n                <span class="option-title">Platform w/ Musket</span>\r\n                <label class="switch-checkbox">\r\n                    <input id="_platformMusket" type="checkbox"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class="option-description">When bots have Musket equipped, they build a platform right before firing instead of shooting from the ground.</span>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <div class="section-title">Age 4 Building</div>\r\n        <div class="section-content" style="padding:14px 16px;gap:16px;display:flex;flex-direction:column;">\r\n            <div>\r\n                <div class="wpn-label">Age 4 Building</div>\r\n                <div class="wpn-grid" id="bot-age4-selector">\r\n                    <div class="bot-weapon-btn" data-age4id="0" title="Trap"><span class="wpn-name">Trap</span></div>\r\n                    <div class="bot-weapon-btn" data-age4id="1" title="Boost Pad"><span class="wpn-name">Boost Pad</span></div>\r\n                </div>\r\n                <div class="wpn-selected-bar"><div class="wpn-selected-dot"></div><span class="wpn-selected-text" id="bot-age4-label">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class="section">\r\n        <div class="section" style="margin-top:6px;">\r\n        <div class="section" style="margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;">\r\n        <div class="section-title" style="font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;">Auto Farm</div>\r\n\r\n        <div style="display:flex;flex-direction:column;gap:10px;">\r\n\r\n            \x3c!-- Farm Mode card --\x3e\r\n            <div style="background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">\r\n                <span style="font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;">Farm Mode</span>\r\n                <p style="font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;">Bots automatically gather resources. In <b style="color:rgba(200,195,220,0.85);">Single</b> mode they target one resource type. In <b style="color:rgba(200,195,220,0.85);">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style="display:flex;gap:8px;margin-top:2px;">\r\n                    <button id="_farmModeSingle" style="flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;">Single</button>\r\n                    <button id="_farmModeNearest" style="flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            \x3c!-- Resource Type card --\x3e\r\n            <div id="_farmTypeRow" style="background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">\r\n                <span style="font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;">Resource Type</span>\r\n                <div style="display:flex;gap:8px;">\r\n                    <button data-farm-type="0" class="farm-type-btn" style="flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;">Wood</button>\r\n                    <button data-farm-type="1" class="farm-type-btn" style="flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;">Food</button>\r\n                    <button data-farm-type="2" class="farm-type-btn" style="flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;">Stone</button>\r\n                    <button data-farm-type="3" class="farm-type-btn" style="flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;">Gold</button>\r\n                </div>\r\n                <input id="_botFarmType" type="hidden" value="0">\r\n            </div>\r\n\r\n            \x3c!-- Limit card --\x3e\r\n            <div style="background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;">\r\n                <span style="font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;">Limit</span>\r\n                <div style="display:flex;align-items:center;gap:12px;">\r\n                    <input id="_botFarmLimit" class="input" type="number" min="0" max="9999" step="50" value="0" style="width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;">\r\n                    <span style="font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;">Bots stop and return to you when they reach this amount. Set to <b style="color:rgba(200,195,220,0.7);">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>';
@@ -6945,9 +6945,6 @@ window.grbtp = 35;
       if (isMyPlayer && !myPlayer.inGame) {
         return;
       }
-      if (isMyPlayer && gathering === 1) {
-        myPlayer._autogatherTick = this.client._ModuleHandler.tickCount + 1;
-      }
       const weapon = DataHandler_default.getWeapon(weaponID);
       const type = weapon.itemType;
       player.updateMaxReload(reload[type], weaponID);
@@ -10838,7 +10835,7 @@ window.grbtp = 35;
       const nearestSpike = EnemyManager2.nearestSpike;
       const fallback = EnemyManager2.nearestEnemyObject || EnemyManager2.secondNearestEnemyObject;
       const reachable = t => t && this.getDestroyingWeapon(t) !== null;
-      const enemyFirst = () => reachable(fallback) ? fallback : this._lunaPathBreak();
+      const enemyFirst = () => reachable(fallback) ? fallback : null;
       if (!nearestSpike && !nearestTrap) {
         return [ enemyFirst(), null ];
       }
@@ -10855,34 +10852,6 @@ window.grbtp = 35;
       const single = nearestSpike || nearestTrap;
       if (reachable(single)) return [ single, null ];
       return [ enemyFirst(), null ];
-    }
-    _lunaPathBreak() {
-      if (!Settings_default._pathBreak) return null;
-      const {myPlayer: myPlayer, ObjectManager: OM, _ModuleHandler: ModuleHandler} = this.client;
-      const primary = myPlayer.getItemByType(0);
-      const secondary = myPlayer.getItemByType(1);
-      const isHammer = secondary === 10;
-      const _pw = DataHandler_default?.getWeapon?.(primary);
-      const isFastPrimary = (_pw?.speed ?? 1e9) < 400;
-      const ownsTank = ModuleHandler.canBuy(0, 40);
-      const pos0 = myPlayer.pos.current;
-      let best = null, minDist = Infinity;
-      OM.grid2D.query(pos0.x, pos0.y, 3, id => {
-        const obj = OM.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject)) return;
-        if (!myPlayer.isMyPlayerByID(obj.ownerID)) return;
-        if (obj.type !== 15 && obj.itemGroup !== 2) return;
-        const dist = pos0.distance(obj.pos.current);
-        if (dist >= minDist) return;
-        let w = null;
-        if (isHammer && secondary != null && dist <= this.getWeaponRange(secondary, obj)) w = secondary; else if (isFastPrimary && primary != null && dist <= this.getWeaponRange(primary, obj)) w = primary;
-        if (w === null) return;
-        const dmg = myPlayer.getBuildingDamage?.(w, ownsTank) ?? 0;
-        if (obj.health > dmg) return;
-        minDist = dist;
-        best = obj;
-      });
-      return best;
     }
     getDestroyingWeapon(target) {
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
@@ -10951,7 +10920,7 @@ window.grbtp = 35;
       if (!Settings_default._autobreak) {
         return;
       }
-      if (!Settings_default._lunaMode && ModuleHandler.moduleActive && !myPlayer.isTrapped) {
+      if (ModuleHandler.moduleActive && !myPlayer.isTrapped) {
         return;
       }
       const beneficial = this._beneficialBreakTarget(myPlayer, EnemyManager2.nearestEnemy, ObjectManager3, PlayerManager3);
@@ -11205,163 +11174,10 @@ window.grbtp = 35;
       }
       const cur = myPlayer.pos.current;
       let moveAngle = Math.atan2(ty - cur.y, tx - cur.x);
-      if (Settings_default._lunaPathfinder) {
-        const pf = this.client._ModuleHandler.staticModules.lunaPathfinder;
-        if (pf) {
-          pf.pathMode.avoidEnemySpikes = false;
-          pf.pathMode.avoidEnemy = true;
-          const path = pf.pathfindTo({
-            x: tx,
-            y: ty
-          });
-          if (path && path.length > 1) {
-            const w = path[1];
-            moveAngle = Math.atan2(w.y - cur.y, w.x - cur.x);
-          }
-        }
-      }
       ModuleHandler.startMovement(moveAngle);
     }
   }
   const AutoPlay_default = AutoPlay;
-  class AutoGatherBreak {
-    moduleName="autoGatherBreak";
-    client;
-    _on=false;
-    _wasOurs=false;
-    constructor(client2) {
-      this.client = client2;
-    }
-    reset() {
-      this._on = false;
-      this._wasOurs = false;
-    }
-    _isBadTail() {
-      const mp = this.client.myPlayer;
-      if (!mp || mp.tailIndex !== 11) return false;
-      const predictWeapon = this.client._ModuleHandler._getPredictWeapon();
-      const wid = mp.getItemByType(predictWeapon);
-      return wid != null && wid < 8;
-    }
-    _need() {
-      const MH = this.client._ModuleHandler;
-      if (!Settings_default._autoGather) return false;
-      if (!MH._autoBreakActive) return false;
-      if (this._isBadTail()) return false;
-      return true;
-    }
-    _send() {
-      this._on = !this._on;
-      this.client.PacketManager.autoAttack();
-    }
-    _checkGather=false;
-    postTick() {
-      const MH = this.client._ModuleHandler, mp = this.client.myPlayer;
-      if (!mp || !mp.inGame) {
-        this._on = false;
-        this._wasOurs = false;
-        this._checkGather = false;
-        return;
-      }
-      if (this._checkGather) {
-        if (this._on) {
-          this._on = false;
-          this._wasOurs = false;
-        }
-        this._checkGather = false;
-      }
-      const need = this._need();
-      if (need) {
-        if (!this._on) {
-          this._send();
-          this._wasOurs = true;
-        }
-      } else {
-        if (this._on && this._wasOurs) {
-          this._send();
-          this._wasOurs = false;
-        }
-      }
-      if (mp.buildIndex < 0) {
-        const wIdx = mp.weaponIndex;
-        const ready = wIdx < 9 ? mp.isReloaded && mp.isReloaded(0, 0) : mp.isReloaded && mp.isReloaded(1, 0);
-        if (ready) this._checkGather = true;
-      }
-    }
-  }
-  const AutoGatherBreak_default = AutoGatherBreak;
-  class TrapRebuild {
-    moduleName="trapRebuild";
-    client;
-    _mine=new Map;
-    _tolerance=20;
-    constructor(client2) {
-      this.client = client2;
-      if (!window._rynBrokenSids) window._rynBrokenSids = [];
-    }
-    reset() {
-      this._mine.clear();
-    }
-    postTick() {
-      const {myPlayer: myPlayer, ObjectManager: OM, EnemyManager: EM, _ModuleHandler: MH} = this.client;
-      const broken = window._rynBrokenSids || [];
-      if (!Settings_default._trapRebuild || !myPlayer || !myPlayer.inGame) {
-        this._mine.clear();
-        broken.length = 0;
-        return;
-      }
-      const ap = MH.staticModules.autoPlacer;
-      const trapId = myPlayer.getItemByType(7);
-      const myPos = myPlayer.pos.current;
-      if (broken.length && ap && trapId != null) {
-        const enemy = EM.nearestEnemy;
-        const near = enemy && myPos.distance(enemy.pos.current) < 300;
-        if (near && !ap._isItemLimit(trapId, myPlayer)) {
-          const item = Items[trapId];
-          const dist = 35 + item.scale + (item.placeOffset || 0);
-          for (const sid of broken) {
-            const rec = this._mine.get(sid);
-            if (!rec) continue;
-            if (rec.type !== 15) continue;
-            if (MH.packetCount + 5 > MH.packetLimit) break;
-            const angle = Math.atan2(rec.y - myPos.y, rec.x - myPos.x);
-            const px = myPos.x + dist * Math.cos(angle);
-            const py = myPos.y + dist * Math.sin(angle);
-            if (Math.hypot(px - rec.x, py - rec.y) > this._tolerance) continue;
-            let banned = false;
-            if (ap._bannedAngles) {
-              for (const ba of ap._bannedAngles.keys()) {
-                if (Math.abs(ba - angle) < .01) {
-                  banned = true;
-                  break;
-                }
-              }
-            }
-            if (banned) continue;
-            if (!ap._canPlace(trapId, angle, myPos, OM, null)) continue;
-            MH.place(7, angle);
-            MH.placeAngles[0] = 7;
-            MH.placeAngles[1].push(angle);
-          }
-        }
-      }
-      broken.length = 0;
-      this._mine.clear();
-      OM.grid2D.query(myPos.x, myPos.y, 4, id => {
-        const obj = OM.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject)) return;
-        if (obj.type !== 15) return;
-        if (!myPlayer.isMyPlayerByID(obj.ownerID)) return;
-        const p = obj.pos.current;
-        this._mine.set(obj.id, {
-          x: p.x,
-          y: p.y,
-          type: obj.type
-        });
-      });
-    }
-  }
-  const TrapRebuild_default = TrapRebuild;
   class TrapTick {
     moduleName="trapTick";
     client;
@@ -11372,565 +11188,6 @@ window.grbtp = 35;
     postTick() {}
   }
   const TrapTick_default = TrapTick;
-  class LunaSafeWalk {
-    moduleName="lunaSafeWalk";
-    client;
-    constructor(client2) {
-      this.client = client2;
-    }
-    _lerpAngle(from, to, t) {
-      let diff = to - from;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      return from + diff * t;
-    }
-    _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
-      let minX = ax, maxX = bx;
-      if (ax > bx) {
-        minX = bx;
-        maxX = ax;
-      }
-      if (maxX > x2) maxX = x2;
-      if (minX < x1) minX = x1;
-      if (minX > maxX) return false;
-      let minY = ay, maxY = by;
-      const dx = bx - ax;
-      if (Math.abs(dx) > 1e-7) {
-        const slope = (by - ay) / dx;
-        const intercept = ay - slope * ax;
-        minY = slope * minX + intercept;
-        maxY = slope * maxX + intercept;
-      }
-      if (minY > maxY) {
-        const t = maxY;
-        maxY = minY;
-        minY = t;
-      }
-      if (maxY > y2) maxY = y2;
-      if (minY < y1) minY = y1;
-      if (minY > maxY) return false;
-      return true;
-    }
-    _gatherObstacles() {
-      const {ObjectManager: OM, PlayerManager: PM, myPlayer: myPlayer} = this.client;
-      const pos = myPlayer.pos.current;
-      const spikes = [], cactuses = [];
-      OM.grid2D.query(pos.x, pos.y, 4, id => {
-        const obj = OM.objects.get(id);
-        if (!obj) return;
-        const p = obj.pos.current;
-        if (obj instanceof PlayerObject) {
-          if (obj.itemGroup !== 2) return;
-          let isEnemy = false;
-          try {
-            isEnemy = PM.isEnemyByID(obj.ownerID, myPlayer);
-          } catch (_) {}
-          if (!isEnemy) return;
-          spikes.push({
-            x: p.x,
-            y: p.y,
-            scale: Items[obj.type].scale
-          });
-        } else if (obj.isCactus) {
-          cactuses.push({
-            x: p.x,
-            y: p.y,
-            scale: obj.scale
-          });
-        }
-      });
-      return {
-        spikes: spikes,
-        cactuses: cactuses
-      };
-    }
-    postTick() {
-      if (!Settings_default._lunaSafeWalk) return;
-      const {myPlayer: myPlayer, _ModuleHandler: MH} = this.client;
-      if (!myPlayer || !myPlayer.inGame) return;
-      if (myPlayer.isTrapped) return;
-      let moveAngle = MH.move_dir;
-      if (moveAngle === null || moveAngle === undefined) return;
-      const cur = myPlayer.pos.current;
-      const fut = myPlayer.pos.future ?? cur;
-      const LOOKAHEAD = 222;
-      const {spikes: spikes, cactuses: cactuses} = this._gatherObstacles();
-      if (!spikes.length && !cactuses.length) return;
-      const findBestAngle = () => {
-        const STEPS = 24;
-        let bestAngle = moveAngle, bestScore = -Infinity;
-        const all = [ ...spikes.map(s => ({
-          x: s.x,
-          y: s.y,
-          scale: 35 + s.scale
-        })), ...cactuses.map(c => ({
-          x: c.x,
-          y: c.y,
-          scale: c.scale
-        })) ];
-        for (let i = 0; i < STEPS; i++) {
-          const testAngle = Math.PI * 2 / STEPS * i;
-          const tfx = cur.x + Math.cos(testAngle) * LOOKAHEAD;
-          const tfy = cur.y + Math.sin(testAngle) * LOOKAHEAD;
-          const tsx = cur.x + Math.cos(testAngle) * 35;
-          const tsy = cur.y + Math.sin(testAngle) * 35;
-          let score = 100, blocked = false, minDist = Infinity;
-          for (const o of all) {
-            const dist = Math.hypot(o.x - tfx, o.y - tfy);
-            const hits = this._lineInRect(o.x - o.scale, o.y - o.scale, o.x + o.scale, o.y + o.scale, tsx, tsy, tfx, tfy);
-            if (hits || dist < o.scale) {
-              blocked = true;
-              break;
-            }
-            minDist = Math.min(minDist, dist);
-          }
-          if (blocked) continue;
-          score += Math.min(minDist, 300) * 2;
-          let d = Math.abs(testAngle - moveAngle);
-          if (d > Math.PI) d = Math.PI * 2 - d;
-          score += (Math.PI - d) * 120;
-          if (score > bestScore) {
-            bestScore = score;
-            bestAngle = testAngle;
-          }
-        }
-        return bestScore > 0 ? this._lerpAngle(moveAngle, bestAngle, .5) : moveAngle;
-      };
-      const checkObstacle = (o, collisionDist, stopDist) => {
-        const fx = cur.x + Math.cos(moveAngle) * LOOKAHEAD;
-        const fy = cur.y + Math.sin(moveAngle) * LOOKAHEAD;
-        const sx = cur.x + Math.cos(moveAngle) * 35;
-        const sy = cur.y + Math.sin(moveAngle) * 35;
-        const dist = Math.hypot(o.x - fut.x, o.y - fut.y);
-        if (!this._lineInRect(o.x - collisionDist, o.y - collisionDist, o.x + collisionDist, o.y + collisionDist, sx, sy, fx, fy)) return false;
-        const close = this._lineInRect(o.x - 60, o.y - 60, o.x + 60, o.y + 60, sx, sy, fx, fy);
-        if (close) {
-          if (dist <= collisionDist) {
-            const away = Math.atan2(cur.y - o.y, cur.x - o.x);
-            moveAngle = this._lerpAngle(moveAngle, away, .7);
-            return true;
-          } else if (dist <= stopDist) {
-            moveAngle = null;
-            return true;
-          }
-        } else if (dist <= stopDist) {
-          moveAngle = findBestAngle();
-          return true;
-        }
-        return false;
-      };
-      for (const sp of spikes) {
-        if (checkObstacle(sp, 35 + sp.scale + 1, sp.scale + 75)) break;
-      }
-      if (moveAngle !== null) {
-        for (const ca of cactuses) {
-          if (checkObstacle(ca, ca.scale + 1, ca.scale + 35)) break;
-        }
-      }
-      if (moveAngle === null) MH.stopMovement(); else MH.startMovement(moveAngle);
-    }
-  }
-  const LunaSafeWalk_default = LunaSafeWalk;
-  const _lunaPfWorkerBody = function() {
-    function getDist(p1, p2) {
-      return Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
-    }
-    function findNearestNode(pos, grid) {
-      let nearest = null, minDist = Infinity;
-      for (const node of grid) {
-        const d = getDist(pos, node);
-        if (d < minDist) {
-          minDist = d;
-          nearest = node;
-        }
-      }
-      return nearest;
-    }
-    function getNeighbors(node, grid, maxDist = 100) {
-      const out = [];
-      for (const other of grid) {
-        if (other === node) continue;
-        if (getDist(node, other) <= maxDist) out.push(other);
-      }
-      return out;
-    }
-    function astar(startPos, goalPos, grid) {
-      const start = findNearestNode(startPos, grid);
-      const goal = findNearestNode(goalPos, grid);
-      if (!start || !goal) return {
-        success: false
-      };
-      const openSet = [ {
-        node: start,
-        cost: 0,
-        priority: getDist(start, goal),
-        parent: null
-      } ];
-      const visited = new Set;
-      const maxAttempts = 300;
-      let attempts = 0;
-      while (openSet.length > 0 && attempts < maxAttempts) {
-        attempts++;
-        openSet.sort((a, b) => a.priority - b.priority);
-        const current = openSet.shift();
-        const key = current.node.x + "," + current.node.y;
-        if (visited.has(key)) continue;
-        visited.add(key);
-        if (getDist(current.node, goal) <= 20) {
-          const path = [];
-          let n = current;
-          while (n) {
-            path.push({
-              x: n.node.x,
-              y: n.node.y
-            });
-            n = n.parent;
-          }
-          return {
-            success: true,
-            path: path.reverse()
-          };
-        }
-        for (const nb of getNeighbors(current.node, grid)) {
-          const nk = nb.x + "," + nb.y;
-          if (visited.has(nk)) continue;
-          const newCost = current.cost + getDist(current.node, nb);
-          openSet.push({
-            node: nb,
-            cost: newCost,
-            priority: newCost + getDist(nb, goal),
-            parent: current
-          });
-        }
-      }
-      return {
-        success: false
-      };
-    }
-    self.onmessage = ev => {
-      const {startPos: startPos, goalPos: goalPos, grid: grid} = ev.data;
-      self.postMessage(astar(startPos, goalPos, grid));
-    };
-  };
-  class LunaPathfinder {
-    moduleName="lunaPathfinder";
-    client;
-    worker=null;
-    state={
-      active: false,
-      currentPath: [],
-      oldPath: [],
-      lastDestination: null
-    };
-    pathMode={
-      avoidEnemySpikes: false,
-      avoidEnemy: true
-    };
-    moveAngle=null;
-    constructor(client2) {
-      this.client = client2;
-    }
-    _ensureWorker() {
-      if (this.worker !== null) return this.worker;
-      try {
-        const url = URL.createObjectURL(new Blob([ "(", _lunaPfWorkerBody.toString(), ")()" ], {
-          type: "application/javascript"
-        }));
-        this.worker = new Worker(url);
-        URL.revokeObjectURL(url);
-        this.worker.onmessage = ev => this._onWorkerResult(ev);
-      } catch (e) {
-        this.worker = false;
-      }
-      return this.worker;
-    }
-    reset() {
-      this.state = {
-        active: false,
-        currentPath: [],
-        oldPath: [],
-        lastDestination: null
-      };
-      this.moveAngle = null;
-    }
-    _getActualRadius(obj) {
-      const {PlayerManager: PM, myPlayer: myPlayer} = this.client;
-      if (obj instanceof PlayerObject) {
-        if (obj.itemGroup === 2) {
-          let isEnemy = false;
-          try {
-            isEnemy = PM.isEnemyByID(obj.ownerID, myPlayer);
-          } catch (_) {}
-          if (isEnemy) return Items[obj.type].scale + 40;
-        }
-        return Items[obj.type].scale + 35;
-      }
-      if (obj.type === 0) return obj.scale - 25;
-      if (obj.type === 1) return obj.isCactus ? obj.scale + 15 : obj.scale + 5;
-      return obj.scale + 35;
-    }
-    _getGridObjects(dest, MAX_DIST) {
-      const {ObjectManager: OM, PlayerManager: PM, myPlayer: myPlayer} = this.client;
-      const out = [];
-      OM.grid2D.query(dest.x, dest.y, Math.ceil(MAX_DIST / 100), id => {
-        const obj = OM.objects.get(id);
-        if (!obj) return;
-        const p = obj.pos.current;
-        if (obj instanceof PlayerObject) {
-          if (obj.type === 15) return;
-          if (obj.itemGroup === 2 && !this.pathMode.avoidEnemySpikes) {
-            let isEnemy = false;
-            try {
-              isEnemy = PM.isEnemyByID(obj.ownerID, myPlayer);
-            } catch (_) {}
-          }
-        }
-        if (Math.hypot(p.x - dest.x, p.y - dest.y) >= MAX_DIST) return;
-        out.push({
-          x: p.x,
-          y: p.y,
-          sid: id,
-          ref: obj
-        });
-      });
-      return out;
-    }
-    _radiusOf(g) {
-      return this._getActualRadius(g.ref);
-    }
-    _objectPoints(gridObjects) {
-      const enemy = this.client.EnemyManager.nearestEnemy;
-      const ePos = enemy ? enemy.pos.future ?? enemy.pos.current : null;
-      const pts = [];
-      for (const o of gridObjects) {
-        const radius = this._radiusOf(o);
-        for (let i = 0; i < 8; i++) {
-          const a = Math.PI * 2 / 8 * i;
-          const x = o.x + Math.cos(a) * radius, y = o.y + Math.sin(a) * radius;
-          let valid = true;
-          for (const o2 of gridObjects) {
-            if (o2.sid === o.sid) continue;
-            if (Math.hypot(x - o2.x, y - o2.y) < this._radiusOf(o2)) {
-              valid = false;
-              break;
-            }
-          }
-          if (valid && ePos) {
-            const dE = Math.hypot(x - ePos.x, y - ePos.y);
-            if (this.pathMode.avoidEnemy && dE < 75) valid = false; else if (dE < 35) valid = false;
-          }
-          if (valid) pts.push({
-            x: x,
-            y: y,
-            type: "object"
-          });
-        }
-      }
-      return pts;
-    }
-    _enemyPoints(gridObjects) {
-      const enemy = this.client.EnemyManager.nearestEnemy;
-      if (!enemy) return [];
-      const ePos = enemy.pos.future ?? enemy.pos.current;
-      const pts = [];
-      for (let i = 0; i < 8; i++) {
-        const a = i * Math.PI * 2 / 8;
-        const x = ePos.x + Math.cos(a) * 75, y = ePos.y + Math.sin(a) * 75;
-        let inside = false;
-        for (const o of gridObjects) {
-          if (Math.hypot(x - o.x, y - o.y) < this._radiusOf(o)) {
-            inside = true;
-            break;
-          }
-        }
-        if (!inside) pts.push({
-          x: x,
-          y: y,
-          type: "enemy"
-        });
-      }
-      return pts;
-    }
-    _squeezablePoints(gridObjects) {
-      const pts = [];
-      for (let i = 0; i < gridObjects.length; i++) {
-        for (let j = i + 1; j < gridObjects.length; j++) {
-          const a = gridObjects[i], b = gridObjects[j];
-          const r1 = this._radiusOf(a), r2 = this._radiusOf(b);
-          const d = Math.hypot(b.x - a.x, b.y - a.y);
-          if (d < r1 + r2 && d > 0) {
-            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-            const s1 = a.ref instanceof PlayerObject ? Items[a.ref.type].scale : a.ref.scale;
-            const s2 = b.ref instanceof PlayerObject ? Items[b.ref.type].scale : b.ref.scale;
-            if (Math.hypot(mx - a.x, my - a.y) > s1 + 9 && Math.hypot(mx - b.x, my - b.y) > s2 + 9) {
-              pts.push({
-                x: mx,
-                y: my,
-                type: "squeezable"
-              });
-            }
-          }
-        }
-      }
-      return pts;
-    }
-    _regularWaypoints(gridObjects, MAX_DIST, spacing = 100) {
-      const {myPlayer: myPlayer, EnemyManager: EM} = this.client;
-      const c = myPlayer.pos.current;
-      const enemy = EM.nearestEnemy;
-      const ePos = enemy ? enemy.pos.future ?? enemy.pos.current : null;
-      const out = [];
-      for (let x = c.x - MAX_DIST; x <= c.x + MAX_DIST; x += spacing) {
-        for (let y = c.y - MAX_DIST; y <= c.y + MAX_DIST; y += spacing) {
-          let blocked = false;
-          for (const o of gridObjects) {
-            if (Math.hypot(x - o.x, y - o.y) < this._radiusOf(o)) {
-              blocked = true;
-              break;
-            }
-          }
-          if (!blocked && ePos && Math.hypot(x - ePos.x, y - ePos.y) < 75) blocked = true;
-          if (x < 35 || x > Config_default.mapScale - 35 || y < 35 || y > Config_default.mapScale - 35) blocked = true;
-          if (!blocked) out.push({
-            x: x,
-            y: y,
-            type: "waypoint"
-          });
-        }
-      }
-      return out;
-    }
-    _updateGrid(dest, gridObjects) {
-      const c = this.client.myPlayer.pos.current;
-      const grid = [ {
-        x: dest.x,
-        y: dest.y,
-        type: "destination"
-      }, {
-        x: c.x,
-        y: c.y,
-        type: "player"
-      } ];
-      if (this.pathMode.avoidEnemy && this.client.EnemyManager.nearestEnemy) grid.push(...this._enemyPoints(gridObjects));
-      grid.push(...this._objectPoints(gridObjects));
-      grid.push(...this._squeezablePoints(gridObjects));
-      grid.push(...this._regularWaypoints(gridObjects, 600, 100));
-      return grid;
-    }
-    _losClear(a, b, gridObjects) {
-      const enemy = this.client.EnemyManager.nearestEnemy;
-      const ePos = enemy ? enemy.pos.future ?? enemy.pos.current : null;
-      const steps = 10, dx = (b.x - a.x) / steps, dy = (b.y - a.y) / steps;
-      for (let i = 0; i <= steps; i++) {
-        const x = a.x + dx * i, y = a.y + dy * i;
-        for (const o of gridObjects) {
-          if (Math.hypot(x - o.x, y - o.y) < this._radiusOf(o)) return false;
-        }
-        if (this.pathMode.avoidEnemy && ePos && Math.hypot(x - ePos.x, y - ePos.y) < 70) return false;
-      }
-      return true;
-    }
-    _smoothPath(path, gridObjects) {
-      if (!path || path.length <= 2) return path;
-      const out = [ path[0] ];
-      let i = 0;
-      while (i < path.length - 1) {
-        let far = i + 1;
-        for (let j = i + 2; j < path.length; j++) {
-          if (this._losClear(path[i], path[j], gridObjects)) far = j; else break;
-        }
-        out.push(path[far]);
-        i = far;
-      }
-      return out;
-    }
-    _onWorkerResult(ev) {
-      const st = this.state;
-      if (ev.data.success) {
-        let path = ev.data.path;
-        if (path.length > 1) {
-          const dest = {
-            x: path[path.length - 1].x,
-            y: path[path.length - 1].y
-          };
-          path = this._smoothPath(path, this._getGridObjects(dest, 600));
-          st.oldPath = st.currentPath.slice();
-          st.currentPath = path;
-          st.active = true;
-          this.moveAngle = Math.atan2(path[1].y - path[0].y, path[1].x - path[0].x);
-        }
-      } else if (st.oldPath && st.oldPath.length > 1) {
-        st.currentPath = st.oldPath.slice();
-        st.active = true;
-        const [c0, c1] = st.currentPath;
-        this.moveAngle = Math.atan2(c1.y - c0.y, c1.x - c0.x);
-      } else {
-        st.active = false;
-        st.currentPath = [];
-      }
-    }
-    _offPath(path) {
-      if (!path || path.length < 2) return false;
-      const c = this.client.myPlayer.pos.current;
-      const w = path[1] || path[0];
-      return Math.hypot(c.x - w.x, c.y - w.y) > 50;
-    }
-    _pathBlocked(path, gridObjects) {
-      if (!path || path.length < 2) return false;
-      const enemy = this.client.EnemyManager.nearestEnemy;
-      const ePos = enemy ? enemy.pos.future ?? enemy.pos.current : null;
-      const n = Math.min(3, path.length - 1);
-      for (let i = 1; i <= n; i++) {
-        const w = path[i];
-        for (const o of gridObjects) {
-          if (Math.hypot(w.x - o.x, w.y - o.y) < this._radiusOf(o)) return true;
-        }
-        if (this.pathMode.avoidEnemy && ePos && Math.hypot(w.x - ePos.x, w.y - ePos.y) < 70) return true;
-      }
-      return false;
-    }
-    pathfindTo(dest) {
-      const {myPlayer: myPlayer} = this.client;
-      if (!dest || !myPlayer || !this._ensureWorker()) return null;
-      const MAX_DIST = 600;
-      const c = myPlayer.pos.current;
-      if (Math.hypot(dest.x - c.x, dest.y - c.y) > MAX_DIST) {
-        this.state.active = false;
-        return null;
-      }
-      const gridObjects = this._getGridObjects(dest, MAX_DIST);
-      const st = this.state;
-      const blocked = this._pathBlocked(st.currentPath, gridObjects);
-      const off = this._offPath(st.currentPath);
-      if (st.currentPath.length > 1) {
-        const nx = st.currentPath[1];
-        if (Math.hypot(c.x - nx.x, c.y - nx.y) < 35) st.currentPath.shift();
-      }
-      const recalc = !st.active || !st.lastDestination || Math.hypot(dest.x - st.lastDestination.x, dest.y - st.lastDestination.y) > 0 || blocked || off;
-      if (recalc) {
-        const grid = this._updateGrid(dest, gridObjects);
-        if (grid && grid.length > 0) {
-          this.worker.postMessage({
-            startPos: {
-              x: c.x,
-              y: c.y
-            },
-            goalPos: {
-              x: dest.x,
-              y: dest.y
-            },
-            grid: grid
-          });
-          st.lastDestination = {
-            x: dest.x,
-            y: dest.y
-          };
-        }
-      }
-      return st.active && st.currentPath.length > 1 ? st.currentPath : null;
-    }
-  }
-  const LunaPathfinder_default = LunaPathfinder;
   const SiegeAnalysis = {
     isEscapable(cx, cy, selfRadius, objects) {
       if (objects.length <= 2) return {
@@ -12056,15 +11313,11 @@ window.grbtp = 35;
   }
   class AutoPlacer {
     moduleName="autoPlacer";
-    _glotusAngles=new Map;
-    _glotusCount=0;
     client;
     _bannedAngles=new Map;
     _predictObjects=[];
     _placedAngles=[];
     _tick=0;
-    _lastPrePlaceObj=null;
-    _spamPrePlacer=false;
     constructor(client2) {
       this.client = client2;
     }
@@ -12168,7 +11421,7 @@ window.grbtp = 35;
       }
       return angles;
     }
-    _addPredictObject(id, angle, preplace, myPos) {
+    _addPredictObject(id, angle, myPos) {
       const item = Items[id];
       const dist = 35 + item.scale + (item.placeOffset || 0);
       const x = myPos.x + dist * Math.cos(angle);
@@ -12181,254 +11434,11 @@ window.grbtp = 35;
         angle: angle,
         x: x,
         y: y,
-        scale: item.scale,
-        preplace: preplace
+        scale: item.scale
       });
-    }
-    _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2) {
-      let findObject = null;
-      const _mh = this.client._ModuleHandler;
-      const _agb = _mh.staticModules.autoGatherBreak;
-      const _autogathering = _agb && _agb._on || _mh.autoattack || _mh.forceWeapon !== null;
-      const justGathered = _autogathering;
-      if (justGathered) {
-        const predictType = _mh._getPredictWeapon();
-        const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
-        const predictReady = myWeapon != null && myPlayer.isReloaded && myPlayer.isReloaded(predictType, 0);
-        if (myWeapon != null && predictReady) {
-          const wd = DataHandler_default?.getWeapon?.(myWeapon);
-          if (wd) {
-            const myRange = wd.range ?? 0;
-            const ownsTank = this.client._ModuleHandler.canBuy(0, 40);
-            const myDmg = myPlayer.getBuildingDamage?.(myWeapon, ownsTank) ?? 0;
-            const gatherAngle = Config_default.gatherAngle;
-            const myFut = myPlayer.pos.future ?? myPos;
-            const attackAngle = _mh._autoBreakActive && _mh._lastBreakAngle != null ? _mh._lastBreakAngle : _mh._currentAngle ?? myPos.angle(enemyPos);
-            const selfCandidates = [];
-            ObjectManager2.grid2D.query(myPos.x, myPos.y, 3, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return;
-              const rawScale = Items[obj.type].scale;
-              const distEdge = myFut.distance(obj.pos.current) - rawScale;
-              if (distEdge > myRange) return;
-              const objAngle = myFut.angle(obj.pos.current);
-              let diff = Math.abs(objAngle - attackAngle);
-              if (diff > Math.PI) diff = 2 * Math.PI - diff;
-              if (diff > gatherAngle) return;
-              if (obj.health <= myDmg) selfCandidates.push(obj);
-            });
-            if (selfCandidates.length > 0) {
-              selfCandidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = selfCandidates[0];
-            }
-          }
-        }
-      }
-      if (!findObject) {
-        const secReload = enemy.reload?.[1];
-        const primReload = enemy.reload?.[0];
-        const secJustReady = secReload && secReload.previous < secReload.max && secReload.current >= secReload.max;
-        const primJustReady = primReload && primReload.previous < primReload.max && primReload.current >= primReload.max;
-        const secID = enemy.weapon?.secondary ?? null;
-        const primID = enemy.weapon?.primary ?? null;
-        let weaponToCheck = null;
-        if (secID === 10 && secJustReady) {
-          weaponToCheck = secID;
-        }
-        if (weaponToCheck === null && primID !== null && primJustReady) {
-          const wd = DataHandler_default?.getWeapon?.(primID);
-          if (wd && (wd.speed ?? 999) <= 400) {
-            weaponToCheck = primID;
-          }
-        }
-        if (weaponToCheck !== null) {
-          const wd = DataHandler_default?.getWeapon?.(weaponToCheck);
-          if (wd) {
-            const weaponRange = wd.range ?? 0;
-            const dmgToBuilding = enemy.getBuildingDamage?.(weaponToCheck, true) ?? 50;
-            const candidates = [];
-            ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return;
-              if (Items[obj.type] && Items[obj.type].hideFromEnemy && !obj._lunaUnhidden) return;
-              if (enemyPos.distance(obj.pos.current) - Items[obj.type].scale > weaponRange) return;
-              if (obj.health <= dmgToBuilding) candidates.push(obj);
-            });
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = candidates[0];
-            }
-          }
-        }
-      }
-      if (findObject) {
-        this._spamPrePlacer = true;
-      }
-      return findObject;
-    }
-    // ══════════════════════════════════════════════════════════════════════
-    // GLOTUS MODE — نسخة Glotus من الوضع التلقائي، منقولة حرفياً
-    // ──────────────────────────────────────────────────────────────────────
-    // تشتغل بدل منطق RYN لما يكون Settings._glotusPlacer مفعّلاً. أبسط بكثير
-    // (١٥٦ سطر مقابل ٦٠١): تعتمد على getBestPlacementAngles ثم تفلتر بثلاثة
-    // شروط — العدو كان محبوس، أو السبايك يلمسه/يلمس فخه، أو الـ knockback
-    // بيرميه على سبايك موجود.
-    // ══════════════════════════════════════════════════════════════════════
-    _glotusCanKnockbackSpike(newSpikePos, scale, enemy) {
-      const pos1 = newSpikePos;
-      const pos2 = enemy.pos.current;
-      const knockbackAngle = pos1.angle(pos2);
-      const hasEnoughDistance = pos1.distance(pos2) <= enemy.collisionScale + scale;
-      if (!hasEnoughDistance) {
-        return false;
-      }
-      const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
-      return ObjectManager2.grid2D.query(pos1.x, pos1.y, 3, id => {
-        const object = ObjectManager2.objects.get(id);
-        if (!object) {
-          return;
-        }
-        const pos3 = object.pos.current;
-        const isPlayerObject = object instanceof PlayerObject;
-        const isCactus = !isPlayerObject && object.isCactus;
-        const isSpike = isPlayerObject && object.itemGroup === 2;
-        const isEnemyObject = !isPlayerObject || PlayerManager2.isEnemyByID(object.ownerID, enemy);
-        const isDangerObjectToEnemy = isEnemyObject && (isSpike || isCactus);
-        if (!isDangerObjectToEnemy) {
-          return;
-        }
-        const KBDistance = 200;
-        const spikeScale = object.collisionScale + enemy.collisionScale;
-        const angleToSpike = pos1.angle(pos3);
-        const distanceToTarget = pos2.distance(pos3);
-        const distanceToSpike = pos1.distance(pos3);
-        const offset = Math.asin(2 * spikeScale / (2 * distanceToSpike));
-        const angleDistance = getAngleDist(knockbackAngle, angleToSpike);
-        const intersecting = angleDistance <= offset;
-        const overlapping = distanceToTarget <= distanceToSpike;
-        const inRange2 = enemy.collidingObject(object, KBDistance);
-        return intersecting && overlapping && inRange2;
-      });
-    }
-    _glotusPlace() {
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
-      const {currentType: currentType} = ModuleHandler;
-      const pos0 = myPlayer.pos.current;
-      if (ModuleHandler.placedOnce) {
-        return;
-      }
-      const nearestEnemy = EnemyManager2.nearestTrappedEnemy || EnemyManager2.nearestEnemy;
-      if (nearestEnemy === null) {
-        return;
-      }
-      if (!myPlayer.collidingSimple(nearestEnemy, Settings_default._autoplacerRadius)) {
-        return;
-      }
-      const shouldResetAngles = myPlayer.speed > 5 || ObjectManager2.isDestroyedObject() || nearestEnemy.lastAttacked === myPlayer.tickCount;
-      if (shouldResetAngles) {
-        this._glotusAngles.clear();
-      }
-      const nearestAngle = pos0.angle(nearestEnemy.pos.current);
-      let itemType = null;
-      const spike = myPlayer.getItemByType(4);
-      if (spike === null) {
-        return;
-      }
-      const spikeAngles = ObjectManager2.getBestPlacementAngles({
-        position: pos0,
-        id: spike,
-        targetAngle: nearestAngle,
-        ignoreID: null,
-        preplace: true,
-        reduce: true,
-        fill: true
-      });
-      const spikeScale = Items[spike].scale;
-      let angles = [];
-      const length = myPlayer.getItemPlaceScale(spike);
-      for (const angle of spikeAngles) {
-        const newPos = pos0.addDirection(angle, length);
-        let shouldPlaceSpike = nearestEnemy.wasTrapped();
-        const enemy = EnemyManager2.nearestTrappedEnemy;
-        if (enemy !== null && !shouldPlaceSpike) {
-          const distanceToEnemy = newPos.distance(enemy.pos.current);
-          const enemyRange = spikeScale + enemy.collisionScale + 8;
-          const trap = enemy.trappedIn;
-          if (trap) {
-            const distanceToTrap = newPos.distance(trap.pos.current);
-            const trapRange = spikeScale + trap.placementScale + 8;
-            if (distanceToEnemy <= enemyRange || distanceToTrap <= trapRange) {
-              shouldPlaceSpike = true;
-            }
-          } else if (distanceToEnemy <= enemyRange) {
-            shouldPlaceSpike = true;
-          }
-        }
-        if (!shouldPlaceSpike && this._glotusCanKnockbackSpike(newPos, spikeScale, nearestEnemy)) {
-          shouldPlaceSpike = true;
-        }
-        if (shouldPlaceSpike) {
-          angles = spikeAngles;
-          itemType = 4;
-          break;
-        }
-      }
-      if (angles.length === 0) {
-        let type = currentType && currentType !== 2 ? currentType : 7;
-        if (!myPlayer.canPlace(type)) {
-          return;
-        }
-        let id = myPlayer.getItemByType(type);
-        if (id === 16 && !myPlayer.isTrapped) {
-          return;
-        }
-        if (this._glotusCount >= 3) {
-          type = 4;
-          id = myPlayer.getItemByType(type);
-        }
-        angles = ObjectManager2.getBestPlacementAngles({
-          position: pos0,
-          id: id,
-          targetAngle: nearestAngle,
-          ignoreID: null,
-          preplace: true,
-          reduce: true,
-          fill: type !== 4
-        });
-        itemType = type;
-        if (type === 4 && angles.length !== 0) {
-          this._glotusCount = 0;
-        }
-      }
-      if (itemType === null || angles.length === 0) {
-        return;
-      }
-      ModuleHandler.placeAngles[0] = itemType;
-      ModuleHandler.placedOnce = true;
-      for (const angle of angles) {
-        const angleKey = Math.round(angle * 20) / 20;
-        if (!this._glotusAngles.has(angleKey)) {
-          this._glotusAngles.set(angleKey, 0);
-        }
-        const angleCount = this._glotusAngles.get(angleKey);
-        if (angleCount >= 4) {
-          continue;
-        }
-        this._glotusAngles.set(angleKey, angleCount + 1);
-        ModuleHandler.place(itemType, angle);
-        ModuleHandler.placeAngles[1].push(angle);
-      }
-      if (itemType !== 4) {
-        this._glotusCount += 1;
-      }
     }
     postTick() {
       if (!Settings_default._autoplacer) return;
-      // وضع Glotus: منطق مختلف تماماً، ينفّذ ويخرج بدل منطق RYN
-      if (Settings_default._glotusPlacer) {
-        this._glotusPlace();
-        return;
-      }
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
       this._tick = this.client._ModuleHandler.tickCount;
@@ -12445,9 +11455,6 @@ window.grbtp = 35;
       const trapId = myPlayer.getItemByType(7);
       const spikeId = myPlayer.getItemByType(4);
       if (!spikeId && !trapId) return;
-      const _sm = this.client.SocketManager;
-      const pingTime = _sm?.pong ?? 0;
-      const minPingTime = _sm?.minPingTime ?? 0;
       const spikesOur = [];
       ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
         const obj = ObjectManager2.objects.get(id);
@@ -12470,33 +11477,6 @@ window.grbtp = 35;
       const imTrapped = !!myPlayer.isTrapped;
       const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
       const canTrapTick = () => false;
-      const canShamePlace = () => {
-        if (!Settings_default._shameGrind) return false;
-        const mySecWeapon = DataHandler_default?.getWeapon?.(myPlayer.weapon?.secondary ?? null);
-        if (!mySecWeapon?.name?.toLowerCase().includes("hammer")) return false;
-        if (enemy.spikeDamage > 0 || (enemy.shameCount ?? 0) > 6) return false;
-        if (!enemyTrapped) return false;
-        const hammerDmg = myPlayer.getBuildingDamage?.(myPlayer.weapon?.secondary, this.client._ModuleHandler.canBuy(0, 40)) ?? 0;
-        if (enemyTrapped.health > hammerDmg) return false;
-        if (Math.hypot(enemyTrapped.pos.current.x - myPos.x, enemyTrapped.pos.current.y - myPos.y) > 125) return false;
-        if (Math.hypot(enemyPos.x - myPos.x, enemyPos.y - myPos.y) > 35 * 1.8 + 75) return false;
-        const sp2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, enemyTrapped) : [];
-        const tr2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, enemyTrapped) : [];
-        return tr2.some(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 50) && sp2.some(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 35 + 52);
-      };
-      const canAutoShame = () => {
-        if (!Settings_default._autoShame) return false;
-        if (!enemy) return false;
-        if ((enemy.shameCount ?? 0) >= (Settings_default._autoShameLimit ?? 6)) return false;
-        if (myPlayer.isTrapped) return false;
-        if (enemyTrapped) return false;
-        if (enemy.receivedDamage !== null && Date.now() - enemy.receivedDamage < 600) return false;
-        if (!myPlayer.isReloaded(0, 1)) return false;
-        const primaryRange = 35 * 1.8 + (DataHandler_default.getWeapon(myPlayer.weapon?.primary)?.range ?? 110);
-        const dist = myPos.distance(enemyPos);
-        if (dist <= primaryRange) return false;
-        return true;
-      };
       const LOOKAHEAD = 222, START_OFFSET = 35;
       const futX = myPos.x + Math.cos(predictMoveAngle) * LOOKAHEAD;
       const futY = myPos.y + Math.sin(predictMoveAngle) * LOOKAHEAD;
@@ -12556,21 +11536,9 @@ window.grbtp = 35;
         const bestScore = Math.min(...validKb.map(v => v.alignment));
         return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle || null;
       };
-      let forcedSpam = false;
-      if (this._lastPrePlaceObj) {
-        const stillExists = ObjectManager2.objects.has(this._lastPrePlaceObj.id);
-        if (!stillExists) {
-          forcedSpam = true;
-        }
-      }
       this._predictObjects = [];
-      this._lastPrePlaceObj = null;
-      this._spamPrePlacer = false;
       if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) {
         return;
-      }
-      if (Settings_default._replacer) {
-        this._spamPrePlacer = true;
       }
       if (this._placedAngles && this._placedAngles.length > 0) {
         const _chkS = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
@@ -12584,76 +11552,6 @@ window.grbtp = 35;
         }
       }
       this._placedAngles = [];
-      if (Settings_default._preplacer && myPos.distance(enemyPos) < 300 && !(imTrapped && myPlayer.spikeDamage > 0)) {
-        const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2);
-        if (findObject) {
-          const spikeAngles = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, findObject) : [];
-          const trapAngles = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, findObject) : [];
-          const placeableSpikeAngles = spikeAngles.filter(o => o.placeable);
-          const placeableTrapAngles = trapAngles.filter(o => o.placeable);
-          const closestSpikeToEnemy = placeableSpikeAngles.filter(a => this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0];
-          const closestTrapToEnemy = placeableTrapAngles.filter(a => this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0];
-          const closestSpikeToKbPP = (() => {
-            const validKb = placeableSpikeAngles.filter(a => {
-              const canHit = this._lineInRect(a.x - (enemyScale + a.scale - 2), a.y - (enemyScale + a.scale - 2), a.x + (enemyScale + a.scale - 2), a.y + (enemyScale + a.scale - 2), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-              if (!canHit) return false;
-              const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-              const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-              for (const sp of spikesOur) {
-                const s = sp.pos.current, sc = sp.collisionScale;
-                if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-              }
-              return false;
-            }).map(a => {
-              const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-              const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-              let best = Infinity;
-              for (const sp of spikesOur) {
-                const s = sp.pos.current, sc = sp.collisionScale;
-                if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-                  const a2e = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x), e2s = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-                  let d = Math.abs(a2e - e2s);
-                  if (d > Math.PI) d = 2 * Math.PI - d;
-                  best = Math.min(best, d);
-                }
-              }
-              return {
-                angle: a,
-                alignment: best
-              };
-            });
-            if (!validKb.length) return undefined;
-            const bestScore = Math.min(...validKb.map(v => v.alignment));
-            return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle;
-          })();
-          const isPrePlaceAngle = config => {
-            if (!enemy) return false;
-            if (myPos.distance(enemyPos) > 350) return false;
-            const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-            const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
-            const {blockFuture: blockFuture, blockEnemy: blockEnemy, canSpikeTick: canSpikeTick, canRetrap: canRetrap} = _los(config);
-            if (isSpike && canSpikeTick && canTrapTick()) return true;
-            if (isTrap && canRetrap && canShamePlace()) return true;
-            if (isSpike && enemyTrapped && findObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            if (isTrap && enemy.spikeDamage > 0 && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
-            if (isSpike && closestSpikeToKbPP && config === closestSpikeToKbPP && !canShamePlace()) return true;
-            if (isSpike && enemyTrapped && !blockFuture && !blockEnemy && findObject !== enemyTrapped) return true;
-            if (isTrap) return true;
-            return false;
-          };
-          let findAngle = null;
-          const _pick = angles => angles.filter(o => o.placeable && isPrePlaceAngle(o)).sort((a, b) => Math.hypot(findObject.pos.current.x - a.x, findObject.pos.current.y - a.y) - Math.hypot(findObject.pos.current.x - b.x, findObject.pos.current.y - b.y))[0];
-          for (const _angles of [ spikeAngles, trapAngles ]) {
-            if (findAngle) break;
-            const obj = _pick(_angles);
-            if (obj) findAngle = obj;
-          }
-          if (findAngle) {
-            this._addPredictObject(findAngle.id, findAngle.angle, true, myPos);
-            this._lastPrePlaceObj = findObject;
-          }
-        }
-      }
       {
         const spikeAngles2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
         const trapAngles2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) : [];
@@ -12735,17 +11633,15 @@ window.grbtp = 35;
             if (enemyTrapped && closestSpikeToEnemy2 && config === closestSpikeToEnemy2) return true;
             if (closestSpikeToKb2 && config === closestSpikeToKb2) return true;
             if (enemyTrapped && !blockFuture && !blockEnemy) return true;
-            if (!Settings_default._lunaExactPlacer) {
-              if (_sealsExit(config)) return true;
-              if (_isDoubleSpike(config)) return true;
-              if (_bouncesOntoSpike(config)) return true;
-              const distSpikeToEnemy = Math.hypot(config.x - enemyPos.x, config.y - enemyPos.y);
-              const touchesEnemy = distSpikeToEnemy < config.scale + enemyScale + 15;
-              if (enemyTrapped && touchesEnemy) return true;
-              if (!enemyTrapped && !imTrapped) {
-                if (closestSpikeToEnemy2 && config === closestSpikeToEnemy2) return true;
-                if (touchesEnemy) return true;
-              }
+            if (_sealsExit(config)) return true;
+            if (_isDoubleSpike(config)) return true;
+            if (_bouncesOntoSpike(config)) return true;
+            const distSpikeToEnemy = Math.hypot(config.x - enemyPos.x, config.y - enemyPos.y);
+            const touchesEnemy = distSpikeToEnemy < config.scale + enemyScale + 15;
+            if (enemyTrapped && touchesEnemy) return true;
+            if (!enemyTrapped && !imTrapped) {
+              if (closestSpikeToEnemy2 && config === closestSpikeToEnemy2) return true;
+              if (touchesEnemy) return true;
             }
           }
           if (isTrap) {
@@ -12756,15 +11652,13 @@ window.grbtp = 35;
           return false;
         };
         for (const obj of validAngles.filter(a => a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
+          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, myPos);
         }
         for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
+          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, myPos);
         }
       }
-      const autoObjects = this._predictObjects.filter(o => !o.preplace);
-      const preObjects = this._predictObjects.filter(o => o.preplace);
-      for (const obj of autoObjects) {
+      for (const obj of this._predictObjects) {
         if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;
         const type = obj.id === trapId ? 7 : 4;
         ModuleHandler.place(type, obj.angle);
@@ -12773,48 +11667,6 @@ window.grbtp = 35;
         ModuleHandler.placeAngles[1].push(obj.angle);
         ModuleHandler.moduleActive = true;
         this._placedAngles.push(obj.angle);
-      }
-      if (preObjects.length > 0) {
-        const _aimAngle = () => {
-          const mh = ModuleHandler;
-          if (mh._autoBreakActive && mh._lastBreakAngle != null) return mh._lastBreakAngle;
-          return mh._currentAngle ?? 0;
-        };
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              PacketManager2.updateAngle(_aimAngle());
-            }
-          } catch (_) {}
-        }, 1);
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placedOnce = true;
-              ModuleHandler.placeAngles[0] = type;
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              ModuleHandler.moduleActive = true;
-              this._placedAngles.push(obj.angle);
-              PacketManager2.updateAngle(_aimAngle());
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - pingTime));
-        setTimeout(() => {
-          if (!this._spamPrePlacer) return;
-          try {
-            for (const obj of preObjects) {
-              if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              this._placedAngles.push(obj.angle);
-              PacketManager2.updateAngle(_aimAngle());
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - minPingTime));
       }
     }
   }
@@ -12843,7 +11695,6 @@ window.grbtp = 35;
       return angles.reduce((best, a) => this._angleDist(a, targetAngle) < this._angleDist(best, targetAngle) ? a : best, angles[0]);
     }
     postTick() {
-      if (Settings_default._lunaMode) return;
       if (!Settings_default._trapAnimal) return;
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2} = this.client;
       if (ModuleHandler.moduleActive || ModuleHandler.placedOnce) return;
@@ -12913,633 +11764,6 @@ window.grbtp = 35;
     }
   }
   const AutoPlacer_default = AutoPlacer;
-  class AutoRetrap {
-    moduleName="autoRetrap";
-    client;
-    _bannedAngles=new Map;
-    _predictObjects=[];
-    _placedAngles=[];
-    _tick=0;
-    _lastPrePlaceObj=null;
-    _spamPrePlacer=false;
-    constructor(client2) {
-      this.client = client2;
-    }
-    _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
-      let minX = ax, maxX = bx;
-      if (ax > bx) {
-        minX = bx;
-        maxX = ax;
-      }
-      if (maxX > x2) maxX = x2;
-      if (minX < x1) minX = x1;
-      if (minX > maxX) return false;
-      let minY = ay, maxY = by;
-      const dx = bx - ax;
-      if (Math.abs(dx) > 0.0000001) {
-        const slope = (by - ay) / dx;
-        const intercept = ay - slope * ax;
-        minY = slope * minX + intercept;
-        maxY = slope * maxX + intercept;
-      }
-      if (minY > maxY) {
-        const tmp = maxY;
-        maxY = minY;
-        minY = tmp;
-      }
-      if (maxY > y2) maxY = y2;
-      if (minY < y1) minY = y1;
-      if (minY > maxY) return false;
-      return true;
-    }
-    _getConfig(id, myPos) {
-      return angle => {
-        const item = Items[id];
-        const dist = 35 + item.scale + (item.placeOffset || 0);
-        return {
-          id: id,
-          angle: angle,
-          x: myPos.x + dist * Math.cos(angle),
-          y: myPos.y + dist * Math.sin(angle),
-          scale: item.scale
-        };
-      };
-    }
-    _canPlace(id, angle, myPos, ObjectManager2, excludeObj) {
-      const cfg = this._getConfig(id, myPos)(angle);
-      const cx = cfg.x, cy = cfg.y, cs = cfg.scale;
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        if (excludeObj && obj === excludeObj) return;
-        const blockS = obj.placementScale;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < cs + blockS) collision = true;
-      });
-      if (collision) return false;
-      if (id !== 18) {
-        const mid = Config_default.mapScale / 2;
-        const riverHalf = Config_default.riverWidth / 2;
-        if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      }
-      return true;
-    }
-    _isItemLimit(id, myPlayer) {
-      const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
-      return count >= limit;
-    }
-    _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj, enemyPos = null) {
-      if (this._isItemLimit(id, myPlayer)) return [];
-      const tickCount = this.client._ModuleHandler.tickCount;
-      const cacheKey = this.moduleName + "_" + id + "_" + (excludeObj ? excludeObj.id : "n");
-      const getConfig = this._getConfig(id, myPos);
-      let priorityIndex = -1;
-      let myQuadrant = -1;
-      if (enemyPos) {
-        const dirAngle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
-        const normalized = (dirAngle % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-        priorityIndex = Math.round(normalized / (Math.PI * 2 / 72)) % 72;
-        myQuadrant = Math.floor(priorityIndex / 18);
-      }
-      this.client._retrapQuadrant = myQuadrant;
-      const computeAngle = i => {
-        if (myQuadrant >= 0 && Math.floor(i / 18) !== myQuadrant) {
-          return {
-            angle: i * (Math.PI * 2 / 72),
-            placeable: false,
-            perfect: false
-          };
-        }
-        const angle = i * (Math.PI * 2 / 72);
-        const cfg = getConfig(angle);
-        return {
-          ...cfg,
-          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
-          perfect: false
-        };
-      };
-      const forceFull = tickCount < (this.client._focusUntilTick || -1);
-      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, priorityIndex);
-      for (let i = 1; i < angles.length; i++) {
-        angles[i].perfect = false;
-      }
-      if (angles[0]) angles[0].perfect = false;
-      for (let i = 1; i < angles.length; i++) {
-        if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
-        if (!angles[i].placeable && angles[i - 1].placeable) angles[i - 1].perfect = true;
-      }
-      return angles;
-    }
-    _addPredictObject(id, angle, preplace, myPos) {
-      const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const x = myPos.x + dist * Math.cos(angle);
-      const y = myPos.y + dist * Math.sin(angle);
-      for (const obj of this._predictObjects) {
-        if (obj.id !== 17 && Math.hypot(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
-      }
-      this._predictObjects.push({
-        id: id,
-        angle: angle,
-        x: x,
-        y: y,
-        scale: item.scale,
-        preplace: preplace
-      });
-    }
-    _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2) {
-      let findObject = null;
-      const _mh = this.client._ModuleHandler;
-      const justGathered = _mh.autoattack || _mh.forceWeapon !== null;
-      if (justGathered) {
-        const predictType = _mh._getPredictWeapon();
-        const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
-        const predictReady = myWeapon != null && myPlayer.isReloaded && myPlayer.isReloaded(predictType, 0);
-        if (myWeapon != null && predictReady) {
-          const wd = DataHandler_default?.getWeapon?.(myWeapon);
-          if (wd) {
-            const myRange = wd.range ?? 0;
-            const ownsTank = this.client._ModuleHandler.canBuy(0, 40);
-            const myDmg = myPlayer.getBuildingDamage?.(myWeapon, ownsTank) ?? 0;
-            const gatherAngle = Config_default.gatherAngle;
-            const myFut = myPlayer.pos.future ?? myPos;
-            const attackAngle = myPos.angle(enemyPos);
-            const selfCandidates = [];
-            ObjectManager2.grid2D.query(myPos.x, myPos.y, 2, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return;
-              if (!myPlayer.isMyPlayerByID(obj.ownerID)) return;
-              const distEdge = myFut.distance(obj.pos.current) - obj.collisionScale;
-              if (distEdge > myRange) return;
-              const objAngle = myFut.angle(obj.pos.current);
-              let diff = Math.abs(objAngle - attackAngle);
-              if (diff > Math.PI) diff = 2 * Math.PI - diff;
-              if (diff > gatherAngle) return;
-              if (obj.health <= myDmg) selfCandidates.push(obj);
-            });
-            if (selfCandidates.length > 0) {
-              selfCandidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = selfCandidates[0];
-            }
-          }
-        }
-      }
-      if (!findObject) {
-        const secReload = enemy.reload?.[1];
-        const primReload = enemy.reload?.[0];
-        const secJustReady = secReload && secReload.previous < secReload.max && secReload.current >= secReload.max;
-        const primJustReady = primReload && primReload.previous < primReload.max && primReload.current >= primReload.max;
-        const secID = enemy.weapon?.secondary ?? null;
-        const primID = enemy.weapon?.primary ?? null;
-        let weaponToCheck = null;
-        if (secID === 10 && secJustReady) {
-          weaponToCheck = secID;
-        }
-        if (weaponToCheck === null && primID !== null && primJustReady) {
-          const wd = DataHandler_default?.getWeapon?.(primID);
-          if (wd && (wd.speed ?? 999) <= 400) {
-            weaponToCheck = primID;
-          }
-        }
-        if (weaponToCheck !== null) {
-          const wd = DataHandler_default?.getWeapon?.(weaponToCheck);
-          if (wd) {
-            const weaponRange = wd.range ?? 0;
-            const dmgToBuilding = enemy.getBuildingDamage?.(weaponToCheck, true) ?? 50;
-            const candidates = [];
-            ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 2, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return;
-              if (!myPlayer.isMyPlayerByID(obj.ownerID)) return;
-              if (Items[obj.type] && Items[obj.type].hideFromEnemy && !obj._lunaUnhidden) return;
-              if (enemyPos.distance(obj.pos.current) - obj.collisionScale > weaponRange) return;
-              if (obj.health <= dmgToBuilding) candidates.push(obj);
-            });
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = candidates[0];
-            }
-          }
-        }
-      }
-      if (findObject) {
-        this._spamPrePlacer = true;
-      }
-      return findObject;
-    }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
-      // [مُصلَّح] كان هنا return; عارٍ يقتل ٦٢٧ سطر تحته
-      if (!Settings_default._autoRetrap) return;
-      if (!myPlayer.canPlace(7) && !myPlayer.canPlace(4)) return;
-      this._tick++;
-      for (const [angle, expiry] of this._bannedAngles) {
-        if (this._tick > expiry) this._bannedAngles.delete(angle);
-      }
-      const trapId = myPlayer.getItemByType(7);
-      const spikeId = myPlayer.getItemByType(4);
-      const myPos = myPlayer.pos.current;
-      const myFut = myPlayer.pos.future;
-      const enemy = EnemyManager2.nearestEnemy;
-      if (!enemy) return;
-      const enemyPos = enemy.pos.current;
-      const enemyFut = enemy.pos.future;
-      const enemyScale = enemy.collisionScale;
-      const spikesOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject) || obj.itemGroup !== 2) return;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, enemy)) return;
-        spikesOur.push(obj);
-      });
-      const trapsOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 4, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject) || obj.type !== 15) return;
-        if (obj.ownerID !== myPlayer.id) return;
-        trapsOur.push(obj);
-      });
-      const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < t.collisionScale) || null;
-      if (enemyTrapped && !this.client._wasEnemyTrapped) {
-        this.client._focusUntilTick = this.client._ModuleHandler.tickCount + 3;
-      }
-      this.client._wasEnemyTrapped = !!enemyTrapped;
-      const imTrapped = !!myPlayer.isTrapped;
-      const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
-      const pingTime = PacketManager2?.pong || 0;
-      const minPingTime = PacketManager2?.minPingTime || 0;
-      const _tryShameHammerBreak = () => {
-        if (!Settings_default._shameGrind) return false;
-        if (ModuleHandler.moduleActive) return false;
-        const mySec = myPlayer.weapon?.secondary ?? null;
-        const mySecW = DataHandler_default?.getWeapon?.(mySec);
-        if (!mySecW?.name?.toLowerCase().includes("hammer")) return false;
-        if (enemy.spikeDamage > 0 || (enemy.shameCount ?? 0) > 6) return false;
-        if (!enemyTrapped) return false;
-        const {reloading: reloading} = ModuleHandler.staticModules;
-        if (!reloading.isReloaded(1)) return false;
-        const hammerDmg = myPlayer.getBuildingDamage?.(mySec, ModuleHandler.canBuy(0, 40)) ?? 0;
-        if (enemyTrapped.health > hammerDmg) return false;
-        if (enemyTrapped.pos.current.distance(myPos) > 50 + 75) return false;
-        if (enemyPos.distance(myPos) > 35 * 1.8 + 75) return false;
-        const sp2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, enemyTrapped) : [];
-        const tr2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, enemyTrapped) : [];
-        const canPlaceTrap = tr2.some(o => o.placeable && o.x !== undefined && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 50);
-        const canPlaceSpike = sp2.some(o => o.placeable && o.x !== undefined && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 35 + 52);
-        if (!canPlaceTrap || !canPlaceSpike) return false;
-        const newTrapAngle = tr2.find(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 50)?.angle;
-        if (newTrapAngle !== undefined && myPlayer.canPlace(7)) {
-          ModuleHandler.place(7, newTrapAngle, true);
-        }
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.forceWeapon = 1;
-        ModuleHandler.forceHat = 40;
-        ModuleHandler.useAngle = myPos.angle(enemyTrapped.pos.current);
-        ModuleHandler.shouldAttack = true;
-        return true;
-      };
-      if (_tryShameHammerBreak()) return;
-      const canTrapTick = () => false;
-      const canShamePlace = () => {
-        if (!Settings_default._shameGrind) return false;
-        const _mySecW = DataHandler_default?.getWeapon?.(myPlayer.weapon?.secondary ?? null);
-        if (!_mySecW?.name?.toLowerCase().includes("hammer")) return false;
-        if (enemy.spikeDamage > 0 || (enemy.shameCount ?? 0) > 6) return false;
-        if (!enemyTrapped) return false;
-        const hammerDmg = myPlayer.getBuildingDamage?.(myPlayer.weapon?.secondary, this.client._ModuleHandler.canBuy(0, 40)) ?? 0;
-        if (enemyTrapped.health > hammerDmg) return false;
-        if (Math.hypot(enemyTrapped.pos.current.x - myPos.x, enemyTrapped.pos.current.y - myPos.y) > 125) return false;
-        if (Math.hypot(enemyPos.x - myPos.x, enemyPos.y - myPos.y) > 35 * 1.8 + 75) return false;
-        const sp2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, enemyTrapped, enemyTrapped ? enemyPos : null) : [];
-        const tr2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, enemyTrapped, enemyTrapped ? enemyPos : null) : [];
-        return tr2.some(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 50) && sp2.some(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 35 + 52);
-      };
-      const canAutoShame = () => {
-        if (!Settings_default._autoShame) return false;
-        if (!enemy) return false;
-        if ((enemy.shameCount ?? 0) >= (Settings_default._autoShameLimit ?? 6)) return false;
-        if (myPlayer.isTrapped) return false;
-        if (enemyTrapped) return false;
-        if (enemy.receivedDamage !== null && Date.now() - enemy.receivedDamage < 600) return false;
-        if (!myPlayer.isReloaded(0, 1)) return false;
-        const primaryRange = 35 * 1.8 + (DataHandler_default.getWeapon(myPlayer.weapon?.primary)?.range ?? 110);
-        const dist = myPos.distance(enemyPos);
-        if (dist <= primaryRange) return false;
-        return true;
-      };
-      const LOOKAHEAD = 222, START_OFFSET = 35;
-      const futX = myPos.x + Math.cos(predictMoveAngle) * LOOKAHEAD;
-      const futY = myPos.y + Math.sin(predictMoveAngle) * LOOKAHEAD;
-      const stX = myPos.x + Math.cos(predictMoveAngle) * START_OFFSET;
-      const stY = myPos.y + Math.sin(predictMoveAngle) * START_OFFSET;
-      const _los = cfg => {
-        const blockFuture = this._lineInRect(cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5, stX, stY, futX, futY);
-        const blockEnemy = this._lineInRect(cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5, myFut.x, myFut.y, enemyFut.x, enemyFut.y);
-        let canSpikeTick = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < cfg.scale + 35;
-        if (canSpikeTick) {
-          const kbA = Math.atan2(enemyPos.y - cfg.y, enemyPos.x - cfg.x);
-          const e2p = Math.atan2(myPos.y - enemyPos.y, myPos.x - enemyPos.x);
-          let diff = Math.abs(kbA - e2p);
-          if (diff > Math.PI) diff = 2 * Math.PI - diff;
-          canSpikeTick = diff >= Math.PI / 5;
-        }
-        const canRetrap = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < 50;
-        const willRetrap = true;
-        return {
-          blockFuture: blockFuture,
-          blockEnemy: blockEnemy,
-          canSpikeTick: canSpikeTick,
-          canRetrap: canRetrap,
-          willRetrap: willRetrap
-        };
-      };
-      const _findClosestSpikeToKb = spikeList => {
-        const validKb = spikeList.filter(a => {
-          const canHit = this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-          if (!canHit) return false;
-          const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-          const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-          for (const sp of spikesOur) {
-            const s = sp.pos.current, sc = sp.collisionScale;
-            if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-          }
-          return false;
-        }).map(a => {
-          const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-          const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-          let best = Infinity;
-          for (const sp of spikesOur) {
-            const s = sp.pos.current, sc = sp.collisionScale;
-            if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-              const a2e = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x), e2s = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-              let d = Math.abs(a2e - e2s);
-              if (d > Math.PI) d = 2 * Math.PI - d;
-              best = Math.min(best, d);
-            }
-          }
-          return {
-            angle: a,
-            alignment: best
-          };
-        });
-        if (!validKb.length) return null;
-        const bestScore = Math.min(...validKb.map(v => v.alignment));
-        return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle || null;
-      };
-      let forcedSpam = false;
-      if (this._lastPrePlaceObj) {
-        const stillExists = ObjectManager2.objects.has(this._lastPrePlaceObj.id);
-        if (!stillExists) {
-          forcedSpam = true;
-        }
-      }
-      this._predictObjects = [];
-      this._lastPrePlaceObj = null;
-      this._spamPrePlacer = forcedSpam;
-      if (Settings_default._replacer) {
-        this._spamPrePlacer = true;
-      }
-      if (this._placedAngles && this._placedAngles.length > 0) {
-        const _chkS = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _chkT = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _allChk = [ ..._chkS, ..._chkT ];
-        for (const pa of this._placedAngles) {
-          const _m = _allChk.find(a => Math.abs(a.angle - pa) < 0.01);
-          if (_m && _m.placeable) {
-            this._bannedAngles.set(pa, this._tick + 18);
-          }
-        }
-      }
-      this._placedAngles = [];
-      if (Settings_default._preplacer && myPos.distance(enemyPos) < 300 && !(imTrapped && myPlayer.spikeDamage > 0)) {
-        const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2);
-        if (findObject) {
-          const spikeAngles = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, findObject, enemyTrapped ? enemyPos : null) : [];
-          const trapAngles = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, findObject, enemyTrapped ? enemyPos : null) : [];
-          const placeableSpikeAngles = spikeAngles.filter(o => o.placeable);
-          const placeableTrapAngles = trapAngles.filter(o => o.placeable);
-          const enemyScale = enemy.collisionScale;
-          const closestSpikeToEnemy = placeableSpikeAngles.filter(a => this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0];
-          const closestTrapToEnemy = placeableTrapAngles.filter(a => this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0];
-          const closestSpikeToKbPP = (() => {
-            const validKb = placeableSpikeAngles.filter(a => {
-              const canHit = this._lineInRect(a.x - (enemyScale + a.scale - 2), a.y - (enemyScale + a.scale - 2), a.x + (enemyScale + a.scale - 2), a.y + (enemyScale + a.scale - 2), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-              if (!canHit) return false;
-              const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-              const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-              for (const sp of spikesOur) {
-                const s = sp.pos.current, sc = sp.collisionScale;
-                if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-              }
-              return false;
-            }).map(a => {
-              const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-              const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-              let best = Infinity;
-              for (const sp of spikesOur) {
-                const s = sp.pos.current, sc = sp.collisionScale;
-                if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-                  const a2e = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x), e2s = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-                  let d = Math.abs(a2e - e2s);
-                  if (d > Math.PI) d = 2 * Math.PI - d;
-                  best = Math.min(best, d);
-                }
-              }
-              return {
-                angle: a,
-                alignment: best
-              };
-            });
-            if (!validKb.length) return undefined;
-            const bestScore = Math.min(...validKb.map(v => v.alignment));
-            return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle;
-          })();
-          const isPrePlaceAngle = config => {
-            if (!enemy) return false;
-            const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-            const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
-            const {blockFuture: blockFuture, blockEnemy: blockEnemy, canSpikeTick: canSpikeTick, canRetrap: canRetrap} = _los(config);
-            if (isSpike && canSpikeTick && canTrapTick()) return true;
-            if (isTrap && canRetrap && canShamePlace()) return true;
-            if (isSpike && enemyTrapped && findObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            if (isTrap && enemy.spikeDamage > 0 && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
-            if (isSpike && closestSpikeToKbPP && config === closestSpikeToKbPP && !canShamePlace()) return true;
-            if (isSpike && enemyTrapped && !blockFuture && !blockEnemy && findObject !== enemyTrapped) return true;
-            if (isTrap) return true;
-            return false;
-          };
-          let findAngle = null;
-          if (!findAngle) {
-            const obj = spikeAngles.filter(o => o.placeable && isPrePlaceAngle(o)).sort((a, b) => Math.hypot(findObject.pos.current.x - a.x, findObject.pos.current.y - a.y) - Math.hypot(findObject.pos.current.x - b.x, findObject.pos.current.y - b.y))[0];
-            if (obj) findAngle = obj;
-          }
-          if (!findAngle) {
-            const obj = trapAngles.filter(o => o.placeable && isPrePlaceAngle(o)).sort((a, b) => Math.hypot(findObject.pos.current.x - a.x, findObject.pos.current.y - a.y) - Math.hypot(findObject.pos.current.x - b.x, findObject.pos.current.y - b.y))[0];
-            if (obj) findAngle = obj;
-          }
-          if (findAngle) {
-            this._addPredictObject(findAngle.id, findAngle.angle, true, myPos);
-            this._lastPrePlaceObj = findObject;
-          }
-        }
-      }
-      if (Settings_default._autoplacer && enemy) {
-        const spikeAngles2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null, enemyTrapped ? enemyPos : null) : [];
-        const trapAngles2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null, enemyTrapped ? enemyPos : null) : [];
-        const filterBanned = a => !this._bannedAngles.has(a.angle);
-        const validSpike = spikeAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
-        const validTrap = trapAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
-        const validAngles = [ ...validSpike, ...validTrap ];
-        const closestSpikeToEnemy2 = validSpike.filter(a => this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] || null;
-        const closestTrapToEnemy2 = validTrap.filter(a => this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] || null;
-        const closestSpikeToKb2 = _findClosestSpikeToKb(validSpike);
-        const neitherTrapped = !enemyTrapped && !imTrapped;
-        let _escapeExits = null;
-        if (enemy) {
-          const surroundSpikes = [];
-          ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
-            const o = ObjectManager2.objects.get(id);
-            if (!o || !(o instanceof PlayerObject)) return;
-            if (o.itemGroup !== 2 && o.type !== 15) return;
-            if (PlayerManager2.isEnemyByID(o.ownerID, myPlayer)) return;
-            const d = enemyPos.distance(o.pos.current);
-            if (d > enemyScale + o.collisionScale + 40) return;
-            surroundSpikes.push({
-              x: o.pos.current.x,
-              y: o.pos.current.y,
-              escapeScale: o.collisionScale
-            });
-          });
-          if (surroundSpikes.length >= 2) {
-            const esc = SiegeAnalysis.isEscapable(enemyPos.x, enemyPos.y, enemyScale, surroundSpikes);
-            if (esc.escapable) _escapeExits = esc.exits;
-          }
-        }
-        const _sealsExit = cfg => {
-          if (!_escapeExits || _escapeExits.length === 0) return false;
-          const angToConfig = Math.atan2(cfg.y - enemyPos.y, cfg.x - enemyPos.x);
-          for (const exit of _escapeExits) {
-            let diff = Math.abs(angToConfig - exit.angle);
-            if (diff > Math.PI) diff = 2 * Math.PI - diff;
-            if (diff < 0.45) return true;
-          }
-          return false;
-        };
-        const _primaryType = myPlayer.getItemByType(0);
-        const _hasPolearm = _primaryType === 4 || _primaryType === 5;
-        const _kbObjects = [];
-        ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 4, id => {
-          const o = ObjectManager2.objects.get(id);
-          if (!o || !(o instanceof PlayerObject)) return;
-          const isSpk = o.itemGroup === 2, isTrp = o.type === 15;
-          if (!isSpk && !isTrp) return;
-          if (PlayerManager2.isEnemyByID(o.ownerID, myPlayer)) return;
-          _kbObjects.push({
-            x: o.pos.current.x,
-            y: o.pos.current.y,
-            dmg: isSpk,
-            trap: isTrp,
-            isCactus: false,
-            colScale: o.collisionScale
-          });
-        });
-        const _kbDir = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
-        const _bouncesOntoSpike = cfg => {
-          if (_kbObjects.length === 0) return false;
-          const res = SiegeAnalysis.knockInto(cfg.x, cfg.y, _kbObjects, enemyPos.x, enemyPos.y, _kbDir, _hasPolearm);
-          return res.willHit || res.inEscapable;
-        };
-        const _isDoubleSpike = cfg => {
-          if (_kbObjects.length === 0) return false;
-          const res = SiegeAnalysis.knockInto(cfg.x, cfg.y, _kbObjects, enemyPos.x, enemyPos.y, _kbDir, _hasPolearm);
-          return res.doubleSpike;
-        };
-        const isAutoPlaceAngle = config => {
-          if (!enemy) return false;
-          if (myPos.distance(enemyPos) > (Settings_default._autoplacerRadius ?? 350)) return false;
-          const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-          const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
-          const {blockFuture: blockFuture, blockEnemy: blockEnemy, canSpikeTick: canSpikeTick, canRetrap: canRetrap, willRetrap: willRetrap} = _los(config);
-          if (isSpike && _sealsExit(config)) return true;
-          if (isSpike && _isDoubleSpike(config)) return true;
-          if (isSpike && _bouncesOntoSpike(config)) return true;
-          if (isSpike) {
-            if (enemyTrapped && closestSpikeToEnemy2 && config === closestSpikeToEnemy2) return true;
-            if (closestSpikeToKb2 && config === closestSpikeToKb2) return true;
-            if (enemyTrapped && !blockFuture && !blockEnemy) return true;
-            if (enemyTrapped) {
-              const distSpikeToEnemy = Math.hypot(config.x - enemyPos.x, config.y - enemyPos.y);
-              if (distSpikeToEnemy < config.scale + enemyScale + 15) return true;
-            }
-            if (!enemyTrapped && !imTrapped) {
-              if (closestSpikeToEnemy2 && config === closestSpikeToEnemy2) return true;
-              const distSpikeToEnemy = Math.hypot(config.x - enemyPos.x, config.y - enemyPos.y);
-              if (distSpikeToEnemy < config.scale + enemyScale + 15) return true;
-            }
-          }
-          if (isTrap) {
-            if (closestTrapToEnemy2 && config === closestTrapToEnemy2 && willRetrap && neitherTrapped) return true;
-            if (neitherTrapped) return true;
-            return false;
-          }
-          return false;
-        };
-        for (const obj of validAngles.filter(a => a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
-        }
-        for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
-        }
-      }
-      const autoObjects = this._predictObjects.filter(o => !o.preplace);
-      const preObjects = this._predictObjects.filter(o => o.preplace);
-      for (const obj of autoObjects) {
-        if (ModuleHandler.totalPlaces >= 20) break;
-        const type = obj.id === trapId ? 7 : 4;
-        ModuleHandler.place(type, obj.angle);
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.placeAngles[0] = type;
-        ModuleHandler.placeAngles[1].push(obj.angle);
-        ModuleHandler.moduleActive = true;
-        this._bannedAngles.set(obj.angle, this._tick + 18);
-        this._placedAngles.push(obj.angle);
-      }
-      if (preObjects.length > 0) {
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              PacketManager2.updateAngle(obj.angle);
-            }
-          } catch (_) {}
-        }, 1);
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placedOnce = true;
-              ModuleHandler.placeAngles[0] = type;
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              ModuleHandler.moduleActive = true;
-              PacketManager2.updateAngle(obj.angle);
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - pingTime));
-        setTimeout(() => {
-          if (!this._spamPrePlacer) return;
-          try {
-            for (const obj of preObjects) {
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              PacketManager2.updateAngle(obj.angle);
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - minPingTime));
-      }
-    }
-  }
   class AntiRetrap {
       moduleName="antiRetrap";
       client;
@@ -13657,7 +11881,6 @@ window.grbtp = 35;
       return true;
     }
     postTick() {
-      if (Settings_default._lunaMode) return;
       if (!Settings_default._antiTrapProtect) return;
       const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
@@ -13779,7 +12002,6 @@ window.grbtp = 35;
       return d;
     }
     postTick() {
-      if (Settings_default._lunaMode) return;
       if (!Settings_default._antiTrapStar || Settings_default._disableAutoTickCombat) {
         this._protected = false;
         return;
@@ -14170,10 +12392,6 @@ window.grbtp = 35;
         this.useTurret = false;
         return;
       }
-      if (Settings_default._lockTrappedEnemy && EnemyManager2.enemyTrappedByMe()) {
-        this.useTurret = false;
-        return;
-      }
       const nearestEnemySpikeCollider = EnemyManager2.nearestEnemySpikeCollider;
       const spikeCollider = EnemyManager2.spikeCollider;
       const reloading = ModuleHandler.staticModules.reloading;
@@ -14230,10 +12448,6 @@ window.grbtp = 35;
     postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (ModuleHandler.moduleActive || !Settings_default._knockbackTickHammer || Settings_default._disableAutoTickCombat || EnemyManager2.shouldIgnoreModule()) {
-        this.targetEnemy = null;
-        return;
-      }
-      if (Settings_default._lockTrappedEnemy && EnemyManager2.enemyTrappedByMe()) {
         this.targetEnemy = null;
         return;
       }
@@ -15506,7 +13720,7 @@ window.grbtp = 35;
       if (useItem !== null) {
         ModuleHandler.selectItem(useItem);
       }
-      if (ModuleHandler.shouldAttack && !(Settings_default._autoGather && ModuleHandler.staticModules.autoGatherBreak._on && !ModuleHandler._comboAttack)) {
+      if (ModuleHandler.shouldAttack) {
         const angle = this.getAttackAngle();
         ModuleHandler.attack(angle);
         ModuleHandler.stopAttack();
@@ -16790,7 +15004,6 @@ window.grbtp = 35;
       this.client = client2;
     }
     postTick() {
-      if (Settings_default._lunaMode) return;
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ProjectileManager: ProjectileManager2, ObjectManager: ObjectManager2} = this.client;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       if (nearestEnemy === null || !Settings_default._placementDefense) {
@@ -17076,7 +15289,6 @@ window.grbtp = 35;
       this.client = client2;
     }
     postTick() {
-      if (Settings_default._lunaMode) return;
       const {_ModuleHandler: ModuleHandler, InputHandler: InputHandler2, PlayerManager: PlayerManager2, myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
       if (ModuleHandler.moduleActive) {
         return;
@@ -17123,7 +15335,6 @@ window.grbtp = 35;
       this.client = client2;
     }
     postTick() {
-      if (Settings_default._lunaMode) return;
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
       if (ModuleHandler.moduleActive) {
         return;
@@ -17197,7 +15408,6 @@ window.grbtp = 35;
       this.client = client2;
     }
     postTick() {
-      if (Settings_default._lunaMode) return;
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
       const {currentType: currentType, _currentAngle: currentAngle} = ModuleHandler;
       if (!myPlayer.canPlace(currentType) || !Settings_default._dashMovement) {
@@ -17257,10 +15467,6 @@ window.grbtp = 35;
     postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (ModuleHandler.moduleActive || !Settings_default._knockbackTickHammer || Settings_default._disableAutoTickCombat || EnemyManager2.shouldIgnoreModule()) {
-        this.targetEnemy = null;
-        return;
-      }
-      if (Settings_default._lockTrappedEnemy && EnemyManager2.enemyTrappedByMe()) {
         this.targetEnemy = null;
         return;
       }
@@ -18019,36 +16225,6 @@ window.grbtp = 35;
       }
     }
   }
-  class AutoHitToShame {
-    moduleName="autoHitToShame";
-    client;
-    constructor(client2) {
-      this.client = client2;
-    }
-    postTick() {
-      const {_ModuleHandler: MH, EnemyManager: EM, myPlayer: mp} = this.client;
-      if (MH.moduleActive || !Settings_default._autoShame || EM.shouldIgnoreModule()) return;
-      const enemy = EM.nearestEnemy;
-      if (!enemy) return;
-      if ((enemy.shameCount ?? 0) >= (Settings_default._autoShameLimit ?? 6)) return;
-      if (mp.isTrapped) return;
-      if (enemy.trappedIn) return;
-      if (enemy.receivedDamage !== null && Date.now() - enemy.receivedDamage < 600) return;
-      const {reloading: reloading} = MH.staticModules;
-      if (!reloading.isReloaded(0)) return;
-      const myPos = mp.pos.current;
-      const enemyPos = enemy.pos.current;
-      const dist = myPos.distance(enemyPos);
-      const primary = mp.getItemByType(0);
-      const primaryRange = 35 * 1.8 + (DataHandler_default.getWeapon(primary)?.range ?? 110);
-      if (dist > primaryRange) return;
-      const angleToEnemy = myPos.angle(enemyPos);
-      MH.moduleActive = true;
-      MH.useAngle = angleToEnemy;
-      MH.forceWeapon = 0;
-      MH.shouldAttack = true;
-    }
-  }
   class AntiSpikePush {
     moduleName="antiSpikePush";
     client;
@@ -18170,7 +16346,6 @@ window.grbtp = 35;
         adaptiveGearSwitching: new AdaptiveGearSwitching_default(client2),
         antiSync: new AntiSync_default(client2),
         shameSpam: new ShameSpam(client2),
-        autoHitToShame: new AutoHitToShame(client2),
         spikeSyncHammer: new SpikeSyncHammer(client2),
         spikeSync: new SpikeSync(client2),
         chatLog: new ChatLog_default(client2),
@@ -18212,15 +16387,10 @@ window.grbtp = 35;
         trapAnimal: new TrapAnimal(client2),
         antiTrapProtect: new AntiTrapProtect(client2),
         antiTrapStar: new AntiTrapStar(client2),
-        autoRetrap: new AutoRetrap(client2),
         antiRetrap: new AntiRetrap(client2),
         autoPush: new AutoPush_default(client2),
         autoPlay: new AutoPlay_default(client2),
-        autoGatherBreak: new AutoGatherBreak_default(client2),
-        trapRebuild: new TrapRebuild_default(client2),
         trapTick: new TrapTick_default(client2),
-        lunaPathfinder: new LunaPathfinder_default(client2),
-        lunaSafeWalk: new LunaSafeWalk_default(client2),
         autoPlacer: new AutoPlacer_default(client2),
         placer: new Placer_default(client2),
         autoMill: new Automill_default(client2),
@@ -18234,7 +16404,7 @@ window.grbtp = 35;
         safeWalk: new SafeWalk(client2)
       };
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.movement ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.shameSpam, this.staticModules.autoHitToShame, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.autoRetrap, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTick, this.staticModules.knockbackTickTrap, this.staticModules.knockbackTickHammer, this.staticModules.kbTickHammerV2, this.staticModules.knockbackTick, this.staticModules.kbPredictInsta, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.comboApproach, this.staticModules.chatLog, this.staticModules.autoPlay, this.staticModules.lunaSafeWalk, this.staticModules.autoGatherBreak, this.staticModules.autoPlacer, this.staticModules.trapRebuild, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.shameSpam, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTick, this.staticModules.knockbackTickTrap, this.staticModules.knockbackTickHammer, this.staticModules.kbTickHammerV2, this.staticModules.knockbackTick, this.staticModules.kbPredictInsta, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.comboApproach, this.staticModules.chatLog, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule ];
       this.reset();
     }
     movementReset() {
@@ -18961,15 +17131,6 @@ window.grbtp = 35;
           } else {
             gameUI.classList.remove("hidden");
           }
-          break;
-        }
-
-       case "_placerRetrapCombo":
-        {
-          Settings_default._preplacer = checked;
-          Settings_default._replacer = checked;
-          Settings_default._autoRetrap = checked;
-          SaveSettings();
           break;
         }
 
@@ -20577,7 +18738,6 @@ window.grbtp = 35;
     _knockbackTickTrap: true,
     _knockbackTickHammer: true,
     _knockbackTick: true,
-    _lockTrappedEnemy: false,
     _kbPredictInsta: false,
     _toolSpearInsta: true,
     _autoSteal: true,
@@ -20588,27 +18748,11 @@ window.grbtp = 35;
     _turretSync: true,
     _automill: true,
     _autoplacer: true,
-    _glotusPlacer: false,
-    _autoRetrap: false,
     _antiRetrap: true,
     _trapAnimal: false,
     _placementDefense: true,
-    _preplacer: false,
-    _replacer: false,
-    _lunaExactPlacer: false,
-    _lunaMode: false,
     _autoPlay: false,
-    _autoGather: false,
-    _trapRebuild: false,
-    _pathBreak: true,
-    _lunaSafeWalk: false,
-    _lunaPathfinder: false,
     _botAge4BoostPad: false,
-    _placerRetrapCombo: false,
-    _shameGrind: false,
-    _shameTick: false,
-    _autoShame: false,
-    _autoShameLimit: 6,
     _autoplacerRadius: 350,
     _placeAttempts: 4,
     _autobreak: true,
@@ -20723,9 +18867,6 @@ window.grbtp = 35;
   const GLOTUS_PARITY = 1;
   if (settings._glotusParity !== GLOTUS_PARITY) {
     for (const k of [ "_antiRetrap", "_antiSpikePush", "_antianimal", "_antienemy", "_antispike", "_autoPush", "_autoShield", "_autoSteal", "_autoSync", "_autobreak", "_autoemp", "_autoheal", "_automill", "_autoplacer", "_circleRotation", "_dashMovement", "_empDefense", "_enemyMarkers", "_followCursor", "_itemMarkers", "_killMessage", "_knockbackTick", "_knockbackTickHammer", "_knockbackTickTrap", "_menuTransparency", "_notificationTracers", "_placementDefense", "_playerTurretReloadBar", "_possiblePlacement", "_renderHP", "_safeWalk", "_shameSpam", "_soldierDefault", "_spikeGearInsta", "_spikeSync", "_spikeSyncHammer", "_spikeTick", "_stackedDamage", "_tailPriority", "_teammateMarkers", "_toolSpearInsta", "_trapKB", "_turretSteal", "_turretSync", "_weaponReloadBar" ]) settings[k] = true;
-    settings._lunaMode = false;
-    settings._lunaExactPlacer = false;
-    settings._lockTrappedEnemy = false;
     settings._glotusParity = GLOTUS_PARITY;
   }
   const SaveSettings = () => {
@@ -20745,7 +18886,7 @@ window.grbtp = 35;
     UI_default.resetFrame();
   };
   const Settings_default = settings;
-  const LEGIT_MODE_EXCLUDE = new Set([ "_legitMode", "_lunaMode", "_lunaExactPlacer", "_hideHUD", "_lowQuality", "_menuTransparency", "_spectate", "_spectateBotVision", "_spectateHideHUD", "_spectateGhost", "_botIndividualClans", "_autoRandomBotNames", "_botAttackStagger" ]);
+  const LEGIT_MODE_EXCLUDE = new Set([ "_legitMode", "_hideHUD", "_lowQuality", "_menuTransparency", "_spectate", "_spectateBotVision", "_spectateHideHUD", "_spectateGhost", "_botIndividualClans", "_autoRandomBotNames", "_botAttackStagger" ]);
   const getLegitModeKeys = () => Object.keys(defaultSettings).filter(k => typeof defaultSettings[k] === "boolean" && !LEGIT_MODE_EXCLUDE.has(k));
   const syncCheckboxUI = id => {
     try {
@@ -24680,11 +22821,7 @@ window.grbtp = 35;
       anti_spike_push: "Anti Spike Push",
       trap_animal: "Trap Animal",
       autoplacer: "Autoplacer",
-      replacer: "Replacer",
       autoplacer_radius: "Autoplacer radius",
-      shame_grind: "Shame Grind",
-      shame_tick: "Shame Tick",
-      preplacer: "PrePlacer",
       placement_accuracy: "Placement accuracy",
       automill: "Automill",
       auto_grind: "Auto grind",
@@ -24765,7 +22902,6 @@ window.grbtp = 35;
       toggle_dash: "Toggle Dash Movement",
       name_song: "Name Song 🎶",
       ranged_shield: "Ranged Shield",
-      auto_retrap: "Auto Retrap",
       musket_bow_insta: "Musket Bow Insta",
       platform_w_musket: "Platform w/ Musket",
       visuals_desc: "Customize your visuals, or you can disable it for performance",
@@ -25274,7 +23410,7 @@ window.grbtp = 35;
       if (pdescs[1]) pdescs[1].textContent = t.bot_primary_desc;
       if (pdescs[2]) pdescs[2].textContent = t.bot_secondary_desc;
     } catch (e) {}
-    const optionMap = [ [ "Follow cursor", t.follow_cursor ], [ "Stop movement radius", t.stop_radius ], [ "Formation", t.formation ], [ "Circle rotation", t.circle_rotation ], [ "Circle radius", t.circle_radius ], [ "Anti enemy", t.anti_enemy ], [ "Anti spike", t.anti_spike ], [ "Emp Defense", t.emp_defense ], [ "Autoheal", t.autoheal ], [ "Autobreak", t.autobreak ], [ "Safe walk", t.safe_walk ], [ "Auto Shield", t.auto_shield ], [ "Tail Priority", t.tail_priority ], [ "Anti Spike Push", t.anti_spike_push ], [ "Trap Animal", t.trap_animal ], [ "Autoplacer radius", t.autoplacer_radius ], [ "Autoplacer", t.autoplacer ], [ "Placement accuracy", t.placement_accuracy ], [ "Automill", t.automill ], [ "Auto grind", t.auto_grind ], [ "Placement Defense", t.placement_defense ], [ "Dash Movement", t.dash_movement ], [ "Auto sync", t.auto_sync ], [ "Spike tick", t.spike_tick ], [ "Spike sync hammer", t.spike_sync_hammer ], [ "Spike sync", t.spike_sync ], [ "Knockback tick hammer", t.knockback_tick_hammer ], [ "Knockback tick trap", t.knockback_tick_trap ], [ "KB Predict Insta", t.kb_predict_insta ], [ "Bleed Insta", t.bleed_insta ], [ "Apple Insta", t.apple_insta ], [ "Knockback tick", t.knockback_tick ], [ "Anti Retrap", t.anti_retrap ], [ "Tool Spear Insta", t.tool_spear_insta ], [ "Autosteal", t.autosteal ], [ "Autopush", t.autopush ], [ "Turret steal", t.turret_steal ], [ "Spike Gear Insta", t.spike_gear_insta ], [ "Turret Sync", t.turret_sync ], [ "Trap KB", t.trap_kb ], [ "Shame Spam", t.shame_spam ], [ "Bot Auto-Attack", t.bot_auto_attack ], [ "Spawn Bot", t.spawn_bot ], [ "Kill All Bots", t.kill_all_bots ], [ "Repel Alts", t.repel_alts ], [ "Scatter Bots", t.scatter_bots ], [ "Clear Targets", t.clear_targets ], [ "Target Cooldown", t.target_cooldown ], [ "Clear All Targets", t.clear_all_targets ], [ "Quad Spikes", t.quad_spikes ], [ "Quad Traps", t.quad_traps ], [ "Toggle Automill", t.toggle_automill ], [ "Boost Spike Rush", t.boost_spike_rush ], [ "Toggle Dash Movement", t.toggle_dash ], [ "Name Song", t.name_song ], [ "Ranged Shield", t.ranged_shield ], [ "Auto Retrap", t.auto_retrap ], [ "Musket Bow Insta", t.musket_bow_insta ], [ "Platform w/ Musket", t.platform_w_musket ], [ "Weapon XP Bar", t.weapon_xp_bar ], [ "Turret Reload Bar", t.turret_reload_bar ], [ "Weapon Reload Bar", t.weapon_reload_bar ], [ "Render HP", t.render_hp ], [ "Position Prediction", t.position_prediction ], [ "Item Health Bar", t.item_health_bar ], [ "Item Markers", t.item_markers ], [ "Enemies", t.enemies ], [ "Teammates", t.teammates ], [ "Animal", t.animal ], [ "Notification", t.notification ], [ "Auto Equip Assassin", t.auto_equip_assassin ], [ "Bots Auto Equip Assassin", t.bots_auto_assassin ], [ "Lock bot position", t.lock_bot_pos ], [ "Toggle Shop", t.toggle_shop ], [ "Toggle Clan", t.toggle_clan ], [ "Toggle Menu", t.toggle_menu ], [ "Instakill", t.instakill ], [ "Auto Farm", t.auto_farm ], [ "Food", t.food ], [ "Wall", t.wall ], [ "Spike", t.spike ], [ "Windmill", t.windmill ], [ "Farm", t.farm ], [ "Trap", t.trap ], [ "Turret", t.turret ], [ "Spawn", t.spawn ], [ "Kill Message", t.kill_message ], [ "Provoke on Kill", t.provoke_on_kill ], [ "Autospawn", t.autospawn ], [ "Autoaccept", t.autoaccept ], [ "Hide game HUD", t.hide_hud ], [ "Chat Log", t.chat_log ], [ "Enable Player Chat", t.enable_bot_chat ], [ "Enable", t.enable ], [ "Interval (sec)", t.interval_sec ] ];
+    const optionMap = [ [ "Follow cursor", t.follow_cursor ], [ "Stop movement radius", t.stop_radius ], [ "Formation", t.formation ], [ "Circle rotation", t.circle_rotation ], [ "Circle radius", t.circle_radius ], [ "Anti enemy", t.anti_enemy ], [ "Anti spike", t.anti_spike ], [ "Emp Defense", t.emp_defense ], [ "Autoheal", t.autoheal ], [ "Autobreak", t.autobreak ], [ "Safe walk", t.safe_walk ], [ "Auto Shield", t.auto_shield ], [ "Tail Priority", t.tail_priority ], [ "Anti Spike Push", t.anti_spike_push ], [ "Trap Animal", t.trap_animal ], [ "Autoplacer radius", t.autoplacer_radius ], [ "Autoplacer", t.autoplacer ], [ "Placement accuracy", t.placement_accuracy ], [ "Automill", t.automill ], [ "Auto grind", t.auto_grind ], [ "Placement Defense", t.placement_defense ], [ "Dash Movement", t.dash_movement ], [ "Auto sync", t.auto_sync ], [ "Spike tick", t.spike_tick ], [ "Spike sync hammer", t.spike_sync_hammer ], [ "Spike sync", t.spike_sync ], [ "Knockback tick hammer", t.knockback_tick_hammer ], [ "Knockback tick trap", t.knockback_tick_trap ], [ "KB Predict Insta", t.kb_predict_insta ], [ "Bleed Insta", t.bleed_insta ], [ "Apple Insta", t.apple_insta ], [ "Knockback tick", t.knockback_tick ], [ "Anti Retrap", t.anti_retrap ], [ "Tool Spear Insta", t.tool_spear_insta ], [ "Autosteal", t.autosteal ], [ "Autopush", t.autopush ], [ "Turret steal", t.turret_steal ], [ "Spike Gear Insta", t.spike_gear_insta ], [ "Turret Sync", t.turret_sync ], [ "Trap KB", t.trap_kb ], [ "Shame Spam", t.shame_spam ], [ "Bot Auto-Attack", t.bot_auto_attack ], [ "Spawn Bot", t.spawn_bot ], [ "Kill All Bots", t.kill_all_bots ], [ "Repel Alts", t.repel_alts ], [ "Scatter Bots", t.scatter_bots ], [ "Clear Targets", t.clear_targets ], [ "Target Cooldown", t.target_cooldown ], [ "Clear All Targets", t.clear_all_targets ], [ "Quad Spikes", t.quad_spikes ], [ "Quad Traps", t.quad_traps ], [ "Toggle Automill", t.toggle_automill ], [ "Boost Spike Rush", t.boost_spike_rush ], [ "Toggle Dash Movement", t.toggle_dash ], [ "Name Song", t.name_song ], [ "Ranged Shield", t.ranged_shield ], [ "Musket Bow Insta", t.musket_bow_insta ], [ "Platform w/ Musket", t.platform_w_musket ], [ "Weapon XP Bar", t.weapon_xp_bar ], [ "Turret Reload Bar", t.turret_reload_bar ], [ "Weapon Reload Bar", t.weapon_reload_bar ], [ "Render HP", t.render_hp ], [ "Position Prediction", t.position_prediction ], [ "Item Health Bar", t.item_health_bar ], [ "Item Markers", t.item_markers ], [ "Enemies", t.enemies ], [ "Teammates", t.teammates ], [ "Animal", t.animal ], [ "Notification", t.notification ], [ "Auto Equip Assassin", t.auto_equip_assassin ], [ "Bots Auto Equip Assassin", t.bots_auto_assassin ], [ "Lock bot position", t.lock_bot_pos ], [ "Toggle Shop", t.toggle_shop ], [ "Toggle Clan", t.toggle_clan ], [ "Toggle Menu", t.toggle_menu ], [ "Instakill", t.instakill ], [ "Auto Farm", t.auto_farm ], [ "Food", t.food ], [ "Wall", t.wall ], [ "Spike", t.spike ], [ "Windmill", t.windmill ], [ "Farm", t.farm ], [ "Trap", t.trap ], [ "Turret", t.turret ], [ "Spawn", t.spawn ], [ "Kill Message", t.kill_message ], [ "Provoke on Kill", t.provoke_on_kill ], [ "Autospawn", t.autospawn ], [ "Autoaccept", t.autoaccept ], [ "Hide game HUD", t.hide_hud ], [ "Chat Log", t.chat_log ], [ "Enable Player Chat", t.enable_bot_chat ], [ "Enable", t.enable ], [ "Interval (sec)", t.interval_sec ] ];
     const allTitles = doc.querySelectorAll(".option-title");
     for (const el of allTitles) {
       if (!el.dataset.enText) {
