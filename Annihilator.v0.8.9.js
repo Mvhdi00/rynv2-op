@@ -469,6 +469,8 @@ const EXP = (function() {
     };
 }
 )();
+
+function __annBoot() {
 // COMMANDS JUST WATCH THESE DONT SEARCH THEM:
 /*
 value based commands just add anymore number begind last - and it will use that value:
@@ -12639,3 +12641,12 @@ window.prepareUI = function (tmpObj) {
         })(i);
     }
 };
+}
+
+(function __annStart(tries) {
+    tries = tries || 0;
+    if ((document.readyState === "loading" || !document.getElementById("gameUI")) && tries < 400) {
+        return setTimeout(function () { __annStart(tries + 1); }, 50);
+    }
+    __annBoot();
+})();

@@ -69,7 +69,39 @@ check(/\.a -chat -/.test(src), "the author's command reference survives");
 check(/█/.test(src), 'as does their banner');
 
 // --------------------------------------------------------------------------
-console.log('\n3. no part of the mod still speaks the old transport');
+console.log('\n3. the shim runs early, the body runs late');
+
+// These two want opposite timings and both have to be satisfied. The shim has
+// to be in place at document-start, because the game captures
+// WebSocket.prototype.send once at bundle load. The body must NOT run then:
+// its top level builds a menu into document.body and getEl("gameUI"), neither
+// of which exists yet, so it dies on the first one and no menu is ever drawn.
+// That is what the "document_start" typo was hiding -- it meant document-end,
+// where the DOM is there.
+const bootAt = src.indexOf('function __annBoot() {');
+check(bootAt > 0, 'the mod body is wrapped in __annBoot()');
+check(shimStart < bootAt, 'with the shim outside it, so the shim installs at document-start');
+check(src.indexOf('EXP.setHandler(') > bootAt,
+      'and the handler inside it -- until then the trampoline passes the game\'s '
+      + 'own framed packets through untouched, so nothing is missed by waiting');
+check(src.indexOf('document.body.appendChild(menuDiv)') > bootAt,
+      'the menu build is deferred');
+check(src.indexOf('getEl("gameUI").appendChild(mStatus)') > bootAt,
+      'including the part that needs gameUI, which is what actually threw');
+
+{
+  const starter = src.slice(src.indexOf('(function __annStart(tries)'));
+  check(/document\.readyState === "loading"/.test(starter),
+        'the starter waits for the document to stop parsing');
+  check(/!document\.getElementById\("gameUI"\)/.test(starter),
+        'and for gameUI, since that is the element it dies without');
+  check(/tries < 400/.test(starter),
+        'and gives up polling rather than spinning forever');
+  check(/__annBoot\(\);/.test(starter), 'then runs the body');
+}
+
+// --------------------------------------------------------------------------
+console.log('\n4. no part of the mod still speaks the old transport');
 
 check(!/window\.msgpack\./.test(modCode),
       'nothing in the mod encodes or decodes for itself any more');
@@ -79,7 +111,7 @@ check(!/WebSocket\.prototype\.send\s*=/.test(modCode),
       'and the mod no longer installs its own prototype hook -- the shim owns it');
 
 // --------------------------------------------------------------------------
-console.log('\n4. the three seams');
+console.log('\n5. the three seams');
 
 check(/EXP\.setHandler\(function \(message, sid\) \{/.test(src),
       'outgoing traffic arrives through the shim handler');
@@ -109,7 +141,7 @@ check(/if \(!parsed\) return;/.test(src),
       'and an opcode the shim cannot place is dropped rather than crashing the handler');
 
 // --------------------------------------------------------------------------
-console.log('\n5. the wire, against the game bundle\'s own crypto');
+console.log('\n6. the wire, against the game bundle\'s own crypto');
 
 const SEED = 0x5AFE5EED, KEY_HEX = '0f1e2d3c4b5a69788796a5b4c3d2e1f0';
 const tables = game.Po(SEED);

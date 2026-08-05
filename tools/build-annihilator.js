@@ -39,19 +39,6 @@ src = src.replace('// @run-at       document_start', '// @run-at       document-
 expect('// @require      https://rawgit.com/kawanet/msgpack-lite/master/dist/msgpack.min.js\n');
 src = src.replace('// @require      https://rawgit.com/kawanet/msgpack-lite/master/dist/msgpack.min.js\n', '');
 
-/* --- the transport shim --------------------------------------------------- */
-// The block ends on a line that is exactly ")();": searching for the substring
-// finds the inner "})();" of the Turnstile hook first and truncates it.
-const extLines = fs.readFileSync(path.join(ROOT, 'ExternalClient.user.js'), 'utf8').split('\n');
-const a = extLines.indexOf('const EXP = (function() {');
-const b = extLines.indexOf(')();', a);
-if (a < 0 || b < 0) { console.error('could not find the EXP core'); process.exit(1); }
-const shim = stripComments(extLines.slice(a, b + 1).join('\n'), { metadata: false }).out;
-
-const marker = '// ==/UserScript==\n';
-const at = src.indexOf(marker) + marker.length;
-src = src.slice(0, at) + '\n' + shim + '\n' + src.slice(at);
-
 /* --- seam 1: the socket hook ---------------------------------------------- */
 expect('WebSocket.prototype.nsend = WebSocket.prototype.send;');
 src = src.replace(`WebSocket.prototype.nsend = WebSocket.prototype.send;
@@ -159,5 +146,47 @@ src = src.replace(`function getMessage(message, sid) {
     let type = parsed.type;
     let data = parsed.args;`);
 
-fs.writeFileSync(OUT, src);
-console.log('wrote', path.relative(ROOT, OUT), '-', src.split('\n').length, 'lines');
+/* --- assembly -------------------------------------------------------------
+ * Two things have to be true at once, and they want opposite timings.
+ *
+ * The shim must be installed at document-start: the game captures
+ * WebSocket.prototype.send once, at bundle load, and whoever holds that
+ * reference owns the traffic.
+ *
+ * The mod body must NOT run then. Its top level builds a menu --
+ * document.body.appendChild, getEl("gameUI").appendChild -- and at
+ * document-start there is no body and no gameUI, so it dies on the first one
+ * and no menu is ever drawn. (That is what "@run-at document_start" was
+ * hiding: the typo meant document-end, where the DOM exists.)
+ *
+ * So: shim at the top, body deferred until the page it draws into is there.
+ * Until the body runs the shim has no handler, and its trampoline passes the
+ * game's own already-framed packets straight through, which is correct --
+ * nothing is missed by waiting.
+ */
+const extLines = fs.readFileSync(path.join(ROOT, 'ExternalClient.user.js'), 'utf8').split('\n');
+// The block ends on a line that is exactly ")();": searching for the substring
+// finds the inner "})();" of the Turnstile hook first and truncates it.
+const a = extLines.indexOf('const EXP = (function() {');
+const b = extLines.indexOf(')();', a);
+if (a < 0 || b < 0) { console.error('could not find the EXP core'); process.exit(1); }
+const shim = stripComments(extLines.slice(a, b + 1).join('\n'), { metadata: false }).out;
+
+const marker = '// ==/UserScript==\n';
+const at = src.indexOf(marker) + marker.length;
+const head = src.slice(0, at);
+const body = src.slice(at);
+
+const starter = `
+(function __annStart(tries) {
+    tries = tries || 0;
+    if ((document.readyState === "loading" || !document.getElementById("gameUI")) && tries < 400) {
+        return setTimeout(function () { __annStart(tries + 1); }, 50);
+    }
+    __annBoot();
+})();
+`;
+
+const out = head + '\n' + shim + '\n\nfunction __annBoot() {\n' + body + '\n}\n' + starter;
+fs.writeFileSync(OUT, out);
+console.log('wrote', path.relative(ROOT, OUT), '-', out.split('\n').length, 'lines');

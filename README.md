@@ -714,6 +714,21 @@ game bundle had already taken its own reference to `WebSocket.prototype.send`,
 and the mod's hook was installed onto a function nothing was calling any more.
 The mod loaded, drew its menu, and silently sent nothing.
 
+Correcting the value to `document-start` is necessary but **not sufficient**,
+and getting that wrong is worth recording: the first build did only that, and
+the mod stopped loading entirely — no menu at all. Its top level builds the
+menu with `document.body.appendChild(menuDiv)` and
+`getEl("gameUI").appendChild(mStatus)`, and at document-start there is no body
+and no `gameUI`. It died on the first one. The typo had been *hiding* that,
+because document-end is exactly when the DOM is ready.
+
+So the two halves need opposite timings, and the build gives them opposite
+timings: the shim goes in at the top, and the body is wrapped in `__annBoot()`
+and deferred until `document.readyState` has moved past `loading` **and**
+`gameUI` exists. Nothing is missed by waiting — until the body runs, the shim
+has no handler, and its trampoline passes the game's own already-framed
+packets straight through.
+
 ## `@require https://rawgit.com/...`
 
 rawgit.com shut down in 2019. A `@require` that fails **aborts the whole
@@ -756,7 +771,7 @@ and still refuses to write unless the syntax tree is unchanged.
 
 ## Checked
 
-`test/annihilator.js` — 33 checks: both metadata mistakes, that the bundled
+`test/annihilator.js` — 41 checks: both metadata mistakes, that the bundled
 shim is byte-identical to every other copy, that no part of the mod still
 encodes for itself or calls `nsend`, that `packet()` still filters and
 `origPacket()` still does not, and a round trip on the wire against the game
@@ -766,6 +781,17 @@ is keyed by.
 
 `node tools/probe-mod.js --standalone Annihilator.v0.8.9.js` boots it in a real
 Chromium with no errors.
+
+That probe had to be fixed first, because it passed the broken build. It was
+creating the page and publishing `window.config` **before** injecting the mod,
+which models a mod running at document-end — the one timing a document-start
+mod never sees. `--standalone` now injects the mod into an empty document and
+brings the page, the config and the constructor freeze in afterwards, in that
+order. It also checks the mod actually *ran*: "no errors" and "never executed"
+look identical from the outside, so it counts how many of the globals the mod
+assigns to `window` exist when it is done. Against the un-deferred build it
+reports the `gameUI` failure and 9 of 12 globals; against the shipped one, no
+errors and 11.
 
 ---
 
@@ -1222,7 +1248,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 768 checks.
+them with `npm test` — 777 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.

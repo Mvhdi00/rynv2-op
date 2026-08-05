@@ -35,6 +35,13 @@ const ids = [...new Set([
   ...[...src.matchAll(/querySelector\(\s*[`"']#([\w-]+)/g)].map(m => m[1]),
 ])].filter(id => /^[A-Za-z][\w-]*$/.test(id));
 
+// Globals the mod publishes on window. "No errors" is not the same as "ran" --
+// a deferred boot that never fires throws nothing at all. If a mod assigns to
+// window and none of those names exist afterwards, its body never executed.
+const globals = [...new Set(
+  [...src.matchAll(/\bwindow\.([A-Za-z_$][\w$]*)\s*=[^=]/g)].map(m => m[1])
+)].filter(n => !['onload','onerror','onkeydown','onkeyup','onmousemove','location','msgpack','WebSocket','onbeforeunload','oncontextmenu','onresize','onblur','onfocus'].includes(n));
+
 const CONFIG = {
   clientSendRate: 9, serverUpdateRate: 9, mapScale: 14400, snowBiomeTop: 2400,
   treeScales: [150, 160, 165, 175], bushScales: [80, 85, 95], rockScales: [80, 85, 95],
@@ -62,7 +69,12 @@ const CONFIG = {
   });
 
   await page.setContent('<!doctype html><html><head><title>probe</title></head><body></body></html>');
-  await page.evaluate((list) => {
+
+  // Building the page BEFORE the mod loads models a mod that runs at
+  // document-end. A document-start mod sees none of this -- no body, no ids,
+  // no window.config -- and that is exactly where this family dies. Getting
+  // this order wrong made the probe pass a mod that was dead on the real page.
+  const buildPage = () => page.evaluate((list) => {
     // moomoo's two canvases. Everything else on the page is a div, and a div
     // where the mod expects a canvas throws on .getContext for reasons that
     // have nothing to do with the mod.
@@ -74,22 +86,12 @@ const CONFIG = {
     }
   }, ids.concat(['gameCanvas', 'mapDisplay', 'storeHolder', 'chatBox', 'menuCardHolder']));
 
-  if (!standalone) {
-    await page.addScriptTag({ content: fs.readFileSync('/home/user/rynv2-op/MooUnpatcher.user.js', 'utf8') })
-      .catch(e => errors.push('[unpatcher] ' + e.message));
-  }
-
-  // What the bundle publishes for the mod to read.
-  await page.evaluate((cfg) => {
+  const publishConfig = () => page.evaluate((cfg) => {
     window.config = cfg;
     window.turnstile = { getResponse: () => 'PROBE-TOKEN', render: () => {}, reset: () => {} };
   }, CONFIG);
 
-  // The constructor freeze the bundle does at boot. Where it goes depends on
-  // when the mod runs: a document-start mod (--standalone, carrying its own
-  // shim) is installed BEFORE the bundle, so the freeze comes after it. A mod
-  // with no @run-at loads after the bundle, so the freeze comes first -- which
-  // is the harder case, and the one the unpatcher exists to absorb.
+  // The constructor freeze the bundle does at boot.
   const harden = () => page.evaluate(() => {
     try {
       const captured = window.WebSocket;
@@ -98,21 +100,44 @@ const CONFIG = {
     } catch (e) { window.__frozen = 'refused'; }
   });
 
-  if (!standalone) await harden();
-  const before = errors.length;
-  await page.addScriptTag({ content: src }).catch(e => errors.push('[mod inject] ' + e.message));
-  if (standalone) await harden();
+  let before;
+  if (standalone) {
+    // A document-start mod: it loads into an empty document, and the bundle
+    // arrives afterwards with the page, window.config and the freeze. A mod
+    // that touches the DOM or config at its top level dies here, which is the
+    // whole point of running it in this order.
+    before = errors.length;
+    await page.addScriptTag({ content: src }).catch(e => errors.push('[mod inject] ' + e.message));
+    await buildPage();
+    await publishConfig();
+    await harden();
+  } else {
+    // A mod with no @run-at: the bundle has already been and gone, so the page
+    // and config exist and WebSocket is frozen before the mod is even parsed.
+    await buildPage();
+    await publishConfig();
+    await page.addScriptTag({ content: fs.readFileSync('/home/user/rynv2-op/MooUnpatcher.user.js', 'utf8') })
+      .catch(e => errors.push('[unpatcher] ' + e.message));
+    await harden();
+    before = errors.length;
+    await page.addScriptTag({ content: src }).catch(e => errors.push('[mod inject] ' + e.message));
+  }
+  await page.evaluate(() => document.dispatchEvent(new Event('DOMContentLoaded')));
   await page.waitForTimeout(2500);
 
-  const state = await page.evaluate(() => ({
+  const state = await page.evaluate((names) => ({
     // Either the mod hooked prototype.send itself, or it installed a handler
     // on a transport shim of its own. Both count as "the socket is wired up".
     modHookedSend: WebSocket.prototype.send.toString().length > 120,
     msgpackPresent: typeof window.msgpack === 'object' && typeof window.msgpack.decode === 'function',
     shimPresent: typeof EXP === 'object' && typeof EXP.send === 'function',
     constructorFreeze: window.__frozen,
+    // A mod that boots draws something. "No errors" is not the same as "ran".
+    elementsAdded: document.body.children.length,
+    globalsPublished: names.filter(n => typeof window[n] !== 'undefined').length,
+    globalsExpected: names.length,
     report: window.unpatch ? window.unpatch.report() : null,
-  }));
+  }), globals);
 
   const lines = src.split('\n');
   console.log('--- errors thrown by the mod ---');
@@ -130,7 +155,8 @@ const CONFIG = {
   console.log(JSON.stringify(state, null, 2));
 
   const ok = errors.length === before && state.msgpackPresent
-    && (state.modHookedSend || state.shimPresent);
+    && (state.modHookedSend || state.shimPresent)
+    && (state.globalsExpected === 0 || state.globalsPublished > 0);
   console.log('\n' + (ok ? '=> the mod booted and its socket hook is installed'
                          : '=> the mod did NOT boot cleanly'));
   await browser.close();
