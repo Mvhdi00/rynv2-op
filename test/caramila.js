@@ -93,7 +93,42 @@ check(/if \(!altcha \|\| !altchaButton\) return clearInterval\(annoyingAltchaStu
       'and the once-a-second poll stops itself');
 
 // --------------------------------------------------------------------------
-console.log('\n5. Primary Sync now works in both directions');
+console.log('\n5. the verification box had nowhere to appear');
+
+// The mod builds its own inputCard and hides the game's setupCard. The
+// Turnstile widget lives inside setupCard, and the game refuses to render into
+// something that is not laid out:
+//     if (!e || e.offsetParent === null) return !1;
+// So no checkbox, no token, and Play stays "disabled" for ever -- the game only
+// clears that class from onGotTurnstileToken.
+check(!/turnstileWidget/.test(original),
+      'the original never mentioned the widget at all, which is why it stayed buried');
+check(/const widget = getEl\("turnstileWidget"\);/.test(src),
+      'the build now takes hold of it');
+{
+  const move = src.slice(src.indexOf('const widget = getEl("turnstileWidget")'));
+  const block = move.slice(0, 1400);
+  check(/holder\.appendChild\(widget\);/.test(block) && /inputCard\.appendChild\(holder\);/.test(block),
+        'and moves it into the card the mod actually shows');
+  check(block.indexOf('inputCard.appendChild(holder)') < block.indexOf('inputCard.appendChild(divider)') ||
+        src.indexOf('inputCard.appendChild(holder)') < src.indexOf('inputCard.appendChild(divider)'),
+        'directly under the name-and-Play row, above the divider, since Play is what it gates');
+  check(/widget\.style\.display = "";/.test(block),
+        'clearing any inline display:none it inherited');
+  check(/sitekey: "0x4AAAAAAAMYHI96GFiJzMmp"/.test(block),
+        "the fallback render uses the game's own production sitekey");
+  check(/callback: window\.onGotTurnstileToken/.test(block),
+        "and the game's own callback, so Play is what gets re-enabled");
+  check(/if \(widget\.childElementCount > 0 \|\| \+\+tries > 60\) return clearInterval\(settle\);/.test(block),
+        'the fallback stands down the moment anything has rendered, so the two cannot both render');
+  check(/if \(tries < 12\) return;/.test(block),
+        "and waits three seconds first, because the game's own poll should win");
+}
+check(src.indexOf('getEl("turnstileWidget")') < src.indexOf("setupCard.style.display = 'none'"),
+      'the move happens before setupCard is hidden, inside the window the game polls in');
+
+// --------------------------------------------------------------------------
+console.log('\n6. Primary Sync now works in both directions');
 
 // The mod streams name, sid, server, ping and live x2/y2 to a server of its
 // own. That is its advertised feature, not something smuggled in -- but the
@@ -107,7 +142,7 @@ check(!/if \(!configs\.serverSync\) return;/.test(original),
       'which the original did not do: it reported the setting inside the payload and sent anyway');
 
 // --------------------------------------------------------------------------
-console.log('\n6. the wire, against the game bundle\'s own crypto');
+console.log('\n7. the wire, against the game bundle\'s own crypto');
 
 const SEED = 0x1234BEEF, KEY_HEX = 'ff00aa5511bb66cc22dd77ee33990088';
 const tables = game.Po(SEED);

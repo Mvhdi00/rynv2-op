@@ -39,7 +39,8 @@ and additionally needed their packet vocabulary mapped forward.
 
 - **`RoBoTic-CaraMila.v6.9.5.js`** (`v6.9.5`) — hook mod, 15,610 lines. No
   `@run-at` at all, a `@require` it never used, ALTCHA code for a captcha the
-  game replaced, and a privacy switch that only worked one way. See below.
+  game replaced, a verification box with nowhere to appear, and a privacy
+  switch that only worked one way. See below.
 
 Plus **`MooUnpatcher.user.js`** — install it once and run old mods unchanged,
 instead of patching them one at a time. Version 2 repairs the environment as
@@ -735,6 +736,38 @@ a hidden stub for a closed list of ids moomoo deleted, and null for everything
 else. `altcha` is deliberately **not** on that list, because it has to stay null
 for the poll to notice and stop.
 
+## The verification box had nowhere to appear
+
+The mod builds its own `inputCard` and then hides the game's `setupCard`.
+`#turnstileWidget` lives **inside** that card, and the game will not render into
+something that is not laid out:
+
+```js
+const e = document.getElementById("turnstileWidget");
+if (!e || e.offsetParent === null) return !1;
+```
+
+So no checkbox ever appeared, no token was ever issued, and Play stayed
+`disabled` for ever — the game only clears that class from
+`onGotTurnstileToken`. Reported from a photo of the real menu: name, skins,
+Play, and nothing to verify with.
+
+Moving the widget into the visible card is the whole fix. The game polls for it
+every 150 ms for about fifteen seconds, so it renders itself once it can be
+seen; it now sits directly under the name-and-Play row, which is what it gates.
+The fallback render is only for a mod that booted too late to catch that
+window — it waits three seconds so the game gets first refusal, uses the game's
+own sitekey and callbacks, and stands down the moment anything has been
+rendered into the widget, so the two can never both render.
+
+Measured with the exact test the game applies, against a page where the widget
+starts inside the hidden card as it really does:
+
+| | `stillInsideHiddenSetupCard` | `gameWouldRender` |
+|---|---|---|
+| before | `true` | **`false`** |
+| after | `false` | **`true`** |
+
 ## Primary Sync only worked one way
 
 The mod talks to two servers of its own: one sends a fixed handshake and
@@ -752,7 +785,7 @@ feature removed.
 
 ## Checked
 
-`test/caramila.js` — 36 checks, including a round trip on the wire against the
+`test/caramila.js` — 46 checks, including a round trip on the wire against the
 game bundle's own crypto, and that the original really did send regardless of
 the setting.
 
@@ -1350,7 +1383,7 @@ that the removed logger leaves no trace in the code.
 
 The test harness pulls the code under test straight out of the shipped scripts
 and out of the game bundles, so the tests cannot drift from what ships. Run
-them with `npm test` — 822 checks.
+them with `npm test` — 832 checks.
 
 unX is additionally re-parsed by the suite to prove that no comment survives
 past the metadata block and that the metadata block itself is intact.

@@ -204,7 +204,58 @@ swap(`        altcha.style.display = 'none';
             if (!altcha || !altchaButton) return clearInterval(annoyingAltchaStuff);
             altchaButton.click();`);
 
-/* --- seam 5: the sync toggle only worked one way --------------------------
+/* --- seam 5: the verification box had nowhere to appear --------------------
+ * The mod builds its own inputCard and then does setupCard.style.display =
+ * 'none'. #turnstileWidget lives inside setupCard, and the game will not
+ * render into it while it is not laid out:
+ *
+ *     const e = document.getElementById("turnstileWidget");
+ *     if (!e || e.offsetParent === null) return !1;
+ *
+ * So no checkbox ever appeared, no token was ever issued, and Play stayed
+ * "disabled" -- the game only clears that class from onGotTurnstileToken.
+ *
+ * Moving the widget into the visible card is the whole fix: the game polls for
+ * it every 150ms for about fifteen seconds, so it renders itself once it can
+ * be seen. It goes directly under the name-and-Play row, which is the thing it
+ * gates.
+ *
+ * The poll below is only for the case where the mod booted too late to catch
+ * that window. It waits three seconds first so the game gets the first go, and
+ * stops the moment anything has been rendered into the widget, so the two
+ * cannot both render. Sitekey and callbacks are the game's own.
+ */
+swap(`        inputCard.appendChild(inputSection);`,
+`        inputCard.appendChild(inputSection);
+
+        (function () {
+            const widget = getEl("turnstileWidget");
+            if (!widget) return;
+            const holder = document.createElement("div");
+            holder.style.cssText = "display:flex;justify-content:center;width:100%;min-height:65px;";
+            widget.style.display = "";
+            holder.appendChild(widget);
+            inputCard.appendChild(holder);
+
+            let tries = 0;
+            const settle = setInterval(function () {
+                if (widget.childElementCount > 0 || ++tries > 60) return clearInterval(settle);
+                if (tries < 12) return;
+                if (!window.turnstile || typeof window.turnstile.render != "function") return;
+                try {
+                    window.turnstile.render(widget, {
+                        sitekey: "0x4AAAAAAAMYHI96GFiJzMmp",
+                        theme: "light",
+                        callback: window.onGotTurnstileToken,
+                        "error-callback": window.onTurnstileError,
+                        "expired-callback": window.onTurnstileExpired
+                    });
+                    clearInterval(settle);
+                } catch (e) {}
+            }, 250);
+        })();`);
+
+/* --- seam 6: the sync toggle only worked one way --------------------------
  * The mod talks to two servers of its own. sync-script-users sends a fixed
  * handshake and receives other users' positions; robotics-ahh.fly.dev gets
  * sendPlayerInfo() on a timer, carrying your name, sid, server, ping and live

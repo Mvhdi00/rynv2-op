@@ -1010,6 +1010,33 @@ let mainContext = gameCanvas.getContext("2d");
         `;
         inputCard.appendChild(inputSection);
 
+        (function () {
+            const widget = getEl("turnstileWidget");
+            if (!widget) return;
+            const holder = document.createElement("div");
+            holder.style.cssText = "display:flex;justify-content:center;width:100%;min-height:65px;";
+            widget.style.display = "";
+            holder.appendChild(widget);
+            inputCard.appendChild(holder);
+
+            let tries = 0;
+            const settle = setInterval(function () {
+                if (widget.childElementCount > 0 || ++tries > 60) return clearInterval(settle);
+                if (tries < 12) return;
+                if (!window.turnstile || typeof window.turnstile.render != "function") return;
+                try {
+                    window.turnstile.render(widget, {
+                        sitekey: "0x4AAAAAAAMYHI96GFiJzMmp",
+                        theme: "light",
+                        callback: window.onGotTurnstileToken,
+                        "error-callback": window.onTurnstileError,
+                        "expired-callback": window.onTurnstileExpired
+                    });
+                    clearInterval(settle);
+                } catch (e) {}
+            }, 250);
+        })();
+
         nameInput.style.cssText = `
             flex: 1;
             height: 58px;
