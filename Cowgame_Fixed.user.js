@@ -14186,7 +14186,6 @@ input[type="radio"] {
                     module.exports.MAX_SPEED = 0.3;
                     module.exports.MAX_TURN_SPEED = 0.3;
                     module.exports.DAY_INTERVAL = 1440000;
-
                     /* WEBPACK VAR INJECTION */
                 }
                 ).call(this, __webpack_require__(/*! ./../../node_modules/process/browser.js */
@@ -17307,7 +17306,7 @@ input[type="radio"] {
   \**********************************/
             /*! no static exports found */
             /***/
-            function(module, exports, __webpack_require__) {
+            function(module, exports, __webpack_require__) {/* @reup-io-client */
                 /* ------------------------------------------------------------------
                  * io-client, rewritten against the shipped game bundle.
                  *
@@ -17535,44 +17534,44 @@ input[type="radio"] {
                         var data = Array.prototype.slice.call(arguments, 1);
                         if (!this.connected) return;
                         if (!firstSend.min) {
-                            firstSend.min = true;
-                            setTimeout(()=>{
-                                firstSend.min = false;
-                                minPacket = 0;
-                            }, minTime);
-                        }
-                        if (!firstSend.sec) {
-                            firstSend.sec = true;
-                            setTimeout(()=>{
-                                firstSend.sec = false;
-                                secPacket = 0;
-                            }, secTime);
-                        }
-                        if (secPacket >= secMax || minPacket >= minMax) return;
-                            if (type == "6") {
-                                // ANTI PROFANITY:
-                                let profanity = ["cunt", "whore", "fuck", "shit", "faggot", "nigger", "nigga", "dick", "vagina", "minge", "cock", "rape", "cum", "sex", "tits", "penis", "clit", "pussy", "meatcurtain", "jizz", "prune", "douche", "wanker", "damn", "bitch", "dick", "fag", "bastard", ];
-                                let tmpString;
-                                profanity.forEach((profany)=>{
-                                    if (data[0].indexOf(profany) > -1) {
-                                        tmpString = "";
-                                        for (let i = 0; i < profany.length; ++i) {
-                                            if (i == 1) {
-                                                tmpString += String.fromCharCode(0);
-                                            }
-                                            tmpString += profany[i];
-                                        }
-                                        let re = new RegExp(profany, "g");
-                                        data[0] = data[0].replace(re, tmpString);
-                                    }
-                                });
-                                // FIX CHAT:
-                                data[0] = data[0].slice(0, 30);
-                            } else if (type == "L") {
-                                // MAKE SAME CLAN:
-                                data[0] = data[0] + String.fromCharCode(0);
-                                data[0] = data[0].slice(0, 7);
-                            }
+                                                    firstSend.min = true;
+                                                    setTimeout(()=>{
+                                                        firstSend.min = false;
+                                                        minPacket = 0;
+                                                    }, minTime);
+                                                }
+                                                if (!firstSend.sec) {
+                                                    firstSend.sec = true;
+                                                    setTimeout(()=>{
+                                                        firstSend.sec = false;
+                                                        secPacket = 0;
+                                                    }, secTime);
+                                                }
+                        if (!(secPacket < secMax && minPacket < minMax)) return;
+                        if (type == "6") {
+                                                        // ANTI PROFANITY:
+                                                        let profanity = ["cunt", "whore", "fuck", "shit", "faggot", "nigger", "nigga", "dick", "vagina", "minge", "cock", "rape", "cum", "sex", "tits", "penis", "clit", "pussy", "meatcurtain", "jizz", "prune", "douche", "wanker", "damn", "bitch", "dick", "fag", "bastard", ];
+                                                        let tmpString;
+                                                        profanity.forEach((profany)=>{
+                                                            if (data[0].indexOf(profany) > -1) {
+                                                                tmpString = "";
+                                                                for (let i = 0; i < profany.length; ++i) {
+                                                                    if (i == 1) {
+                                                                        tmpString += String.fromCharCode(0);
+                                                                    }
+                                                                    tmpString += profany[i];
+                                                                }
+                                                                let re = new RegExp(profany, "g");
+                                                                data[0] = data[0].replace(re, tmpString);
+                                                            }
+                                                        });
+                                                        // FIX CHAT:
+                                                        data[0] = data[0].slice(0, 30);
+                                                    } else if (type == "L") {
+                                                        // MAKE SAME CLAN:
+                                                        data[0] = data[0] + String.fromCharCode(0);
+                                                        data[0] = data[0].slice(0, 7);
+                                                    }
                         minPacket++;
                         secPacket++;
 

@@ -117,18 +117,18 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
-Dune_Mod_Fixed.user.js    Dune's mod 0.1.0, repaired
-Cowgame_Fixed.user.js     cowgame v7, repaired
+*_Fixed.user.js           the five repaired mods
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
-src/mods/                 the two old-bundle mods, unmodified (input)
+src/mods/                 the five old-bundle mods, unmodified (input)
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/mod-bundle.js       webpack bundle reading, named and minified
 tools/mod-transport.js    emits the protocol-correct io-client + prologue
 tools/fix-mods.js         src/mods/*.js -> *_Fixed.user.js
 tools/verify-transport.js emitted transport vs. the game bundle's own
@@ -189,19 +189,29 @@ understood.
 
 # Old-bundle mod repairs
 
-Two other mods live here — **Dune's mod 0.1.0** and **cowgame v7** — and they
-are the same kind of thing Luna is: forks of the pre-2024 webpack `bundle.js`,
-shipped as userscripts that hijack the page's WebSocket and run their own copy
-of the game. Neither one broke because of anything it does. The game moved out
-from under both of them, in four places.
+Five other mods live here, and they are the same kind of thing Luna is: forks
+of the pre-2024 webpack `bundle.js`, shipped as userscripts that hijack the
+page's WebSocket and run their own copy of the game. None of them broke because
+of anything they do. The game moved out from under all of them, in four places.
 
-Build output: **`Dune_Mod_Fixed.user.js`**, **`Cowgame_Fixed.user.js`**
+| Input | Build output |
+|---|---|
+| `src/mods/Dune_Mod_0.1.0.js` | `Dune_Mod_Fixed.user.js` |
+| `src/mods/Cowgame_v7.js` | `Cowgame_Fixed.user.js` |
+| `src/mods/Lrx_v5.js` | `Lrx_v5_Fixed.user.js` |
+| `src/mods/S_Client_v8.2.js` | `S_Client_v8.2_Fixed.user.js` |
+| `src/mods/Chicken_v3.js` | `Chicken_v3_Fixed.user.js` |
+
+Four are beautified and keep webpack's named module ids; Chicken v3 is the
+minified asset, where the module map is an array and ids are its indices.
+`tools/mod-bundle.js` handles both so the fixer and the verifier do not each
+need two code paths.
 
 ## What was wrong
 
 ### 1. The packet layer
 
-Both mods still had the original io-client:
+All five still had the original io-client:
 
 ```js
 send:      socket.send(msgpack.encode([name, args]))
@@ -224,8 +234,11 @@ signature, no sequence and a string where an integer belonged — all dropped �
 and every packet they received landed on `events[<number>]`, which is
 `undefined`, so `events[type].apply(...)` threw on the first server message.
 
-The io-client in both is now a re-implementation of the bundle's own `Co`,
-`Oi`, `Po`, `Vt`, `Ao`, `Eo` and `Ro`.
+The io-client in each is now a re-implementation of the bundle's own `Co`,
+`Oi`, `Po`, `Vt`, `Ao`, `Eo` and `Ro`. Each mod keeps its own send-path
+additions across the rewrite — the two-window rate limiter and chat filter in
+the Emre-descended four, Chicken's packet counter, and Chicken's deliberately
+inert `close()`.
 
 ### 2. Entry
 
@@ -245,9 +258,10 @@ Object.defineProperty(window, "WebSocket",
     { value: <native>, writable: false, configurable: false })
 ```
 
-Both mods hook `window.WebSocket` by plain assignment, from inside the bundle,
-at `document-end` (cowgame) or `document-idle` (Dune) — after the lock. The
-assignment silently does nothing and the mod never sees a connection.
+Every one of them hooks `window.WebSocket` by plain assignment, from inside
+the bundle, at `document-end`, `document-idle`, or — in lrx's case — under an
+`@run-at none` that is not a valid value at all. All of that is after the lock.
+The assignment silently does nothing and the mod never sees a connection.
 
 The fix is to get there first. Each script now has a `document-start` prologue
 that captures the native constructor, installs its own hook, and locks the
@@ -264,45 +278,59 @@ client.
 
 ### 4. Table drift
 
-| | Was | Game |
+| Where | Was | Game |
 |---|---|---|
 | Dune: `clientSendRate` | 20 | 5 |
-| Dune: `maxPlayers` / `maxPlayersHard` | 50 / 60 | 40 / 50 |
-| cowgame: `maxPlayers` / `maxPlayersHard` | 60 / 70 | 40 / 50 |
-| cowgame: `skinColors` | 11 entries | 10 |
-| cowgame: weapon 3 "short sword" `src` / `yOff` | `samurai_1` / 59 | `sword_1` / 46 |
-| both: `MAX_ATTACK`, `MAX_SPAWN_DELAY`, `MAX_SPEED`, `MAX_TURN_SPEED`, `DAY_INTERVAL` | absent | present |
+| `maxPlayers` / `maxPlayersHard` | 50/60, 60/70, 50/50 | 40 / 50 |
+| cowgame, lrx, S Client: `skinColors` | 11 entries | 10 |
+| cowgame, lrx, S Client: weapon 3 "short sword" `src` / `yOff` | `samurai_1` / 59 | `sword_1` / 46 |
+| lrx: `maxAge` | 9 | 100 |
+| lrx: `cowNames` | 1 entry | 45 |
+| Chicken: hat 45 "Shame!" `dontSell` | absent | `true` |
+| all: `MAX_ATTACK`, `MAX_SPAWN_DELAY`, `MAX_SPEED`, `MAX_TURN_SPEED`, `DAY_INTERVAL` | absent | present |
 
 `clientSendRate` is the live one: at 20 the mod put out four times the movement
 frames the server expects for the same input. The extra skin colour is an index
 the server has no entry for. Short sword had picked up the katana's sprite and
-offset — index 3 carrying index 4's values.
+offset — index 3 carrying index 4's values, inherited across the whole family.
+
+`maxAge` is the ceiling the server actually runs to; at 9 the client stopped
+advancing age long before the server did, so the age readout and the upgrade
+menu drifted out of step with the real player. `cowNames` matters because the
+server sends an *index* into that table for every animal name — a one-entry
+table leaves every cow past index 0 rendering `undefined`. `dontSell` is what
+keeps the server-assigned shaming hat out of the buyable list.
 
 The five `MAX_*` keys are mirrored for parity only; the bundle multiplies them
 by a factor it currently pins to `0`, so they are inert today.
 
+Deliberate mod choices are left alone — Chicken's reworded item descriptions,
+S Client's weapon-sprite URL overrides, Chicken's inert `close()`. The verifier
+reports description drift as a note rather than a failure for that reason.
+
 ### Dead references
 
-- Dune `@require`d msgpack from greasyfork and cowgame from **rawgit.com**,
-  which has been shut down since 2019. Neither is used: the only consumer is
-  the io-client, and it resolves msgpack-lite out of the bundle itself. Both
-  lines are dropped.
+- Dune `@require`d msgpack from greasyfork, and cowgame, lrx and S Client from
+  **rawgit.com**, which has been shut down since 2019. None of them is used:
+  the only consumer is the io-client, and it resolves msgpack-lite out of the
+  bundle itself. All four lines are dropped. (Chicken never had one — it always
+  used the bundled copy.)
 - cowgame gated its **entire body** on `window.r`, supplied by a
   `@require`d `cow.js` on a CodeSandbox host. With that host gone `window.r` is
   `undefined` and the very first statement throws, so nothing ran. The check is
   kept where the data is present and skipped where it is not.
-- cowgame's chat profanity filter was keyed on `type == "ch"` and its clan-name
-  padding on `type == "8"`. Both packets were renamed (`"6"` and `"L"`), which
-  cowgame already sends — so neither branch had been running. Retargeted.
+- The chat profanity filter in cowgame, lrx and S Client was keyed on
+  `type == "ch"` and their clan-name padding on `type == "8"`. Both packets were
+  renamed (`"6"` and `"L"`), which all three already send — so neither branch
+  had been running. Retargeted.
 
 ## Building the repaired mods
 
 ```sh
 node tools/fix-mods.js          # src/mods/*.js -> *_Fixed.user.js
 node tools/verify-transport.js  # emitted crypto/opcode tables vs. the bundle's own
-node tools/verify-mods.js       # end-to-end handshake + table diff
-node --check Dune_Mod_Fixed.user.js
-node --check Cowgame_Fixed.user.js
+node tools/verify-mods.js       # end-to-end handshake + table diff, all five
+for f in *_Fixed.user.js; do node --check "$f"; done
 ```
 
 `verify-transport.js` lifts the game's `Po`/`Eo`/`Ro`/`Vt`/`Ao` straight out of
@@ -315,12 +343,12 @@ working client until the server drops every frame — which is the state the mod
 were already in.
 
 `verify-mods.js` loads the rebuilt io-client out of each built userscript with
-the bundle's own msgpack-lite, drives a real handshake through it, and takes the
-resulting frame apart against the game's opcode table and HMAC. It also confirms
-the callback is withheld until `io-init`, that the sequence advances per frame,
-that a numeric server opcode reaches the right handler, that an unhandled opcode
-does not throw, that the session is dropped on close, and that every packet name
-either mod sends exists in the game's c2s alphabet.
+that bundle's own msgpack-lite, drives a real handshake through it, and takes
+the resulting frame apart against the game's opcode table and HMAC. It also
+confirms the callback is withheld until `io-init`, that the sequence advances
+per frame, that a numeric server opcode reaches the right handler, that an
+unhandled opcode does not throw, that the session is dropped on close, and that
+every packet name the mod sends exists in the game's c2s alphabet.
 
 ## Still there, deliberately
 

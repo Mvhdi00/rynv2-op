@@ -31,14 +31,41 @@
 const fs = require("fs");
 const path = require("path");
 
+const { IO_CLIENT_SENTINEL } = require("./mod-bundle.js");
+
 const ROOT = path.resolve(__dirname, "..");
 
-/* `extras` lets a mod keep its own send-path additions (rate limiting, chat
- * filtering) — it is spliced in just before the frame is built, with `type`
- * holding the packet *name* and `data` the argument array. */
-function ioClientModule({ protocol, extras = "", msgpackId }) {
+/* Options, because the five mods do not all ship the same way:
+ *
+ *   msgpackExpr   how this bundle reaches msgpack-lite — a webpack id in the
+ *                 beautified mods, a numeric one in the minified Chicken build
+ *   exportsTarget `module.exports` normally, `e.exports` where the factory's
+ *                 parameters were mangled
+ *   preamble      side-effect requires the original module made
+ *   extras        the mod's own send-path additions (rate limiting, chat
+ *                 filtering, packet counters), spliced in just before the
+ *                 frame is built, with `type` holding the packet *name* and
+ *                 `data` the argument array
+ *   closeBody     overrides close(), for the one mod that deliberately
+ *                 neuters it
+ */
+function ioClientModule({
+  protocol,
+  extras = "",
+  msgpackExpr,
+  exportsTarget = "module.exports",
+  preamble = "",
+  closeBody = null,
+}) {
   const p = protocol;
-  return `
+  const close =
+    closeBody !== null
+      ? closeBody
+      : `                        this.socket && this.socket.close();
+                        this.socket = null;
+                        this.connected = false;
+                        session = null;`;
+  return `${IO_CLIENT_SENTINEL}
                 /* ------------------------------------------------------------------
                  * io-client, rewritten against the shipped game bundle.
                  *
@@ -51,8 +78,8 @@ function ioClientModule({ protocol, extras = "", msgpackId }) {
                  * then never spawns.
                  * ---------------------------------------------------------------- */
 
-                var msgpack = __webpack_require__(${JSON.stringify(msgpackId)});
-
+                var msgpack = ${msgpackExpr};
+${preamble}
                 var SIG_BYTES = ${p.signatureBytes};
                 var MODE_KEYED = ${p.encryptedMode};
                 var TABLE_SALT = ${p.tableSalt};
@@ -188,7 +215,7 @@ function ioClientModule({ protocol, extras = "", msgpackId }) {
                  * reconnect can never reuse a stale table or sequence number. */
                 var session = null;
 
-                module.exports = {
+                ${exportsTarget} = {
                     socket: null
                     , connected: false
                     , socketId: -1
@@ -285,10 +312,7 @@ ${extras}
                         return (this.socket && this.connected);
                     }
                     , close: function () {
-                        this.socket && this.socket.close();
-                        this.socket = null;
-                        this.connected = false;
-                        session = null;
+${close}
                     }
                 };
 `;

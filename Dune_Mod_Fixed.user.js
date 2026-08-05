@@ -14518,7 +14518,6 @@ let tC = 0;
                     module.exports.MAX_TURN_SPEED = 0.3;
                     module.exports.DAY_INTERVAL = 1440000;
 
-
                     /* WEBPACK VAR INJECTION */
                 }.call(this, __webpack_require__( /*! ./../../node_modules/process/browser.js */ "./node_modules/process/browser.js")))
 
@@ -17737,7 +17736,7 @@ let tC = 0;
                     \**********************************/
             /*! no static exports found */
             /***/
-            (function (module, exports, __webpack_require__) {
+            (function (module, exports, __webpack_require__) {/* @reup-io-client */
                 /* ------------------------------------------------------------------
                  * io-client, rewritten against the shipped game bundle.
                  *
