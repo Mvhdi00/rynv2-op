@@ -766,7 +766,7 @@ window.grbtp = 35;
     [8]: {
       name: "Plaftorm",
       limit: 12,
-      layer: -1
+      layer: 1
     },
     [9]: {
       name: "Healing pad",
@@ -942,6 +942,7 @@ window.grbtp = 35;
     itemGroup: 2,
     upgradeOf: 7,
     name: "poison spikes",
+    pDmg: 5,
     description: "poisons enemies when they touch them",
     age: 9,
     pre: 1,
@@ -1121,6 +1122,7 @@ window.grbtp = 35;
     boostSpeed: 1.5,
     health: 150,
     colDiv: .7,
+    ignoreCollision: true,
     scale: 45,
     holdOffset: 20,
     placeOffset: -5
@@ -1239,6 +1241,7 @@ window.grbtp = 35;
     teleport: true,
     health: 200,
     colDiv: .7,
+    ignoreCollision: true,
     scale: 45,
     holdOffset: 20,
     placeOffset: -5

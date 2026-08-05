@@ -35,6 +35,32 @@ function lineOf(name, valuePattern = "[\\[{]") {
   throw new Error("binding not found in game bundle: " + name);
 }
 
+/* Same idea for a table hung off `this` inside a constructor, which is where
+ * the animal definitions live. Kept separate from lineOf so the single-letter
+ * top-level names it looks up cannot start matching indented locals. */
+function memberLiteral(prop) {
+  const re = new RegExp("^\\s*this\\." + prop + "\\s*=\\s*\\[");
+  const at = lines.findIndex((l) => re.test(l));
+  if (at === -1) throw new Error("member table not found in game bundle: this." + prop);
+
+  const body = lines.slice(at).join("\n");
+  const open = body.indexOf("[");
+  let depth = 0, quote = null, end = -1;
+  for (let i = open; i < body.length; i++) {
+    const c = body[i];
+    if (quote) {
+      if (c === "\\") { i++; continue; }
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") { quote = c; continue; }
+    if (c === "[") depth++;
+    else if (c === "]") { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end === -1) throw new Error("unterminated member table: this." + prop);
+  return vm.runInNewContext("(" + body.slice(open, end + 1) + ")", { Math });
+}
+
 /* Slice `name = <literal>` and evaluate the literal on its own. */
 function literal(name, extraScope = {}) {
   const start = lineOf(name);
@@ -133,6 +159,7 @@ const drivers = {
   items: literal("Ce", { B: itemGroups }),
   hats: literal("ma"),
   accessories: literal("pa"),
+  animals: memberLiteral("aiTypes"),
 };
 
 const outPath = path.join(ROOT, "drivers/game-drivers.json");
@@ -140,7 +167,7 @@ fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, JSON.stringify(drivers, null, 2));
 
 console.log("wrote", path.relative(ROOT, outPath));
-for (const k of ["itemGroups", "projectiles", "weapons", "items", "hats", "accessories"]) {
+for (const k of ["itemGroups", "projectiles", "weapons", "items", "hats", "accessories", "animals"]) {
   console.log(`  ${k.padEnd(12)} ${drivers[k].length} entries`);
 }
 console.log("  config       " + Object.keys(drivers.config).length + " keys");

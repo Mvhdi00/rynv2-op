@@ -90,9 +90,13 @@ function checkKeyed(label, clientObj, gameArr, fields) {
  * `defaults` names the game fields that are optional in the bundle because the
  * engine substitutes a value when they are absent; a client that spells the
  * default out explicitly still agrees with the game. */
-function checkPositional(label, clientArr, gameArr, fields, defaults = {}) {
-  if (clientArr.length !== gameArr.length) {
+function checkPositional(label, clientArr, gameArr, fields, defaults = {}, { allowExtra = false } = {}) {
+  if (clientArr.length < gameArr.length) {
     fail(`${label}: client has ${clientArr.length} entries, game has ${gameArr.length}`);
+  } else if (clientArr.length > gameArr.length && !allowExtra) {
+    fail(`${label}: client has ${clientArr.length} entries, game has ${gameArr.length}`);
+  } else if (clientArr.length > gameArr.length) {
+    note(`${label}: client carries ${clientArr.length - gameArr.length} row(s) past the game table`);
   }
   const n = Math.min(clientArr.length, gameArr.length);
   for (let i = 0; i < n; i++) {
@@ -144,6 +148,109 @@ checkPositional("weapons", clientTable("Weapons"), game.weapons, [
   ["age", "age"],
   ["type", "type"],
 ], { spdMult: 1 });
+
+/* ---- physics tables -----------------------------------------------------
+ * These drive prediction rather than pricing, so drift here does not look like
+ * a wrong label — it looks like the client and the server disagreeing about
+ * where a player ends up. checkPositional's `allowExtra` lets the client carry
+ * rows past the end of the game table (the boss animals the server spawns are
+ * not in the shipped aiTypes list).
+ */
+
+/* Items: scale, placeOffset and health decide placement and what blocks a
+ * path; ignoreCollision decides whether the object is solid at all. The client
+ * tests that one with `"ignoreCollision" in item`, so presence is what has to
+ * agree, not the value. */
+checkPositional("items", clientTable("Items"), game.items, [
+  ["name", "name"],
+  ["description", "desc"],
+  ["scale", "scale"],
+  ["holdOffset", "holdOffset"],
+  ["placeOffset", "placeOffset"],
+  ["spritePadding", "spritePadding"],
+  ["health", "health"],
+  ["damage", "dmg"],
+  ["pDmg", "pDmg"],
+  ["projDmg", "projDmg"],
+  ["turnSpeed", "turnSpeed"],
+  ["shootRange", "shootRange"],
+  ["shootRate", "shootRate"],
+  ["pps", "pps"],
+  ["colDiv", "colDiv"],
+  ["boostSpeed", "boostSpeed"],
+  ["healCol", "healCol"],
+  ["age", "age"],
+]);
+
+{
+  const mine = clientTable("Items");
+  game.items.forEach((g, i) => {
+    const c = mine[i];
+    if (!c) return;
+    /* Group id: the client stores the id where the game nests the whole group
+     * row. Food (group 0) is deliberately absent client-side — ItemGroups drops
+     * the non-placeable group, and getItemCount would throw on it. */
+    if (g.group.place && c.itemGroup !== g.group.id) {
+      fail(`items: index ${i} ("${g.name}") itemGroup=${c.itemGroup} but game has ${g.group.id}`);
+    }
+    const gameSolid = !("ignoreCollision" in g);
+    const clientSolid = !("ignoreCollision" in c);
+    if (gameSolid !== clientSolid) {
+      fail(`items: index ${i} ("${g.name}") is ${clientSolid ? "solid" : "pass-through"} in the client but ${gameSolid ? "solid" : "pass-through"} in the game`);
+    }
+  });
+}
+
+/* Turret-fired projectiles carry no speed or range of their own in the bundle —
+ * the firing item supplies them — so those two are only compared on the rows
+ * the game actually fills in, and the item link is checked separately below. */
+checkPositional("projectiles", clientTable("Projectiles"), game.projectiles, [
+  ["index", "indx"],
+  ["layer", "layer"],
+  ["src", "src"],
+  ["damage", "dmg"],
+  ["scale", "scale"],
+]);
+
+{
+  const mine = clientTable("Projectiles");
+  game.projectiles.forEach((g, i) => {
+    const c = mine[i];
+    if (!c) return;
+    for (const f of ["speed", "range"]) {
+      if (g[f] === undefined) continue;
+      if (c[f] !== g[f]) {
+        fail(`projectiles: index ${i} ${f}=${JSON.stringify(c[f])} but game has ${JSON.stringify(g[f])}`);
+      }
+    }
+  });
+
+  /* An item that shoots names its projectile row and its own range. Where the
+   * client spells that range onto the projectile, it has to be the item's. */
+  for (const item of game.items) {
+    if (item.projectile === undefined || item.shootRange === undefined) continue;
+    const c = mine[item.projectile];
+    if (!c || c.range === undefined) continue;
+    if (c.range !== item.shootRange) {
+      fail(`projectiles: row ${item.projectile} range=${c.range} but "${item.name}" shootRange=${item.shootRange}`);
+    }
+  }
+}
+
+/* Animals: speed, turnSpeed, scale and weightM are what the bot movement and
+ * the trap-animal logic predict against. */
+checkPositional("animals", clientTable("Animals"), game.animals, [
+  ["src", "src"],
+  ["killScore", "killScore"],
+  ["health", "health"],
+  ["weightM", "weightM"],
+  ["speed", "speed"],
+  ["turnSpeed", "turnSpeed"],
+  ["scale", "scale"],
+  ["dmg", "dmg"],
+  ["viewRange", "viewRange"],
+  ["hostile", "hostile"],
+], {}, { allowExtra: true });
 
 /* Item groups: client keys by group id and drops group 0 (food, not placeable). */
 {

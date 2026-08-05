@@ -97,26 +97,11 @@ edit(
 /* ------------------------------------------------------------------ *
  * 4. Driver correction
  *
- * verify-drivers.js flags item group 8 (the platform / "watchtower" group) as
- * layer -1 in RYN, while the shipped bundle has layer 1. PlayerObject reads
- * ItemGroups[group].layer straight into its own .layer, which every collision
- * and placement check keys off, so the wrong value makes the client treat
- * platforms as a pass-under layer like traps and boost pads.
+ * The platform group's layer used to be corrected here, because the source
+ * carried -1 where the shipped bundle has 1. It is fixed in src/ now, so the
+ * build no longer has to patch it and the two agree. verify-drivers.js is what
+ * guards it from here on.
  * ------------------------------------------------------------------ */
-
-edit(
-  "drivers: item group 8 layer -1 -> 1 (matches shipped bundle)",
-  `    [8]: {
-      name: "Plaftorm",
-      limit: 12,
-      layer: -1
-    },`,
-  `    [8]: {
-      name: "Plaftorm",
-      limit: 12,
-      layer: 1
-    },`
-);
 
 /* ------------------------------------------------------------------ *
  * 5. Settings for the ported Luna features

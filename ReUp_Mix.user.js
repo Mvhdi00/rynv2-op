@@ -936,6 +936,7 @@ window.grbtp = 35;
     itemGroup: 2,
     upgradeOf: 7,
     name: "poison spikes",
+    pDmg: 5,
     description: "poisons enemies when they touch them",
     age: 9,
     pre: 1,
@@ -1115,6 +1116,7 @@ window.grbtp = 35;
     boostSpeed: 1.5,
     health: 150,
     colDiv: .7,
+    ignoreCollision: true,
     scale: 45,
     holdOffset: 20,
     placeOffset: -5
@@ -1233,6 +1235,7 @@ window.grbtp = 35;
     teleport: true,
     health: 200,
     colDiv: .7,
+    ignoreCollision: true,
     scale: 45,
     holdOffset: 20,
     placeOffset: -5
@@ -20049,12 +20052,12 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-05T21:04:11.518Z",
+      "builtAt": "2026-08-05T21:17:04.380Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
       },
-      "extractedAt": "2026-07-31T23:50:43.068Z",
+      "extractedAt": "2026-08-05T21:14:54.959Z",
       "protocol": {
           "signatureBytes": 6,
           "encryptedMode": 1,
