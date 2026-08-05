@@ -122,16 +122,20 @@ edit(
  * 5. Settings for the ported Luna features
  * ------------------------------------------------------------------ */
 
+/* Anchored on the last key of defaultSettings, so the inserted block lands at
+ * the end of the object and keeps the trailing comma correct. */
 edit(
   "settings: ReUp keys",
-  `    _lunaMigration: 0,`,
-  `    _spikeRotation: true,
+  `    _legitModeBackup: null
+  };`,
+  `    _legitModeBackup: null,
+    _spikeRotation: true,
     _millRotation: true,
     _usernameCycler: false,
     _usernameList: "Luna1, Luna2, Luna3",
     _usernameIndex: 0,
-    _menuTheme: "ryn",
-    _lunaMigration: 0,`
+    _menuTheme: "ryn"
+  };`
 );
 
 /* ------------------------------------------------------------------ *

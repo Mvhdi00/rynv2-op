@@ -2820,9 +2820,6 @@ window.grbtp = 35;
               if (!isEnemyObjectToMyPlayer && this.isNear(target, this.nearestEnemyPush)) {
                 this.nearestEnemyPush = target;
               }
-              if (!isEnemyObjectToMyPlayer) {
-                object._lunaUnhidden = true;
-              }
             }
             target.isTrapped = true;
             if (target.hatID === 40) {
@@ -2833,7 +2830,6 @@ window.grbtp = 35;
             }
             if (isOwner && this.isNear(object, this.nearestTrap)) {
               this.nearestTrap = object;
-              object._lunaUnhidden = true;
             }
           }
           if (collidingCurrent || !object.seenPlacement && !object.wasTeammate) {
@@ -6706,7 +6702,6 @@ window.grbtp = 35;
       this.upgradeAge += 1;
     }
     updateClanMembers(teammates) {
-      // لقطة قبل التحديث عشان نعرف مين انضم ومين غادر
       const _before = new Set(this.teammates);
       this.teammates.clear();
       for (let i = 0; i < teammates.length; i += 2) {
@@ -8171,7 +8166,6 @@ window.grbtp = 35;
             const _sbFirst = [ ..._sbClients ][0];
             const _sbCurrentlyActive = _sbFirst && _sbFirst._ModuleHandler && _sbFirst._ModuleHandler._scatterActive;
             if (_sbCurrentlyActive) {
-              // إيقاف: كل بوت يرجع للاونر بدل ما يوقف مكانه فجأة، ويتفادى البنايات بالطريق
               for (const _sbBot of _sbClients) {
                 const _sbMH = _sbBot._ModuleHandler;
                 if (!_sbMH) continue;
@@ -8183,7 +8177,6 @@ window.grbtp = 35;
                 _sbMH._scatterNextDecisionTime = 0;
               }
             } else {
-              // تفعيل: كل بوت يبدأ تجوال عشوائي ذكي، مو نقطة وحدة ثابتة
               for (const _sbBot of _sbClients) {
                 const _sbMH = _sbBot._ModuleHandler;
                 if (!_sbMH) continue;
@@ -11030,8 +11023,6 @@ window.grbtp = 35;
       if (reloading.isReloaded(type) && !shouldIgnore) {
         ModuleHandler.moduleActive = true;
         ModuleHandler.useAngle = angle;
-        // Tank من أول ضربة: أي مبنى ما ينكسر بضربة وحدة نلبس له Tank فوراً،
-        // مو ننتظر الضربة الأخيرة — الهدف نقصّر عدد الضربات مو نجمّلها.
         if (!isEnoughDamage || urgentRetrapRisk) {
           ModuleHandler.forceHat = 40;
         }
@@ -12524,7 +12515,6 @@ window.grbtp = 35;
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
-      // [مُصلَّح] كان inTrap — الخاصية اسمها isTrapped
       if (nearestEnemy === null || nearestEnemy.isTrapped) return;
       const primary = myPlayer.getItemByType(0);
       if (primary === null) return;
@@ -12993,35 +12983,11 @@ window.grbtp = 35;
     }
   }
   const AntiSync_default = AntiSync;
-  // ══════════════════════════════════════════════════════════════════════════
-  // COMBO APPROACH — يمشيك لمسافة الكومبو بدل ما تنتظرها
-  // ──────────────────────────────────────────────────────────────────────────
-  // نافذة velocityTick ضيقة (٢٢٠–٢٤٥ = ٢٥ بكسل). الانتظار السلبي يعني إن
-  // الكومبو ينطلق لما يعبرها العدو بالصدفة. هذا الموديول يركنك فيها ويثبّتك،
-  // فينطلق الكومبو كل ما جهز السلاح.
-  //
-  // الفكرة من gotoGoal (LooKed): بدل مكابح ثنائية (امشِ/قف)، يستخدم مضاعفات
-  // سرعة القبعات كدوّاسة متدرجة — كل ما قربت من المسافة الهدف، كبح أشد:
-  //   Tank Gear (40) spdMult .3   ← ضبط دقيق
-  //   Emp Helmet (22) spdMult .7  ← كبح متوسط
-  //   بلا فرض قبعة                ← اقتراب حر
-  // المناطق مشتقة من playerScale (٣٥) زي الأصل.
-  //
-  // أدنى أولوية عمداً: ما يتحرك إلا لو ما فيه موديول ماسك التيك أو الحركة،
-  // ويتنازل فوراً أول ما تدخل النافذة عشان velocityTick يشتغل بحرية.
-  // ══════════════════════════════════════════════════════════════════════════
-  const CA_SCALE = 35;          // playerScale — وحدة المناطق
-  const CA_BRAKE_HARD = 40;     // Tank Gear  spdMult .3
-  const CA_BRAKE_SOFT = 22;     // Emp Helmet spdMult .7
-  // ══════════════════════════════════════════════════════════════════════════
-  // CHAT LOG — سجل أحداث اللعبة
-  // ──────────────────────────────────────────────────────────────────────────
-  // يسجّل: دخول/خروج اللاعبين، الرسائل، إنشاء وحذف العشائر، الانضمام والخروج
-  // منها — كل سطر بوقته (ساعة:دقيقة:ثانية) وتاريخه.
-  // اللوحة: تُسحب من رأسها، تُكبَّر من زاويتها، وتخبو بهدوء لما يهدأ النشاط.
-  // ══════════════════════════════════════════════════════════════════════════
-  const CL_MAX_ROWS = 2000;       // سقف السطور المحفوظة (مطابق Auraro)
-  const CL_IDLE_MS = 8e3;         // بعدها تبدأ تخبو
+  const CA_SCALE = 35;
+  const CA_BRAKE_HARD = 40;
+  const CA_BRAKE_SOFT = 22;
+  const CL_MAX_ROWS = 2000;
+  const CL_IDLE_MS = 8e3;
   const CL_KINDS = {
     join:   { icon: "\u2192", color: "#00d68f", label: "دخل" },
     leave:  { icon: "\u2190", color: "#ff4d6d", label: "خرج" },
@@ -13039,9 +13005,6 @@ window.grbtp = 35;
     _idleTimer=null;
     _drag=null;
     _resize=null;
-    // FIX: نخزّن مراجع الدوال هنا عشان نقدر نشيلها بـdestroy() —
-    // قبل كذا كانت تُضاف من جديد بكل build() بدون ما تُشال أبداً،
-    // فتتراكم مستمعين ميتة على document مع كل تبديل تشغيل/إطفاء.
     _onMove=null;
     _onUp=null;
     _onResizeMove=null;
@@ -13049,7 +13012,6 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    // ── التخزين: مكان اللوحة وحجمها يبقيان بين الجلسات ──
     _loadBox() {
       try {
         const raw = CustomStorage.get("RYN_chatlog");
@@ -13075,12 +13037,10 @@ window.grbtp = 35;
       const h12 = h24 % 12 || 12;
       const ampm = h24 >= 12 ? "PM" : "AM";
       return {
-        // Auraro-style: 12-hour مع AM/PM بدل 24 ساعة
         time: `${h12}:${p(d.getMinutes())} ${ampm}`,
         date: `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`
       };
     }
-    // ── الإدخال: كل حدث يمر من هنا ──
     add(kind, text, who) {
       if (!Settings_default._chatLog) return;
       const s = this._stamp();
@@ -13089,7 +13049,6 @@ window.grbtp = 35;
       this._render(this.rows[this.rows.length - 1]);
       this._wake();
     }
-    // ── الخبو: تُنار عند أي حدث، وتخبو بعد سكون ──
     _wake() {
       if (!this._el) return;
       this._el.classList.remove("cl-idle");
@@ -13100,8 +13059,6 @@ window.grbtp = 35;
     }
     _render(row) {
       if (!this._list) return;
-      // Auraro-style: نحفظ هل كنت بالأسفل أصلاً *قبل* نضيف السطر —
-      // لو كنت طالع تقرأ فوق، ما نسحبك تحت كل رسالة جديدة.
       const wasAtBottom = this._list.scrollTop + this._list.clientHeight >= this._list.scrollHeight - 2;
       const k = CL_KINDS[row.kind] || CL_KINDS.system;
       const div = document.createElement("div");
@@ -13122,7 +13079,6 @@ window.grbtp = 35;
       this.rows.length = 0;
       if (this._list) this._list.innerHTML = "";
     }
-    // ── بناء اللوحة ──
     build() {
       if (this._el) return;
       const box = this._loadBox();
@@ -13143,14 +13099,12 @@ window.grbtp = 35;
       this._el = el;
       this._list = el.querySelector("#cl-list");
       el.querySelector("#cl-clear").onclick = () => this.clear();
-      // السحب من الرأس
       const head = el.querySelector("#cl-head");
       head.onmousedown = e => {
         if (e.target.id === "cl-clear") return;
         this._drag = { dx: e.clientX - el.offsetLeft, dy: e.clientY - el.offsetTop };
         e.preventDefault();
       };
-      // FIX: نشيل أي مستمعين قدامى قبل نضيف جدد (لو build() انصلح بعد destroy())
       if (this._onMove) document.removeEventListener("mousemove", this._onMove);
       if (this._onUp) document.removeEventListener("mouseup", this._onUp);
       this._onMove = e => {
@@ -13165,7 +13119,6 @@ window.grbtp = 35;
       };
       document.addEventListener("mousemove", this._onMove);
       document.addEventListener("mouseup", this._onUp);
-      // التكبير من الزاوية
       const grip = el.querySelector("#cl-grip");
       grip.onmousedown = e => {
         this._resize = { x: e.clientX, y: e.clientY, w: el.offsetWidth, h: el.offsetHeight };
@@ -13184,13 +13137,11 @@ window.grbtp = 35;
       document.addEventListener("mousemove", this._onResizeMove);
       document.addEventListener("mouseup", this._onResizeUp);
       el.addEventListener("mouseenter", () => this._wake());
-      // نعيد رسم اللي تجمّع قبل البناء
       for (const r of this.rows) this._render(r);
       this._wake();
     }
     destroy() {
       if (this._idleTimer) clearTimeout(this._idleTimer);
-      // FIX: نشيل المستمعين فعلياً — قبل كذا كانت تفضل على document للأبد
       if (this._onMove) { document.removeEventListener("mousemove", this._onMove); this._onMove = null; }
       if (this._onUp) { document.removeEventListener("mouseup", this._onUp); this._onUp = null; }
       if (this._onResizeMove) { document.removeEventListener("mousemove", this._onResizeMove); this._onResizeMove = null; }
@@ -13217,34 +13168,28 @@ window.grbtp = 35;
     postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (!Settings_default._comboApproach) return;
-      // أدنى أولوية: موديول ثاني ماسك التيك أو الحركة؟ نتنحّى
       if (ModuleHandler.moduleActive) return;
       if (ModuleHandler.moveTo !== "disable") return;
       if (EnemyManager2.shouldIgnoreModule()) return;
       if (!myPlayer.inGame) return;
       const enemy = EnemyManager2.nearestEnemy;
       if (enemy === null) return;
-      // نفس شروط velocityTick — ما نقرّب إلا لكومبو ممكن أصلاً
       const primary = myPlayer.getItemByType(0);
       if (primary !== 5) return;
       if (myPlayer.getWeaponVariant(primary).current < 2) return;
       if (!ModuleHandler.hasStoreItem(0, 53)) return;
       const velTick = ModuleHandler.staticModules.velocityTick;
       if (!velTick) return;
-      // الهدف = منتصف نافذة velocityTick نفسها، فيبقى متسقاً مع معايرتها
       const goal = (velTick.minKB + velTick.maxKB) / 2;
       const tol = (velTick.maxKB - velTick.minKB) / 2;
       const myPos = myPlayer.pos.current;
       const enemyPos = enemy.pos.current;
       const target = enemy.pos.future || enemyPos;
       const dist = myPos.distance(target);
-      // داخل النافذة؟ نسلّم لـ velocityTick ولا نلمس شي
       if (dist >= goal - tol && dist <= goal + tol) return;
-      // الاتجاه: نبتعد لو قريبين، ونقترب لو بعيدين
       const angle = myPos.angle(enemyPos);
       const tooClose = dist < goal;
       ModuleHandler.moveTo = tooClose ? angle + Math.PI : angle;
-      // مكابح متدرجة: كل ما قلّ الفرق عن الهدف، كبح أشد
       const offset = Math.abs(dist - goal);
       if (offset <= CA_SCALE) {
         ModuleHandler.forceHat = CA_BRAKE_HARD;
@@ -13277,7 +13222,6 @@ window.grbtp = 35;
           }
           const {reloading: reloading} = ModuleHandler.staticModules;
 
-          // finish the swing that was queued last tick (unchanged)
           if (this.nearestTarget !== null) {
               const pos12 = myPlayer.pos.current;
               const pos22 = this.nearestTarget.pos.current;
@@ -13292,14 +13236,6 @@ window.grbtp = 35;
               return;
           }
 
-          // ── Trigger condition (rewritten) ────────────────────────────────────
-          // Only arm the attack on the exact tick a trap the enemy was standing
-          // in breaks — either from your own hit or theirs. This replaces the old
-          // "every tick they happen to be in the 220-245 window" polling, which
-          // kept re-firing as knockback drifted them in and out of range without
-          // ever landing a clean kill. previousTrappedEnemy/nearestTrappedEnemy
-          // are already maintained by EnemyManager each tick, so comparing them
-          // gives a one-tick pulse the moment someone escapes a trap.
           const brokeTrapEnemy = EnemyManager2.previousTrappedEnemy;
           const stillTrapped = EnemyManager2.nearestTrappedEnemy;
           const trapJustBroke = brokeTrapEnemy !== null && (stillTrapped === null || stillTrapped.id !== brokeTrapEnemy.id);
@@ -13341,12 +13277,11 @@ window.grbtp = 35;
       moduleName="spikeTick";
       client;
       useTurret=false;
-      useBreakTrapPlace=false;      // بعد ضربة كسر الفخ: التيك الجاي يبني السبايك + يضرب العدو
-      useBreakTrapFollowup=false;   // بعد البناء: التيك اللي بعده يكمل بـ Bull Helmet
+      useBreakTrapPlace=false;
+      useBreakTrapFollowup=false;
       constructor(client2) {
           this.client = client2;
       }
-      // دُمجت من unifiedSpikeTick: يلقى فخّ العدو نفسه (مالكه هو) اللي واقف عليه فعلياً
       findEnemyOwnTrap(enemy) {
           const {ObjectManager: ObjectManager2} = this.client;
           let enemyOwnTrap = null;
@@ -13373,7 +13308,6 @@ window.grbtp = 35;
           const spikeCollider = EnemyManager2.enemySpikeCollider;
           const nearestEnemy = EnemyManager2.nearestEnemy;
 
-          // ── خطوة 3: Bull Helmet + ضربة حقيقية (بعد ما السبايك انبنى) ──
           if (this.useBreakTrapFollowup) {
               this.useBreakTrapFollowup = false;
               if (primaryReloaded && nearestEnemy) {
@@ -13383,21 +13317,19 @@ window.grbtp = 35;
                   if (ModuleHandler.canBuy(0, 7)) ModuleHandler.forceHat = 7;
                   ModuleHandler.forceWeapon = 0;
                   ModuleHandler.shouldAttack = true;
-                  this.useTurret = true;   // يكمل بنفس تسلسل التيرت الموجود أصلاً بالأسفل
+                  this.useTurret = true;
               }
               return;
           }
-          // ── خطوة 2: ابني السبايك + اضرب العدو بالسلاح الأساسي (نفس نمط الفرع الأصلي المُثبت شغال) ──
-          // مفصولة عمداً عن ضربة المطرقة (خطوة 1) عشان ما يتصادمون على نفس "اختيار السلاح" بنفس التيك
           if (this.useBreakTrapPlace) {
               this.useBreakTrapPlace = false;
               if (primaryReloaded && nearestEnemy) {
                   const hitAngle = myPlayer.pos.future.angle(nearestEnemy.pos.future);
                   ModuleHandler.moduleActive = true;
                   ModuleHandler.useAngle = hitAngle;
-                  ModuleHandler.forceWeapon = 0;   // السلاح الأساسي — نفس القاعدة المُثبتة بالفرع الأصلي
+                  ModuleHandler.forceWeapon = 0;
                   ModuleHandler.shouldAttack = true;
-                  EnemyManager2.attemptSpikePlacement();   // البناء + الضرب بالأساسي بنفس التيك = مُختبر وشغال
+                  EnemyManager2.attemptSpikePlacement();
                   this.useBreakTrapFollowup = true;
               }
               return;
@@ -13414,8 +13346,6 @@ window.grbtp = 35;
               return;
           }
 
-          // ══════ دُمجت من unifiedSpikeTick: فرع breakTrap — العدو واقف على فخّه هو ══════
-          // شرط: ثانوي = Great Hammer(10) وجاهز + ضربة وحدة تكسر الفخ أكيد (health <= hammerDmg)
           if (Settings_default._spikeTick_breakTrap && nearestEnemy && isPrimary) {
               const secondary = myPlayer.getItemByType(1);
               const secondaryReloaded = reloading.isReloaded(1);
@@ -13425,16 +13355,14 @@ window.grbtp = 35;
                       const hammerRange = DataHandler_default.getWeapon(10).range;
                       const canHitTrap = myPlayer.collidingSimple(enemyOwnTrap, hammerRange + enemyOwnTrap.hitScale);
                       if (canHitTrap) {
-                          // getBuildingDamage موجودة أصلاً بـ myPlayer — تحسب ضرر المطرقة مع بونص Tank Gear لو متاح
                           const hammerDmg = myPlayer.getBuildingDamage(10, ModuleHandler.canBuy(0, 40));
                           if (enemyOwnTrap.health <= hammerDmg) {
-                              // خطوة 1: بس اضرب الفخ بالمطرقة — بدون أي بناء بنفس التيك
                               const trapAngle = myPlayer.pos.future.angle(enemyOwnTrap.pos.future);
                               ModuleHandler.moduleActive = true;
                               ModuleHandler.useAngle = trapAngle;
-                              ModuleHandler.forceWeapon = 1;   // الثانوي (المطرقة) يكسر الفخ
+                              ModuleHandler.forceWeapon = 1;
                               ModuleHandler.shouldAttack = true;
-                              this.useBreakTrapPlace = true;   // التيك الجاي: ابني السبايك + اضرب بالأساسي
+                              this.useBreakTrapPlace = true;
                               this.client.StatsManager.spikeTickTimes = 1;
                               return;
                           }
@@ -13443,7 +13371,6 @@ window.grbtp = 35;
               }
           }
 
-          // ══════ الفرع الأصلي (سبايك موجود بيهدد العدو) — بدون تغيير ══════
           if (!isPrimary || !primaryReloaded || spikeCollider === null) {
               return;
           }
@@ -13780,7 +13707,6 @@ window.grbtp = 35;
       if (ModuleHandler.moduleActive || ModuleHandler.attackingState !== 1 || ModuleHandler.forceWeapon !== null) {
         return;
       }
-      // بوت يزرع موارد الحين — لا تتدخل بقرار السلاح/الهجوم، هذا شغل موديول الزراعة
       if (ModuleHandler._autoFarmActive) {
         return;
       }
@@ -13807,7 +13733,6 @@ window.grbtp = 35;
       if (ModuleHandler.moduleActive || ModuleHandler.attackingState !== 2 || ModuleHandler.forceWeapon !== null) {
         return;
       }
-      // بوت يزرع موارد الحين — لا تتدخل بقرار السلاح/الهجوم، هذا شغل موديول الزراعة
       if (ModuleHandler._autoFarmActive) {
         return;
       }
@@ -13828,7 +13753,6 @@ window.grbtp = 35;
       if (ModuleHandler.moduleActive) {
         return;
       }
-      // بوت يزرع موارد الحين — يبقى على السلاح الرئيسي، ما نخليه يبدّل لأسرع سلاح
       if (ModuleHandler._autoFarmActive) {
         return;
       }
@@ -13933,8 +13857,6 @@ window.grbtp = 35;
     }
     antiSmartTick(myPlayer, nearestEnemy, ModuleHandler, ObjectManager2, PlayerManager2) {
       if (!nearestEnemy) return false;
-      // [مُصلَّح] كان myPlayer.secondary — خاصية غير موجودة، فالنتيجة undefined
-      // و undefined !== 10 صحيح دايماً → الدالة (٧٦ سطر) ترجع false ولا تشتغل
       const mySecondary = myPlayer.getItemByType(1);
       if (mySecondary !== 10) return false;
       const enemyPos = nearestEnemy.pos.current;
@@ -14197,10 +14119,6 @@ window.grbtp = 35;
       const useTail = ModuleHandler.canBuy(1, 11);
       const useActual = ModuleHandler.canBuy(1, actual);
       const useBloodWings = ModuleHandler.canBuy(1, 18);
-      // قبعات الكومبو تسبق كل شي: لو تسلسل هجومي شغّال، الإكسسوار يتبعه.
-      // بدون هالترتيب، shouldUseTail() يرجع true وقت ما السلاح يعبّي — وهذا
-      // يصير مباشرة بعد ضربة الكومبو — فيلبس Monkey Tail (dmgMultO .2) وتنزل
-      // بقية الضربات بعشرين بالمية من الضرر.
       const turretActive = ModuleHandler.forceHat === 53 || myPlayer.hatID === 53;
       if (turretActive && useShadow) {
         return 19;
@@ -14870,10 +14788,6 @@ window.grbtp = 35;
       this.targetEnemy = nearestEnemy;
     }
   }
-  // بختصار: لو السلاح الثانوي مسدس (musket، id=15) وقرر المحرك العام
-  // (UseAttacking) إن الوقت حان يطلق فيه، ننتظره فوق منصة (platform) أول
-  // شي — لو ما هو فوق وحده حالياً، نبنيها بنفس التيك مباشرة، وبعدها الإطلاق
-  // الفعلي يصير بنفس التيك أيضاً عن طريق updateAttack اللي يجي بعدنا بالترتيب.
   class PlatformMusket {
     moduleName="platformMusket";
     client;
@@ -15563,8 +15477,6 @@ window.grbtp = 35;
           if (!p || !p.pos || !p.inGame) continue;
           if (p === oc.myPlayer) continue;
           if (oc.isBotByID && oc.isBotByID(p.id)) continue;
-          // [مُصلَّح] كان .clan — الخاصية اسمها clanName، فكانت undefined
-        // والشرط ينهار دايماً فما يُستثنى زملاء العشيرة من الاستهداف
         if (oc.myPlayer.clanName && p.clanName === oc.myPlayer.clanName) continue;
           const dx = p.pos.current.x - fromPos.x;
           const dy = p.pos.current.y - fromPos.y;
@@ -16655,9 +16567,6 @@ window.grbtp = 35;
       this.attack(null, 1);
       this.whichWeapon(this._getPredictWeapon());
     }
-    // كل شفاء = ٣ باكيتات (selectItem + attack + whichWeapon). بدون بوابة
-    // ميزانية، antiInsta يقدر يطلق ٦ شفاءات بتيك واحد = ١٨ باكيت، وتفريغ
-    // طابور shame يوصل ٣٦. نحجز هامش ٣ ونرجع لو الميزانية خلصت.
     _healBudgetLeft() {
       return this.packetLimit - this.packetCount;
     }
@@ -16677,8 +16586,6 @@ window.grbtp = 35;
     _flushShameHealQueue() {
       if (this._shameHealQueue <= 0 || this._shameHealDeadline === null) return;
       if (Date.now() < this._shameHealDeadline) return;
-      // نفرّغ بقدر ما تسمح الميزانية فقط، والباقي يبقى بالطابور للتيك الجاي —
-      // بدل ما نرمي ١٢ شفاء (٣٦ باكيت) دفعة وحدة ونقفز فوق الحد.
       const affordable = Math.max(0, Math.floor(this._healBudgetLeft() / 3));
       const count = Math.min(this._shameHealQueue, affordable);
       this._shameHealQueue -= count;
@@ -18902,9 +18809,7 @@ window.grbtp = 35;
     _usernameCycler: false,
     _usernameList: "Luna1, Luna2, Luna3",
     _usernameIndex: 0,
-    _menuTheme: "ryn",
-    _lunaMigration: 0,
-    _glotusParity: 0
+    _menuTheme: "ryn"
   };
   const settings = {
     ...defaultSettings,
@@ -18915,17 +18820,6 @@ window.grbtp = 35;
     if (!defaultSettings.hasOwnProperty(key)) {
       delete settings[key];
     }
-  }
-  const LUNA_MIGRATION = 1;
-  if (settings._lunaMigration !== LUNA_MIGRATION) {
-    settings._autoplacerRadius = 350;
-    settings._antiTrapProtect = false;
-    settings._lunaMigration = LUNA_MIGRATION;
-  }
-  const GLOTUS_PARITY = 1;
-  if (settings._glotusParity !== GLOTUS_PARITY) {
-    for (const k of [ "_antiRetrap", "_antiSpikePush", "_antianimal", "_antienemy", "_antispike", "_autoPush", "_autoShield", "_autoSteal", "_autoSync", "_autobreak", "_autoemp", "_autoheal", "_automill", "_autoplacer", "_circleRotation", "_dashMovement", "_empDefense", "_enemyMarkers", "_followCursor", "_itemMarkers", "_killMessage", "_knockbackTick", "_knockbackTickHammer", "_knockbackTickTrap", "_menuTransparency", "_notificationTracers", "_placementDefense", "_playerTurretReloadBar", "_possiblePlacement", "_renderHP", "_safeWalk", "_shameSpam", "_soldierDefault", "_spikeGearInsta", "_spikeSync", "_spikeSyncHammer", "_spikeTick", "_stackedDamage", "_tailPriority", "_teammateMarkers", "_toolSpearInsta", "_trapKB", "_turretSteal", "_turretSync", "_weaponReloadBar" ]) settings[k] = true;
-    settings._glotusParity = GLOTUS_PARITY;
   }
   const SaveSettings = () => {
     CustomStorage.set("RYN", settings);
@@ -20003,10 +19897,6 @@ window.grbtp = 35;
       if (!object.seenPlacement || !object.isDestroyable) {
         return 0;
       }
-      // مين مالك الـ object؟ عدو = لون الأعداء، غير كذا (حقي/الكلان) = لوني.
-      // نستخدم myPlayer.isEnemyByID (= !myPlayer && !teammate) — ما يرمي خطأ لو
-      // المالك مو موجود في playerData (عكس PlayerManager.isEnemyByID اللي يرمي
-      // Error فيُبتلع بالـ catch ويخلي كل المباني "حقي" فما يظهر شريط الأعداء).
       let isEnemyObj = false;
       const _mp = client && client.myPlayer;
       const _owner = object.ownerID;
@@ -20159,7 +20049,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-05T19:48:19.254Z",
+      "builtAt": "2026-08-05T20:49:12.636Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
@@ -20679,7 +20569,6 @@ window.grbtp = 35;
       });
     }
     _save() {
-      // ننظّف حقل العرض المؤقّت قبل التخزين، ونحمل علامة الدمج عشان ما يتكرر
       this._songs.forEach(s => { delete s.__origIndex; });
       const data = {
         songs: this._songs,
@@ -20707,9 +20596,6 @@ window.grbtp = 35;
             } catch (_) {}
           }
           const beeKey = "bee_music_data";
-          // [مُصلَّح] الدمج القديم كان يشتغل في **كل** تحميل، فأي أغنية أو ألبوم
-          // تحذفه يرجع من المخزن القديم بعد أول تحديث للصفحة. صار يتم مرة وحدة
-          // فقط ويُعلَّم عليه، وبعدها ما يُقرأ إطلاقاً.
           const mergeBeeData = beeData => {
             if (!beeData) return;
             if (data && data.__beeMerged) return;
@@ -20798,11 +20684,6 @@ window.grbtp = 35;
       }
       return this._reflowLRC(result.sort((a, b) => a.ms - b.ms));
     }
-    // Rewrites the parsed lyrics so every entry already fits the game's 30
-    // character chat limit, giving each piece its own timestamp interpolated
-    // into the gap before the next line. Without this a long line is split at
-    // send time and the pieces go out on a fixed 2.2s stagger, so the chat
-    // drifts further behind the music with every long line.
     _reflowLRC(list) {
       const MAX_CHAT = 30;
       const MIN_STEP = 1600;
@@ -20894,18 +20775,10 @@ window.grbtp = 35;
       }
       this._sendChat(text);
     }
-    // Splits a lyric line into as many chat-sized chunks as needed.
-    // The old helper only ever produced two pieces, so anything past about
-    // sixty characters was cut off by the game and the line arrived
-    // incomplete. This wraps on word boundaries and never drops text.
-    // Balanced word wrap. Greedy filling leaves ragged tails ("...warranty" /
-    // "plan"); this aims for pieces of even length so every chunk reads like a
-    // deliberate line rather than an overflow.
     _wrapText(text, max) {
       const t = String(text == null ? "" : text).trim().replace(/\s+/g, " ");
       if (!t) return [];
       if (t.length <= max) return [ t ];
-      // كلمة أطول من الحد: نقصّها أولاً عشان اللفّ يشتغل على وحدات صالحة
       const words = [];
       for (const w of t.split(" ")) {
         let r = w;
@@ -20939,7 +20812,6 @@ window.grbtp = 35;
         const got = pack(n);
         if (got) return got;
       }
-      // احتياط: قص صلب لا يفقد نصاً
       const out = [];
       let rest = t;
       while (rest.length > max && out.length < 12) {
@@ -20969,9 +20841,6 @@ window.grbtp = 35;
         } catch (_) {}
       }, i * 2200));
     }
-    // Unified sync: the player and every bot post the same line at the same
-    // moment. Chunks are staggered together so a long line stays readable and
-    // the whole group stays on the same words.
     _sendLyricUnified(text) {
       const chunks = this._splitLine(text);
       if (!chunks.length) return;
@@ -21263,8 +21132,6 @@ window.grbtp = 35;
           const wasCurrent = i === this._currentIndex;
           this._songs.splice(i, 1);
           if (wasCurrent) {
-            // [مُصلَّح] كان ينقص المؤشّر فيشير لأغنية ثانية بينما الصوت والكلمات
-            // لسه للمحذوفة — فأول Save تُكتب الكلمات على الأغنية الخطأ.
             const a = this._frameDoc && this._frameDoc.querySelector("audio");
             if (a) { try { a.pause(); } catch (_) {} }
             if (this._audio) { try { this._audio.pause(); } catch (_) {} }
@@ -21403,8 +21270,6 @@ window.grbtp = 35;
         const rect = progBar.getBoundingClientRect();
         this.seekTo((e.clientX - rect.left) / rect.width);
       };
-      // Four sync modes, only one may be active. One helper keeps the flags
-      // and the checkboxes in step so they can never disagree.
       const SYNC_MODES = [
         [ "#music-chat-sync",      "_chatSync"      ],
         [ "#music-mixed-sync",     "_mixedSync"     ],
@@ -22564,20 +22429,6 @@ window.grbtp = 35;
     requestAnimationFrame(_drawTargets);
   };
   requestAnimationFrame(_drawTargets);
-  // ══════════════════════════════════════════════════════════════════════════
-  // Scatter Bots — تجوال عشوائي ذكي
-  // ──────────────────────────────────────────────────────────────────────────
-  // - كل بوت يعيد اختيار اتجاه بشكل دوري، ما يختار اتجاه قريب من عكس اتجاهه
-  //   الأخير (ما يرجع بنفس المسار اللي مشى فيه).
-  // - يبتعد عن أي بوت/لاعب قريب (repulsion) بدل ما يقرب منه.
-  // - يفحص وجود بنايات (spike/wall/mill/turret...) بطريقه قبل ما يمشي؛ لو
-  //   الاتجاه مسدود يجرب زوايا بديلة حواليه؛ لو كل الزوايا مسدودة (محاصر
-  //   بالكامل) يبدأ يكسر أقرب بناية بدل ما يعلق.
-  // - كشف "عالق" عبر مقارنة الموقع كل دورة قرار — لو ما تحرك تقريباً رغم
-  //   محاولته، يعيد القرار بشكل أسرع.
-  // - لما تطفي الميزة: كل بوت يرجع للاونر بنفس منطق تفادي البنايات، مو
-  //   يوقف مكانه فجأة.
-  // ══════════════════════════════════════════════════════════════════════════
   const _SC_DECISION_MS = 1200;
   const _SC_DECISION_MS_STUCK = 450;
   const _SC_LOOKAHEAD = 170;
@@ -22599,8 +22450,6 @@ window.grbtp = 35;
     return hit;
   }
 
-  // يفحص الممر كامل خطوة خطوة (مو بس نقطة النهاية) — عشان يكتشف مدخل/فجوة
-  // ضيقة بين بنايتين بدل ما يفترض إن الاتجاه مسدود بالكامل.
   function _scPathClear(om, myPlayer, x0, y0, angle, dist) {
     const steps = Math.max(3, Math.round(dist / 40));
     for (let i = 1; i <= steps; i++) {
@@ -22612,9 +22461,6 @@ window.grbtp = 35;
     return true;
   }
 
-  // يمسح قوس كامل حوالين الاتجاه المطلوب بدقة 10 درجات، ويفضّل أقرب زاوية
-  // صافية للاتجاه الأصلي — فلو فيه مدخل بين بنايتين يوقعه ويمشي فيه بدل ما
-  // يلف حوالين الكتلة كلها أو يعتبرها مسدودة بالكامل.
   function _scFindClearAngle(om, myPlayer, pos, desiredAngle, lookahead) {
     const STEP = Math.PI / 18;
     let best = null, bestAbsOff = Infinity;
@@ -22694,15 +22540,12 @@ window.grbtp = 35;
         baseAngle = Math.atan2(ry, rx);
       }
     }
-    // فحص الطريق قدام بمسح قوس كامل — يلقط أي مدخل/فجوة بين بنايتين ولو
-    // كانت ضيقة، مو بس يجرب زوايا ثابتة محدودة
     const clearAngle = _scFindClearAngle(om, sc_bot.myPlayer, sc_pos, baseAngle, _SC_LOOKAHEAD);
     if (clearAngle !== null) {
       sc_mh._scatterBreaking = false;
       sc_mh._scatterBreakTarget = null;
       return clearAngle;
     }
-    // كل القوس مسدود — محاصر فعلاً، نكسر أقرب بناية بدل ما نعلق
     const blocker = _scNearestBlocker(om, sc_pos, baseAngle, _SC_LOOKAHEAD + 60);
     if (blocker) {
       sc_mh._scatterBreaking = true;
@@ -22726,7 +22569,6 @@ window.grbtp = 35;
           if (!_sc_player || !_sc_player.pos) continue;
           const _sc_pos = _sc_player.pos.current;
 
-          // وصلنا للاونر أثناء الرجوع؟ خلص، نسلّم القيادة لباقي موديولات البوت
           if (_sc_mh._scatterReturning) {
             const owner = _sc_client.myPlayer;
             const op = owner && owner.pos && owner.pos.current;
@@ -24025,8 +23867,6 @@ window.grbtp = 35;
       const {myPlayer: myPlayer, _ModuleHandler: _ModuleHandler} = this.client;
       if (!myPlayer || !myPlayer.inGame || !myPlayer.pos) return;
       if (!Settings_default._botAutoFarmEnabled) return;
-      // احتياط: لو موديول ثاني بالتيك العادي خلّى moduleActive عالقة true (سباق
-      // بين حلقة RAF حق الزراعة والتيك العادي)، نفكها هنا عشان الزراعة ما تتوقف
       _ModuleHandler.moduleActive = false;
       _ModuleHandler.attackingState = 0;
       const needed = this._neededTypes();
@@ -24079,11 +23919,6 @@ window.grbtp = 35;
           _ModuleHandler.shouldAttack = true;
         }
       } else {
-        // ما فيه مورد بمجال رؤيتي الحالي — أتجول بمنطقتي بشكل طبيعي (منحني،
-        // مو خط مستقيم يلف فجأة) لين يدخل مورد بمجالي. ملاحظة: الكشف فوري —
-        // فوق بالضبط target = getNearestResource() يتحسب من جديد كل تيك، فأول
-        // ما يدخل مورد بمجال رؤيتي (أو حتى لو قريت الآيدي نفسه بعد ما كان
-        // مخفي)، أترك التجول وأروح له مباشرة بدون أي تأخير — مو لازم أنتظر.
         try {
           const myPos = myPlayer.pos.current;
           if (this._wanderAngle === undefined) {
@@ -24093,14 +23928,10 @@ window.grbtp = 35;
           }
           this._wanderRetargetIn--;
           if (this._wanderRetargetIn <= 0) {
-            // انعطافة جديدة، بس ما تكون حادة أكثر من ~110 درجة عن اتجاهي الحالي
-            // (زي لاعب حقيقي يغيّر مساره، مو يستدير فجأة 180)
             const maxTurn = Math.PI * 0.6;
             this._wanderTargetAngle = this._wanderAngle + (Math.random() * 2 - 1) * maxTurn;
             this._wanderRetargetIn = 40 + Math.floor(Math.random() * 80);
           }
-          // ميل تدريجي ناعم نحو الاتجاه الهدف (مو قفزة فجأة) + رعشة خفيفة عشوائية
-          // تخلي المسار يبان طبيعي مو مرسوم بالمسطرة
           let diff = this._wanderTargetAngle - this._wanderAngle;
           while (diff > Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
