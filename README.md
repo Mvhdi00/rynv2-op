@@ -1,4 +1,51 @@
-# ReUp Mix (Luna × Ryn)
+# moomoo.io clients
+
+Two userscripts live here.
+
+| File | What it is |
+|---|---|
+| **`RYN_Client_v5.user.js`** | RYN Client v5, edited in place. Glass menu, skin-colour wheel, and a set of features stripped out. |
+| **`ReUp_Mix.user.js`** | The older merge: RYN v4 core + the Luna features RYN never had, built by `tools/build-reup.js`. |
+
+---
+
+## RYN Client v5
+
+Committed pristine first (`9d6b18f`), then changed, so `git log -p` on the file
+reads as the edit history rather than one 24k-line blob.
+
+**Removed, end to end — menu row, setting, and the code behind it:**
+
+- Chat commands (`!gbots` / `!rbots` / `!abot` / `!sabot` / `![N]1v1`), including
+  the in-game `[#N]` player numbering and the 1v1 bot brain they drove.
+- Legit Mode, Manual Mode, Velocity Tick, Combo Approach, KB Predict Insta.
+- Spectate and Ghost Mode, including their keybinds.
+- The texture pack: the postimg hat pack and the always-on base64 overrides
+  (Flipper Hat included). No image data ships with the client any more — the
+  launcher button is drawn in CSS.
+- Toggle Shop / Toggle Clan keybinds, bot Attack Sync Delay.
+
+Enemy-side velocity-tick *detection* stays: it feeds anti-insta, not the module
+that was removed.
+
+**Fixed:**
+
+- `Config.skinColors` was in the wrong order and carried `#91B2DB`, which is the
+  river fill, not a skin. The picker sends the array index, so every swatch past
+  the stray entry told the server a different colour than the one clicked. The
+  table now matches the game's byte for byte.
+- `updateAngle` compared angles with a raw subtraction. Both wrap at ±PI, so
+  facing west resent the angle every tick; the difference is now normalised
+  before the threshold check.
+
+**Redesigned:** the menu is one translucent surface — a dark vibrancy layer with
+thin glass panes above it — on a 1440×840 stage, laid out in responsive columns.
+The game's skin picker is a wheel: ten colours on a ring in the game's own order,
+with the `toString` skin as the hub.
+
+---
+
+## ReUp Mix (Luna × Ryn)
 
 A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client
 features RYN never had, built against the game bundles in `src/` and verified
