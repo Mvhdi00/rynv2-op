@@ -1440,6 +1440,12 @@ window.grbtp = 35;
     const p = Math.abs(b - a) % (PI * 2);
     return p > PI ? PI * 2 - p : p;
   };
+  const wireAngle = angle => {
+    if (typeof angle !== "number" || !isFinite(angle)) {
+      return null;
+    }
+    return fixTo(Math.atan2(Math.sin(angle), Math.cos(angle)), 2);
+  };
   const findMiddleAngle = (a, b) => {
     const x = Math.cos(a) + Math.cos(b);
     const y = Math.sin(a) + Math.sin(b);
@@ -5592,6 +5598,7 @@ window.grbtp = 35;
     Encoder=null;
     Decoder=null;
     packetCount=0;
+    sentWireAngle=null;
     constructor(client2) {
       this.client = client2;
       setInterval(() => {
@@ -5670,10 +5677,10 @@ window.grbtp = 35;
       this.send([ "6", message ]);
     }
     attack(angle) {
-      this.send([ "F", 1, angle ]);
+      this.send([ "F", 1, wireAngle(angle) ]);
     }
     stopAttack(angle = null) {
-      this.send([ "F", 0, angle ]);
+      this.send([ "F", 0, wireAngle(angle) ]);
     }
     resetMoveDir() {
       this.send([ "e" ]);
@@ -5704,7 +5711,12 @@ window.grbtp = 35;
       this.send([ "H", id ]);
     }
     updateAngle(radians) {
-      this.send([ "D", radians ]);
+      const angle = wireAngle(radians);
+      if (angle === this.sentWireAngle) {
+        return;
+      }
+      this.sentWireAngle = angle;
+      this.send([ "D", angle ]);
     }
     pingRequest() {
       this.client.SocketManager.startPing = performance.now();
@@ -11543,8 +11555,7 @@ window.grbtp = 35;
       const toPlayer = Math.atan2(dy, dx);
       const futurePos = enemy.pos.future;
       const actualClosing = Math.max(0, dist - myPos.distance(futurePos));
-      const angleDiff = Math.abs(enemy.move_dir - toPlayer);
-      const angleClosing = enemy.speed * Math.cos(Math.min(angleDiff, Math.PI));
+      const angleClosing = enemy.speed * Math.cos(getAngleDist(enemy.move_dir, toPlayer));
       const closing = Math.max(actualClosing, angleClosing);
       if (closing <= 0) return Infinity;
       return remaining / closing;
