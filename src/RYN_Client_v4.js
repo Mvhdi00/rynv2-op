@@ -5106,9 +5106,9 @@ window.grbtp = 35;
         ctx.textBaseline = "middle";
         ctx.lineWidth = 6;
         ctx.lineJoin = "round";
-        ctx.strokeStyle = "#1a0308";
+        ctx.strokeStyle = "#14001f";
         ctx.strokeText(label, entity.x - _off.x, entity.y - _off.y);
-        ctx.fillStyle = "#dc143c";
+        ctx.fillStyle = "#b57bff";
         ctx.fillText(label, entity.x - _off.x, entity.y - _off.y);
         ctx.restore();
       }
@@ -18283,6 +18283,7 @@ window.grbtp = 35;
     _knockbackTickTrapTimes: 0,
     _knockbackTickHammerTimes: 0,
     _knockbackTickTimes: 0,
+    _settingsRevision: 0
   };
   const settings = {
     ...defaultSettings,
@@ -18293,6 +18294,17 @@ window.grbtp = 35;
     if (!defaultSettings.hasOwnProperty(key)) {
       delete settings[key];
     }
+  }
+  /* Legit Mode used to park every real value in a backup and leave the live
+   * settings switched off. It is gone now, so a profile saved in that state
+   * comes back with everything off and nothing to turn it back on. Unknown
+   * keys were already dropped on load, but that cannot restore a value that
+   * was zeroed, so anything stored before this revision is replaced with the
+   * defaults, once. */
+  const SETTINGS_REVISION = 1;
+  if (settings._settingsRevision !== SETTINGS_REVISION) {
+    for (const key of Object.keys(defaultSettings)) settings[key] = defaultSettings[key];
+    settings._settingsRevision = SETTINGS_REVISION;
   }
   const SaveSettings = () => {
     CustomStorage.set("RYN", settings);

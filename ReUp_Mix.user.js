@@ -5100,9 +5100,9 @@ window.grbtp = 35;
         ctx.textBaseline = "middle";
         ctx.lineWidth = 6;
         ctx.lineJoin = "round";
-        ctx.strokeStyle = "#1a0308";
+        ctx.strokeStyle = "#14001f";
         ctx.strokeText(label, entity.x - _off.x, entity.y - _off.y);
-        ctx.fillStyle = "#dc143c";
+        ctx.fillStyle = "#b57bff";
         ctx.fillText(label, entity.x - _off.x, entity.y - _off.y);
         ctx.restore();
       }
@@ -18335,6 +18335,7 @@ window.grbtp = 35;
     _knockbackTickTrapTimes: 0,
     _knockbackTickHammerTimes: 0,
     _knockbackTickTimes: 0,
+    _settingsRevision: 0,
     _spikeRotation: true,
     _millRotation: true,
     _usernameCycler: false,
@@ -18351,6 +18352,17 @@ window.grbtp = 35;
     if (!defaultSettings.hasOwnProperty(key)) {
       delete settings[key];
     }
+  }
+  /* Legit Mode used to park every real value in a backup and leave the live
+   * settings switched off. It is gone now, so a profile saved in that state
+   * comes back with everything off and nothing to turn it back on. Unknown
+   * keys were already dropped on load, but that cannot restore a value that
+   * was zeroed, so anything stored before this revision is replaced with the
+   * defaults, once. */
+  const SETTINGS_REVISION = 1;
+  if (settings._settingsRevision !== SETTINGS_REVISION) {
+    for (const key of Object.keys(defaultSettings)) settings[key] = defaultSettings[key];
+    settings._settingsRevision = SETTINGS_REVISION;
   }
   const SaveSettings = () => {
     CustomStorage.set("RYN", settings);
@@ -19559,7 +19571,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-06T01:31:30.144Z",
+      "builtAt": "2026-08-06T01:43:48.212Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"

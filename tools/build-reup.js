@@ -111,9 +111,9 @@ edit(
  * the end of the object and keeps the trailing comma correct. */
 edit(
   "settings: ReUp keys",
-  `    _knockbackTickTimes: 0,
+  `    _settingsRevision: 0
   };`,
-  `    _knockbackTickTimes: 0,
+  `    _settingsRevision: 0,
     _spikeRotation: true,
     _millRotation: true,
     _usernameCycler: false,
