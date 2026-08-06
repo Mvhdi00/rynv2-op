@@ -5032,14 +5032,6 @@ window.grbtp = 35;
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager, InputHandler: InputHandler} = client;
       const isMyPlayer = entity === player;
       const pos = new Vector_default(entity.x, entity.y);
-      if (entity.isPlayer && !isMyPlayer && window._gbotPlayerIndex) {
-        if (!window._gbotPlayerIndex.has(entity.sid)) {
-          let n = 1;
-          const used = new Set(window._gbotPlayerIndex.values());
-          while (used.has(n)) n++;
-          window._gbotPlayerIndex.set(entity.sid, n);
-        }
-      }
       if (isMyPlayer) {
         const now = Date.now();
         this.step = now - this.start;
@@ -5098,27 +5090,21 @@ window.grbtp = 35;
         }
       }
       this.drawEntityHP(ctx, entity);
-      if (entity.isPlayer && !isMyPlayer && window._gbotPlayerIndex) {
-        const num = window._gbotPlayerIndex.get(entity.sid);
-        if (num !== undefined) {
-          const _off = RYN._offset;
-          const ex = entity.x - _off.x;
-          const ey = entity.y - _off.y;
-          const lbl = "" + num;
-          const isTg = window._gbotFollowID !== null && entity.sid === window._gbotFollowID;
-          ctx.save();
-          ctx.globalAlpha = 0.75;
-          ctx.font = "bold 19px Hammersmith One";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.lineWidth = 6;
-          ctx.lineJoin = "round";
-          ctx.strokeStyle = "#110022";
-          ctx.strokeText(lbl, ex, ey);
-          ctx.fillStyle = isTg ? "#00ff88" : "#cc88ff";
-          ctx.fillText(lbl, ex, ey);
-          ctx.restore();
-        }
+      if (entity.isPlayer && entity.sid !== undefined) {
+        const _off = RYN._offset;
+        const label = "" + entity.sid;
+        ctx.save();
+        ctx.globalAlpha = .85;
+        ctx.font = "bold 19px Hammersmith One";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth = 6;
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = "#1a0308";
+        ctx.strokeText(label, entity.x - _off.x, entity.y - _off.y);
+        ctx.fillStyle = "#dc143c";
+        ctx.fillText(label, entity.x - _off.x, entity.y - _off.y);
+        ctx.restore();
       }
       if (Settings_default._collisionHitbox) {
         Renderer_default.circle(ctx, entity.x, entity.y, entity.scale, "#c7fff2", .5, 1);
@@ -7928,10 +7914,6 @@ window.grbtp = 35;
     }
   }
   const TempData_default = TempData;
-  window._gbotFollowID = null;
-  window._gbotFollowCount = 0;
-  window._gbotPlayerIndex = new Map;
-  window._gbotAutoAttack = false;
   window._gbot1v1BotID = null;
   window._gbot1v1LastBuild = 0;
   window._gbot1v1WinCleanup = null;
@@ -8079,15 +8061,6 @@ window.grbtp = 35;
             S._sentGG = false;
           }
           return moveTarget || ownerPos;
-        }
-      }
-      if (window._gbotFollowID !== null && this.client.isOwner === false) {
-        const ownerClient = this.client.ownerClient;
-        const botsList = [ ...ownerClient.clients ];
-        const botIndex = botsList.indexOf(this.client);
-        if (botIndex !== -1 && botIndex < window._gbotFollowCount) {
-          const tp = ownerClient.PlayerManager.playerData.get(window._gbotFollowID);
-          if (tp && tp.pos && tp.pos.current) return tp.pos.current;
         }
       }
       return this.client.ownerClient.InputHandler.getMovePosition();
@@ -19586,7 +19559,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-06T01:19:23.356Z",
+      "builtAt": "2026-08-06T01:31:30.144Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
