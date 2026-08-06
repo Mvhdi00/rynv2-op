@@ -96,6 +96,76 @@ pads. Corrected to `1`.
 This was the only mismatch across item groups, weapons, items, hats,
 accessories, and config — see [Verification](#verification).
 
+### Login repair
+
+RYN's login was written against an older build of the game. The bundle in
+`src/game_index.js` verifies with **Cloudflare Turnstile** and connects with
+`Lt("cf:" + token)`; RYN was still solving an **altcha** proof-of-work against
+`https://api.moomoo.io/verify` and passing the result as `alt:…`.
+
+Three things were wrong, and each of them on its own stopped the client from
+getting into a game:
+
+- **The token was fetched at load and never arrived.** `const gameToken =
+  altcha.generate()` ran as the script initialised, against an endpoint the
+  current game no longer has. `startGame()` then did `await gameToken`, so it
+  threw rather than reaching its own "failed to generate" branch, and
+  `_gameInit` was never called. Even a token that did resolve was the wrong
+  kind — the server is handed `cf:` tokens.
+- **Clicking early killed the menu.** `Fi()` in the bundle latches `ei = !0` on
+  its first call and only connects when a Turnstile token already exists, so a
+  click before the widget resolves burns the one attempt and every later click
+  does nothing. RYN enables `#enterGame` at page load, well before that, which
+  made this easy to hit.
+- **Bot connections hung silently.** `createSocket` fell back to
+  `altcha.generate()`, whose rejection propagated out of the bot-creation
+  handler: no bot, no error, and a "Connecting…" row left in the menu forever.
+
+Now: `startGame()` uses the token the game already captured (via the
+`captureTurnstile` hook) or renders its own Turnstile widget, and calls
+`_gameInit("cf:" + token)` — the same call the bundle makes, with the token
+resolved first. The `#enterGame` wrapper routes through that path whenever the
+game has no token yet, so `Fi()`'s guard is never burned. The sitekey follows
+the bundle's (`1x0000…AA` on localhost, the live key otherwise), a host that
+does not require verification connects without a token exactly as `Lt()` does,
+and a bot that cannot get a token reports it and rolls the menu back. The
+altcha solver and its worker pool are gone.
+
+### Packet repair
+
+- **`pingMap` was a byte short.** It sent `["S"]`; the bundle sends
+  `O.send("S", 1)`. Now checked mechanically for every opcode — see
+  `verify-packets.js` below.
+- **The first packet after `io-init` went out unsigned.** RYN registers its
+  message listener from the `WebSocket` construct trap, so it runs *before* the
+  bundle's `onmessage` — which is what installs the connection's transport
+  state. The ping RYN sent from inside that dispatch therefore went through
+  `O.send()` with no state present, i.e. as a plain frame on a connection the
+  server expects signed frames on. It now waits a microtask.
+- **The transport mode was ignored.** The bundle only permutes opcodes and
+  signs frames when the server negotiates mode `Ht`; RYN built the tables from
+  whatever `io-init` carried. On a server that negotiated the plain transport,
+  every packet the client sent would have been scrambled.
+- **…and the client went mute on that same server.** The send path gated on
+  crypto state being present rather than on the connection being up, so with no
+  crypto to wait for it dropped everything. The gate is now "has `io-init`
+  landed"; `gameNet.send` picks the framing itself.
+- **A failed send could re-send with a stale sequence number.** If
+  `gameNet.send` threw, the owner fell through to the hand-rolled signing path,
+  which keeps its own counter — the server has already moved past it. That path
+  is now bots-only, which is the only place it was ever correct.
+- **Nobody handled `E` (removePlayer).** Players who left were never dropped
+  from `playerData`, and the "left the game" chat line hung off `R`
+  (`removeAllItems`), which the server also sends on death — so deaths were
+  reported as leaves. `E` now removes the player and carries the notice.
+- **An unknown id in a tick threw.** `updatePlayer` called `.update()` on a
+  `Map` miss, which took the whole tick — every module downstream of it — with
+  the exception. It skips instead.
+
+`_gameCrypto` itself was already right: the opcode permutation, the seed
+mixing, and the truncated HMAC are a faithful port of the bundle's, verified
+byte for byte across nine seeds and four payloads.
+
 ### Removed
 
 RYN v4 opened with this:
@@ -124,6 +194,7 @@ src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
+tools/verify-packets.js   client's opcodes + arities vs. the game bundle
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
@@ -143,6 +214,7 @@ a newer RYN will surface as a build error rather than a half-merged script.
 
 ```sh
 node tools/verify-drivers.js ReUp_Mix.user.js
+node tools/verify-packets.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
 node --check ReUp_Mix.user.js
 ```
@@ -153,6 +225,13 @@ Current state of the build:
   groups (14) and 42 scalar config keys all match `src/game_index.js`. The
   client also carries the right frame-signature width, transport mode, table
   salt, and both opcode alphabets.
+- **Packets** — all 17 c2s opcodes the client sends are in the bundle's c2s
+  alphabet and carry the same argument count as the bundle's own `O.send()`
+  call site; all 30 s2c opcodes it handles are in the s2c alphabet and routed
+  by the bundle's handler map. The six the bundle routes and the client does
+  not (`8` damage text, `9` map-ping animation, `B` disconnect, `J` AI gather
+  animation, `V` item/weapon list, `Z` restart notice) are reported as
+  informational — RYN drives its own UI and tracks its own inventory.
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
