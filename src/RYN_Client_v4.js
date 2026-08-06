@@ -1444,6 +1444,7 @@ window.grbtp = 35;
   const REPLACE_RANGE = 300;
   const REPLACE_TRIGGER = 200;
   const REACH_MARGIN = 60;
+  const RETRAP_SPIKE_MARGIN = 10;
   const SPIN_STEPS = 16;
   const PREPLACE_EPSILON = 1e-6;
   const findMiddleAngle = (a, b) => {
@@ -11610,90 +11611,116 @@ window.grbtp = 35;
   }
   const AutoPlacer_default = AutoPlacer;
   class AntiRetrap {
-      moduleName="antiRetrap";
-      client;
-      constructor(client2) {
-          this.client = client2;
-      }
-      postTick() {
-          const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-          if (ModuleHandler.moduleActive || !Settings_default._antiRetrap) {
-              return;
-          }
-          const {reloading: reloading} = ModuleHandler.staticModules;
-          const nearestTrap = EnemyManager2.nearestTrap;
-          const primary = myPlayer.getItemByType(0);
-          const isReloadedPrimary = reloading.isReloaded(0);
-          const secondary = myPlayer.getItemByType(1);
-          const isHammer = secondary === 10;
-          const isReloadedSecondary = reloading.isReloaded(1);
-          const damage = myPlayer.getBuildingDamage(10, true);
-          const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
-          const nearestEnemy = EnemyManager2.nearestEnemy;
-          if (nearestEnemy === null || nearestTrap === null || nearestTrap.health > damage || !isHammer || !isReloadedSecondary) {
-              return;
-          }
-          const range = DataHandler_default.getWeapon(primary).range + nearestEnemy.hitScale;
-          if (!myPlayer.collidingEntity(nearestEnemy, range)) {
-              return;
-          }
-          const pos1 = myPlayer.pos.current;
-          const pos2 = nearestEnemy.pos.current;
-          const angle = pos1.angle(pos2);
-          if (isReloadedPrimary) {
-              ModuleHandler.moduleActive = true;
-              ModuleHandler.forceWeapon = 0;
-              ModuleHandler.useAngle = angle;
-              ModuleHandler.shouldAttack = true;
-              if (turretReloaded) {
-                  ModuleHandler.forceHat = 53;
-              }
-          }
-      }
-  }
-  class NormalInstakill {
-    constructor(client) {
-      this.client = client;
-      this.targetEnemy = null;
+    moduleName="antiRetrap";
+    client;
+    _phase=0;
+    _trapID=null;
+    constructor(client2) {
+      this.client = client2;
     }
     reset() {
-      this.targetEnemy = null;
+      this._phase = 0;
+      this._trapID = null;
+    }
+    /* Anything of theirs in reach that hurts on contact. While you are held you
+     * cannot step off it, so it decides the hat. */
+    _spikeThreat(myPlayer) {
+      const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
+      const position = myPlayer.pos.current;
+      let found = false;
+      ObjectManager2.grid2D.query(position.x, position.y, 2, id => {
+        if (found) {
+          return;
+        }
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0 || !(object instanceof PlayerObject) || object.getDamage() <= 0) {
+          return;
+        }
+        try {
+          if (!PlayerManager2.isEnemyByID(object.ownerID, myPlayer)) {
+            return;
+          }
+        } catch (e) {
+          return;
+        }
+        if (position.distance(object.pos.current) <= myPlayer.scale + object.collisionScale + RETRAP_SPIKE_MARGIN) {
+          found = true;
+        }
+      });
+      return found;
     }
     postTick() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager, _ModuleHandler: _ModuleHandler} = this.client;
-      if (!myPlayer || !EnemyManager || ModuleHandler.moduleActive) return;
-      const instaActive = window._instaKillActive || false;
-      if (!instaActive) {
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler} = this.client;
+      if (!Settings_default._antiRetrap || !myPlayer || !myPlayer.inGame) {
         this.reset();
         return;
       }
-      let target = this.targetEnemy || EnemyManager.nearestEnemy;
-      if (!target) return;
-      const myPos = myPlayer.pos.current;
-      const targetPos = target.pos.current;
-      const angle = myPos.angle(targetPos);
-      const distance = myPos.distance(targetPos);
-      const primaryID = myPlayer.getItemByType(0);
-      let range = 80;
-      try {
-        if (primaryID !== null && primaryID !== undefined) {
-          const weapon = gameCatalog.getWeapon(primaryID);
-          if (weapon && weapon.range) {
-            range = weapon.range + (target.hitScale || 0);
+      const trap = myPlayer.trappedIn;
+      if (trap === null || trap === void 0) {
+        this.reset();
+        return;
+      }
+      if (this._trapID !== null && this._trapID !== trap.id) {
+        this.reset();
+      }
+      const {reloading: reloading} = ModuleHandler.staticModules;
+      const secondary = myPlayer.getItemByType(1);
+      const primary = myPlayer.getItemByType(0);
+      const isHammer = secondary === 10;
+      const toTrap = myPlayer.pos.current.angle(trap.pos.current);
+      const hasTank = ModuleHandler.hasStoreItem(0, 40);
+
+      /* Second tick: the trap, with everything the hammer can carry. */
+      if (this._phase === 1) {
+        this.reset();
+        if (isHammer && reloading.isReloaded(1)) {
+          ModuleHandler.moduleActive = true;
+          ModuleHandler.forceWeapon = 1;
+          ModuleHandler.useAngle = toTrap;
+          ModuleHandler.shouldAttack = true;
+          if (hasTank) {
+            ModuleHandler.forceHat = 40;
           }
+          return;
         }
-      } catch (_) {}
-      _ModuleHandler._currentAngle = angle;
-      if (_ModuleHandler.mouse) _ModuleHandler.mouse.sentAngle = angle;
-      if (distance <= range + 50) {
-        _ModuleHandler.startMovement(null);
-        _ModuleHandler.useAngle = angle;
-        _ModuleHandler.forceWeapon = 0;
-        _ModuleHandler.shouldAttack = true;
-        this.targetEnemy = target;
-      } else {
-        _ModuleHandler.startMovement(angle, true);
-        _ModuleHandler.shouldAttack = false;
+      }
+
+      const enemy = EnemyManager2.nearestEnemy;
+      const breakDamage = myPlayer.getBuildingDamage(isHammer ? secondary : primary, hasTank);
+      const canFinish = isHammer && breakDamage > 0 && trap.health <= breakDamage;
+
+      /* First tick: push them out of retrap range, and only if there is
+       * someone there to push and a hammer ready to follow it. */
+      if (canFinish && enemy !== null && !enemy.isTrapped && primary !== null && reloading.isReloaded(0) && reloading.isReloaded(1)) {
+        const range = DataHandler_default.getWeapon(primary).range + enemy.hitScale;
+        if (myPlayer.collidingEntity(enemy, range)) {
+          this._phase = 1;
+          this._trapID = trap.id;
+          ModuleHandler.moduleActive = true;
+          ModuleHandler.forceWeapon = 0;
+          ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
+          ModuleHandler.shouldAttack = true;
+          if (ModuleHandler.hasStoreItem(0, 20)) {
+            ModuleHandler.forceHat = 20;
+          }
+          return;
+        }
+      }
+
+      /* Otherwise keep taking the trap down. Soldier over Tank while a spike
+       * can reach you: slower out, a quarter less taken while you cannot move. */
+      const type = isHammer ? 1 : 0;
+      if (!reloading.isReloaded(type)) {
+        return;
+      }
+      ModuleHandler.moduleActive = true;
+      ModuleHandler.forceWeapon = type;
+      ModuleHandler.useAngle = toTrap;
+      ModuleHandler.shouldAttack = true;
+      if (this._spikeThreat(myPlayer) && ModuleHandler.hasStoreItem(0, 6)) {
+        ModuleHandler.forceHat = 6;
+      } else if (hasTank) {
+        ModuleHandler.forceHat = 40;
       }
     }
   }
@@ -16092,7 +16119,7 @@ window.grbtp = 35;
         safeWalk: new SafeWalk(client2)
       };
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.movement ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.shameSpam, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.spikeTick, this.staticModules.knockbackTickTrap, this.staticModules.knockbackTickHammer, this.staticModules.kbTickHammerV2, this.staticModules.knockbackTick, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.chatLog, this.staticModules.autoPlay, this.staticModules.prePlacer, this.staticModules.replacer, this.staticModules.autoPlacer, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.shameSpam, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.spikeTick, this.staticModules.knockbackTickTrap, this.staticModules.knockbackTickHammer, this.staticModules.kbTickHammerV2, this.staticModules.knockbackTick, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.antiRetrap, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.autoPush, this.staticModules.chatLog, this.staticModules.autoPlay, this.staticModules.prePlacer, this.staticModules.replacer, this.staticModules.autoPlacer, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule ];
       this.reset();
     }
     movementReset() {
