@@ -113,6 +113,114 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+---
+
+## Legacy clients (`clients/`)
+
+Six older moomoo clients are kept here, each in two versions: the script as it
+was written in `clients/original/`, and a version fixed against the current game
+in `clients/`. Install the ones in `clients/`.
+
+None of them could connect as shipped. They were all written against the old
+transport — plain `msgpack([type, args])` frames, string packet names in both
+directions, and a `WebSocket.prototype.send` patch installed after page load.
+Every one of those three assumptions is now wrong.
+
+| | fixed |
+|---|---|
+| `aurora_v5.5.user.js` | Aurora Client v5.5 |
+| `chocolate_illusion.user.js` | 18k chocolate mod / illusion mode |
+| `porshe_client_v1.user.js` | Porshe Client v1 |
+| `project_aurora_v2.2.user.js` | project aurora v2.2 |
+| `project_zelta_reborn.user.js` | Project Zelta Reborn |
+| `robotics_blood_v1.user.js` | Robotics Blood v1 |
+
+### What was wrong
+
+**Entry.** The bundle takes its own copy of `WebSocket.prototype.send` while it
+evaluates and sends through that copy (`saved.call(socket, frame)`). A patch
+installed at `document-idle` — which is when a userscript runs by default — is
+therefore never called for a single game packet, no matter that it is sitting on
+the prototype. It also freezes `window.WebSocket` with a non-configurable
+`defineProperty`, so a client reassigning it later gets a silent no-op or, under
+strict mode, a throw that takes the rest of the script with it.
+
+**Packets.** `io-init` now carries `[socketId, seed, keyHex, mode]`. In mode 1
+the client permutes the c2s/s2c name alphabets from `seed`, and every frame it
+sends is `msgpack([opcode, args, seq])` behind 6 bytes of HMAC-SHA256 over that
+payload. Frames from the server arrive with numeric opcodes. So each of these
+clients was decoding a signed frame as if it were bare msgpack, re-encoding it
+unsigned and unsequenced, and looking up numeric packet types in a table keyed
+by letters.
+
+**Requires.** Four of them `@require` msgpack from `rawgit.com`, which shut down
+in 2019 and serves nothing. Two more inject the same dead URL as a `<script>` at
+runtime. That is why `msgpack` was undefined in scripts that never declared it.
+
+### The fix
+
+`src/moo-transport.js` is spliced into each client ahead of its own code and
+runs at `document-start`, before the bundle evaluates. It carries the negotiated
+opcode tables, the SHA-256/HMAC signature, and its own msgpack, and it presents
+the *old* protocol to everything above it:
+
+```
+bundle  --[signed frame]--> shim --[msgpack([name,args])]--> client hook
+client hook --[msgpack([name,args])]--> shim --[signed frame]--> network
+network --[numeric opcode]--> shim --[msgpack([name,args])]--> client listeners
+```
+
+So the clients' own packet code is untouched — including their packet-name
+aliasing layers, their bot sockets, and the packets they choose to drop. Frames
+are renumbered from the shim's own counter, so a dropped packet does not leave a
+hole in the sequence the server sees, and the first packet on a connection is
+still `seq` 1.
+
+Around that:
+
+- the client body is deferred to `DOMContentLoaded`, which is where it used to
+  run, so moving the script to `document-start` changes nothing else about it;
+- `window.WebSocket` is installed as a non-configurable accessor, so the
+  bundle's own lockdown fails inside its `try/catch` instead of freezing the
+  constructor out from under the client;
+- the game socket is identified by endpoint, not by creation order, so a chat
+  relay opened before the user hits play cannot take its place;
+- dead rawgit URLs are repointed at cdnjs, and a client with no working msgpack
+  at all gets the shim's;
+- the bundle's `setInterval(… debugger …)` loop and its "disable your extension"
+  banner are dropped.
+
+A client that owns its socket instead of hooking the bundle's — the chocolate
+mod is a fork of the old bundle — marks it with `__mooTransport.legacy(socket)`
+so it keeps receiving legacy frames too. Servers that negotiate mode 0 (private
+servers) keep the plain framing untouched.
+
+### Rebuilding them
+
+```sh
+node tools/patch-clients.js     # clients/original/*.user.js -> clients/*.user.js
+node tools/verify-clients.js
+node tools/test-transport.js
+```
+
+`patch-clients.js` anchors every edit to an exact string and fails the build if
+an anchor is missing or ambiguous, so nothing is ever half-patched.
+`verify-clients.js` re-checks each output: it parses, it runs at
+`document-start`, the shim is present and installs before the client touches
+`WebSocket.prototype`, no rawgit URL survives, and the client's own body is
+carried over byte for byte apart from the declared edits.
+
+`test-transport.js` is the one that matters. It lifts SHA-256, the truncated
+HMAC and the seeded table builder straight out of `src/game_index.js` and
+compares them against the shim's (500 random seeds for the tables, block-boundary
+lengths for the hash), round-trips the shim's msgpack against the bundle's own
+codec in both directions, and then drives the whole path end to end against a
+transcription of the bundle's `io.send` — checking that what reaches the wire
+verifies under the connection key, maps back to the right packet name, keeps its
+arguments, and stays consecutively numbered when the client drops a packet.
+
+---
+
 ## Layout
 
 ```
@@ -122,10 +230,16 @@ src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
+src/moo-transport.js      transport shim spliced into the legacy clients
+clients/*.user.js         the fixed legacy clients — these are the ones to install
+clients/original/         the same clients as they were written (input)
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/patch-clients.js    clients/original -> clients, with the transport shim
+tools/verify-clients.js   patched clients vs. their sources
+tools/test-transport.js   the shim vs. the game bundle, primitives and end to end
 ```
 
 ## Build
