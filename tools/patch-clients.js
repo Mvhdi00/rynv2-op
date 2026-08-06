@@ -41,6 +41,9 @@ const outDir = path.join(root, "clients");
 
 const DEAD_MSGPACK = "https://rawgit.com/kawanet/msgpack-lite/master/dist/msgpack.min.js";
 const LIVE_MSGPACK = "https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js";
+const JQUERY = "https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js";
+// `$(...)`, but not `.$(`, `"$("`, or `$` inside a template placeholder
+const USES_JQUERY = /(^|[^A-Za-z0-9_$."'`])\$\(/;
 
 // output names carry each script's own @version instead of the .user suffix
 const CLIENTS = [
@@ -48,6 +51,9 @@ const CLIENTS = [
     {
         file: "chocolate_illusion.user.js",
         out: "chocolate_illusion_2023-12-07.js",
+        // a fork of the old bundle: it opens and reads the socket itself rather
+        // than hooking WebSocket.prototype.send the way the others do
+        fork: true,
         edits: [
             {
                 what: "mark the fork's own socket as client-owned",
@@ -81,6 +87,16 @@ const CLIENTS = [
             {
                 what: "removed the password gate and its check",
                 cut: ["(function(_0x352b46,_0xf87036){", "setTimeout(showPasswordPrompt,0x4b0);"],
+            },
+            {
+                // toggleDay_NightMode() writes to a `nightMode` that is declared
+                // nowhere in the script, and window.toggleNight() calls it during
+                // load, so the ReferenceError took out everything defined after
+                // it. There is no such element and no night1/night2 keyframes
+                // either, so this only has to be somewhere for the writes to land.
+                what: "declared the undeclared nightMode the night toggle writes to",
+                from: "        let nightState = 1;\n        let nightStateTime = Date.now();",
+                to: '        let nightState = 1;\n        let nightStateTime = Date.now();\n        let nightMode = document.getElementById("nightMode") || document.createElement("div");',
             },
         ],
     },
@@ -179,10 +195,29 @@ function splitMetadata(text, file) {
     };
 }
 
+/**
+ * The old bundle published its data tables on `window`; the current one is a
+ * module and publishes nothing. Clients that carry their own tables are
+ * unaffected, but the ones that read `window.config` off the page find undefined
+ * and die on the first property they touch. This hands them the real thing,
+ * extracted from the shipped bundle into drivers/game-drivers.json, and only
+ * when the page has not already provided it.
+ */
+function gameGlobals() {
+    const drivers = JSON.parse(fs.readFileSync(path.join(root, "drivers/game-drivers.json"), "utf8"));
+    return [
+        "(function () {",
+        '    if (typeof window === "undefined" || window.config)',
+        "        return;",
+        "    window.config = " + JSON.stringify(drivers.config, null, 4).split("\n").join("\n    ") + ";",
+        "})();",
+    ].join("\n");
+}
+
 /** the shim plus the boot wrapper, with every comment of ours removed */
 function injected() {
     const shim = fs.readFileSync(path.join(root, "src/moo-transport.js"), "utf8");
-    return stripComments(shim).trim();
+    return stripComments(shim).trim() + "\n\n" + gameGlobals();
 }
 
 function build(client) {
@@ -201,6 +236,13 @@ function build(client) {
         meta = meta.split(DEAD_MSGPACK).join(LIVE_MSGPACK);
         body = body.split(DEAD_MSGPACK).join(LIVE_MSGPACK);
         notes.push("repointed " + deadCount + " dead rawgit msgpack URL" + (deadCount > 1 ? "s" : ""));
+    }
+    // The old moomoo page shipped jQuery, so several of these use `$` without
+    // ever declaring it. The current page does not, and the first `$(...)` at
+    // top level takes the whole client down with it.
+    if (USES_JQUERY.test(body) && !/@require[^\n]*jquery/i.test(meta)) {
+        meta = meta.replace("// ==/UserScript==", "// @require      " + JQUERY + "\n// ==/UserScript==");
+        notes.push("added the jQuery @require the script assumed the page provided");
     }
     if (!/@run-at/.test(meta)) {
         meta = meta.replace("// ==/UserScript==", "// @run-at       document-start\n// ==/UserScript==");
@@ -229,7 +271,7 @@ function build(client) {
     return { text: preamble + meta + head + body.replace(/\s*$/, "\n") + tail, notes };
 }
 
-module.exports = { CLIENTS, build, splitMetadata, applyEdits, srcDir, outDir, DEAD_MSGPACK, LIVE_MSGPACK };
+module.exports = { CLIENTS, build, splitMetadata, applyEdits, srcDir, outDir, DEAD_MSGPACK, LIVE_MSGPACK, USES_JQUERY };
 
 if (require.main === module) {
     for (const client of CLIENTS) {

@@ -9,7 +9,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-const { CLIENTS, build, splitMetadata, applyEdits, srcDir, outDir, DEAD_MSGPACK, LIVE_MSGPACK } = require("./patch-clients");
+const { CLIENTS, build, splitMetadata, applyEdits, srcDir, outDir, DEAD_MSGPACK, LIVE_MSGPACK, USES_JQUERY } = require("./patch-clients");
 
 let failures = 0;
 function ok(file, name, cond, extra) {
@@ -78,6 +78,10 @@ for (const client of CLIENTS) {
     // anything the client was supposed to lose is actually gone, references included
     for (const name of client.absent || [])
         ok(file, "removed " + name, !out.includes(name), "still referenced");
+
+    // the two things the old page provided and the current one does not
+    ok(file, "jQuery is required when used", !USES_JQUERY.test(bodySrc) || /@require[^\n]*jquery/i.test(meta));
+    ok(file, "window.config is provided", out.includes("window.config = {"));
 
     // whatever msgpack the client reaches for now resolves
     const usesMsgpack = /\bmsgpack\s*\.\s*(en|de)code/.test(bodySrc);

@@ -842,10 +842,15 @@
         return nativeSetInterval.apply(this, arguments);
     }
     ;
-    var dropBanner = function () {
-        var el = document.getElementById("userscript-warning");
-        if (el)
-            el.remove();
+    // Watch only for the banner being inserted. Looking it up on every mutation
+    // batch would mean a document-wide id lookup on every frame the game draws.
+    var dropBanner = function (records) {
+        for (var i = 0; i < records.length; i++) {
+            var added = records[i].addedNodes;
+            for (var j = 0; j < added.length; j++)
+                if (added[j].id === "userscript-warning" && added[j].remove)
+                    added[j].remove();
+        }
     };
     if (typeof MutationObserver === "function" && document.documentElement)
         new MutationObserver(dropBanner).observe(document.documentElement, {

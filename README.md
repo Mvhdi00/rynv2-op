@@ -202,6 +202,32 @@ mod is a fork of the old bundle — marks it with `__mooTransport.legacy(socket)
 so it keeps receiving legacy frames too. Servers that negotiate mode 0 (private
 servers) keep the plain framing untouched.
 
+### What the page used to provide
+
+Fixing the transport got the packets right and still left these clients dead,
+because the old bundle also published things on `window` that the current one,
+being a module, publishes nothing of. A client that reads them finds `undefined`
+and throws — and the throw happens above its own `WebSocket.prototype.send`
+patch, so the hook never installs and the client is inert.
+
+- **`window.config`.** Porshe and Zelta read the game's config off the page and
+  write to it (`config.clientSendRate = …`) on their first line of work. The
+  build now emits the real config, extracted from the shipped bundle into
+  `drivers/game-drivers.json`, and only when the page has not provided one — a
+  client that carries its own overwrites it as before.
+- **jQuery.** Four of them call `$(…)` without ever requiring it, because
+  moomoo used to ship jQuery on the page. project aurora's first `$(…)` is at
+  the top level of its main script, so it took the whole client down. They now
+  `@require` jQuery from cdnjs.
+
+### A bug of its own
+
+project aurora v2.2's `toggleDay_NightMode()` writes to a `nightMode` that is
+declared nowhere in the script, and `window.toggleNight()` calls it during load.
+The ReferenceError took out everything defined after it. There is no such
+element and no `night1`/`night2` keyframes either, so the fix only has to give
+the writes somewhere to land.
+
 ### Gates removed from project aurora v2.2
 
 Three full-screen overlays sat in front of that client before it would let you
@@ -225,6 +251,7 @@ own check, which is what actually gets you into a server.
 node tools/patch-clients.js     # clients/original -> clients/<name>_<version>.js
 node tools/verify-clients.js
 node tools/test-transport.js
+npm i --no-save jsdom && node tools/test-client-runtime.js
 ```
 
 `patch-clients.js` anchors every edit to an exact string and fails the build if
@@ -240,7 +267,26 @@ lines of real code sitting inside the header. Those lines are moved into the bod
 along with everything else, rather than being stranded above the shim where
 `document-start` would run them against a page that does not exist yet.
 
-`test-transport.js` is the one that matters. It lifts SHA-256, the truncated
+`test-client-runtime.js` is the one that matters. It loads each patched client
+into a jsdom page laid out like the real one — harness stubs and the client in
+`<head>` (which is what `document-start` gets you), the game's UI elements in
+`<body>`, and a transcription of the bundle's `io` object at the end of the body,
+so it captures `window.WebSocket` and `WebSocket.prototype.send` exactly where
+the real bundle does. Then it connects, negotiates `io-init`, and sends through
+`io.send` the way pressing play does.
+
+What it asserts is that the client is genuinely *in* the chain, not merely
+loaded: five of the six rewrite the spawn packet on its way past (`moofoll`
+comes out `true`), two of them drop packets their rules say to drop, and every
+frame that reaches the socket still verifies under the connection key, carries
+the right name, and stays consecutively numbered. It also catches the client
+opening a relay socket of its own before the game connects — porshe and zelta
+both do, which is why the shim picks the game socket by endpoint rather than by
+creation order.
+
+It needs jsdom, which is not vendored: `npm i --no-save jsdom`.
+
+`test-transport.js` is the one that pins the protocol. It lifts SHA-256, the truncated
 HMAC and the seeded table builder straight out of `src/game_index.js` and
 compares them against the shim's (500 random seeds for the tables, block-boundary
 lengths for the hash), round-trips the shim's msgpack against the bundle's own
@@ -272,6 +318,7 @@ tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/patch-clients.js    clients/original -> clients, with the transport shim
 tools/verify-clients.js   patched clients vs. their sources
 tools/test-transport.js   the shim vs. the game bundle, primitives and end to end
+tools/test-client-runtime.js  each patched client, driven in a jsdom page
 tools/strip-comments.js   comment stripper for the code spliced into the clients
 ```
 
