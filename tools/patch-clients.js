@@ -60,7 +60,30 @@ const CLIENTS = [
         ],
     },
     { file: "porshe_client_v1.user.js", out: "porshe_client_v1.js" },
-    { file: "project_aurora_v2.2.user.js", out: "project_aurora_v2.2.js" },
+    {
+        file: "project_aurora_v2.2.user.js",
+        out: "project_aurora_v2.2.js",
+        // Three full-screen overlays sat in front of this client, none of which
+        // did anything: a splash you had to press Enter to clear, a nickname box
+        // that only echoed the name back, and an obfuscated password gate whose
+        // answer was hardcoded in the same file. Nothing downstream reads any of
+        // them, so all three come out whole.
+        absent: ["showPasswordPrompt", "showNicknamePrompt", "_0x4934", "_0x49fa", "keyHandler"],
+        edits: [
+            {
+                what: "removed the press-Enter splash overlay",
+                cut: ['(function () {\n    // create audio', '    document.addEventListener("keydown", keyHandler);\n})();'],
+            },
+            {
+                what: "removed the nickname prompt",
+                cut: ["function showNicknamePrompt() {", "setTimeout(showNicknamePrompt, 1200);"],
+            },
+            {
+                what: "removed the password gate and its check",
+                cut: ["(function(_0x352b46,_0xf87036){", "setTimeout(showPasswordPrompt,0x4b0);"],
+            },
+        ],
+    },
     { file: "project_zelta_reborn.user.js", out: "project_zelta_reborn_v0.1.js" },
     { file: "robotics_blood_v1.user.js", out: "robotics_blood_v1.0.js" },
 ];
@@ -69,12 +92,47 @@ function fail(file, msg) {
     throw new Error(file + ": " + msg);
 }
 
+/** locates an anchor, matching it against either line ending */
+function findAnchor(text, anchor, from) {
+    let at = text.indexOf(anchor, from);
+    let used = anchor;
+    if (at === -1 && anchor.includes("\n")) {
+        used = anchor.split("\n").join("\r\n");
+        at = text.indexOf(used, from);
+    }
+    return { at, length: used.length };
+}
+
 function replaceOnce(text, from, to, label, file) {
-    const first = text.indexOf(from);
-    if (first === -1) fail(file, 'anchor not found for "' + label + '": ' + from.slice(0, 60));
-    if (text.indexOf(from, first + from.length) !== -1)
+    const first = findAnchor(text, from, 0);
+    if (first.at === -1) fail(file, 'anchor not found for "' + label + '": ' + from.slice(0, 60));
+    if (findAnchor(text, from, first.at + first.length).at !== -1)
         fail(file, 'anchor is ambiguous for "' + label + '": ' + from.slice(0, 60));
-    return text.slice(0, first) + to + text.slice(first + from.length);
+    return text.slice(0, first.at) + to + text.slice(first.at + first.length);
+}
+
+/** deletes everything from the start anchor through the end anchor, inclusive */
+function cutOnce(text, from, to, label, file) {
+    const start = findAnchor(text, from, 0);
+    if (start.at === -1) fail(file, 'cut start not found for "' + label + '": ' + from.slice(0, 60));
+    if (findAnchor(text, from, start.at + start.length).at !== -1)
+        fail(file, 'cut start is ambiguous for "' + label + '": ' + from.slice(0, 60));
+    const end = findAnchor(text, to, start.at + start.length);
+    if (end.at === -1) fail(file, 'cut end not found for "' + label + '": ' + to.slice(0, 60));
+    if (findAnchor(text, to, end.at + end.length).at !== -1)
+        fail(file, 'cut end is ambiguous for "' + label + '": ' + to.slice(0, 60));
+    const head = text.slice(0, start.at).replace(/[ \t]*$/, "");
+    const tail = text.slice(end.at + end.length).replace(/^[ \t]*(\r?\n)+/, "$1");
+    return head + tail;
+}
+
+function applyEdits(body, client, file) {
+    for (const edit of client.edits || []) {
+        body = edit.cut
+            ? cutOnce(body, edit.cut[0], edit.cut[1], edit.what, file)
+            : replaceOnce(body, edit.from, edit.to, edit.what, file);
+    }
+    return body;
 }
 
 /**
@@ -152,10 +210,8 @@ function build(client) {
         notes.push("forced @run-at document-start");
     }
 
-    for (const edit of client.edits || []) {
-        body = replaceOnce(body, edit.from, edit.to, edit.what, file);
-        notes.push(edit.what);
-    }
+    body = applyEdits(body, client, file);
+    for (const edit of client.edits || []) notes.push(edit.what);
 
     const head = "\n" + injected() + "\n\n(function () {\n    var __clientMain = function () {\n\n";
     const tail = [
@@ -173,7 +229,7 @@ function build(client) {
     return { text: preamble + meta + head + body.replace(/\s*$/, "\n") + tail, notes };
 }
 
-module.exports = { CLIENTS, build, splitMetadata, srcDir, outDir, DEAD_MSGPACK, LIVE_MSGPACK };
+module.exports = { CLIENTS, build, splitMetadata, applyEdits, srcDir, outDir, DEAD_MSGPACK, LIVE_MSGPACK };
 
 if (require.main === module) {
     for (const client of CLIENTS) {

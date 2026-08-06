@@ -202,6 +202,23 @@ mod is a fork of the old bundle — marks it with `__mooTransport.legacy(socket)
 so it keeps receiving legacy frames too. Servers that negotiate mode 0 (private
 servers) keep the plain framing untouched.
 
+### Gates removed from project aurora v2.2
+
+Three full-screen overlays sat in front of that client before it would let you
+near the game, and none of them did anything:
+
+- a splash you had to press Enter to clear, with a sound and falling snow;
+- a nickname box that echoed the name back in a welcome message and threw it
+  away — nothing downstream ever reads it;
+- an obfuscated password gate whose answer, `worldisyours.`, was sitting in the
+  same file as a rotated string-array constant, and which on success only faded
+  its own overlay out.
+
+All three are cut out whole, along with the obfuscation helpers that existed to
+hide the password. `verify-clients.js` checks that no reference to any of them
+survives. The client's altcha handling is untouched — that one clears the game's
+own check, which is what actually gets you into a server.
+
 ### Rebuilding them
 
 ```sh

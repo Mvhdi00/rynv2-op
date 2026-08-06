@@ -9,7 +9,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-const { CLIENTS, build, splitMetadata, srcDir, outDir, DEAD_MSGPACK, LIVE_MSGPACK } = require("./patch-clients");
+const { CLIENTS, build, splitMetadata, applyEdits, srcDir, outDir, DEAD_MSGPACK, LIVE_MSGPACK } = require("./patch-clients");
 
 let failures = 0;
 function ok(file, name, cond, extra) {
@@ -67,13 +67,17 @@ for (const client of CLIENTS) {
     // the client's own code is carried over untouched apart from declared edits
     let bodySrc = splitMetadata(src, client.file).body;
     bodySrc = bodySrc.split(DEAD_MSGPACK).join(LIVE_MSGPACK);
-    for (const edit of client.edits || []) bodySrc = bodySrc.replace(edit.from, edit.to);
+    bodySrc = applyEdits(bodySrc, client, client.file);
     ok(file, "client body preserved", out.includes(bodySrc.replace(/\s*$/, "")), "body was altered beyond the declared edits");
 
     // nothing of ours was added above the client's own code
     const added = out.slice(0, out.indexOf(bodySrc.slice(0, 200)));
     const addedAfterMeta = added.slice(added.indexOf("// ==/UserScript==") + "// ==/UserScript==".length);
     ok(file, "no comments added above the client body", !/\/\*|\/\//.test(addedAfterMeta), "spliced code still carries comments");
+
+    // anything the client was supposed to lose is actually gone, references included
+    for (const name of client.absent || [])
+        ok(file, "removed " + name, !out.includes(name), "still referenced");
 
     // whatever msgpack the client reaches for now resolves
     const usesMsgpack = /\bmsgpack\s*\.\s*(en|de)code/.test(bodySrc);
