@@ -111,9 +111,9 @@ edit(
  * the end of the object and keeps the trailing comma correct. */
 edit(
   "settings: ReUp keys",
-  `    _knockbackTickTimes: 0,
+  `    _legitModeBackup: null
   };`,
-  `    _knockbackTickTimes: 0,
+  `    _legitModeBackup: null,
     _spikeRotation: true,
     _millRotation: true,
     _usernameCycler: false,
@@ -153,9 +153,14 @@ edit(
     }`
 );
 
-/* Legit Mode used to flip every boolean setting off, so the ported toggles had
- * to be listed as exclusions. The mode is gone from the client, and its
- * exclusion set with it, so there is nothing left to opt out of. */
+/* Legit Mode flips every boolean setting off. The ported toggles are cosmetic
+ * (rotation) or naming (cycler), so they sit alongside the other exclusions
+ * rather than being reset along with the combat automation. */
+edit(
+  "settings: keep ReUp toggles out of Legit Mode",
+  `"_autoRandomBotNames" ]);`,
+  `"_autoRandomBotNames", "_spikeRotation", "_millRotation", "_usernameCycler" ]);`
+);
 
 /* ------------------------------------------------------------------ *
  * 6. Object spin hook (Luna: "spike rotation" / "mill rotation")
