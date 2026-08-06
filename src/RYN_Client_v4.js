@@ -5096,22 +5096,30 @@ window.grbtp = 35;
         }
       }
       this.drawEntityHP(ctx, entity);
-      if (entity.isPlayer && entity.sid !== undefined) {
+      /* _render is prepended straight into the game's render loop by the
+       * renderEntity hook, with nothing catching for it, so anything thrown in
+       * here takes the whole frame down and the game stops dead. Everything
+       * this draws is decoration, so it is never worth a frame. */
+      try {
         const _off = RYN._offset;
-        const label = "" + entity.sid;
-        ctx.save();
-        ctx.globalAlpha = .85;
-        ctx.font = "bold 19px Hammersmith One";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.lineWidth = 6;
-        ctx.lineJoin = "round";
-        ctx.strokeStyle = "#14001f";
-        ctx.strokeText(label, entity.x - _off.x, entity.y - _off.y);
-        ctx.fillStyle = "#b57bff";
-        ctx.fillText(label, entity.x - _off.x, entity.y - _off.y);
-        ctx.restore();
-      }
+        if (entity.isPlayer && entity.sid !== undefined && _off) {
+          const label = "" + entity.sid;
+          const lx = entity.x - _off.x;
+          const ly = entity.y - _off.y;
+          ctx.save();
+          ctx.globalAlpha = .85;
+          ctx.font = "bold 19px Hammersmith One";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.lineWidth = 6;
+          ctx.lineJoin = "round";
+          ctx.strokeStyle = "#14001f";
+          ctx.strokeText(label, lx, ly);
+          ctx.fillStyle = "#b57bff";
+          ctx.fillText(label, lx, ly);
+          ctx.restore();
+        }
+      } catch (_) {}
       if (Settings_default._collisionHitbox) {
         Renderer_default.circle(ctx, entity.x, entity.y, entity.scale, "#c7fff2", .5, 1);
       }
