@@ -211,34 +211,6 @@ window.grbtp = 35;
       reject(e);
     }
   });
-  const ENTRY_TOKEN_LIFETIME = 24e4;
-  const ENTRY_TOKEN_GIVEUP = 20;
-  let entryTokenTimer = null;
-  let entryTokenFailures = 0;
-  const keepEntryTokenFresh = () => {
-    if (entryTokenTimer !== null) {
-      return;
-    }
-    const attempt = async () => {
-      try {
-        const token = await generateTurnstileToken();
-        entryTokenFailures = 0;
-        if (typeof window.onGotTurnstileToken === "function") {
-          window.onGotTurnstileToken(token);
-        }
-        entryTokenTimer = setTimeout(attempt, ENTRY_TOKEN_LIFETIME);
-      } catch (e) {
-        entryTokenFailures++;
-        if (entryTokenFailures >= ENTRY_TOKEN_GIVEUP) {
-          entryTokenTimer = null;
-          return;
-        }
-        const waitingForApi = !window.turnstile || typeof window.turnstile.render !== "function";
-        entryTokenTimer = setTimeout(attempt, waitingForApi ? 1200 : 5e3);
-      }
-    };
-    entryTokenTimer = setTimeout(attempt, 0);
-  };
   const createSocket = async href => {
     let url = href;
     if (/moomoo/.test(href)) {
@@ -18518,7 +18490,6 @@ window.grbtp = 35;
       });
     }
     formatMainMenu() {
-      keepEntryTokenFresh();
       const {setupCard: setupCard, serverBrowser: serverBrowser, settingRadio: settingRadio, altServer: altServer, gameUI: gameUI} = this.getElements();
       setupCard.appendChild(serverBrowser);
       this.openServerList(serverBrowser);
@@ -19639,7 +19610,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-06T03:06:50.096Z",
+      "builtAt": "2026-08-06T02:43:38.800Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
