@@ -158,8 +158,8 @@ edit(
  * rather than being reset along with the combat automation. */
 edit(
   "settings: keep ReUp toggles out of Legit Mode",
-  `"_botAttackStagger" ]);`,
-  `"_botAttackStagger", "_spikeRotation", "_millRotation", "_usernameCycler" ]);`
+  `"_autoRandomBotNames" ]);`,
+  `"_autoRandomBotNames", "_spikeRotation", "_millRotation", "_usernameCycler" ]);`
 );
 
 /* ------------------------------------------------------------------ *
