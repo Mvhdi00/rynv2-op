@@ -5145,15 +5145,6 @@ window.grbtp = 35;
           Renderer_default.circle(ctx, entity.x, entity.y, bowInsta.distMax, "#eda0ee", .4, 1);
         }
       }
-      const {target: velTickTarget, minKB: minKB, maxKB: maxKB} = ModuleHandler.staticModules.velocityTick;
-      if (entity.isPlayer && velTickTarget !== null && entity.sid === velTickTarget.id) {
-        const diff = Math.abs(maxKB - minKB);
-        const length = minKB + (maxKB - minKB) / 2;
-        const angle = getAngle(entity.x, entity.y, player.x, player.y);
-        const posX = entity.x + Math.cos(angle) * length;
-        const posY = entity.y + Math.sin(angle) * length;
-        Renderer_default.circle(ctx, posX, posY, diff, "#e25176", .5, 1);
-      }
     }
   };
   const EntityRenderer_default = EntityRenderer;
@@ -16198,6 +16189,48 @@ window.grbtp = 35;
 }
 #serverSelect option, #setupCard select option { background: #1c1630 !important; color: #fff !important; }
 
+/* ── SERVER LIST ── */
+#serverBrowser { width: 100% !important; }
+#setupCard select[size]:not([size="1"]) {
+    height: auto !important;
+    max-height: 186px !important;
+    overflow-y: auto !important;
+    padding: 8px !important;
+    text-align: left !important;
+    text-align-last: left !important;
+    background-image: none !important;
+    cursor: default !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(170,130,255,0.5) transparent !important;
+}
+#setupCard select[size]:not([size="1"]) option {
+    padding: 7px 11px !important;
+    border-radius: 9px !important;
+    font-size: 0.84em !important;
+    font-weight: 600 !important;
+    background: transparent !important;
+    color: rgba(255,255,255,0.86) !important;
+}
+#setupCard select[size]:not([size="1"]) option:checked {
+    background: linear-gradient(135deg, rgba(150,96,255,0.55), rgba(110,64,220,0.55)) !important;
+    color: #ffffff !important;
+}
+#setupCard select[size]:not([size="1"]) option[disabled] {
+    color: rgba(255,255,255,0.34) !important;
+    font-size: 0.68em !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.14em !important;
+    text-transform: uppercase !important;
+    padding: 9px 11px 3px !important;
+}
+#setupCard select[size]:not([size="1"])::-webkit-scrollbar { width: 8px !important; }
+#setupCard select[size]:not([size="1"])::-webkit-scrollbar-track { background: transparent !important; }
+#setupCard select[size]:not([size="1"])::-webkit-scrollbar-thumb {
+    background: rgba(170,130,255,0.42) !important;
+    border-radius: 8px !important;
+}
+#setupCard select[size]:not([size="1"])::-webkit-scrollbar-thumb:hover { background: rgba(170,130,255,0.7) !important; }
+
 /* ── ENTER ── */
 #enterGame {
     background: linear-gradient(135deg, rgba(150,96,255,0.92), rgba(110,64,220,0.92)) !important;
@@ -16218,6 +16251,36 @@ window.grbtp = 35;
 #enterGame:hover { filter: brightness(1.12) !important; box-shadow: 0 10px 30px rgba(122,66,244,0.48) !important; }
 #enterGame:active { transform: scale(0.985) !important; }
 
+/* ── SKIN SWATCHES ── */
+#ryn-skin-holder {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    margin: 4px auto 2px !important;
+    padding: 12px 8px !important;
+    max-width: 100% !important;
+    border-radius: 16px !important;
+    background: rgba(255,255,255,0.045) !important;
+    border: 1px solid rgba(255,255,255,0.09) !important;
+}
+#ryn-skin-holder .skinColorItem {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 50% !important;
+    border: 2px solid rgba(255,255,255,0.20) !important;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.34) !important;
+    cursor: pointer !important;
+    flex: 0 0 auto !important;
+    transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease !important;
+}
+#ryn-skin-holder .skinColorItem:hover { border-color: rgba(255,255,255,0.65) !important; transform: scale(1.10) !important; }
+#ryn-skin-holder .skinColorItem.activeSkin {
+    border-color: #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(170,130,255,0.55), 0 4px 14px rgba(0,0,0,0.4) !important;
+}
+
+/* ── NATIVE RESOLUTION ── */
 #nativeCheckHolder {
     display: flex !important;
     align-items: center !important;
@@ -18343,9 +18406,35 @@ window.grbtp = 35;
       }
       setupCard.appendChild(skinHolder);
     }
+    openServerList(serverBrowser) {
+      const rowLimit = 8;
+      let scrolled = false;
+      const apply = () => {
+        const select = serverBrowser.querySelector("select");
+        if (select === null) {
+          return;
+        }
+        const rows = Math.max(2, Math.min(rowLimit, select.options.length));
+        if (select.size !== rows) {
+          select.size = rows;
+        }
+        if (!scrolled && select.selectedIndex >= 0) {
+          scrolled = true;
+          select.options[select.selectedIndex].scrollIntoView({
+            block: "nearest"
+          });
+        }
+      };
+      apply();
+      new MutationObserver(apply).observe(serverBrowser, {
+        childList: true,
+        subtree: true
+      });
+    }
     formatMainMenu() {
       const {setupCard: setupCard, serverBrowser: serverBrowser, settingRadio: settingRadio, altServer: altServer, gameUI: gameUI} = this.getElements();
       setupCard.appendChild(serverBrowser);
+      this.openServerList(serverBrowser);
       setupCard.querySelector("br")?.remove();
       this.createSkinColors();
       const radio = settingRadio[0];
