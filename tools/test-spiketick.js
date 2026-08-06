@@ -26,6 +26,10 @@ class PlayerObject {}
 const Settings_default = { _spikeTick: true };
 const DataHandler_default = { getWeapon: () => ({ range: 110 }) };
 const SPIKE_TICK_TURRET = 25;
+const SPIKE_TICK_NEAR = 90;
+const SPIKE_TICK_CONE = Math.PI / 4;
+const Hats = { 53: { knockback: 33.3 } };
+const getAngleDist = (a, b) => { const p = Math.abs(b - a) % (Math.PI * 2); return p > Math.PI ? Math.PI * 2 - p : p; };
 
 class Vector {
   constructor(x, y) { this.x = x; this.y = y; }
@@ -35,8 +39,10 @@ class Vector {
 
 const SpikeTick = new Function(
   "PlayerObject", "Settings_default", "DataHandler_default", "SPIKE_TICK_TURRET",
+  "SPIKE_TICK_NEAR", "SPIKE_TICK_CONE", "Hats", "getAngleDist",
   lift("  class SpikeTick {") + "\nreturn SpikeTick;"
-)(PlayerObject, Settings_default, DataHandler_default, SPIKE_TICK_TURRET);
+)(PlayerObject, Settings_default, DataHandler_default, SPIKE_TICK_TURRET,
+  SPIKE_TICK_NEAR, SPIKE_TICK_CONE, Hats, getAngleDist);
 
 const PLAIN = 40;   /* a primary hit */
 const BULL = 60;    /* the same hit under the bull helmet */
@@ -44,7 +50,7 @@ const BULL = 60;    /* the same hit under the bull helmet */
 const spike = (x, y, damage = 20, ownerID = 99) => {
   const o = new PlayerObject();
   return Object.assign(o, {
-    itemGroup: 2, ownerID,
+    itemGroup: 2, ownerID, collisionScale: 35,
     pos: { current: new Vector(x, y) },
     getDamage: () => damage
   });
@@ -59,12 +65,14 @@ function makeClient(o = {}) {
     hitScale: 35,
     speed: extra.speed ?? 0,
     pos: { current: new Vector(x, y), future: new Vector(x, y) },
+    collisionScale: 35,
     collidingObject: obj => new Vector(x, y).distance(obj.pos.current) <= 50,
     ...extra
   });
   return {
     state, at,
     myPlayer: {
+      isTrapped: o.trapped === true,
       pos: { current: new Vector(0, 0), future: new Vector(0, 0) },
       getItemByType: () => 5,
       getMaxWeaponDamage: (id, shielded, bull) => (bull ? BULL : PLAIN) * (shielded ? 0.2 : 1),
@@ -217,6 +225,71 @@ console.log("\nreach, and when it swings");
   new SpikeTick(off).postTick();
   check("switched off it does nothing", off.state.attacked, false);
   Settings_default._spikeTick = true;
+}
+
+console.log("\nthe push");
+{
+  /* You at the origin, them at 60. The push travels away from you, so a spike
+   * at 130 is behind them and a spike at -10 is between you. */
+  const behind = spike(130, 0, 25);
+  const between = spike(-10, 0, 25);
+  const c = makeClient({});
+  const target = c.at(60, 0, 55);
+
+  const m = new SpikeTick(makeClient({ objects: [behind], enemy: target }));
+  check("a spike behind them is one the shove reaches", m._pushOnto(target) !== null, true);
+
+  const wrongSide = new SpikeTick(makeClient({ objects: [between], enemy: target }));
+  check("one between you and them is not", wrongSide._pushOnto(target), null);
+
+  /* Sakuna arms at 90 without checking the side; past that nothing is in range
+   * of the knockback anyway. */
+  const tooFar = new SpikeTick(makeClient({ objects: [spike(60 + 200, 0, 25)], enemy: target }));
+  check("nor one the knockback cannot reach", tooFar._pushOnto(target), null);
+
+  /* Their own spike is not a hazard to them, pushed onto or not. */
+  const theirs = new SpikeTick(makeClient({ objects: [spike(130, 0, 25, 7)], enemy: c.at(60, 0, 55, { id: 7 }) }));
+  check("their own spike is not worth pushing onto", theirs._pushOnto(c.at(60, 0, 55, { id: 7 })), null);
+}
+
+console.log("\nthe two ticks of a push");
+{
+  const behind = spike(130, 0, 25);
+  const c = makeClient({});
+  /* 90 health: past a bull hit even with the turret, but inside one once the
+   * spike they are about to land on takes its 25. */
+  const client = makeClient({ objects: [behind], enemy: c.at(60, 0, 90) });
+  const m = new SpikeTick(client);
+
+  m.postTick();
+  check("first tick wears turret gear", client.state.hat, 53);
+  check("and swings the primary", client.state.weapon, 0);
+  check("it is holding a push", m._phase, 1);
+
+  client.state.active = false;
+  client.state.hat = null;
+  m.postTick();
+  check("second tick is the hit that lands with the spike", client.state.attacked, true);
+  check("and the push is done", m._phase, 0);
+}
+{
+  /* Nothing to push them onto, and out of a plain hit: it holds. */
+  const c = makeClient({});
+  const client = makeClient({ enemy: c.at(60, 0, 90) });
+  new SpikeTick(client).postTick();
+  check("no hazard to shove them onto means no shove", client.state.attacked, false);
+
+  /* Standing on it already: one hit, no shoving. */
+  const on = makeClient({ objects: [spike(60, 0, 25)], enemy: c.at(60, 0, 60) });
+  const m2 = new SpikeTick(on);
+  m2.postTick();
+  check("already on it, it just hits", on.state.hat === 53, false);
+  check("and starts no push", m2._phase, 0);
+
+  /* Trapped, and the stick: Sakuna refuses both, so this does too. */
+  const held = makeClient({ objects: [spike(130, 0, 25)], enemy: c.at(60, 0, 90), trapped: true });
+  new SpikeTick(held).postTick();
+  check("it does not spike tick while trapped", held.state.attacked, false);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
