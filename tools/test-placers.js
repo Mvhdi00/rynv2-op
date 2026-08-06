@@ -61,13 +61,13 @@ const Settings_default = { _prePlace: true, _prePlaceHits: 4, _prePlaceSpike: tr
 const [PrePlacer, Replacer] = new Function(
   "PI", "Items", "PREPLACE_EPSILON", "PREPLACE_RANGE", "REPLACE_RANGE", "pointInRiver",
   "PlayerObject", "getAngleDist", "findPlacementAngles", "Sorting_default",
-  "Settings_default", "DataHandler_default",
+  "Settings_default", "DataHandler_default", "REPLACE_TRIGGER",
   [lift("  class PlacementGeometry {"),
    lift("  class PrePlacer extends PlacementGeometry {"),
    lift("  class Replacer extends PlacementGeometry {"),
    "return [PrePlacer, Replacer];"].join("\n")
 )(PI, Items, PREPLACE_EPSILON, 270, 300, pointInRiver, PlayerObject, getAngleDist,
-  findPlacementAngles, Sorting_default, Settings_default, DataHandler_default);
+  findPlacementAngles, Sorting_default, Settings_default, DataHandler_default, 200);
 
 /* A building, and a client stub whose placements are recorded rather than sent. */
 const building = (x, y, scale, extra = {}) => {
@@ -97,7 +97,14 @@ function makeClient(options = {}) {
       canPlace: () => options.canPlace !== false
     },
     EnemyManager: { nearestEnemy: options.enemy ?? null },
-    PlayerManager: { isEnemyByID: id => id === 99 },
+    PlayerManager: {
+      isEnemyByID: id => {
+        /* The real one throws for an owner it cannot find, which is what a
+         * building whose owner has left view looks like. */
+        if (id === 404) throw new Error("isEnemyByID Error: Failed to find an owner!");
+        return id === 99;
+      }
+    },
     _ModuleHandler: {
       tickCount: 1,
       moduleActive: false,
@@ -243,6 +250,51 @@ console.log("\nwhat the replacer reaches for");
   new Replacer(c6).onDestroyed(dead);
   check("switched off it does nothing", c6.placed.length, 0);
   Settings_default._replace = true;
+}
+
+console.log("\nthe three defects found reading it back");
+{
+  const dead = building(REACH, 0, 40);
+  const at = (x, y) => ({ pos: { current: new Vector(x, y) }, hitScale: 35 });
+
+  /* 1. An owner who has left view makes the real isEnemyByID throw. The tick
+   *    loop has no guard, so a throw here stops every module behind it. */
+  const orphan = building(REACH, 0, 40, { ownerID: 404 });
+  const c1 = makeClient({ objects: [orphan], enemy: at(60, 0) });
+  const r1 = new Replacer(c1);
+  let threw = false;
+  try { r1.postTick(); } catch (e) { threw = true; }
+  check("an owner out of view does not throw the tick", threw, false);
+  check("and its building is not treated as ours", c1.placed.length, 0);
+  check("nor on the packet path", (() => {
+    const c = makeClient({ objects: [orphan], enemy: at(60, 0) });
+    try { new Replacer(c).onDestroyed(orphan); } catch (e) { return "threw"; }
+    return c.placed.length;
+  })(), 0);
+
+  /* 2. The enemy's damage is their own hat, not a tank forced on. Tank Gear is
+   *    bDmg 3.3, so forcing it made everything look three times closer to
+   *    breaking than it is. */
+  const enemy = {
+    weapon: { primary: 5 },
+    getBuildingDamage: (id, isTank) => 40 * (isTank ? 3.3 : 1)
+  };
+  check("a spike takes the hits it really takes", geo._hitsToBreak({ health: 380 }, enemy), 10);
+  check("not the three a forced tank claimed",
+    Math.ceil(380 / (40 * 3.3)), 3);
+
+  /* 3. The packet path skips postTick's checks, so it carries its own. */
+  const c3 = makeClient({ objects: [dead], enemy: at(2000, 0) });
+  new Replacer(c3).onDestroyed(dead);
+  check("nothing is spent when the enemy is far away", c3.placed.length, 0);
+
+  const c4 = makeClient({ objects: [dead], enemy: at(60, 0) });
+  new Replacer(c4).onDestroyed(building(260, 0, 40));
+  check("nor for a building out of placement reach", c4.placed.length, 0);
+
+  const c5 = makeClient({ objects: [dead], enemy: at(60, 0) });
+  new Replacer(c5).onDestroyed(dead);
+  check("but a near building with a near enemy is answered", c5.placed.length > 0, true);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

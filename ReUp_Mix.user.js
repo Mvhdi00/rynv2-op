@@ -1436,6 +1436,7 @@ window.grbtp = 35;
   };
   const PREPLACE_RANGE = 270;
   const REPLACE_RANGE = 300;
+  const REPLACE_TRIGGER = 200;
   const PREPLACE_EPSILON = 1e-6;
   const findMiddleAngle = (a, b) => {
     const x = Math.cos(a) + Math.cos(b);
@@ -10781,13 +10782,21 @@ window.grbtp = 35;
       });
       return objects;
     }
+    _isMine(object) {
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager2} = this.client;
+      try {
+        return !PlayerManager2.isEnemyByID(object.ownerID, myPlayer);
+      } catch (e) {
+        return false;
+      }
+    }
     _hitsToBreak(object, enemy) {
       let best = 0;
       for (const weapon of [ enemy.weapon?.primary, enemy.weapon?.secondary ]) {
         if (!DataHandler_default.isMelee(weapon)) {
           continue;
         }
-        const damage = enemy.getBuildingDamage(weapon, true);
+        const damage = enemy.getBuildingDamage(weapon, false);
         if (damage > best) {
           best = damage;
         }
@@ -10854,7 +10863,7 @@ window.grbtp = 35;
       if (!Settings_default._prePlace) {
         return;
       }
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _ModuleHandler: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler} = this.client;
       if (!myPlayer || !myPlayer.inGame || ModuleHandler.moduleActive) {
         return;
       }
@@ -10877,7 +10886,7 @@ window.grbtp = 35;
         if (!(object instanceof PlayerObject) || !object.isDestroyable) {
           continue;
         }
-        if (PlayerManager2.isEnemyByID(object.ownerID, myPlayer)) {
+        if (!this._isMine(object)) {
           continue;
         }
         const hits = this._hitsToBreak(object, enemy);
@@ -10928,11 +10937,11 @@ window.grbtp = 35;
       if (!Settings_default._replace || !(object instanceof PlayerObject)) {
         return;
       }
-      const {myPlayer: myPlayer, PlayerManager: PlayerManager2} = this.client;
+      const {myPlayer: myPlayer} = this.client;
       if (!myPlayer || !myPlayer.inGame) {
         return;
       }
-      if (PlayerManager2.isEnemyByID(object.ownerID, myPlayer)) {
+      if (!this._isMine(object)) {
         return;
       }
       this._fill(object);
@@ -10978,11 +10987,11 @@ window.grbtp = 35;
         return;
       }
       const enemy = EnemyManager2.nearestEnemy;
-      if (enemy === null) {
+      if (enemy === null || myPlayer.pos.current.distance(enemy.pos.current) > REPLACE_RANGE) {
         return;
       }
       const from = myPlayer.pos.future;
-      if (from.distance(object.pos.current) > REPLACE_RANGE) {
+      if (from.distance(object.pos.current) > REPLACE_TRIGGER) {
         return;
       }
       const nearby = this._nearbyObjects(from);
@@ -11008,7 +11017,7 @@ window.grbtp = 35;
       if (!Settings_default._replace) {
         return;
       }
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _ModuleHandler: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler} = this.client;
       if (!myPlayer || !myPlayer.inGame || ModuleHandler.moduleActive) {
         return;
       }
@@ -11025,7 +11034,7 @@ window.grbtp = 35;
         if (!(object instanceof PlayerObject) || !object.isDestroyable) {
           continue;
         }
-        if (PlayerManager2.isEnemyByID(object.ownerID, myPlayer)) {
+        if (!this._isMine(object)) {
           continue;
         }
         if (this._hitsToBreak(object, enemy) > 1) {
@@ -19896,7 +19905,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-06T06:12:19.369Z",
+      "builtAt": "2026-08-06T06:34:30.136Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
