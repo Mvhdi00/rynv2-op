@@ -113,8 +113,6 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
----
-
 ## Legacy clients (`clients/`)
 
 Six older moomoo clients are kept here, each in two versions: the script as it
@@ -126,14 +124,23 @@ transport — plain `msgpack([type, args])` frames, string packet names in both
 directions, and a `WebSocket.prototype.send` patch installed after page load.
 Every one of those three assumptions is now wrong.
 
-| | fixed |
-|---|---|
-| `aurora_v5.5.user.js` | Aurora Client v5.5 |
-| `chocolate_illusion.user.js` | 18k chocolate mod / illusion mode |
-| `porshe_client_v1.user.js` | Porshe Client v1 |
-| `project_aurora_v2.2.user.js` | project aurora v2.2 |
-| `project_zelta_reborn.user.js` | Project Zelta Reborn |
-| `robotics_blood_v1.user.js` | Robotics Blood v1 |
+| fixed | script | version |
+|---|---|---|
+| `aurora_v5.5.js` | Aurora Client v5.5 | v5 |
+| `chocolate_illusion_2023-12-07.js` | 18k chocolate mod / illusion mode | 2023-12-07 |
+| `porshe_client_v1.js` | Porshe Client | v1 |
+| `project_aurora_v2.2.js` | project aurora | v2.2 |
+| `project_zelta_reborn_v0.1.js` | Project Zelta Reborn | v0.1 |
+| `robotics_blood_v1.0.js` | Robotics Blood | v1.0 |
+
+Each output is named for the version in its own `@version` line rather than the
+`.user.js` suffix. They are still userscripts and still install by pasting them
+into a new Tampermonkey script; what a `.user.js` name would add is only the
+click-to-install prompt.
+
+The spliced-in code carries no comments. Everything a shipped client says is
+what its original author wrote — the commentary for the transport work lives in
+`src/moo-transport.js` and in this file.
 
 ### What was wrong
 
@@ -198,17 +205,23 @@ servers) keep the plain framing untouched.
 ### Rebuilding them
 
 ```sh
-node tools/patch-clients.js     # clients/original/*.user.js -> clients/*.user.js
+node tools/patch-clients.js     # clients/original -> clients/<name>_<version>.js
 node tools/verify-clients.js
 node tools/test-transport.js
 ```
 
 `patch-clients.js` anchors every edit to an exact string and fails the build if
 an anchor is missing or ambiguous, so nothing is ever half-patched.
-`verify-clients.js` re-checks each output: it parses, it runs at
-`document-start`, the shim is present and installs before the client touches
-`WebSocket.prototype`, no rawgit URL survives, and the client's own body is
-carried over byte for byte apart from the declared edits.
+`verify-clients.js` re-checks each output: it matches a fresh build, it parses,
+it runs at `document-start`, the shim is present and installs before the client
+touches `WebSocket.prototype`, the metadata block holds no stranded code, no
+rawgit URL survives, nothing above the client's body carries a comment of ours,
+and the body itself is carried over byte for byte apart from the declared edits.
+
+One of these scripts — Porshe — never closed its metadata block and left thirteen
+lines of real code sitting inside the header. Those lines are moved into the body
+along with everything else, rather than being stranded above the shim where
+`document-start` would run them against a page that does not exist yet.
 
 `test-transport.js` is the one that matters. It lifts SHA-256, the truncated
 HMAC and the seeded table builder straight out of `src/game_index.js` and
@@ -217,7 +230,9 @@ lengths for the hash), round-trips the shim's msgpack against the bundle's own
 codec in both directions, and then drives the whole path end to end against a
 transcription of the bundle's `io.send` — checking that what reaches the wire
 verifies under the connection key, maps back to the right packet name, keeps its
-arguments, and stays consecutively numbered when the client drops a packet.
+arguments, and stays consecutively numbered when the client drops a packet. The
+whole suite then runs a second time against the comment-stripped shim, which is
+what the clients actually ship.
 
 ---
 
@@ -231,7 +246,7 @@ src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 src/moo-transport.js      transport shim spliced into the legacy clients
-clients/*.user.js         the fixed legacy clients — these are the ones to install
+clients/*.js              the fixed legacy clients — these are the ones to install
 clients/original/         the same clients as they were written (input)
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
@@ -240,6 +255,7 @@ tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/patch-clients.js    clients/original -> clients, with the transport shim
 tools/verify-clients.js   patched clients vs. their sources
 tools/test-transport.js   the shim vs. the game bundle, primitives and end to end
+tools/strip-comments.js   comment stripper for the code spliced into the clients
 ```
 
 ## Build

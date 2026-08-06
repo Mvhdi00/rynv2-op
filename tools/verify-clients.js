@@ -9,11 +9,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-
-const root = path.join(__dirname, "..");
-const srcDir = path.join(root, "clients/original");
-const outDir = path.join(root, "clients");
-const shim = fs.readFileSync(path.join(root, "src/moo-transport.js"), "utf8").trimEnd();
+const { CLIENTS, build, splitMetadata, srcDir, outDir, DEAD_MSGPACK, LIVE_MSGPACK } = require("./patch-clients");
 
 let failures = 0;
 function ok(file, name, cond, extra) {
@@ -22,18 +18,20 @@ function ok(file, name, cond, extra) {
     console.error("  " + file + ": FAIL " + name + (extra ? " (" + extra + ")" : ""));
 }
 
-const files = fs.readdirSync(outDir).filter((f) => f.endsWith(".user.js"));
-if (!files.length) {
-    console.error("no patched clients in clients/ - run tools/patch-clients.js");
-    process.exit(1);
-}
+for (const client of CLIENTS) {
+    const file = client.out;
+    const outPath = path.join(outDir, file);
+    if (!fs.existsSync(outPath)) {
+        ok(file, "exists", false, "run tools/patch-clients.js");
+        continue;
+    }
+    const out = fs.readFileSync(outPath, "utf8");
+    const src = fs.readFileSync(path.join(srcDir, client.file), "utf8");
+    const meta = splitMetadata(out, file).meta;
 
-for (const file of files) {
-    const out = fs.readFileSync(path.join(outDir, file), "utf8");
-    const src = fs.readFileSync(path.join(srcDir, file), "utf8");
-    const meta = out.slice(out.indexOf("// ==UserScript=="), out.indexOf("// ==/UserScript=="));
+    // on disk is what the patcher produces, i.e. nobody hand-edited the output
+    ok(file, "matches a fresh build", out === build(client).text);
 
-    // parses at all
     let parses = true;
     try {
         new vm.Script(out, { filename: file });
@@ -45,13 +43,12 @@ for (const file of files) {
 
     // entry
     ok(file, "runs at document-start", /@run-at\s+document-start/.test(meta));
-    ok(file, "no dead rawgit requires", !/rawgit\.com/.test(out), "still present");
+    ok(file, "no dead rawgit requires", !out.includes(DEAD_MSGPACK), "still present");
     ok(file, "body deferred to DOMContentLoaded", out.includes('document.addEventListener("DOMContentLoaded", __clientMain'));
 
-    // the shim is present, exactly once, and ahead of everything else
+    // the shim is present and ahead of everything else
     const shimAt = out.indexOf("window.__mooTransport");
     ok(file, "transport shim spliced in", shimAt !== -1);
-    ok(file, "transport shim matches src/moo-transport.js", out.includes(shim));
     const firstProtoPatch = out.indexOf("WebSocket.prototype", out.indexOf("__clientMain = function"));
     ok(
         file,
@@ -59,17 +56,24 @@ for (const file of files) {
         shimAt !== -1 && (firstProtoPatch === -1 || shimAt < firstProtoPatch)
     );
 
+    // the metadata block is comments only: no client code stranded ahead of the
+    // shim, where it would run at document-start instead of on a built page
+    ok(
+        file,
+        "metadata block holds no code",
+        meta.split("\n").every((l) => l.trim() === "" || l.trim().startsWith("//"))
+    );
+
     // the client's own code is carried over untouched apart from declared edits
-    const bodySrc = src.slice(src.indexOf("\n", src.indexOf("// ==/UserScript==")) + 1);
-    const edited = bodySrc
-        .split("https://rawgit.com/kawanet/msgpack-lite/master/dist/msgpack.min.js")
-        .join("https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack.min.js")
-        .replace(
-            "this.socket = new WebSocket(e),",
-            "this.socket = window.__mooTransport ? window.__mooTransport.legacy(new WebSocket(e)) : new WebSocket(e),"
-        )
-        .replace(/\s*$/, "");
-    ok(file, "client body preserved", out.includes(edited), "body was altered beyond the declared edits");
+    let bodySrc = splitMetadata(src, client.file).body;
+    bodySrc = bodySrc.split(DEAD_MSGPACK).join(LIVE_MSGPACK);
+    for (const edit of client.edits || []) bodySrc = bodySrc.replace(edit.from, edit.to);
+    ok(file, "client body preserved", out.includes(bodySrc.replace(/\s*$/, "")), "body was altered beyond the declared edits");
+
+    // nothing of ours was added above the client's own code
+    const added = out.slice(0, out.indexOf(bodySrc.slice(0, 200)));
+    const addedAfterMeta = added.slice(added.indexOf("// ==/UserScript==") + "// ==/UserScript==".length);
+    ok(file, "no comments added above the client body", !/\/\*|\/\//.test(addedAfterMeta), "spliced code still carries comments");
 
     // whatever msgpack the client reaches for now resolves
     const usesMsgpack = /\bmsgpack\s*\.\s*(en|de)code/.test(bodySrc);
@@ -82,9 +86,13 @@ for (const file of files) {
     );
 }
 
+// nothing stale left over from the older naming
+const strays = fs.readdirSync(outDir).filter((f) => f.endsWith(".js") && !CLIENTS.some((c) => c.out === f));
+ok("clients/", "no stale outputs", strays.length === 0, strays.join(", "));
+
 console.log(
     failures
-        ? "\n" + failures + " check(s) FAILED across " + files.length + " clients"
-        : files.length + " clients verified"
+        ? "\n" + failures + " check(s) FAILED across " + CLIENTS.length + " clients"
+        : CLIENTS.length + " clients verified"
 );
 process.exit(failures ? 1 : 0);

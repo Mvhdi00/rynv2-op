@@ -19,7 +19,14 @@ const vm = require("vm");
 const root = path.join(__dirname, "..");
 const indexSrc = fs.readFileSync(path.join(root, "src/game_index.js"), "utf8").split("\n");
 const vendorSrc = fs.readFileSync(path.join(root, "src/game_vendor.js"), "utf8");
-const shimSrc = fs.readFileSync(path.join(root, "src/moo-transport.js"), "utf8");
+const { stripComments } = require("./strip-comments");
+
+// The shipped clients carry the shim with its comments stripped, so the whole
+// suite runs twice: once over the source, once over exactly what gets spliced in.
+const STRIPPED = process.argv.includes("--stripped");
+const shimSource = fs.readFileSync(path.join(root, "src/moo-transport.js"), "utf8");
+const shimSrc = STRIPPED ? stripComments(shimSource) : shimSource;
+console.log(STRIPPED ? "== shim as shipped (comments stripped) ==" : "== shim as written ==");
 
 let failures = 0;
 let checks = 0;
@@ -464,6 +471,35 @@ const renamed = [];
 // (i) a client that has no working msgpack of its own gets one
 ok("window.msgpack is provided when missing", typeof win.msgpack === "object" && typeof win.msgpack.decode === "function");
 
+/* ------------------------------------------------- 4. the stripped variant */
+if (!STRIPPED) {
+    section("comment stripping");
+    const stripped = stripComments(shimSource);
+    ok("stripping removes something", stripped.length < shimSource.length);
+    ok("stripping is idempotent", stripComments(stripped) === stripped);
+    ok("no comment markers survive", !/\/\*|\/\//.test(stripped));
+    ok("no comment prose survives", !stripped.includes("Ported from the game bundle"));
+    let strippedParses = true;
+    try {
+        new (require("vm").Script)(stripped, { filename: "moo-transport.stripped.js" });
+    } catch (e) {
+        strippedParses = false;
+        ok("stripped shim parses", false, e.message);
+    }
+    if (strippedParses) ok("stripped shim parses", true);
+}
+
 /* ------------------------------------------------------------------ report */
 console.log("\n" + (failures ? failures + " of " + checks + " checks FAILED" : checks + " checks passed"));
-process.exit(failures ? 1 : 0);
+if (failures) process.exit(1);
+
+// and again over the stripped shim, which is what the clients actually ship
+if (!STRIPPED) {
+    const { status } = require("child_process").spawnSync(
+        process.execPath,
+        [__filename, "--stripped"],
+        { stdio: "inherit" }
+    );
+    process.exit(status || 0);
+}
+process.exit(0);
