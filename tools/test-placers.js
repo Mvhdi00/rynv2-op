@@ -61,13 +61,13 @@ const Settings_default = { _prePlace: true, _prePlaceHits: 4, _prePlaceSpike: tr
 const [PrePlacer, Replacer] = new Function(
   "PI", "Items", "PREPLACE_EPSILON", "PREPLACE_RANGE", "REPLACE_RANGE", "pointInRiver",
   "PlayerObject", "getAngleDist", "findPlacementAngles", "Sorting_default",
-  "Settings_default", "DataHandler_default", "REPLACE_TRIGGER",
+  "Settings_default", "DataHandler_default", "REPLACE_TRIGGER", "REACH_MARGIN", "SPIN_STEPS",
   [lift("  class PlacementGeometry {"),
    lift("  class PrePlacer extends PlacementGeometry {"),
    lift("  class Replacer extends PlacementGeometry {"),
    "return [PrePlacer, Replacer];"].join("\n")
 )(PI, Items, PREPLACE_EPSILON, 270, 300, pointInRiver, PlayerObject, getAngleDist,
-  findPlacementAngles, Sorting_default, Settings_default, DataHandler_default, 200);
+  findPlacementAngles, Sorting_default, Settings_default, DataHandler_default, 200, 60, 16);
 
 /* A building, and a client stub whose placements are recorded rather than sent. */
 const building = (x, y, scale, extra = {}) => {
@@ -90,6 +90,7 @@ function makeClient(options = {}) {
     placed,
     myPlayer: {
       inGame: true,
+      scale: PLAYER_SCALE,
       pos: { current: new Vector(0, 0), future: new Vector(0, 0) },
       trappedIn: options.trappedIn ?? null,
       getItemPlaceScale: id => PLAYER_SCALE + Items[id].scale + Items[id].placeOffset,
@@ -97,6 +98,7 @@ function makeClient(options = {}) {
       canPlace: () => options.canPlace !== false
     },
     EnemyManager: { nearestEnemy: options.enemy ?? null },
+    PacketManager: { attack: angle => placed.push(["F", angle]) },
     PlayerManager: {
       isEnemyByID: id => {
         /* The real one throws for an owner it cannot find, which is what a
@@ -111,6 +113,9 @@ function makeClient(options = {}) {
       packetCount: options.packetCount ?? 0,
       packetLimit: 70,
       staticModules: {},
+      selectItem: type => placed.push(["z", type]),
+      whichWeapon: () => placed.push(["w"]),
+      _getPredictWeapon: () => 0,
       place: (type, angle) => placed.push([type, angle])
     },
     ObjectManager: {
@@ -203,8 +208,15 @@ console.log("\nthe replacer's free angles");
   const crowded = rep._freeAngles(ORIGIN, SPIKE, [dead, crowd], dead, 0);
   const crowdArc = rep._arc(ORIGIN, SPIKE, crowd);
   check("a neighbour overhanging the hole takes it", crowded.includes(0), false);
-  check("and what comes back is that neighbour's edge",
-    Math.abs(getAngleDist(crowded[0], crowdArc[0]) - crowdArc[1]) <= 1e-9, true);
+  /* What comes back is the middle of a free span, not its edge. The edge is
+   * where the item exactly grazes its neighbour, so any drift rejects it; the
+   * middle has room on both sides. Measure the room rather than the formula. */
+  const pick = crowded[0];
+  check("what comes back is not grazing the neighbour",
+    Math.abs(getAngleDist(pick, crowdArc[0]) - crowdArc[1]) > 0.05, true);
+  const room = 0.05;
+  check("it has room on the near side", rep._isFree(pick - room, rep._blockedArcs(ORIGIN, SPIKE, [dead, crowd], dead)), true);
+  check("and room on the far side", rep._isFree(pick + room, rep._blockedArcs(ORIGIN, SPIKE, [dead, crowd], dead)), true);
   check("every angle it offers is free",
     angles.every(a => blockerArc[1] - getAngleDist(a, blockerArc[0]) <= PREPLACE_EPSILON), true);
   check("they come out nearest-first",
@@ -219,7 +231,7 @@ console.log("\nthe replacer's free angles");
 console.log("\nwhat the replacer reaches for");
 {
   const dead = building(REACH, 0, 40);
-  const at = (x, y) => ({ pos: { current: new Vector(x, y) }, hitScale: 35 });
+  const at = (x, y) => ({ pos: { current: new Vector(x, y) }, hitScale: 35, weapon: { primary: 5 }, getBuildingDamage: () => 40 });
 
   const trapped = building(0, REACH, 40);
   const c1 = makeClient({ objects: [dead], enemy: at(60, 0), trappedIn: trapped });
@@ -255,7 +267,7 @@ console.log("\nwhat the replacer reaches for");
 console.log("\nthe three defects found reading it back");
 {
   const dead = building(REACH, 0, 40);
-  const at = (x, y) => ({ pos: { current: new Vector(x, y) }, hitScale: 35 });
+  const at = (x, y) => ({ pos: { current: new Vector(x, y) }, hitScale: 35, weapon: { primary: 5 }, getBuildingDamage: () => 40 });
 
   /* 1. An owner who has left view makes the real isEnemyByID throw. The tick
    *    loop has no guard, so a throw here stops every module behind it. */
@@ -295,6 +307,54 @@ console.log("\nthe three defects found reading it back");
   const c5 = makeClient({ objects: [dead], enemy: at(60, 0) });
   new Replacer(c5).onDestroyed(dead);
   check("but a near building with a near enemy is answered", c5.placed.length > 0, true);
+}
+
+console.log("\nthe rest of Auraro's routine, ported");
+{
+  const at = (x, y) => ({ pos: { current: new Vector(x, y) }, hitScale: 35, weapon: { primary: 5 }, getBuildingDamage: () => 40 });
+
+  /* Free arcs: the complement of the blocked ones, and they have to cover
+   * exactly what the blocked ones do not. */
+  const blocked = [[0, 0.5], [2.0, 0.3]];
+  const free = geo._freeArcs(blocked);
+  const inFree = a => free.some(([s2, e2]) => {
+    const w = x => (x % (2 * PI) + 2 * PI) % (2 * PI);
+    const t = w(a);
+    return (s2 <= e2) ? (t >= s2 && t <= e2) : (t >= s2 || t <= e2);
+  });
+  check("an angle inside a blocked span is not free", inFree(0.2), false);
+  check("an angle outside every blocked span is", inFree(1.0), true);
+  check("the other blocked span is excluded too", inFree(2.1), false);
+  check("nothing blocked means the whole circle", geo._freeArcs([]).length, 1);
+  check("blocked everywhere means nothing free", geo._freeArcs([[0, PI]]).length, 0);
+
+  /* Reach: a building the enemy is nowhere near is not in danger, however
+   * little health it has. */
+  const near = building(REACH, 0, 40, { health: 1 });
+  const far = building(1200, 0, 40, { health: 1 });
+  check("a building beside the enemy is in danger", geo._canReach(near, at(60, 0)), true);
+  check("one across the map is not", geo._canReach(far, at(60, 0)), false);
+
+  /* The spin: select, sixteen attacks, put the weapon back. */
+  const c = makeClient({ objects: [], enemy: at(60, 0) });
+  const spun = new PrePlacer(c)._spin(7);
+  check("the sweep goes out", spun, true);
+  check("it selects, sweeps and re-arms", c.placed.length, 18);
+  check("sixteen attacks", c.placed.filter(p => p[0] === "F").length, 16);
+  check("right round the circle",
+    Math.abs(c.placed.filter(p => p[0] === "F").pop()[1] - 15 * (2 * PI / 16)) < 1e-9, true);
+
+  const tight = makeClient({ objects: [], enemy: at(60, 0), packetCount: 60 });
+  check("and not when the budget cannot carry it", new PrePlacer(tight)._spin(7), false);
+  check("nothing was sent", tight.placed.length, 0);
+
+  /* The clamp narrows the pre-placer to angles that also touch the clamp arc. */
+  const doomed2 = building(REACH, 0, 40);
+  const clampAway = [PI, 0.2];
+  check("a clamp pointing elsewhere leaves nothing",
+    geo._angleFor(ORIGIN, SPIKE, doomed2, [doomed2], 0, clampAway), null);
+  check("a clamp over the target still allows it",
+    geo._angleFor(ORIGIN, SPIKE, doomed2, [doomed2], 0, [0, 0.4]), 0);
 }
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
