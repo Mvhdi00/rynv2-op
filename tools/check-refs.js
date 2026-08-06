@@ -108,5 +108,18 @@ const registered = new Set([...regBody.matchAll(/^\s{8}([\w$]+):/gm)].map(m => m
   report(`hook objects (${defined.size} defined)`, [...used].filter(n => !defined.has(n)));
 }
 
+/* 7. an alias must not be read before the thing it aliases exists. A class is
+ * hoisted but not initialised, so `const X_default = X` placed above `class X`
+ * throws the moment the script runs — and node --check passes it, because it is
+ * valid syntax that is only wrong in time. */
+{
+  const early = [];
+  for (const m of code.matchAll(/^  const ([\w$]+_default) = ([\w$]+);$/gm)) {
+    const declared = code.search(new RegExp(`^  (?:class|function|const|let|var) ${m[2]}\\b`, "m"));
+    if (declared === -1 || declared > m.index) early.push(`${m[1]} = ${m[2]}`);
+  }
+  report(`aliases (declared after their class)`, early);
+}
+
 console.log(bad ? `\n${bad} check(s) failed` : "\nno dangling references");
 process.exit(bad ? 1 : 0);
