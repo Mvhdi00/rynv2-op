@@ -235,22 +235,3 @@ offscreen canvas and overlaid with purple through `source-atop`, so the fill
 lands on the sprite and not on the empty space around it. Transparency is a
 separate `globalAlpha` multiply, which is what the **Tint Transparency** slider
 in Visuals drives (0% solid, 100% invisible).
-
-## RYN Link
-
-The owner build opens with `!ryn?`; anything running a RYN build answers `!ryn!`
-and gets recorded in `RYNPresence`, which is what draws its name red. Misc →
-**RYN Link** makes that exchange readable in chat instead of only in name
-colours:
-
-- **Welcome RYN Players** (owner build only) — the first time a player answers
-  the check, chat `welcome {name}`. `{name}` is their nickname.
-- **Say Hello on Spawn** (both builds) — send a line of your own right after the
-  handshake, so the check reads as a greeting rather than a bare token.
-
-Both texts are editable and both are optional. Outgoing link chat runs through
-one queue with a 4s gap and a 30-character cap, shared with the protocol tokens
-themselves, so a lobby full of RYN users produces a readable roll-call instead
-of a burst the server would rate-limit. The queue holds at most 6 pending
-welcomes, is deduplicated, and is cleared on death — presence tracking is not
-capped, only the chat about it.
