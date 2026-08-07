@@ -6,6 +6,7 @@
 // @author
 // @match        *://*.moomoo.io/*
 // @grant        none
+// @require      https://code.jquery.com/jquery-3.7.1.min.js
 // @run-at       document-start
 // ==/UserScript==
 
@@ -12497,8 +12498,8 @@ const O1 = {};
 O1[Oe(1033)] = Oe(989);
 const L1 = {};
 L1["auto"] = {}, L1[Oe(1330)] = {}, L1["challengeurl"] = {}, L1["challengejson"] = {}, L1[Oe(1134)] = B1, L1[Oe(1269)] = {}, L1[Oe(1476)] = {}, L1["floating"] = {}, L1[Oe(685)] = {}, L1[Oe(1067)] = {}, L1[Oe(1301)] = D1, L1[Oe(654)] = P1, L1[Oe(726)] = {}, L1[Oe(652)] = {}, L1[Oe(1594)] = R1, L1[Oe(1399)] = {}, L1["plugins"] = {}, L1["refetchonexpire"] = M1, L1[Oe(1437)] = N1, L1[Oe(744)] = {}, L1["test"] = O1, L1[Oe(953)] = {}, L1[Oe(393)] = {}, L1[Oe(436)] = {}, customElements[Oe(343)](Oe(769), qf(C1, L1, [Oe(404)], [Oe(809), Oe(796), "getConfiguration", Oe(1104), Oe(681), Oe(622), Oe(415), Oe(280), Oe(1163), Oe(1492)], !(-8590 + 6957 + 19 * 86))), globalThis[Oe(1518)] = e => e ? new Worker(new URL(e)) : new Yu, globalThis[Oe(450)] = globalThis[Oe(450)] || [];
-window.setupCard.innerHTML += "<script-widget style='position: fixed;top: -100%;' id='script-altcha' challengeurl='https://api.moomoo.io/verify'></script-widget>";
-window.altcha.replaceWith(window["script-altcha"]);
+if (window.setupCard) window.setupCard.innerHTML += "<script-widget style='position: fixed;top: -100%;' id='script-altcha' challengeurl='https://api.moomoo.io/verify'></script-widget>";
+if (window.altcha) window.altcha.replaceWith(window["script-altcha"]);
 window.loadedScript = !0;
 const F1 = location.hostname !== "localhost" && location.hostname !== "127.0.0.1" && !location.hostname.startsWith("192.168."),
       _1 = location.hostname === "sandbox-dev.moomoo.io" || location.hostname === "sandbox.moomoo.io",
@@ -14379,7 +14380,7 @@ if (!J1) {
         hm = t,
         pm = n;
     const E4 = document.getElementById("touch-controls-fullscreen");
-    E4.style.display = "block", E4.addEventListener("mousemove", e, !1), E4.addEventListener("mousedown", t, !1), E4.addEventListener("mouseup", n, !1)
+    if (E4) E4.style.display = "block", E4.addEventListener("mousemove", e, !1), E4.addEventListener("mousedown", t, !1), E4.addEventListener("mouseup", n, !1)
 }
 let mm = !1,
     gm;

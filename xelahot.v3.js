@@ -6,6 +6,7 @@
 // @icon         https://pbs.twimg.com/profile_images/1366245884921536515/rnBpE7M9_400x400.jpg
 // @description  dominate cowgame
 // @grant        none
+// @require      https://code.jquery.com/jquery-3.7.1.min.js
 // @run-at       document-start
 // ==/UserScript==
 
@@ -3442,14 +3443,14 @@ CanvasRenderingContext2D.prototype.lineTo = function(x, y) {
             }
 
             let gameName = getEl("gameName");
-            gameName.innerText = "";
+            if (gameName) gameName.innerText = "";
             let adCard = getEl("adCard");
-            adCard.remove();
+            if (adCard) adCard.remove();
             let promoImageHolder = getEl("promoImgHolder");
-            promoImageHolder.remove();
+            if (promoImageHolder) promoImageHolder.remove();
 
             let chatButton = getEl("chatButton");
-            chatButton.remove();
+            if (chatButton) chatButton.remove();
             let gameCanvas = getEl("gameCanvas");
             let mainContext = gameCanvas.getContext("2d");
             let mapDisplay = getEl("mapDisplay");

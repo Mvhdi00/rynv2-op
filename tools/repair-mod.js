@@ -82,6 +82,46 @@ if (/[^\w$]\$\(/.test(body) && !/@require.*jquery/i.test(meta)) {
   report.jquery = true;
 }
 
+/* --- 2c. ALTCHA, and other page furniture that has gone -------------------
+ * moomoo replaced ALTCHA with Cloudflare Turnstile and stopped publishing
+ * setupCard on window. Mods from that era still wire the old widget up at
+ * their top level, so the first dereference throws and takes the boot with it.
+ * The game solves Turnstile by itself now, so there is nothing to replace --
+ * these only need to stop being fatal.
+ */
+let body2 = body;
+const guards = [
+  // window.setupCard.innerHTML += "<script-widget ... altcha ...>"
+  [/^(\s*)window\.setupCard\.innerHTML \+=/m, '$1if (window.setupCard) window.setupCard.innerHTML +='],
+  // window.altcha.replaceWith(window["script-altcha"])
+  [/^(\s*)window\.altcha\.replaceWith\(/m, '$1if (window.altcha) window.altcha.replaceWith('],
+];
+for (const [re, rep] of guards) {
+  if (re.test(body2)) { body2 = body2.replace(re, rep); report.guarded = (report.guarded || 0) + 1; }
+}
+
+// `let x = getEl("adCard"); x.remove();` -- the commonest failure in this
+// whole family. The element is gone from the page, the mod only wants it gone,
+// and the deref kills everything after it. The unpatcher stubs a closed list of
+// ids, but mods reach for others too, so guard the pattern itself.
+body2 = body2.replace(
+  /^(\s*)(let|const|var) (\w+) = ((?:getEl|document\.getElementById)\([^)]*\));\n(\s*)\3\.(remove\(\)|style\.\w+ =|innerHTML =|innerText =)/gm,
+  (m, i1, kw, v, call, i2, tail) => {
+    report.guarded = (report.guarded || 0) + 1;
+    // the call is kept exactly as written -- rewriting it to reach for `getEl`
+    // defensively broke two mods that declare it later, or not at all
+    return `${i1}${kw} ${v} = ${call};\n${i2}if (${v}) ${v}.${tail}`;
+  });
+
+// `let a = document.getElementById(x); let b = a.firstChild; if (b.nodeType`
+// -- an empty or absent element makes firstChild null and the next line throws.
+body2 = body2.replace(
+  /^(\s*)(let|const|var) (\w+) = (\w+)\.firstChild;\n(\s*)if \(\3\.nodeType/m,
+  (m, i1, kw, v, parent, i2) => {
+    report.guarded = (report.guarded || 0) + 1;
+    return `${i1}${kw} ${v} = ${parent} && ${parent}.firstChild;\n${i2}if (${v} && ${v}.nodeType`;
+  });
+
 /* --- 3. the unpatcher, inlined -------------------------------------------- */
 const unpatcher = fs.readFileSync(path.join(ROOT, 'MooUnpatcher.user.js'), 'utf8');
 const uMeta = unpatcher.indexOf('// ==/UserScript==');
@@ -91,12 +131,12 @@ const shim = stripComments(unpatcher.slice(uMeta + '// ==/UserScript=='.length),
 // Only if it needs it: a mod that already waits for the DOM must not be made
 // to wait twice, and one that touches nothing at its top level loses nothing
 // by running immediately.
-const TOUCHES_DOM = /^[^\s/].*\b(?:document\.(?:body|getElementById|querySelector)|getEl\()/m.test(body)
-  || /^\s{0,2}(?:let|const|var)\s+\w+\s*=\s*(?:document\.getElementById|getEl)\(/m.test(body);
+const TOUCHES_DOM = /^[^\s/].*\b(?:document\.(?:body|getElementById|querySelector)|getEl\()/m.test(body2)
+  || /^\s{0,2}(?:let|const|var)\s+\w+\s*=\s*(?:document\.getElementById|getEl)\(/m.test(body2);
 let out;
 if (TOUCHES_DOM) {
   report.deferred = true;
-  out = meta + '// ==/UserScript==\n\n' + shim + '\n\nfunction __repairedBoot() {\n' + body +
+  out = meta + '// ==/UserScript==\n\n' + shim + '\n\nfunction __repairedBoot() {\n' + body2 +
     '\n}\n(function __repairedStart(tries) {\n' +
     '    tries = tries || 0;\n' +
     '    if ((document.readyState === "loading" || !document.getElementById("gameUI")) && tries < 400) {\n' +
@@ -105,7 +145,7 @@ if (TOUCHES_DOM) {
     '    __repairedBoot();\n' +
     '})();\n';
 } else {
-  out = meta + '// ==/UserScript==\n\n' + shim + '\n' + body;
+  out = meta + '// ==/UserScript==\n\n' + shim + '\n' + body2;
 }
 
 try { acorn.parse(out, { ecmaVersion: 'latest', allowReturnOutsideFunction: true }); }
@@ -117,6 +157,7 @@ fs.writeFileSync(OUT, out);
 console.log(report.name.trim());
 console.log('  @run-at  : ' + report.runAt);
 console.log('  @require : ' + (report.requires.length ? report.requires.join(', ') : '(none dead)'));
+if (report.guarded) console.log('  guarded  : ' + report.guarded + ' dereference(s) of page furniture the game removed');
 if (report.jquery) console.log('  jQuery   : added (used but never required)');
 console.log('  body     : ' + (report.deferred ? 'deferred behind __repairedBoot' : 'left at top level (touches no DOM)'));
 console.log('  -> ' + path.relative(ROOT, OUT));

@@ -14155,8 +14155,8 @@ let serverID;
             }
         }
         let VO = document.getElementById("leaderboard");
-        let VI = VO.firstChild;
-        if (VI.nodeType === 3 && VI.textContent === "Leaderboard") {
+        let VI = VO && VO.firstChild;
+        if (VI && VI.nodeType === 3 && VI.textContent === "Leaderboard") {
             VO.removeChild(VI);
         }
         function Va(ci) {

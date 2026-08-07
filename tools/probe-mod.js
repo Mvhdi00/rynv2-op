@@ -144,6 +144,40 @@ const CONFIG = {
   const publishConfig = () => page.evaluate((cfg) => {
     window.config = cfg;
     window.turnstile = { getResponse: () => 'PROBE-TOKEN', render: () => {}, reset: () => {} };
+    // moomoo is an FRVR title and its page sets these up before the bundle
+    // runs. A full client replacement waits on them, so a probe without them
+    // is less faithful than the real page, not more.
+    window.frvrSdkInitPromise = Promise.resolve();
+    window.FRVR = { bootstrapper: { complete: () => Promise.resolve() } };
+
+    // A stand-in for jQuery. Tampermonkey resolves @require before the script
+    // runs; this probe injects the file directly and has no network, so a mod
+    // with a jQuery @require would otherwise fail here for a reason that
+    // cannot happen on a real install. This is only enough to get past the
+    // calls these mods make -- a pass with it is a pass on everything EXCEPT
+    // the jQuery, which is the honest thing to report.
+    if (!window.$) {
+      // Any method returns the same chainable object: enumerating jQuery's
+      // surface is a losing game (the first attempt missed .hover), and the
+      // point is only to get past the calls, not to reimplement jQuery.
+      const wrap = (els) => new Proxy(els.slice(), {
+        get(t, k) {
+          if (k in t && typeof t[k] !== 'function') return t[k];
+          if (k === 'length' || typeof k === 'symbol') return t[k];
+          if (k === 'remove') return () => { t.forEach(e => e.remove && e.remove()); return wrap(t); };
+          if (k === 'each') return (f) => { t.forEach((e, i) => f.call(e, i, e)); return wrap(t); };
+          if (typeof t[k] === 'function') return t[k].bind(t);
+          return () => wrap(t);
+        }
+      });
+      window.$ = window.jQuery = (sel) => {
+        if (typeof sel === 'function') { try { sel(); } catch (e) {} return wrap([]); }
+        if (typeof sel !== 'string') return wrap(sel ? [sel] : []);
+        try { return wrap([...document.querySelectorAll(sel)]); } catch (e) { return wrap([]); }
+      };
+      window.$.fn = {};
+      window.__jqueryWasStubbed = true;
+    }
   }, CONFIG);
 
   // The constructor freeze the bundle does at boot.
@@ -187,6 +221,7 @@ const CONFIG = {
     msgpackPresent: typeof window.msgpack === 'object' && typeof window.msgpack.decode === 'function',
     shimPresent: typeof EXP === 'object' && typeof EXP.send === 'function',
     constructorFreeze: window.__frozen,
+    jqueryStubbed: !!window.__jqueryWasStubbed,
     // A mod that boots draws something. "No errors" is not the same as "ran".
     elementsAdded: document.body.children.length,
     globalsPublished: names.filter(n => typeof window[n] !== 'undefined').length,

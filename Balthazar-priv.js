@@ -2425,13 +2425,13 @@ function getEl(_0x370e34) {
     return _0x403e6a(_0x4e7d72, _0x219fa9);
   }
   let _0x5ba86b = getEl("gameName");
-  _0x5ba86b.innerText = "";
+  if (_0x5ba86b) _0x5ba86b.innerText = "";
   let _0x2c43b3 = getEl("adCard");
-  _0x2c43b3.remove();
+  if (_0x2c43b3) _0x2c43b3.remove();
   let _0x24c29f = getEl("promoImgHolder");
-  _0x24c29f.remove();
+  if (_0x24c29f) _0x24c29f.remove();
   let _0x5f2a45 = getEl("chatButton");
-  _0x5f2a45.remove();
+  if (_0x5f2a45) _0x5f2a45.remove();
   let _0x4851e7 = getEl("gameCanvas");
   let _0x3b5929 = _0x4851e7.getContext("2d");
   let _0x72ac7a = getEl("mapDisplay");
@@ -2511,7 +2511,7 @@ function getEl(_0x370e34) {
   function _0x1ef610() {
     let _0x2e53b5 = window.pingTime;
     const _0x3dc335 = document.getElementById("pingDisplay");
-    _0x3dc335.innerText = "1" + _0x2e53b5 + "ms";
+    if (_0x3dc335) _0x3dc335.innerText = "1" + _0x2e53b5 + "ms";
     if (_0x2e53b5 > _0x22e55e.max || isNaN(_0x22e55e.max)) {
       _0x22e55e.max = _0x2e53b5;
     }
@@ -6442,7 +6442,7 @@ function getEl(_0x370e34) {
   _0x2b4572();
   var _0x4ea428;
   const _0x490897 = document.getElementById("touch-controls-fullscreen");
-  _0x490897.style.display = "block";
+  if (_0x490897) _0x490897.style.display = "block";
   _0x490897.addEventListener("mousemove", _0x1a8973, false);
   function _0x1a8973(_0xa1583b) {
     _0x11ec7b = _0xa1583b.clientX;
@@ -8336,12 +8336,12 @@ function getEl(_0x370e34) {
     for (let _0x1754c0 = 0; _0x1754c0 < _0x146f01.list.length; _0x1754c0++) {
       let _0x224b91 = _0x146f01.weapons.length + _0x1754c0;
       let _0x52f998 = getEl("actionBarItem" + _0x224b91);
-      _0x52f998.style.display = _0x547655.items.indexOf(_0x146f01.list[_0x1754c0].id) >= 0 ? "inline-block" : "none";
+      if (_0x52f998) _0x52f998.style.display = _0x547655.items.indexOf(_0x146f01.list[_0x1754c0].id) >= 0 ? "inline-block" : "none";
       document.getElementsByTagName("button").style.boxShadow = "2px 2px 5px rgba(0, 0, 0, 0.5)";
     }
     for (let _0x29e88d = 0; _0x29e88d < _0x146f01.weapons.length; _0x29e88d++) {
       let _0xbbc93 = getEl("actionBarItem" + _0x29e88d);
-      _0xbbc93.style.display = _0x547655.weapons[_0x146f01.weapons[_0x29e88d].type] == _0x146f01.weapons[_0x29e88d].id ? "inline-block" : "none";
+      if (_0xbbc93) _0xbbc93.style.display = _0x547655.weapons[_0x146f01.weapons[_0x29e88d].type] == _0x146f01.weapons[_0x29e88d].id ? "inline-block" : "none";
       document.getElementsByTagName("button").style.boxShadow = "2px 2px 5px rgba(0, 0, 0, 0.5)";
     }
     let _0x11e766 = _0x547655.weapons[0] == 3 && _0x547655.weapons[1] == 15;
@@ -8399,7 +8399,7 @@ function getEl(_0x370e34) {
   };
   _0x3261ca.onopen = function () {
     var _0x2cabfd = getEl("gameName");
-    _0x2cabfd.innerText = "";
+    if (_0x2cabfd) _0x2cabfd.innerText = "";
   };
   function _0x117b83(_0x6ab3e3, _0x23af1f) {
     let _0x3e463b = _0x403e6a(_0x311ef8, _0x6ab3e3);
@@ -12144,13 +12144,13 @@ function findProjectileBySid(_0x35e0e8) {
   return findSID(gameObjects, _0x35e0e8);
 }
 let gameName = getEl("gameName");
-gameName.innerText = "!!";
+if (gameName) gameName.innerText = "!!";
 let adCard = getEl("adCard");
-adCard.remove();
+if (adCard) adCard.remove();
 let promoImageHolder = getEl("promoImgHolder");
-promoImageHolder.remove();
+if (promoImageHolder) promoImageHolder.remove();
 let chatButton = getEl("chatButton");
-chatButton.remove();
+if (chatButton) chatButton.remove();
 let gameCanvas = getEl("gameCanvas");
 let mainContext = gameCanvas.getContext("2d");
 let mapDisplay = getEl("mapDisplay");
@@ -12226,7 +12226,7 @@ let ms = {
 function pingSocketResponse() {
   let _0x5a06a6 = window.pingTime;
   const _0x17eb94 = document.getElementById("pingDisplay");
-  _0x17eb94.innerText = "Ping: " + _0x5a06a6 + " ms`";
+  if (_0x17eb94) _0x17eb94.innerText = "Ping: " + _0x5a06a6 + " ms`";
   if (_0x5a06a6 > ms.max || isNaN(ms.max)) {
     ms.max = _0x5a06a6;
   }

@@ -9,6 +9,7 @@
 // @match        http://193.233.171.27:*/*
 // @match        *://*.moomoo.io/*
 // @grant        none
+// @require      https://code.jquery.com/jquery-3.7.1.min.js
 // @run-at       document-start
 // ==/UserScript==
 
