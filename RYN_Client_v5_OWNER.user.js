@@ -4012,23 +4012,18 @@ window.grbtp = 35;
 
   const RYN_OWNER_NAME = "";
   const RYN_LINK = {
-    beacon: "!ryn?",
-    announce: "!ryn!",
+
+    ask: [ "!ryn!", "hi" ],
+
+    reply: "!ryn?",
     meme: "!meme",
     memeLine: "mohmoh",
 
     presenceTTL: 9e5,
 
     replyCooldown: 2e3,
-    announceDelay: 2e3,
-    beaconDelay: 3e3,
 
-    beaconMinGap: 12e3,
-
-    reAnnounceEvery: 25e3,
-    reAnnounceMax: 3,
-
-    announceEcho: 8e3
+    askCooldown: 6e3
   };
 
   const RYNPresence = new class {
@@ -4101,14 +4096,8 @@ window.grbtp = 35;
   const RYNLink = new class {
     _pendingMeme=null;
     _lastReply=0;
-    _lastBeacon=0;
-    _beaconQueued=false;
-    _lastAnnounce=0;
-    _spawnAt=0;
+    _lastAsk=0;
     _wasInGame=false;
-    _openingSent=false;
-    _reAnnounces=0;
-    _nextReAnnounce=0;
     _norm(text) {
       return String(text == null ? "" : text).trim();
     }
@@ -4122,18 +4111,12 @@ window.grbtp = 35;
         return false;
       }
     }
-    _beacon(client2) {
-      if (this._say(client2, RYN_LINK.beacon)) {
-        this._lastBeacon = Date.now();
-        this._beaconQueued = false;
+    _isAsk(lower) {
+      for (const word of RYN_LINK.ask) {
+        if (lower === String(word).trim().toLowerCase()) return true;
       }
+      return false;
     }
-    _announce(client2) {
-      if (this._say(client2, RYN_LINK.announce)) {
-        this._lastAnnounce = Date.now();
-      }
-    }
-
     handleChat(client2, senderID, senderPlayer, rawMessage) {
       const message = this._norm(rawMessage);
       if (message === "") return;
@@ -4143,23 +4126,20 @@ window.grbtp = 35;
       const myPlayer = client2.myPlayer;
       const myID = myPlayer ? myPlayer.id : null;
       const fromMe = typeof myID === "number" && senderID === myID;
-      if (lower === RYN_LINK.announce.toLowerCase()) {
 
+      if (lower === RYN_LINK.reply.toLowerCase()) {
         if (RYN_IS_OWNER_BUILD && !fromMe) {
-          if (RYNPresence.mark(senderID, senderName)) {
-            this._beaconQueued = true;
-          }
+          RYNPresence.mark(senderID, senderName);
         }
         return;
       }
-      if (lower === RYN_LINK.beacon.toLowerCase()) {
-        if (RYN_IS_OWNER_BUILD) return;
-        if (fromMe) return;
-        RYNOwner.learn(senderID, senderName);
 
-        if (Date.now() - this._lastAnnounce > RYN_LINK.announceEcho) {
-          this._announce(client2);
-        }
+      if (this._isAsk(lower)) {
+        if (RYN_IS_OWNER_BUILD || fromMe) return;
+        RYNOwner.learn(senderID, senderName);
+        if (now - this._lastAsk < RYN_LINK.askCooldown) return;
+        this._lastAsk = now;
+        this._say(client2, RYN_LINK.reply);
         return;
       }
       if (lower.startsWith(RYN_LINK.meme.toLowerCase() + " ")) {
@@ -4193,44 +4173,14 @@ window.grbtp = 35;
       const player = client2.myPlayer;
       if (!player || !player.inGame) {
         this._wasInGame = false;
-        this._openingSent = false;
-        this._beaconQueued = false;
-        this._reAnnounces = 0;
         return;
       }
-      const now = Date.now();
       if (!this._wasInGame) {
         this._wasInGame = true;
-        this._openingSent = false;
-        this._spawnAt = now;
-        this._reAnnounces = 0;
-        this._nextReAnnounce = now + RYN_LINK.reAnnounceEvery;
+        this._lastAsk = 0;
+        this._lastReply = 0;
+        this._pendingMeme = null;
       }
-      if (RYN_IS_OWNER_BUILD) {
-        if (!this._openingSent) {
-          if (now - this._spawnAt < RYN_LINK.beaconDelay) return;
-          this._openingSent = true;
-          this._beacon(client2);
-          return;
-        }
-
-        if (this._beaconQueued && now - this._lastBeacon >= RYN_LINK.beaconMinGap) {
-          this._beacon(client2);
-        }
-        return;
-      }
-      if (!this._openingSent) {
-        if (now - this._spawnAt < RYN_LINK.announceDelay) return;
-        this._openingSent = true;
-        this._announce(client2);
-        return;
-      }
-
-      if (RYNOwner.known || this._reAnnounces >= RYN_LINK.reAnnounceMax) return;
-      if (now < this._nextReAnnounce) return;
-      this._nextReAnnounce = now + RYN_LINK.reAnnounceEvery;
-      this._reAnnounces += 1;
-      this._announce(client2);
     }
   };
   const Renderer = new class {

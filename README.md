@@ -187,8 +187,9 @@ understood.
 
 ```
 tools/build-player.js     OWNER -> PLAYER (name tag, RYN_ROLE, owner-only rows)
-tools/obfuscate.js        renames every identifier, packs to one line
+tools/obfuscate.js        renames identifiers, encodes every string
 tools/strip-comments.js   removes JS comments, keeps the userscript header
+tools/e2e-hooks.js        boots a build in a browser against the real bundle
 ```
 
 ## Build
@@ -203,12 +204,22 @@ three anchors is missing or ambiguous, so the two builds cannot drift apart:
 the `@name` tag, `RYN_ROLE`, and the owner-only **Mark RYN Players** row in
 Visuals.
 
-`obfuscate.js` mangles identifiers with terser (`compress: false` — renaming
-only, nothing rewrites the logic) using a seeded generator, so the same input
-always produces the same output. Before writing anything it re-scans both sides
-and refuses to ship if a single plain string literal moved, since a rename can
-never do that. Regex literals are likewise untouched, which is what keeps the
-bundle-rewrite hooks working after obfuscation.
+`obfuscate.js` runs two passes. Terser first (`compress: false` — renaming only,
+nothing rewrites the logic), which packs the file and mangles names including the
+two top-level ones. Then javascript-obfuscator, which moves every string literal
+into a base64-encoded, rotated, shuffled array behind wrapper functions, renames
+every local to a hex name, and rewrites object keys as computed lookups. Both
+passes are seeded, so the same input always produces byte-identical output.
+
+Nothing readable survives except two things that cannot be touched: the
+userscript metadata block, which Tampermonkey parses, and the regex literals,
+which *are* the bundle-rewrite hook patterns. `obfuscate.js` re-scans both sides
+and refuses to write if a single regex literal moved.
+
+Off on purpose: `controlFlowFlattening` and `deadCodeInjection` cost real frame
+time in a client that hooks the render loop, `stringArrayCallsTransform` added
+half a megabyte and a wrapper call in front of every string read, and
+`debugProtection` would fight whoever maintains the build.
 
 ## Verification
 
@@ -216,10 +227,20 @@ bundle-rewrite hooks working after obfuscation.
 node tools/check-hooks.js RYN_Client_v5_OWNER.user.js
 node tools/verify-drivers.js RYN_Client_v5_OWNER.user.js
 node --check RYN_Client_v5_OWNER.user.js
+
+node tools/e2e-hooks.js RYN_Client_v5_PLAYER.user.js   # works on obfuscated builds
 ```
 
-Run these against the **pre-obfuscation** build. `check-hooks.js` locates the
+The first three want the **pre-obfuscation** build: `check-hooks.js` locates the
 `Regexer` class by name, which the obfuscated player build no longer has.
+
+`e2e-hooks.js` answers the question the others cannot — *does this build, as
+shipped, still rewrite the bundle?* It serves a fake moomoo.io whose bundle is
+`src/game_*.js`, loads the client at document-start the way a userscript would,
+lets it discover the script tag, fetch it and rewrite it, then intercepts the
+`Function()` call the client hands the result to and checks the rewritten source
+for all 27 injections. No game needs to run, and it does not care what anything
+in the client is named.
 
 41/41 hooks bind, including the four that drive the world tint:
 
@@ -235,3 +256,26 @@ offscreen canvas and overlaid with purple through `source-atop`, so the fill
 lands on the sprite and not on the empty space around it. Transparency is a
 separate `globalAlpha` multiply, which is what the **Tint Transparency** slider
 in Visuals drives (0% solid, 100% invisible).
+
+## RYN Link
+
+Neither build says anything on its own. Nothing is sent on spawn and nothing is
+sent on a timer — the check runs only when you type it.
+
+Type one of `RYN_LINK.ask` in chat and every RYN build in the lobby answers with
+`RYN_LINK.reply`, which records that player in `RYNPresence` and draws their name
+red. Defaults:
+
+```js
+ask:   [ "!ryn!", "hi" ],   // what you type, by hand
+reply: "!ryn?"              // what a RYN build answers
+```
+
+Matching is exact, so `hi guys` does not count as `hi`. An answer is never read
+as a question, so two RYN players cannot bounce replies off each other. A player
+answers at most once per 6s however many times the check is typed, and never
+answers its own.
+
+`hi` is in the list because it reads as ordinary chat, but it costs stealth: any
+stranger who types it makes every RYN build in the lobby answer. Cut it from
+`RYN_LINK.ask` if that matters more than looking innocuous.
