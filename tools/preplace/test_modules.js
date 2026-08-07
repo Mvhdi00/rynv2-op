@@ -43,8 +43,8 @@ const DataHandler_default = {
 };
 const Settings_default = {
   _autoplacer: true, _autoplacerRadius: 350,
-  _prePlace: true, _prePlaceRadius: 270, _prePlaceHits: 4,
-  _replace: true, _replaceRadius: 300,
+  _prePlace: true, _prePlaceHits: 4,
+  _replace: true,
   _autoPush: false, _autoPushRange: 250, _antiTrapProtect: true,
 };
 class MovementSimulation {
@@ -408,7 +408,7 @@ console.log("PrePlacer");
   {
     const { c } = withDoomed({ enemyDist: 900 });
     new PrePlacer(c).postTick();
-    check("respects the preplace radius", placeLog.length === 0);
+    check("respects the autoplacer radius", placeLog.length === 0);
   }
   placeLog.length = 0;
   {
@@ -525,7 +525,7 @@ console.log("Replacer");
   {
     const c = makeClient({ deleted: [ownSpike(new Vec(7200 + 70, 3000))], enemyDist: 900 });
     new Replacer(c).postTick();
-    check("respects the replace radius", placeLog.length === 0);
+    check("replace respects the autoplacer radius", placeLog.length === 0);
   }
   placeLog.length = 0;
   {

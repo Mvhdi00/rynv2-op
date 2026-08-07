@@ -70,8 +70,9 @@ into. `preplaceCheck` is what makes it a *pre*-place — a candidate spot only
 counts if it overlaps the doomed build.
 
 Triggers on `canBeDestroyed` for the current tick, or a damage estimate showing
-the build is within `_prePlaceHits` swings of dying. Placement is computed
-against the position two movement-sim ticks ahead, as auraro does.
+the build is within `_prePlaceHits` swings of dying — `health / best enemy
+building-damage swing`, rounded up. Placement is computed against the position
+two movement-sim ticks ahead, as auraro does.
 
 Retrap: when the doomed build *is* the trap holding the enemy, auraro cycles
 the whole circle in `π/8` steps so whichever slot frees up gets refilled.
@@ -83,6 +84,15 @@ pre-emptive scan for one of ours within two hits of dying. Branches in auraro's
 order: they escaped → trap where they are heading; still pinned and in reach →
 spike into their trap; we escaped what just broke → two opposed traps;
 otherwise refill the hole.
+
+## One radius for all three
+
+Autoplace, preplace and replace all gate on `_autoplacerRadius`; there is no
+separate preplace or replace radius. Auraro gates preplace at 269 and replace
+at 300 internally, so with the slider at its 350 default both now reach a
+little further than the reference. `AURA_REPLACE_RANGE` (300) is untouched —
+that is auraro's *object* scan cap, a different quantity from the enemy
+distance gate.
 
 ## The packet budget
 
@@ -166,7 +176,7 @@ Built to stay cheap:
     node test_modules.js --player   # the same 76 against the player build
     node test_weather.js            # 31 cases, weather overlay
     node test_weather.js --player   # the same 31 against the player build
-    node test_menu.js               # 48 cases, menu wiring in both builds
+    node test_menu.js               # 42 cases, menu wiring in both builds
 
 `test_modules.js` slices the placer out of the shipped file and drives it with
 stubbed managers, so it tests what actually ships rather than a copy. It covers
