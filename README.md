@@ -170,6 +170,54 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+## RYN v5
+
+The same angle work, folded into the two RYN v5 builds. Those are a separate
+client from the v4 core this repo mixes — the placer is rebuilt and there is no
+Legit Mode — so the angle engine was ported rather than copied, and only the
+parts v5 still gives away were changed.
+
+```sh
+node tools/patch-v5.js      # -> RYN_Client_v5_OWNER.user.js, RYN_Client_v5_PLAYER.user.js
+node tools/test-v5-aim.js   # 31 tests
+```
+
+| | v4 / ReUp Mix | v5 |
+|---|---|---|
+| Aim from the screen centre | yes | yes → **fixed** |
+| Facing resent at 0.3 rad | yes | yes → **adaptive** |
+| ±π wrap in the resend check | broken | already fixed upstream |
+| Autobreak sweeps 72 angles | yes | yes → **exact** |
+| Placement angles on a 72-point ring | yes → refined | already exact (`AuraPlacer` solves arcs analytically) |
+| Angle rounded on the wire | client sends raw | rounds to 2 dp, like the vanilla client — **left alone** |
+
+That last row is why v5 does not get the precision changes v4 got: `wireAngle`
+rounds every angle to two decimals on the way out, which is what the vanilla
+game sends, and the placer already simulates that rounding when it decides
+where a spike will land. Sending more precision than the real client does would
+be a fingerprint, so the engine computes precisely and lets the client round.
+
+### The PLAYER build
+
+`RYN_Client_v5_PLAYER.user.js` ships through obfuscator.io: every string in it,
+including the property names it reads off objects, is RC4'd into a shuffled
+array behind ~2100 per-scope decoder aliases. It is patched anyway, and it
+stays obfuscated.
+
+`tools/decode-v5-player.js` resolves those calls back to the strings they
+return — 17,359 of them, no failures — and records the byte range each one came
+from. `tools/patch-v5.js` finds each patch site in that readable view, maps it
+back through those ranges, and splices the shipped file. Only the patched spans
+change; everything around them is byte-identical, including the string array,
+its rotation checksum, and the one self-defending check in the header.
+
+Both builds share one engine (`v5-src/reup-aim.js`). It leans on nothing inside
+the client — it reaches everything through `window.RYN`, which the client
+publishes — so the same code drops into the readable build and the obfuscated
+one, and the call sites are a single line each.
+
+---
+
 ## Layout
 
 ```
@@ -184,6 +232,12 @@ tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/test-angle.js       the angle engine in the build, against client stand-ins
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+
+v5-src/*.orig.js          the two shipped RYN v5 builds (input)
+v5-src/reup-aim.js        the angle engine injected into both
+tools/decode-v5-player.js resolves the PLAYER build's obfuscated strings
+tools/patch-v5.js         v5-src/*.orig.js -> RYN_Client_v5_*.user.js
+tools/test-v5-aim.js      the v5 engine and both patched builds
 ```
 
 ## Build
