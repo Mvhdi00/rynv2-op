@@ -40,7 +40,19 @@ const GONE = new Set(JSON.parse(
 // the id has to be collected from the call sites of the wrapper too -- the
 // first run of this missed jester's `getEl("gameUI")` and blamed the mod for
 // an element the real page has.
-const WRAPPERS = /(?:getElementById|getEl|getE|byId|\$id|getID|elem|gid)\(\s*[`"']([^`"']+)[`"']\s*\)/g;
+// Find the mod's own getElementById wrappers rather than guessing their names:
+// any `function k(id) { return document.getElementById(id) }` (or arrow, or
+// assigned const) counts. SamMod calls its one `k`, which no fixed list of
+// likely names would have caught -- and the probe then blamed the mod for
+// elements it had simply failed to plant.
+const wrapperNames = new Set(['getElementById']);
+for (const m of src.matchAll(
+    /(?:function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{[^{}]{0,80}document\.getElementById|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:function\s*)?\([^)]*\)\s*(?:=>)?\s*\{?[^{}]{0,80}document\.getElementById)/g)) {
+  wrapperNames.add(m[1] || m[2]);
+}
+const WRAPPERS = new RegExp(
+  '(?:' + [...wrapperNames].map(n => n.replace(/\$/g, '\\$')).join('|') +
+  ')\\(\\s*[`"\']([^`"\']+)[`"\']\\s*\\)', 'g');
 const ids = [...new Set([
   ...[...src.matchAll(WRAPPERS)].map(m => m[1]),
   ...[...src.matchAll(/querySelector\(\s*[`"']#([\w-]+)/g)].map(m => m[1]),
