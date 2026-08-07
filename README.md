@@ -49,6 +49,63 @@ Luna features that were **not** ported, and why:
 - *"ai hat predict" (`autsh1`) and "ai triangulation" (`triangle2`)* — these
   are menu entries in Luna with no implementation behind them. Nothing to port.
 
+### The angle engine
+
+Four places in the client decide on an angle, and each of them was giving
+something away. All four now go through one set of shared math (`ReUpAim`),
+switched from **Combat → Aim**.
+
+| Switch | Default | What it does |
+|---|---|---|
+| **Precision Aim** (`_smartAim`) | on | Aims from where you are to the point under the cursor, every tick, and corrects your facing as soon as it drifts. |
+| **Target Lock** (`_targetLock`) | off | Points at the nearest enemy instead of at the cursor, led for movement and arrow flight. |
+| **Target lock range** (`_targetLockRange`) | 400 | How far the lock reaches. |
+| **Flush Placement** (`_placerRefine`) | on | Slides placements off the 72-point ring onto the exact edge of what blocks them. |
+| **Exact Break Angle** (`_smartBreakAngle`) | on | Gives autobreak the exact best multi-hit facing instead of the best of 72 samples. |
+
+**Where you are pointing.** The aim was `atan2(mouse − screen centre)`, which
+only describes the direction of the cursor when the player is at the centre of
+the screen. The camera lerps toward the player rather than sitting on it
+(`oe += g·cos(m)` in the bundle's frame loop), so while you move, the player
+drifts off centre and the cursor no longer points where the angle says. The
+correction is to rebuild the aim from the camera the frame was actually drawn
+with — the renderer offset RYN already hooks — and take the angle from the
+player's own position. Same fix for `cursorPosition()`, which follow-cursor and
+the bot positions are driven off, and which was also reading the target zoom
+rather than the smoothed one the frame used.
+
+Two smaller things came with it: the angle is no longer rounded to two decimals
+on the way in, and the cursor position is tracked whether or not rotation is
+locked, so locking it no longer freezes the coordinates the rest of the client
+reads.
+
+**How often you say it.** The facing was only resent once it was more than
+`0.3` rad — 17° — from what the server had. That is a lot of aim to give away
+on every hit and every placement, and the comparison was a plain subtraction,
+so aiming near the ±π seam read as 6 rad of drift and resent every tick anyway.
+RYN v5 fixes the wrap with `getAngleDist`; the mix takes that and makes the
+threshold adaptive: `0.02` rad with an enemy near, `0.12` otherwise, and back to
+the stock `0.3` when the second's packet budget is nearly spent. At 9 ticks a
+second the tight figure costs at most 9 packets out of 70.
+
+**Where things get placed.** Placement angles come off a 72-point ring, so every
+one of them can be up to 2.5° from the angle the placer meant — around 7px at
+spike radius, which is the width of the gap an enemy walks out of. When the
+chosen angle has a blocked neighbour, `_reupRefineAngle` bisects the gap between
+them so the placement lands flush against the blocker; when both neighbours are
+blocked it is a slot, and the middle of the free arc is the only angle that
+fits. Both `AutoPlacer` and `AutoRetrap` carry it.
+
+**What you hit.** Autobreak wants the facing that hits the most objects at once
+and swept 72 angles looking for it. A facing either covers an object or it does
+not, and it stops covering it exactly on the edge of that object's hit window,
+so the best facing always sits on one of those edges — a fixed sweep only lands
+on one by luck. Testing the edges directly is exact, and with a handful of
+objects in range it is also less work than the sweep.
+
+`node tools/test-angle.js` runs 22 tests over this, including a randomised check
+that the candidate set never scores below a 0.1° sweep.
+
 ### The placer
 
 Luna's placer was already ported into RYN before this merge — `AutoPlacer`
@@ -125,6 +182,7 @@ src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
+tools/test-angle.js       the angle engine in the build, against client stand-ins
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 
@@ -144,6 +202,7 @@ a newer RYN will surface as a build error rather than a half-merged script.
 ```sh
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
+node tools/test-angle.js
 node --check ReUp_Mix.user.js
 ```
 
@@ -153,6 +212,10 @@ Current state of the build:
   groups (14) and 42 scalar config keys all match `src/game_index.js`. The
   client also carries the right frame-signature width, transport mode, table
   salt, and both opcode alphabets.
+- **Angle engine** — 22/22 tests pass. `test-angle.js` lifts `ReUpAim` and
+  `_reupRefineAngle` out of the built script by their source text and runs them
+  against stand-ins for the camera, the zoom, the weapon tables and the placer,
+  so it exercises the shipped code rather than a copy that can drift.
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
@@ -172,6 +235,11 @@ understood.
 
 ## Notes
 
+- `_smartAim`, `_placerRefine` and `_smartBreakAngle` are excluded from Legit
+  Mode: they do not act on their own, they only change how an angle the client
+  is already sending gets computed, and flipping them off would quietly degrade
+  the aim and the placer after Legit Mode was turned back off. `_targetLock`
+  **is** automation and stays in the sweep.
 - `_spikeRotation`, `_millRotation` and `_usernameCycler` are excluded from
   Legit Mode — they are cosmetic and naming options, not combat automation.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted

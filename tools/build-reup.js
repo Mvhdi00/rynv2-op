@@ -37,6 +37,18 @@ function edit(label, find, replace) {
   applied.push(label);
 }
 
+/* Same, for the handful of methods the client carries in two copies (the
+ * placer exists once on AutoPlacer and once on AutoRetrap). The count is
+ * declared at the call site so an extra or missing copy still fails. */
+function editAll(label, find, replace, expected) {
+  const parts = code.split(find);
+  if (parts.length - 1 !== expected) {
+    throw new Error(`anchor hit ${parts.length - 1} times, expected ${expected}: ${label}`);
+  }
+  code = parts.join(replace);
+  applied.push(`${label} (x${expected})`);
+}
+
 /* ------------------------------------------------------------------ *
  * 1. Userscript header
  * ------------------------------------------------------------------ */
@@ -445,7 +457,476 @@ ${themeButtons}\r
 }
 
 /* ------------------------------------------------------------------ *
- * 10. Driver manifest + runtime drift check
+ * 10. Angle engine
+ *
+ * Four places in the client decide on an angle, and each of them was
+ * giving something away:
+ *
+ *   - The aim is `atan2(mouse - screen centre)`, which is only the
+ *     direction of the cursor if the player is at the centre of the
+ *     screen. The camera lerps toward the player rather than sitting on
+ *     it, so while you move, the point under the cursor is not the point
+ *     that angle describes. It was also only recomputed on mousemove and
+ *     rounded to two decimals.
+ *   - The facing was only resent once it was more than 0.3 rad (17
+ *     degrees) away from what the server had, and the comparison was a
+ *     plain subtraction, so it also fired every tick while aiming near
+ *     the +/-pi wrap. RYN v5 fixes the wrap; the deadzone is ours.
+ *   - The placer scores a 72 point ring and places on the grid angle it
+ *     picked, up to 2.5 degrees off the angle it actually wanted.
+ *   - Autobreak sweeps the same 72 point grid looking for the facing
+ *     that hits the most objects, which can only find the multi-hit
+ *     angles by luck.
+ *
+ * The shared math lives in ReUpAim; the rest of this section wires it in.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "angle: ReUpAim engine",
+  `  const findMiddleAngle = (a, b) => {
+    const x = Math.cos(a) + Math.cos(b);
+    const y = Math.sin(a) + Math.sin(b);
+    return Math.atan2(y, x);
+  };`,
+  `  const findMiddleAngle = (a, b) => {
+    const x = Math.cos(a) + Math.cos(b);
+    const y = Math.sin(a) + Math.sin(b);
+    return Math.atan2(y, x);
+  };
+  const TAU = PI * 2;
+  /* Signed shortest turn, so angle arithmetic survives the +/-pi wrap.
+   * getAngleDist above is the unsigned version of the same thing. */
+  const normalizeAngle = angle => {
+    const wrapped = angle % TAU;
+    return wrapped > PI ? wrapped - TAU : wrapped < -PI ? wrapped + TAU : wrapped;
+  };
+  const angleDelta = (from, to) => normalizeAngle(to - from);
+  const ReUpAim = {
+    mouseX: 0,
+    mouseY: 0,
+    known: false,
+    setMouse(x, y) {
+      this.mouseX = x;
+      this.mouseY = y;
+      this.known = true;
+    },
+    /* The cursor in world coordinates, rebuilt from the camera and zoom
+     * the frame was actually drawn with: the renderer offset hook gives
+     * the top-left corner of the view, so the camera is that plus half a
+     * viewport, and a CSS pixel is 1/scale of a world unit.
+     *
+     * Null means the camera is not up yet (before the first frame, or
+     * before the offset hook has run), which is the caller's cue to fall
+     * back to the screen-centre angle. */
+    worldMouse() {
+      if (!this.known) return null;
+      const smooth = ZoomHandler_default._scale._smooth;
+      const viewW = Number(smooth._w);
+      const viewH = Number(smooth._h);
+      if (!(viewW > 0) || !(viewH > 0)) return null;
+      const scale = Math.max(window.innerWidth / viewW, window.innerHeight / viewH);
+      if (!(scale > 0)) return null;
+      const offset = RYN._offset;
+      if (!offset || offset.x === 0 && offset.y === 0) return null;
+      const camX = offset.x + viewW / 2;
+      const camY = offset.y + viewH / 2;
+      return {
+        x: camX + (this.mouseX - window.innerWidth / 2) / scale,
+        y: camY + (this.mouseY - window.innerHeight / 2) / scale,
+        camX: camX,
+        camY: camY
+      };
+    },
+    /* Angle from where the player actually is to the point under the
+     * cursor - the angle the player means, rather than the one the
+     * screen centre happens to describe. */
+    cursorAngle(client) {
+      const myPlayer = client && client.myPlayer;
+      if (!myPlayer || !myPlayer.inGame) return null;
+      const world = this.worldMouse();
+      if (world === null) return null;
+      const pos = myPlayer.pos.current;
+      /* The camera trails the player by a few pixels. Much more than
+       * that and it is following something else (spectate, ghost) or has
+       * gone stale, and correcting against it would be worse than not. */
+      if (Math.hypot(world.camX - pos.x, world.camY - pos.y) > 400) return null;
+      const dx = world.x - pos.x;
+      const dy = world.y - pos.y;
+      if (dx * dx + dy * dy < 4) return null;
+      return Math.atan2(dy, dx);
+    },
+    /* Where to point so the hit lands on a moving target: their position
+     * advanced by the time our command needs to reach the server, plus
+     * flight time when the weapon throws something. speed is the
+     * distance they covered over the last server tick. */
+    leadAngle(client, target) {
+      const myPlayer = client.myPlayer;
+      const from = myPlayer.pos.current;
+      const to = target.pos.current;
+      const tickMs = 1e3 / Config_default.serverUpdateRate;
+      const ping = client.PacketManager && client.PacketManager.pong || 0;
+      const speed = target.speed || 0;
+      const vx = Math.cos(target.move_dir || 0) * speed;
+      const vy = Math.sin(target.move_dir || 0) * speed;
+      let ticks = (ping / 2 + tickMs) / tickMs;
+      const weaponID = myPlayer.weapon && myPlayer.weapon.current;
+      const weapon = weaponID != null ? DataHandler_default.getWeapon(weaponID) : null;
+      const projectile = weapon && weapon.projectile != null ? Projectiles[weapon.projectile] : null;
+      if (projectile && projectile.speed > 0) {
+        for (let i = 0; i < 2; i++) {
+          const flight = Math.hypot(to.x + vx * ticks - from.x, to.y + vy * ticks - from.y) / projectile.speed;
+          ticks = (ping / 2 + tickMs + flight) / tickMs;
+        }
+      }
+      ticks = clamp(ticks, 0, 4);
+      return Math.atan2(to.y + vy * ticks - from.y, to.x + vx * ticks - from.x);
+    },
+    /* Nearest enemy, weighted toward the one the cursor is already
+     * pointing at, so the lock sharpens the choice instead of taking it
+     * away. Returns null when nobody is in range. */
+    pickTarget(client) {
+      const myPlayer = client && client.myPlayer;
+      const playerManager = client && client.PlayerManager;
+      if (!myPlayer || !myPlayer.inGame || !playerManager) return null;
+      const from = myPlayer.pos.current;
+      const range = Settings_default._targetLockRange ?? 400;
+      const cursor = this.cursorAngle(client);
+      let best = null;
+      let bestScore = -Infinity;
+      for (const enemy of playerManager.enemies) {
+        if (!enemy || enemy === myPlayer) continue;
+        const distance = from.distance(enemy.pos.current);
+        if (distance > range) continue;
+        let score = 1 - distance / range;
+        if (cursor !== null) {
+          score += 1.5 * (1 - getAngleDist(cursor, from.angle(enemy.pos.current)) / PI);
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          best = enemy;
+        }
+      }
+      return best;
+    },
+    /* The angle the owner should be facing this tick, or null to leave
+     * the facing to whatever else decided it. */
+    resolve(client) {
+      if (Settings_default._targetLock) {
+        const target = this.pickTarget(client);
+        if (target !== null) return this.leadAngle(client, target);
+      }
+      if (Settings_default._smartAim) return this.cursorAngle(client);
+      return null;
+    },
+    /* Every angle that can be optimal for "face the most objects at
+     * once". A cone either covers an object or it does not, and it stops
+     * covering it exactly on the edge of that object's window, so the
+     * best facing always sits on one of those edges. Both sides of each
+     * edge are offered, since covering an object and dodging one are
+     * both worth points. */
+    coverageCandidates(items, seed) {
+      const out = [ seed ];
+      const nudge = 1e-4;
+      for (const item of items) {
+        out.push(item.angle);
+        out.push(item.angle + item.cone - nudge);
+        out.push(item.angle - item.cone + nudge);
+        out.push(item.angle + item.cone + nudge);
+        out.push(item.angle - item.cone - nudge);
+      }
+      return out;
+    }
+  };`
+);
+
+/* Settings for the angle work. _targetLockRange is a number, so Legit
+ * Mode leaves it alone; the three booleans below join the exclusion list
+ * further down. */
+edit(
+  "angle: settings keys",
+  `    _spikeRotation: true,`,
+  `    _smartAim: true,
+    _targetLock: false,
+    _targetLockRange: 400,
+    _placerRefine: true,
+    _smartBreakAngle: true,
+    _spikeRotation: true,`
+);
+
+/* Legit Mode silences automatic actions. Target lock is one and stays in
+ * the sweep; the other three only change how an angle already being sent
+ * is computed, and switching them off would quietly degrade the aim and
+ * the placer after Legit Mode was turned back off. */
+edit(
+  "angle: keep aim precision out of Legit Mode",
+  `"_spikeRotation", "_millRotation", "_usernameCycler" ]);`,
+  `"_spikeRotation", "_millRotation", "_usernameCycler", "_smartAim", "_placerRefine", "_smartBreakAngle" ]);`
+);
+
+/* The cursor is now tracked whether or not the player is following it,
+ * so locking rotation no longer freezes the position cursorPosition()
+ * reads, and the angle keeps full precision instead of being rounded to
+ * two decimals on the way in. */
+edit(
+  "angle: camera-corrected mouse aim",
+  `    handleMouseMove(event) {
+      const x = event.clientX;
+      const y = event.clientY;
+      const angle = parseFloat(getAngle(window.innerWidth / 2, window.innerHeight / 2, x, y).toFixed(2));
+      this.mouse.angle = angle;
+      if (this.rotation) {
+        this.mouse.x = x;
+        this.mouse.y = y;
+        this.client._ModuleHandler._currentAngle = angle;
+      }
+    }`,
+  `    handleMouseMove(event) {
+      const x = event.clientX;
+      const y = event.clientY;
+      this.mouse.x = x;
+      this.mouse.y = y;
+      if (this.client.isOwner) ReUpAim.setMouse(x, y);
+      const angle = getAngle(window.innerWidth / 2, window.innerHeight / 2, x, y);
+      this.mouse.angle = angle;
+      if (this.rotation) {
+        const corrected = this.client.isOwner && Settings_default._smartAim ? ReUpAim.cursorAngle(this.client) : null;
+        this.client._ModuleHandler._currentAngle = corrected !== null ? corrected : angle;
+      }
+    }`
+);
+
+/* Same correction for the world position of the cursor, which follow
+ * cursor and the bot positions are driven off. The old form assumed the
+ * player was at the centre of the screen and read the target zoom rather
+ * than the smoothed one the frame was drawn at. */
+edit(
+  "angle: camera-corrected cursor position",
+  `      const {myPlayer: myPlayer} = this.client;
+      const pos = myPlayer.pos.future;
+      const {_w: w, _h: h} = ZoomHandler_default._scale.current;`,
+  `      if (this.client.isOwner && Settings_default._smartAim) {
+        const world = ReUpAim.worldMouse();
+        if (world !== null) return new Vector_default(world.x, world.y);
+      }
+      const {myPlayer: myPlayer} = this.client;
+      const pos = myPlayer.pos.future;
+      const {_w: w, _h: h} = ZoomHandler_default._scale.current;`
+);
+
+/* Re-aim at the top of the tick. The cursor keeps pointing at the same
+ * place on the screen while the player and the camera move under it, so
+ * the angle it describes is only still true if it is recomputed - a
+ * mousemove is not the only thing that changes it. Modules run after
+ * this and can still take the facing for whatever they are doing. */
+edit(
+  "angle: re-aim every tick",
+  `      const {isOwner: isOwner} = this.client;
+      this.placeAngles[0] = null;`,
+  `      const {isOwner: isOwner} = this.client;
+      if (isOwner && this.client.InputHandler && this.client.InputHandler.rotation) {
+        const aim = ReUpAim.resolve(this.client);
+        if (aim !== null) this._currentAngle = aim;
+      }
+      this.placeAngles[0] = null;`
+);
+
+/* How far the server's idea of our facing may drift before it is
+ * corrected. The stock 0.3 rad is 17 degrees of slack given away on
+ * every hit and every placement; at 9 ticks a second the tighter figure
+ * costs at most 9 packets a second out of a 70 packet budget, and it is
+ * only paid while someone is close enough to hit. */
+edit(
+  "angle: adaptive resend threshold",
+  `    updateAngle(angle, force = false) {`,
+  `    reUpAngleThreshold() {
+      if (!Settings_default._smartAim) return .3;
+      if (this.packetCount + 12 > this.packetLimit) return .3;
+      const enemyManager = this.client.EnemyManager;
+      const enemy = enemyManager && enemyManager.nearestEnemy;
+      return enemy ? .02 : .12;
+    }
+    updateAngle(angle, force = false) {`
+);
+
+/* The comparison itself was a plain subtraction, so aiming near the
+ * +/-pi wrap read as 6 rad of drift and resent the angle every tick.
+ * This is the RYN v5 fix, with the threshold now coming from above. */
+edit(
+  "angle: wrap-safe resend comparison",
+  `      if (myPlayer && Math.abs(myPlayer.angle - sendDir) > .3) {`,
+  `      if (myPlayer && getAngleDist(myPlayer.angle, sendDir) > mh.reUpAngleThreshold()) {`
+);
+
+/* The swing is sent later in the tick than the facing was chosen, so
+ * when the lock is on, the lead is recomputed here against the target's
+ * newest position rather than reusing the tick's opening aim. */
+edit(
+  "angle: target lock on the attack angle",
+  `      if (MH._autoBreakActive && MH._lastBreakAngle != null) {
+        return MH._lastBreakAngle;
+      }
+      return currentAngle;
+    }
+    postTick() {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;`,
+  `      if (MH._autoBreakActive && MH._lastBreakAngle != null) {
+        return MH._lastBreakAngle;
+      }
+      if (Settings_default._targetLock && this.client.isOwner) {
+        const target = ReUpAim.pickTarget(this.client);
+        if (target !== null) return ReUpAim.leadAngle(this.client, target);
+      }
+      return currentAngle;
+    }
+    postTick() {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;`
+);
+
+/* Placement angles come off a 72 point ring, so every one of them can be
+ * up to 2.5 degrees away from the angle the placer meant - around 7px of
+ * slack at spike radius, which is the width of the gap an enemy walks
+ * out of. When the chosen angle sits next to a blocked one, bisect the
+ * gap so the placement lands flush against whatever is blocking it. If
+ * both neighbours are blocked it is a slot, and the middle of the free
+ * arc is the only angle that fits.
+ *
+ * Both the placer and the retrapper carry their own copy of this method
+ * set, so both get it. */
+editAll(
+  "angle: refine placement angles off the ring",
+  `    _addPredictObject(id, angle, preplace, myPos) {
+      const item = Items[id];`,
+  `    _reupRefineAngle(id, angle, myPos) {
+      if (!Settings_default._placerRefine) return angle;
+      const ObjectManager2 = this.client.ObjectManager;
+      const step = PI * 2 / 72;
+      const canPlace = a => this._canPlace(id, a, myPos, ObjectManager2, null);
+      if (!canPlace(angle)) return angle;
+      const edge = direction => {
+        if (canPlace(angle + direction * step)) return null;
+        let open = angle;
+        let blocked = angle + direction * step;
+        for (let i = 0; i < 5; i++) {
+          const mid = (open + blocked) / 2;
+          if (canPlace(mid)) open = mid; else blocked = mid;
+        }
+        return open;
+      };
+      const clockwise = edge(1);
+      const counter = edge(-1);
+      if (clockwise !== null && counter !== null) return (clockwise + counter) / 2;
+      if (clockwise !== null) return clockwise;
+      if (counter !== null) return counter;
+      return angle;
+    }
+    _addPredictObject(id, angle, preplace, myPos) {
+      angle = this._reupRefineAngle(id, angle, myPos);
+      const item = Items[id];`,
+  2
+);
+
+/* Autobreak wants the facing that hits the most objects and sweeps 72
+ * angles looking for it. A facing either covers an object or it does
+ * not, and it stops covering it exactly on the edge of that object's
+ * window, so the answer is always on one of those edges - a fixed sweep
+ * only lands on one by luck. Testing the edges directly is exact, and
+ * with a handful of objects in range it is also less work. */
+edit(
+  "angle: exact multi-hit angle for autobreak",
+  `      let angle = angle1;
+      let bestScore = scoreAngle(angle1);
+      for (let i = 0; i < 72; i++) {
+        const testA = i / 72 * Math.PI * 2;
+        const s = scoreAngle(testA);
+        if (s > bestScore) {
+          bestScore = s;
+          angle = testA;
+        }
+      }`,
+  `      let angle = angle1;
+      let bestScore = scoreAngle(angle1);
+      const testAngles = [];
+      if (Settings_default._smartBreakAngle) {
+        const windows = [];
+        const consider = obj => {
+          if (!obj || !inRangeOf(obj)) return;
+          windows.push({
+            angle: pos1.angle(obj.pos.current),
+            cone: obj === target ? gatherAngle / 2 : gatherAngle
+          });
+        };
+        consider(target);
+        consider(nearestEnemyForScore);
+        for (const obj of hittable) consider(obj);
+        for (const obj of nonHittable) consider(obj);
+        testAngles.push(...ReUpAim.coverageCandidates(windows, angle1));
+      } else {
+        for (let i = 0; i < 72; i++) testAngles.push(i / 72 * Math.PI * 2);
+      }
+      for (const testA of testAngles) {
+        const s = scoreAngle(testA);
+        if (s > bestScore) {
+          bestScore = s;
+          angle = testA;
+        }
+      }`
+);
+
+/* The switches, at the top of Combat where the aim belongs. */
+patchPage(
+  "Combat_default",
+  "\r\n\r\n    <!-- Instakills -->",
+  `\r
+\r
+    <!-- Aim -->\r
+    <div class="section">\r
+        <div class="section-title">Aim<span class="sec-sub">Where the client says you are pointing.</span></div>\r
+        <div class="section-content">\r
+            <div class="content-option">\r
+                <label class="option-title" for="_smartAim">Precision Aim</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_smartAim" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Aims from where you actually are to the point under the cursor, every tick, and corrects your facing as soon as it drifts instead of waiting for it to be 17 degrees out. The game aims from the centre of the screen, which is only where you are once the camera has caught up with you. Off restores the vanilla behaviour.</span>\r
+            </div>\r
+            <div class="content-option">\r
+                <label class="option-title" for="_targetLock">Target Lock</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_targetLock" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Points at the nearest enemy in range instead of at the cursor, led by how far they will move before the hit lands (plus arrow flight time on ranged weapons). Picks whichever enemy your cursor is closest to already, so you still choose the target. Very visible to everyone else.</span>\r
+            </div>\r
+            <div class="content-option">\r
+                <span class="option-title">Target lock range</span>\r
+                <label class="slider">\r
+                    <span class="slider-value"></span>\r
+                    <input id="_targetLockRange" type="range" step="25" min="100" max="800">\r
+                </label>\r
+            </div>\r
+            <div class="content-option">\r
+                <label class="option-title" for="_placerRefine">Flush Placement</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_placerRefine" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Placement angles are chosen on a 72 point ring, so they can sit up to 2.5 degrees - about 7px - away from the angle the placer meant. This slides each one onto the exact edge of whatever is blocking it, so walls close instead of leaving a seam.</span>\r
+            </div>\r
+            <div class="content-option">\r
+                <label class="option-title" for="_smartBreakAngle">Exact Break Angle</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_smartBreakAngle" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Autobreak looks for the facing that hits the most things at once by sweeping 72 angles. The best facing always sits exactly on the edge of some object's hit window, so this tests those edges instead - it finds the multi-hits the sweep walks past, and does less work doing it.</span>\r
+            </div>\r
+        </div>\r
+    </div>`
+);
+
+/* ------------------------------------------------------------------ *
+ * 11. Driver manifest + runtime drift check
  *
  * The tables the client carries were checked against the shipped bundle at
  * build time (tools/verify-drivers.js). This records what they were checked
