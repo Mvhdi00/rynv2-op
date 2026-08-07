@@ -47,6 +47,24 @@ for (const logical of Object.keys(NAMES)) {
   }
 }
 
+// The three spike ticks are lifted the same way. The block is self-contained —
+// its constants and its two tick stamps live inside it — so it drops in whole
+// and the two builds cannot drift.
+const SBLOCK_START = "  const SPIKE_TICK_RANGE = 170;";
+const SBLOCK_END = "  class SpikeSync {";
+const ss = ownerSrc.indexOf(SBLOCK_START);
+const se = ownerSrc.indexOf(SBLOCK_END);
+if (ss < 0 || se < ss) throw new Error("could not lift the spike ticks out of the OWNER build");
+let spikeBlock = ownerSrc.slice(ss, se);
+for (const [logical, mangled] of Object.entries(NAMES).sort((a, b) => b[0].length - a[0].length)) {
+  spikeBlock = spikeBlock.replace(new RegExp("\\b" + logical + "\\b", "g"), mangled);
+}
+for (const logical of Object.keys(NAMES)) {
+  if (new RegExp("\\b" + logical + "\\b").test(spikeBlock)) {
+    throw new Error(`${logical} survived renaming in the spike tick block`);
+  }
+}
+
 // The weather overlay is lifted the same way.
 const WBLOCK_START = "  const WEATHER_MAX_PARTICLES = 420;";
 const WBLOCK_END = "  })(performance.now());";
@@ -148,6 +166,69 @@ function classExtent(name) {
   }
   throw new Error("unbalanced class " + name);
 }
+// Brace-match a class body starting from an arbitrary offset.
+function braceEnd(from) {
+  let depth = 0;
+  for (let i = folded.indexOf("{", from); i < folded.length; i++) {
+    const c = folded[i];
+    if (c === '"' || c === "'" || c === "`") {
+      const q = c;
+      i++;
+      while (i < folded.length && folded[i] !== q) {
+        if (folded[i] === "\\") i++;
+        i++;
+      }
+      continue;
+    }
+    if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return i + 1;
+  }
+  throw new Error("unbalanced body");
+}
+// The spike ticks are three classes preceded by a comma-chained const of three
+// arrows, and the whole run is contiguous. Find it by content rather than by
+// mangled name: the head is the const that opens spikeTickTarget, the tail is
+// the close of the SpikeTickTrap class.
+function spikeTickExtent() {
+  const mark = '["_spikeTick"]||!';
+  if (folded.split(mark).length - 1 !== 1) throw new Error("_spikeTick gate is not unique");
+  const start = folded.lastIndexOf("const ", folded.indexOf(mark));
+  if (!/^const [_$\w]+=\([_$\w]+,[_$\w]+\)=>\{/.test(folded.slice(start))) {
+    throw new Error("the const before the _spikeTick gate is not spikeTickTarget");
+  }
+  const trapMark = '["moduleName"]="spikeTickTrap"';
+  if (folded.split(trapMark).length - 1 !== 1) throw new Error("spikeTickTrap is not unique");
+  const cls = folded.lastIndexOf("class ", folded.indexOf(trapMark));
+  return { start, end: braceEnd(cls) };
+}
+const oldSpikeTicks = spikeTickExtent();
+{
+  const text = folded.slice(oldSpikeTicks.start, oldSpikeTicks.end);
+  for (const n of [ "spikeTickBreak", "spikeTickNear", "spikeTickTrap" ]) {
+    if (!text.includes(`["moduleName"]="${n}"`)) throw new Error(`${n} is not inside the span`);
+  }
+  if (text.includes('"spikeSync"')) throw new Error("the span ran past spikeTickTrap");
+  console.log(`old spike ticks: ${text.length} chars in the folded copy`);
+}
+
+// The module table names the old classes; repoint each at its replacement.
+const spikeTickCtorEdits = [
+  [ "spikeTickBreak", "SpikeTickBreak" ],
+  [ "spikeTickNear", "SpikeTickNear" ],
+  [ "spikeTickTrap", "SpikeTickTrap" ],
+].map(([key, cls]) => {
+  const head = `'${key}':new `;
+  const m = new RegExp(head.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([_$\\w]+)\\(").exec(folded);
+  if (!m) throw new Error(`no module table entry for ${key}`);
+  return {
+    name: `staticModules: ${key}`,
+    landmark: head + m[1] + "(",
+    from: head.length,
+    toEnd: 1,
+    text: cls,
+  };
+});
+
 const oldClass = classExtent(OLD_AUTOPLACER);
 const oldText = folded.slice(oldClass.start, oldClass.end);
 if (!oldText.includes('["moduleName"]="autoPlacer"')) {
@@ -181,6 +262,13 @@ const edits = [
     to: oldClass.end,
     text: "\n" + moduleBlock + menuHelpers + "\n",
   },
+  {
+    name: "old spike ticks -> reworked spike ticks",
+    from: oldSpikeTicks.start,
+    to: oldSpikeTicks.end,
+    text: "\n" + spikeBlock + "\n",
+  },
+  ...spikeTickCtorEdits,
   {
     name: "point AutoPlacer_default at the new class",
     landmark: `const ${AUTOPLACER_ALIAS}=${OLD_AUTOPLACER};`,

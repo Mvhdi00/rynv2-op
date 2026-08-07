@@ -4012,11 +4012,6 @@ window.grbtp = 35;
 
   const COWBOY_DROP_RANGE = 350;
 
-  const SPIKE_TICK_RANGE = 170;
-  const SPIKE_TICK_BREAK_GAP = 90;
-  const SPIKE_TICK_TOUCH_SLACK = 1.05;
-  const SPIKE_TICK_TRAP_RANGE = 110;
-
   const RYN_OWNER_NAME = "";
   const RYN_LINK = {
 
@@ -8521,12 +8516,11 @@ window.grbtp = 35;
       const inSecondaryRange = distance <= this.getWeaponRange(secondary, target);
       const isHammer = secondary === 10;
       // The tank bonus is 3.3x, but only if the hat is actually on.
-      // canBuy(0, 40) means owned-or-affordable, not worn — and after every
-      // module has run, _antienemy overwrites forceHat with soldier whenever an
-      // enemy is close, which is exactly when buildings get broken. Assuming
-      // the bonus here picked the primary for jobs it then could not finish:
-      // the swing landed at a third of the assumed damage and the building
-      // survived. Only count it when we are already wearing it.
+      // canBuy(0, 40) means owned-or-affordable, not worn, and this module only
+      // equips tank further down when the bare swing is NOT enough — so
+      // assuming the bonus here picked the primary for jobs it then could not
+      // finish: the swing landed at a third of the assumed damage and the
+      // building survived. Only count it when we are already wearing it.
       const primaryDamage = myPlayer.getBuildingDamage(primary, myPlayer.hatID === 40);
       const _pw = DataHandler_default?.getWeapon?.(primary);
       const isFastPrimary = (_pw?.speed ?? 1e9) < 400;
@@ -10734,16 +10728,112 @@ window.grbtp = 35;
       }
     }
   }
+  const SPIKE_TICK_RANGE = 170;
+  const SPIKE_TICK_BREAK_GAP = 90;
+  const SPIKE_TICK_TOUCH_SLACK = 1.05;
+  const SPIKE_TICK_TRAP_RANGE = 110;
+  // Sakuna's own numbers, ported alongside the gates that use them.
+  //   checkspiketick():      Date.now() - player.intrapTime > 300  (~3 ticks)
+  //   checkAntiSpikeTick():  near.dist2 <= 180, latched for 200ms  (~2 ticks)
+  //   killObject():          objDist < items.weapons[primary].range + 70
+  //   hasNearSpikes:         tmp.scale + min(primary.range, 75)
+  const SPIKE_TICK_TRAP_GRACE = 3;
+  const SPIKE_TICK_COUNTER_RANGE = 180;
+  const SPIKE_TICK_COUNTER_GRACE = 2;
+  const SPIKE_TICK_BREAK_REACH = 70;
+  const SPIKE_TICK_NEAR_SPIKE_REACH = 75;
+  // Two tick stamps per client, for the gates below. They cannot live on
+  // EnemyManager, which wipes its state at the top of every tick — the whole
+  // point of a stamp is how long ago something was true.
+  const SPIKE_TICK_STATE = new WeakMap;
+  const spikeTickState = client2 => {
+    let state = SPIKE_TICK_STATE.get(client2);
+    if (state === void 0) {
+      state = {
+        trapTick: -99,
+        counterTick: -99
+      };
+      SPIKE_TICK_STATE.set(client2, state);
+    }
+    return state;
+  };
+  // Sakuna's checkAntiSpikeTick, which all three of its spike ticks are gated
+  // on. Two ways to lose the exchange you are about to open:
+  //   1. they swing first and you fly into a spike (emySpikeHit)
+  //   2. they drop a spike on you and tick you instead (the 200ms latch)
+  const spikeTickCounterThreat = (client2, state) => {
+    const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, myPlayer: myPlayer} = client2;
+    // The enemy swings first and you fly into a spike. This is Sakuna's
+    // emySpikeHit; RYN works it out with a proper knockback cone in
+    // checkCollision, which is strictly better than Sakuna's projection.
+    if (EnemyManager2.possibleToKnockback && !myPlayer.isTrapped) {
+      return true;
+    }
+    // Or they are standing close enough to drop a spike that touches you, with
+    // a primary ready to swing — one tick from ticking you instead.
+    // canPlaceSpike was already worked out this tick by canPossiblyInstakill,
+    // so this is a read of existing state, not a second scan.
+    const enemies = PlayerManager2.enemies;
+    for (let i = 0; i < enemies.length; i++) {
+      const enemy = enemies[i];
+      if (enemy.canPlaceSpike && !enemy.isTrapped && enemy.isReloaded(0, 1) && myPlayer.collidingSimple(enemy, SPIKE_TICK_COUNTER_RANGE)) {
+        EnemyManager2.enemyCanPlaceSpike = true;
+        state.counterTick = ModuleHandler.tickCount;
+        break;
+      }
+    }
+    // Sakuna latches this for 200ms rather than reading it live: one frame of
+    // the enemy being out of position is not a window, they are still standing
+    // right there.
+    return ModuleHandler.tickCount - state.counterTick <= SPIKE_TICK_COUNTER_GRACE;
+  };
+  // Sakuna's nearBreakType == "NearSpikes" branch: a spike already sitting on
+  // top of you takes the tick, because ticking the enemy does not stop it from
+  // chewing you. Gated on autobreak the same way Sakuna gates it, so turning
+  // autobreak off does not quietly disable the spike ticks with nothing left
+  // to break the spike.
+  const spikeTickNearSpike = client2 => {
+    if (!Settings_default._autobreak) {
+      return false;
+    }
+    const {EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
+    const spike = EnemyManager2.nearestSpike;
+    if (spike === null) {
+      return false;
+    }
+    const primary = myPlayer.getItemByType(0);
+    if (primary === null) {
+      return false;
+    }
+    const reach = spike.scale + Math.min(DataHandler_default.getWeapon(primary).range, SPIKE_TICK_NEAR_SPIKE_REACH);
+    return myPlayer.collidingSimple(spike, reach);
+  };
   const spikeTickTarget = (client2, enabled) => {
+    const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
+    // Stamped before any exit: all three modules call this every tick, so the
+    // stamp cannot be missed the way it would be behind one of the gates.
+    const state = spikeTickState(client2);
+    if (myPlayer.isTrapped) {
+      state.trapTick = ModuleHandler.tickCount;
+    }
     if (!Settings_default._spikeTick || !enabled) {
       return null;
     }
-    const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
       return null;
     }
     const nearest = EnemyManager2.nearestEnemy;
     if (nearest === null || myPlayer.isTrapped) {
+      return null;
+    }
+    // Leaving a trap is not the same as being free: for the next few ticks the
+    // knockback the whole tick is built on does not land the way it is
+    // predicted here, so the swing is spent for nothing. RYN only ever checked
+    // isTrapped, which covers exactly one tick.
+    if (ModuleHandler.tickCount - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
+      return null;
+    }
+    if (spikeTickCounterThreat(client2, state) || spikeTickNearSpike(client2)) {
       return null;
     }
     const primary = myPlayer.getItemByType(0);
@@ -10765,8 +10855,8 @@ window.grbtp = 35;
     ModuleHandler.forceWeapon = 0;
     ModuleHandler.shouldAttack = true;
   };
-  const spikeTickTurret = (client2) => {
-    const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = client2;
+  const spikeTickTurret = (client2, enemy) => {
+    const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
       return;
     }
@@ -10775,18 +10865,26 @@ window.grbtp = 35;
     }
     ModuleHandler.moduleActive = true;
     ModuleHandler.forceHat = 53;
+    // Sakuna holds my.autoAim across both halves of insta(5) so the aim stays
+    // on the target through the turret half instead of snapping back to the
+    // mouse the tick after the swing.
+    if (enemy) {
+      ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
+    }
   };
   class SpikeTickBreak {
     moduleName="spikeTickBreak";
     client;
     useTurret=false;
+    turretTarget=null;
     constructor(client2) {
       this.client = client2;
     }
     postTick() {
       if (this.useTurret) {
         this.useTurret = false;
-        spikeTickTurret(this.client);
+        spikeTickTurret(this.client, this.turretTarget);
+        this.turretTarget = null;
         return;
       }
       const {ObjectManager: ObjectManager2, myPlayer: myPlayer} = this.client;
@@ -10796,10 +10894,17 @@ window.grbtp = 35;
       }
       const pos1 = myPlayer.pos.current;
       const pos2 = nearest.pos.current;
+      // Sakuna requires the break to be inside the primary's own reach as well
+      // as inside 170: `objDist < items.weapons[primary].range + 70`. With a
+      // long primary the flat 170 binds first, but a short one (a hammer or a
+      // stick as primary) reaches nowhere near that far, and swinging at a
+      // break you cannot cover is a wasted tick.
+      const primaryReach = DataHandler_default.getWeapon(myPlayer.getItemByType(0)).range + SPIKE_TICK_BREAK_REACH;
       let broken = false;
       for (const object of ObjectManager2.deletedObjects) {
         const pos3 = object.pos.current;
-        if (pos1.distance(pos3) <= SPIKE_TICK_RANGE && pos2.distance(pos3) <= SPIKE_TICK_BREAK_GAP) {
+        const myDist = pos1.distance(pos3);
+        if (myDist <= SPIKE_TICK_RANGE && myDist < primaryReach && pos2.distance(pos3) <= SPIKE_TICK_BREAK_GAP) {
           broken = true;
           break;
         }
@@ -10809,12 +10914,14 @@ window.grbtp = 35;
       }
       spikeTickHit(this.client, nearest);
       this.useTurret = true;
+      this.turretTarget = nearest;
     }
   }
   class SpikeTickNear {
     moduleName="spikeTickNear";
     client;
     useTurret=false;
+    turretTarget=null;
     constructor(client2) {
       this.client = client2;
     }
@@ -10847,7 +10954,8 @@ window.grbtp = 35;
     postTick() {
       if (this.useTurret) {
         this.useTurret = false;
-        spikeTickTurret(this.client);
+        spikeTickTurret(this.client, this.turretTarget);
+        this.turretTarget = null;
         return;
       }
       const {EnemyManager: EnemyManager2} = this.client;
@@ -10855,12 +10963,19 @@ window.grbtp = 35;
       if (nearest === null) {
         return;
       }
-      const knockedInto = EnemyManager2.nearestEnemySpikeCollider === nearest && EnemyManager2.spikeCollider !== null;
+      // Sakuna guards its predictive branch with `!tmpObj.inTrap`, and it has
+      // to: a trapped enemy does not move when you hit them, so the knockback
+      // this branch is built on never happens. getActualMaxKnockback does not
+      // know about traps, so nearestEnemySpikeCollider will happily name one.
+      // Standing on the spike already (isTouchingDamage) still counts — the
+      // spike ticks them whether they can be pushed or not.
+      const knockedInto = !nearest.isTrapped && EnemyManager2.nearestEnemySpikeCollider === nearest && EnemyManager2.spikeCollider !== null;
       if (!knockedInto && !this.isTouchingDamage(nearest)) {
         return;
       }
       spikeTickHit(this.client, nearest);
       this.useTurret = true;
+      this.turretTarget = nearest;
     }
   }
   class SpikeTickTrap {
@@ -10868,6 +10983,7 @@ window.grbtp = 35;
     client;
     target=null;
     useTurret=false;
+    turretTarget=null;
     constructor(client2) {
       this.client = client2;
     }
@@ -10883,7 +10999,8 @@ window.grbtp = 35;
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (this.useTurret) {
         this.useTurret = false;
-        spikeTickTurret(this.client);
+        spikeTickTurret(this.client, this.turretTarget);
+        this.turretTarget = null;
         return;
       }
       if (this.target !== null) {
@@ -10892,6 +11009,7 @@ window.grbtp = 35;
         if (!ModuleHandler.moduleActive) {
           spikeTickHit(this.client, enemy);
           this.useTurret = true;
+          this.turretTarget = enemy;
         }
         return;
       }
@@ -10912,6 +11030,11 @@ window.grbtp = 35;
         return;
       }
       const trap = trapped.trappedIn;
+      // The whole tick is worth nothing if the hammer does not actually take
+      // the trap down on this swing. The 3.3x here is Tank Gear, so wear it —
+      // Sakuna asks for the same 3.3 and then equips Turret Gear, which leaves
+      // the swing at 88 against a trap it just decided was worth 292. The
+      // turret shot is not lost, it lands on the follow-up tick below.
       if (trap === null || trap.health > myPlayer.getBuildingDamage(secondary, true)) {
         return;
       }
@@ -10923,7 +11046,7 @@ window.grbtp = 35;
       }
       ModuleHandler.moduleActive = true;
       ModuleHandler.useAngle = myPlayer.pos.current.angle(trapped.pos.current);
-      ModuleHandler.forceHat = 53;
+      ModuleHandler.forceHat = 40;
       ModuleHandler.forceWeapon = 1;
       ModuleHandler.shouldAttack = true;
       this.target = trapped;

@@ -171,12 +171,12 @@ needs 11 swings where a hammer needs 6.
 `Autobreak.getDestroyingWeapon` decided whether the primary could finish a
 target in one swing using `getBuildingDamage(primary, canBuy(0, 40))`.
 `canBuy` means *owned or affordable*, not *worn* — so for anyone who has ever
-bought Tank Gear the estimate always carried the 3.3x. When that inflated
-number cleared the target's health it picked the primary, and then, at the end
-of `ModuleHandler.postTick` **after every module has run**, `_antienemy`
-overwrites `forceHat` with soldier whenever an enemy is close, which is exactly
-when buildings get broken. The swing landed at a third of the assumed damage
-and the building survived.
+bought Tank Gear the estimate always carried the 3.3x. Nothing put the hat on
+to match: the module only reaches for `forceHat = 40` further down when the
+**bare** swing is not enough, and `DefaultHat` may already have forced soldier
+for the tick. So the inflated number picked the primary for jobs it could not
+finish, the swing landed at a third of the assumed damage, and the building
+survived.
 
 Both call sites now pass `myPlayer.hatID === 40` — count the bonus only when
 the hat is actually on. With that, anything the primary cannot genuinely finish
@@ -240,6 +240,80 @@ close to both of you, *near* wants the enemy knocked into or touching something
 that damages it, *trap* wants them in a trap. The hit itself only lands if
 `EnemyManager.nearestSpikePlacerAngle` is non-null, which needs a placement
 angle whose spike would actually touch the enemy.
+
+## The three spike ticks, against Sakuna 44.1
+
+RYN had all three shapes but none of the gates Sakuna wraps them in, so they
+fired in positions Sakuna refuses. Five things were missing or wrong.
+
+**No stand-off after leaving a trap.** Sakuna keeps a 300 ms lockout on
+`player.intrapTime`; RYN only checked `isTrapped`, which is one tick. For the
+few ticks after breaking out you are still pinned in practice and the knockback
+the whole tick is built on does not happen, so the swing is spent for nothing.
+Now `SPIKE_TICK_TRAP_GRACE` = 3 ticks (300 ms at 111 ms a tick).
+
+**No counter-threat gate at all.** This is Sakuna's `checkAntiSpikeTick`, which
+every one of its three ticks is gated on, and it is the difference between
+opening an exchange and walking into one. Two halves:
+
+- *they swing first and you fly into a spike* — Sakuna's `emySpikeHit`. RYN
+  already computes this properly (`possibleToKnockback`, a real knockback cone
+  rather than Sakuna's projection along the aim), it was simply never read.
+- *they are close enough to drop a spike on you with a primary ready* — inside
+  180, latched for 200 ms so one frame of them stepping out is not a window.
+  `enemy.canPlaceSpike` was already being computed every tick by
+  `canPossiblyInstakill`, and `EnemyManager.enemyCanPlaceSpike` was a field RYN
+  declared and then never wrote to.
+
+**No priority for a spike already on you.** Sakuna's `nearBreakType ==
+"NearSpikes"` branch breaks a damaging enemy object within
+`scale + min(primary.range, 75)` *instead of* ticking, because ticking them
+does not stop the spike chewing you. Gated on `_autobreak` the way Sakuna gates
+it, so switching autobreak off does not leave the spike to nobody. `Autobreak`
+runs after the spike ticks and already targets `EnemyManager.nearestSpike`, so
+standing off hands it the tick.
+
+**`spikeTickNear` fired on pinned enemies.** Sakuna guards its predictive branch
+with `!tmpObj.inTrap` and has to: a trapped enemy does not move when you hit
+them. `getActualMaxKnockback` knows nothing about traps, so
+`nearestEnemySpikeCollider` would happily name one. The *touching* branch still
+counts for a pinned enemy — the spike ticks them either way.
+
+**`spikeTickTrap` lied about its own damage.** It cleared the trap for breaking
+using `getBuildingDamage(secondary, true)` — the 3.3x Tank Gear number, 292 for
+a hammer — and then equipped hat 53, Turret Gear, so the swing landed at 88 and
+the trap survived. Sakuna has the same mismatch. Here the break tick wears
+**Tank Gear** so the number it decided on is the number it gets; the turret shot
+is not lost, it lands on the follow-up tick.
+
+Two smaller ones: `spikeTickBreak` now also requires Sakuna's
+`objDist < primary.range + 70` (with a short primary the flat 170 lets you swing
+at breaks you cannot reach), and the turret half of the sequence holds the aim
+on the target instead of dropping it, which is what Sakuna's `my.autoAim` does
+across both halves of `insta(5)`.
+
+### Where RYN is already ahead, and was left alone
+
+- The melee reach really is `weapon.range + target.scale * 1.8` — that is the
+  server's own test. RYN's `hitScale` matches it; Sakuna's flat `+35` is short.
+- `nearestEnemySpikeCollider` is a proper knockback cone (angle to the enemy vs
+  angle to the spike, with the spike's angular width, and the spike beyond the
+  enemy). Sakuna projects along the aim by the raw distance.
+- Placement after the hit goes through `attemptSpikePlacement`, which only keeps
+  angles whose spike would actually touch the enemy. Sakuna sprays a 90° arc.
+- Sakuna's `canSpikeTick` is one global flag raised by *any* enemy on a spike
+  and then swung at `near`. RYN only ever ticks the enemy it checked.
+
+### Structure
+
+The whole thing is one liftable block — constants, both tick stamps, the two
+gate helpers, the three shared helpers and the three classes — from
+`const SPIKE_TICK_RANGE = 170;` to the close of `class SpikeTickTrap`. The
+stamps live in a `WeakMap` keyed by client rather than on `EnemyManager`, which
+wipes its state at the top of every tick; a stamp whose whole job is *how long
+ago* cannot live somewhere that is cleared. Being self-contained is what lets
+`patch_player.js` drop it into the obfuscated build whole, so the two builds
+cannot drift.
 
 ## One radius for all three
 
@@ -340,6 +414,8 @@ Built to stay cheap:
 
     node test_modules.js            # 116 cases, owner build
     node test_modules.js --player   # the same 116 against the player build
+    node test_spiketick.js          # 60 cases, the three spike ticks
+    node test_spiketick.js --player # the same 60 against the player build
     node test_weather.js            # 31 cases, weather overlay
     node test_weather.js --player   # the same 31 against the player build
     node test_breaker.js            # 9 cases, weapon choice when breaking
@@ -350,6 +426,12 @@ Built to stay cheap:
 stubbed managers, so it tests what actually ships rather than a copy. It covers
 the arc arithmetic directly (merge/invert/intersect/snap, tangent angles,
 placement and preplace checks) as well as module behaviour.
+
+`test_spiketick.js` does the same for the spike ticks: it slices the block out
+of the shipped file and drives each module tick by tick, so the grace windows
+and the latch are measured across real ticks rather than asserted. The fixtures
+use the game's own numbers — hit reach `range + scale*1.8`, hammer 292 on tank
+and 88 without, pit trap 500 hp.
 
 `test_weather.js` drives the overlay against a mock canvas that counts calls,
 so the cost claims above are measured rather than asserted: draw calls per
