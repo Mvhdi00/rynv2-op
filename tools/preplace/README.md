@@ -205,10 +205,16 @@ The menu pages are encrypted string-array entries and cannot be edited in place,
 so `getFrameContent` is wrapped with `RYN_PP_COMBAT` / `RYN_PP_KEYS`, which
 graft the same rows on at runtime. Both are no-ops if their anchor is missing.
 
-    node deob.js ../../RYN_Client_v5_PLAYER.user.js player_stage1.js
+    node deob.js <clean RYN_Client_v5_PLAYER.user.js> player_stage1.js
     node patch_player.js
 
 `patch_player.js` is not idempotent — run it against a clean copy of the build.
+
+`player_stage1.js` must come from a **clean** copy too, not from an
+already-patched one. It is what `names.js` resolves the mangled names against,
+and a patched build resolves some of them differently, which shows up much
+later as `_0x… is not defined` when the `--player` tests bind their stubs. It
+is gitignored, so a fresh checkout has to regenerate it before those tests run.
 
 ## Weather overlay
 
