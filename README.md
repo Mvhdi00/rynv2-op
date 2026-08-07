@@ -122,10 +122,16 @@ src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
+src/mods/                 third-party userscripts, as received (inputs)
+src/moo-transport-shim.js current transport, for scripts that hook the socket
+mods/                     the repaired userscripts — these are the ones to install
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/fix-mods.js         src/mods/ -> mods/
+tools/check-mods.js       mods vs. the game bundle
+tools/verify-shim.js      shim vs. the game's own codec and crypto
 ```
 
 ## Build
@@ -156,6 +162,123 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
+
+---
+
+# The other userscripts
+
+Five third-party mods were repaired against the same two game files:
+**Balthazar priv**, **Robotics kusoi**, **Sam Mod**, **x18k Original** and
+**xelahot**. Inputs are in `src/mods/`, output in `mods/`.
+
+## Why none of them worked
+
+They were all written for the old transport, where every frame in both
+directions is a bare msgpack `[typeString, args]`. The game in
+`src/game_index.js` does not do that any more. On connect the server sends
+`io-init` carrying `[socketId, seed, hexKey, mode]`, and when `mode` is 1 the
+client has to
+
+- permute the 17 c2s and 36 s2c opcode names from `seed`, so a packet is
+  addressed by a per-connection **number** rather than by its name,
+- carry a monotonic sequence counter as a third frame element, and
+- prefix every client frame with the first 6 bytes of
+  `HMAC-SHA256(key, frame)`.
+
+So each mod was broken twice over: not one packet it sent could be accepted,
+and none of its receive handlers ever ran, because the incoming type arrived as
+a number matching no string key. Every one of them reads `io-init[0]` for the
+socket id and ignores the seed and the key.
+
+Three of them additionally `@require`d msgpack-lite from **rawgit.com**, which
+was shut down in 2019 — those had been running with an undefined `msgpack`
+global for years, before the protocol was ever a factor.
+
+And none of them declared `@run-at document-start`. The game captures
+`WebSocket.prototype.send` into a private binding as its bundle evaluates
+(`kn`/`Ri`, near the top of `src/game_index.js`) and calls that captured
+reference for every packet, then locks `window.WebSocket` with
+`defineProperty`. A hook installed after the bundle has loaded is simply never
+called, so their socket interception could not have worked whatever the
+protocol was.
+
+## The shim
+
+`src/moo-transport-shim.js` sits at the socket boundary and keeps the old
+protocol true from the mod's point of view — opcode names in both directions,
+no signature, no counter — while speaking the real thing to the server.
+
+The part that makes it hold together is that the shim rewrites `io-init`'s
+`mode` to 0 on the way to the page. The game then leaves its own crypto off and
+emits bare `[name, args]` frames, which is exactly what the mods'
+`WebSocket.prototype.send` hooks expect to decode and re-encode. Every frame is
+then signed once, at the last point before the wire, and the sequence counter
+has a single owner instead of being split between the game and the mod.
+
+That means no mod's packet logic had to be rewritten. It also covers **x18k**,
+which is not a socket-hooking mod at all but a fork of the whole game bundle
+with its own `packet.connect`/`packet.send`; because it still reaches the wire
+through `WebSocket.prototype.send`, the shim picks it up unchanged.
+
+A packet name that is not in the game's alphabet is dropped rather than sent,
+and dropped without consuming a sequence number, so a mod's leftover
+private-server opcodes cannot desync the stream.
+
+## What was changed in each script
+
+| | Balthazar | Robotics | Sam Mod | x18k | xelahot |
+|---|---|---|---|---|---|
+| transport shim | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `@run-at document-start` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| dead `@require` dropped | — | ✓ | ✓ | ✓ | ✓ |
+| runtime CDN injection neutralised | ✓ | — | — | — | ✓ |
+| metadata block moved to the top | ✓ | — | — | — | — |
+| body gated on `<body>` / jQuery | ✓ | — | ✓ | ✓ | ✓ |
+
+Balthazar's metadata block was not the first thing in the file — an
+`IIFE` sat above it — so no userscript manager was parsing its header at all.
+
+The readiness gate is there because `document-start` runs before `<body>`
+exists and several of these scripts build DOM at top level. It holds the body
+until the document has a body, and until the page's jQuery has loaded for the
+four that call `$()` immediately. That still lands before the game runs: the
+bundle is a module script, and module scripts are deferred until after parsing,
+so the gate opens while parsing is still in progress and any
+`WebSocket.prototype.send` hook below is in place before the bundle captures it.
+
+Data tables needed no correction — hats (46) and accessories (21) in all five
+already match the shipped bundle exactly.
+
+## Build and verify
+
+```sh
+node tools/fix-mods.js        # src/mods/ -> mods/
+node tools/check-mods.js      # audit mods/ against the bundle
+node tools/verify-shim.js     # shim vs. the game's own codec and crypto
+```
+
+`verify-shim.js` does not test the shim against a restatement of the protocol.
+It lifts the real msgpack encoder and decoder out of `src/game_vendor.js` and
+the real `Po`/`Vt`/`Ao`/`Eo` out of `src/game_index.js` and runs them side by
+side with the shim's, because what matters is agreement with the server and the
+bundle is the only description of the server's side available. 73 checks:
+
+- msgpack — 16 real frame shapes, each checked three ways: shim-encoded then
+  decoded by the game's decoder, game-encoded then decoded by the shim's, and
+  **byte-for-byte identical** encodings.
+- opcode tables — 11 fixed seeds plus 2000 random ones, against the bundle's
+  own `Po`.
+- signature — sha256 across block boundaries against the bundle's `Vt`, plus
+  the published vectors for `""` and `"abc"`; truncated HMAC over 500 random
+  key/frame pairs against the bundle's `Eo`, and an over-length key.
+- session — a full connection driven through the shim: `io-init` arriving with
+  `mode` cleared and the socket id intact, an incoming opcode translated back
+  to its name, outgoing frames renumbered from 1 and signed so the bundle's own
+  `Eo` verifies them, an unknown name dropped without a gap in the sequence,
+  and a socket that never sent `io-init` left untouched.
+
+That last case is what keeps the mods' own side channels — the party and relay
+sockets some of them open — out of the crypto path.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
