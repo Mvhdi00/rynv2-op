@@ -12405,28 +12405,34 @@ function receiveChat(_0x2d1e16, _0x2ae79f) {
   _0x19f8fa.chatMessage = _0x2ae79f;
   _0x19f8fa.chatCountdown = config.chatCountdown;
 }
-if (e.keyCode == 68) {
-  storeEquip(0, 1);
-  setTimeout(() => {
-    place(inv.boostPad);
+document.addEventListener("keydown", function (e) {
+  var typing = document.activeElement &&
+      /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+  if (typing) return;
+  if (e.keyCode == 68) {
+    storeEquip(0, 1);
     setTimeout(() => {
-      weapon("secondary");
-      storeEquip(53, 0);
-      hit(true);
+      place(inv.boostPad);
       setTimeout(() => {
-        weapon("primary");
-        storeEquip(7, 0);
+        weapon("secondary");
+        storeEquip(53, 0);
+        hit(true);
         setTimeout(() => {
-          storeEquip(6, 0);
+          weapon("primary");
+          storeEquip(7, 0);
           setTimeout(() => {
-            hit(false);
-            storeEquip(11, 1);
-          }, 80);
-        }, 255);
-      }, 140);
-    }, 1.5);
-  }, 150);
-}
+            storeEquip(6, 0);
+            setTimeout(() => {
+              hit(false);
+              storeEquip(11, 1);
+            }, 80);
+          }, 255);
+        }, 140);
+      }, 1.5);
+    }, 150);
+  }
+});
+
 ;
 function receiveChat(_0x363828, _0x303e3c) {
   if (/img/i.test(_0x303e3c)) {
@@ -12443,20 +12449,6 @@ function receiveChat(_0x363828, _0x303e3c) {
   addMenuChText($tmpPlayer.name[$tmpPlayer.sid], _0x303e3c, "white");
   _0x54ee48.chatMessage = _0x303e3c;
   _0x54ee48.chatCountdown = config.chatCountdown;
-}
-if (!firstSetup) {
-  waterMult += waterPlus * config.waveSpeed * delta;
-  if (waterMult >= config.waveMax) {
-    waterMult = config.waveMax;
-    waterPlus = -1;
-  } else if (waterMult <= 1) {
-    waterMult = waterPlus = 1;
-  }
-  mainContext.globalAlpha = 1;
-  mainContext.fillStyle = "#dbc666";
-  renderWaterBodies(xOffset, yOffset, mainContext, config.riverPadding);
-  mainContext.fillStyle = "#91b2db";
-  renderWaterBodies(xOffset, yOffset, mainContext, (waterMult - 1) * 250);
 }
 let biomemap = false;
 let canvas = document.getElementById("gameCanvas");
