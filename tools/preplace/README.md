@@ -116,34 +116,60 @@ order: they escaped → trap where they are heading; still pinned and in reach �
 spike into their trap; we escaped what just broke → two opposed traps;
 otherwise refill the hole.
 
-## Preplace and replace place traps only
+## The placer lays traps only
 
-Both were changed to place traps and never spikes, which is a deliberate
-departure from auraro — it spikes when the enemy is pinned by something other
-than the doomed build, and replaces a broken build with a spike. Spikes are
-left to autoplace and to the spike-tick modules.
-
-Where auraro would have spiked:
+All three modules place traps and never spikes. This is the largest deliberate
+departure from auraro, which alternates the two throughout. Spikes are left
+entirely to the spike-tick modules.
 
 | situation | auraro | here |
 |---|---|---|
+| autoplace, pushing and ≤169 | spike, trap fallback | trap |
+| autoplace, ≤222 enemy pinned | spike, trap fallback | trap |
+| autoplace, ≤222 neither | mode 1 spike, then trap | mode 1 trap |
+| autoplace, 269–400 | trap, spike fallback | trap |
 | preplace, enemy pinned by something else | spike into their trap | trap |
 | replace, enemy pinned and in reach | spike into their trap | trap chained onto it |
 | replace, plain refill | spike toward the break | trap toward the break |
+| `protect` | a trap arc and a spike arc | two trap arcs |
+
+With one build type, auraro's alternation collapses. `autoPlace`'s `again`
+recursion has nothing to swap to, so it goes straight to the mode-0 fallback,
+and the dispatch reduces to which *shape* to run — mode 0 lays against
+everything nearby, mode 1 extends what already sits near the enemy.
 
 ### Standing off the spike tick
 
 `spikeTickBreak`, `spikeTickNear`, `spikeTickTrap`, `spikeSync`,
 `spikeSyncHammer`, `spikeTrap` and `teammateSpikeTrap` all run **before** the
 placer in the module order, and whichever claims a tick first puts its name in
-`ModuleHandler.activeModule`. Preplace and replace skip the tick entirely when
-one of those owns it, so they cannot take the slot or the packets a spike tick
-is about to need. Any other module holding the tick is not a reason to stand
-off.
+`ModuleHandler.activeModule`. All three modules skip the tick entirely when one
+of those owns it, so they cannot take the slot or the packets a spike tick is
+about to need. Any other module holding the tick is not a reason to stand off.
+
+The other direction was already safe: `spikeTickTarget` bails on
+`ModuleHandler.moduleActive`, and the spike-tick modules run first, so the
+placer could never have blocked one.
+
+### What the spike tick itself requires
+
+`_spikeTick` is the master switch and **defaults to off**; the three variants
+(`_spikeTickBreak`, `_spikeTickNear`, `_spikeTickTrap`) default on but are
+gated behind it. On top of that `spikeTickTarget` wants all of: no other module
+holding the tick, `!shouldIgnoreModule()` (no insta threat, no danger enemy, no
+spike-sync threat), an enemy present, **you** not trapped, a primary that is not
+weapon 8, that primary reloaded, and the enemy inside
+`min(170, primaryRange + enemy.hitScale)`.
+
+Then each variant adds its own: *break* wants something destroyed this tick
+close to both of you, *near* wants the enemy knocked into or touching something
+that damages it, *trap* wants them in a trap. The hit itself only lands if
+`EnemyManager.nearestSpikePlacerAngle` is non-null, which needs a placement
+angle whose spike would actually touch the enemy.
 
 ## One radius for all three
 
-Autoplace, preplace and replace all gate on `_autoplacerRadius`; there is no
+All three gate on `_autoplacerRadius`; there is no
 separate preplace or replace radius. Auraro gates preplace at 269 and replace
 at 300 internally, so with the slider at its 350 default both now reach a
 little further than the reference. `AURA_REPLACE_RANGE` (300) is untouched —
@@ -238,8 +264,8 @@ Built to stay cheap:
 
 ## Tests
 
-    node test_modules.js            # 97 cases, owner build
-    node test_modules.js --player   # the same 97 against the player build
+    node test_modules.js            # 107 cases, owner build
+    node test_modules.js --player   # the same 107 against the player build
     node test_weather.js            # 31 cases, weather overlay
     node test_weather.js --player   # the same 31 against the player build
     node test_menu.js               # 39 cases, menu wiring in both builds

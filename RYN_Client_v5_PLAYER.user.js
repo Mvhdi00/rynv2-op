@@ -656,8 +656,9 @@
       if (!_0x35d81b._antiTrapProtect) {
         return;
       }
+      // Auraro walls off with a trap arc and a spike arc; trap-only here.
       this.testCanPlace(AURA_TRAP, -(Math.PI / 2), Math.PI / 2, Math.PI / 6, aim + Math.PI, true);
-      this.testCanPlace(AURA_SPIKE, -(Math.PI / 3), Math.PI / 3, Math.PI / 6, aim + Math.PI, true);
+      this.testCanPlace(AURA_TRAP, -(Math.PI / 3), Math.PI / 3, Math.PI / 6, aim + Math.PI, true);
       this.antiTrapped = true;
     }
 
@@ -739,10 +740,13 @@
           this.send(type, angle);
         }
       }
-      if (again) {
+      // With both types given, auraro swaps and runs again, then falls back to
+      // mode 0. Trap-only leaves nothing to swap to, so it goes straight to
+      // the mode-0 fallback with the one type it has.
+      if (again && type2) {
         this.autoPlace(mode, type2, type, false);
       } else if (this.preplaces[1].length < 1) {
-        this.autoPlace(0, type2, type);
+        this.autoPlace(0, type2 || type, type2 ? type : null);
       }
     }
 
@@ -812,6 +816,9 @@
       if (!_0x35d81b._autoplacer || !myPlayer || !myPlayer.inGame) {
         return;
       }
+      if (auraSpikeTickBusy(ModuleHandler)) {
+        return;
+      }
       const tick = ModuleHandler.tickCount;
       if (this._tick === tick) {
         return;
@@ -832,29 +839,27 @@
       placer.rangesUpdated[AURA_SPIKE] = false;
       placer.rangesUpdated[AURA_TRAP] = false;
 
+      // Trap-only, so auraro's spike/trap alternation collapses: what is left
+      // of its dispatch is which *shape* to run, mode 0 or mode 1.
       const pushing = _0x35d81b._autoPush && dist <= (_0x35d81b._autoPushRange ?? 250);
       if (pushing) {
-        if (dist <= 169) {
-          placer.autoPlace(0, AURA_SPIKE, AURA_TRAP);
-        } else if (dist > 222) {
-          placer.autoPlace(0, AURA_TRAP, AURA_SPIKE);
+        if (dist <= 169 || dist > 222) {
+          placer.autoPlace(0, AURA_TRAP, null);
         }
         return;
       }
       if (dist <= 222) {
-        if (enemy.isTrapped) {
-          placer.autoPlace(0, AURA_SPIKE, AURA_TRAP);
-        } else if (enemy.wasTrapped && enemy.wasTrapped()) {
-          placer.autoPlace(0, AURA_TRAP, AURA_SPIKE);
+        if (enemy.isTrapped || enemy.wasTrapped && enemy.wasTrapped()) {
+          placer.autoPlace(0, AURA_TRAP, null);
         } else {
-          placer.autoPlace(1, AURA_SPIKE, AURA_TRAP, true);
+          placer.autoPlace(1, AURA_TRAP, null, false);
         }
         return;
       }
       if (dist > 269 && dist < 400) {
-        placer.autoPlace(0, AURA_TRAP, AURA_SPIKE);
+        placer.autoPlace(0, AURA_TRAP, null);
       } else if (dist <= 269) {
-        placer.autoPlace(1, AURA_TRAP, AURA_SPIKE, true);
+        placer.autoPlace(1, AURA_TRAP, null, false);
       }
     }
   }
@@ -939,7 +944,7 @@
       if (myPos.distance(enemy.pos.current) > (_0x35d81b._autoplacerRadius ?? AURA_AUTOPLACE_RADIUS)) {
         return;
       }
-      if (!myPlayer.canPlace(AURA_SPIKE) && !myPlayer.canPlace(AURA_TRAP)) {
+      if (!myPlayer.canPlace(AURA_TRAP)) {
         return;
       }
       // auraro clears the preplace arcs before every run.

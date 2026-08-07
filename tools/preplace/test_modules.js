@@ -261,7 +261,9 @@ console.log("angleRanges / calcPreplace");
 // ===========================================================================
 console.log("AutoPlacer dispatch");
 {
-  // Which autoPlace shape runs is decided by distance and who is pinned.
+  // Trap-only collapses auraro's spike/trap alternation, so what is left to
+  // dispatch on is the shape: mode 0 lays against everything nearby, mode 1
+  // extends what already sits near the enemy.
   const calls = [];
   const spy = c => {
     const p = new AuraPlacer(c);
@@ -271,29 +273,29 @@ console.log("AutoPlacer dispatch");
   };
   const run = opts => {
     calls.length = 0;
-    const c = spy(makeClient(opts));
-    new AutoPlacer(c).postTick();
+    new AutoPlacer(spy(makeClient(opts))).postTick();
     return calls[0];
   };
 
-  check("pinned enemy inside 222 -> spike first", String(run({ enemyDist: 150, enemyTrapped: true })) === "0,4,7");
-  check("escaped enemy inside 222 -> trap first", String(run({ enemyDist: 150, enemyEscaped: true })) === "0,7,4");
-  check("neither, inside 222 -> extend spikes", String(run({ enemyDist: 150 })) === "1,4,7,true");
-  check("between 269 and 400 -> lay traps", String(run({ enemyDist: 300 })) === "0,7,4");
-  check("between 222 and 269 -> extend traps", String(run({ enemyDist: 240 })) === "1,7,4,true");
-  check("pushing and very close -> spike", String(run({ enemyDist: 150, myTrapped: false,
-        ...(Settings_default._autoPush = true, {}) })) === "0,4,7");
+  check("pinned enemy inside 222 -> mode 0", String(run({ enemyDist: 150, enemyTrapped: true })) === "0,7,");
+  check("escaped enemy inside 222 -> mode 0", String(run({ enemyDist: 150, enemyEscaped: true })) === "0,7,");
+  check("neither, inside 222 -> mode 1", String(run({ enemyDist: 150 })) === "1,7,,false");
+  check("between 269 and 400 -> mode 0", String(run({ enemyDist: 300 })) === "0,7,");
+  check("between 222 and 269 -> mode 1", String(run({ enemyDist: 240 })) === "1,7,,false");
+
+  Settings_default._autoPush = true;
+  check("pushing and very close -> mode 0", String(run({ enemyDist: 150 })) === "0,7,");
   Settings_default._autoPush = false;
 
+  check("every branch asks for traps", calls.length === 0 || calls.every(a => a[1] === 7));
+
   calls.length = 0;
-  const far = spy(makeClient({ enemyDist: 900 }));
-  new AutoPlacer(far).postTick();
+  new AutoPlacer(spy(makeClient({ enemyDist: 900 }))).postTick();
   check("beyond the radius nothing runs", calls.length === 0);
 
   calls.length = 0;
   Settings_default._autoplacer = false;
-  const off = spy(makeClient({ enemyDist: 150 }));
-  new AutoPlacer(off).postTick();
+  new AutoPlacer(spy(makeClient({ enemyDist: 150 }))).postTick();
   check("off when the setting is off", calls.length === 0);
   Settings_default._autoplacer = true;
 
@@ -417,15 +419,12 @@ console.log("traps only, and out of the spike tick's way");
 }
 
 // ===========================================================================
-console.log("spike/trap balance");
+console.log("autoplace is trap-only too");
 {
-  // The reported symptom was spikes going down far more than traps. The cause
-  // was the mode-1 filter being inverted, so a spike paired against spikes.
-  // With that fixed, which type leads is auraro's own ordering: spike-first
-  // inside 222, trap-first between 222 and 269.
-  const runBand = dist => {
+  const dying = { canBeDestroyed: true, destroyingTick: 10 };
+  const runBand = (dist, extra = {}) => {
     placeLog.length = 0;
-    const c = makeClient({ enemyDist: dist });
+    const c = makeClient({ enemyDist: dist, ...extra });
     const my = c.myPlayer.pos.current;
     for (const [dx, dy, kind] of [[55, 0, "s"], [-55, 0, "t"]]) {
       const o = kind === "s" ? ownSpike(new Vec(my.x + dx, my.y + dy))
@@ -436,16 +435,39 @@ console.log("spike/trap balance");
     return placeLog.map(x => x.type);
   };
 
-  const close = runBand(150);
-  check("inside 222 something gets placed", close.length > 0);
-  check("inside 222 spikes lead, as auraro does", close[0] === 4);
+  for (const [label, dist, extra] of [
+    ["inside 222, nobody pinned", 150, {}],
+    ["inside 222, enemy pinned", 150, { enemyTrapped: true }],
+    ["inside 222, enemy just escaped", 150, { enemyEscaped: true }],
+    ["between 222 and 269", 240, {}],
+    ["between 269 and 400", 300, {}],
+  ]) {
+    const out = runBand(dist, extra);
+    check(`${label}: places something`, out.length > 0);
+    check(`${label}: traps only`, out.every(t => t === 7));
+  }
 
-  const mid = runBand(240);
-  check("between 222 and 269 something gets placed", mid.length > 0);
-  check("between 222 and 269 traps lead, as auraro does", mid[0] === 7);
-
-  // and traps are reachable at all through the dispatcher
-  check("traps do get placed by the dispatcher", mid.includes(7));
+  // and it stands off a spike tick, like the other two
+  for (const name of ["spikeTickBreak", "spikeSync", "spikeTrap"]) {
+    placeLog.length = 0;
+    const c = makeClient({ enemyDist: 150 });
+    const my = c.myPlayer.pos.current;
+    const o = ownTrap(new Vec(my.x - 55, my.y));
+    c.ObjectManager.objects.set(o.id, o);
+    c._ModuleHandler.activeModule = name;
+    new AutoPlacer(c).postTick();
+    check(`autoplace stands off while ${name} owns the tick`, placeLog.length === 0);
+  }
+  placeLog.length = 0;
+  {
+    const c = makeClient({ enemyDist: 150 });
+    const my = c.myPlayer.pos.current;
+    const o = ownSpike(new Vec(my.x + 55, my.y));
+    c.ObjectManager.objects.set(o.id, o);
+    c._ModuleHandler.activeModule = "autoBreak";
+    new AutoPlacer(c).postTick();
+    check("but not for an unrelated module", placeLog.length > 0);
+  }
 }
 
 // ===========================================================================
@@ -466,8 +488,7 @@ console.log("testCanPlace / protect");
   const prot = makeClient();
   new AuraPlacer(prot).protect(0);
   check("protect walls off the far side", placeLog.length > 0);
-  check("protect uses both traps and spikes",
-        placeLog.some(x => x.type === 7) && placeLog.some(x => x.type === 4));
+  check("protect walls off with traps only", placeLog.every(x => x.type === 7));
 
   // the same angle cannot be hammered more than four times in a tick
   placeLog.length = 0;
