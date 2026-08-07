@@ -8520,13 +8520,23 @@ window.grbtp = 35;
       const inPrimaryRange = distance <= this.getWeaponRange(primary, target);
       const inSecondaryRange = distance <= this.getWeaponRange(secondary, target);
       const isHammer = secondary === 10;
-      const primaryDamage = myPlayer.getBuildingDamage(primary, ModuleHandler.canBuy(0, 40));
+      // The tank bonus is 3.3x, but only if the hat is actually on.
+      // canBuy(0, 40) means owned-or-affordable, not worn — and after every
+      // module has run, _antienemy overwrites forceHat with soldier whenever an
+      // enemy is close, which is exactly when buildings get broken. Assuming
+      // the bonus here picked the primary for jobs it then could not finish:
+      // the swing landed at a third of the assumed damage and the building
+      // survived. Only count it when we are already wearing it.
+      const primaryDamage = myPlayer.getBuildingDamage(primary, myPlayer.hatID === 40);
       const _pw = DataHandler_default?.getWeapon?.(primary);
       const isFastPrimary = (_pw?.speed ?? 1e9) < 400;
       const canOneHitWithPrimary = primaryDamage >= target.health;
       if (isFastPrimary && canOneHitWithPrimary && inPrimaryRange) {
         return 0;
       }
+      // A hammer does 7.5x on structures where a primary does 1x. If it can
+      // reach, it is the right tool for anything the primary cannot finish in
+      // this one swing.
       if (isHammer && inSecondaryRange) {
         return 1;
       }
@@ -8547,7 +8557,7 @@ window.grbtp = 35;
       if (!spikeId) return null;
       const myPos = myPlayer.pos.current;
       const enemyPos = enemy.pos.current;
-      const hammerDmg = myPlayer.getBuildingDamage?.(secondary, this.client._ModuleHandler.canBuy(0, 40)) ?? 0;
+      const hammerDmg = myPlayer.getBuildingDamage?.(secondary, myPlayer.hatID === 40) ?? 0;
       const hammerWD = DataHandler_default.getWeapon(secondary);
       const spikeItem = Items[spikeId];
       const spikeReach = spikeItem.scale + enemy.collisionScale;

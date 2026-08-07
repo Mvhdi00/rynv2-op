@@ -226,6 +226,23 @@ const edits = [
   },
   { name: "visuals wrap (open)", landmark: `"+${VISUALS_PAGE}+"`, at: 2, text: "RYN_PP_VISUALS(" },
   { name: "visuals wrap (close)", landmark: `"+${VISUALS_PAGE}+"`, at: 2 + VISUALS_PAGE.length, text: ")" },
+  // Autobreak lives outside the lifted block, so its tank-assumption fix has
+  // to be spliced separately. The call spans a folded string, which cannot be
+  // replaced in one piece, so the guard is inserted in front of it instead:
+  //   hatID === 40 && canBuy(0, 40)   ==   hatID === 40
+  // (wearing the hat means you own it, so canBuy is true whenever hatID is 40).
+  {
+    name: "getDestroyingWeapon: only count tank when worn",
+    landmark: '_0x14c863["getBuildingDamage"](_0x2519c2,_0x1f750c["canBuy"](0x0,0x28))',
+    at: '_0x14c863["getBuildingDamage"](_0x2519c2,'.length,
+    text: '_0x14c863["hatID"]===0x28&&',
+  },
+  {
+    name: "hammerDmg: only count tank when worn",
+    landmark: '_0x3b7afb["getBuildingDamage"]?.(_0x89ebbd,this["client"]["_ModuleHandler"]["canBuy"](0x0,0x28))',
+    at: '_0x3b7afb["getBuildingDamage"]?.(_0x89ebbd,'.length,
+    text: '_0x3b7afb["hatID"]===0x28&&',
+  },
   { name: "keybinds wrap (open)", landmark: `"+${KEYBINDS_PAGE}+"`, at: 2, text: "RYN_PP_KEYS(" },
   { name: "keybinds wrap (close)", landmark: `"+${KEYBINDS_PAGE}+"`, at: 2 + KEYBINDS_PAGE.length, text: ")" },
   { name: "combat wrap (open)", landmark: `"+${COMBAT_PAGE}+"`, at: 2, text: "RYN_PP_COMBAT(" },

@@ -155,6 +155,41 @@ and exactly the radial floor at 40, 50, 80 and 100px.
 Rates for reference: `serverUpdateRate` 9 (111ms a tick), `clientSendRate` 5
 (200ms between sends).
 
+## Breaking: the tank bonus is only real when worn
+
+Numbers from the game files, so the sizes are not guesses:
+
+| | per swing | on Tank Gear (3.3x) |
+|---|---|---|
+| hammer (`dmg 10, sDmg 7.5, range 75`) | 88 | 292 |
+| katana (`dmg 40`, no `sDmg`, range 118) | 47 | 156 |
+
+`sDmg` appears exactly once in the whole item table — on the hammer. Everything
+else multiplies by 1 against buildings. A pit trap has **500 hp**, so a primary
+needs 11 swings where a hammer needs 6.
+
+`Autobreak.getDestroyingWeapon` decided whether the primary could finish a
+target in one swing using `getBuildingDamage(primary, canBuy(0, 40))`.
+`canBuy` means *owned or affordable*, not *worn* — so for anyone who has ever
+bought Tank Gear the estimate always carried the 3.3x. When that inflated
+number cleared the target's health it picked the primary, and then, at the end
+of `ModuleHandler.postTick` **after every module has run**, `_antienemy`
+overwrites `forceHat` with soldier whenever an enemy is close, which is exactly
+when buildings get broken. The swing landed at a third of the assumed damage
+and the building survived.
+
+Both call sites now pass `myPlayer.hatID === 40` — count the bonus only when
+the hat is actually on. With that, anything the primary cannot genuinely finish
+in one swing goes to the hammer, which is what the 7.5x multiplier is for.
+`AutoGrind` still uses `canBuy` and was left alone: it grinds turrets out of
+combat, where nothing overwrites the hat.
+
+`Autobreak` is not part of the block lifted into the player, so the player gets
+this as its own splice. The call spans a folded string and cannot be replaced
+in one piece, so the guard is inserted in front of it instead —
+`hatID === 40 && canBuy(0, 40)` is the same thing, since wearing the hat means
+owning it.
+
 ## The placer lays traps only
 
 All three modules place traps and never spikes. This is the largest deliberate
@@ -307,6 +342,8 @@ Built to stay cheap:
     node test_modules.js --player   # the same 116 against the player build
     node test_weather.js            # 31 cases, weather overlay
     node test_weather.js --player   # the same 31 against the player build
+    node test_breaker.js            # 9 cases, weapon choice when breaking
+    node test_breaker.js --player   # checks the spliced guard in the player
     node test_menu.js               # 39 cases, menu wiring in both builds
 
 `test_modules.js` slices the placer out of the shipped file and drives it with
