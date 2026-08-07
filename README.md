@@ -177,3 +177,61 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# RYN Client v5
+
+`RYN_Client_v5_OWNER.user.js` is the readable, edit-me build.
+`RYN_Client_v5_PLAYER.user.js` is derived from it and is what gets handed out.
+
+```
+tools/build-player.js     OWNER -> PLAYER (name tag, RYN_ROLE, owner-only rows)
+tools/obfuscate.js        renames every identifier, packs to one line
+tools/strip-comments.js   removes JS comments, keeps the userscript header
+```
+
+## Build
+
+```sh
+node tools/build-player.js
+node tools/obfuscate.js RYN_Client_v5_PLAYER.user.js
+```
+
+`build-player.js` changes exactly three things and fails loudly if any of the
+three anchors is missing or ambiguous, so the two builds cannot drift apart:
+the `@name` tag, `RYN_ROLE`, and the owner-only **Mark RYN Players** row in
+Visuals.
+
+`obfuscate.js` mangles identifiers with terser (`compress: false` — renaming
+only, nothing rewrites the logic) using a seeded generator, so the same input
+always produces the same output. Before writing anything it re-scans both sides
+and refuses to ship if a single plain string literal moved, since a rename can
+never do that. Regex literals are likewise untouched, which is what keeps the
+bundle-rewrite hooks working after obfuscation.
+
+## Verification
+
+```sh
+node tools/check-hooks.js RYN_Client_v5_OWNER.user.js
+node tools/verify-drivers.js RYN_Client_v5_OWNER.user.js
+node --check RYN_Client_v5_OWNER.user.js
+```
+
+Run these against the **pre-obfuscation** build. `check-hooks.js` locates the
+`Regexer` class by name, which the obfuscated player build no longer has.
+
+41/41 hooks bind, including the four that drive the world tint:
+
+| Hook | What it rewrites |
+|---|---|
+| `objectAlpha` | scales the per-object `globalAlpha` in the object loop |
+| `buildingTint` | swaps the item sprite for a tinted copy |
+| `resourceTint` | same, for trees / bushes / rocks / gold |
+| `animalTint` | routes animal draws through `_drawAnimal` |
+
+The tint itself is a per-sprite cache: each sprite is drawn once into an
+offscreen canvas and overlaid with purple through `source-atop`, so the fill
+lands on the sprite and not on the empty space around it. Transparency is a
+separate `globalAlpha` multiply, which is what the **Tint Transparency** slider
+in Visuals drives (0% solid, 100% invisible).
