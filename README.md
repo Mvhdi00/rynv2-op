@@ -307,6 +307,19 @@ is simply empty, which costs nothing: the Cowboy Hat has no effect either.
 Returning `5` instead of `0` there would keep the cowboy look the whole way, at
 the price of the 350px drop.
 
+The option also reaches the accessory slot, in the same shape:
+
+- **Blood Wings** are no longer gated on standing still. `DefaultAcc` used to
+  hand them out only when stopped and fall through to the Monkey Tail the moment
+  you moved; with the option on they stay on through movement.
+- **Monkey Tail** is never equipped. That includes the Tail Priority branch,
+  which this option outranks — with both on, Tail Priority does nothing.
+
+The combat branches ahead of it are untouched: turret gear still takes Shadow
+Wings, the bull helmet still takes Blood Wings, and an enemy inside 300px still
+takes Angel Wings. Dash Movement also still equips the tail for the dash itself,
+because that is the trick, not the default.
+
 ## Spike Tick
 
 Three variants ported from Sakuna 44, under one master switch in Combat →

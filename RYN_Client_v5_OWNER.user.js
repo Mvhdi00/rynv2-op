@@ -11240,7 +11240,7 @@ window.grbtp = 35;
         if (useBloodWings) return 18;
         if (useShadow) return 19;
       }
-      if (Settings_default._tailPriority && useTail && this.shouldUseTail()) {
+      if (Settings_default._tailPriority && !Settings_default._cowboyWhenSafe && useTail && this.shouldUseTail()) {
         return 11;
       }
       if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(300, EnemyManager2.nearestEntity)) {
@@ -11255,6 +11255,10 @@ window.grbtp = 35;
         if (useActual && actual !== 11) {
           return actual;
         }
+        return 0;
+      }
+      if (Settings_default._cowboyWhenSafe) {
+        if (useBloodWings) return 18;
         return 0;
       }
       if (!ModuleHandler.isMoving && myPlayer.speed <= 5) {
