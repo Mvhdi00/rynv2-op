@@ -140,16 +140,42 @@ graft the same rows on at runtime. Both are no-ops if their anchor is missing.
 
 `patch_player.js` is not idempotent — run it against a clean copy of the build.
 
+## Weather overlay
+
+Rain across the screen that turns to snow inside the snow biome
+(`myPlayer.pos.current.y <= Config_default.snowBiomeTop`), easing across the
+boundary rather than snapping. `Visuals -> Weather` has the toggle and an
+intensity slider.
+
+Built to stay cheap:
+
+- one overlay canvas, created only while the effect is on and you are in a
+  game, torn down otherwise — when it is off the frame callback is one `if`
+- one particle pool, grown once and recycled in place; nothing is allocated
+  per frame
+- every raindrop goes into a single path and is stroked once; every snowflake
+  into a single path filled once. Two draw calls a frame at any intensity
+- the canvas is only resized when the game canvas actually changes size
+- delta-timed, so speed does not follow framerate, and a backgrounded tab
+  cannot teleport the field
+- `_lowQuality` thins the field
+
 ## Tests
 
     node test_modules.js            # 76 cases, owner build
     node test_modules.js --player   # the same 76 against the player build
-    node test_menu.js               # 36 cases, menu wiring in both builds
+    node test_weather.js            # 31 cases, weather overlay
+    node test_weather.js --player   # the same 31 against the player build
+    node test_menu.js               # 48 cases, menu wiring in both builds
 
 `test_modules.js` slices the placer out of the shipped file and drives it with
 stubbed managers, so it tests what actually ships rather than a copy. It covers
 the arc arithmetic directly (merge/invert/intersect/snap, tangent angles,
 placement and preplace checks) as well as module behaviour.
+
+`test_weather.js` drives the overlay against a mock canvas that counts calls,
+so the cost claims above are measured rather than asserted: draw calls per
+frame, pool growth, particle identity across frames, and canvas reallocation.
 
 **Not covered:** none of this has been run against the live game. The geometry
 is verified against stubs; timing, and whether the chosen angles land the way

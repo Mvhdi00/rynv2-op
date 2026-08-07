@@ -18,6 +18,8 @@ const probes = {
   Items: { re: /const _0x5ca083=(_0x[0-9a-f]+)\[/, want: [] },
   Config_default: { re: /class _0x[0-9a-f]+\{\["speed"\]=(_0x[0-9a-f]+)\["playerSpeed"\]/, want: ["mapScale", "riverWidth", "playerSpeed"] },
   MovementSimulation: { re: /class (_0x[0-9a-f]+)\{\["speed"\]=_0x[0-9a-f]+\["playerSpeed"\]/, want: [] },
+  // the client itself, read off the RYN global literal
+  client: { re: /\{'_myClient':(_0x[0-9a-f]+),'_settings':_0x[0-9a-f]+/, want: ["SocketManager"] },
 };
 
 const out = {};

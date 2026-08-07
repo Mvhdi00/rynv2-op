@@ -17,7 +17,11 @@ const he = player.indexOf("  };", player.indexOf("  const RYN_PP_KEYS")) + 4;
 const helpers = player.slice(hs, he);
 const sandbox = {};
 vm.createContext(sandbox);
-vm.runInContext(helpers + "\nglobalThis.C = RYN_PP_COMBAT; globalThis.K = RYN_PP_KEYS;", sandbox);
+vm.runInContext(
+  helpers +
+    "\nglobalThis.C = RYN_PP_COMBAT; globalThis.K = RYN_PP_KEYS; globalThis.V = RYN_PP_VISUALS;",
+  sandbox
+);
 
 // Recover the real page strings from the folded copy.
 function pageFrom(varName) {
@@ -80,6 +84,21 @@ const balanced = (before, after, expected) => {
 check("combat page stays balanced and gains 5 rows", balanced(combat, combatOut, 5));
 check("keybinds page stays balanced and gains 2 tiles", balanced(keys, keysOut, 2));
 check("transforms are a no-op without their anchor", sandbox.C("X") === "X" && sandbox.K("X") === "X");
+
+// Weather rows live on the Visuals page.
+const visuals = pageFrom("_0x5bc8e9");
+check("recovered the Visuals page", visuals.includes('id="_objectTintOpacity"'));
+const visualsOut = sandbox.V(visuals);
+check("PLAYER visuals transform fires", visualsOut.length > visuals.length);
+for (const id of ["_weather", "_weatherAmount"]) {
+  check(`PLAYER visuals has ${id}`, visualsOut.includes(`id="${id}"`));
+  check(`OWNER markup has ${id}`, owner.includes(`id=\\"${id}\\"`));
+  check(`OWNER settings define ${id}`, new RegExp(`\\n\\s*${id}:`).test(owner));
+  check(`PLAYER settings define ${id}`, player.includes(`_0xc709e6["${id}"]=`));
+}
+check("weather rows land after the tint slider",
+      visualsOut.indexOf('id="_weather"') > visualsOut.indexOf('id="_objectTintOpacity"'));
+check("visuals page stays balanced and gains a 5-div section", balanced(visuals, visualsOut, 5));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

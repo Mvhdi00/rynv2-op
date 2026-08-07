@@ -24,6 +24,8 @@ const AUTOPLACER_ALIAS = "_0x266440"; // AutoPlacer_default
 const CLIENT_ARG = "_0x4ad6f7"; // the client threaded through the module table
 const KEYBINDS_PAGE = "_0x4f695d";
 const COMBAT_PAGE = "_0x222a58";
+const VISUALS_PAGE = "_0x5bc8e9";
+const WIN_VAR = "_0x63a37"; // const <win> = window, ... — where the overlay goes
 
 // ---------------------------------------------------------------- module code
 const ownerSrc = fs.readFileSync(RYN_OWNER, "utf8");
@@ -42,6 +44,23 @@ for (const [logical, mangled] of Object.entries(NAMES).sort((a, b) => b[0].lengt
 for (const logical of Object.keys(NAMES)) {
   if (new RegExp("\\b" + logical + "\\b").test(moduleBlock)) {
     throw new Error(`${logical} survived renaming`);
+  }
+}
+
+// The weather overlay is lifted the same way.
+const WBLOCK_START = "  const WEATHER_MAX_PARTICLES = 420;";
+const WBLOCK_END = "  })(performance.now());";
+const ws = ownerSrc.indexOf(WBLOCK_START);
+const we = ownerSrc.indexOf(WBLOCK_END);
+if (ws < 0 || we < ws) throw new Error("could not lift the weather block out of the OWNER build");
+let weatherBlock = ownerSrc.slice(ws, we + WBLOCK_END.length);
+for (const [logical, mangled] of Object.entries(NAMES).sort((a, b) => b[0].length - a[0].length)) {
+  // `(?<!\.)` keeps `game.clientWidth` from being rewritten
+  weatherBlock = weatherBlock.replace(new RegExp("(?<!\\.)\\b" + logical + "\\b", "g"), mangled);
+}
+for (const logical of Object.keys(NAMES)) {
+  if (new RegExp("(?<!\\.)\\b" + logical + "\\b").test(weatherBlock)) {
+    throw new Error(`${logical} survived renaming in the weather block`);
   }
 }
 
@@ -79,6 +98,16 @@ const combatRows =
   slider("_prePlaceHits", "Preplace break threshold", 1, 1, 6) +
   toggle("_replace", "Replace") +
   slider("_replaceRadius", "Replace radius", 25, 100, 500);
+const visualsAnchor =
+  `<input id="_objectTintOpacity" type="range" step="5" min="0" max="100" data-suffix="%">${NL}` +
+  `                </label>${NL}            </div>${NL}        </div>${NL}    </div>${NL}${NL}`;
+const visualsRows =
+  `    <div class="section">${NL}` +
+  `        <div class="section-title">Weather<span class="sec-sub">Rain over the map, turning to snow in the snow biome.</span></div>${NL}` +
+  `        <div class="section-content">${NL}` +
+  toggle("_weather", "Rain &amp; Snow") +
+  slider("_weatherAmount", "Intensity", 5, 0, 100) +
+  `        </div>${NL}    </div>${NL}${NL}`;
 const keyAnchor =
   `                <button id="_autoplacerKey" class="hotkeyInput"></button>\n` +
   `            </div>\n`;
@@ -90,6 +119,10 @@ const menuHelpers =
   `\n  const RYN_PP_COMBAT = html => {\n` +
   `    const anchor = ${JSON.stringify(combatAnchor)};\n` +
   `    return html.indexOf(anchor) < 0 ? html : html.replace(anchor, anchor + ${JSON.stringify(combatRows)});\n` +
+  `  };\n` +
+  `  const RYN_PP_VISUALS = html => {\n` +
+  `    const anchor = ${JSON.stringify(visualsAnchor)};\n` +
+  `    return html.indexOf(anchor) < 0 ? html : html.replace(anchor, anchor + ${JSON.stringify(visualsRows)});\n` +
   `  };\n` +
   `  const RYN_PP_KEYS = html => {\n` +
   `    const anchor = ${JSON.stringify(keyAnchor)};\n` +
@@ -129,7 +162,8 @@ console.log(`old AutoPlacer: ${oldText.length} chars in the folded copy`);
 const settingsDefaults =
   `_0xc709e6["_prePlace"]=!![],_0xc709e6["_prePlaceRadius"]=0x10e,` +
   `_0xc709e6["_prePlaceHits"]=0x4,_0xc709e6["_prePlaceKey"]='',` +
-  `_0xc709e6["_replace"]=!![],_0xc709e6["_replaceRadius"]=0x12c,_0xc709e6["_replaceKey"]='',`;
+  `_0xc709e6["_replace"]=!![],_0xc709e6["_replaceRadius"]=0x12c,_0xc709e6["_replaceKey"]='',` +
+  `_0xc709e6["_weather"]=!![],_0xc709e6["_weatherAmount"]=0x2d,`;
 
 const S = NAMES.Settings_default;
 function toggleHandler(keyProp, valueProp, elementId) {
@@ -188,6 +222,14 @@ const edits = [
     after: true,
     text: toggleHandler("_prePlaceKey", "_prePlace", "_prePlace") + toggleHandler("_replaceKey", "_replace", "_replace"),
   },
+  {
+    name: "weather overlay",
+    landmark: `const ${WIN_VAR}=window,`,
+    at: 0,
+    text: "\n" + weatherBlock + "\n",
+  },
+  { name: "visuals wrap (open)", landmark: `"+${VISUALS_PAGE}+"`, at: 2, text: "RYN_PP_VISUALS(" },
+  { name: "visuals wrap (close)", landmark: `"+${VISUALS_PAGE}+"`, at: 2 + VISUALS_PAGE.length, text: ")" },
   { name: "keybinds wrap (open)", landmark: `"+${KEYBINDS_PAGE}+"`, at: 2, text: "RYN_PP_KEYS(" },
   { name: "keybinds wrap (close)", landmark: `"+${KEYBINDS_PAGE}+"`, at: 2 + KEYBINDS_PAGE.length, text: ")" },
   { name: "combat wrap (open)", landmark: `"+${COMBAT_PAGE}+"`, at: 2, text: "RYN_PP_COMBAT(" },
