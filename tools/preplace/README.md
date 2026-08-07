@@ -12,9 +12,44 @@ for the enemy to walk into. Trigger is `PlayerObject.canBeDestroyed` on the
 current tick (an enemy in range can finish it now), or a damage estimate showing
 the building is within `_prePlaceHits` swings of dying.
 
+What gets placed depends on who is pinned, following the reference client:
+
+| situation | placement | aimed at |
+|---|---|---|
+| the doomed building *is* our trap holding the enemy | retrap burst | the enemy |
+| enemy pinned by something else | spike | their trap |
+| nobody pinned | trap | the doomed slot |
+| we are the pinned one | spike | whatever has us |
+
+The retrap burst refills several slots around us at once instead of one, so
+whichever opens up as the trap dies gets taken. The reference fans 16 angles;
+that costs more packets than a RYN tick has, so the burst takes the best
+`PREPLACE_RETRAP_ANGLES` toward the enemy and stops at the packet budget.
+
 **Replace** — when one of our spikes or traps *is* destroyed, drop a new one into
 the hole on the same tick. Reads `ObjectManager.deletedObjects`, which the client
-already fills with nearby player objects removed this tick.
+already fills with nearby player objects removed this tick. Priority order:
+
+1. we are pinned -> spike at our captor (this is what breaks the cycle)
+2. our trap on them broke -> re-pin, aimed where they are heading
+3. they just escaped (`wasTrapped()`) -> trap, aimed where they are heading
+4. they are pinned and within `REPLACE_TRAP_REACH` -> spike into their trap
+5. otherwise -> spike toward the break direction
+
+## Deliberately not ported
+
+- The reference aims a retrap so the enemy is knocked into an adjacent friendly
+  spike. RYN's `AutoPlacer` already runs `SiegeAnalysis.knockInto` and
+  `_findClosestSpikeToKb` every tick, so this would duplicate a live system.
+- Placing traps around yourself after escaping one — RYN covers that with
+  `AntiTrapStar` and `AntiTrapProtect`.
+- Breaking the trap you are stuck in — RYN's `AntiRetrap`.
+- `shameGrind` variants and the reference's spike-tick folding: RYN has no
+  `shameGrind`, and runs spike tick as its own `spikeTick*` modules.
+
+Unrelated but worth knowing: `AutoPlacer` reads `client._retrapQuadrant` to mask
+off a quadrant of placement angles, and nothing in the build ever sets it. It is
+inert, and was left alone.
 
 Both live as ordinary RYN modules (`postTick`), respect the packet budget, and
 sit in the module order as `replacer` → `autoPlacer` → `prePlacer`.
@@ -61,9 +96,9 @@ build.
 
 ## Tests
 
-    node test_modules.js   # placement logic, run against the OWNER block
-    node test_menu.js      # menu wiring and markup in both builds
+    node test_modules.js            # placement logic, owner build
+    node test_modules.js --player   # the same cases against the player build
+    node test_menu.js               # menu wiring and markup in both builds
 
 `test_modules.js` slices the module block out of the shipped file and drives it
-with stubbed managers, so it tests what actually ships. Point it at the player
-build with the mangled names to check that copy too.
+with stubbed managers, so it tests what actually ships rather than a copy.

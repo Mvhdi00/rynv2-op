@@ -17,7 +17,9 @@
   const PREPLACE_SCAN_RANGE = 200;
   const PREPLACE_MAX_PER_TICK = 2;
   const PREPLACE_COOLDOWN_TICKS = 6;
+  const PREPLACE_RETRAP_ANGLES = 3;
   const REPLACE_MAX_PER_TICK = 2;
+  const REPLACE_TRAP_REACH = 169;
   function placementCost(type) {
     return type === 7 ? 5 : 4;
   }
@@ -111,14 +113,104 @@
       return doomed.sort((a, b) => a.hits - b.hits || a.distance - b.distance);
     }
 
-    // Spike normally; trap first when nobody is pinned yet and a trap would land
-    // between us and the enemy.
-    placementOrder(enemy) {
-      const {myPlayer: myPlayer} = this.client;
-      if (!myPlayer.isTrapped && !enemy.isTrapped) {
-        return [ 7, 4 ];
+    // The trap currently pinning the enemy, but only when it is one of ours —
+    // an enemy sitting in their own trap is not something we are holding.
+    enemyTrap(enemy) {
+      if (!enemy.isTrapped) {
+        return null;
       }
-      return [ 4, 7 ];
+      const trap = enemy.trappedIn;
+      if (!trap) {
+        return null;
+      }
+      const {PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
+      return PlayerManager2.isEnemyByID(trap.ownerID, myPlayer) ? null : trap;
+    }
+
+    // What to place for a given doomed building, and what to aim it at.
+    //   enemy pinned, and this IS the trap holding them -> retrap, handled by
+    //     the caller as a burst rather than a single angle
+    //   enemy pinned by something else -> spike, aimed into the trap
+    //   nobody pinned -> trap, to pin them
+    //   we are the pinned one -> spike, aimed at whatever has us
+    plan(object, enemy, enemyTrap) {
+      const {myPlayer: myPlayer} = this.client;
+      if (enemyTrap !== null && enemyTrap.id === object.id) {
+        return {
+          order: [ 7, 4 ],
+          aim: enemy,
+          retrap: true
+        };
+      }
+      if (myPlayer.isTrapped) {
+        return {
+          order: [ 4, 7 ],
+          aim: myPlayer.trappedIn || object,
+          retrap: false
+        };
+      }
+      if (enemyTrap !== null) {
+        return {
+          order: [ 4, 7 ],
+          aim: enemyTrap,
+          retrap: false
+        };
+      }
+      return {
+        order: [ 7, 4 ],
+        aim: object,
+        retrap: false
+      };
+    }
+
+    // The trap under the enemy is about to go. Refill several slots around
+    // ourselves rather than one, so whichever opens up gets taken. The angle
+    // budget is small on purpose: a full fan costs more packets than a tick has.
+    retrapBurst(object, enemy, fromPos, tick) {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      if (!myPlayer.canPlace(7)) {
+        return false;
+      }
+      const id = myPlayer.getItemByType(7);
+      if (id === null) {
+        return false;
+      }
+      const targetAngle = fromPos.angle(enemy.pos.current);
+      const angles = ObjectManager2.getBestPlacementAngles({
+        position: fromPos,
+        id: id,
+        targetAngle: targetAngle,
+        ignoreID: object.id,
+        preplace: true,
+        reduce: false,
+        fill: true
+      });
+      if (angles.length === 0) {
+        return false;
+      }
+      let sent = 0;
+      for (const angle of angles) {
+        if (sent >= PREPLACE_RETRAP_ANGLES) {
+          break;
+        }
+        if (ModuleHandler.packetCount + placementCost(7) > ModuleHandler.packetLimit) {
+          break;
+        }
+        if (angleGap(angle, targetAngle) > Math.PI / 2) {
+          continue;
+        }
+        ModuleHandler.place(7, angle);
+        ModuleHandler.placeAngles[0] = 7;
+        ModuleHandler.placeAngles[1].push(angle);
+        sent += 1;
+      }
+      if (sent === 0) {
+        return false;
+      }
+      ModuleHandler.placedOnce = true;
+      ModuleHandler.moduleActive = true;
+      this._sentAt.set(object.id, tick);
+      return true;
     }
 
     postTick() {
@@ -153,13 +245,20 @@
       }
       // Aim from where we will be once the packet lands, not where we are now.
       const fromPos = myPlayer.pos.future ?? myPos;
-      const order = this.placementOrder(enemy);
+      const enemyTrap = this.enemyTrap(enemy);
       let placed = 0;
       for (const {object: object} of doomed) {
         if (placed >= PREPLACE_MAX_PER_TICK) {
           break;
         }
-        const targetAngle = fromPos.angle(object.pos.current);
+        const {order: order, aim: aim, retrap: retrap} = this.plan(object, enemy, enemyTrap);
+        if (retrap) {
+          if (this.retrapBurst(object, enemy, fromPos, tick)) {
+            placed += 1;
+          }
+          continue;
+        }
+        const targetAngle = fromPos.angle(aim.pos.current);
         for (const type of order) {
           if (!myPlayer.canPlace(type)) {
             continue;
@@ -185,8 +284,11 @@
           if (angles.length === 0) {
             continue;
           }
+          // The freed slot and the tactical aim are not always the same
+          // direction, so accept anything on the enemy-facing side and only
+          // refuse placements that would land behind us.
           const angle = angles[0];
-          if (angleGap(angle, targetAngle) > Math.PI / 4) {
+          if (angleGap(angle, targetAngle) > Math.PI / 2) {
             continue;
           }
           ModuleHandler.place(type, angle);
@@ -210,18 +312,58 @@
       this.client = client2;
     }
 
-    // What to drop into the hole a destroyed building left behind.
-    replacementType(object, enemy) {
+    // The trap pinning the enemy, when it is one of ours.
+    enemyTrap(enemy) {
+      if (!enemy.isTrapped) {
+        return null;
+      }
+      const trap = enemy.trappedIn;
+      if (!trap) {
+        return null;
+      }
+      const {PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
+      return PlayerManager2.isEnemyByID(trap.ownerID, myPlayer) ? null : trap;
+    }
+
+    // What to drop into the hole a destroyed building left behind, and where to
+    // aim it. Ordered by how much the situation is worth reacting to.
+    plan(object, enemy) {
       const {myPlayer: myPlayer} = this.client;
-      // Pinned: a spike facing the trap punishes whoever put us there.
+      const enemyTrap = this.enemyTrap(enemy);
+      // Being pinned ourselves outranks everything: a spike facing whatever has
+      // us is what breaks the cycle.
       if (myPlayer.isTrapped) {
-        return [ 4, 7 ];
+        return {
+          order: [ 4, 7 ],
+          aim: (myPlayer.trappedIn || object).pos.current
+        };
       }
-      // Enemy still loose and the broken piece was a trap — re-pin it.
-      if (object.type === 15 && !enemy.isTrapped) {
-        return [ 7, 4 ];
+      // The trap we had on them just broke — re-pin before they walk out.
+      if (object.type === 15 && (enemyTrap === null || enemyTrap.id === object.id)) {
+        return {
+          order: [ 7, 4 ],
+          aim: enemy.pos.future ?? enemy.pos.current
+        };
       }
-      return [ 4, 7 ];
+      // They just got out. Put the trap where they are heading, not where the
+      // old one stood.
+      if (enemy.wasTrapped && enemy.wasTrapped()) {
+        return {
+          order: [ 7, 4 ],
+          aim: enemy.pos.future ?? enemy.pos.current
+        };
+      }
+      // Still pinned and within reach: spike into the trap while they sit there.
+      if (enemyTrap !== null && myPlayer.pos.current.distance(enemyTrap.pos.current) <= REPLACE_TRAP_REACH) {
+        return {
+          order: [ 4, 7 ],
+          aim: enemyTrap.pos.current
+        };
+      }
+      return {
+        order: [ 4, 7 ],
+        aim: object.pos.current
+      };
     }
 
     postTick() {
@@ -248,8 +390,9 @@
         if (!isSpikeOrTrap(object) || !isOwnBuilding(this.client, object)) {
           continue;
         }
-        const breakAngle = myPos.angle(object.pos.current);
-        for (const type of this.replacementType(object, enemy)) {
+        const {order: order, aim: aim} = this.plan(object, enemy);
+        const breakAngle = myPos.angle(aim);
+        for (const type of order) {
           if (!myPlayer.canPlace(type)) {
             continue;
           }
@@ -275,7 +418,7 @@
             continue;
           }
           const angle = angles[0];
-          if (angleGap(angle, breakAngle) > Math.PI / 3) {
+          if (angleGap(angle, breakAngle) > Math.PI / 2) {
             continue;
           }
           ModuleHandler.place(type, angle);

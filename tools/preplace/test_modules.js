@@ -7,7 +7,10 @@ const RYN_OWNER = path.join(REPO, "RYN_Client_v5_OWNER.user.js");
 const RYN_PLAYER = path.join(REPO, "RYN_Client_v5_PLAYER.user.js");
 const vm = require("vm");
 
-const src = fs.readFileSync(RYN_OWNER, "utf8");
+// `--player` runs the very same cases against the copy spliced into the
+// obfuscated build, which reaches its dependencies by their mangled names.
+const usePlayer = process.argv.includes("--player");
+const src = fs.readFileSync(usePlayer ? RYN_PLAYER : RYN_OWNER, "utf8");
 const start = src.indexOf("  const PREPLACE_SCAN_CELLS = 2;");
 const end = src.indexOf("  const Replacer_default = Replacer;") + "  const Replacer_default = Replacer;".length;
 if (start < 0 || end < start) throw new Error("could not slice the modules out");
@@ -36,11 +39,15 @@ const Settings_default = {
 };
 
 const placeLog = [];
-function makeClient({ deleted = [], objects = [], myTrapped = false, enemyTrapped = false, enemyDist = 100 }) {
+function makeClient({ deleted = [], objects = [], myTrapped = false, enemyTrapped = false,
+                      enemyDist = 100, enemyTrappedIn = null, myTrappedIn = null,
+                      enemyEscaped = false, angleFan = null }) {
   const myPos = new Vec(0, 0);
   const enemy = {
-    pos: { current: new Vec(enemyDist, 0) },
+    pos: { current: new Vec(enemyDist, 0), future: new Vec(enemyDist, 0) },
     isTrapped: enemyTrapped,
+    trappedIn: enemyTrappedIn,
+    wasTrapped: () => enemyEscaped,
     weapon: { primary: 0, secondary: 10 },
     getBuildingDamage: () => 40,
   };
@@ -49,6 +56,7 @@ function makeClient({ deleted = [], objects = [], myTrapped = false, enemyTrappe
     myPlayer: {
       inGame: true,
       isTrapped: myTrapped,
+      trappedIn: myTrappedIn,
       pos: { current: myPos, future: myPos },
       canPlace: () => true,
       getItemByType: t => (t === 4 ? 9 : 15),
@@ -64,12 +72,16 @@ function makeClient({ deleted = [], objects = [], myTrapped = false, enemyTrappe
       objects: objMap,
       deletedObjects: new Set(deleted),
       grid2D: { queryFull: () => [...objMap.keys()] },
-      getBestPlacementAngles: ({ targetAngle }) => [targetAngle],
+      getBestPlacementAngles: ({ targetAngle }) =>
+        angleFan ? angleFan.map(d => targetAngle + d) : [targetAngle],
     },
   };
 }
 
-const sandbox = { PlayerObject, Settings_default, Math, Number, console };
+const sandbox = usePlayer
+  ? { _0xcd92ac: PlayerObject, _0x35d81b: Settings_default, Math, Number, console }
+  : { PlayerObject, Settings_default, Math, Number, console };
+console.log(usePlayer ? "(player build)" : "(owner build)");
 vm.createContext(sandbox);
 vm.runInContext(code + "\nglobalThis.__PrePlacer = PrePlacer_default; globalThis.__Replacer = Replacer_default;", sandbox);
 const PrePlacer = sandbox.__PrePlacer;
@@ -89,7 +101,8 @@ const ownSpike = id => new PlayerObject({
 });
 const ownTrap = id => new PlayerObject({
   id, ownerID: 1, itemGroup: 4, type: 15, isDestroyable: true,
-  health: 200, canBeDestroyed: false, destroyingTick: -1,
+  // 3 swings at the stubbed 40 dmg, so it counts as doomed
+  health: 120, canBeDestroyed: false, destroyingTick: -1,
   pos: { current: new Vec(0, 50) },
 });
 
@@ -187,9 +200,12 @@ placeLog.length = 0;
 }
 placeLog.length = 0;
 {
-  const c = makeClient({ deleted: [ownTrap(203)], myTrapped: true });
+  const captor = ownSpike(203);
+  captor.type = 15;
+  const c = makeClient({ deleted: [ownTrap(204)], myTrapped: true, myTrappedIn: captor });
   new Replacer(c).postTick();
   check("spikes instead when we are the pinned one", placeLog[0].type === 4);
+  check("aims at our captor", Math.abs(placeLog[0].angle) < 1e-9);
 }
 placeLog.length = 0;
 {
@@ -222,6 +238,102 @@ placeLog.length = 0;
   new Replacer(c).postTick();
   check("off when the setting is off", placeLog.length === 0);
   Settings_default._replace = true;
+}
+
+console.log("Retrap");
+placeLog.length = 0;
+{
+  // enemy pinned in OUR trap, and that trap is the one about to break
+  const trap = ownTrap(301);
+  const c = makeClient({ objects: [trap], enemyTrapped: true, enemyTrappedIn: trap,
+                         angleFan: [0, 0.3, -0.3, 0.6] });
+  new PrePlacer(c).postTick();
+  check("retrap burst fires on the trap holding the enemy", placeLog.length > 1);
+  check("burst places traps, not spikes", placeLog.every(p => p.type === 7));
+  check("burst is capped", placeLog.length <= 3);
+  check("burst aims at the enemy", Math.abs(placeLog[0].angle) < 1e-9);
+}
+placeLog.length = 0;
+{
+  // enemy pinned, but something ELSE is breaking -> spike into the trap
+  const trap = ownTrap(302);
+  const spike = ownSpike(303);
+  const c = makeClient({ objects: [spike], enemyTrapped: true, enemyTrappedIn: trap });
+  new PrePlacer(c).postTick();
+  check("spikes when the enemy is pinned by something else", placeLog[0].type === 4);
+  const toTrap = Math.atan2(trap.pos.current.y, trap.pos.current.x);
+  check("aims into the enemy's trap, not at the doomed object",
+        Math.abs(placeLog[0].angle - toTrap) < 1e-9);
+}
+placeLog.length = 0;
+{
+  // enemy's own trap holding them is not ours -> no retrap credit
+  const trap = ownTrap(304);
+  trap.ownerID = 99;
+  const c = makeClient({ objects: [ownSpike(305)], enemyTrapped: true, enemyTrappedIn: trap });
+  new PrePlacer(c).postTick();
+  check("ignores a trap that is not ours", placeLog[0].type === 7);
+}
+placeLog.length = 0;
+{
+  const c = makeClient({ objects: [ownSpike(306)], enemyTrapped: false });
+  new PrePlacer(c).postTick();
+  check("traps first when nobody is pinned", placeLog[0].type === 7);
+}
+placeLog.length = 0;
+{
+  const trap = ownTrap(307);
+  const c = makeClient({ objects: [trap], enemyTrapped: true, enemyTrappedIn: trap,
+                         angleFan: [0, 0.3, -0.3] });
+  const m = new PrePlacer(c);
+  m.postTick();
+  const first = placeLog.length;
+  c._ModuleHandler.tickCount = 11;
+  m.postTick();
+  check("retrap burst respects the cooldown", placeLog.length === first);
+}
+placeLog.length = 0;
+{
+  const trap = ownTrap(308);
+  const c = makeClient({ objects: [trap], enemyTrapped: true, enemyTrappedIn: trap,
+                         angleFan: [0, 0.3, -0.3] });
+  c._ModuleHandler.packetCount = 69;
+  new PrePlacer(c).postTick();
+  check("retrap burst stops at the packet budget", placeLog.length === 0);
+}
+placeLog.length = 0;
+{
+  // our trap on the enemy just broke -> re-pin at where they are going
+  const c = makeClient({ deleted: [ownTrap(401)], enemyTrapped: false });
+  new Replacer(c).postTick();
+  check("replace re-traps when our trap on them broke", placeLog[0].type === 7);
+  check("replace aims at the enemy, not the old slot", Math.abs(placeLog[0].angle) < 1e-9);
+}
+placeLog.length = 0;
+{
+  // they escaped this tick
+  const c = makeClient({ deleted: [ownSpike(402)], enemyEscaped: true });
+  new Replacer(c).postTick();
+  check("replace traps an enemy that just escaped", placeLog[0].type === 7);
+}
+placeLog.length = 0;
+{
+  // still pinned and in reach -> spike into their trap
+  const trap = ownTrap(403);
+  trap.pos.current = new Vec(60, 0);
+  const c = makeClient({ deleted: [ownSpike(404)], enemyTrapped: true, enemyTrappedIn: trap });
+  new Replacer(c).postTick();
+  check("replace spikes into the trap while they are pinned", placeLog[0].type === 4);
+  check("replace aims at their trap", Math.abs(placeLog[0].angle) < 1e-9);
+}
+placeLog.length = 0;
+{
+  // pinned but far away -> fall through to the plain break-direction replace
+  const trap = ownTrap(405);
+  trap.pos.current = new Vec(400, 0);
+  const c = makeClient({ deleted: [ownSpike(406)], enemyTrapped: true, enemyTrappedIn: trap });
+  new Replacer(c).postTick();
+  check("replace ignores an out-of-reach trap", placeLog[0].type === 4);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
