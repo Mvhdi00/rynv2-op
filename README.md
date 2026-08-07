@@ -124,7 +124,7 @@ src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 src/mods/                 third-party userscripts, as received (inputs)
 src/moo-transport-shim.js current transport, for scripts that hook the socket
-mods/                     the repaired userscripts — these are the ones to install
+mods/                     the repaired scripts — these are the ones to install
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
@@ -252,9 +252,10 @@ already match the shipped bundle exactly.
 ## Build and verify
 
 ```sh
-node tools/fix-mods.js        # src/mods/ -> mods/
+node tools/fix-mods.js        # src/mods/ -> mods/ (bare .js, no added commentary)
 node tools/check-mods.js      # audit mods/ against the bundle
 node tools/verify-shim.js     # shim vs. the game's own codec and crypto
+node tools/verify-shim.js mods/xelahot.js   # or against a shipped copy
 ```
 
 `verify-shim.js` does not test the shim against a restatement of the protocol.

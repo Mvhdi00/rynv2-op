@@ -9,86 +9,20 @@
 // @match        http://193.233.171.27:*/*
 // @match        *://*.moomoo.io/*
 // @grant        none
-// @run-at        document-start
+// @run-at       document-start
 // ==/UserScript==
-
-/* Rebuilt by tools/fix-mods.js against src/game_index.js + src/game_vendor.js.
- * Source: src/mods/sam_mod.js
- *
- * Changes:
- *   - dropped 1 dead @require line(s) — the shim provides window.msgpack
- *   - added @run-at document-start
- *   - body gated on jQuery as well as <body> — it calls $() at top level
- *   - prepended src/moo-transport-shim.js so the script speaks the game's
- *     current transport (permuted opcodes, sequence counter, signed frames)
- */
-
-/* ==========================================================================
- * moo-transport-shim.js
- *
- * Restores the wire protocol that socket-hooking moomoo.io userscripts were
- * written against.
- *
- * Those mods all assume the old transport: every frame is a bare msgpack
- * `[typeString, args]`, in both directions. The game shipped in
- * src/game_index.js does not do that any more. On connect the server sends
- * `io-init` carrying `[socketId, seed, hexKey, mode]`, and when `mode` is 1 the
- * client must:
- *
- *   - permute the 17 c2s and 36 s2c opcode names from `seed`, so a packet is
- *     addressed by a per-connection *number* rather than by its name;
- *   - carry a monotonic sequence counter as a third frame element;
- *   - prefix every client frame with the first 6 bytes of
- *     HMAC-SHA256(key, frame).
- *
- * A mod that still speaks the old protocol cannot send one accepted packet,
- * and none of its receive handlers ever fire, because the incoming type is a
- * number that matches no string key.
- *
- * Rather than rewrite each mod's packet logic, this shim sits at the socket
- * boundary and keeps the old protocol true from the mod's point of view:
- *
- *   incoming   numeric opcode -> string name, re-encoded before any listener
- *              runs, so `events["A"]` and `type == "6"` work again
- *   outgoing   plain `[name, args]` -> `[opcode, args, seq]`, signed
- *   io-init    the seed and key are captured here, and `mode` is rewritten to
- *              0 on its way to the page
- *
- * That last point is what makes the whole thing hold together. With `mode`
- * reported as 0 the game's own transport stays in plaintext mode and emits
- * bare `[name, args]` frames — exactly what the mods' `WebSocket.prototype.send`
- * hooks expect to decode and re-encode. Every frame is then signed once, here,
- * at the last point before the wire, and the sequence counter has a single
- * owner instead of being split between the game and the mod.
- *
- * Load order matters: the game captures `WebSocket.prototype.send` into a
- * private binding as its bundle evaluates and calls that captured reference
- * directly, so anything installed afterwards is bypassed. This shim, and the
- * mod above it, must be in place first — hence `@run-at document-start`.
- *
- * The constants and the three algorithms below are ports of `Io`/`jt`/`Ht`,
- * `bo`/`To`, `Co`/`Oi`/`Po`, and `Vt`/`Ao`/`Eo` in src/game_index.js.
- * ========================================================================== */
 
 (function () {
   "use strict";
 
   if (window.__mooShim) return;
 
-  /* ---- protocol constants (game_index.js: Io, jt, Ht, bo, To) ---------- */
   var SALT = 1;
   var SIG_BYTES = 6;
   var ENCRYPTED_MODE = 1;
 
   var C2S = ["M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0"];
   var S2C = ["A", "B", "C", "D", "E", "a", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "X", "Y", "Z", "g", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
-
-  /* ==== msgpack ==========================================================
-   * Self-contained so the shim does not depend on a CDN copy of msgpack-lite.
-   * The @require URLs these mods used are dead, and the game's own codec lives
-   * inside an ES module that a userscript cannot reach. Covers the types
-   * moomoo frames actually carry: nil, bool, int, float, str, bin, array, map.
-   * ===================================================================== */
 
   function utf8Len(str) {
     var n = 0;
@@ -272,8 +206,7 @@
       case 0xdd: n = this.view.getUint32(this.pos); this.pos += 4; out = new Array(n); for (i = 0; i < n; i++) out[i] = this.read(); return out;
       case 0xde: n = this.view.getUint16(this.pos); this.pos += 2; out = {}; for (i = 0; i < n; i++) { var k2 = this.read(); out[k2] = this.read(); } return out;
       case 0xdf: n = this.view.getUint32(this.pos); this.pos += 4; out = {}; for (i = 0; i < n; i++) { var k3 = this.read(); out[k3] = this.read(); } return out;
-      /* Fixed-width and variable extensions. moomoo frames do not carry these,
-       * but skipping them cleanly beats throwing on an unexpected frame. */
+
       case 0xd4: return this.ext(1);
       case 0xd5: return this.ext(2);
       case 0xd6: return this.ext(4);
@@ -300,10 +233,6 @@
     return new Reader(bytes).read();
   }
 
-  /* ==== opcode tables (game_index.js: Co, Oi, Po) ======================== */
-
-  /* splitmix32 — the game seeds this from io-init so client and server derive
-   * the same permutation. */
   function rng(seed) {
     return function () {
       seed |= 0;
@@ -339,8 +268,6 @@
       s2c: shuffle(S2C, (mixed ^ 2246822507) >>> 0),
     };
   }
-
-  /* ==== HMAC-SHA256, truncated (game_index.js: Vt, Ao, Eo) ============== */
 
   var K = new Uint32Array([
     1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221,
@@ -425,11 +352,6 @@
     return out;
   }
 
-  /* ==== socket wiring ==================================================== */
-
-  /* Per-socket state, keyed by the socket itself. A socket only gets a session
-   * once it has produced an io-init, so the mods' own side channels — the
-   * party and relay sockets some of them open — pass through untouched. */
   var sessions = new WeakMap();
 
   function toBytes(data) {
@@ -438,8 +360,6 @@
     return null;
   }
 
-  /* Rewrite a frame from the server so the page sees the old protocol:
-   * numeric opcode back to its name, and io-init's mode field cleared. */
   function inbound(socket, raw) {
     var bytes = toBytes(raw);
     if (!bytes) return raw;
@@ -458,10 +378,6 @@
       }
       sessions.set(socket, session);
 
-      /* Report plaintext mode upward. The game then leaves its own crypto off
-       * and emits bare [name, args] frames, which is what the mod hooks above
-       * decode — and it leaves this shim as the single owner of the sequence
-       * counter and the signature. */
       if (session) {
         var patched = args.slice();
         patched[3] = 0;
@@ -479,8 +395,6 @@
     return encode([name, args]).buffer;
   }
 
-  /* Turn a bare [name, args] frame from the page into a signed
-   * [opcode, args, seq] frame. */
   function outbound(socket, data) {
     var s = sessions.get(socket);
     if (!s) return data;
@@ -502,15 +416,11 @@
     return out;
   }
 
-  /* ---- install --------------------------------------------------------
-   * Both directions are wrapped on the prototype, before the page runs, so
-   * every listener the game and the mod register later is already covered. */
-
   var nativeSend = WebSocket.prototype.send;
 
   WebSocket.prototype.send = function (data) {
     var out = outbound(this, data);
-    if (out === null) return;            // unknown packet name — drop, do not desync
+    if (out === null) return;
     return nativeSend.call(this, out);
   };
 
@@ -521,8 +431,6 @@
       var rewritten = inbound(socket, event.data);
       if (rewritten === event.data) return fn.call(this, event);
 
-      /* A MessageEvent's `data` is read-only, so hand the page a stand-in that
-       * proxies the original and reports the rewritten payload. */
       var view = Object.create(event);
       Object.defineProperty(view, "data", { value: rewritten, enumerable: true });
       return fn.call(this, view);
@@ -556,8 +464,6 @@
     },
   });
 
-  /* Exposed so a mod can send a packet without going through its own encoder,
-   * and so tools/verify-shim.js can exercise the codec and the crypto. */
   window.__mooShim = {
     encode: encode,
     decode: decode,
@@ -567,8 +473,6 @@
     session: function (socket) { return sessions.get(socket); },
   };
 
-  /* Several of these mods expect a global `msgpack` from a @require that no
-   * longer resolves. Fill it in rather than leaving them to throw. */
   if (!window.msgpack) {
     window.msgpack = {
       encode: encode,
@@ -578,16 +482,6 @@
 })();
 
 
-/* ---- readiness gate --------------------------------------------------
- * @run-at document-start runs before <body> exists, and this script builds
- * DOM at top level. Hold it until the document has a body and the page's
- * jQuery has loaded.
- *
- * This still runs before the game does: the game bundle is a module script,
- * and module scripts are deferred until after the document is parsed. So the
- * gate opens while parsing is still in progress, which leaves any
- * WebSocket.prototype.send hook below in place before the bundle captures it.
- * -------------------------------------------------------------------- */
 (function (start) {
   var started = false;
   function ready() {

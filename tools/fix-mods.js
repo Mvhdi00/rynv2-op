@@ -46,7 +46,52 @@ const ROOT = path.resolve(__dirname, "..");
 const SRC = path.join(ROOT, "src/mods");
 const OUT = path.join(ROOT, "mods");
 
-const shim = fs.readFileSync(path.join(ROOT, "src/moo-transport-shim.js"), "utf8");
+const shimSrc = fs.readFileSync(path.join(ROOT, "src/moo-transport-shim.js"), "utf8");
+
+/* The shipped scripts carry no commentary of ours — only the mod's own. Strip
+ * the shim's comments rather than maintaining a second copy of it, tracking
+ * string state so a `//` inside a literal survives. The shim contains no regex
+ * literals, which is the one case this does not handle. */
+function stripComments(src) {
+  let out = "";
+  for (let i = 0; i < src.length; ) {
+    const c = src[i];
+
+    if (c === '"' || c === "'" || c === "`") {
+      out += c;
+      for (i++; i < src.length; ) {
+        if (src[i] === "\\") { out += src[i] + src[i + 1]; i += 2; continue; }
+        out += src[i];
+        if (src[i] === c) { i++; break; }
+        i++;
+      }
+      continue;
+    }
+
+    if (c === "/" && src[i + 1] === "/") {
+      while (i < src.length && src[i] !== "\n") i++;
+      continue;
+    }
+
+    if (c === "/" && src[i + 1] === "*") {
+      for (i += 2; i < src.length && !(src[i] === "*" && src[i + 1] === "/"); i++);
+      i += 2;
+      continue;
+    }
+
+    out += c;
+    i++;
+  }
+
+  return out
+    .split("\n")
+    .map((l) => l.replace(/\s+$/, ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+const shim = stripComments(shimSrc);
 
 /* @require targets that no longer serve what the mod expects. */
 const DEAD_REQUIRE = /^\s*\/\/\s*@require\s+.*(rawgit\.com|energyaproton2\.onrender\.com|msgpack)/i;
@@ -72,6 +117,20 @@ function splitScript(src) {
   return { meta, body, wasFirst: start === 0 };
 }
 
+/* Match the block's own column layout — these headers are hand-aligned and
+ * each file pads differently. */
+function metaLine(lines, key, value) {
+  const sample = lines.find((l) => /^\/\/\s+@[\w-]+\s+\S/.test(l));
+  if (!sample) return `// ${key} ${value}`;
+
+  const lead = sample.match(/^\/\/(\s+)/)[1];
+  const column = sample.match(/^\/\/(\s+@[\w-]+\s+)\S/)[1].length;
+
+  let gap = lead + key;
+  gap += gap.length < column ? " ".repeat(column - gap.length) : " ";
+  return "//" + gap + value;
+}
+
 function fixMeta(meta, notes) {
   const out = [];
   let dropped = 0;
@@ -83,7 +142,7 @@ function fixMeta(meta, notes) {
   if (dropped) notes.push(`dropped ${dropped} dead @require line(s) — the shim provides window.msgpack`);
 
   if (!out.some((l) => /@run-at/.test(l))) {
-    out.splice(out.length - 1, 0, "// @run-at        document-start");
+    out.splice(out.length - 1, 0, metaLine(out, "@run-at", "document-start"));
     notes.push("added @run-at document-start");
   }
 
@@ -91,15 +150,6 @@ function fixMeta(meta, notes) {
 }
 
 const BOOT = (needsJQuery) => `
-/* ---- readiness gate --------------------------------------------------
- * @run-at document-start runs before <body> exists, and this script builds
- * DOM at top level. Hold it until the document has a body${needsJQuery ? " and the page's\n * jQuery has loaded" : ""}.
- *
- * This still runs before the game does: the game bundle is a module script,
- * and module scripts are deferred until after the document is parsed. So the
- * gate opens while parsing is still in progress, which leaves any
- * WebSocket.prototype.send hook below in place before the bundle captures it.
- * -------------------------------------------------------------------- */
 (function (start) {
   var started = false;
   function ready() {
@@ -148,16 +198,7 @@ function build(file) {
   const out = [
     fixedMeta.join("\n"),
     "",
-    "/* Rebuilt by tools/fix-mods.js against src/game_index.js + src/game_vendor.js.",
-    " * Source: src/mods/" + file,
-    " *",
-    " * Changes:",
-    ...notes.map((n) => " *   - " + n),
-    " *   - prepended src/moo-transport-shim.js so the script speaks the game's",
-    " *     current transport (permuted opcodes, sequence counter, signed frames)",
-    " */",
-    "",
-    shim.trim(),
+    shim,
     "",
     BOOT(needsJQuery),
     body,
@@ -166,7 +207,7 @@ function build(file) {
   ].join("\n");
 
   fs.mkdirSync(OUT, { recursive: true });
-  fs.writeFileSync(path.join(OUT, name + ".user.js"), out);
+  fs.writeFileSync(path.join(OUT, name + ".js"), out);
 
   return { name, notes, bytes: out.length };
 }
@@ -182,7 +223,7 @@ console.log("");
 
 for (const file of files) {
   const r = build(file);
-  console.log(`mods/${r.name}.user.js`);
+  console.log(`mods/${r.name}.js`);
   for (const n of r.notes) console.log("  - " + n);
   console.log("");
 }
