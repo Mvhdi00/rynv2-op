@@ -88,6 +88,13 @@
       return !this._0x4cf5fe.PlayerManager.isEnemyByID(object.ownerID, this._0x4cf5fe.myPlayer);
     }
 
+    // auraro: obj.hideFromEnemy — a pit trap the enemy cannot see yet. Giving
+    // its position away by building on it is worse than losing it.
+    isHiddenTrap(object) {
+      const item = _0x3a006b[object.type];
+      return !!(item && item.hideFromEnemy);
+    }
+
     // auraro: tmp.blocker ? tmp.blocker : tmp.getScale(0.6, tmp.isItem)
     blockScale(object) {
       return object.placementScale;
@@ -929,14 +936,22 @@
 
       const replaceable = [];
       for (const obj of placer.nearObjs(myPos.x, myPos.y)) {
-        if (!(obj instanceof _0xcd92ac) || !obj.isDestroyable || !placer.isTeamObject(obj)) {
+        if (!(obj instanceof _0xcd92ac) || !obj.isDestroyable) {
           continue;
         }
-        if (obj.itemGroup !== 2 && obj.type !== 15) {
+        // auraro takes any placed item, including the enemy's — a slot they
+        // are about to lose is worth claiming. It only skips our own traps
+        // that are still hidden from them.
+        if (placer.isTeamObject(obj) && placer.isHiddenTrap(obj)) {
+          continue;
+        }
+        // Both gates, as auraro has them: it has to actually die this tick,
+        // and be within the swing threshold.
+        if (!placer.canBeBroken(obj)) {
           continue;
         }
         const hits = placer.hitsToBreak(obj, enemy);
-        if (!placer.canBeBroken(obj) && hits > maxHits) {
+        if (hits > maxHits) {
           continue;
         }
         replaceable.push({

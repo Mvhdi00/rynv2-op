@@ -96,10 +96,14 @@ first, so the slot is free when the packet arrives and there is no gap to walk
 into. `preplaceCheck` is what makes it a *pre*-place — a candidate spot only
 counts if it overlaps the doomed build.
 
-Triggers on `canBeDestroyed` for the current tick, or a damage estimate showing
-the build is within `_prePlaceHits` swings of dying — `health / best enemy
-building-damage swing`, rounded up. Placement is computed against the position
-two movement-sim ticks ahead, as auraro does.
+auraro gates it on **both** `canBeBroken` — the enemy can actually finish it
+this tick — and `hitsToBreak <= 4`. Both are required, not either; here the
+second is `_prePlaceHits`. Placement is computed against the position two
+movement-sim ticks ahead, as auraro does.
+
+The candidate set is any placed item within 200, **including the enemy's** — a
+slot they are about to lose is worth claiming. The only exclusion is our own
+`hideFromEnemy` traps, whose position is worth more than the slot.
 
 Retrap: when the doomed build *is* the trap holding the enemy, auraro cycles
 the whole circle in `π/8` steps so whichever slot frees up gets refilled.
@@ -131,7 +135,11 @@ deliberate behavioural difference from auraro.
 
 ## Not ported
 
-- `checkSpikeTick` — RYN runs spike tick as its own `spikeTick*` modules.
+- `checkSpikeTick` — RYN runs spike tick as its own `spikeTick*` modules. Note
+  this is also where auraro detects a *break-trap tick*: when the trap holding
+  **you** is about to break (`canBeBroken(player.inTrap)`), it pre-registers
+  incoming spike damage and raises `anti0Tick`. That is a defensive prediction,
+  not a placement, and RYN's `AntiInsta` / `AntiRetrap` cover the same ground.
 - `shameGrind` variants — RYN has no `shameGrind`.
 - Auraro's `instaC` / chat / `addDamageThreat` side effects inside the placer.
 
@@ -199,8 +207,8 @@ Built to stay cheap:
 
 ## Tests
 
-    node test_modules.js            # 87 cases, owner build
-    node test_modules.js --player   # the same 87 against the player build
+    node test_modules.js            # 89 cases, owner build
+    node test_modules.js --player   # the same 89 against the player build
     node test_weather.js            # 31 cases, weather overlay
     node test_weather.js --player   # the same 31 against the player build
     node test_menu.js               # 42 cases, menu wiring in both builds

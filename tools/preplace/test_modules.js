@@ -428,12 +428,15 @@ console.log("testCanPlace / protect");
 // ===========================================================================
 console.log("PrePlacer");
 {
+  // auraro gates preplace on BOTH canBeBroken (it dies this tick) and
+  // hitsToBreak <= threshold, so the fixture has to satisfy both.
+  const dying = { canBeDestroyed: true, destroyingTick: 10 };
   const withDoomed = (extra = {}) => {
     const c = makeClient(extra);
     const my = c.myPlayer.pos.current;
     const doomed = extra.doomedTrap
-      ? ownTrap(new Vec(my.x + 67, my.y))
-      : ownSpike(new Vec(my.x + 70, my.y));
+      ? ownTrap(new Vec(my.x + 67, my.y), dying)
+      : ownSpike(new Vec(my.x + 70, my.y), dying);
     c.ObjectManager.objects.set(doomed.id, doomed);
     return { c, doomed };
   };
@@ -453,19 +456,40 @@ console.log("PrePlacer");
   }
   placeLog.length = 0;
   {
+    // dying this tick, but far over the swing threshold: auraro wants both
     const { c, doomed } = withDoomed();
     doomed.health = 100000;
-    doomed.canBeDestroyed = true;
-    doomed.destroyingTick = 10;
     new PrePlacer(c).postTick();
-    check("canBeDestroyed overrides the hit threshold", placeLog.length === 1);
+    check("dying this tick is not enough on its own", placeLog.length === 0);
   }
   placeLog.length = 0;
   {
+    // low on health but the enemy cannot finish it this tick
+    const { c, doomed } = withDoomed();
+    doomed.canBeDestroyed = false;
+    doomed.destroyingTick = -1;
+    new PrePlacer(c).postTick();
+    check("low health is not enough on its own", placeLog.length === 0);
+  }
+  placeLog.length = 0;
+  {
+    // an enemy build about to go is a slot worth claiming
     const { c, doomed } = withDoomed();
     doomed.ownerID = 99;
     new PrePlacer(c).postTick();
-    check("ignores enemy buildings", placeLog.length === 0);
+    check("claims a slot an enemy build is about to free", placeLog.length === 1);
+  }
+  placeLog.length = 0;
+  {
+    // ...but never gives away one of our own hidden traps
+    const c = makeClient();
+    const my = c.myPlayer.pos.current;
+    const hidden = ownTrap(new Vec(my.x + 67, my.y), dying);
+    c.ObjectManager.objects.set(hidden.id, hidden);
+    Items[TRAP_ITEM].hideFromEnemy = true;
+    new PrePlacer(c).postTick();
+    delete Items[TRAP_ITEM].hideFromEnemy;
+    check("skips our own hidden trap", placeLog.length === 0);
   }
   placeLog.length = 0;
   {
@@ -502,7 +526,7 @@ console.log("PrePlacer");
   {
     const c = makeClient({ enemyTrapped: true });
     const my = c.myPlayer.pos.current;
-    const trap = ownTrap(new Vec(my.x + 67, my.y));
+    const trap = ownTrap(new Vec(my.x + 67, my.y), dying);
     c.ObjectManager.objects.set(trap.id, trap);
     c.EnemyManager.nearestEnemy.trappedIn = trap;
     new PrePlacer(c).postTick();
@@ -516,7 +540,7 @@ console.log("PrePlacer");
     const c = makeClient({ enemyTrapped: true });
     const my = c.myPlayer.pos.current;
     const trap = ownTrap(new Vec(my.x, my.y + 67), { health: 100000 });
-    const doomed = ownSpike(new Vec(my.x + 70, my.y));
+    const doomed = ownSpike(new Vec(my.x + 70, my.y), dying);
     c.ObjectManager.objects.set(trap.id, trap);
     c.ObjectManager.objects.set(doomed.id, doomed);
     c.EnemyManager.nearestEnemy.trappedIn = trap;
@@ -530,7 +554,7 @@ console.log("PrePlacer");
     const c = makeClient({ enemyTrapped: true });
     const my = c.myPlayer.pos.current;
     const trap = ownTrap(new Vec(my.x + 67, my.y), { ownerID: 99 });
-    const doomed = ownSpike(new Vec(my.x, my.y + 70));
+    const doomed = ownSpike(new Vec(my.x, my.y + 70), dying);
     c.ObjectManager.objects.set(doomed.id, doomed);
     c.EnemyManager.nearestEnemy.trappedIn = trap;
     new PrePlacer(c).postTick();
