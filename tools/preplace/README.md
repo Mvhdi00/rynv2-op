@@ -116,6 +116,45 @@ order: they escaped → trap where they are heading; still pinned and in reach �
 spike into their trap; we escaped what just broke → two opposed traps;
 otherwise refill the hole.
 
+## Rebuilding on the exact spot
+
+From the game bundle's `buildItem`, the server decides where a build lands:
+
+    w = this.scale + f.scale + (f.placeOffset || 0)
+    x = this.x + w * cos(this.dir)
+    y = this.y + w * sin(this.dir)
+
+Three things follow, and the first two are what made rebuilds imprecise.
+
+**The radius is fixed.** The only thing under our control is the bearing, so
+the build always lands somewhere on a circle of radius `w` around us. Aiming
+straight at the remembered position is the closest reachable point on that
+circle, and the residual is exactly `|distance(us, target) - w|`. No angle can
+beat it. `rebuildAngle` does that and returns the miss.
+
+The old code aimed a bearing and then ran it through `closeToAngle`, which
+snaps to the nearest **free arc edge** when the true bearing is not inside one.
+That is what put rebuilds off to the side. Now the exact bearing is tried first
+and only falls back to arc-snapping when the spot it would land on is not free.
+For preplace the test is `preplaceCheck`, which skips the doomed build and
+requires the landing to overlap it — literally "the same place".
+
+**`this.x` is the server's position, not ours.** Both modules now aim from a
+`MovementSimulation` prediction rather than `pos.current`: two ticks for
+preplace, as auraro does, one for replace since it reacts to something that has
+already happened.
+
+**The wire quantises the angle.** RYN sends `angle.toFixed(2)`, so bearings
+land on a 0.01 rad grid — about 0.31px of arc at a trap's 62px radius, worst
+case. `landingPoint` mirrors that rounding so the predicted landing is the real
+one. It is the precision floor and nothing can go below it.
+
+Measured in `test_modules.js`: 0.000px when standing a placement radius away,
+and exactly the radial floor at 40, 50, 80 and 100px.
+
+Rates for reference: `serverUpdateRate` 9 (111ms a tick), `clientSendRate` 5
+(200ms between sends).
+
 ## The placer lays traps only
 
 All three modules place traps and never spikes. This is the largest deliberate
@@ -264,8 +303,8 @@ Built to stay cheap:
 
 ## Tests
 
-    node test_modules.js            # 107 cases, owner build
-    node test_modules.js --player   # the same 107 against the player build
+    node test_modules.js            # 116 cases, owner build
+    node test_modules.js --player   # the same 116 against the player build
     node test_weather.js            # 31 cases, weather overlay
     node test_weather.js --player   # the same 31 against the player build
     node test_menu.js               # 39 cases, menu wiring in both builds

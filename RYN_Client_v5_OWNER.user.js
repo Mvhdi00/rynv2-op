@@ -9030,6 +9030,55 @@ window.grbtp = 35;
       return Math.hypot(x - t.x, y - t.y) <= scale + target.scale;
     }
 
+    // The server builds at exactly this radius from the player, along
+    // player.dir. From the game bundle's buildItem:
+    //   w = this.scale + f.scale + (f.placeOffset || 0)
+    //   x = this.x + w * cos(this.dir);  y = this.y + w * sin(this.dir)
+    placeRadius(item) {
+      return this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
+    }
+
+    // RYN rounds the angle to two decimals on the wire, so this is the angle
+    // the server actually sees. Worth mirroring: it is the precision floor,
+    // about 0.3px of arc at a trap's 62px radius.
+    wireAngleOf(angle) {
+      return parseFloat(Math.atan2(Math.sin(angle), Math.cos(angle)).toFixed(2));
+    }
+
+    landingPoint(fromX, fromY, item, angle) {
+      const r = this.placeRadius(item);
+      const a = this.wireAngleOf(angle);
+      return {
+        x: fromX + r * Math.cos(a),
+        y: fromY + r * Math.sin(a)
+      };
+    }
+
+    // Aim straight at where the old build stood. The build lands on the ray at
+    // a fixed radius, so this is the closest the geometry can get; the residual
+    // is |distance(us, target) - radius| and no angle can beat it.
+    //
+    // `target` is a remembered world position, not a bearing — that is the
+    // whole point. Returns null when the spot it would land on is not free,
+    // in which case the caller falls back to the nearest free arc.
+    rebuildAngle(target, fromX, fromY, type, opts) {
+      const item = this.item(type);
+      if (!item) {
+        return null;
+      }
+      const angle = Math.atan2(target.y - fromY, target.x - fromX);
+      const landing = this.landingPoint(fromX, fromY, item, angle);
+      const objs = this.nearObjs(fromX, fromY);
+      const free = opts && opts.freeing ? this.preplaceCheck(landing.x, landing.y, item.scale, item.id, opts.freeing, objs) : this.checkItemLocation(landing.x, landing.y, item.scale, item.id, objs);
+      if (!free) {
+        return null;
+      }
+      return {
+        angle: angle,
+        miss: Math.hypot(landing.x - target.x, landing.y - target.y)
+      };
+    }
+
     // auraro: objectManager.hitsToBreak
     hitsToBreak(object, who) {
       if (!object || !who || !object.isDestroyable) {
@@ -9711,6 +9760,31 @@ window.grbtp = 35;
     }
   }
 
+  // Where the server will think we are when it processes the build. auraro
+  // runs its movement sim two ticks out for preplace; replace is reacting to
+  // something that already happened, so it only needs one.
+  function auraPredictPos(client2, ticks) {
+    const myPlayer = client2.myPlayer;
+    try {
+      const sim = new MovementSimulation;
+      sim.reset(client2);
+      sim.update(client2, true);
+      if (ticks > 1) {
+        sim.update(client2, false);
+      }
+      return {
+        x: sim.x,
+        y: sim.y
+      };
+    } catch (e) {
+      const fallback = myPlayer.pos.future ?? myPlayer.pos.current;
+      return {
+        x: fallback.x,
+        y: fallback.y
+      };
+    }
+  }
+
   class PrePlacer {
     moduleName="prePlacer";
     client;
@@ -9728,25 +9802,8 @@ window.grbtp = 35;
       this._retrapLast = 0;
     }
 
-    // auraro runs the movement sim two ticks out and places against that.
     predictPos() {
-      const {myPlayer: myPlayer} = this.client;
-      try {
-        const sim = new MovementSimulation;
-        sim.reset(this.client);
-        sim.update(this.client, true);
-        sim.update(this.client, false);
-        return {
-          x: sim.x,
-          y: sim.y
-        };
-      } catch (e) {
-        const fallback = myPlayer.pos.future ?? myPlayer.pos.current;
-        return {
-          x: fallback.x,
-          y: fallback.y
-        };
-      }
+      return auraPredictPos(this.client, 2);
     }
 
     // The trap holding the enemy is about to go. Auraro cycles the whole
@@ -9851,14 +9908,23 @@ window.grbtp = 35;
         if (!myPlayer.canPlace(AURA_TRAP)) {
           continue;
         }
-        const key = obj.id + "_" + AURA_TRAP;
-        if (!this._rangeCache[key]) {
-          placer.calcPreplace(obj, AURA_TRAP, pred.x, pred.y);
-          this._rangeCache[key] = placer.preplaceRanges[AURA_TRAP];
-        } else {
-          placer.preplaceRanges[AURA_TRAP] = this._rangeCache[key];
+        // Straight at the slot it is about to free. preplaceCheck is the right
+        // test here: it skips the doomed build and demands the landing overlap
+        // it, which is exactly "the same place".
+        const exact = placer.rebuildAngle(obj.pos.current, pred.x, pred.y, AURA_TRAP, {
+          freeing: obj
+        });
+        let angle = exact ? exact.angle : null;
+        if (angle === null) {
+          const key = obj.id + "_" + AURA_TRAP;
+          if (!this._rangeCache[key]) {
+            placer.calcPreplace(obj, AURA_TRAP, pred.x, pred.y);
+            this._rangeCache[key] = placer.preplaceRanges[AURA_TRAP];
+          } else {
+            placer.preplaceRanges[AURA_TRAP] = this._rangeCache[key];
+          }
+          angle = placer.findPlacementAngle(AURA_TRAP, obj, pred.x, pred.y, enemy);
         }
-        const angle = placer.findPlacementAngle(AURA_TRAP, obj, pred.x, pred.y, enemy);
         if (angle !== null && placer.send(AURA_TRAP, angle)) {
           found += 1;
         }
@@ -9879,16 +9945,14 @@ window.grbtp = 35;
     }
 
     // auraro checkPlace: only send it if the spot is actually free.
-    checkPlace(placer, type, angle) {
+    checkPlace(placer, type, angle, from) {
       const item = placer.item(type);
       if (!item) {
         return false;
       }
-      const myPos = this.client.myPlayer.pos.current;
-      const offset = this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
-      const x = myPos.x + offset * Math.cos(angle);
-      const y = myPos.y + offset * Math.sin(angle);
-      if (!placer.checkItemLocation(x, y, item.scale, item.id, placer.nearObjs(myPos.x, myPos.y))) {
+      const at = from || this.client.myPlayer.pos.current;
+      const landing = placer.landingPoint(at.x, at.y, item, angle);
+      if (!placer.checkItemLocation(landing.x, landing.y, item.scale, item.id, placer.nearObjs(at.x, at.y))) {
         return false;
       }
       return placer.send(type, angle);
@@ -9908,12 +9972,15 @@ window.grbtp = 35;
       if (hits > 3 && !placer.inPredictedRange(enemy, reach)) {
         return false;
       }
+      // Everything below aims from where the server will have us, not from
+      // where we are now — the packet is processed a tick later.
+      const pred = auraPredictPos(this.client, 1);
       placer.rangesUpdated[AURA_TRAP] = false;
-      placer.angleRanges(AURA_TRAP, myPos.x, myPos.y);
+      placer.angleRanges(AURA_TRAP, pred.x, pred.y);
       const rTrap = placer.ranges[AURA_TRAP];
-      const breakDir = Math.atan2(building.pos.current.y - myPos.y, building.pos.current.x - myPos.x);
+      const breakDir = Math.atan2(building.pos.current.y - pred.y, building.pos.current.x - pred.x);
       const enemyFut = enemy.pos.future ?? enemy.pos.current;
-      const aimDir = Math.atan2(enemyFut.y - myPos.y, enemyFut.x - myPos.x);
+      const aimDir = Math.atan2(enemyFut.y - pred.y, enemyFut.x - pred.x);
       const enemyTrap = placer.enemyTrap(enemy);
 
       // 1. They just got out — trap where they are heading.
@@ -9921,9 +9988,9 @@ window.grbtp = 35;
         if (rTrap && rTrap.length) {
           placer.send(AURA_TRAP, placer.closeToAngle(aimDir, rTrap));
         }
-        this.checkPlace(placer, AURA_TRAP, aimDir);
-        this.checkPlace(placer, AURA_TRAP, aimDir + .17);
-        this.checkPlace(placer, AURA_TRAP, aimDir - .17);
+        this.checkPlace(placer, AURA_TRAP, aimDir, pred);
+        this.checkPlace(placer, AURA_TRAP, aimDir + .17, pred);
+        this.checkPlace(placer, AURA_TRAP, aimDir - .17, pred);
         return true;
       }
       // 2. Still pinned and in reach — chain another trap onto the one that
@@ -9945,10 +10012,17 @@ window.grbtp = 35;
         }
         return true;
       }
-      // 4. Otherwise refill the hole, with a trap.
+      // 4. Otherwise rebuild it where it stood. Aiming at the remembered
+      //    position beats snapping to the nearest free arc, which is what this
+      //    used to do and why it landed off to the side.
+      const exact = placer.rebuildAngle(building.pos.current, pred.x, pred.y, AURA_TRAP);
+      if (exact) {
+        placer.send(AURA_TRAP, exact.angle);
+        return true;
+      }
       if (rTrap && rTrap.length) {
         placer.send(AURA_TRAP, placer.closeToAngle(breakDir, rTrap));
-        this.checkPlace(placer, AURA_TRAP, breakDir);
+        this.checkPlace(placer, AURA_TRAP, breakDir, pred);
       }
       return true;
     }

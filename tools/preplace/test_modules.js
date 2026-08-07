@@ -129,6 +129,12 @@ function check(name, cond) {
 const TWO_PI = Math.PI * 2;
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 
+// same stubbed world, but with a specific set of destroyed objects
+function makeClientWith(c, deleted) {
+  c.ObjectManager.deletedObjects = new Set(deleted);
+  return c;
+}
+
 let nextId = 1000;
 function ownSpike(pos, extra = {}) {
   return new PlayerObject({
@@ -364,6 +370,77 @@ console.log("mode 1 pairing");
   // and the pairing actually reaches a placement
   check("a trap goes down against a spike", build("spike", 7).placed > 0);
   check("a spike goes down against a trap", build("trap", 4).placed > 0);
+}
+
+// ===========================================================================
+console.log("rebuild accuracy");
+{
+  // The game builds at a fixed radius along player.dir:
+  //   x = player.x + (playerScale + itemScale + placeOffset) * cos(dir)
+  // so the only thing we control is the bearing. Aiming straight at the
+  // remembered position is the closest the geometry allows; the residual is
+  // |distance(us, target) - radius| and no angle can beat it.
+  const TRAP_RADIUS = PLAYER_SCALE + Items[TRAP_ITEM].scale + Items[TRAP_ITEM].placeOffset;
+  const landing = (from, angle) => {
+    const a = parseFloat(Math.atan2(Math.sin(angle), Math.cos(angle)).toFixed(2));
+    return { x: from.x + TRAP_RADIUS * Math.cos(a), y: from.y + TRAP_RADIUS * Math.sin(a) };
+  };
+  const missOf = (from, angle, target) => {
+    const l = landing(from, angle);
+    return Math.hypot(l.x - target.x, l.y - target.y);
+  };
+
+  const p = new AuraPlacer(makeClient());
+  check("placeRadius matches the game formula",
+        p.placeRadius(Items[TRAP_ITEM]) === TRAP_RADIUS);
+  check("wireAngleOf mirrors the 2-decimal wire format",
+        p.wireAngleOf(1.23456) === 1.23);
+
+  // sitting exactly a placement radius away: the rebuild should be spot on
+  placeLog.length = 0;
+  {
+    const c = makeClient();
+    const my = c.myPlayer.pos.current;
+    const dead = ownTrap(new Vec(my.x + TRAP_RADIUS, my.y));
+    new Replacer(makeClientWith(c, [dead])).postTick();
+    check("rebuild fires", placeLog.length > 0);
+    const miss = missOf(my, placeLog[0].angle, dead.pos.current);
+    check(`lands within a pixel when in range (miss ${miss.toFixed(3)}px)`, miss < 1);
+  }
+
+  // off-radius: the miss is exactly the radial shortfall, nothing worse
+  for (const d of [40, 50, 80, 100]) {
+    placeLog.length = 0;
+    const c = makeClient();
+    const my = c.myPlayer.pos.current;
+    const dead = ownTrap(new Vec(my.x + d, my.y));
+    new Replacer(makeClientWith(c, [dead])).postTick();
+    if (placeLog.length === 0) { check(`places at ${d}px`, false); continue; }
+    const miss = missOf(my, placeLog[0].angle, dead.pos.current);
+    const floor = Math.abs(d - TRAP_RADIUS);
+    check(`at ${d}px the miss is the radial floor (${miss.toFixed(2)} vs ${floor.toFixed(2)})`,
+          miss <= floor + 0.5);
+  }
+
+  // and it beats what arc-snapping would have done
+  placeLog.length = 0;
+  {
+    const c = makeClient();
+    const my = c.myPlayer.pos.current;
+    const dead = ownTrap(new Vec(my.x + TRAP_RADIUS * Math.cos(0.9), my.y + TRAP_RADIUS * Math.sin(0.9)));
+    // something occupying a neighbouring slot, so the free arcs start away
+    // from the true bearing
+    const blocker = ownSpike(new Vec(my.x + 70, my.y));
+    const cc = makeClientWith(c, [dead]);
+    cc.ObjectManager.objects.set(blocker.id, blocker);
+    new Replacer(cc).postTick();
+    if (placeLog.length > 0) {
+      const miss = missOf(my, placeLog[0].angle, dead.pos.current);
+      check(`still aims at the remembered spot past a blocker (miss ${miss.toFixed(2)}px)`, miss < 20);
+    } else {
+      check("still aims at the remembered spot past a blocker", false);
+    }
+  }
 }
 
 // ===========================================================================
