@@ -113,6 +113,13 @@ const combatAnchor =
 // Preplace and replace share the autoplacer's radius, so they have no radius
 // slider of their own.
 const combatRows = toggle("_prePlace", "Preplace") + toggle("_replace", "Replace");
+// The spike tick sub-options gain the counter-threat switch, last row inside
+// the group so it reads as belonging to the three above it.
+const tickAnchor =
+  `<input id="_spikeTickTrap" type="checkbox"></input>${NL}` +
+  `                    <span></span>${NL}` +
+  `                </label>${NL}            </div>${NL}`;
+const tickRows = toggle("_antiSpikeTick", "Anti Spike Tick");
 const visualsAnchor =
   `<input id="_objectTintOpacity" type="range" step="5" min="0" max="100" data-suffix="%">${NL}` +
   `                </label>${NL}            </div>${NL}        </div>${NL}    </div>${NL}${NL}`;
@@ -133,7 +140,10 @@ const keyRows = keyTile("_prePlaceKey", "Toggle Preplace") + keyTile("_replaceKe
 const menuHelpers =
   `\n  const RYN_PP_COMBAT = html => {\n` +
   `    const anchor = ${JSON.stringify(combatAnchor)};\n` +
-  `    return html.indexOf(anchor) < 0 ? html : html.replace(anchor, anchor + ${JSON.stringify(combatRows)});\n` +
+  `    if (html.indexOf(anchor) >= 0) html = html.replace(anchor, anchor + ${JSON.stringify(combatRows)});\n` +
+  `    const tickAnchor = ${JSON.stringify(tickAnchor)};\n` +
+  `    if (html.indexOf(tickAnchor) >= 0) html = html.replace(tickAnchor, tickAnchor + ${JSON.stringify(tickRows)});\n` +
+  `    return html;\n` +
   `  };\n` +
   `  const RYN_PP_VISUALS = html => {\n` +
   `    const anchor = ${JSON.stringify(visualsAnchor)};\n` +
@@ -240,7 +250,8 @@ console.log(`old AutoPlacer: ${oldText.length} chars in the folded copy`);
 const settingsDefaults =
   `_0xc709e6["_prePlace"]=!![],_0xc709e6["_prePlaceKey"]='',` +
   `_0xc709e6["_replace"]=!![],_0xc709e6["_replaceKey"]='',` +
-  `_0xc709e6["_weather"]=!![],_0xc709e6["_weatherAmount"]=0x2d,`;
+  `_0xc709e6["_weather"]=!![],_0xc709e6["_weatherAmount"]=0x2d,` +
+  `_0xc709e6["_antiSpikeTick"]=!![],`;
 
 const S = NAMES.Settings_default;
 function toggleHandler(keyProp, valueProp, elementId) {

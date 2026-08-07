@@ -315,6 +315,57 @@ ago* cannot live somewhere that is cleared. Being self-contained is what lets
 `patch_player.js` drop it into the obfuscated build whole, so the two builds
 cannot drift.
 
+`_antiSpikeTick` (Combat → the spike tick sub-options, on by default) is
+Sakuna's `antispiketick` checkbox: it switches off the counter-threat gate, and
+nothing else. The post-trap grace, the near-spike priority and the per-variant
+conditions stay on either way.
+
+### Full audit against Sakuna 44.1
+
+Everything in that file that mentions a spike tick, and where it ended up.
+
+| Sakuna | here |
+|---|---|
+| `checkspiketick`: primary reloaded, `dist < 170`, weapon != 8, `caninsta` | same |
+| `checkspiketick`: `dist < primary.range + 35` | `range + hitScale`, and `hitScale` is `scale*1.8` — the server's own melee test, so this is Sakuna's `+35` corrected |
+| `checkspiketick`: `Date.now() - intrapTime > 300` | `SPIKE_TICK_TRAP_GRACE`, 3 ticks |
+| `checkAntiSpikeTick`: `emySpikeHit && !inTrap` | `possibleToKnockback && !isTrapped` (a real knockback cone) |
+| `checkAntiSpikeTick`: enemy inside 180 can spike you, 200 ms latch | `canPlaceSpike` + `SPIKE_TICK_COUNTER_GRACE` |
+| `antispiketick` checkbox | `_antiSpikeTick` |
+| `nearBreakType != "NearSpikes"` on all three | `spikeTickNearSpike` |
+| break: `objDist < 170 && objnearDist < 90` | same |
+| break: `objDist < primary.range + 70` | `SPIKE_TICK_BREAK_REACH` |
+| break: `circlePlace(2, objAim, 90, …)` | `attemptSpikePlacement`, which keeps only angles whose spike touches the enemy |
+| near: touching within `(scale + scale) * 1.05` | `SPIKE_TICK_TOUCH_SLACK` |
+| near: desert cactus counts as damage | `Resource.isCactus`, the same `y >= mapScale - snowBiomeTop` |
+| near: `!tmp.isTeamObject(enemy)` | `isEnemyByID(ownerID, enemy)` |
+| near: project the enemy onto the spike | the knockback cone, `+ !isTrapped` |
+| trap: enemy reload `> 0 && < tickSpeed` | `aboutToReload` — the same "ready next tick" |
+| trap: `inTrap.health <= dmg`, hammer, both reloaded, `dist < 110` | same, and the hat now matches the damage it assumed |
+| trap: break → hit → place | same, on ticks instead of `traptickSpeed1/2` milliseconds |
+| `insta(5)`: bull, then turret gear, aim held across both | `forceHat` 7 → 53, `useAngle` on both |
+| `Text("Spike Tick", …)` | `GameUI.updateActiveModule` |
+| `!checkAntiSpikeTick() → UseHat(6)` | already covered: any enemy inside 200 sets `detectedEnemy`, and `DefaultHat` forces soldier on it. The counter-threat window is 180, a subset |
+| `reTrap` held off while `spikeTick`/`betaspiketick` | `auraSpikeTickBusy(activeModule)`, which holds across every tick of the sequence |
+| `IsSpikeTick` suppresses `autobullspam` while the enemy is trapped | nothing to suppress — RYN has no autobullspam, and every module that swings is either manual (`attackingState`) or conditional |
+| `UseAcc(21)` Corrupt X Wings during the tick | RYN's `DefaultAcc` prefers 18 Blood Wings whenever bull is forced. A gear preference that applies to every insta, not a spike tick decision — left alone |
+| `traptickSpeed1` / `traptickSpeed2` sliders | whole ticks instead of milliseconds |
+| `val`/`skinIndex 6` damage tweak | commented out in Sakuna itself |
+| `isNavigable(x, y, hidespiketick)` | pathfinder argument; RYN has no pathfinder |
+| debug text render | not ported |
+
+**Two features deliberately not ported**, both separate toggles in Sakuna and
+both off by default there:
+
+- **Auto Tick** (`autotick`) — a *fourth* tick, not one of the three: diamond-or-
+  better polearm, enemy wearing neither emp nor soldier, turret ready, and the
+  enemy held at `|distance - 210| < 30`.
+- **Spike Tick Move** (`spiketickmove`) — movement, not a tick: walk to a point
+  70px past the enemy on the far side of one of *your* spikes so the next hit
+  pushes them onto it. It drives `findPath`, and RYN has no pathfinder, so this
+  would have to be a straight-line approximation fighting `autoPush`,
+  `dashMovement` and `safeWalk` for the same movement authority.
+
 ## One radius for all three
 
 All three gate on `_autoplacerRadius`; there is no
@@ -414,13 +465,13 @@ Built to stay cheap:
 
     node test_modules.js            # 116 cases, owner build
     node test_modules.js --player   # the same 116 against the player build
-    node test_spiketick.js          # 60 cases, the three spike ticks
-    node test_spiketick.js --player # the same 60 against the player build
+    node test_spiketick.js          # 63 cases, the three spike ticks
+    node test_spiketick.js --player # the same 63 against the player build
     node test_weather.js            # 31 cases, weather overlay
     node test_weather.js --player   # the same 31 against the player build
     node test_breaker.js            # 9 cases, weapon choice when breaking
     node test_breaker.js --player   # checks the spliced guard in the player
-    node test_menu.js               # 39 cases, menu wiring in both builds
+    node test_menu.js               # 44 cases, menu wiring in both builds
 
 `test_modules.js` slices the placer out of the shipped file and drives it with
 stubbed managers, so it tests what actually ships rather than a copy. It covers

@@ -50,9 +50,12 @@ check("recovered the Keybinds page", keys.includes('id="_autoplacerKey"'));
 
 const combatOut = sandbox.C(combat);
 check("PLAYER combat transform fires", combatOut.length > combat.length);
-for (const id of ["_prePlace", "_replace"]) {
+for (const id of ["_prePlace", "_replace", "_antiSpikeTick"]) {
   check(`PLAYER combat has ${id}`, combatOut.includes(`id="${id}"`));
 }
+check("Anti Spike Tick sits with the three ticks, not after them",
+      combatOut.indexOf('id="_antiSpikeTick"') > combatOut.indexOf('id="_spikeTickTrap"') &&
+        combatOut.indexOf('id="_antiSpikeTick"') < combatOut.indexOf('id="_toolSpearInsta"'));
 for (const id of ["_prePlaceRadius", "_replaceRadius", "_prePlaceHits"]) {
   check(`${id} is gone from both builds`,
         !combatOut.includes(`id="${id}"`) && !owner.includes(`id=\\"${id}\\"`) &&
@@ -70,11 +73,11 @@ check("PLAYER keybinds has _prePlaceKey", keysOut.includes('id="_prePlaceKey"'))
 check("PLAYER keybinds has _replaceKey", keysOut.includes('id="_replaceKey"'));
 
 // OWNER: the same ids must be present in the source markup already.
-for (const id of ["_prePlace", "_replace", "_prePlaceKey", "_replaceKey"]) {
+for (const id of ["_prePlace", "_replace", "_prePlaceKey", "_replaceKey", "_antiSpikeTick"]) {
   check(`OWNER markup has ${id}`, owner.includes(`id=\\"${id}\\"`));
 }
 // and every one of them must be a known setting, or attachCheckboxes logs an error
-for (const id of ["_prePlace", "_replace", "_prePlaceKey", "_replaceKey"]) {
+for (const id of ["_prePlace", "_replace", "_prePlaceKey", "_replaceKey", "_antiSpikeTick"]) {
   check(`OWNER settings define ${id}`, new RegExp(`\\n\\s*${id}:`).test(owner));
   check(`PLAYER settings define ${id}`, player.includes(`_0xc709e6["${id}"]=`));
 }
@@ -86,7 +89,7 @@ const balanced = (before, after, expected) => {
   const added = (after.match(/<div/g) || []).length - (before.match(/<div/g) || []).length;
   return d(before) === d(after) && added === expected;
 };
-check("combat page stays balanced and gains 2 rows", balanced(combat, combatOut, 2));
+check("combat page stays balanced and gains 3 rows", balanced(combat, combatOut, 3));
 check("keybinds page stays balanced and gains 2 tiles", balanced(keys, keysOut, 2));
 check("transforms are a no-op without their anchor", sandbox.C("X") === "X" && sandbox.K("X") === "X");
 

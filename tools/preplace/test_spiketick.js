@@ -67,7 +67,7 @@ class PlayerObject {
 const Items = [];
 const Settings_default = {
   _spikeTick: true, _spikeTickBreak: true, _spikeTickNear: true,
-  _spikeTickTrap: true, _autobreak: true,
+  _spikeTickTrap: true, _autobreak: true, _antiSpikeTick: true,
 };
 const DataHandler_default = { getWeapon: id => WEAPONS[id] };
 
@@ -297,6 +297,15 @@ check("inside 180 but they are trapped -> fires",
   check("and the one after", log[2].attack === false);
   check("then it opens again", log[3].attack === true);
 }
+// Sakuna keeps the whole gate behind its own checkbox.
+check("_antiSpikeTick off -> the knockback threat stops blocking",
+      withSetting("_antiSpikeTick", false,
+                  () => fires(Break, { ...BREAK, possibleToKnockback: true })));
+check("_antiSpikeTick off -> a spike-capable enemy stops blocking",
+      withSetting("_antiSpikeTick", false,
+                  () => fires(Break, { ...BREAK, counterEnemy: { dist: 150 } })));
+check("_antiSpikeTick off does not open the post-trap grace",
+      withSetting("_antiSpikeTick", false, () => !fires(Break, { ...BREAK, myTrapped: true })));
 
 console.log("\nnear-spike priority (Sakuna: nearBreakType == NearSpikes)");
 const spikeAt = d => ({ pos: { current: new Vec(7200 + d, 3000) }, scale: SPIKE_SCALE });
