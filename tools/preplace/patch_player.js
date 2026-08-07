@@ -94,10 +94,7 @@ const combatAnchor =
   `                </label>${NL}            </div>${NL}`;
 // Preplace and replace share the autoplacer's radius, so they have no radius
 // slider of their own.
-const combatRows =
-  toggle("_prePlace", "Preplace") +
-  slider("_prePlaceHits", "Preplace break threshold", 1, 1, 6) +
-  toggle("_replace", "Replace");
+const combatRows = toggle("_prePlace", "Preplace") + toggle("_replace", "Replace");
 const visualsAnchor =
   `<input id="_objectTintOpacity" type="range" step="5" min="0" max="100" data-suffix="%">${NL}` +
   `                </label>${NL}            </div>${NL}        </div>${NL}    </div>${NL}${NL}`;
@@ -160,7 +157,7 @@ console.log(`old AutoPlacer: ${oldText.length} chars in the folded copy`);
 
 // ----------------------------------------------------------------- operations
 const settingsDefaults =
-  `_0xc709e6["_prePlace"]=!![],_0xc709e6["_prePlaceHits"]=0x4,_0xc709e6["_prePlaceKey"]='',` +
+  `_0xc709e6["_prePlace"]=!![],_0xc709e6["_prePlaceKey"]='',` +
   `_0xc709e6["_replace"]=!![],_0xc709e6["_replaceKey"]='',` +
   `_0xc709e6["_weather"]=!![],_0xc709e6["_weatherAmount"]=0x2d,`;
 

@@ -43,7 +43,7 @@ const DataHandler_default = {
 };
 const Settings_default = {
   _autoplacer: true, _autoplacerRadius: 350,
-  _prePlace: true, _prePlaceHits: 4,
+  _prePlace: true,
   _replace: true,
   _autoPush: false, _autoPushRange: 250, _antiTrapProtect: true,
 };
@@ -84,7 +84,7 @@ function makeClient(opts = {}) {
     PlayerManager: { isEnemyByID: ownerID => ownerID !== 1 },
     _ModuleHandler: {
       tickCount: 10, packetCount, packetLimit: 70,
-      placedOnce: false, moduleActive: false, placeAngles: [null, []],
+      placedOnce: false, moduleActive: false, activeModule: null, placeAngles: [null, []],
       place(type, angle) {
         placeLog.push({ type, angle });
         this.packetCount += type === 7 ? 5 : 4;
@@ -365,6 +365,58 @@ console.log("mode 1 pairing");
 }
 
 // ===========================================================================
+console.log("traps only, and out of the spike tick's way");
+{
+  const dying = { canBeDestroyed: true, destroyingTick: 10 };
+
+  // every preplace and replace path must produce traps and nothing else
+  const seen = new Set();
+  const runs = [
+    () => { const c = makeClient(); const my = c.myPlayer.pos.current;
+            const o = ownSpike(new Vec(my.x + 70, my.y), dying);
+            c.ObjectManager.objects.set(o.id, o); new PrePlacer(c).postTick(); },
+    () => { const c = makeClient({ enemyTrapped: true }); const my = c.myPlayer.pos.current;
+            const t = ownTrap(new Vec(my.x + 67, my.y), dying);
+            c.ObjectManager.objects.set(t.id, t);
+            c.EnemyManager.nearestEnemy.trappedIn = t; new PrePlacer(c).postTick(); },
+    () => new Replacer(makeClient({ deleted: [ownSpike(new Vec(7270, 3000))] })).postTick(),
+    () => new Replacer(makeClient({ deleted: [ownSpike(new Vec(7270, 3000))], enemyEscaped: true })).postTick(),
+    () => { const c = makeClient({ enemyTrapped: true }); const my = c.myPlayer.pos.current;
+            c.EnemyManager.nearestEnemy.trappedIn = ownTrap(new Vec(my.x + 60, my.y));
+            c.ObjectManager.deletedObjects = new Set([ownSpike(new Vec(my.x, my.y + 70))]);
+            new Replacer(c).postTick(); },
+  ];
+  for (const run of runs) { placeLog.length = 0; run(); for (const x of placeLog) seen.add(x.type); }
+  check("every preplace/replace path produced something", seen.size > 0);
+  check("and all of it was traps", [...seen].every(t => t === 7));
+
+  // a spike tick owning the tick keeps both of them out
+  for (const name of ["spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeTrap"]) {
+    placeLog.length = 0;
+    const c = makeClient();
+    const my = c.myPlayer.pos.current;
+    const o = ownSpike(new Vec(my.x + 70, my.y), dying);
+    c.ObjectManager.objects.set(o.id, o);
+    c._ModuleHandler.activeModule = name;
+    new PrePlacer(c).postTick();
+    const c2 = makeClient({ deleted: [ownSpike(new Vec(7270, 3000))] });
+    c2._ModuleHandler.activeModule = name;
+    new Replacer(c2).postTick();
+    check(`stands off while ${name} owns the tick`, placeLog.length === 0);
+  }
+
+  // an unrelated module holding the tick is no reason to stand off
+  placeLog.length = 0;
+  const c = makeClient();
+  const my = c.myPlayer.pos.current;
+  const o = ownSpike(new Vec(my.x + 70, my.y), dying);
+  c.ObjectManager.objects.set(o.id, o);
+  c._ModuleHandler.activeModule = "autoPlacer";
+  new PrePlacer(c).postTick();
+  check("but not for an unrelated module", placeLog.length > 0);
+}
+
+// ===========================================================================
 console.log("spike/trap balance");
 {
   // The reported symptom was spikes going down far more than traps. The cause
@@ -545,8 +597,8 @@ console.log("PrePlacer");
     c.ObjectManager.objects.set(doomed.id, doomed);
     c.EnemyManager.nearestEnemy.trappedIn = trap;
     new PrePlacer(c).postTick();
-    check("spikes when they are pinned by something else",
-          placeLog.length > 0 && placeLog[0].type === 4);
+    check("still a trap when they are pinned by something else",
+          placeLog.length > 0 && placeLog[0].type === 7);
   }
   // a trap that is not ours earns no retrap
   placeLog.length = 0;
@@ -558,7 +610,7 @@ console.log("PrePlacer");
     c.ObjectManager.objects.set(doomed.id, doomed);
     c.EnemyManager.nearestEnemy.trappedIn = trap;
     new PrePlacer(c).postTick();
-    check("ignores a trap that is not ours", placeLog.length > 0 && placeLog[0].type === 7);
+    check("a trap that is not ours earns no retrap", placeLog.length === 1);
   }
 }
 
@@ -569,7 +621,7 @@ console.log("Replacer");
   {
     const c = makeClient({ deleted: [ownSpike(new Vec(7200 + 70, 3000))] });
     new Replacer(c).postTick();
-    check("replaces a destroyed own build", placeLog.length > 0 && placeLog[0].type === 4);
+    check("replaces a destroyed own build", placeLog.length > 0);
   }
   placeLog.length = 0;
   {
@@ -585,7 +637,7 @@ console.log("Replacer");
     c.EnemyManager.nearestEnemy.trappedIn = trap;
     c.ObjectManager.deletedObjects = new Set([ownSpike(new Vec(my.x, my.y + 70))]);
     new Replacer(c).postTick();
-    check("spikes into their trap while they are pinned", placeLog[0].type === 4);
+    check("chains a trap onto the one that has them", placeLog[0].type === 7);
   }
   placeLog.length = 0;
   {

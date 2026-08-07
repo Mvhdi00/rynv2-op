@@ -97,9 +97,9 @@ into. `preplaceCheck` is what makes it a *pre*-place — a candidate spot only
 counts if it overlaps the doomed build.
 
 auraro gates it on **both** `canBeBroken` — the enemy can actually finish it
-this tick — and `hitsToBreak <= 4`. Both are required, not either; here the
-second is `_prePlaceHits`. Placement is computed against the position two
-movement-sim ticks ahead, as auraro does.
+this tick — and `hitsToBreak <= 4`. Both are required, not either, and the 4 is
+auraro's, hardcoded as `AURA_MAX_HITS`. Placement is computed against the
+position two movement-sim ticks ahead, as auraro does.
 
 The candidate set is any placed item within 200, **including the enemy's** — a
 slot they are about to lose is worth claiming. The only exclusion is our own
@@ -115,6 +115,31 @@ pre-emptive scan for one of ours within two hits of dying. Branches in auraro's
 order: they escaped → trap where they are heading; still pinned and in reach →
 spike into their trap; we escaped what just broke → two opposed traps;
 otherwise refill the hole.
+
+## Preplace and replace place traps only
+
+Both were changed to place traps and never spikes, which is a deliberate
+departure from auraro — it spikes when the enemy is pinned by something other
+than the doomed build, and replaces a broken build with a spike. Spikes are
+left to autoplace and to the spike-tick modules.
+
+Where auraro would have spiked:
+
+| situation | auraro | here |
+|---|---|---|
+| preplace, enemy pinned by something else | spike into their trap | trap |
+| replace, enemy pinned and in reach | spike into their trap | trap chained onto it |
+| replace, plain refill | spike toward the break | trap toward the break |
+
+### Standing off the spike tick
+
+`spikeTickBreak`, `spikeTickNear`, `spikeTickTrap`, `spikeSync`,
+`spikeSyncHammer`, `spikeTrap` and `teammateSpikeTrap` all run **before** the
+placer in the module order, and whichever claims a tick first puts its name in
+`ModuleHandler.activeModule`. Preplace and replace skip the tick entirely when
+one of those owns it, so they cannot take the slot or the packets a spike tick
+is about to need. Any other module holding the tick is not a reason to stand
+off.
 
 ## One radius for all three
 
@@ -207,11 +232,11 @@ Built to stay cheap:
 
 ## Tests
 
-    node test_modules.js            # 89 cases, owner build
-    node test_modules.js --player   # the same 89 against the player build
+    node test_modules.js            # 97 cases, owner build
+    node test_modules.js --player   # the same 97 against the player build
     node test_weather.js            # 31 cases, weather overlay
     node test_weather.js --player   # the same 31 against the player build
-    node test_menu.js               # 42 cases, menu wiring in both builds
+    node test_menu.js               # 39 cases, menu wiring in both builds
 
 `test_modules.js` slices the placer out of the shipped file and drives it with
 stubbed managers, so it tests what actually ships rather than a copy. It covers
