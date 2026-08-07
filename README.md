@@ -300,6 +300,13 @@ it used to keep the Cowboy Hat until an enemy was inside weapon range, and now
 drops it at the same 350px as the moving case. `COWBOY_DROP_RANGE` is one
 constant to edit.
 
+While the option is on the Booster Hat is never equipped at all — approaching an
+enemy used to read Cowboy → Booster → Soldier, and the Booster in the middle is
+the tell the option exists to remove. Past 350px with no threat yet the hat slot
+is simply empty, which costs nothing: the Cowboy Hat has no effect either.
+Returning `5` instead of `0` there would keep the cowboy look the whole way, at
+the price of the 350px drop.
+
 ## Spike Tick
 
 Three variants ported from Sakuna 44, under one master switch in Combat →
@@ -326,3 +333,16 @@ to the same destroyed-object signal and only one module gets a tick.
 
 `_spikeTickTrap` needs the great hammer as secondary — Sakuna required the same,
 and without it the trap cannot be broken in the window.
+
+## What is not in the menu
+
+Two things were taken out rather than hidden, so nothing is left behind them:
+
+- **Knockback tick** — all three variants (`_knockbackTick`,
+  `_knockbackTickHammer`, `_knockbackTickTrap`), the `KBTickHammerV2` second
+  implementation of the hammer one, their four module registrations, their three
+  stat counters, and their rows in Combat and Devtool. Spike Tick covers the
+  same ground.
+- **Option tooltips** — the `.option-description` spans, the `attachDescriptions`
+  handler that positioned them on hover, its `getElements` entry, and the CSS.
+  Section subtitles (`.sec-sub`) and page descriptions are still there.
