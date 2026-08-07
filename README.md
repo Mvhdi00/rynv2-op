@@ -299,3 +299,30 @@ Making the two branches share the test tightened the standing case slightly:
 it used to keep the Cowboy Hat until an enemy was inside weapon range, and now
 drops it at the same 350px as the moving case. `COWBOY_DROP_RANGE` is one
 constant to edit.
+
+## Spike Tick
+
+Three variants ported from Sakuna 44, under one master switch in Combat →
+Instakills. The master is the only thing that turns them on; the three below it
+choose which of the three run. All three default on, the master defaults **off**,
+so a fresh install behaves exactly as before.
+
+| Variant | Fires when |
+|---|---|
+| `_spikeTickBreak` | a building dies within 90px of the enemy |
+| `_spikeTickNear` | the enemy already touches something that damages them, or is lined up to be knocked into it |
+| `_spikeTickTrap` | the enemy is trapped, their weapon is still on cooldown, and the trap is weak enough to break |
+
+`spikeTickTarget()` is the shared gate, ported from Sakuna's `checkspiketick()`:
+primary reloaded, primary is not the stick, enemy inside both 170px and weapon
+range, not trapped yourself, and no `shouldIgnoreModule()` threat.
+
+Break and near then run the same two ticks — bull helmet and primary into the
+spike, then turret gear. Trap runs three: turret gear with the great hammer to
+break the trap, bull and primary into a fresh spike, then turret gear.
+
+They are registered ahead of `spikeSync` in the module list, because both react
+to the same destroyed-object signal and only one module gets a tick.
+
+`_spikeTickTrap` needs the great hammer as secondary — Sakuna required the same,
+and without it the trap cannot be broken in the window.
