@@ -1,104 +1,156 @@
-# Preplace / Replace patch tooling
+# Auraro placer port
 
-How the preplace and replace features got into the two RYN v5 userscripts, and
-how to redo it if either build is regenerated upstream.
+RYN's own `AutoPlacer` has been removed and replaced with auraro 5.5's placer,
+ported whole. Autoplace, preplace and replace all run on it.
 
-## The two features
+## Why it is a port and not a copy
 
-**Preplace** — when one of our spikes or traps is about to be broken, send the
-replacement placement *before* the break lands. The server processes the break
-first, so the slot is free by the time our packet is handled and there is no gap
-for the enemy to walk into. Trigger is `PlayerObject.canBeDestroyed` on the
-current tick (an enemy in range can finish it now), or a damage estimate showing
-the building is within `_prePlaceHits` swings of dying.
+The two clients do not share a data model. Auraro reads `player.x2`,
+`nearObjs`, `items.list[]`, `objectManager.checkItemLocation`, `near.inTrap`;
+RYN has `myPlayer.pos.current`, a spatial hash grid, `Items[]`, managers. Pasted
+verbatim, not one line of auraro would resolve.
 
-What gets placed depends on who is pinned, following the reference client:
+So the *arithmetic* is carried across unchanged and only the data access is
+rewritten. Every geometry method below is auraro's, operation for operation:
 
-| situation | placement | aimed at |
-|---|---|---|
-| the doomed building *is* our trap holding the enemy | retrap burst | the enemy |
-| enemy pinned by something else | spike | their trap |
-| nobody pinned | trap | the doomed slot |
-| we are the pinned one | spike | whatever has us |
+    normalizeAngle  angleDist   normalizeArc   mergeBlocked   invertArcs
+    angleInArc      closeToAngle intersectRanges isAngleFree
+    closestPossibleAngles  angleRanges  calcPreplace  urgencyScore
+    inPredictedRange  createObj  radCalc  testCanPlace  tryPlaceAngle
+    protect  autoPlace  findPlacementAngle  preplacer  autoReplace
 
-The retrap burst refills several slots around us at once instead of one, so
-whichever opens up as the trap dies gets taken. The reference fans 16 angles;
-that costs more packets than a RYN tick has, so the burst takes the best
-`PREPLACE_RETRAP_ANGLES` toward the enemy and stops at the packet budget.
+The engine is arc-based: build the blocked angular arcs around the player,
+invert them into free arcs, then pick the free angle nearest whatever you want
+to aim at. That is a different approach from RYN's `getBestPlacementAngles`,
+which is why it was ported rather than approximated.
 
-**Replace** — when one of our spikes or traps *is* destroyed, drop a new one into
-the hole on the same tick. Reads `ObjectManager.deletedObjects`, which the client
-already fills with nearby player objects removed this tick. Priority order:
+## Slot numbering
 
-1. we are pinned -> spike at our captor (this is what breaks the cycle)
-2. our trap on them broke -> re-pin, aimed where they are heading
-3. they just escaped (`wasTrapped()`) -> trap, aimed where they are heading
-4. they are pinned and within `REPLACE_TRAP_REACH` -> spike into their trap
-5. otherwise -> spike toward the break direction
+Auraro uses `2 = spike`, `4 = trap`. RYN item types are `4 = spike`,
+`7 = trap`. RYN's numbering is used throughout, so auraro's
+`autoPlace(0, 2, 4)` reads here as `autoPlace(0, AURA_SPIKE, AURA_TRAP)`.
 
-## Deliberately not ported
+## Structure
 
-- The reference aims a retrap so the enemy is knocked into an adjacent friendly
-  spike. RYN's `AutoPlacer` already runs `SiegeAnalysis.knockInto` and
-  `_findClosestSpikeToKb` every tick, so this would duplicate a live system.
-- Placing traps around yourself after escaping one — RYN covers that with
-  `AntiTrapStar` and `AntiTrapProtect`.
-- Breaking the trap you are stuck in — RYN's `AntiRetrap`.
-- `shameGrind` variants and the reference's spike-tick folding: RYN has no
-  `shameGrind`, and runs spike tick as its own `spikeTick*` modules.
+`AuraPlacer` is the ported class. Auraro keeps one global `autoPlace` object
+whose state (`preplaces`, `ranges`, `radObjs`) is shared across a tick, so the
+three RYN modules share one instance via `getAuraPlacer(client)`.
 
-Unrelated but worth knowing: `AutoPlacer` reads `client._retrapQuadrant` to mask
-off a quadrant of placement angles, and nothing in the build ever sets it. It is
-inert, and was left alone.
+| RYN module | auraro entry point |
+|---|---|
+| `autoPlacer` | the per-tick `autoPlace(...)` dispatch |
+| `prePlacer` | `preplacer()` |
+| `replacer` | `autoReplace(building)` |
 
-Both live as ordinary RYN modules (`postTick`), respect the packet budget, and
-sit in the module order as `replacer` → `autoPlacer` → `prePlacer`.
+Module order is `replacer` → `autoPlacer` → `prePlacer`: reacting to a real
+break outranks laying new builds, which outranks a speculative preplace.
+
+### autoPlace dispatch
+
+Straight from auraro, keyed on distance and who is pinned:
+
+| condition | call |
+|---|---|
+| pushing, ≤169 | `autoPlace(0, spike, trap)` |
+| pushing, >222 | `autoPlace(0, trap, spike)` |
+| ≤222, enemy pinned | `autoPlace(0, spike, trap)` |
+| ≤222, enemy just escaped | `autoPlace(0, trap, spike)` |
+| ≤222, neither | `autoPlace(1, spike, trap, true)` |
+| 269–400 | `autoPlace(0, trap, spike)` |
+| ≤269 | `autoPlace(1, trap, spike, true)` |
+
+`my.autoPush` has no RYN equivalent, so it reads as `_autoPush` enabled and the
+enemy inside `_autoPushRange`.
+
+### preplace
+
+Send the replacement *before* the break lands: the server handles the break
+first, so the slot is free when the packet arrives and there is no gap to walk
+into. `preplaceCheck` is what makes it a *pre*-place — a candidate spot only
+counts if it overlaps the doomed build.
+
+Triggers on `canBeDestroyed` for the current tick, or a damage estimate showing
+the build is within `_prePlaceHits` swings of dying. Placement is computed
+against the position two movement-sim ticks ahead, as auraro does.
+
+Retrap: when the doomed build *is* the trap holding the enemy, auraro cycles
+the whole circle in `π/8` steps so whichever slot frees up gets refilled.
+
+### replace
+
+Reacts to `ObjectManager.deletedObjects`, then falls back to auraro's
+pre-emptive scan for one of ours within two hits of dying. Branches in auraro's
+order: they escaped → trap where they are heading; still pinned and in reach →
+spike into their trap; we escaped what just broke → two opposed traps;
+otherwise refill the hole.
+
+## The packet budget
+
+Auraro has no packet budget. RYN caps a tick at `ModuleHandler.packetLimit` and
+every module draws from the same pool, so all placements funnel through
+`AuraPlacer.send()`, which refuses once the budget is spent. Without it a single
+`testCanPlace` sweep would starve the rest of the tick. This is the one
+deliberate behavioural difference from auraro.
+
+## Not ported
+
+- `checkSpikeTick` — RYN runs spike tick as its own `spikeTick*` modules.
+- `shameGrind` variants — RYN has no `shameGrind`.
+- Auraro's `instaC` / chat / `addDamageThreat` side effects inside the placer.
 
 ## OWNER build
 
-Plain source, so it is edited directly:
-
-- the two module classes go in after `const AutoPlacer_default = AutoPlacer;`
-- `menu_owner.js` splices the Combat rows and Keybinds tiles into the page markup
-- settings keys, module registration and the hotkey handlers are hand-edited
+Plain source, edited directly. The old `AutoPlacer`, `SiegeAnalysis`,
+`_getCachedPrePlaceAngles`, `_prePlaceAngleCache` and `PRE_PLACE_ROTATION` were
+all deleted; `menu_owner.js` splices in the Combat rows and Keybinds tiles.
 
 ## PLAYER build
 
-The player script is javascript-obfuscator output: one encrypted string array
-plus ~2200 nested forwarder functions. It is patched without being
-de-obfuscated.
+javascript-obfuscator output: one encrypted string array plus ~2200 nested
+forwarder functions. It is patched without being de-obfuscated.
 
-1. `deob.js` evaluates the string array, the decoder and the rotation IIFE, then
-   resolves every forwarder and constant-folds all `wrapper(a,b)` calls. It emits
-   a folded copy **and** an anchor map recording, for every fold, the matching
-   offsets in both files.
-2. `mapback.js` turns an offset in the folded copy into one in the untouched
-   build. It only answers for positions in the *gaps* between folds — the regions
-   the fold left byte-for-byte identical — and reports when a position is not.
-3. `patch_player.js` locates each insertion point in the readable folded copy,
-   maps it back, checks the surrounding gap is identical on both sides, and
-   splices in plain JS. Every edit is an insertion: no original byte is rewritten.
+1. `deob.js` evaluates the string array, decoder and rotation IIFE, resolves
+   every forwarder and constant-folds all `wrapper(a,b)` calls. It writes a
+   readable copy **and** an anchor map pairing offsets in both files.
+2. `names.js` resolves this build's names for `Settings_default`,
+   `PlayerObject`, `DataHandler_default`, `Items`, `Config_default` and
+   `MovementSimulation`, each verified against a property set only that global
+   has.
+3. `mapback.js` maps an offset in the folded copy back to the untouched build.
+   It only answers for positions inside a *gap* — a region the fold left
+   byte-for-byte identical — and reports when one is not.
+4. `patch_player.js` locates each edit in the folded copy, maps it back, proves
+   the surrounding gap is identical on both sides, then applies it.
 
-The module block is lifted straight out of the OWNER build and renamed
-(`Settings_default` → `_0x35d81b`, `PlayerObject` → `_0xcd92ac`) so the two
-builds cannot drift.
+The placer block is lifted straight out of the OWNER build and renamed, so the
+two builds cannot drift.
+
+The old AutoPlacer class is excised by brace-matching its body. Two of its
+private helpers (the `SiegeAnalysis` object and the cached-angle function)
+remain in the bundle as **unreachable dead code** — nothing references them once
+the class is gone, and cutting them out means more excisions inside a minified
+`const` list for no behavioural gain.
 
 The menu pages are encrypted string-array entries and cannot be edited in place,
-so the player wraps the two page references in `getFrameContent` with
-`RYN_PP_COMBAT` / `RYN_PP_KEYS`, which graft on the same rows at runtime. Both
-are no-ops if their anchor is missing.
+so `getFrameContent` is wrapped with `RYN_PP_COMBAT` / `RYN_PP_KEYS`, which
+graft the same rows on at runtime. Both are no-ops if their anchor is missing.
 
     node deob.js ../../RYN_Client_v5_PLAYER.user.js player_stage1.js
     node patch_player.js
 
-`patch_player.js` is not idempotent — re-run it against a clean copy of the
-build.
+`patch_player.js` is not idempotent — run it against a clean copy of the build.
 
 ## Tests
 
-    node test_modules.js            # placement logic, owner build
-    node test_modules.js --player   # the same cases against the player build
-    node test_menu.js               # menu wiring and markup in both builds
+    node test_modules.js            # 76 cases, owner build
+    node test_modules.js --player   # the same 76 against the player build
+    node test_menu.js               # 36 cases, menu wiring in both builds
 
-`test_modules.js` slices the module block out of the shipped file and drives it
-with stubbed managers, so it tests what actually ships rather than a copy.
+`test_modules.js` slices the placer out of the shipped file and drives it with
+stubbed managers, so it tests what actually ships rather than a copy. It covers
+the arc arithmetic directly (merge/invert/intersect/snap, tangent angles,
+placement and preplace checks) as well as module behaviour.
+
+**Not covered:** none of this has been run against the live game. The geometry
+is verified against stubs; timing, and whether the chosen angles land the way
+they do in auraro, are not.

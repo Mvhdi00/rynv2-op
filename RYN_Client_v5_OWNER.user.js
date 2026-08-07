@@ -8700,8 +8700,6 @@ window.grbtp = 35;
       }
     }
   }
-  const _prePlaceAngleCache = new WeakMap;
-  const PRE_PLACE_ROTATION = 2;
   class AutoPush {
     moduleName="autoPush";
     client;
@@ -8843,488 +8841,1143 @@ window.grbtp = 35;
     postTick() {}
   }
   const TrapTick_default = TrapTick;
-  const SiegeAnalysis = {
-    isEscapable(cx, cy, selfRadius, objects) {
-      if (objects.length <= 2) return {
-        escapable: true,
-        exits: []
-      };
-      const arr = [];
-      for (const o of objects) {
-        const dx = o.x - cx, dy = o.y - cy;
-        arr.push({
-          ang: Math.atan2(dy, dx),
-          dist: Math.hypot(dx, dy),
-          escapeScale: o.escapeScale
-        });
-      }
-      arr.sort((a, b) => a.ang - b.ang);
-      const exits = [];
-      const len = arr.length;
-      for (let i = 0; i < len; i++) {
-        const a = arr[i];
-        const b = arr[i + 1 < len ? i + 1 : 0];
-        let gapAngle = Math.abs(a.ang - b.ang);
-        if (gapAngle > Math.PI) gapAngle = 2 * Math.PI - gapAngle;
-        const gapWidth2 = a.dist * a.dist + b.dist * b.dist - 2 * a.dist * b.dist * Math.cos(gapAngle);
-        const need = selfRadius * 2 + a.escapeScale + b.escapeScale + 10;
-        if (gapWidth2 > need * need) {
-          let exitAng = (a.ang + b.ang) / 2;
-          if (Math.abs(a.ang - b.ang) > Math.PI) exitAng += Math.PI;
-          exits.push({
-            angle: exitAng,
-            width: Math.sqrt(gapWidth2)
-          });
-        }
-      }
-      return {
-        escapable: exits.length > 0,
-        exits: exits
-      };
-    },
-    knockInto(spikeX, spikeY, objects, enemyX, enemyY, dir, playerHasPolearm) {
-      let willHit = false, inEscapable = false, doubleSpike = false;
-      let closest = Infinity;
-      let building1 = null;
-      for (const o of objects) {
-        if (!o.dmg && !o.isCactus && !o.trap) continue;
-        const distance = Math.hypot(enemyX - o.x, enemyY - o.y);
-        if (distance > 320) continue;
-        const px = enemyX + distance * Math.cos(dir);
-        const py = enemyY + distance * Math.sin(dir);
-        const scale = o.trap ? 47.5 : o.colScale;
-        const closestDist2 = (px - o.x) * (px - o.x) + (py - o.y) * (py - o.y);
-        if (closestDist2 > scale * scale) continue;
-        if ((o.dmg || o.isCactus) && distance <= 250 && distance > 125 && closestDist2 < (scale - 20) * (scale - 20)) {
-          inEscapable = true;
-        }
-        const condition = !o.trap && distance <= 245 && (distance >= 185 || playerHasPolearm && distance >= 100);
-        if (building1 && !o.trap && building1.dmg && Math.abs(distance - closest) < 6.7) {
-          const midAng = Math.atan2((building1.y + o.y) / 2 - enemyY, (building1.x + o.x) / 2 - enemyX);
-          let rel = Math.abs(midAng - dir);
-          if (rel > Math.PI) rel = 2 * Math.PI - rel;
-          if (rel <= 0.4) {
-            doubleSpike = true;
-            if (condition) willHit = true;
-            continue;
-          }
-        }
-        if (condition) {
-          const angD = Math.abs(dir - Math.atan2(o.y - spikeY, o.x - spikeX));
-          const normAngD = angD > Math.PI ? 2 * Math.PI - angD : angD;
-          if (normAngD <= 0.4) willHit = true;
-        }
-        if (distance < closest) {
-          closest = distance;
-          building1 = o;
-        }
-      }
-      return {
-        willHit: willHit,
-        inEscapable: inEscapable,
-        doubleSpike: doubleSpike,
-        closest: closest
-      };
-    }
-  };
-  function _getCachedPrePlaceAngles(client, tickCount, cacheKey, computeAngle, forceFull = false, rotationGroups = PRE_PLACE_ROTATION, priorityIndex = -1) {
-    let clientCache = _prePlaceAngleCache.get(client);
-    if (!clientCache) {
-      clientCache = new Map;
-      _prePlaceAngleCache.set(client, clientCache);
-    }
-    let entry = clientCache.get(cacheKey);
-    if (!entry) {
-      entry = {
-        angles: new Array(72).fill(null),
-        lastTick: -1,
-        wasFull: false
-      };
-      clientCache.set(cacheKey, entry);
-    }
-    const isNewTick = entry.lastTick !== tickCount;
-    if (isNewTick) {
-      entry.lastTick = tickCount;
-      entry.wasFull = false;
-    }
-    if (forceFull && !entry.wasFull) {
-      for (let i = 0; i < 72; i++) {
-        entry.angles[i] = computeAngle(i);
-      }
-      entry.wasFull = true;
-    } else if (isNewTick) {
-      const phase = tickCount % rotationGroups;
-      for (let i = phase; i < 72; i += rotationGroups) {
-        entry.angles[i] = computeAngle(i);
-      }
-      for (let i = 0; i < 72; i++) {
-        if (entry.angles[i] === null) entry.angles[i] = computeAngle(i);
-      }
-    }
-    if (priorityIndex >= 0 && priorityIndex < 72) {
-      entry.angles[priorityIndex] = computeAngle(priorityIndex);
-    }
-    return entry.angles;
+  // ==========================================================================
+  // Auraro placer, ported whole. This replaces RYN's own AutoPlacer.
+  //
+  // Auraro decides placements geometrically: it builds the blocked angular arcs
+  // around the player, inverts them into free arcs, and picks the free angle
+  // nearest whatever it wants to aim at. That is a different engine from RYN's
+  // getBestPlacementAngles, so the arithmetic is carried over rather than
+  // approximated, and only the data access is rewritten onto RYN's managers.
+  //
+  // Slot numbering differs between the clients. Auraro uses 2 = spike and
+  // 4 = trap; RYN item types are 4 = spike and 7 = trap. RYN's numbering is
+  // used throughout, so auraro's `autoPlace(0, 2, 4)` reads as
+  // `autoPlace(0, AURA_SPIKE, AURA_TRAP)` here.
+  //
+  // One thing auraro does not have is a packet budget. RYN caps a tick at
+  // ModuleHandler.packetLimit and every other module draws from the same pool,
+  // so each send goes through `send()`, which refuses once the budget is spent.
+  // Without it a single testCanPlace sweep would starve the rest of the tick.
+  // ==========================================================================
+  const AURA_TWO_PI = Math.PI * 2;
+  const AURA_EPS = 1e-6;
+  const AURA_SCAN_RANGE = 200;
+  const AURA_SPIKE = 4;
+  const AURA_TRAP = 7;
+  const AURA_MILL = 3;
+  const AURA_MAX_PER_TICK = 2;
+  const AURA_MAX_HITS = 4;
+  const AURA_RETRAP_STEP = Math.PI / 8;
+  const AURA_RETRAP_COOLDOWN = 200;
+  const AURA_REPLACE_RANGE = 300;
+  const AURA_PREPLACE_RANGE = 269;
+  const AURA_TRAP_REACH = 169;
+  const AURA_SAME_ANGLE_CAP = 4;
+
+  function auraPlacementCost(type) {
+    return type === AURA_TRAP ? 5 : 4;
   }
-  class AutoPlacer {
-    moduleName="autoPlacer";
+
+  // Auraro keeps one global `autoPlace` object whose state (preplaces, ranges,
+  // radObjs) is shared between autoplace, preplace and replace within a tick.
+  // The three RYN modules share one the same way.
+  function getAuraPlacer(client) {
+    if (!client._auraPlacer) {
+      client._auraPlacer = new AuraPlacer(client);
+    }
+    return client._auraPlacer;
+  }
+
+  class AuraPlacer {
     client;
-    _bannedAngles=new Map;
-    _predictObjects=[];
-    _placedAngles=[];
-    _tick=0;
+    ranges={};
+    rangesUpdated={};
+    preplaceRanges={};
+    preplaces=[ [], [] ];
+    radObjs=[];
+    replaced=true;
+    antiTrapped=false;
+    _angleList=new Map;
+    _angleListTick=-1;
     constructor(client2) {
       this.client = client2;
     }
-    _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
-      let minX = ax, maxX = bx;
-      if (ax > bx) {
-        minX = bx;
-        maxX = ax;
+
+    // ---- data access, rewritten onto RYN ------------------------------------
+
+    // auraro: items.list[player.items[id]]
+    item(type) {
+      const id = this.client.myPlayer.getItemByType(type);
+      return id === null || id === void 0 ? null : Items[id];
+    }
+
+    // auraro: nearObjs
+    nearObjs(x, y, range = AURA_SCAN_RANGE) {
+      const {ObjectManager: ObjectManager2} = this.client;
+      const cells = Math.max(1, Math.ceil(range / 100));
+      const out = [];
+      for (const id of ObjectManager2.grid2D.queryFull(x, y, cells)) {
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0) {
+          continue;
+        }
+        const dx = object.pos.current.x - x, dy = object.pos.current.y - y;
+        if (dx * dx + dy * dy > range * range) {
+          continue;
+        }
+        out.push(object);
       }
-      if (maxX > x2) maxX = x2;
-      if (minX < x1) minX = x1;
-      if (minX > maxX) return false;
-      let minY = ay, maxY = by;
-      const dx = bx - ax;
-      if (Math.abs(dx) > 0.0000001) {
-        const slope = (by - ay) / dx;
-        const intercept = ay - slope * ax;
-        minY = slope * minX + intercept;
-        maxY = slope * maxX + intercept;
+      return out;
+    }
+
+    isTeamObject(object) {
+      return !this.client.PlayerManager.isEnemyByID(object.ownerID, this.client.myPlayer);
+    }
+
+    // auraro: tmp.blocker ? tmp.blocker : tmp.getScale(0.6, tmp.isItem)
+    blockScale(object) {
+      return object.placementScale;
+    }
+
+    inRiver(y) {
+      const mid = Config_default.mapScale / 2;
+      const half = Config_default.riverWidth / 2;
+      return y >= mid - half && y <= mid + half;
+    }
+
+    // Every placement funnels through here so the tick budget is respected.
+    send(type, angle) {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      if (angle === null || angle === void 0 || !myPlayer.canPlace(type)) {
+        return false;
       }
-      if (minY > maxY) {
-        const tmp = maxY;
-        maxY = minY;
-        minY = tmp;
+      if (ModuleHandler.packetCount + auraPlacementCost(type) > ModuleHandler.packetLimit) {
+        return false;
       }
-      if (maxY > y2) maxY = y2;
-      if (minY < y1) minY = y1;
-      if (minY > maxY) return false;
+      ModuleHandler.place(type, angle);
+      ModuleHandler.placedOnce = true;
+      ModuleHandler.placeAngles[0] = type;
+      ModuleHandler.placeAngles[1].push(angle);
+      ModuleHandler.moduleActive = true;
       return true;
     }
-    _getConfig(id, myPos) {
-      return angle => {
-        const item = Items[id];
-        const dist = 35 + item.scale + (item.placeOffset || 0);
-        return {
-          id: id,
-          angle: angle,
-          x: myPos.x + dist * Math.cos(angle),
-          y: myPos.y + dist * Math.sin(angle),
-          scale: item.scale
-        };
-      };
+
+    // auraro tryPlaceAngle: never hammer the same angle more than four times
+    // in one tick.
+    tryPlaceAngle(type, angle) {
+      const tick = this.client._ModuleHandler.tickCount;
+      if (this._angleListTick !== tick) {
+        this._angleList.clear();
+        this._angleListTick = tick;
+      }
+      const key = (angle * 1e3 | 0) + "_" + type;
+      const count = this._angleList.get(key) || 0;
+      if (count >= AURA_SAME_ANGLE_CAP) {
+        return false;
+      }
+      this._angleList.set(key, count + 1);
+      return this.send(type, angle);
     }
-    _canPlace(id, angle, myPos, ObjectManager2, excludeObj) {
-      const cfg = this._getConfig(id, myPos)(angle);
-      const cx = cfg.x, cy = cfg.y, cs = cfg.scale;
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        if (excludeObj && obj === excludeObj) return;
-        const blockS = obj.placementScale;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < cs + blockS) collision = true;
-      });
-      if (collision) return false;
-      if (id !== 18) {
-        const mid = Config_default.mapScale / 2;
-        const riverHalf = Config_default.riverWidth / 2;
-        if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      }
-      return true;
-    }
-    _isItemLimit(id, myPlayer) {
-      const group = ItemGroups[Items[id].itemGroup];
-      const limit = ("sandboxLimit" in group ? group.sandboxLimit : null) || 99;
-      const count = myPlayer.itemCount.get(Items[id].itemGroup) || 0;
-      return count >= limit;
-    }
-    _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
-      if (this._isItemLimit(id, myPlayer)) return [];
-      const tickCount = this.client._ModuleHandler.tickCount;
-      const cacheKey = this.moduleName + "_" + id + "_" + (excludeObj ? excludeObj.id : "n");
-      const getConfig = this._getConfig(id, myPos);
-      const retrapQuadrant = this.client._retrapQuadrant ?? -1;
-      const computeAngle = i => {
-        if (retrapQuadrant >= 0 && Math.floor(i / 18) === retrapQuadrant) {
-          return {
-            angle: i * (Math.PI * 2 / 72),
-            placeable: false,
-            perfect: false
-          };
-        }
-        const angle = i * (Math.PI * 2 / 72);
-        const cfg = getConfig(angle);
-        return {
-          ...cfg,
-          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
-          perfect: false
-        };
-      };
-      const forceFull = tickCount < (this.client._focusUntilTick || -1);
-      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1);
-      for (let i = 1; i < angles.length; i++) {
-        angles[i].perfect = false;
-      }
-      if (angles[0]) angles[0].perfect = false;
-      for (let i = 1; i < angles.length; i++) {
-        if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
-        if (!angles[i].placeable && angles[i - 1].placeable) angles[i - 1].perfect = true;
-      }
-      return angles;
-    }
-    _addPredictObject(id, angle, myPos) {
-      const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const x = myPos.x + dist * Math.cos(angle);
-      const y = myPos.y + dist * Math.sin(angle);
-      for (const obj of this._predictObjects) {
-        if (obj.id !== 17 && Math.hypot(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
-      }
-      this._predictObjects.push({
-        id: id,
-        angle: angle,
-        x: x,
-        y: y,
-        scale: item.scale
-      });
-    }
-    postTick() {
-      if (!Settings_default._autoplacer) return;
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
-      if (!myPlayer || !myPlayer.inGame) return;
-      this._tick = this.client._ModuleHandler.tickCount;
-      for (const [angle, expiry] of this._bannedAngles) {
-        if (this._tick > expiry) this._bannedAngles.delete(angle);
-      }
-      const enemy = EnemyManager2.nearestEnemy;
-      if (!enemy) return;
-      const myPos = myPlayer.pos.current;
-      const myFut = myPlayer.pos.future;
-      const enemyPos = enemy.pos.current;
-      const enemyFut = enemy.pos.future;
-      const enemyScale = enemy.collisionScale;
-      const trapId = myPlayer.getItemByType(7);
-      const spikeId = myPlayer.getItemByType(4);
-      if (!spikeId && !trapId) return;
-      const spikesOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject) || obj.itemGroup !== 2) return;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return;
-        spikesOur.push(obj);
-      });
-      const trapsOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 4, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject) || obj.type !== 15) return;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return;
-        trapsOur.push(obj);
-      });
-      const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < Items[t.type].scale) || null;
-      if (enemyTrapped && !this.client._wasEnemyTrapped) {
-        this.client._focusUntilTick = this.client._ModuleHandler.tickCount + 3;
-      }
-      this.client._wasEnemyTrapped = !!enemyTrapped;
-      const imTrapped = !!myPlayer.isTrapped;
-      const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
-      const canTrapTick = () => false;
-      const LOOKAHEAD = 222, START_OFFSET = 35;
-      const futX = myPos.x + Math.cos(predictMoveAngle) * LOOKAHEAD;
-      const futY = myPos.y + Math.sin(predictMoveAngle) * LOOKAHEAD;
-      const stX = myPos.x + Math.cos(predictMoveAngle) * START_OFFSET;
-      const stY = myPos.y + Math.sin(predictMoveAngle) * START_OFFSET;
-      const _los = cfg => {
-        const blockFuture = this._lineInRect(cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5, stX, stY, futX, futY);
-        const blockEnemy = this._lineInRect(cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5, myFut.x, myFut.y, enemyFut.x, enemyFut.y);
-        let canSpikeTick = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < cfg.scale + 35;
-        if (canSpikeTick) {
-          const kbA = Math.atan2(enemyPos.y - cfg.y, enemyPos.x - cfg.x);
-          const e2p = Math.atan2(myPos.y - enemyPos.y, myPos.x - enemyPos.x);
-          let diff = Math.abs(kbA - e2p);
-          if (diff > Math.PI) diff = 2 * Math.PI - diff;
-          canSpikeTick = diff >= Math.PI / 5;
-        }
-        const canRetrap = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < 50;
-        const willRetrap = true;
-        return {
-          blockFuture: blockFuture,
-          blockEnemy: blockEnemy,
-          canSpikeTick: canSpikeTick,
-          canRetrap: canRetrap,
-          willRetrap: willRetrap
-        };
-      };
-      const _findClosestSpikeToKb = spikeList => {
-        const validKb = spikeList.filter(a => {
-          const canHit = this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-          if (!canHit) return false;
-          const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-          const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-          for (const sp of spikesOur) {
-            const s = sp.pos.current, sc = sp.collisionScale;
-            if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-          }
+
+    // auraro: objectManager.checkItemLocation
+    checkItemLocation(x, y, scale, type, objs) {
+      for (const object of objs) {
+        const p = object.pos.current;
+        if (Math.hypot(x - p.x, y - p.y) < scale + this.blockScale(object)) {
           return false;
-        }).map(a => {
-          const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-          const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-          let best = Infinity;
-          for (const sp of spikesOur) {
-            const s = sp.pos.current, sc = sp.collisionScale;
-            if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-              const a2e = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x), e2s = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-              let d = Math.abs(a2e - e2s);
-              if (d > Math.PI) d = 2 * Math.PI - d;
-              best = Math.min(best, d);
+        }
+      }
+      const id = this.client.myPlayer.getItemByType(type);
+      if (id !== 18 && this.inRiver(y)) {
+        return false;
+      }
+      return true;
+    }
+
+    // auraro: objectManager.preplaceCheck — the doomed object is skipped, and
+    // the spot must overlap it. That last clause is what makes this "pre"
+    // place: only the slot being freed counts.
+    preplaceCheck(x, y, scale, type, target, objs) {
+      for (const object of objs) {
+        if (object.id === target.id) {
+          continue;
+        }
+        const p = object.pos.current;
+        if (Math.hypot(x - p.x, y - p.y) < scale + this.blockScale(object)) {
+          return false;
+        }
+      }
+      const id = this.client.myPlayer.getItemByType(type);
+      if (id !== 18 && this.inRiver(y)) {
+        return false;
+      }
+      const t = target.pos.current;
+      return Math.hypot(x - t.x, y - t.y) <= scale + target.scale;
+    }
+
+    // auraro: objectManager.hitsToBreak
+    hitsToBreak(object, who) {
+      if (!object || !who || !object.isDestroyable) {
+        return 1 / 0;
+      }
+      let best = 0;
+      for (const id of [ who.weapon.primary, who.weapon.secondary ]) {
+        if (id == null) {
+          continue;
+        }
+        let damage = 0;
+        try {
+          damage = who.getBuildingDamage(id, true);
+        } catch (e) {
+          continue;
+        }
+        if (Number.isFinite(damage) && damage > best) {
+          best = damage;
+        }
+      }
+      if (!(best > 0)) {
+        return 1 / 0;
+      }
+      return Math.ceil(object.health / best);
+    }
+
+    // auraro: objectManager.canBeBroken — RYN already flags this per tick.
+    canBeBroken(object) {
+      return object.canBeDestroyed && object.destroyingTick === this.client._ModuleHandler.tickCount;
+    }
+
+    // ---- auraro geometry ----------------------------------------------------
+
+    normalizeAngle(a) {
+      return a < 0 ? a + AURA_TWO_PI : a > AURA_TWO_PI ? a - AURA_TWO_PI : a;
+    }
+
+    dist(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    addDir(pos, angle, length) {
+      return {
+        x: pos.x + Math.cos(angle) * length,
+        y: pos.y + Math.sin(angle) * length
+      };
+    }
+
+    angleDist(a, b) {
+      const p = Math.abs(b - a) % AURA_TWO_PI;
+      return p > Math.PI ? AURA_TWO_PI - p : p;
+    }
+
+    isAngleFree(angle, ranges, gap = 0) {
+      const na = this.normalizeAngle(angle);
+      for (const [s, e] of ranges) {
+        if (na >= s - gap && na <= e + gap) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    normalizeArc(start, end) {
+      const s = this.normalizeAngle(start);
+      const e = this.normalizeAngle(end);
+      const origSpan = (end - start + AURA_TWO_PI) % AURA_TWO_PI;
+      const newSpan = (e - s + AURA_TWO_PI) % AURA_TWO_PI;
+      return Math.abs(origSpan - newSpan) > AURA_EPS ? [ e, s ] : [ s, e ];
+    }
+
+    mergeBlocked(arcs) {
+      if (!arcs.length) {
+        return [];
+      }
+      const intervals = [];
+      for (let i = 0; i < arcs.length; i++) {
+        const s = this.normalizeAngle(arcs[i][0]);
+        const e = this.normalizeAngle(arcs[i][1]);
+        const span = (e - s + AURA_TWO_PI) % AURA_TWO_PI;
+        if (span < AURA_EPS) {
+          intervals.push([ s, s ]);
+        } else if (s < e) {
+          intervals.push([ s, e ]);
+        } else {
+          intervals.push([ s, AURA_TWO_PI ], [ 0, e ]);
+        }
+      }
+      intervals.sort((a, b) => a[0] - b[0]);
+      const merged = [ intervals[0] ];
+      for (let i = 1; i < intervals.length; i++) {
+        const s = intervals[i][0], e = intervals[i][1];
+        const last = merged[merged.length - 1];
+        if (s <= last[1] + AURA_EPS) {
+          last[1] = e > last[1] ? e : last[1];
+        } else {
+          merged.push([ s, e ]);
+        }
+      }
+      return merged.length === 1 && merged[0][0] <= AURA_EPS && merged[0][1] >= AURA_TWO_PI - AURA_EPS ? [ [ 0, AURA_TWO_PI ] ] : merged;
+    }
+
+    invertArcs(merged) {
+      if (!merged.length) {
+        return [ [ 0, AURA_TWO_PI ] ];
+      }
+      const free = [];
+      for (let i = 0; i < merged.length; i++) {
+        const gapStart = merged[i][1];
+        const gapEnd = i < merged.length - 1 ? merged[i + 1][0] : merged[0][0] + AURA_TWO_PI;
+        if (gapEnd - gapStart > AURA_EPS) {
+          free.push([ this.normalizeAngle(gapStart), this.normalizeAngle(gapEnd) ]);
+        }
+      }
+      return free;
+    }
+
+    angleInArc(angle, start, end) {
+      if (start < end) {
+        return angle >= start && angle <= end;
+      }
+      return angle >= start || angle <= end;
+    }
+
+    closeToAngle(angle, ranges) {
+      angle = this.normalizeAngle(angle);
+      let bestAngle = null, bestDist = 1 / 0;
+      for (const [start, end] of ranges) {
+        if (this.angleInArc(angle, start, end)) {
+          return angle;
+        }
+        for (const ang of [ start, end ]) {
+          const dist = this.angleDist(ang, angle);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestAngle = ang;
+          }
+        }
+      }
+      return bestAngle;
+    }
+
+    intersectRanges(range1, range2) {
+      const result = [];
+      const split = ([s, e]) => s <= e ? [ [ s, e ] ] : [ [ s, AURA_TWO_PI ], [ 0, e ] ];
+      for (const r1 of range1) {
+        for (const r2 of range2) {
+          for (const [a1, b1] of split(r1)) {
+            for (const [a2, b2] of split(r2)) {
+              const start = Math.max(a1, a2), end = Math.min(b1, b2);
+              if (start < end) {
+                result.push([ start, end ]);
+              }
             }
           }
-          return {
-            angle: a,
-            alignment: best
-          };
-        });
-        if (!validKb.length) return null;
-        const bestScore = Math.min(...validKb.map(v => v.alignment));
-        return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle || null;
-      };
-      this._predictObjects = [];
-      if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) {
+        }
+      }
+      return result;
+    }
+
+    // The two angles at which an item placed around us just touches `obj`.
+    // A single-element result means it is too far away to block anything.
+    closestPossibleAngles(obj, type, px, py) {
+      const item = this.item(type);
+      if (!item) {
+        return null;
+      }
+      const objPos = obj.pos ? obj.pos.current : obj;
+      const objScale = (obj.pos ? this.blockScale(obj) : obj.scale) + .01;
+      const myScale = this.client.myPlayer.scale;
+      const dx = objPos.x - px, dy = objPos.y - py;
+      const dist2 = dx * dx + dy * dy;
+      const dist = Math.sqrt(dist2);
+      const threshold = myScale + objScale + 2 * item.scale + item.placeOffset;
+      if (dist > threshold) {
+        return [ Math.atan2(dy, dx) ];
+      }
+      const D = myScale + item.scale + item.placeOffset;
+      const E = objScale + item.scale;
+      const invDist = 1 / dist;
+      const a = (D * D - E * E + dist2) * .5 * invDist;
+      const h2 = D * D - a * a;
+      if (h2 <= 0) {
+        return [ Math.atan2(dy, dx) ];
+      }
+      const h = Math.sqrt(h2);
+      const aInv = a * invDist, hInv = h * invDist;
+      const baseX = px + aInv * dx, baseY = py + aInv * dy;
+      const hdy = hInv * dy, hdx = hInv * dx;
+      return [ Math.atan2(baseY - hdx - py, baseX + hdy - px), Math.atan2(baseY + hdx - py, baseX - hdy - px) ];
+    }
+
+    // Free arcs around (px, py) for this build type.
+    angleRanges(type, px, py) {
+      const item = this.item(type);
+      if (!item) {
         return;
       }
-      if (this._placedAngles && this._placedAngles.length > 0) {
-        const _chkS = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _chkT = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _allChk = [ ..._chkS, ..._chkT ];
-        for (const pa of this._placedAngles) {
-          const _m = _allChk.find(a => getAngleDist(a.angle, pa) < 0.01);
-          if (_m && _m.placeable) {
-            this._bannedAngles.set(pa, this._tick + 18);
-          }
+      const offset = this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
+      const objs = this.nearObjs(px, py);
+      const rawBlocked = [];
+      for (const obj of objs) {
+        const p = obj.pos.current;
+        const dx = p.x - px, dy = p.y - py;
+        if (dx * dx + dy * dy > 40000) {
+          continue;
+        }
+        const angles = this.closestPossibleAngles(obj, type, px, py);
+        if (!angles || angles.length !== 2) {
+          continue;
+        }
+        const [a1, a2] = angles;
+        const v1 = this.checkItemLocation(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, type, objs);
+        const v2 = this.checkItemLocation(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, type, objs);
+        if (v1 && v2) {
+          rawBlocked.push([ a1, a2 ]);
+        } else if (v1 || v2) {
+          const valid = v1 ? a1 : a2;
+          const invalid = v1 ? a2 : a1;
+          const buildAngle = Math.atan2(dy, dx);
+          const cw = (buildAngle - valid + AURA_TWO_PI) % AURA_TWO_PI < (invalid - valid + AURA_TWO_PI) % AURA_TWO_PI;
+          rawBlocked.push(cw ? [ valid, invalid ] : [ invalid, valid ]);
+        } else {
+          rawBlocked.push([ a1, a2 ]);
         }
       }
-      this._placedAngles = [];
-      {
-        const spikeAngles2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
-        const trapAngles2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) : [];
-        const filterBanned = a => !this._bannedAngles.has(a.angle);
-        const validSpike = spikeAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
-        const validTrap = trapAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
-        const validAngles = [ ...validSpike, ...validTrap ];
-        const closestSpikeToEnemy2 = validSpike.filter(a => this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] || null;
-        const closestTrapToEnemy2 = validTrap.filter(a => this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] || null;
-        const closestSpikeToKb2 = _findClosestSpikeToKb(validSpike);
-        const neitherTrapped = !enemyTrapped && !imTrapped;
-        let _escapeExits = null;
-        if (enemy) {
-          const surroundSpikes = [];
-          ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
-            const o = ObjectManager2.objects.get(id);
-            if (!o || !(o instanceof PlayerObject)) return;
-            if (o.itemGroup !== 2 && o.type !== 15) return;
-            if (PlayerManager2.isEnemyByID(o.ownerID, myPlayer)) return;
-            const d = enemyPos.distance(o.pos.current);
-            if (d > enemyScale + o.collisionScale + 40) return;
-            surroundSpikes.push({
-              x: o.pos.current.x,
-              y: o.pos.current.y,
-              escapeScale: o.collisionScale
-            });
-          });
-          if (surroundSpikes.length >= 2) {
-            const esc = SiegeAnalysis.isEscapable(enemyPos.x, enemyPos.y, enemyScale, surroundSpikes);
-            if (esc.escapable) _escapeExits = esc.exits;
-          }
+      this.ranges[type] = this.invertArcs(this.mergeBlocked(rawBlocked));
+      this.rangesUpdated[type] = true;
+    }
+
+    // Same, but treating `target` as already gone — the arcs that open up when
+    // it breaks.
+    calcPreplace(target, type, px, py) {
+      const item = this.item(type);
+      if (!item) {
+        return;
+      }
+      const offset = this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
+      const objs = this.nearObjs(px, py);
+      const rawBlocked = [];
+      for (const obj of objs) {
+        const p = obj.pos.current;
+        if (Math.hypot(p.x - px, p.y - py) > AURA_SCAN_RANGE || obj.id === target.id) {
+          continue;
         }
-        const _sealsExit = cfg => {
-          if (!_escapeExits || _escapeExits.length === 0) return false;
-          const angToConfig = Math.atan2(cfg.y - enemyPos.y, cfg.x - enemyPos.x);
-          for (const exit of _escapeExits) {
-            let diff = Math.abs(angToConfig - exit.angle);
-            if (diff > Math.PI) diff = 2 * Math.PI - diff;
-            if (diff < 0.45) return true;
-          }
-          return false;
-        };
-        const _primaryType = myPlayer.getItemByType(0);
-        const _hasPolearm = _primaryType === 4 || _primaryType === 5;
-        const _kbObjects = [];
-        ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 4, id => {
-          const o = ObjectManager2.objects.get(id);
-          if (!o || !(o instanceof PlayerObject)) return;
-          const isSpk = o.itemGroup === 2, isTrp = o.type === 15;
-          if (!isSpk && !isTrp) return;
-          if (PlayerManager2.isEnemyByID(o.ownerID, myPlayer)) return;
-          _kbObjects.push({
-            x: o.pos.current.x,
-            y: o.pos.current.y,
-            dmg: isSpk,
-            trap: isTrp,
-            isCactus: false,
-            colScale: o.collisionScale
-          });
-        });
-        const _kbDir = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
-        const _bouncesOntoSpike = cfg => {
-          if (_kbObjects.length === 0) return false;
-          const res = SiegeAnalysis.knockInto(cfg.x, cfg.y, _kbObjects, enemyPos.x, enemyPos.y, _kbDir, _hasPolearm);
-          return res.willHit || res.inEscapable;
-        };
-        const _isDoubleSpike = cfg => {
-          if (_kbObjects.length === 0) return false;
-          const res = SiegeAnalysis.knockInto(cfg.x, cfg.y, _kbObjects, enemyPos.x, enemyPos.y, _kbDir, _hasPolearm);
-          return res.doubleSpike;
-        };
-        const isAutoPlaceAngle = config => {
-          if (!enemy) return false;
-          if (myPos.distance(enemyPos) > (Settings_default._autoplacerRadius ?? 350)) return false;
-          const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-          const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
-          const {blockFuture: blockFuture, blockEnemy: blockEnemy, willRetrap: willRetrap} = _los(config);
-          if (isSpike) {
-            if (enemyTrapped && closestSpikeToEnemy2 && config === closestSpikeToEnemy2) return true;
-            if (closestSpikeToKb2 && config === closestSpikeToKb2) return true;
-            if (enemyTrapped && !blockFuture && !blockEnemy) return true;
-            if (_sealsExit(config)) return true;
-            if (_isDoubleSpike(config)) return true;
-            if (_bouncesOntoSpike(config)) return true;
-            const distSpikeToEnemy = Math.hypot(config.x - enemyPos.x, config.y - enemyPos.y);
-            const touchesEnemy = distSpikeToEnemy < config.scale + enemyScale + 15;
-            if (enemyTrapped && touchesEnemy) return true;
-            if (!enemyTrapped && !imTrapped) {
-              if (closestSpikeToEnemy2 && config === closestSpikeToEnemy2) return true;
-              if (touchesEnemy) return true;
+        const angles = this.closestPossibleAngles(obj, type, px, py);
+        if (!angles || angles.length !== 2) {
+          continue;
+        }
+        const [a1, a2] = angles;
+        const buildAngle = Math.atan2(p.y - py, p.x - px);
+        const v1 = this.preplaceCheck(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, type, target, objs);
+        const v2 = this.preplaceCheck(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, type, target, objs);
+        if (v1 && v2) {
+          rawBlocked.push([ a1, a2 ]);
+        } else if (v1 || v2) {
+          const valid = v1 ? a1 : a2;
+          const invalid = v1 ? a2 : a1;
+          const cw = (buildAngle - valid + AURA_TWO_PI) % AURA_TWO_PI < (invalid - valid + AURA_TWO_PI) % AURA_TWO_PI;
+          rawBlocked.push(cw ? [ valid, invalid ] : [ invalid, valid ]);
+        } else {
+          rawBlocked.push([ a1, a2 ]);
+        }
+      }
+      this.preplaceRanges[type] = this.invertArcs(this.mergeBlocked(rawBlocked));
+    }
+
+    // Lower is more urgent: fewest hits from death, then closest.
+    urgencyScore(obj, who) {
+      return this.hitsToBreak(obj, who) + this.client.myPlayer.pos.current.distance(obj.pos.current) * .01;
+    }
+
+    inPredictedRange(who, weaponRange) {
+      const myPos = this.client.myPlayer.pos.current;
+      const dist = myPos.distance(who.pos.current);
+      const fut = who.pos.future;
+      const spd = fut ? Math.hypot(fut.x - who.pos.current.x, fut.y - who.pos.current.y) : 0;
+      return dist - spd <= weaponRange;
+    }
+
+    // The trap pinning `enemy`, when it is one of ours.
+    enemyTrap(enemy) {
+      if (!enemy || !enemy.isTrapped) {
+        return null;
+      }
+      const trap = enemy.trappedIn;
+      return trap && this.isTeamObject(trap) ? trap : null;
+    }
+
+    // ---- auraro placement ---------------------------------------------------
+
+    // auraro createObj: a hypothetical build at `direct`, used to reserve the
+    // spot so two placements in one tick cannot claim the same ground.
+    createObj(item, direct, px, py) {
+      const offset = this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
+      return {
+        id: item.id,
+        dir: direct,
+        scale: item.scale,
+        x: px + offset * Math.cos(direct),
+        y: py + offset * Math.sin(direct)
+      };
+    }
+
+    // auraro radCalc: the angles at which `item` can be laid against `obj`,
+    // skipping any that collide with something already reserved this tick.
+    radCalc(obj, direct, item, type, px, py) {
+      const offset = this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
+      const objPos = obj.pos.current;
+      const objScale = this.blockScale(obj);
+      const dx = objPos.x - px, dy = objPos.y - py;
+      const dist2 = dx * dx + dy * dy;
+      const combined = objScale + item.scale;
+      const combined2 = combined * combined;
+      const objs = this.nearObjs(px, py);
+
+      const checkPreplace = preObj => {
+        for (const bucket of this.preplaces) {
+          for (const p of bucket) {
+            const pdx = p.x - preObj.x, pdy = p.y - preObj.y;
+            const thr = p.scale + preObj.scale;
+            if (pdx * pdx + pdy * pdy < thr * thr) {
+              return false;
             }
           }
-          if (isTrap) {
-            if (closestTrapToEnemy2 && config === closestTrapToEnemy2 && willRetrap && neitherTrapped) return true;
-            if (neitherTrapped) return true;
-            return false;
-          }
-          return false;
-        };
-        for (const obj of validAngles.filter(a => a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, myPos);
         }
-        for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, myPos);
+        return this.checkItemLocation(preObj.x, preObj.y, preObj.scale, type === void 0 ? AURA_SPIKE : type, objs);
+      };
+
+      if (dist2 >= combined2) {
+        if (type) {
+          return [];
+        }
+        const preObj = this.createObj(item, direct, px, py);
+        if (!checkPreplace(preObj)) {
+          return [];
+        }
+        this.preplaces[1].push(preObj);
+        return [ direct ];
+      }
+      const dist = Math.sqrt(dist2);
+      const D = offset, E = combined;
+      const a = (D * D - E * E + dist2) / (2 * dist);
+      const h2 = D * D - a * a;
+      if (h2 < 0) {
+        return [];
+      }
+      const h = Math.sqrt(h2);
+      const baseAngle = Math.atan2(dy, dx);
+      const spread = Math.atan2(h, a);
+      const result = [];
+      for (const angle of [ baseAngle + spread, baseAngle - spread ]) {
+        const preObj = this.createObj(item, angle, px, py);
+        if (checkPreplace(preObj)) {
+          this.preplaces[1].push(preObj);
+          result.push(angle);
         }
       }
-      for (const obj of this._predictObjects) {
-        if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;
-        const type = obj.id === trapId ? 7 : 4;
-        ModuleHandler.place(type, obj.angle);
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.placeAngles[0] = type;
-        ModuleHandler.placeAngles[1].push(obj.angle);
-        ModuleHandler.moduleActive = true;
-        this._placedAngles.push(obj.angle);
+      return result;
+    }
+
+    // auraro testCanPlace: sweep a fan of angles outward from `radian` and
+    // drop a build at every one that is actually free.
+    testCanPlace(type, first = -(Math.PI / 2), repeat = Math.PI / 2, plus = Math.PI / 36, radian = 0, loopAll = false, noOverlap = false) {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const item = this.item(type);
+      if (!item) {
+        return;
+      }
+      const tmpS = myPlayer.scale + item.scale + (item.placeOffset || 0);
+      const px = myPlayer.pos.current.x, py = myPlayer.pos.current.y;
+      const objs = this.nearObjs(px, py);
+      const blockers = objs.map(o => {
+        const thr = item.scale + this.blockScale(o);
+        return {
+          x: o.pos.current.x,
+          y: o.pos.current.y,
+          thr2: thr * thr
+        };
+      });
+      const noOverlapThr2 = noOverlap ? Math.pow(item.scale * 2, 2) : 0;
+
+      const tryAngle = relAim => {
+        if (ModuleHandler.packetCount + auraPlacementCost(type) > ModuleHandler.packetLimit) {
+          return false;
+        }
+        const tmpX = px + tmpS * Math.cos(relAim), tmpY = py + tmpS * Math.sin(relAim);
+        const id = myPlayer.getItemByType(type);
+        if (id !== 18 && this.inRiver(tmpY)) {
+          return false;
+        }
+        for (const o of blockers) {
+          const dx = tmpX - o.x, dy = tmpY - o.y;
+          if (dx * dx + dy * dy < o.thr2) {
+            return false;
+          }
+        }
+        if (!this.checkItemLocation(tmpX, tmpY, item.scale, type, objs)) {
+          return false;
+        }
+        if (!this.tryPlaceAngle(type, relAim)) {
+          return false;
+        }
+        if (noOverlap) {
+          blockers.push({
+            x: tmpX,
+            y: tmpY,
+            thr2: noOverlapThr2
+          });
+        }
+        this.preplaces[0].push({
+          x: tmpX,
+          y: tmpY,
+          scale: item.scale
+        });
+        return true;
+      };
+
+      // auraro first tries the two angles where the build would touch the
+      // enemy, then falls back to sweeping outward from the middle.
+      const enemy = this.client.EnemyManager.nearestEnemy;
+      if (enemy && !loopAll) {
+        const ePos = enemy.pos.current;
+        const dx = ePos.x - px, dy = ePos.y - py;
+        const dist2 = dx * dx + dy * dy;
+        const dist = Math.sqrt(dist2);
+        const D = tmpS, E = enemy.scale + item.scale;
+        if (dist <= D + E && dist > 0) {
+          const invDist = 1 / dist;
+          const a = (D * D - E * E + dist2) * .5 * invDist;
+          const h2 = D * D - a * a;
+          if (h2 > 0) {
+            const h = Math.sqrt(h2);
+            const aInv = a * invDist, hInv = h * invDist;
+            const baseX = px + aInv * dx, baseY = py + aInv * dy;
+            const hdy = hInv * dy, hdx = hInv * dx;
+            const angle1 = Math.atan2(baseY - hdx - py, baseX + hdy - px);
+            const angle2 = Math.atan2(baseY + hdx - py, baseX - hdy - px);
+            if (angle1 >= radian + first && angle1 <= radian + repeat) {
+              tryAngle(angle1);
+            }
+            if (angle2 >= radian + first && angle2 <= radian + repeat) {
+              tryAngle(angle2);
+            }
+          }
+        }
+      }
+      const end = loopAll ? repeat : repeat - plus * .001;
+      const steps = Math.round((end - first) / plus);
+      const half = steps >> 1;
+      const base = radian + first;
+      for (let s = 0; s <= half; s++) {
+        tryAngle(base + (half + s) * plus);
+        if (s > 0) {
+          tryAngle(base + (half - s) * plus);
+        }
+      }
+      if ((steps & 1) === 0) {
+        tryAngle(radian + end);
+      }
+    }
+
+    // auraro protect: wall off the side away from `aim` so we cannot be
+    // walked into a trap.
+    protect(aim) {
+      if (!Settings_default._antiTrapProtect) {
+        return;
+      }
+      this.testCanPlace(AURA_TRAP, -(Math.PI / 2), Math.PI / 2, Math.PI / 6, aim + Math.PI, true);
+      this.testCanPlace(AURA_SPIKE, -(Math.PI / 3), Math.PI / 3, Math.PI / 6, aim + Math.PI, true);
+      this.antiTrapped = true;
+    }
+
+    // auraro autoPlace.
+    //   mode 0 — lay `type` against every nearby object, `type2` as fallback
+    //   mode 1 — extend our own spikes/traps that already sit near the enemy,
+    //            then fall through to mode 0
+    autoPlace(mode, type, type2, again) {
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      if (!Settings_default._autoplacer) {
+        return;
+      }
+      const enemy = EnemyManager2.nearestEnemy;
+      if (!enemy) {
+        return;
+      }
+      const px = myPlayer.pos.current.x, py = myPlayer.pos.current.y;
+      const item = this.item(type);
+      if (!item) {
+        return;
+      }
+      if (mode === 0) {
+        const item2 = type2 ? this.item(type2) : null;
+        this.radObjs = this.nearObjs(px, py);
+        if (this.radObjs.length) {
+          const placeOffset = myPlayer.scale + item.scale + (item.placeOffset || 0);
+          const enemyPos = enemy.pos.current;
+          for (const obj of this.radObjs) {
+            const direct = Math.atan2(obj.pos.current.y - py, obj.pos.current.x - px);
+            const placeAngles = this.radCalc(obj, direct, item, void 0, px, py);
+            if (placeAngles.length) {
+              // A spike that lands touching the enemy goes down first.
+              let placedContact = false;
+              if (type === AURA_SPIKE) {
+                for (const angle of placeAngles) {
+                  const tx = px + placeOffset * Math.cos(angle);
+                  const ty = py + placeOffset * Math.sin(angle);
+                  if (Math.hypot(tx - enemyPos.x, ty - enemyPos.y) <= item.scale + enemy.scale + 8) {
+                    this.send(type, angle);
+                    placedContact = true;
+                  }
+                }
+              }
+              if (!placedContact) {
+                for (const angle of placeAngles) {
+                  this.send(type, angle);
+                }
+              }
+            } else if (item2) {
+              for (const angle of this.radCalc(obj, direct, item2, void 0, px, py)) {
+                this.send(type2, angle);
+              }
+            }
+          }
+        } else {
+          const fut = enemy.pos.future ?? enemy.pos.current;
+          const aim = Math.atan2(fut.y - py, fut.x - px);
+          for (let i = 0; i < AURA_TWO_PI; i += Math.PI / 2) {
+            this.tryPlaceAngle(type, aim + i);
+          }
+        }
+        return;
+      }
+      // mode 1
+      const enemyPos = enemy.pos.current;
+      this.radObjs = this.nearObjs(px, py).filter(obj => {
+        if (!this.isTeamObject(obj)) {
+          return false;
+        }
+        const matches = type === AURA_TRAP ? obj.type === 15 : obj.itemGroup === 2;
+        return matches && obj.pos.current.distance(enemyPos) < 500;
+      });
+      for (const obj of this.radObjs) {
+        const direct = Math.atan2(obj.pos.current.y - py, obj.pos.current.x - px);
+        for (const angle of this.radCalc(obj, direct, item, 1, px, py)) {
+          this.send(type, angle);
+        }
+      }
+      if (again) {
+        this.autoPlace(mode, type2, type, false);
+      } else if (this.preplaces[1].length < 1) {
+        this.autoPlace(0, type2, type);
+      }
+    }
+
+    // auraro findPlacementAngle: clamp the free arcs to the angles that touch
+    // the doomed build, then aim inside what is left.
+    findPlacementAngle(type, build, px, py, enemy) {
+      const item = this.item(type);
+      if (!item || !build) {
+        return null;
+      }
+      const closeAngles = this.closestPossibleAngles(build, type, px, py);
+      if (!closeAngles || closeAngles.length < 2) {
+        return null;
+      }
+      if (!this.preplaceRanges[type]) {
+        this.calcPreplace(build, type, px, py);
+      }
+      const clampRange = [ this.normalizeArc(closeAngles[0], closeAngles[1]) ];
+      const ranges = this.intersectRanges(this.preplaceRanges[type], clampRange);
+      if (!ranges.length) {
+        return null;
+      }
+      const trap = this.enemyTrap(enemy);
+      if (trap) {
+        if (trap.id !== build.id) {
+          return this.closeToAngle(Math.atan2(trap.pos.current.y - py, trap.pos.current.x - px), ranges);
+        }
+        if (type === AURA_TRAP) {
+          // Aim the new trap so they are knocked into a spike already sitting
+          // against the old one.
+          const enemyPos = enemy.pos.current;
+          const spike = this.nearObjs(enemyPos.x, enemyPos.y, 300).filter(o => o.isSpike && this.isTeamObject(o) && o.pos.current.distance(trap.pos.current) <= trap.scale + o.scale + 69).sort((a, b) => a.pos.current.distance(trap.pos.current) - b.pos.current.distance(trap.pos.current))[0];
+          if (spike) {
+            const ghost = {
+              x: enemyPos.x,
+              y: enemyPos.y,
+              scale: Math.max(0, this.client.myPlayer.scale - item.scale)
+            };
+            const ca = this.closestPossibleAngles(ghost, type, px, py);
+            if (ca && ca.length === 2) {
+              const intersection = this.intersectRanges(ranges, [ this.normalizeArc(ca[0], ca[1]) ]);
+              if (intersection.length) {
+                return this.closeToAngle(Math.atan2(spike.pos.current.y - py, spike.pos.current.x - px), intersection);
+              }
+            }
+          }
+        }
+      }
+      return this.closeToAngle(Math.atan2(build.pos.current.y - py, build.pos.current.x - px), ranges);
+    }
+  }
+
+  // Auraro's per-tick dispatcher: reset the shared state, then pick which
+  // autoPlace shape to run from how far the enemy is and who is pinned.
+  class AutoPlacer {
+    moduleName="autoPlacer";
+    client;
+    _tick=-1;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this._tick = -1;
+    }
+    postTick() {
+      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (!Settings_default._autoplacer || !myPlayer || !myPlayer.inGame) {
+        return;
+      }
+      const tick = ModuleHandler.tickCount;
+      if (this._tick === tick) {
+        return;
+      }
+      this._tick = tick;
+      const enemy = EnemyManager2.nearestEnemy;
+      if (enemy === null) {
+        return;
+      }
+      const placer = getAuraPlacer(this.client);
+      const dist = myPlayer.pos.current.distance(enemy.pos.current);
+      if (dist > (Settings_default._autoplacerRadius ?? 350)) {
+        return;
+      }
+      // Shared per-tick state, cleared exactly where auraro clears it.
+      placer.preplaces[0] = [];
+      placer.preplaces[1] = [];
+      placer.rangesUpdated[AURA_SPIKE] = false;
+      placer.rangesUpdated[AURA_TRAP] = false;
+
+      const pushing = Settings_default._autoPush && dist <= (Settings_default._autoPushRange ?? 250);
+      if (pushing) {
+        if (dist <= 169) {
+          placer.autoPlace(0, AURA_SPIKE, AURA_TRAP);
+        } else if (dist > 222) {
+          placer.autoPlace(0, AURA_TRAP, AURA_SPIKE);
+        }
+        return;
+      }
+      if (dist <= 222) {
+        if (enemy.isTrapped) {
+          placer.autoPlace(0, AURA_SPIKE, AURA_TRAP);
+        } else if (enemy.wasTrapped && enemy.wasTrapped()) {
+          placer.autoPlace(0, AURA_TRAP, AURA_SPIKE);
+        } else {
+          placer.autoPlace(1, AURA_SPIKE, AURA_TRAP, true);
+        }
+        return;
+      }
+      if (dist > 269 && dist < 400) {
+        placer.autoPlace(0, AURA_TRAP, AURA_SPIKE);
+      } else if (dist <= 269) {
+        placer.autoPlace(1, AURA_TRAP, AURA_SPIKE, true);
       }
     }
   }
+
+  class PrePlacer {
+    moduleName="prePlacer";
+    client;
+    _tick=-1;
+    _rangeCache={};
+    _rangeTick=-1;
+    _retrapLast=0;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this._tick = -1;
+      this._rangeCache = {};
+      this._rangeTick = -1;
+      this._retrapLast = 0;
+    }
+
+    // auraro runs the movement sim two ticks out and places against that.
+    predictPos() {
+      const {myPlayer: myPlayer} = this.client;
+      try {
+        const sim = new MovementSimulation;
+        sim.reset(this.client);
+        sim.update(this.client, true);
+        sim.update(this.client, false);
+        return {
+          x: sim.x,
+          y: sim.y
+        };
+      } catch (e) {
+        const fallback = myPlayer.pos.future ?? myPlayer.pos.current;
+        return {
+          x: fallback.x,
+          y: fallback.y
+        };
+      }
+    }
+
+    // The trap holding the enemy is about to go. Auraro cycles the whole
+    // circle so whichever slot frees up gets refilled; `send` stops the sweep
+    // once the tick budget is gone.
+    retrapSpam(placer) {
+      const {myPlayer: myPlayer} = this.client;
+      const now = Date.now();
+      if (now - this._retrapLast < AURA_RETRAP_COOLDOWN || !myPlayer.canPlace(AURA_TRAP)) {
+        return false;
+      }
+      this._retrapLast = now;
+      let sent = 0;
+      for (let a = 0; a < AURA_TWO_PI; a += AURA_RETRAP_STEP) {
+        if (!placer.send(AURA_TRAP, a)) {
+          break;
+        }
+        sent += 1;
+      }
+      return sent > 0;
+    }
+
+    postTick() {
+      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (!Settings_default._prePlace || !myPlayer || !myPlayer.inGame) {
+        return;
+      }
+      const tick = ModuleHandler.tickCount;
+      if (this._tick === tick) {
+        return;
+      }
+      this._tick = tick;
+      const enemy = EnemyManager2.nearestEnemy;
+      if (enemy === null) {
+        return;
+      }
+      const placer = getAuraPlacer(this.client);
+      const myPos = myPlayer.pos.current;
+      if (myPos.distance(enemy.pos.current) > (Settings_default._prePlaceRadius ?? AURA_PREPLACE_RANGE)) {
+        return;
+      }
+      if (!myPlayer.canPlace(AURA_SPIKE) && !myPlayer.canPlace(AURA_TRAP)) {
+        return;
+      }
+      // auraro clears the preplace arcs before every run.
+      placer.preplaceRanges = {};
+      const maxHits = Settings_default._prePlaceHits ?? AURA_MAX_HITS;
+
+      const replaceable = [];
+      for (const obj of placer.nearObjs(myPos.x, myPos.y)) {
+        if (!(obj instanceof PlayerObject) || !obj.isDestroyable || !placer.isTeamObject(obj)) {
+          continue;
+        }
+        if (obj.itemGroup !== 2 && obj.type !== 15) {
+          continue;
+        }
+        const hits = placer.hitsToBreak(obj, enemy);
+        if (!placer.canBeBroken(obj) && hits > maxHits) {
+          continue;
+        }
+        replaceable.push({
+          obj: obj,
+          urgency: placer.urgencyScore(obj, enemy)
+        });
+      }
+      if (!replaceable.length) {
+        return;
+      }
+      replaceable.sort((a, b) => a.urgency - b.urgency);
+
+      const pred = this.predictPos();
+      if (this._rangeTick !== tick) {
+        this._rangeCache = {};
+        this._rangeTick = tick;
+      }
+      const enemyTrap = placer.enemyTrap(enemy);
+      let found = 0;
+      for (const entry of replaceable) {
+        if (found >= AURA_MAX_PER_TICK) {
+          break;
+        }
+        const obj = entry.obj;
+        // Spike while they are pinned by something else, trap otherwise.
+        const buildId = enemyTrap && enemyTrap.id !== obj.id ? AURA_SPIKE : AURA_TRAP;
+        if (enemyTrap && enemyTrap.id === obj.id && !myPlayer.isTrapped) {
+          if (this.retrapSpam(placer)) {
+            found += 1;
+          }
+          continue;
+        }
+        let angle = null, usedId = buildId;
+        for (const type of [ buildId, buildId === AURA_SPIKE ? AURA_TRAP : AURA_SPIKE ]) {
+          if (!myPlayer.canPlace(type)) {
+            continue;
+          }
+          const key = obj.id + "_" + type;
+          if (!this._rangeCache[key]) {
+            placer.calcPreplace(obj, type, pred.x, pred.y);
+            this._rangeCache[key] = placer.preplaceRanges[type];
+          } else {
+            placer.preplaceRanges[type] = this._rangeCache[key];
+          }
+          angle = placer.findPlacementAngle(type, obj, pred.x, pred.y, enemy);
+          usedId = type;
+          if (angle !== null) {
+            break;
+          }
+        }
+        if (angle !== null && placer.send(usedId, angle)) {
+          found += 1;
+        }
+      }
+    }
+  }
+  const PrePlacer_default = PrePlacer;
+
+  class Replacer {
+    moduleName="replacer";
+    client;
+    _tick=-1;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this._tick = -1;
+    }
+
+    // auraro checkPlace: only send it if the spot is actually free.
+    checkPlace(placer, type, angle) {
+      const item = placer.item(type);
+      if (!item) {
+        return false;
+      }
+      const myPos = this.client.myPlayer.pos.current;
+      const offset = this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
+      const x = myPos.x + offset * Math.cos(angle);
+      const y = myPos.y + offset * Math.sin(angle);
+      if (!placer.checkItemLocation(x, y, item.scale, type, placer.nearObjs(myPos.x, myPos.y))) {
+        return false;
+      }
+      return placer.send(type, angle);
+    }
+
+    // auraro autoReplace, one destroyed building at a time.
+    autoReplace(placer, building, enemy) {
+      const {myPlayer: myPlayer} = this.client;
+      const myPos = myPlayer.pos.current;
+      if (myPos.distance(building.pos.current) > AURA_REPLACE_RANGE) {
+        return false;
+      }
+      // auraro bails on a healthy build the enemy cannot even reach yet.
+      const hits = placer.hitsToBreak(building, enemy);
+      const primary = enemy.weapon.primary;
+      const reach = primary != null && DataHandler_default.isWeapon(primary) ? DataHandler_default.getWeapon(primary).range + building.scale : 300;
+      if (hits > 3 && !placer.inPredictedRange(enemy, reach)) {
+        return false;
+      }
+      placer.rangesUpdated[AURA_SPIKE] = false;
+      placer.rangesUpdated[AURA_TRAP] = false;
+      placer.angleRanges(AURA_SPIKE, myPos.x, myPos.y);
+      placer.angleRanges(AURA_TRAP, myPos.x, myPos.y);
+      const rSpike = placer.ranges[AURA_SPIKE];
+      const rTrap = placer.ranges[AURA_TRAP];
+      const breakDir = Math.atan2(building.pos.current.y - myPos.y, building.pos.current.x - myPos.x);
+      const enemyFut = enemy.pos.future ?? enemy.pos.current;
+      const aimDir = Math.atan2(enemyFut.y - myPos.y, enemyFut.x - myPos.x);
+      const enemyTrap = placer.enemyTrap(enemy);
+
+      // 1. They just got out — trap where they are heading.
+      if (enemy.wasTrapped && enemy.wasTrapped()) {
+        if (rTrap && rTrap.length) {
+          placer.send(AURA_TRAP, placer.closeToAngle(aimDir, rTrap));
+        }
+        this.checkPlace(placer, AURA_TRAP, aimDir);
+        this.checkPlace(placer, AURA_TRAP, aimDir + .17);
+        this.checkPlace(placer, AURA_TRAP, aimDir - .17);
+        return true;
+      }
+      // 2. Still pinned and in reach — spike into the trap.
+      if (enemyTrap && myPos.distance(enemyTrap.pos.current) <= AURA_TRAP_REACH) {
+        if (rSpike && rSpike.length) {
+          const trapDir = Math.atan2(enemyTrap.pos.current.y - myPos.y, enemyTrap.pos.current.x - myPos.x);
+          placer.send(AURA_SPIKE, placer.closeToAngle(trapDir, rSpike));
+        }
+        return true;
+      }
+      // 3. We escaped and this was what held us — two opposed traps, so we do
+      //    not walk straight back into a retrap.
+      if (myPlayer.wasTrapped && myPlayer.wasTrapped() && myPlayer.trappedInPrev && myPlayer.trappedInPrev.id === building.id) {
+        if (rTrap && rTrap.length) {
+          const rand = Math.random() * AURA_TWO_PI;
+          placer.send(AURA_TRAP, placer.closeToAngle(rand, rTrap));
+          placer.send(AURA_TRAP, placer.closeToAngle(rand + Math.PI, rTrap));
+        }
+        return true;
+      }
+      // 4. Otherwise refill the hole.
+      if (rSpike && rSpike.length) {
+        placer.send(AURA_SPIKE, placer.closeToAngle(breakDir, rSpike));
+        this.checkPlace(placer, AURA_SPIKE, breakDir);
+      }
+      return true;
+    }
+
+    postTick() {
+      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      if (!Settings_default._replace || !myPlayer || !myPlayer.inGame) {
+        return;
+      }
+      const tick = ModuleHandler.tickCount;
+      if (this._tick === tick) {
+        return;
+      }
+      this._tick = tick;
+      const enemy = EnemyManager2.nearestEnemy;
+      if (enemy === null) {
+        return;
+      }
+      const myPos = myPlayer.pos.current;
+      if (myPos.distance(enemy.pos.current) > (Settings_default._replaceRadius ?? AURA_REPLACE_RANGE)) {
+        return;
+      }
+      const placer = getAuraPlacer(this.client);
+      placer.replaced = false;
+      let handled = 0;
+
+      // Buildings that actually went down this tick.
+      for (const building of ObjectManager2.deletedObjects) {
+        if (handled >= AURA_MAX_PER_TICK) {
+          return;
+        }
+        if (building.itemGroup !== 2 && building.type !== 15 || !placer.isTeamObject(building)) {
+          continue;
+        }
+        if (this.autoReplace(placer, building, enemy)) {
+          handled += 1;
+        }
+      }
+      if (handled > 0) {
+        return;
+      }
+      // auraro also replaces pre-emptively, on the first of ours that is one
+      // or two hits from dying.
+      for (const obj of placer.nearObjs(myPos.x, myPos.y, AURA_REPLACE_RANGE)) {
+        if (!(obj instanceof PlayerObject) || !obj.isDestroyable || !placer.isTeamObject(obj)) {
+          continue;
+        }
+        if (obj.itemGroup !== 2 && obj.type !== 15) {
+          continue;
+        }
+        if (placer.hitsToBreak(obj, enemy) <= 2) {
+          this.autoReplace(placer, obj, enemy);
+          break;
+        }
+      }
+    }
+  }
+  const Replacer_default = Replacer;
   class TrapAnimal {
 
     static CLOSE_PADDING=25;
@@ -9397,426 +10050,6 @@ window.grbtp = 35;
     }
   }
   const AutoPlacer_default = AutoPlacer;
-  const PREPLACE_SCAN_CELLS = 2;
-  const PREPLACE_SCAN_RANGE = 200;
-  const PREPLACE_MAX_PER_TICK = 2;
-  const PREPLACE_COOLDOWN_TICKS = 6;
-  const PREPLACE_RETRAP_ANGLES = 3;
-  const REPLACE_MAX_PER_TICK = 2;
-  const REPLACE_TRAP_REACH = 169;
-  function placementCost(type) {
-    return type === 7 ? 5 : 4;
-  }
-  function isOwnBuilding(client2, object) {
-    const {PlayerManager: PlayerManager2, myPlayer: myPlayer} = client2;
-    return !PlayerManager2.isEnemyByID(object.ownerID, myPlayer);
-  }
-  function isSpikeOrTrap(object) {
-    return object.itemGroup === 2 || object.type === 15;
-  }
-  function angleGap(a, b) {
-    const d = Math.abs(a - b) % (Math.PI * 2);
-    return d > Math.PI ? Math.PI * 2 - d : d;
-  }
-
-  class PrePlacer {
-    moduleName="prePlacer";
-    client;
-    _tick=-1;
-    _sentAt=new Map;
-    constructor(client2) {
-      this.client = client2;
-    }
-    reset() {
-      this._sentAt.clear();
-      this._tick = -1;
-    }
-
-    // Hits the enemy still needs to break `object` with the best melee weapon it
-    // is holding. Infinity when it cannot damage buildings at all.
-    hitsToBreak(object, enemy) {
-      if (!object.isDestroyable) {
-        return 1 / 0;
-      }
-      let best = 0;
-      for (const id of [ enemy.weapon.primary, enemy.weapon.secondary ]) {
-        if (id == null) {
-          continue;
-        }
-        // Ranged weapons yield NaN here and an enemy we have not profiled yet
-        // can throw outright; either way that weapon just does not count.
-        let damage = 0;
-        try {
-          damage = enemy.getBuildingDamage(id, true);
-        } catch (e) {
-          continue;
-        }
-        if (Number.isFinite(damage) && damage > best) {
-          best = damage;
-        }
-      }
-      if (!(best > 0)) {
-        return 1 / 0;
-      }
-      return Math.ceil(object.health / best);
-    }
-
-    // Buildings of ours the enemy is about to take out, most urgent first.
-    findDoomed(enemy, maxHits) {
-      const {ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      const myPos = myPlayer.pos.current;
-      const doomed = [];
-      for (const id of ObjectManager2.grid2D.queryFull(myPos.x, myPos.y, PREPLACE_SCAN_CELLS)) {
-        const object = ObjectManager2.objects.get(id);
-        if (object === void 0 || !(object instanceof PlayerObject)) {
-          continue;
-        }
-        if (!object.isDestroyable || !isSpikeOrTrap(object) || !isOwnBuilding(this.client, object)) {
-          continue;
-        }
-        if (this._sentAt.has(object.id)) {
-          continue;
-        }
-        const distance = myPos.distance(object.pos.current);
-        if (distance > PREPLACE_SCAN_RANGE) {
-          continue;
-        }
-        // `canBeDestroyed` is set by EnemyManager when an enemy in range can
-        // finish the building on this very tick — the strongest signal there is.
-        const breakingNow = object.canBeDestroyed && object.destroyingTick === ModuleHandler.tickCount;
-        const hits = breakingNow ? 0 : this.hitsToBreak(object, enemy);
-        if (!breakingNow && hits > maxHits) {
-          continue;
-        }
-        doomed.push({
-          object: object,
-          hits: hits,
-          distance: distance
-        });
-      }
-      return doomed.sort((a, b) => a.hits - b.hits || a.distance - b.distance);
-    }
-
-    // The trap currently pinning the enemy, but only when it is one of ours —
-    // an enemy sitting in their own trap is not something we are holding.
-    enemyTrap(enemy) {
-      if (!enemy.isTrapped) {
-        return null;
-      }
-      const trap = enemy.trappedIn;
-      if (!trap) {
-        return null;
-      }
-      const {PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
-      return PlayerManager2.isEnemyByID(trap.ownerID, myPlayer) ? null : trap;
-    }
-
-    // What to place for a given doomed building, and what to aim it at.
-    //   enemy pinned, and this IS the trap holding them -> retrap, handled by
-    //     the caller as a burst rather than a single angle
-    //   enemy pinned by something else -> spike, aimed into the trap
-    //   nobody pinned -> trap, to pin them
-    //   we are the pinned one -> spike, aimed at whatever has us
-    plan(object, enemy, enemyTrap) {
-      const {myPlayer: myPlayer} = this.client;
-      if (enemyTrap !== null && enemyTrap.id === object.id) {
-        return {
-          order: [ 7, 4 ],
-          aim: enemy,
-          retrap: true
-        };
-      }
-      if (myPlayer.isTrapped) {
-        return {
-          order: [ 4, 7 ],
-          aim: myPlayer.trappedIn || object,
-          retrap: false
-        };
-      }
-      if (enemyTrap !== null) {
-        return {
-          order: [ 4, 7 ],
-          aim: enemyTrap,
-          retrap: false
-        };
-      }
-      return {
-        order: [ 7, 4 ],
-        aim: object,
-        retrap: false
-      };
-    }
-
-    // The trap under the enemy is about to go. Refill several slots around
-    // ourselves rather than one, so whichever opens up gets taken. The angle
-    // budget is small on purpose: a full fan costs more packets than a tick has.
-    retrapBurst(object, enemy, fromPos, tick) {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      if (!myPlayer.canPlace(7)) {
-        return false;
-      }
-      const id = myPlayer.getItemByType(7);
-      if (id === null) {
-        return false;
-      }
-      const targetAngle = fromPos.angle(enemy.pos.current);
-      const angles = ObjectManager2.getBestPlacementAngles({
-        position: fromPos,
-        id: id,
-        targetAngle: targetAngle,
-        ignoreID: object.id,
-        preplace: true,
-        reduce: false,
-        fill: true
-      });
-      if (angles.length === 0) {
-        return false;
-      }
-      let sent = 0;
-      for (const angle of angles) {
-        if (sent >= PREPLACE_RETRAP_ANGLES) {
-          break;
-        }
-        if (ModuleHandler.packetCount + placementCost(7) > ModuleHandler.packetLimit) {
-          break;
-        }
-        if (angleGap(angle, targetAngle) > Math.PI / 2) {
-          continue;
-        }
-        ModuleHandler.place(7, angle);
-        ModuleHandler.placeAngles[0] = 7;
-        ModuleHandler.placeAngles[1].push(angle);
-        sent += 1;
-      }
-      if (sent === 0) {
-        return false;
-      }
-      ModuleHandler.placedOnce = true;
-      ModuleHandler.moduleActive = true;
-      this._sentAt.set(object.id, tick);
-      return true;
-    }
-
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      if (!Settings_default._prePlace || !myPlayer || !myPlayer.inGame) {
-        return;
-      }
-      const tick = ModuleHandler.tickCount;
-      if (this._tick === tick) {
-        return;
-      }
-      this._tick = tick;
-      for (const [id, sentAt] of this._sentAt) {
-        if (tick - sentAt > PREPLACE_COOLDOWN_TICKS) {
-          this._sentAt.delete(id);
-        }
-      }
-      const enemy = EnemyManager2.nearestEnemy;
-      if (enemy === null) {
-        return;
-      }
-      const myPos = myPlayer.pos.current;
-      if (myPos.distance(enemy.pos.current) > (Settings_default._prePlaceRadius ?? 270)) {
-        return;
-      }
-      if (!myPlayer.canPlace(4) && !myPlayer.canPlace(7)) {
-        return;
-      }
-      const doomed = this.findDoomed(enemy, Settings_default._prePlaceHits ?? 4);
-      if (doomed.length === 0) {
-        return;
-      }
-      // Aim from where we will be once the packet lands, not where we are now.
-      const fromPos = myPlayer.pos.future ?? myPos;
-      const enemyTrap = this.enemyTrap(enemy);
-      let placed = 0;
-      for (const {object: object} of doomed) {
-        if (placed >= PREPLACE_MAX_PER_TICK) {
-          break;
-        }
-        const {order: order, aim: aim, retrap: retrap} = this.plan(object, enemy, enemyTrap);
-        if (retrap) {
-          if (this.retrapBurst(object, enemy, fromPos, tick)) {
-            placed += 1;
-          }
-          continue;
-        }
-        const targetAngle = fromPos.angle(aim.pos.current);
-        for (const type of order) {
-          if (!myPlayer.canPlace(type)) {
-            continue;
-          }
-          if (ModuleHandler.packetCount + placementCost(type) > ModuleHandler.packetLimit) {
-            return;
-          }
-          const id = myPlayer.getItemByType(type);
-          if (id === null) {
-            continue;
-          }
-          // Ignore the doomed building so its slot counts as free: the server
-          // handles the break before this place, so the spot opens up in time.
-          const angles = ObjectManager2.getBestPlacementAngles({
-            position: fromPos,
-            id: id,
-            targetAngle: targetAngle,
-            ignoreID: object.id,
-            preplace: true,
-            reduce: false,
-            fill: false
-          });
-          if (angles.length === 0) {
-            continue;
-          }
-          // The freed slot and the tactical aim are not always the same
-          // direction, so accept anything on the enemy-facing side and only
-          // refuse placements that would land behind us.
-          const angle = angles[0];
-          if (angleGap(angle, targetAngle) > Math.PI / 2) {
-            continue;
-          }
-          ModuleHandler.place(type, angle);
-          ModuleHandler.placedOnce = true;
-          ModuleHandler.placeAngles[0] = type;
-          ModuleHandler.placeAngles[1].push(angle);
-          ModuleHandler.moduleActive = true;
-          this._sentAt.set(object.id, tick);
-          placed += 1;
-          break;
-        }
-      }
-    }
-  }
-  const PrePlacer_default = PrePlacer;
-
-  class Replacer {
-    moduleName="replacer";
-    client;
-    constructor(client2) {
-      this.client = client2;
-    }
-
-    // The trap pinning the enemy, when it is one of ours.
-    enemyTrap(enemy) {
-      if (!enemy.isTrapped) {
-        return null;
-      }
-      const trap = enemy.trappedIn;
-      if (!trap) {
-        return null;
-      }
-      const {PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
-      return PlayerManager2.isEnemyByID(trap.ownerID, myPlayer) ? null : trap;
-    }
-
-    // What to drop into the hole a destroyed building left behind, and where to
-    // aim it. Ordered by how much the situation is worth reacting to.
-    plan(object, enemy) {
-      const {myPlayer: myPlayer} = this.client;
-      const enemyTrap = this.enemyTrap(enemy);
-      // Being pinned ourselves outranks everything: a spike facing whatever has
-      // us is what breaks the cycle.
-      if (myPlayer.isTrapped) {
-        return {
-          order: [ 4, 7 ],
-          aim: (myPlayer.trappedIn || object).pos.current
-        };
-      }
-      // The trap we had on them just broke — re-pin before they walk out.
-      if (object.type === 15 && (enemyTrap === null || enemyTrap.id === object.id)) {
-        return {
-          order: [ 7, 4 ],
-          aim: enemy.pos.future ?? enemy.pos.current
-        };
-      }
-      // They just got out. Put the trap where they are heading, not where the
-      // old one stood.
-      if (enemy.wasTrapped && enemy.wasTrapped()) {
-        return {
-          order: [ 7, 4 ],
-          aim: enemy.pos.future ?? enemy.pos.current
-        };
-      }
-      // Still pinned and within reach: spike into the trap while they sit there.
-      if (enemyTrap !== null && myPlayer.pos.current.distance(enemyTrap.pos.current) <= REPLACE_TRAP_REACH) {
-        return {
-          order: [ 4, 7 ],
-          aim: enemyTrap.pos.current
-        };
-      }
-      return {
-        order: [ 4, 7 ],
-        aim: object.pos.current
-      };
-    }
-
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      if (!Settings_default._replace || !myPlayer || !myPlayer.inGame) {
-        return;
-      }
-      if (ObjectManager2.deletedObjects.size === 0) {
-        return;
-      }
-      const enemy = EnemyManager2.nearestEnemy;
-      if (enemy === null) {
-        return;
-      }
-      const myPos = myPlayer.pos.current;
-      if (myPos.distance(enemy.pos.current) > (Settings_default._replaceRadius ?? 300)) {
-        return;
-      }
-      let placed = 0;
-      for (const object of ObjectManager2.deletedObjects) {
-        if (placed >= REPLACE_MAX_PER_TICK) {
-          break;
-        }
-        if (!isSpikeOrTrap(object) || !isOwnBuilding(this.client, object)) {
-          continue;
-        }
-        const {order: order, aim: aim} = this.plan(object, enemy);
-        const breakAngle = myPos.angle(aim);
-        for (const type of order) {
-          if (!myPlayer.canPlace(type)) {
-            continue;
-          }
-          if (ModuleHandler.packetCount + placementCost(type) > ModuleHandler.packetLimit) {
-            return;
-          }
-          const id = myPlayer.getItemByType(type);
-          if (id === null) {
-            continue;
-          }
-          // The object is already out of the grid, so the freed slot is simply
-          // the best angle towards where it used to stand.
-          const angles = ObjectManager2.getBestPlacementAngles({
-            position: myPos,
-            id: id,
-            targetAngle: breakAngle,
-            ignoreID: null,
-            preplace: false,
-            reduce: false,
-            fill: false
-          });
-          if (angles.length === 0) {
-            continue;
-          }
-          const angle = angles[0];
-          if (angleGap(angle, breakAngle) > Math.PI / 2) {
-            continue;
-          }
-          ModuleHandler.place(type, angle);
-          ModuleHandler.placedOnce = true;
-          ModuleHandler.placeAngles[0] = type;
-          ModuleHandler.placeAngles[1].push(angle);
-          ModuleHandler.moduleActive = true;
-          placed += 1;
-          break;
-        }
-      }
-    }
-  }
-  const Replacer_default = Replacer;
   class AntiRetrap {
       moduleName="antiRetrap";
       client;
