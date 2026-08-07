@@ -279,3 +279,23 @@ answers its own.
 `hi` is in the list because it reads as ordinary chat, but it costs stealth: any
 stranger who types it makes every RYN build in the lobby answer. Cut it from
 `RYN_LINK.ask` if that matters more than looking innocuous.
+
+## Cowboy When Safe
+
+Combat → **Cowboy When Safe** swaps the Booster Hat for the Cowboy Hat, which
+has no effect in game — the point is not to be seen walking around in meta gear.
+
+It now applies while moving, not only while standing still. `canWearCowboy()`
+gates it on one shared test used by both branches, so the two cannot disagree:
+
+- no `detectedEnemy` and no `detectedDangerEnemy`, and
+- nothing within `COWBOY_DROP_RANGE` (350px)
+
+Everything defensive still outranks it. It sits after the soldier, flipper, emp
+and winter branches and only ever replaces the Booster fallback, so a threat,
+a river, a turret or the snow biome all still get the hat they need.
+
+Making the two branches share the test tightened the standing case slightly:
+it used to keep the Cowboy Hat until an enemy was inside weapon range, and now
+drops it at the same 350px as the moving case. `COWBOY_DROP_RANGE` is one
+constant to edit.
