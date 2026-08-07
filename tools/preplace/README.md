@@ -45,6 +45,33 @@ three RYN modules share one instance via `getAuraPlacer(client)`.
 Module order is `replacer` → `autoPlacer` → `prePlacer`: reacting to a real
 break outranks laying new builds, which outranks a speculative preplace.
 
+### Mode 1 pairs opposites
+
+`autoPlace(1, ...)` extends what is already near the enemy, and auraro's filter
+is `id == 4 ? obj.dmg : obj.trap` — laying a **trap** looks for existing
+**spikes**, laying a **spike** looks for existing **traps**. Pairing them is
+the point; extending like with like just spams one item.
+
+This was inverted in the first version of the port and produced visibly more
+spikes than traps, twice over: directly, and because a mode-1 pass that places
+nothing falls through to mode 0 with the fallback type.
+
+Which type *leads* is auraro's own ordering, and is not a bug: spike-first
+inside 222, trap-first between 222 and 269. The first pass also reserves ground
+through `preplaces`, so in a tight spot the leading type can crowd the other
+out — that is auraro's behaviour too.
+
+### The tangent knife-edge
+
+`radCalc` builds a candidate tangent to its anchor, which puts it at exactly
+`anchorScale + itemScale` away — the same value `checkItemLocation` rejects on.
+At world coordinates floating point decides, measured at a ~50/50 coin flip, so
+half of all pairings silently failed and fell through to mode 0.
+
+`radCalc` now pads the anchor scale by `+0.01`, which is the same slack auraro
+uses in `closestPossibleAngles` for this exact problem. Auraro does not apply
+it in `radCalc`; this is a deliberate deviation to make placement deterministic.
+
 ### autoPlace dispatch
 
 Straight from auraro, keyed on distance and who is pinned:
@@ -172,8 +199,8 @@ Built to stay cheap:
 
 ## Tests
 
-    node test_modules.js            # 76 cases, owner build
-    node test_modules.js --player   # the same 76 against the player build
+    node test_modules.js            # 87 cases, owner build
+    node test_modules.js --player   # the same 87 against the player build
     node test_weather.js            # 31 cases, weather overlay
     node test_weather.js --player   # the same 31 against the player build
     node test_menu.js               # 42 cases, menu wiring in both builds

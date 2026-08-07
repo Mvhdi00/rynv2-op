@@ -134,15 +134,14 @@
     }
 
     // auraro: objectManager.checkItemLocation
-    checkItemLocation(x, y, scale, type, objs) {
+    checkItemLocation(x, y, scale, itemId, objs) {
       for (const object of objs) {
         const p = object.pos.current;
         if (Math.hypot(x - p.x, y - p.y) < scale + this.blockScale(object)) {
           return false;
         }
       }
-      const id = this._0x4cf5fe.myPlayer.getItemByType(type);
-      if (id !== 18 && this.inRiver(y)) {
+      if (itemId !== 18 && this.inRiver(y)) {
         return false;
       }
       return true;
@@ -151,7 +150,7 @@
     // auraro: objectManager.preplaceCheck — the doomed object is skipped, and
     // the spot must overlap it. That last clause is what makes this "pre"
     // place: only the slot being freed counts.
-    preplaceCheck(x, y, scale, type, target, objs) {
+    preplaceCheck(x, y, scale, itemId, target, objs) {
       for (const object of objs) {
         if (object.id === target.id) {
           continue;
@@ -161,8 +160,7 @@
           return false;
         }
       }
-      const id = this._0x4cf5fe.myPlayer.getItemByType(type);
-      if (id !== 18 && this.inRiver(y)) {
+      if (itemId !== 18 && this.inRiver(y)) {
         return false;
       }
       const t = target.pos.current;
@@ -381,8 +379,8 @@
           continue;
         }
         const [a1, a2] = angles;
-        const v1 = this.checkItemLocation(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, type, objs);
-        const v2 = this.checkItemLocation(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, type, objs);
+        const v1 = this.checkItemLocation(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, item.id, objs);
+        const v2 = this.checkItemLocation(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, item.id, objs);
         if (v1 && v2) {
           rawBlocked.push([ a1, a2 ]);
         } else if (v1 || v2) {
@@ -420,8 +418,8 @@
         }
         const [a1, a2] = angles;
         const buildAngle = Math.atan2(p.y - py, p.x - px);
-        const v1 = this.preplaceCheck(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, type, target, objs);
-        const v2 = this.preplaceCheck(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, type, target, objs);
+        const v1 = this.preplaceCheck(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, item.id, target, objs);
+        const v2 = this.preplaceCheck(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, item.id, target, objs);
         if (v1 && v2) {
           rawBlocked.push([ a1, a2 ]);
         } else if (v1 || v2) {
@@ -475,10 +473,15 @@
 
     // auraro radCalc: the angles at which `item` can be laid against `obj`,
     // skipping any that collide with something already reserved this tick.
-    radCalc(obj, direct, item, type, px, py) {
+    radCalc(obj, direct, item, mode, px, py) {
       const offset = this._0x4cf5fe.myPlayer.scale + item.scale + (item.placeOffset || 0);
       const objPos = obj.pos.current;
-      const objScale = this.blockScale(obj);
+      // The +0.01 is auraro's, borrowed from closestPossibleAngles. A tangent
+      // candidate lands at exactly `objScale + item.scale` from the anchor,
+      // which is the same value checkItemLocation rejects below, so at world
+      // coordinates floating point decides — measured at a ~50/50 coin flip.
+      // The slack pushes the candidate a hair clear and makes it deterministic.
+      const objScale = this.blockScale(obj) + .01;
       const dx = objPos.x - px, dy = objPos.y - py;
       const dist2 = dx * dx + dy * dy;
       const combined = objScale + item.scale;
@@ -495,11 +498,11 @@
             }
           }
         }
-        return this.checkItemLocation(preObj.x, preObj.y, preObj.scale, type === void 0 ? AURA_SPIKE : type, objs);
+        return this.checkItemLocation(preObj.x, preObj.y, preObj.scale, preObj.id, objs);
       };
 
       if (dist2 >= combined2) {
-        if (type) {
+        if (mode) {
           return [];
         }
         const preObj = this.createObj(item, direct, px, py);
@@ -566,7 +569,7 @@
             return false;
           }
         }
-        if (!this.checkItemLocation(tmpX, tmpY, item.scale, type, objs)) {
+        if (!this.checkItemLocation(tmpX, tmpY, item.scale, item.id, objs)) {
           return false;
         }
         if (!this.tryPlaceAngle(type, relAim)) {
@@ -708,7 +711,10 @@
         if (!this.isTeamObject(obj)) {
           return false;
         }
-        const matches = type === AURA_TRAP ? obj.type === 15 : obj.itemGroup === 2;
+        // auraro: `id == 4 ? obj.dmg : obj.trap` — a trap goes down next to an
+        // existing spike, a spike next to an existing trap. Pairing them is
+        // the point; extending like with like just spams one item.
+        const matches = type === AURA_TRAP ? obj.itemGroup === 2 : obj.type === 15;
         return matches && obj.pos.current.distance(enemyPos) < 500;
       });
       for (const obj of this.radObjs) {
@@ -1010,7 +1016,7 @@
       const offset = this._0x4cf5fe.myPlayer.scale + item.scale + (item.placeOffset || 0);
       const x = myPos.x + offset * Math.cos(angle);
       const y = myPos.y + offset * Math.sin(angle);
-      if (!placer.checkItemLocation(x, y, item.scale, type, placer.nearObjs(myPos.x, myPos.y))) {
+      if (!placer.checkItemLocation(x, y, item.scale, item.id, placer.nearObjs(myPos.x, myPos.y))) {
         return false;
       }
       return placer.send(type, angle);

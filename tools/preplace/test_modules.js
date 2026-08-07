@@ -334,6 +334,69 @@ console.log("autoPlace / radCalc");
 }
 
 // ===========================================================================
+console.log("mode 1 pairing");
+{
+  // auraro: `id == 4 ? obj.dmg : obj.trap` — a trap is laid against an existing
+  // spike and a spike against an existing trap. Getting this backwards spams
+  // one item, which is exactly what it did before.
+  const build = (anchor, type) => {
+    placeLog.length = 0;
+    const c = makeClient();
+    const my = c.myPlayer.pos.current;
+    const o = anchor === "spike" ? ownSpike(new Vec(my.x + 55, my.y)) : ownTrap(new Vec(my.x + 55, my.y));
+    c.ObjectManager.objects.set(o.id, o);
+    const p = new AuraPlacer(c);
+    // A mode-1 pass that placed nothing falls through to mode 0, which
+    // rebuilds radObjs from everything nearby. Seed a far-away reservation so
+    // that fallback is skipped and radObjs still holds mode 1's own filter.
+    p.preplaces[1] = [{ x: -1e6, y: -1e6, scale: 1 }];
+    p.autoPlace(1, type, type === 4 ? 7 : 4, false);
+    return { placed: placeLog.length, radObjs: p.radObjs.length };
+  };
+
+  check("laying traps looks for spikes", build("spike", 7).radObjs === 1);
+  check("laying traps ignores other traps", build("trap", 7).radObjs === 0);
+  check("laying spikes looks for traps", build("trap", 4).radObjs === 1);
+  check("laying spikes ignores other spikes", build("spike", 4).radObjs === 0);
+
+  // and the pairing actually reaches a placement
+  check("a trap goes down against a spike", build("spike", 7).placed > 0);
+  check("a spike goes down against a trap", build("trap", 4).placed > 0);
+}
+
+// ===========================================================================
+console.log("spike/trap balance");
+{
+  // The reported symptom was spikes going down far more than traps. The cause
+  // was the mode-1 filter being inverted, so a spike paired against spikes.
+  // With that fixed, which type leads is auraro's own ordering: spike-first
+  // inside 222, trap-first between 222 and 269.
+  const runBand = dist => {
+    placeLog.length = 0;
+    const c = makeClient({ enemyDist: dist });
+    const my = c.myPlayer.pos.current;
+    for (const [dx, dy, kind] of [[55, 0, "s"], [-55, 0, "t"]]) {
+      const o = kind === "s" ? ownSpike(new Vec(my.x + dx, my.y + dy))
+                             : ownTrap(new Vec(my.x + dx, my.y + dy));
+      c.ObjectManager.objects.set(o.id, o);
+    }
+    new AutoPlacer(c).postTick();
+    return placeLog.map(x => x.type);
+  };
+
+  const close = runBand(150);
+  check("inside 222 something gets placed", close.length > 0);
+  check("inside 222 spikes lead, as auraro does", close[0] === 4);
+
+  const mid = runBand(240);
+  check("between 222 and 269 something gets placed", mid.length > 0);
+  check("between 222 and 269 traps lead, as auraro does", mid[0] === 7);
+
+  // and traps are reachable at all through the dispatcher
+  check("traps do get placed by the dispatcher", mid.includes(7));
+}
+
+// ===========================================================================
 console.log("testCanPlace / protect");
 {
   placeLog.length = 0;
