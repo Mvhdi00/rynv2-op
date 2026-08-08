@@ -101,7 +101,9 @@ function makeWorld(o = {}) {
     },
     EnemyManager: { nearestEnemy: noEnemy ? null : enemy },
     _ModuleHandler: {
-      placedOnce,
+      placedOnce, moduleActive: o.moduleActive || false,
+      forceHat: null, shouldEquipSoldier: false,
+      canBuy: () => o.ownSoldier !== false,
       place(type, angle) { placed.push({ type, angle }); },
     },
     ObjectManager: {
@@ -194,6 +196,31 @@ console.log("\nwhere it goes");
   // Something already sits where the shove would take me.
   const w = run({ enemyPrimary: BAT, objects: [{ dx: 84, scale: 50 }] });
   check("an existing building means no second one", w.placed.length === 0);
+}
+
+console.log("\nsurviving it");
+// polearm 45 * 1.18 variant * 1.5 bull = 79.7, + 25 from the turret = 104.7
+// against 100 health. At soldier's 0.75 the same burst is 78.5.
+const BURST = 45 * 1.18 * 1.5 + 25;
+check("the canonical tick kills a full-health player outright", BURST > 100);
+check("and soldier is the difference between living and dying", BURST * 0.75 < 100);
+{
+  const w = run({ enemyPrimary: POLEARM });
+  check("soldier goes on for the threat", w._ModuleHandler.forceHat === 6);
+  check("and anti-insta is told about it", w._ModuleHandler.shouldEquipSoldier === true);
+}
+{
+  const w = run({ enemyPrimary: KATANA });
+  check("no threat, no hat swap", w._ModuleHandler.forceHat === null);
+}
+{
+  const w = run({ enemyPrimary: POLEARM, moduleActive: true });
+  check("a committed insta keeps its own hat", w._ModuleHandler.forceHat === null);
+}
+{
+  const w = run({ enemyPrimary: POLEARM, ownSoldier: false });
+  check("without a soldier helmet it still puts the wall up",
+        w._ModuleHandler.forceHat === null && w.placed.length === 1);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -3899,8 +3899,20 @@ window.grbtp = 35;
       if (this.isReloaded(2, 1) && includeTurret && !lookingShield) {
         this.potentialDamage += 25;
       }
-      if (collidingPrimary && collidingTurret && this.isEmptyReload(2) && primaryReloaded && isDiamondPolearm) {
-        this.velocityTicking = true;
+      // A velocity tick is a shove plus a turret shot: the projectile alone
+      // adds 1.5 to your velocity where a polearm swing adds 0.5, and the pair
+      // carries you off your spot and into whatever they have waiting.
+      //
+      // This used to name one weapon — a diamond polearm — and that misses the
+      // hardest shove in the game. The knockback table is bat 0.7, polearm and
+      // mc grabby 0.2, daggers 0.1, on top of a flat 0.3 every hit carries. So
+      // read the table instead of naming a weapon: anything that shoves at
+      // least as hard as a polearm counts.
+      if (collidingPrimary && collidingTurret && this.isEmptyReload(2) && primaryReloaded) {
+        const primaryKnock = .3 + (DataHandler_default.getWeapon(primary).knockback || 0);
+        if (isDiamondPolearm || primaryKnock >= .5) {
+          this.velocityTicking = true;
+        }
       }
       if (collidingPrimary && collidingSecondary && collidingTurret && this.isEmptyReload(1) && this.isEmptyReload(2) && primaryReloaded) {
         this.reverseInsta = true;
@@ -14306,6 +14318,22 @@ window.grbtp = 35;
       }
       if (this.shoveForce(enemy) < ANTI_VELOCITY_SHOVE) {
         return;
+      }
+      // Soldier first, wall second — this is the half that decides whether you
+      // live. The canonical tick is a polearm on bull plus a turret shot:
+      //   45 dmg * 1.18 variant * 1.5 bull = 79.7,  + 25 from the projectile
+      //   = 104.7 against 100 health.
+      // Dead. At soldier's 0.75 the same burst is 78.5 and you walk away with
+      // 21 left. The wall stops you being carried into the spikes that would
+      // have made up the difference anyway.
+      //
+      // Set directly rather than through _antienemy: surviving this should not
+      // depend on a second switch being on. It does stand off a tick another
+      // module has already claimed, so a committed insta keeps its bull helmet
+      // rather than having it swapped out from under it mid-sequence.
+      if (!ModuleHandler.moduleActive && ModuleHandler.canBuy(0, 6)) {
+        ModuleHandler.forceHat = 6;
+        ModuleHandler.shouldEquipSoldier = true;
       }
       // Measure from where the server will have us, same as everything else
       // that places.
