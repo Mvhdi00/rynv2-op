@@ -1,12 +1,12 @@
-// Slice the bot squad + roam engine out of a shipped build and drive them
-// against stubbed clients.
+// Slice the bot squad and its shared helpers out of a shipped build and drive
+// them against stubbed clients.
 //
 //   node test_bots.js            owner build
 //   node test_bots.js --player   the copy spliced into the obfuscated build
 //
 // The two blocks are sliced separately because they sit far apart in the file:
-// BotSquad is next to the other bot modules, the roam engine and the shared
-// name/trust helpers are down with the rest of the owner-scope loops.
+// BotSquad is next to the other bot modules, the shared name/trust helpers are
+// down with the rest of the owner-scope code.
 const path = require("path");
 const fs = require("fs");
 const vm = require("vm");
@@ -31,13 +31,11 @@ const squadCode = slice(
   "  const BotSquad_default = BotSquad;",
   "the squad module"
 );
-// The roam block runs a requestAnimationFrame loop on load; the harness has no
-// rAF, so the loop is left out of the slice and the functions driven directly.
-const roamCode = slice(
+const helperCode = slice(
   "  const BOT_RANGED_SECONDARIES = new Set([ 9, 12, 13, 15 ]);",
-  "  (function roamLoop() {",
-  "the roam engine"
-).replace(/\s*\(function roamLoop\(\) \{$/, "");
+  "    return picked;\n  }",
+  "the shared bot helpers"
+);
 
 // ---- stubs ----------------------------------------------------------------
 const SHIELD = 11, HAMMER = 10, MUSKET = 15, BOW = 9, DAGGERS = 7, KATANA = 4;
@@ -76,7 +74,6 @@ function mkBot(owner, x, y, secondary, primary = KATANA) {
     tickCount: 5, moduleActive: false, forceWeapon: null, useWeapon: null,
     useAngle: null, shouldAttack: false, currentHolding: null, weapon: null,
     _currentAngle: null, _squadControl: false, _autoFarmActive: false,
-    _scatterActive: false, _scatterReturning: false,
     move_dir: null, moves,
     staticModules: { reloading: { isReloaded: () => true } },
     startMovement(a) { moves.push({ kind: "move", angle: a }); return true; },
@@ -127,13 +124,12 @@ if (usePlayer) {
 }
 vm.createContext(sandbox);
 vm.runInContext(
-  roamCode + "\n" + squadCode +
+  helperCode + "\n" + squadCode +
     "\nglobalThis.__Squad = BotSquad;" +
-    "\nglobalThis.__roam = { tick: roamTick, start: roamStart, recall: roamRecall, pick: roamPickDestination, weapon: roamBreakWeapon, steer: roamSteer };" +
     "\nglobalThis.__helpers = { base: botBaseName, swarm: botSwarmGroup, defenders: botDefenderSet, lead: botLeadAngle, trust: botHandleTrustCommand, trusted: botTrustedIDs, shooter: botIsShooter };",
   sandbox
 );
-const Squad = sandbox.__Squad, roam = sandbox.__roam, H = sandbox.__helpers;
+const Squad = sandbox.__Squad, H = sandbox.__helpers;
 
 let pass = 0, fail = 0;
 const check = (name, cond) => {
@@ -384,103 +380,6 @@ console.log("\nhalf circle");
   check("one bot is not a half circle", b._ModuleHandler._squadControl === false);
   Settings_default._botDefenders = true;
   Settings_default._botAutoShoot = true;
-}
-
-console.log("\nroam");
-{
-  const pos = new Vec(7000, 7000);
-  let minTrip = Infinity;
-  for (let i = 0; i < 200; i++) {
-    const d = roam.pick(pos);
-    minTrip = Math.min(minTrip, Math.hypot(d.x - pos.x, d.y - pos.y));
-    if (d.x < 400 || d.y < 400 || d.x > MAP - 400 || d.y > MAP - 400) { minTrip = -1; break; }
-  }
-  check("destinations stay inside the map margin", minTrip > 0);
-  check("and are a real trip away", minTrip >= 1800);
-  // From a corner the far side is still reachable, so the trip is long there too.
-  const corner = new Vec(500, 500);
-  let ok = true;
-  for (let i = 0; i < 100; i++) {
-    const d = roam.pick(corner);
-    if (Math.hypot(d.x - corner.x, d.y - corner.y) < 1800) ok = false;
-  }
-  check("including from a corner", ok);
-}
-{
-  const mk = (secondary, primary) => ({ getItemByType: t => (t === 0 ? primary : secondary) });
-  check("a hammer breaks with the hammer", roam.weapon(mk(HAMMER, KATANA)) === 1);
-  check("a musket breaks with the primary", roam.weapon(mk(MUSKET, KATANA)) === 0);
-  check("so does a bow", roam.weapon(mk(BOW, KATANA)) === 0);
-  check("a shield falls back to the primary", roam.weapon(mk(SHIELD, KATANA)) === 0);
-  check("no primary at all means nothing to break with", roam.weapon(mk(MUSKET, null)) === null);
-}
-{
-  // A wall dead ahead, a gap to the north: the steer has to find the gap.
-  const myPlayer = { collisionScale: 35 };
-  const objects = new Map();
-  for (let i = 0; i < 6; i++) {
-    const o = new PlayerObject({ id: i, isDestroyable: true, collisionScale: 45,
-                                 pos: { current: new Vec(7150, 6800 + i * 50) } });
-    objects.set(o.id, o);
-  }
-  const om = { objects, grid2D: { query: (x, y, r, cb) => { for (const id of objects.keys()) if (cb(id)) return; } } };
-  const pos = new Vec(7000, 7000);
-  const steered = roam.steer(om, myPlayer, pos, 0);
-  check("a blocked heading is not returned unchanged", steered !== 0);
-  check("a way round is found", steered !== null);
-  check("and it is the smaller turn, not a u-turn", Math.abs(steered) < Math.PI / 2);
-}
-{
-  // Boxed in on every side: nothing to steer to.
-  const myPlayer = { collisionScale: 35 };
-  const objects = new Map();
-  let id = 0;
-  for (let a = 0; a < Math.PI * 2; a += Math.PI / 16) {
-    const o = new PlayerObject({ id: id++, isDestroyable: true, collisionScale: 45,
-                                 pos: { current: new Vec(7000 + Math.cos(a) * 120, 7000 + Math.sin(a) * 120) } });
-    objects.set(o.id, o);
-  }
-  const om = { objects, grid2D: { query: (x, y, r, cb) => { for (const k of objects.keys()) if (cb(k)) return; } } };
-  check("a sealed box has no clear angle", roam.steer(om, myPlayer, new Vec(7000, 7000), 0) === null);
-}
-{
-  const owner = mkOwner();
-  const bot = mkBot(owner, 7000, 7000, MUSKET);
-  owner.clients.add(bot);
-  roam.start(owner.clients);
-  const mh = bot._ModuleHandler;
-  check("roam start arms the bot", mh._scatterActive === true && mh._scatterReturning === false);
-  roam.tick(owner, 1000);
-  check("it picks a destination", mh._roamDest !== null && mh._roamDest !== undefined);
-  check("and starts walking", bot.PacketManager.sent.some(s => s.kind === "move"));
-  const dest = mh._roamDest;
-  roam.tick(owner, 1010);
-  check("the destination is kept between ticks", mh._roamDest === dest);
-  roam.recall(owner.clients);
-  check("recall flips it to returning", mh._scatterActive === false && mh._scatterReturning === true);
-  roam.tick(owner, 2000);
-  check("and having arrived home it stands down", mh._scatterReturning === false);
-}
-{
-  // Walled in with a musket: it must swing the primary, since a musket cannot
-  // hit a building at all.
-  const owner = mkOwner();
-  const bot = mkBot(owner, 7000, 7000, MUSKET);
-  owner.clients.add(bot);
-  const objects = new Map();
-  let id = 0;
-  for (let a = 0; a < Math.PI * 2; a += Math.PI / 16) {
-    const o = new PlayerObject({ id: id++, isDestroyable: true, collisionScale: 45,
-                                 pos: { current: new Vec(7000 + Math.cos(a) * 110, 7000 + Math.sin(a) * 110) } });
-    objects.set(o.id, o);
-  }
-  bot.ObjectManager = { objects, grid2D: { query: (x, y, r, cb) => { for (const k of objects.keys()) if (cb(k)) return; } } };
-  roam.start(owner.clients);
-  roam.tick(owner, 5000);
-  const mh = bot._ModuleHandler;
-  check("being walled in triggers a break", mh._roamBreaking === true);
-  check("it swings", bot.PacketManager.sent.some(s => s.kind === "attack"));
-  check("with the primary, not the musket", mh.forceWeapon === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
