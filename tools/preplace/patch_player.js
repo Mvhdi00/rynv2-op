@@ -36,6 +36,12 @@ const be = ownerSrc.indexOf(BLOCK_END);
 if (bs < 0 || be < bs) throw new Error("could not lift the placer out of the OWNER build");
 
 let moduleBlock = ownerSrc.slice(bs, be + BLOCK_END.length);
+// The packet counter is an OWNER-only diagnostic. Its refusal hooks sit inside
+// the placer block, so strip them on the way across rather than shipping calls
+// into a PacketManager that has no counter on it.
+moduleBlock = moduleBlock.split("        this.client.PacketManager?.noteDenied?.();\n").join("");
+moduleBlock = moduleBlock.split("          this.client.PacketManager?.noteDenied?.();\n").join("");
+if (moduleBlock.includes("noteDenied")) throw new Error("a noteDenied call survived the strip");
 // Rename the globals to whatever this build calls them. Longest first so no
 // name is a prefix of another mid-substitution.
 for (const [logical, mangled] of Object.entries(NAMES).sort((a, b) => b[0].length - a[0].length)) {

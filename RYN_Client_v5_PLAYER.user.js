@@ -131,7 +131,6 @@
         return false;
       }
       if (ModuleHandler.packetCount + auraPlacementCost(type) > ModuleHandler.packetLimit) {
-        this._0x4cf5fe.PacketManager?.noteDenied?.();
         return false;
       }
       ModuleHandler.place(type, angle);
@@ -631,8 +630,7 @@
 
       const tryAngle = relAim => {
         if (ModuleHandler.packetCount + auraPlacementCost(type) > ModuleHandler.packetLimit) {
-          this._0x4cf5fe.PacketManager?.noteDenied?.();
-          return false;
+            return false;
         }
         const tmpX = px + tmpS * Math.cos(relAim), tmpY = py + tmpS * Math.sin(relAim);
         const id = myPlayer.getItemByType(type);
