@@ -3101,8 +3101,16 @@ window.grbtp = 35;
       }
       const nearest = this.nearestEnemy;
       if (nearest !== null) {
-        const pos1 = myPlayer.pos.current;
-        const pos2 = nearest.pos.current;
+        // These angles are what the spike ticks place with, and a spike only
+        // works if it lands touching the enemy — a few pixels out and it does
+        // nothing at all. So measure from where the server will put us when the
+        // build arrives, and aim at where the enemy will be, not where the last
+        // packet drew them. Same correction the placer already carries.
+        const pos1 = myPlayer.pos.current.copy();
+        const predicted = auraPredictPos(this.client, 1);
+        pos1.x = predicted.x;
+        pos1.y = predicted.y;
+        const pos2 = nearest.pos.future ?? nearest.pos.current;
         const angleToEnemy = pos1.angle(pos2);
         const itemType = 4;
         const spikeID = myPlayer.getItemByType(itemType);
@@ -9110,6 +9118,15 @@ window.grbtp = 35;
       const id = this.client.myPlayer.getItemByType(type);
       return id === null || id === void 0 ? null : Items[id];
     }
+    // Where the server will think we are when it processes the build. The
+    // build lands at a fixed radius from *that* point, not from where the
+    // client last drew us, so every angle the placer works out has to start
+    // here. preplace and replace already did this through rebuildAngle;
+    // autoplace was still measuring from pos.current and inheriting a whole
+    // tick of movement as placement error.
+    selfPos() {
+      return auraPredictPos(this.client, 1);
+    }
 
     // auraro: nearObjs
     nearObjs(x, y, range = AURA_SCAN_RANGE) {
@@ -9644,7 +9661,7 @@ window.grbtp = 35;
         return;
       }
       const tmpS = myPlayer.scale + item.scale + (item.placeOffset || 0);
-      const px = myPlayer.pos.current.x, py = myPlayer.pos.current.y;
+      const {x: px, y: py} = this.selfPos();
       const objs = this.nearObjs(px, py);
       const blockers = objs.map(o => {
         const thr = item.scale + this.blockScale(o);
@@ -9761,7 +9778,7 @@ window.grbtp = 35;
       if (!enemy) {
         return;
       }
-      const px = myPlayer.pos.current.x, py = myPlayer.pos.current.y;
+      const {x: px, y: py} = this.selfPos();
       const item = this.item(type);
       if (!item) {
         return;
@@ -11038,11 +11055,43 @@ window.grbtp = 35;
     const range = Math.min(SPIKE_TICK_RANGE, DataHandler_default.getWeapon(primary).range + nearest.hitScale);
     return myPlayer.collidingSimple(nearest, range) ? nearest : null;
   };
+  // Deliberately its own copy of the one-tick movement prediction rather than
+  // a call into the placer's. This whole block is lifted into the obfuscated
+  // build in one piece, and it can only be lifted if it does not reach outside
+  // itself.
+  const spikeTickPredictPos = client2 => {
+    try {
+      const sim = new MovementSimulation;
+      sim.reset(client2);
+      sim.update(client2, true);
+      return {
+        x: sim.x,
+        y: sim.y
+      };
+    } catch (e) {
+      const fallback = client2.myPlayer.pos.future ?? client2.myPlayer.pos.current;
+      return {
+        x: fallback.x,
+        y: fallback.y
+      };
+    }
+  };
+  // One place for "where do I swing at this enemy", so the hit and the turret
+  // follow-up cannot disagree about it.
+  const spikeTickAimAngle = (client2, enemy) => {
+    const from = spikeTickPredictPos(client2);
+    const to = enemy.pos.future ?? enemy.pos.current;
+    return Math.atan2(to.y - from.y, to.x - from.x);
+  };
   const spikeTickHit = (client2, enemy) => {
     const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     EnemyManager2.attemptSpikePlacement();
     ModuleHandler.moduleActive = true;
-    ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
+    // The swing resolves on the server a tick from now, by which time both of
+    // us have moved. The melee test is a cone so the hit itself forgives a
+    // small error, but the knockback direction is exactly this angle, and the
+    // whole point of a spike tick is which way they get pushed.
+    ModuleHandler.useAngle = spikeTickAimAngle(client2, enemy);
     ModuleHandler.forceHat = 7;
     ModuleHandler.forceWeapon = 0;
     ModuleHandler.shouldAttack = true;
@@ -11061,7 +11110,7 @@ window.grbtp = 35;
     // on the target through the turret half instead of snapping back to the
     // mouse the tick after the swing.
     if (enemy) {
-      ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
+      ModuleHandler.useAngle = spikeTickAimAngle(client2, enemy);
     }
   };
   class SpikeTickBreak {
@@ -11237,7 +11286,9 @@ window.grbtp = 35;
         return;
       }
       ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = myPlayer.pos.current.angle(trapped.pos.current);
+      // The enemy is pinned so their own drift is nil, but ours is not — this
+      // swing has to land on the trap, and we are still moving.
+      ModuleHandler.useAngle = spikeTickAimAngle(this.client, trapped);
       ModuleHandler.forceHat = 40;
       ModuleHandler.forceWeapon = 1;
       ModuleHandler.shouldAttack = true;

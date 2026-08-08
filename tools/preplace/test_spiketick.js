@@ -165,7 +165,15 @@ function makeWorld(o = {}) {
   };
 }
 
-const globals = { Items, Settings_default, PlayerObject, DataHandler_default };
+// Advances my position by a fixed step so the aim's self-prediction is
+// visible; the real one walks the same movement sim the placer uses.
+let SIM_STEP = { x: 0, y: 0 };
+class MovementSimulation {
+  reset(client) { const p = client.myPlayer.pos.current; this.x = p.x; this.y = p.y; }
+  update() { this.x += SIM_STEP.x; this.y += SIM_STEP.y; }
+}
+
+const globals = { Items, Settings_default, PlayerObject, DataHandler_default, MovementSimulation };
 const sandbox = { Math, Number, Date, Map, Set, WeakMap, console };
 if (usePlayer) {
   const NAMES = require("./names.js");
@@ -353,6 +361,33 @@ check("a full 500 hp trap is not", !fires(Trap, { ...TRAP, trapHealth: 500 }));
   check("the next tick hits with bull and the primary",
         log[1].hat === 7 && log[1].weapon === 0);
   check("the tick after that is the turret", log[2].hat === 53);
+}
+
+console.log("\naim angle");
+{
+  // Enemy due east and drifting north. The swing resolves a tick from now, so
+  // the aim has to point north of straight-on.
+  const world = makeWorld({ ...BREAK, enemyDist: 120 });
+  world._enemy.pos.future = new Vec(world._enemy.pos.current.x, world._enemy.pos.current.y - 40);
+  const mod = new Break(world);
+  mod.postTick();
+  check("a drifting enemy is led, not aimed at",
+        world._ModuleHandler.useAngle < -0.2 && world._ModuleHandler.useAngle > -Math.PI / 2);
+}
+{
+  // Enemy stationary, but I am the one moving north: the aim has to swing the
+  // other way to compensate.
+  SIM_STEP = { x: 0, y: -40 };
+  const world = makeWorld({ ...BREAK, enemyDist: 120 });
+  new Break(world).postTick();
+  SIM_STEP = { x: 0, y: 0 };
+  check("my own drift is taken out of the aim", world._ModuleHandler.useAngle > 0.2);
+}
+{
+  const world = makeWorld({ ...BREAK, enemyDist: 120 });
+  new Break(world).postTick();
+  check("with nobody moving it is just the straight line",
+        Math.abs(world._ModuleHandler.useAngle) < 1e-9);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
