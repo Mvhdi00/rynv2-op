@@ -280,6 +280,17 @@ const edits = [
     text: "\n" + spikeBlock + "\n",
   },
   ...spikeTickCtorEdits,
+  // EnemyManager.handleEnemies works out the angles attemptSpikePlacement lays
+  // spikes with. Core code, outside both lifted blocks, so the "measure from
+  // where the server will be, aim at where they will be" correction is its own
+  // splice. auraPredictPos resolves because the placer block is lifted in.
+  {
+    name: "spike placement aims from the prediction",
+    landmark: 'const _0x4dae89=_0xb166fe["pos"]["current"],_0x28488f=_0x4a8d6e["pos"]["current"],',
+    from: 'const _0x4dae89='.length,
+    toEnd: 1,
+    text: '(()=>{const _p=_0xb166fe["pos"]["current"]["copy"](),_q=auraPredictPos(this["client"],1);_p.x=_q.x,_p.y=_q.y;return _p;})(),_0x28488f=_0x4a8d6e["pos"]["future"]??_0x4a8d6e["pos"]["current"]',
+  },
   {
     name: "point AutoPlacer_default at the new class",
     landmark: `const ${AUTOPLACER_ALIAS}=${OLD_AUTOPLACER};`,
