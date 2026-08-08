@@ -226,10 +226,10 @@ sent its spawn before the key had arrived.
 
 ## The fix
 
-`src/ae86-protocol.js` is a direct port of the shipped transport — SHA-256,
+`src/moomoo-transport.js` is a direct port of the shipped transport — SHA-256,
 HMAC, the truncated signature, the seeded Fisher-Yates permutation and the
-table salt — plus the two translation tables between Ae86's packet names and
-the current ones. Both name maps were recovered by comparing handler bodies
+table salt. `src/ae86-protocol.js` supplies the two translation tables between
+Ae86's packet names and the current ones. Both name maps were recovered by comparing handler bodies
 between the two bundles one by one, not by assuming positional order.
 
 `tools/fix-ae86.js` applies it in 16 anchored edits. Every edit is pinned to an
@@ -294,3 +294,81 @@ Two further caveats, neither of them packet-related:
 `DAY_INTERVAL` are config keys the engine gained after Ae86 forked. Ae86 does
 not reference any of them, so they are reported by the driver check rather than
 injected.
+
+---
+
+# x18k 7.4 — protocol repair
+
+Build output: **`x18k_7_4_Fixed.user.js`**
+
+x18k 7.4 is a second whole-bundle fork, but a much more recent one than Ae86.
+It arrived unobfuscated, so there was nothing to undo — only the transport to
+bring forward.
+
+## What was already right
+
+Unlike Ae86, x18k's vocabulary is essentially current:
+
+- its inbound handler table is keyed by all **36** shipped names;
+- **13 of its 16** outbound names are current, and the script already rewrites
+  the other three inline (`d`→`F`, `a`→`9`, `G`→`z`, marked `//PacketFix`);
+- it already connects to `wss://<address>` with the token as the only query
+  parameter, and its config carries the newer `MAX_*`/`DAY_INTERVAL` keys.
+
+## What was wrong
+
+The transport, and a dead dependency.
+
+| | x18k 7.4 | Shipped game |
+|---|---|---|
+| Frame | `[name, args]` | `HMAC[0:6] ++ [opcode, args, seq]` |
+| Opcodes | plain names | per-connection permutation |
+| `io-init` | reads `socketId`, drops seed/key/mode | negotiates the transport |
+| Ready signal | fires on `onopen` | fires on `io-init` |
+| Bot spawn | 111ms after `onopen` | — |
+
+Every frame went out unsigned with an unpermuted name, and every inbound frame
+arrived as an integer that `s[i].apply(...)` looked up as a handler name.
+
+Separately, the script `@require`d msgpack from **rawgit.com**, which shut down
+in 2019. `Ke = msgpack` read that global at load — a `ReferenceError` that takes
+the whole script down before anything else runs — and the bot sockets used
+`window.msgpack` for every packet. `Ke` is assigned once and never read, so it
+goes; the bot sockets are served from the msgpack encoder/decoder the script
+already bundles, and the dead `@require` is removed rather than repointed at
+another CDN.
+
+Bots also spawned on a 111ms timer after `onopen`, racing the handshake; they
+now spawn when the transport is up.
+
+## Build and verify
+
+```sh
+npm run build:x18k
+npm run test:x18k
+```
+
+`tools/test-x18k.js` slices the patched socket object out of the build and runs
+it with stubs for the globals it closes over. It checks x18k's *own* handler
+map against the shipped alphabet, drives all 16 outbound names and all 36
+inbound opcodes, then runs a real WebSocket server on localhost — verifying the
+HMAC and rejecting replayed sequence numbers — through a full login.
+
+The same live-server caveat as Ae86 applies: `moomoo.io` is blocked by egress
+policy here, so a real login is unconfirmed. x18k is also a whole-bundle fork
+with a `@match` for the live page, so it runs alongside the page's own bundle
+rather than replacing it.
+
+---
+
+# Shared transport
+
+Both clients sit on `src/moomoo-transport.js`, a port of the shipped transport
+parameterised by name maps: `create({ c2s, s2c })` binds a client's vocabulary
+to the shared primitives, and names absent from a map pass through unchanged.
+`src/ae86-protocol.js` and `src/x18k-protocol.js` are just those maps.
+
+```sh
+npm run build   # both clients
+npm test        # 263 checks
+```

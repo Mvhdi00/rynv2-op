@@ -109,6 +109,7 @@ function loadIoClient() {
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/moomoo-transport.js'), 'utf8'), sandbox);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/ae86-protocol.js'), 'utf8'), sandbox);
   vm.runInContext('var antiKick = false, secPacket = 0, minPacket = 0, pktSended = 0;', sandbox);
   vm.runInContext(`this.__f = function (${args}) ${built.slice(open, end)};`, sandbox);

@@ -38,6 +38,7 @@ const game = sandbox.__game;
 
 const shimCtx = { console };
 vm.createContext(shimCtx);
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/moomoo-transport.js'), 'utf8'), shimCtx);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/ae86-protocol.js'), 'utf8'), shimCtx);
 const shim = shimCtx.Ae86Proto;
 

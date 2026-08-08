@@ -10,18 +10,20 @@
 // ==/UserScript==
 
 /*
- * Ae86 protocol shim.
+ * moomoo.io transport core.
  *
- * Ae86 v10.2 is a fork of the pre-permutation moomoo.io bundle. The shipped
- * game (src/game_index.js) now negotiates a transport in `io-init` and the old
- * frame format is rejected outright. This layer reproduces the shipped
- * transport and translates Ae86's packet names to the current ones, so the
- * rest of the fork can keep using the names it was written against.
+ * A direct port of the transport in the shipped bundle (src/game_index.js):
+ * a per-connection opcode permutation negotiated in `io-init`, and a truncated
+ * HMAC-SHA256 prefix on every client frame.
  *
- * Everything here is a direct port of the shipped bundle:
  *   Vt -> sha256      Ao -> hmacSha256   Eo -> sign      Ro -> hexToBytes
  *   Co -> makeRng     Oi -> permute      Po -> makeTables
  *   jt = 6 (signature width)   Ht = 1 (permuted mode)   Io = 1 (table salt)
+ *
+ * The clients built on this (Ae86, x18k) are forks of older bundles, so each
+ * one supplies its own translation between the packet names it was written
+ * against and the names the shipped bundle uses. `create()` binds those maps
+ * to the shared primitives; everything else here is protocol, not policy.
  */
 (function (root) {
   'use strict';
@@ -30,70 +32,9 @@
   var MODE_PERMUTED = 1; // Ht
   var TABLE_SALT = 1; // Io
 
-  // Alphabets are order-sensitive: the permutation is derived from index order.
+  // Order matters: the permutation is derived from index order.
   var C2S_ALPHABET = ['M', 'D', '9', 'e', 'F', 'z', 'H', 'K', 'L', 'N', 'b', 'P', 'Q', 'c', '6', 'S', '0'];
   var S2C_ALPHABET = ['A', 'B', 'C', 'D', 'E', 'a', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'X', 'Y', 'Z', 'g', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
-
-  // Ae86 (old bundle) outbound name -> shipped bundle name.
-  var C2S_MAP = {
-    'sp': 'M',    // spawn
-    '2': 'D',     // move direction
-    '33': '9',    // aim / turn
-    'rmd': 'e',   // reset move dir
-    'c': 'F',     // attack state
-    '5': 'z',     // select item / weapon
-    '6': 'H',     // buy upgrade
-    '7': 'K',     // lock dir (0) / auto attack (1)
-    '8': 'L',     // create alliance
-    '9': 'N',     // leave alliance
-    '10': 'b',    // kick from alliance
-    '11': 'P',    // respond to alliance request
-    '12': 'Q',    // send alliance request
-    '13c': 'c',   // store equip/buy (skin 0 / tail 1)
-    'ch': '6',    // chat
-    '14': 'S',    // ping / map marker
-    'pp': '0'     // latency probe
-  };
-
-  // Shipped bundle inbound name -> Ae86 (old bundle) name.
-  var S2C_MAP = {
-    'A': 'id',    // init teams
-    'B': 'd',     // disconnect
-    'C': '1',     // setup game
-    'D': '2',     // add player
-    'E': '4',     // remove player
-    'a': '33',    // update players
-    'G': '5',     // update leaderboard
-    'H': '6',     // load game objects
-    'I': 'a',     // update AI
-    'J': 'aa',    // animate AI
-    'K': '7',     // gather animation
-    'L': '8',     // wiggle object
-    'M': 'sp',    // shoot turret / set dir
-    'N': '9',     // update player value
-    'O': 'h',     // update health
-    'P': '11',    // kill player
-    'Q': '12',    // kill object (disable by sid)
-    'R': '13',    // kill all objects by owner
-    'S': '14',    // update item counts
-    'T': '15',    // update XP / age
-    'U': '16',    // update upgrades
-    'V': '17',    // update items / weapons
-    'X': '18',    // add projectile
-    'Y': '19',    // remaining projectile range
-    'Z': '20',    // server shutdown notice
-    'g': 'ac',    // add alliance
-    '1': 'ad',    // delete alliance
-    '2': 'an',    // alliance notification
-    '3': 'st',    // set player team
-    '4': 'sa',    // set alliance players
-    '5': 'us',    // update store items
-    '6': 'ch',    // chat message
-    '7': 'mm',    // minimap
-    '8': 't',     // show text
-    '9': 'p',     // ping map
-    '0': 'pp'     // latency reply
-  };
 
   var K = new Uint32Array([1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298]);
 
@@ -217,6 +158,7 @@
     };
   }
 
+
   function toBytes(x) {
     if (x instanceof Uint8Array) return x;
     if (ArrayBuffer.isView(x)) return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
@@ -224,67 +166,171 @@
   }
 
   /*
-   * Build per-connection state from an io-init payload. Returns null when the
-   * server is not running the permuted transport, in which case callers fall
-   * back to plain frames.
+   * Bind a client's name maps to the shared transport.
+   *
+   *   c2s: this client's outbound name -> shipped name
+   *   s2c: shipped inbound name -> this client's name
+   *
+   * Names absent from a map pass through unchanged, so a client already using
+   * current names supplies an empty map.
    */
-  function createState(args) {
-    if (!args || args[3] !== MODE_PERMUTED) return null;
+  function create(maps) {
+    var c2s = (maps && maps.c2s) || {};
+    var s2c = (maps && maps.s2c) || {};
+
+    /*
+     * Build per-connection state from an io-init payload. Returns null when
+     * the server is not running the permuted transport, in which case callers
+     * fall back to plain frames.
+     */
+    function createState(args) {
+      if (!args || args[3] !== MODE_PERMUTED) return null;
+      return {
+        mode: MODE_PERMUTED,
+        key: hexToBytes(args[2]),
+        tables: makeTables(args[1] >>> 0),
+        seq: 0
+      };
+    }
+
+    /*
+     * Encode one outbound packet. `encode` is the bundle's msgpack encoder.
+     * Returns null when the packet has no counterpart in the current protocol,
+     * which the caller should treat as "drop".
+     */
+    function encodeFrame(state, encode, name, args) {
+      var mapped = c2s[name];
+      if (mapped === undefined) mapped = name;
+      if (!state) return toBytes(encode([mapped, args]));
+      var op = state.tables.c2s.enc[mapped];
+      if (op === undefined) return null;
+      var payload = toBytes(encode([op, args, ++state.seq]));
+      var sig = sign(state.key, payload);
+      var frame = new Uint8Array(SIG_LEN + payload.length);
+      frame.set(sig, 0);
+      frame.set(payload, SIG_LEN);
+      return frame;
+    }
+
+    /*
+     * Translate an inbound packet name into the name this client's handlers
+     * expect. Returns undefined for opcodes outside the negotiated table.
+     */
+    function decodeName(state, raw) {
+      if (state && typeof raw === 'number') {
+        var name = state.tables.s2c.dec[raw];
+        if (name === undefined) return undefined;
+        raw = name;
+      }
+      var mapped = s2c[raw];
+      return mapped === undefined ? raw : mapped;
+    }
+
     return {
-      mode: MODE_PERMUTED,
-      key: hexToBytes(args[2]),
-      tables: makeTables(args[1] >>> 0),
-      seq: 0
+      SIG_LEN: SIG_LEN,
+      MODE_PERMUTED: MODE_PERMUTED,
+      C2S_MAP: c2s,
+      S2C_MAP: s2c,
+      sha256: sha256,
+      hmacSha256: hmacSha256,
+      sign: sign,
+      hexToBytes: hexToBytes,
+      makeTables: makeTables,
+      createState: createState,
+      encodeFrame: encodeFrame,
+      decodeName: decodeName
     };
   }
 
-  /*
-   * Encode one outbound packet. `name` is an Ae86-era name; `encode` is the
-   * bundle's msgpack encoder. Returns null when the packet has no counterpart
-   * in the current protocol, which the caller should treat as "drop".
-   */
-  function encodeFrame(state, encode, name, args) {
-    var mapped = C2S_MAP[name];
-    if (mapped === undefined) mapped = name;
-    if (!state) return toBytes(encode([mapped, args]));
-    var op = state.tables.c2s.enc[mapped];
-    if (op === undefined) return null;
-    var payload = toBytes(encode([op, args, ++state.seq]));
-    var sig = sign(state.key, payload);
-    var frame = new Uint8Array(SIG_LEN + payload.length);
-    frame.set(sig, 0);
-    frame.set(payload, SIG_LEN);
-    return frame;
-  }
-
-  /*
-   * Translate an inbound packet name into the name Ae86's handlers expect.
-   * Returns undefined for opcodes outside the negotiated table.
-   */
-  function decodeName(state, raw) {
-    if (state && typeof raw === 'number') {
-      var name = state.tables.s2c.dec[raw];
-      if (name === undefined) return undefined;
-      raw = name;
-    }
-    var old = S2C_MAP[raw];
-    return old === undefined ? raw : old;
-  }
-
-  root.Ae86Proto = {
+  root.MooTransport = {
     SIG_LEN: SIG_LEN,
     MODE_PERMUTED: MODE_PERMUTED,
-    C2S_MAP: C2S_MAP,
-    S2C_MAP: S2C_MAP,
+    C2S_ALPHABET: C2S_ALPHABET,
+    S2C_ALPHABET: S2C_ALPHABET,
     sha256: sha256,
     hmacSha256: hmacSha256,
     sign: sign,
     hexToBytes: hexToBytes,
     makeTables: makeTables,
-    createState: createState,
-    encodeFrame: encodeFrame,
-    decodeName: decodeName
+    create: create
   };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/*
+ * Ae86 v10.2 name maps.
+ *
+ * Ae86 is a fork of the pre-permutation bundle, so every packet name it uses
+ * differs from the shipped one. Both maps were recovered by comparing handler
+ * bodies between the two bundles one at a time — the correspondence turned out
+ * to be positional, but that was checked rather than assumed.
+ *
+ * Requires src/moomoo-transport.js.
+ */
+(function (root) {
+  'use strict';
+
+  // Ae86 (old bundle) outbound name -> shipped bundle name.
+  var C2S_MAP = {
+    'sp': 'M',    // spawn
+    '2': 'D',     // move direction
+    '33': '9',    // aim / turn
+    'rmd': 'e',   // reset move dir
+    'c': 'F',     // attack state
+    '5': 'z',     // select item / weapon
+    '6': 'H',     // buy upgrade
+    '7': 'K',     // lock dir (0) / auto attack (1)
+    '8': 'L',     // create alliance
+    '9': 'N',     // leave alliance
+    '10': 'b',    // kick from alliance
+    '11': 'P',    // respond to alliance request
+    '12': 'Q',    // send alliance request
+    '13c': 'c',   // store equip/buy (skin 0 / tail 1)
+    'ch': '6',    // chat
+    '14': 'S',    // ping / map marker
+    'pp': '0'     // latency probe
+  };
+
+  // Shipped bundle inbound name -> Ae86 (old bundle) name.
+  var S2C_MAP = {
+    'A': 'id',    // init teams
+    'B': 'd',     // disconnect
+    'C': '1',     // setup game
+    'D': '2',     // add player
+    'E': '4',     // remove player
+    'a': '33',    // update players
+    'G': '5',     // update leaderboard
+    'H': '6',     // load game objects
+    'I': 'a',     // update AI
+    'J': 'aa',    // animate AI
+    'K': '7',     // gather animation
+    'L': '8',     // wiggle object
+    'M': 'sp',    // shoot turret / set dir
+    'N': '9',     // update player value
+    'O': 'h',     // update health
+    'P': '11',    // kill player
+    'Q': '12',    // kill object (disable by sid)
+    'R': '13',    // kill all objects by owner
+    'S': '14',    // update item counts
+    'T': '15',    // update XP / age
+    'U': '16',    // update upgrades
+    'V': '17',    // update items / weapons
+    'X': '18',    // add projectile
+    'Y': '19',    // remaining projectile range
+    'Z': '20',    // server shutdown notice
+    'g': 'ac',    // add alliance
+    '1': 'ad',    // delete alliance
+    '2': 'an',    // alliance notification
+    '3': 'st',    // set player team
+    '4': 'sa',    // set alliance players
+    '5': 'us',    // update store items
+    '6': 'ch',    // chat message
+    '7': 'mm',    // minimap
+    '8': 't',     // show text
+    '9': 'p',     // ping map
+    '0': 'pp'     // latency reply
+  };
+
+  root.Ae86Proto = root.MooTransport.create({ c2s: C2S_MAP, s2c: S2C_MAP });
 })(typeof window !== 'undefined' ? window : globalThis);
 
 // @license      MIT

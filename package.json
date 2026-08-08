@@ -7,7 +7,12 @@
     "deobfuscate:ae86": "node tools/run-webcrack.mjs && node tools/polish-ae86.mjs",
     "build:ae86": "node tools/fix-ae86.js",
     "test:ae86": "node tools/verify-ae86-protocol.js && node tools/test-ae86-transport.js && node tools/test-ae86-login.js && node tools/verify-ae86-drivers.js",
-    "check:ae86": "node --check Ae86_v10_2_Fixed.user.js"
+    "check:ae86": "node --check Ae86_v10_2_Fixed.user.js",
+    "build:x18k": "node tools/fix-x18k.js",
+    "test:x18k": "node tools/test-x18k.js",
+    "check:x18k": "node --check x18k_7_4_Fixed.user.js",
+    "build": "npm run build:ae86 && npm run build:x18k",
+    "test": "npm run test:ae86 && npm run test:x18k && npm run check:ae86 && npm run check:x18k"
   },
   "devDependencies": {
     "msgpack-lite": "^0.1.26",

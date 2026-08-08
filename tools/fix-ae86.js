@@ -14,6 +14,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const IN = path.join(ROOT, 'src/Ae86_v10.2_deobfuscated.js');
+const CORE = path.join(ROOT, 'src/moomoo-transport.js');
 const SHIM = path.join(ROOT, 'src/ae86-protocol.js');
 const OUT = path.join(ROOT, 'Ae86_v10_2_Fixed.user.js');
 
@@ -33,7 +34,7 @@ function edit(label, find, replace) {
  * ------------------------------------------------------------------ */
 {
   const header = '// ==/UserScript==\n';
-  const shim = fs.readFileSync(SHIM, 'utf8');
+  const shim = fs.readFileSync(CORE, 'utf8') + '\n' + fs.readFileSync(SHIM, 'utf8');
   edit('inject protocol shim', header, header + '\n' + shim + '\n');
 }
 
