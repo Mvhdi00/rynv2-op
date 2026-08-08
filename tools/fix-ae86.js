@@ -242,6 +242,58 @@ for (const [group, limit] of [['mill', 0x7], ['booster', 0xc], ['teleporter', 0x
       sandboxLimit: 0x12b,`);
 }
 
+/* ------------------------------------------------------------------ *
+ * 12. Server discovery.
+ *
+ * Ae86 still expects the old page, which shipped the server list inline as a
+ * `window.vultr` global and served refreshes from a relative `/serverData`.
+ * The current page defines neither: it fetches `api.moomoo.io/servers?v=1.27`
+ * and hands the parsed body straight to processServers.
+ *
+ * The constructor's unguarded read of that global is the worse half — it is a
+ * ReferenceError at load, before anything else in the client runs.
+ * ------------------------------------------------------------------ */
+edit('server discovery: guard the inline-list global',
+  `      this.processServers(vultr.servers);
+    }`,
+  `      // The current page has no inline server list; discovery happens in
+      // the fetch below instead.
+      typeof vultr !== "undefined" && vultr && this.processServers(vultr.servers);
+    }`);
+
+edit('server discovery: fetch the current endpoint',
+  `    function _0x5a61d9() {
+      var _0x1c317c = new XMLHttpRequest();
+      var _0x53658f = "/serverData";
+      _0x1c317c.onreadystatechange = function () {
+        if (this.readyState == 4) {
+          if (this.status == 200) {
+            window.vultr = JSON.parse(this.responseText);
+            _0x17dbb2.processServers(vultr.servers);
+            _0x179f00();
+          } else {
+            console.error("Failed to load server data with status code:", this.status);
+          }
+        }
+      };
+      _0x1c317c.open("GET", _0x53658f, true);
+      _0x1c317c.send();
+    }`,
+  `    function _0x5a61d9() {
+      var _0xapi = location.hostname === "sandbox.moomoo.io" || location.hostname === "sandbox-dev.moomoo.io" ? "https://api-sandbox.moomoo.io" : location.hostname === "dev.moomoo.io" || location.hostname === "dev2.moomoo.io" ? "https://api-dev.moomoo.io" : "https://api.moomoo.io";
+      fetch(_0xapi + "/servers?v=1.27").then(function (_0xr) {
+        return _0xr.json();
+      }).then(function (_0xd) {
+        // The endpoint returns the server payload itself, not a wrapper with
+        // a .servers property like the old inline global had.
+        window.vultr = _0xd;
+        _0x17dbb2.processServers(_0xd);
+        _0x179f00();
+      })["catch"](function (_0xe) {
+        console.error("Failed to load server data:", _0xe);
+      });
+    }`);
+
 fs.writeFileSync(OUT, src);
 console.log(`Applied ${edits.length} edits:`);
 for (const e of edits) console.log(`  - ${e}`);

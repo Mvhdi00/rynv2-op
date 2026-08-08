@@ -6792,21 +6792,18 @@ var sTime = 0;
       document.getElementById("altServer").innerHTML = "<a href='" + _0xcb3165 + '\x27>' + _0x503249 + "<i class='material-icons' style='font-size:10px;vertical-align:middle'>arrow_forward_ios</i></a>";
     }
     function _0x5a61d9() {
-      var _0x1c317c = new XMLHttpRequest();
-      var _0x53658f = "/serverData";
-      _0x1c317c.onreadystatechange = function () {
-        if (this.readyState == 4) {
-          if (this.status == 200) {
-            window.vultr = JSON.parse(this.responseText);
-            _0x17dbb2.processServers(vultr.servers);
-            _0x179f00();
-          } else {
-            console.error("Failed to load server data with status code:", this.status);
-          }
-        }
-      };
-      _0x1c317c.open("GET", _0x53658f, true);
-      _0x1c317c.send();
+      var _0xapi = location.hostname === "sandbox.moomoo.io" || location.hostname === "sandbox-dev.moomoo.io" ? "https://api-sandbox.moomoo.io" : location.hostname === "dev.moomoo.io" || location.hostname === "dev2.moomoo.io" ? "https://api-dev.moomoo.io" : "https://api.moomoo.io";
+      fetch(_0xapi + "/servers?v=1.27").then(function (_0xr) {
+        return _0xr.json();
+      }).then(function (_0xd) {
+        // The endpoint returns the server payload itself, not a wrapper with
+        // a .servers property like the old inline global had.
+        window.vultr = _0xd;
+        _0x17dbb2.processServers(_0xd);
+        _0x179f00();
+      })["catch"](function (_0xe) {
+        console.error("Failed to load server data:", _0xe);
+      });
     }
     _0x580e68.addEventListener("change", _0x4a052b.checkTrusted(function () {
       let _0x4c328d = _0x580e68.value.split(':');
@@ -13518,7 +13515,9 @@ var sTime = 0;
       this.gameIndex = undefined;
       this.callback = undefined;
       this.errorCallback = undefined;
-      this.processServers(vultr.servers);
+      // The current page has no inline server list; discovery happens in
+      // the fetch below instead.
+      typeof vultr !== "undefined" && vultr && this.processServers(vultr.servers);
     }
     var _0x28cd9d = {
       name: "New Jersey",

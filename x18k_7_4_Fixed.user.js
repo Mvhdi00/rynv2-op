@@ -11905,8 +11905,11 @@ document.getElementById("ad-container");
 const Uh = document.getElementById("mainMenu"),
       jh = document.getElementById("enterGame"),
       Hh = document.getElementById("promoImg");
-Hh.remove();
-document.getElementById("promoImgHolder").remove();
+Hh && Hh.remove();
+{
+  const _ph = document.getElementById("promoImgHolder");
+  _ph && _ph.remove();
+}
 const Wh = document.getElementById("joinPartyButton"),
       Qh = document.getElementById("settingsButton"),
       Yh = Qh.getElementsByTagName("span")[0],
@@ -12019,10 +12022,21 @@ function U0(e) {
     }())
 }
 window.addEventListener("load", () => {
-    document.getElementById("altcha_checkbox").click();
-    document.getElementById("enterGame").innerText = "Generating Token";
+    const cb = document.getElementById("altcha_checkbox");
     const e = document.getElementById("script-altcha");
-    e == null || e.addEventListener("statechange", U0)
+    const btn = document.getElementById("enterGame");
+    if (!cb || !e) {
+        // No altcha on this page: nothing will ever report "verified", so the
+        // button has to be released here or it stays disabled forever.
+        if (btn) {
+            btn.classList.remove("disabled");
+            btn.innerText = "Enter Game";
+        }
+        return
+    }
+    cb.click();
+    if (btn) btn.innerText = "Generating Token";
+    e.addEventListener("statechange", U0)
 });
 
 function j0() {
@@ -12092,7 +12106,7 @@ qd.mount(Jh, W0);
 var Q0, Y0;
 location.hostname == "sandbox.moomoo.io" ? (Q0 = "Back to MooMoo", Y0 = "//moomoo.io/") : (Q0 = "Try the sandbox", Y0 = "//sandbox.moomoo.io/");
 document.getElementById("altServer").innerHTML = "<a href='" + Y0 + "'>" + Q0 + "<i class='material-icons' style='font-size:10px;vertical-align:middle'>arrow_forward_ios</i></a>";
-const z0 = `${j1}/servers?v=1.26`,
+const z0 = `${j1}/servers?v=1.27`,
       G0 = async () => fetch(z0).then(e => e.json()).then(async e => G1.processServers(e))["catch"](e => {
           console.error("Failed to load server data with status code:", e)
       }), K0 = () => G0().then(_0)["catch"](e => {

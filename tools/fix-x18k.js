@@ -204,6 +204,73 @@ edit('bot socket: spawn on io-init, not on a timer',
         c.pingSocketResponse()
     };`);
 
+/* ------------------------------------------------------------------ *
+ * 9. Server list endpoint.
+ *
+ * This is what stops the menu working. The button's click handler is bound by
+ * the function that runs *after* the server list resolves:
+ *
+ *   K0 = () => G0().then(_0).catch(...)   // _0 -> j0() -> jh.onclick = ...
+ *
+ * x18k asks for `/servers?v=1.26`; the shipped bundle asks for `v=1.27`. When
+ * the old version is refused the promise rejects, the catch logs "Failed to
+ * load.", `_0` never runs, and "Enter Game" is left with no click handler at
+ * all — the button looks fine and does nothing.
+ * ------------------------------------------------------------------ */
+edit('server list endpoint version',
+  '`${j1}/servers?v=1.26`',
+  '`${j1}/servers?v=1.27`');
+
+/* ------------------------------------------------------------------ *
+ * 10. Menu elements the current page no longer serves.
+ *
+ * `promoImgHolder` is gone from the shipped page, and this runs at the top
+ * level: the null dereference throws and takes every statement after it with
+ * it. Both removals become conditional.
+ * ------------------------------------------------------------------ */
+edit('guard removed promo elements',
+  `Hh.remove();
+document.getElementById("promoImgHolder").remove();`,
+  `Hh && Hh.remove();
+{
+  const _ph = document.getElementById("promoImgHolder");
+  _ph && _ph.remove();
+}`);
+
+/* ------------------------------------------------------------------ *
+ * 11. The captcha gate.
+ *
+ * x18k waits for an ALTCHA widget to report "verified" before it enables the
+ * button. The shipped bundle has no altcha at all — it uses
+ * `captchaCallbackHook` — so on the current page `altcha_checkbox` is absent,
+ * the first line throws, and nothing that follows runs. When the widget is not
+ * there, enable the button instead of waiting for an event that never fires.
+ * ------------------------------------------------------------------ */
+edit('captcha gate: enable when altcha is absent',
+  `window.addEventListener("load", () => {
+    document.getElementById("altcha_checkbox").click();
+    document.getElementById("enterGame").innerText = "Generating Token";
+    const e = document.getElementById("script-altcha");
+    e == null || e.addEventListener("statechange", U0)
+});`,
+  `window.addEventListener("load", () => {
+    const cb = document.getElementById("altcha_checkbox");
+    const e = document.getElementById("script-altcha");
+    const btn = document.getElementById("enterGame");
+    if (!cb || !e) {
+        // No altcha on this page: nothing will ever report "verified", so the
+        // button has to be released here or it stays disabled forever.
+        if (btn) {
+            btn.classList.remove("disabled");
+            btn.innerText = "Enter Game";
+        }
+        return
+    }
+    cb.click();
+    if (btn) btn.innerText = "Generating Token";
+    e.addEventListener("statechange", U0)
+});`);
+
 fs.writeFileSync(OUT, src);
 console.log(`Applied ${edits.length} edits:`);
 for (const e of edits) console.log(`  - ${e}`);

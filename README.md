@@ -372,3 +372,56 @@ to the shared primitives, and names absent from a map pass through unchanged.
 npm run build   # both clients
 npm test        # 263 checks
 ```
+
+---
+
+# Startup failures (both clients)
+
+The transport work above is downstream of a set of load-time failures. Both
+clients fork an older *page*, not just an older protocol, and where the page
+they expect is gone the script dies before it ever opens a socket. These are
+asserted by `npm run check:bootstrap` so they cannot quietly come back.
+
+## x18k: "Enter Game" does nothing
+
+The button's click handler is bound by `_0`, and `_0` only runs after the
+server list resolves:
+
+```js
+K0 = () => G0().then(_0).catch(e => console.error("Failed to load."))
+```
+
+x18k requests `/servers?v=1.26`; the shipped bundle requests **`v=1.27`**. The
+stale version means the promise rejects, `_0` never runs, and the button is
+left with no handler at all — it looks normal and does nothing. That one
+character is the whole bug.
+
+Two more load-time faults sat alongside it:
+
+- **The captcha gate.** x18k waits for an ALTCHA widget to report `verified`
+  before calling `jh.classList.remove("disabled")`. The shipped bundle has no
+  altcha at all — it uses `captchaCallbackHook` — so `altcha_checkbox` is
+  absent, `.click()` on null throws, and the button never gets released. When
+  the widget is missing the button is now enabled directly.
+- **`promoImgHolder`.** Removed from the shipped page, dereferenced unguarded
+  at the top level, so the `TypeError` took out every statement after it.
+
+## Ae86: dies at construction
+
+`VultrClient`'s constructor ends with `this.processServers(vultr.servers)` —
+a bare read of a global the old page defined inline. The current page does not
+define it, so this is a `ReferenceError` before anything else in the client
+runs. It is now guarded, and the `/serverData` refresh (also gone) is replaced
+with a fetch of `api.moomoo.io/servers?v=1.27`, whose body goes straight to
+`processServers` rather than through a `.servers` wrapper.
+
+# Does Ae86 have a menu?
+
+No. Ae86 references 52 element ids and all but one (`featuredYoutube`) belong
+to the game's own UI; the only element it creates is a `status` div for the FPS
+counter. There is no settings panel and no chat-command parser — its features
+are not user-toggleable.
+
+x18k is the opposite: of the 139 ids it touches, ~84 are its own menu controls
+(`auto heal`, `auto place`, `bot smart aim`, `Assassin`, `botCount`, …). If you
+want a client with a menu, x18k is the one that has one.
