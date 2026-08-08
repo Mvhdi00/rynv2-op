@@ -177,3 +177,120 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ae86 v10.2 — deobfuscation and protocol repair
+
+Build output: **`Ae86_v10_2_Fixed.user.js`**
+
+Ae86 v10.2 shipped obfuscated and could not connect to the current game. Both
+problems are fixed here; the deobfuscated source is the delivered artifact, so
+the result is readable rather than a re-packed blob.
+
+## Deobfuscation
+
+The script was protected with javascript-obfuscator: an RC4 string array behind
+a rotator IIFE, per-scope proxy wrappers, numeric-expression padding, and a
+`debugger` trap on a 4s timer. `tools/run-webcrack.mjs` undoes the protection
+and `tools/polish-ae86.mjs` folds the leftover constant arithmetic and
+bracketed member access.
+
+```
+12,379,321 bytes  ->  546,880 bytes
+```
+
+Original identifiers survive at global scope (`bConnect`, `botConfig`,
+`randomcowname`, `tmpAddress`), so the result reads as source.
+
+## Why it could not connect
+
+Ae86 is not a userscript that patches the live bundle — it is a **fork of the
+pre-permutation game bundle**, the same shape as Luna 1.1. It therefore carried
+the whole old transport:
+
+| | Ae86 v10.2 | Shipped game |
+|---|---|---|
+| Frame | `[name, args]` | `HMAC[0:6] ++ [opcode, args, seq]` |
+| Opcodes | old string names (`sp`, `13c`, `rmd`) | per-connection permutation of 17 c2s / 36 s2c names |
+| `io-init` | reads `socketId`, drops the rest | seed, HMAC key and transport mode |
+| Ready signal | fires on `onopen` | fires on `io-init` |
+| URL | `ws://host:8008/?gameIndex=N` | `wss://host` |
+| Lobby size | 50 | 40 |
+
+Every outbound frame was unsigned and named with an opcode the server no longer
+knows, and every inbound frame arrived as a permuted integer that Ae86 looked up
+as a handler name — `handlers[14]` is `undefined`, so the first packet after
+`io-init` threw. Firing the ready callback on `onopen` also meant the client
+sent its spawn before the key had arrived.
+
+## The fix
+
+`src/ae86-protocol.js` is a direct port of the shipped transport — SHA-256,
+HMAC, the truncated signature, the seeded Fisher-Yates permutation and the
+table salt — plus the two translation tables between Ae86's packet names and
+the current ones. Both name maps were recovered by comparing handler bodies
+between the two bundles one by one, not by assuming positional order.
+
+`tools/fix-ae86.js` applies it in 16 anchored edits. Every edit is pinned to an
+exact string, and a missing or ambiguous anchor fails the build, so a different
+Ae86 build surfaces as an error rather than a half-patched script. The edits
+are confined to the transport, the connection URL, server capacity, and the
+sandbox placement limits; no gameplay code is touched.
+
+The obfuscator's anti-debug timer is removed. Ae86 contains no exfiltration —
+its only outbound calls are the game's own `/serverData` and region pings.
+
+## Build
+
+```sh
+npm install
+npm run deobfuscate:ae86   # src/Ae86_v10.2_original.js -> src/Ae86_v10.2_deobfuscated.js
+npm run build:ae86         # -> Ae86_v10_2_Fixed.user.js
+```
+
+## Verification
+
+```sh
+npm run test:ae86
+npm run check:ae86
+```
+
+- **`verify-ae86-protocol.js`** — differential test of the shim against the
+  transport primitives lifted out of `src/game_index.js`: SHA-256 (including a
+  known-answer test), HMAC and its truncation across key/data lengths that
+  straddle the block boundary, and the opcode tables over eight seeds.
+- **`test-ae86-transport.js`** — drives the patched `io-client` module itself
+  against a server built from the shipped primitives. All 17 outbound names
+  produce correctly permuted, correctly signed, correctly sequenced frames; all
+  36 inbound opcodes reach the right handler; unknown packets are dropped in
+  both directions.
+- **`test-ae86-login.js`** — a real WebSocket server on localhost speaking the
+  shipped protocol, verifying the HMAC and rejecting replayed sequence numbers.
+  The client completes the handshake, spawns, receives game setup and round
+  trips a latency probe.
+- **`verify-ae86-drivers.js`** — item groups (14), items (23), weapons (16),
+  projectiles (6), hats (46), accessories (21) and 59 config scalars against
+  `drivers/game-drivers.json`.
+
+### Not verified against the live servers
+
+`moomoo.io` is blocked by egress policy in the environment this was built in,
+so the client has never been pointed at a real server. Everything above is
+checked against the shipped bundle and a local server implementing it. The
+protocol is right; a live login is still unconfirmed.
+
+Two further caveats, neither of them packet-related:
+
+- Ae86 is a whole-bundle fork with a `@match` for `*://*.moomoo.io/*`. Loaded as
+  a userscript on the live page it runs *alongside* the page's own bundle rather
+  than replacing it. It wants to be served as the page's script.
+- The shipped bundle boots with `detectUserscripts` enabled. Nothing here
+  addresses that.
+
+### Known drift
+
+`MAX_ATTACK`, `MAX_SPAWN_DELAY`, `MAX_SPEED`, `MAX_TURN_SPEED` and
+`DAY_INTERVAL` are config keys the engine gained after Ae86 forked. Ae86 does
+not reference any of them, so they are reported by the driver check rather than
+injected.

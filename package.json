@@ -1,0 +1,17 @@
+{
+  "name": "rynv2-op",
+  "private": true,
+  "version": "1.0.0",
+  "description": "moomoo.io client work: ReUp Mix (Luna x Ryn) and the Ae86 v10.2 protocol repair",
+  "scripts": {
+    "deobfuscate:ae86": "node tools/run-webcrack.mjs && node tools/polish-ae86.mjs",
+    "build:ae86": "node tools/fix-ae86.js",
+    "test:ae86": "node tools/verify-ae86-protocol.js && node tools/test-ae86-transport.js && node tools/test-ae86-login.js && node tools/verify-ae86-drivers.js",
+    "check:ae86": "node --check Ae86_v10_2_Fixed.user.js"
+  },
+  "devDependencies": {
+    "msgpack-lite": "^0.1.26",
+    "webcrack": "^2.14.1",
+    "ws": "^8.18.0"
+  }
+}

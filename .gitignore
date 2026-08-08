@@ -1,2 +1,5 @@
 node_modules/
 package-lock.json
+
+# regenerable intermediate from tools/run-webcrack.mjs
+src/Ae86_v10.2_webcrack.js
