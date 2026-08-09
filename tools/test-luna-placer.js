@@ -316,7 +316,7 @@ console.log("luna placer smoke test\n");
   const placer = new AutoPlacer(env.client);
   const myPos = env.client.myPlayer.pos.current;
   const angles = placer._getPrePlaceAngles(SPIKE_ID, myPos, env.client.myPlayer, env.client.ObjectManager, null);
-  check("probes 72 angles", angles.length === 72, angles.length + " angles");
+  check("probes 72 grid angles", angles.filter(a => !a.corner).length === 72, angles.filter(a => !a.corner).length + " grid angles");
   check("the blocked side is unplaceable", angles.some(a => !a.placeable), "none blocked");
   check("the open side is placeable", angles.some(a => a.placeable), "none free");
   const perfect = angles.filter(a => a.perfect);
@@ -330,6 +330,67 @@ console.log("luna placer smoke test\n");
   // Excluding the blocker frees the angles it was sitting on.
   const freed = placer._getPrePlaceAngles(SPIKE_ID, myPos, env.client.myPlayer, env.client.ObjectManager, blocker);
   check("excluding an object frees its angles", freed.filter(a => a.placeable).length > angles.filter(a => a.placeable).length);
+}
+
+// 7b — the exact tangent corners. Every corner has to sit exactly where the
+// build lands touching the object that produced it, and the merged ring must
+// stay sorted and free of duplicates.
+{
+  const blocker = ours(1, 7070, 3000, 16);
+  const env = makeClient({ objects: [ blocker ] });
+  const placer = new AutoPlacer(env.client);
+  const myPos = env.client.myPlayer.pos.current;
+  const angles = placer._getPrePlaceAngles(SPIKE_ID, myPos, env.client.myPlayer, env.client.ObjectManager, null);
+
+  const corners = angles.filter(a => a.corner);
+  check("corners were added to the ring", corners.length === 2, corners.length + " corners");
+
+  // A corner lands tangent: |build - object| == itemScale + blockRadius.
+  const want = Items[SPIKE_ID].scale + blocker.placementScale;
+  for (const c of corners) {
+    const got = Math.hypot(c.x - blocker.pos.current.x, c.y - blocker.pos.current.y);
+    // The nudge pushes it just clear, so it lands at or barely past tangency.
+    const off = got - want;
+    check("corner is tangent (+" + off.toFixed(2) + "px)", off >= 0 && off < 1.5, "off by " + off.toFixed(3));
+    check("corner clears the object", got >= want, got.toFixed(2) + " vs " + want);
+  }
+
+  let sorted = true, duped = false;
+  for (let i = 1; i < angles.length; i++) {
+    if (angles[i].angle < angles[i - 1].angle) sorted = false;
+    if (angles[i].angle - angles[i - 1].angle < 1e-9) duped = true;
+  }
+  check("ring stays sorted", sorted);
+  check("ring has no duplicate angles", !duped);
+  check("grid samples are still all there", angles.length >= 72, angles.length + " entries");
+}
+
+// 7c — the case the 5° grid alone cannot solve: a gap between two objects that
+// is legal but narrower than one grid step. Only the solved corners find it.
+{
+  const item = Items[SPIKE_ID];
+  const w = 35 + item.scale + (item.placeOffset || 0);
+  const R = item.scale + Items[16].scale;
+  const d = 120;
+  // Half-width of the arc one object at distance d subtracts from the landing
+  // circle — the same law of cosines the placer solves.
+  const blockedHalf = Math.acos((w * w + d * d - R * R) / (2 * w * d));
+  // Leave a free window 1.6° wide, centred at 47.5° so the nearest grid
+  // samples (45° and 50°) both sit 2.5° outside it.
+  const gapCentre = 47.5 * Math.PI / 180;
+  const halfGap = .8 * Math.PI / 180;
+  const mk = (id, bearing) => ours(id, 7000 + d * Math.cos(bearing), 3000 + d * Math.sin(bearing), 16);
+  const a = mk(1, gapCentre - halfGap - blockedHalf);
+  const b = mk(2, gapCentre + halfGap + blockedHalf);
+  const env = makeClient({ objects: [ a, b ] });
+  const placer = new AutoPlacer(env.client);
+  const myPos = env.client.myPlayer.pos.current;
+  const angles = placer._getPrePlaceAngles(SPIKE_ID, myPos, env.client.myPlayer, env.client.ObjectManager, null);
+
+  const gridFound = angles.some(x => !x.corner && x.placeable && Math.abs(x.angle - gapCentre) < halfGap);
+  const cornerFound = angles.some(x => x.corner && x.placeable && Math.abs(x.angle - gapCentre) < halfGap);
+  check("a sub-5° gap exists that the grid misses", !gridFound);
+  check("the solved corners find it anyway", cornerFound);
 }
 
 // 8 — item limit: at the cap, nothing of that kind is proposed.

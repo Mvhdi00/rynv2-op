@@ -160,7 +160,36 @@ Only the data access is rewritten onto RYN's managers: `visibleObjects` becomes
 72-angle probe, the perfect-angle edge detection, `lineInRect`, the knockback
 alignment scoring, and both placement priority ladders.
 
-Three deliberate differences:
+### Exact tangent corners
+
+Luna samples the landing circle every 5°, so a legal gap narrower than that is
+found only if a sample happens to land inside it. At the spike's landing radius
+of 79px, one step is about 7px of arc.
+
+The one piece of the Auraro placer kept is its answer to that: instead of
+sampling near an object, solve for it. The game puts every build on a circle of
+radius `w = playerScale + itemScale + placeOffset` and rejects it within
+`R = itemScale + blockRadius` of an object, so for an object at distance `d`
+and bearing `α` the blocked arc is exactly `α ± Δ` with
+
+```
+cos Δ = (w² + d² − R²) / (2wd)
+```
+
+Those two boundaries are the only angles where a build lands packed against
+that object, and every tight legal spot is one of them. No solution means the
+object cannot reach the landing circle — which doubles as the distance filter,
+so only objects that can actually block produce candidates.
+
+The candidate ring is Luna's 72 samples **plus** those solved corners, sorted
+together and de-duplicated; a placeable corner is marked `perfect` outright,
+since "perfect" means packed against something and a corner is that by
+construction. **Luna's decision logic is untouched** — it just receives a list
+that cannot miss a gap. `test-luna-placer.js` builds a free window 1.6° wide,
+off-grid, and checks that the grid samples all miss it while the solved corners
+land inside it.
+
+### Other differences from Luna
 
 - **`canTrapTick` and `canShamePlace` are dead.** Both gate on Luna's
   `shameTick` / `shameGrind` toggles, and v5 has no shame-grind feature to hang
@@ -264,7 +293,8 @@ stubbed managers and drives `postTick` through each decision path — traps on a
 open enemy, spikes on a trapped one, the radius and master-toggle gates, the
 spike-tick yield in both places it is checked, the held-back preplace and its
 two resends, the 72-angle probe and its perfect-angle edges, the item cap, and
-the packet budget. All 25 checks pass, and `verify-drivers.js` reports the v5
+the packet budget, the tangent corners and a sub-5° gap the grid alone misses.
+All 35 checks pass, and `verify-drivers.js` reports the v5
 build's data tables unchanged against the shipped bundle.
 
 Current state of the ReUp Mix build:

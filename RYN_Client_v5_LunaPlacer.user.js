@@ -8845,7 +8845,20 @@ window.grbtp = 35;
   const LUNA_SPIKE_TYPE = 4;
   const LUNA_TRAP_TYPE = 7;
   const LUNA_ANGLE_STEPS = 72;
-  const LUNA_ANGLE_STEP = Math.PI * 2 / LUNA_ANGLE_STEPS;
+  const LUNA_TWO_PI = Math.PI * 2;
+  const LUNA_ANGLE_STEP = LUNA_TWO_PI / LUNA_ANGLE_STEPS;
+
+  // Two candidate angles closer together than this are the same build.
+  const LUNA_ANGLE_EPS = 1e-4;
+
+  // How far a tangent corner is pushed off the object it is packed against.
+  const LUNA_CORNER_NUDGE = 6e-3;
+
+  // Cells of the 100px spatial grid to sweep for corner-producing objects.
+  // An object only reaches the landing circle from within w + itemScale +
+  // blockRadius; the largest blockRadius in the game is the blocker's 300, so
+  // ~430px, and 5 cells covers it.
+  const LUNA_CORNER_SCAN = 5;
 
   // Luna's own budget check was `packets + 5 > 119` against a counter it owned
   // outright. RYN shares one allowance across every module, so the same guard
@@ -8967,15 +8980,67 @@ window.grbtp = 35;
       return !!limit && count >= limit;
     }
 
+    // The exact angles where a build lands tangent to one object — the two
+    // boundaries of the arc that object subtracts from the landing circle.
+    //
+    // This is the one part of the Auraro placer worth keeping. Luna samples
+    // the circle every 5°, so a legal gap narrower than that is found only if
+    // a sample happens to fall inside it. These are solved rather than
+    // sampled, so no gap is missed however tight it is.
+    //
+    // The geometry is fixed by the game: buildItem puts the build on a circle
+    // of radius w = playerScale + itemScale + placeOffset around the player,
+    // and checkItemLocation rejects it when it comes within R = itemScale +
+    // blockRadius of an object. With the object at distance d and bearing α,
+    // the law of cosines gives the half-width of the blocked arc:
+    //
+    //   cos Δ = (w² + d² − R²) / (2wd)
+    //
+    // so the two corners are α ± Δ. No solution means that object cannot
+    // reach the landing circle at all, which is also the distance filter —
+    // only objects with |w − d| ≤ R ≤ w + d produce corners.
+    _cornerAngles(id, myPos, ObjectManager2, excludeObj) {
+      const item = Items[id];
+      const w = 35 + item.scale + (item.placeOffset || 0);
+      const out = [];
+      ObjectManager2.grid2D.query(myPos.x, myPos.y, LUNA_CORNER_SCAN, objId => {
+        const obj = ObjectManager2.objects.get(objId);
+        if (!obj || excludeObj && obj === excludeObj) return false;
+        const dx = obj.pos.current.x - myPos.x;
+        const dy = obj.pos.current.y - myPos.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 1e-6) return false;
+        const R = item.scale + obj.placementScale;
+        const cos = (w * w + d * d - R * R) / (2 * w * d);
+        if (cos < -1 || cos > 1) return false;
+        const delta = Math.acos(cos);
+        const alpha = Math.atan2(dy, dx);
+        // Nudged off the object it is packed against. The server rejects on
+        // `<`, so exact tangency is legal, but the landing point is recomputed
+        // from a rounded wire angle and the sign of the residual is a coin
+        // flip. Each corner moves away from the object, never into it.
+        out.push(alpha + delta + LUNA_CORNER_NUDGE, alpha - delta - LUNA_CORNER_NUDGE);
+        return false;
+      });
+      return out;
+    }
+
     // Luna getPrePlaceAngles + getPerfectAngles: probe 72 evenly spaced
     // angles, then mark the two ends of every placeable run "perfect" — those
     // are the angles packed against something, which is where a build is worth
     // the most. `excludeObj` is the object Luna pretends is already gone.
     //
-    // Luna recomputes all 72 on every call and calls it several times a tick.
-    // The result only depends on (id, excludeObj) within a tick, so it is
-    // memoised per tick — callers compare entries by identity, which needs the
-    // same objects back anyway.
+    // The candidate list is Luna's 72 samples plus the exact corners above,
+    // sorted into one ring. Luna's decision logic is untouched — it just gets
+    // a list that cannot miss a gap. A placeable corner is marked perfect
+    // outright: "perfect" means packed against something, and a corner is that
+    // by construction, whether or not its neighbours in the merged list
+    // happen to straddle it.
+    //
+    // Luna recomputes everything on every call and calls it several times a
+    // tick. The result only depends on (id, excludeObj) within a tick, so it
+    // is memoised per tick — callers compare entries by identity, which needs
+    // the same objects back anyway.
     _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
       if (id === null || id === undefined) return [];
       if (this._isItemLimit(id, myPlayer)) return [];
@@ -8987,19 +9052,47 @@ window.grbtp = 35;
       const key = id + "_" + (excludeObj ? excludeObj.id : "n");
       const cached = this._angleCache.get(key);
       if (cached) return cached;
+
+      const wrap = a => (a % LUNA_TWO_PI + LUNA_TWO_PI) % LUNA_TWO_PI;
+      const candidates = [];
+      for (let i = 0; i < LUNA_ANGLE_STEPS; i++) {
+        candidates.push({
+          angle: i * LUNA_ANGLE_STEP,
+          corner: false
+        });
+      }
+      for (const raw of this._cornerAngles(id, myPos, ObjectManager2, excludeObj)) {
+        candidates.push({
+          angle: wrap(raw),
+          corner: true
+        });
+      }
+      candidates.sort((a, b) => a.angle - b.angle);
+
       const getConfig = this._getConfig(id, myPos);
       const angles = [];
-      for (let i = 0; i < LUNA_ANGLE_STEPS; i++) {
-        const angle = i * LUNA_ANGLE_STEP;
+      for (const candidate of candidates) {
+        // Two corners from neighbouring objects can land on top of each other,
+        // and a corner can coincide with a grid sample. Same angle, same
+        // build — keep one.
+        const last = angles[angles.length - 1];
+        if (last && candidate.angle - last.angle < LUNA_ANGLE_EPS) {
+          if (candidate.corner) last.corner = true;
+          continue;
+        }
         angles.push({
-          ...getConfig(angle),
-          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
+          ...getConfig(candidate.angle),
+          corner: candidate.corner,
+          placeable: this._canPlace(id, candidate.angle, myPos, ObjectManager2, excludeObj),
           perfect: false
         });
       }
       for (let i = 1; i < angles.length; i++) {
         if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
         if (angles[i - 1].placeable && !angles[i].placeable) angles[i - 1].perfect = true;
+      }
+      for (const angle of angles) {
+        if (angle.corner && angle.placeable) angle.perfect = true;
       }
       this._angleCache.set(key, angles);
       return angles;
