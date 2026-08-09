@@ -182,6 +182,53 @@ Keybinds page: no rotate keys, no mouse-movement hotkey. `Misc → Precise Angle
 and the keydown hook together — leaving any one of them behind would have called
 a method the build no longer generates.
 
+#### Spike back in the placer
+
+v5's port collapsed auraro's spike/trap alternation to trap-only —
+`autoPlace(0, AURA_SPIKE, AURA_TRAP)` became `autoPlace(0, AURA_TRAP, null)`, and
+PrePlacer and Replacer were pinned to the trap as well.
+
+The spike comes back in all three, gated on distance to the enemy. Inside
+**Misc → Spike Range** it takes the slot the trap would have taken; past that
+range every module stays trap-only exactly as before. Auraro's own pairing does
+the rest — mode 1 puts a spike next to an existing trap and a trap next to an
+existing spike — so the spike goes in as the primary with the trap as its
+fallback, which is the arrangement auraro shipped, just distance-gated.
+
+The port dropped the spike from PrePlacer to stop it fighting the spike-tick
+modules over a slot. That guard already exists and still holds: `auraSpikeTickBusy`
+yields the whole tick to a spike-tick module whenever one has claimed it.
+
+**Spike Range** defaults to 150 and runs 60–250. A spike can only land touching
+the enemy at about 170 and under, since placement happens on a circle ~79 from
+you and contact needs ~92 more — below that the setting is strictly a contact
+spike.
+
+#### Placement speed
+
+Two limits, both measured rather than felt.
+
+`ModuleHandler.place` sent four packets every time — select the building, attack,
+stop, put the weapon back — with no state check, so placing two spikes in a row
+re-selected the spike and restored the weapon twice for nothing. Against the
+client's own 70 packets/second that capped every module together at ~17
+placements a second no matter how many it wanted.
+
+The select is now skipped when that item is already in hand, and the weapon
+restore is deferred to the end of the module that placed, flushed between
+modules so nothing downstream ever runs with a building in hand. `currentHolding`
+is the right thing to test against because `selectItem` and `whichWeapon` are its
+only two writers, so anything else changing the held item is seen immediately.
+
+| Placements in a burst | Packets before | after | Ceiling at 70/s |
+|---|---|---|---|
+| 2 | 8 | 6 | 17 → 23 /s |
+| 4 | 16 | 10 | 17 → 28 /s |
+| 6 | 24 | 14 | 17 → 29 /s |
+
+The second limit was `AURA_MAX_PER_TICK`, which stopped PrePlacer and Replacer
+after two placements each per tick. With the packet cost cut it goes to four.
+
 **Left alone in v5:** its first-run `fetch` to `webhook.site` is still there.
 The ReUp Mix build strips v4's, but that is a separate decision about someone
 else's client — it is at the top of `RYN_v5_OWNER.user.js` if you want it gone.

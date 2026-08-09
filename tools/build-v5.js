@@ -218,6 +218,257 @@ edit(
 );
 
 /* ------------------------------------------------------------------ *
+ * 4. Spike back in the placer
+ *
+ * v5's port collapsed auraro's spike/trap alternation to trap-only —
+ * `autoPlace(0, AURA_SPIKE, AURA_TRAP)` became `autoPlace(0, AURA_TRAP, null)`,
+ * and PrePlacer and Replacer were pinned to the trap as well.
+ *
+ * The spike comes back, gated on distance to the enemy: inside `_spikeRange` it
+ * takes the slots the trap would have taken, and past that range every module
+ * stays trap-only exactly as before. Auraro's own pairing does the rest — mode 1
+ * puts a spike next to an existing trap and a trap next to an existing spike —
+ * so passing the spike as the primary with the trap as its fallback is the
+ * arrangement auraro shipped, just distance-gated.
+ *
+ * The port's reason for dropping the spike from PrePlacer was that it would
+ * fight the spike-tick modules over a slot. That guard already exists and still
+ * holds: `auraSpikeTickBusy` makes all three placers yield the tick outright
+ * whenever a spike-tick module has claimed it.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "spike: range gate",
+  `  function auraSpikeTickBusy(ModuleHandler) {`,
+  `  /* Should this placement be a spike rather than a trap? Only within
+   * _spikeRange of the enemy, and only if a spike is actually placeable — the
+   * caller falls back to the trap otherwise. */
+  function auraUseSpike(client, distance) {
+    if (!Settings_default._spikePlacer) return false;
+    if (distance > (Settings_default._spikeRange ?? 150)) return false;
+    return client.myPlayer.canPlace(AURA_SPIKE);
+  }
+  function auraSpikeTickBusy(ModuleHandler) {`
+);
+
+/* AutoPlacer: the dispatch. Spike primary, trap as type2, so auraro's own
+ * fallback path covers everywhere the spike does not fit. */
+edit(
+  "spike: autoplacer dispatch",
+  `      const pushing = Settings_default._autoPush && dist <= (Settings_default._autoPushRange ?? 250);
+      if (pushing) {
+        if (dist <= 169 || dist > 222) {
+          placer.autoPlace(0, AURA_TRAP, null);
+        }
+        return;
+      }
+      if (dist <= 222) {
+        if (enemy.isTrapped || enemy.wasTrapped && enemy.wasTrapped()) {
+          placer.autoPlace(0, AURA_TRAP, null);
+        } else {
+          placer.autoPlace(1, AURA_TRAP, null, false);
+        }
+        return;
+      }
+      if (dist > 269 && dist < 400) {
+        placer.autoPlace(0, AURA_TRAP, null);
+      } else if (dist <= 269) {
+        placer.autoPlace(1, AURA_TRAP, null, false);
+      }`,
+  `      const spike = auraUseSpike(this.client, dist);
+      const first = spike ? AURA_SPIKE : AURA_TRAP;
+      const second = spike ? AURA_TRAP : null;
+      const pushing = Settings_default._autoPush && dist <= (Settings_default._autoPushRange ?? 250);
+      if (pushing) {
+        if (dist <= 169 || dist > 222) {
+          placer.autoPlace(0, first, second);
+        }
+        return;
+      }
+      if (dist <= 222) {
+        if (enemy.isTrapped || enemy.wasTrapped && enemy.wasTrapped()) {
+          placer.autoPlace(0, first, second);
+        } else {
+          placer.autoPlace(1, first, second, false);
+        }
+        return;
+      }
+      if (dist > 269 && dist < 400) {
+        placer.autoPlace(0, first, second);
+      } else if (dist <= 269) {
+        placer.autoPlace(1, first, second, false);
+      }`
+);
+
+/* PrePlacer: the slot it is about to free gets a spike when the enemy is close
+ * enough, a trap otherwise. The range cache is keyed by item so the two never
+ * read each other's arcs. */
+edit(
+  "spike: preplacer slot item",
+  `        // Traps only. Auraro would spike here when the enemy is pinned by
+        // something else; leaving spikes to the spike-tick modules keeps the
+        // two from fighting over the same slot.
+        if (!myPlayer.canPlace(AURA_TRAP)) {
+          continue;
+        }
+        // Straight at the slot it is about to free. preplaceCheck is the right
+        // test here: it skips the doomed build and demands the landing overlap
+        // it, which is exactly "the same place".
+        const exact = placer.rebuildAngle(obj.pos.current, pred.x, pred.y, AURA_TRAP, {
+          freeing: obj
+        });
+        let angle = exact ? exact.angle : null;
+        if (angle === null) {
+          const key = obj.id + "_" + AURA_TRAP;
+          if (!this._rangeCache[key]) {
+            placer.calcPreplace(obj, AURA_TRAP, pred.x, pred.y);
+            this._rangeCache[key] = placer.preplaceRanges[AURA_TRAP];
+          } else {
+            placer.preplaceRanges[AURA_TRAP] = this._rangeCache[key];
+          }
+          angle = placer.findPlacementAngle(AURA_TRAP, obj, pred.x, pred.y, enemy);
+        }
+        if (angle !== null && placer.send(AURA_TRAP, angle)) {
+          found += 1;
+        }`,
+  `        // Spike when the enemy is inside the spike range, trap otherwise. The
+        // spike-tick modules cannot be fighting for this slot: auraSpikeTickBusy
+        // has already yielded the whole tick to them if one claimed it.
+        const item = auraUseSpike(this.client, myPlayer.pos.current.distance(enemy.pos.current)) ? AURA_SPIKE : AURA_TRAP;
+        if (!myPlayer.canPlace(item)) {
+          continue;
+        }
+        // Straight at the slot it is about to free. preplaceCheck is the right
+        // test here: it skips the doomed build and demands the landing overlap
+        // it, which is exactly "the same place".
+        const exact = placer.rebuildAngle(obj.pos.current, pred.x, pred.y, item, {
+          freeing: obj
+        });
+        let angle = exact ? exact.angle : null;
+        if (angle === null) {
+          const key = obj.id + "_" + item;
+          if (!this._rangeCache[key]) {
+            placer.calcPreplace(obj, item, pred.x, pred.y);
+            this._rangeCache[key] = placer.preplaceRanges[item];
+          } else {
+            placer.preplaceRanges[item] = this._rangeCache[key];
+          }
+          angle = placer.findPlacementAngle(item, obj, pred.x, pred.y, enemy);
+        }
+        if (angle !== null && placer.send(item, angle)) {
+          found += 1;
+        }`
+);
+
+/* Replacer: what goes back into a building that just broke. */
+edit(
+  "spike: replacer rebuild item",
+  `      const pred = auraPredictPos(this.client, 1);
+      placer.rangesUpdated[AURA_TRAP] = false;
+      placer.angleRanges(AURA_TRAP, pred.x, pred.y);
+      const rTrap = placer.ranges[AURA_TRAP];`,
+  `      const pred = auraPredictPos(this.client, 1);
+      const rebuild = auraUseSpike(this.client, myPos.distance(enemy.pos.current)) ? AURA_SPIKE : AURA_TRAP;
+      placer.rangesUpdated[rebuild] = false;
+      placer.angleRanges(rebuild, pred.x, pred.y);
+      const rTrap = placer.ranges[rebuild];`
+);
+
+/* ------------------------------------------------------------------ *
+ * 5. Placement speed
+ *
+ * Two things held the placers back, and both are measurable rather than felt.
+ *
+ * ModuleHandler.place sends four packets every time — select the building,
+ * attack, stop, put the weapon back — with no state check, so placing two
+ * spikes in a row re-selected the spike and restored the weapon twice for
+ * nothing. Against the client's own 70 packets/second that capped every module
+ * together at roughly 14-17 placements a second.
+ *
+ * The select is now skipped when that item is already in hand, and the weapon
+ * restore is deferred to the end of the module that placed — so a burst of N
+ * costs 2N + 2 packets instead of 4N. The restore is flushed between modules,
+ * not at the end of the tick, so nothing after the placers ever runs with the
+ * wrong item held.
+ *
+ * `currentHolding` is the right thing to test against because selectItem and
+ * whichWeapon are the only two writers, so anything else changing the held item
+ * is seen here immediately.
+ *
+ * The second limit was AURA_MAX_PER_TICK, which stopped PrePlacer and Replacer
+ * after two placements each. With the packet cost halved it goes to four.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "speed: batch the placement packets",
+  `    place(type, angle = this._currentAngle, reset = false) {
+      this.totalPlaces += 1;
+      this.selectItem(type);
+      this.attack(angle, 1);
+      this.stopAttack(angle);
+      this.whichWeapon(this._getPredictWeapon());
+    }`,
+  `    place(type, angle = this._currentAngle, reset = false) {
+      this.totalPlaces += 1;
+      /* Already holding it from the previous placement in this burst. */
+      if (this.currentHolding !== type) {
+        this.selectItem(type);
+      }
+      this.attack(angle, 1);
+      this.stopAttack(angle);
+      this._placeBatchOpen = true;
+    }
+    _placeBatchOpen=false;
+    /* Put the weapon back, once, after the module that placed is done with the
+     * tick. Called between modules so nothing downstream sees a building in
+     * hand. */
+    _flushPlaceBatch() {
+      if (!this._placeBatchOpen) {
+        return;
+      }
+      this._placeBatchOpen = false;
+      this.whichWeapon(this._getPredictWeapon());
+    }`
+);
+
+edit(
+  "speed: flush the batch between modules",
+  `      for (const module of this.modules) {
+        const prevg = this.moduleActive;
+        module.postTick();
+        if (!prevg && this.moduleActive) {
+          this.activeModule = module.moduleName;
+        }
+      }`,
+  `      for (const module of this.modules) {
+        const prevg = this.moduleActive;
+        module.postTick();
+        this._flushPlaceBatch();
+        if (!prevg && this.moduleActive) {
+          this.activeModule = module.moduleName;
+        }
+      }`
+);
+
+edit(
+  "speed: more placements per tick",
+  `  const AURA_MAX_PER_TICK = 2;`,
+  `  const AURA_MAX_PER_TICK = 4;`
+);
+
+edit(
+  "spike: settings",
+  `  const defaultSettings = {
+` + Angles.settings({ nudgeKeys: false }) + `
+    _primary: "Digit1",`,
+  `  const defaultSettings = {
+` + Angles.settings({ nudgeKeys: false }) + `
+    _spikePlacer: true,
+    _spikeRange: 150,
+    _primary: "Digit1",`
+);
+
+/* ------------------------------------------------------------------ *
  * 4. Menu
  *
  * v5's Misc page uses h2 section titles, and its Keybinds page lays keys out in
@@ -230,7 +481,7 @@ patchPage(
   `\r
 \r
     <div class="section">\r
-        <h2 class="section-title">Precise Angles</h2>\r
+        <h2 class="section-title">Precise Angles &amp; Spike Placer</h2>\r
 \r
         <div class="section-content">\r
 \r
@@ -259,6 +510,24 @@ patchPage(
                     <input id="_buildAngleSteps" type="range" step="24" min="24" max="624">\r
                 </label>\r
                 <span class="option-description">${Angles.COPY.build} The Auraro placer is geometric already, so this drives the trap bounce, auto break and enemy spike slot sweeps.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Spike Placer</span>\r
+                <label class="switch-checkbox">\r
+                    <input id="_spikePlacer" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Autoplace, preplace and replace put a spike in the slot instead of a trap while the enemy is inside the spike range. Past that range they stay trap-only. Off is trap-only everywhere, as before.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Spike Range</span>\r
+                <label class="slider">\r
+                    <span class="slider-value"></span>\r
+                    <input id="_spikeRange" type="range" step="10" min="60" max="250">\r
+                </label>\r
+                <span class="option-description">How close the enemy has to be before the spike takes over the slot. A spike can only land touching them at about 170 and under; below that it is strictly a contact spike.</span>\r
             </div>\r
 \r
             <div class="content-option">\r
