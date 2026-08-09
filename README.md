@@ -280,3 +280,80 @@ Alongside that:
   clock gate is one tick and three quarters, so on the tick that mattered it
   was as likely to be shut as open depending on where the clock landed.
 - **`AURA_MAX_PER_TICK` 2 → 3**, which the packet budget now affords.
+
+## Spikes, only where a trap cannot go
+
+`AuraPlacer.spikeFill()`, called by all three placers after their trap logic
+and gated by **Combat → Spikes & Traps → Placer Spikes** (`_placerSpike`, on by
+default). Two clauses, both enforced:
+
+- **Only where a trap cannot.** Either there is no trap to place at all — the
+  group limit is 6, and in a fight the limit runs out long before the geometry
+  does — or the trap's own landing point at that same angle is rejected.
+  Placement is parameterised by angle, so asking the question at the angle asks
+  it exactly.
+- **Only in contact with the enemy.** The spike must land within
+  `spike.scale + enemy.scale + 8` of them. A spike short of that is a wall, and
+  walls are not this module's job.
+
+Candidates are the spike's own corners plus the bearing straight at the enemy,
+tried closest-first so the packet budget buys the tightest contact available.
+
+Verified over 60000 randomised scenes: **0** placements out of contact, **0**
+placements into a slot a trap would have fitted.
+
+| spike | fires | of which, because traps ran out |
+|---|---|---|
+| spikes (scale 49, smaller than the trap's 50) | 17.1% | 72.3% |
+| greater / poison / spinning (scale 52) | 13.0% | **100%** |
+
+Worth knowing: a spike bigger than the trap can never fit somewhere the trap
+does not, so with greater spikes the geometric clause is vacuous and the
+feature reduces to "spike when out of traps". With basic spikes it also finds
+genuine tight gaps. It fires with the enemy between 61 and 177 away, median
+109 — contact range, as asked.
+
+### Not colliding with spike tick
+
+All seven spike-tick modules sit at indices 5–13 of `ModuleHandler.modules`;
+the placers are at 43–45. So a tick one of them claimed is already in
+`activeModule` when the placer looks — that is the direct collision, and it was
+already guarded. `spikeFill` adds two more:
+
+- it stands down if anything ahead of it already built this tick
+  (`ModuleHandler.placedOnce`), and
+- it stands off for two further ticks after the last spike-tick claim, because
+  those sequences span ticks — place, then swing — and dropping a spike into
+  the contact ring halfway through is the collision that the `activeModule`
+  check alone does not catch.
+
+## A per-tick packet slice
+
+The 70-packet allowance resets on a **wall clock**, not per tick. Measured on a
+built-up base, `autoPlace` mode 0 wants ~12 builds in one tick — ~26 packets
+even batched — so one busy tick took the whole second and the next eight had
+nothing left. That is what "it places once and then goes dead" actually was.
+
+`AURA_TICK_PACKETS = 24` caps the placer's slice per tick. The second's total is
+unchanged; it is now spread over three or four productive ticks instead of one.
+Sweeps ask `hasBudget()` rather than reading a failed `send()` as "out of
+budget", since `send()` also returns false for a duplicate and that is not a
+reason to abandon a sweep.
+
+Also added: wire-precision deduplication in `send()`. The angle is rounded to
+two decimals before transmission, so two candidates that round the same are the
+same packet twice. Measured at only **0.7%** of mode-0 sends — marginal, but
+free.
+
+## What was measured, and what was not
+
+The CPU work is now **3.0x** faster with 13 grid queries per tick down to 1 —
+but it was **0.04%** of a 111ms tick to begin with, so it was never what made
+the placer feel slow. The packet budget was, and still is, the binding
+constraint.
+
+One thing left unexplored: whether the server builds on each `F,1` or only on
+the `1`→`0` transition. If the former, a run of builds could drop to roughly
+one packet each. `buildItem` is server-side and is never called anywhere in the
+shipped bundle, so there is nothing here to verify it against, and it was not
+worth guessing at.
