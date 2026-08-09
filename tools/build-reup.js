@@ -482,7 +482,7 @@ ${themeButtons}\r
 edit(
   "angles: AngleGrid helper",
   `  const getAngleFromBitmask = (bitmask, rotate) => {`,
-  Angles.ANGLE_GRID + `  const getAngleFromBitmask = (bitmask, rotate) => {`
+  Angles.angleGrid() + `  const getAngleFromBitmask = (bitmask, rotate) => {`
 );
 
 edit(

@@ -38,6 +38,9 @@ const hasPrePlaceCache = src.includes("  const _prePlaceAngleCache = new WeakMap
  * menu options and no new keybinds, so the mouse is its only way onto the fine
  * grid and there is no nudge offset to test. */
 const hasNudgeKeys = src.includes("    handleAngleKeys(event) {");
+/* A client that rounds its attack angle for the wire rounds the movement angle
+ * the same way, so the expected value is the snapped angle put through it. */
+const wiresMovement = src.includes("return wireAngle(AngleGrid.snap(");
 
 const TAU = Math.PI * 2;
 const deg = r => (r * 180 / Math.PI + 360) % 360;
@@ -59,24 +62,27 @@ function check(name, condition, detail = "") {
 
 const Settings_default = {
   _preciseAngles: true,
-  _moveAngleSteps: 624,
+  _moveAngleSteps: src.includes("    _moveAngleSteps: 720,") ? 720 : 624,
   _buildAngleSteps: 624,
   _mouseMovement: false
 };
 
-const { AngleGrid, Input } = eval(`(() => {
+const { AngleGrid, Input, wireAngle } = eval(`(() => {
+${wiresMovement ? region("  const fixTo = ", "  const findMiddleAngle") : "const wireAngle = a => a;"}
 ${region("  const AngleGrid = {", "  const getAngleFromBitmask")}
 ${region("  const getAngleFromBitmask = (bitmask, rotate) => {", "  const formatCode")}
 class Input {
   constructor() { this.move = 0; this.moveNudge = 0; this.mouse = { angle: 0 }; }
 ${region("    getMoveAngle() {", "    handleMovement(")}
 }
-return { AngleGrid, Input };
+return { AngleGrid, Input, wireAngle };
 })()`);
 
 console.log("grid\n");
 
-check("624 steps by default", AngleGrid.moveSteps === 624 && AngleGrid.buildStepsOr(72) === 624);
+check("the grid is at the top of its slider by default",
+  AngleGrid.moveSteps === (wiresMovement ? 720 : 624) && AngleGrid.buildStepsOr(72) === 624,
+  `${AngleGrid.moveSteps} move / ${AngleGrid.buildStepsOr(72)} build`);
 check("624 is at or under what the game can express", 624 <= Math.floor(TAU / 0.01) && 624 % 8 === 0,
   `game ceiling ${Math.floor(TAU / 0.01)}`);
 check("a step is 0.577 degrees", near(deg(AngleGrid.step(624)), 360 / 624, 1e-12));
@@ -98,7 +104,7 @@ check("snap never moves an angle more than half a step",
 
 /* Every slider value is a multiple of 8, so the eight key directions stay
  * exactly representable however fine the grid is. */
-for (const steps of [8, 16, 144, 360, 624]) {
+for (const steps of [8, 16, 144, 360, 624, 720]) {
   check(`key directions stay exact at ${steps} steps`,
     [0, 45, 90, 135, 180, 225, 270, 315].every(d => {
       const a = d * Math.PI / 180;
@@ -113,10 +119,14 @@ console.log("\nmovement input\n");
 const UP = 1, DOWN = 2, LEFT = 4, RIGHT = 8;
 const input = new Input();
 
+/* On a wire-rounded build the value lands on the game's 0.01 rad lattice, so
+ * "exact" means within half a lattice step — the same distance vanilla's own
+ * value sits from the true direction. */
+const keyEps = wiresMovement ? 0.29 : 1e-9;
 input.move = UP;
-check("W is up", near(deg(input.getMoveAngle()), 270));
+check("W is up", Math.abs(deg(input.getMoveAngle()) - 270) < keyEps, `${deg(input.getMoveAngle()).toFixed(4)} deg`);
 input.move = UP | RIGHT;
-check("W+D is up-right", near(deg(input.getMoveAngle()), 315));
+check("W+D is up-right", Math.abs(deg(input.getMoveAngle()) - 315) < keyEps);
 input.move = 0;
 check("no keys is no direction", input.getMoveAngle() === null);
 input.move = UP | DOWN;
@@ -141,7 +151,7 @@ if (!hasNudgeKeys) {
     check(`a press turns ${want.toFixed(2)} deg at ${steps} steps`, Math.abs(turned - want) <= 360 / steps,
       `${turned.toFixed(2)} deg`);
   }
-  Settings_default._moveAngleSteps = 624;
+  Settings_default._moveAngleSteps = AngleGrid.moveSteps;
   input.moveNudge = -perPress(624);
   check("nudging below zero wraps", near(deg(input.getMoveAngle()), 360 - 4 * 360 / 624));
   input.moveNudge = 156;
@@ -152,7 +162,8 @@ if (!hasNudgeKeys) {
 Settings_default._mouseMovement = true;
 const cursor = 33 * Math.PI / 180;
 input.mouse.angle = cursor;
-const GRID = 624;
+const GRID = AngleGrid.moveSteps;
+const expected = a => wireAngle(AngleGrid.snap(a, GRID));
 const relative = [
   [UP, 0, "W goes toward the cursor"],
   [RIGHT, Math.PI / 2, "D strafes right of it"],
@@ -161,7 +172,7 @@ const relative = [
 ];
 for (const [keys, offset, name] of relative) {
   input.move = keys;
-  check(name, near(input.getMoveAngle(), AngleGrid.snap(cursor + offset, GRID)));
+  check(name, near(input.getMoveAngle(), expected(cursor + offset)));
 }
 
 /* A full cursor sweep has to reach every direction, and cost one packet per
@@ -182,8 +193,31 @@ for (let i = 1; i < 20000; i++) {
     last = a;
   }
 }
-check("a cursor sweep reaches all 624", reached.size === 624, `${reached.size} reached`);
-check("one send per step crossed, not per mouse event", sends <= 624, `${sends} sends over 20000 mouse events`);
+check(`a cursor sweep reaches every direction the grid can express`,
+  reached.size === (wiresMovement ? 628 : GRID), `${reached.size} reached`);
+check("one send per step crossed, not per mouse event", sends <= GRID, `${sends} sends over 20000 mouse events`);
+if (wiresMovement) {
+  /* Rounded the way the client already rounds its place angle, so the two paths
+   * emit the same shape of value and a key press matches vanilla exactly. */
+  check("every movement angle is a 2-decimal radian, as the game sends",
+    [...reached].every(i => {
+      const a = wireAngle(AngleGrid.fromIndex(i, GRID));
+      return Math.abs(a * 100 - Math.round(a * 100)) < 1e-9;
+    }));
+  const KEYS = { W: UP, S: DOWN, A: LEFT, D: RIGHT };
+  const exact = { W: -Math.PI / 2, S: Math.PI / 2, A: Math.PI, D: 0,
+    "W+D": -Math.PI / 4, "W+A": -3 * Math.PI / 4, "S+D": Math.PI / 4, "S+A": 3 * Math.PI / 4 };
+  const wasMouse = Settings_default._mouseMovement;
+  Settings_default._mouseMovement = false;
+  const mismatched = Object.entries(exact).filter(([name, a]) => {
+    input.move = name.split("+").reduce((m, k) => m | KEYS[k], 0);
+    return input.getMoveAngle() !== wireAngle(a);
+  }).map(([name]) => name);
+  check("each key direction is byte-identical to vanilla's own value",
+    mismatched.length === 0, mismatched.join(", ") || "all eight match");
+  Settings_default._mouseMovement = wasMouse;
+  input.move = UP;
+}
 
 Settings_default._mouseMovement = false;
 Settings_default._preciseAngles = false;
@@ -192,15 +226,15 @@ check("off puts every sweep back to its own step count",
 input.move = UP;
 input.moveNudge = 5;
 input.mouse.angle = 1.2;
-check("off ignores nudge and cursor", near(deg(input.getMoveAngle()), 270));
+check("off ignores nudge and cursor", Math.abs(deg(input.getMoveAngle()) - 270) < keyEps);
 input.moveNudge = 0;
 Settings_default._preciseAngles = true;
 
 for (const bad of ["nonsense", 2, null, NaN]) {
   Settings_default._moveAngleSteps = bad;
-  check(`a stored ${typeof bad === "string" ? `"${bad}"` : String(bad)} falls back to 624`, AngleGrid.moveSteps === 624);
+  check(`a stored ${typeof bad === "string" ? `"${bad}"` : String(bad)} falls back to the default`, AngleGrid.moveSteps === (wiresMovement ? 720 : 624));
 }
-Settings_default._moveAngleSteps = 624;
+Settings_default._moveAngleSteps = AngleGrid.moveSteps;
 
 /* ------------------------------------------------------------------ *
  * The placement scan cache

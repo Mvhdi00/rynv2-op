@@ -96,7 +96,7 @@ function patchPage(constName, anchorHtml, insertHtml, where = "before") {
 edit(
   "angles: AngleGrid helper",
   `  const getAngleFromBitmask = (bitmask, rotate) => {`,
-  Angles.ANGLE_GRID + `  const getAngleFromBitmask = (bitmask, rotate) => {`
+  Angles.angleGrid({ moveSteps: 720 }) + `  const getAngleFromBitmask = (bitmask, rotate) => {`
 );
 
 edit(
@@ -104,7 +104,7 @@ edit(
   `  const defaultSettings = {
     _primary: "Digit1",`,
   `  const defaultSettings = {
-` + Angles.settings({ nudgeKeys: false }) + `
+` + Angles.settings({ nudgeKeys: false, moveSteps: 720 }) + `
     _primary: "Digit1",`
 );
 
@@ -124,7 +124,7 @@ edit(
       this.client._ModuleHandler.startMovement(angle);
       const {isOwner: isOwner, clients: clients} = this.client;
     }`,
-  Angles.movement("", { nudgeKeys: false })
+  Angles.movement("", { nudgeKeys: false, wire: "wireAngle" })
 );
 
 edit(
@@ -459,10 +459,10 @@ edit(
 edit(
   "spike: settings",
   `  const defaultSettings = {
-` + Angles.settings({ nudgeKeys: false }) + `
+` + Angles.settings({ nudgeKeys: false, moveSteps: 720 }) + `
     _primary: "Digit1",`,
   `  const defaultSettings = {
-` + Angles.settings({ nudgeKeys: false }) + `
+` + Angles.settings({ nudgeKeys: false, moveSteps: 720 }) + `
     _spikePlacer: true,
     _spikeRange: 150,
     _primary: "Digit1",`
@@ -498,9 +498,9 @@ patchPage(
                 <span class="option-title">Movement Angles</span>\r
                 <label class="slider">\r
                     <span class="slider-value"></span>\r
-                    <input id="_moveAngleSteps" type="range" step="8" min="8" max="624">\r
+                    <input id="_moveAngleSteps" type="range" step="8" min="8" max="720">\r
                 </label>\r
-                <span class="option-description">${Angles.COPY.move}</span>\r
+                <span class="option-description">Steps the circle is cut into for movement, before the client rounds the angle the way it already rounds every place angle. At 720 that lands on 628 distinct directions — the most the game can express — with all eight key directions still exact. Costs nothing at any setting.</span>\r
             </div>\r
 \r
             <div class="content-option">\r

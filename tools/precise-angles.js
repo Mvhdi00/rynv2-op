@@ -20,7 +20,8 @@
 /* One circle, N steps, shared by movement and placement. Both fall back to the
  * pre-patch resolutions when precise angles are off, so the toggle is a true
  * bypass rather than a different setting. */
-const ANGLE_GRID = `  const AngleGrid = {
+function angleGrid({ moveSteps = 624 } = {}) {
+  return `  const AngleGrid = {
     /* 624 rather than 628: it is the largest multiple of 8 at or under the 628
      * directions the game's own fixTo(angle, 2) can express, and a multiple of
      * 8 keeps the eight key directions exactly on the grid at every setting. */
@@ -29,7 +30,7 @@ const ANGLE_GRID = `  const AngleGrid = {
       return Number.isFinite(steps) && steps >= 4 ? steps : fallback;
     },
     get moveSteps() {
-      return Settings_default._preciseAngles ? this._steps(Settings_default._moveAngleSteps, 624) : 8;
+      return Settings_default._preciseAngles ? this._steps(Settings_default._moveAngleSteps, ${moveSteps}) : 8;
     },
     /* Each sweep was written with its own step count — 36 here, 72 there — so
      * switching precise angles off puts every one of them back to the exact
@@ -55,13 +56,14 @@ const ANGLE_GRID = `  const AngleGrid = {
     }
   };
 `;
+}
 
 /* `nudgeKeys` adds the J/L rotate keys and the mouse-movement hotkey. v4 keeps
  * them; v5 was asked for the menu options without any new keybinds, and there
  * the mouse is the only way onto the fine grid. */
-function settings({ nudgeKeys = true } = {}) {
+function settings({ nudgeKeys = true, moveSteps = 624 } = {}) {
   return `    _preciseAngles: true,
-    _moveAngleSteps: 624,
+    _moveAngleSteps: ${moveSteps},
     _buildAngleSteps: 624,
     _mouseMovement: false,` + (nudgeKeys ? `
     _mouseMovementKey: "",
@@ -77,7 +79,7 @@ function inputState({ nudgeKeys = true } = {}) {
 
 /* `botFanout` is the block a client runs after its own movement send to mirror
  * it onto spectated bots; only one of the two clients has one. */
-function movement(botFanout = "", { nudgeKeys = true } = {}) {
+function movement(botFanout = "", { nudgeKeys = true, wire = null } = {}) {
   const nudgeTerm = nudgeKeys ? " + this.moveNudge * AngleGrid.step(steps)" : "";
   const nudgeReset = nudgeKeys ? `
       if (this.move === 0) {
@@ -121,6 +123,11 @@ function movement(botFanout = "", { nudgeKeys = true } = {}) {
       return true;
     }` : "";
 
+  /* A client that rounds its attack/place angle for the wire should round the
+   * movement angle the same way: it is the resolution the game itself works in,
+   * and it keeps the two paths emitting the same shape of value. */
+  const open = wire ? wire + "(" : "";
+  const close = wire ? ")" : "";
   return `    /* The direction the keys are asking for. Vanilla reads the key vector as
      * an absolute screen direction, which is 8 angles and nothing between. With
      * mouse movement on it is read relative to the cursor instead — W is
@@ -133,7 +140,7 @@ function movement(botFanout = "", { nudgeKeys = true } = {}) {
       }
       const steps = AngleGrid.moveSteps;
       const relative = Settings_default._mouseMovement ? this.mouse.angle + base + Math.PI / 2 : base;
-      return AngleGrid.snap(relative${nudgeTerm}, steps);
+      return ${open}AngleGrid.snap(relative${nudgeTerm}, steps)${close};
     }
     handleMovement() {${nudgeReset}
       const {isOwner: isOwner, clients: clients, _ModuleHandler: ModuleHandler} = this.client;
@@ -284,7 +291,7 @@ const COPY = {
 };
 
 module.exports = {
-  ANGLE_GRID,
+  angleGrid,
   settings,
   inputState,
   movement,

@@ -59,7 +59,7 @@ float. What limited the client was its own input and its own search grid:
 
 | | Before | Now |
 |---|---|---|
-| Movement directions | 8 — the key vector, and nothing between | **624**, slider 8–624 |
+| Movement directions | 8 — the key vector, and nothing between | **624** in ReUp Mix, **628** in v5 (see below) |
 | Placement scan | 72 steps (5°) | **624**, slider 24–624 |
 
 624 rather than some rounder number: the game's own client rounds every angle
@@ -228,6 +228,35 @@ only two writers, so anything else changing the held item is seen immediately.
 
 The second limit was `AURA_MAX_PER_TICK`, which stopped PrePlacer and Replacer
 after two placements each per tick. With the packet cost cut it goes to four.
+
+#### Movement on the game's own lattice (v5)
+
+v5 rounds every attack and place angle for the wire — `wireAngle` is
+`fixTo(atan2(sin, cos), 2)`, so 0.01 rad, which is **629 distinct directions**
+and the finest the game can express. `move()` was the one path that did not:
+it sent the raw float.
+
+Movement now goes through the same rounding, on a 720-step grid. That lands on
+**628 distinct movement directions**, every one a 2-decimal radian, and every
+one already in the set the place path emits. 720 rather than 628 as the step
+count because 720 is divisible by 8: the eight key directions stay on the grid,
+and 628 steps would have thrown the diagonals 0.573° off for no gain.
+
+Measured on the shipped `getMoveAngle`:
+
+| | |
+|---|---|
+| Distinct movement directions | **628** |
+| All 2-decimal radians | yes |
+| Subset of the place path's directions | yes |
+| Key directions vs. what vanilla sends | **byte-identical, all eight** |
+
+That last row is the point: `W` sends `-1.57`, `W+D` sends `-0.79` — the same
+values the official client produces for the same keypress. The grid adds no
+error of its own, and the raw floats RYN used to send for movement, which no
+vanilla client ever emits, are gone.
+
+ReUp Mix keeps the 624 grid and raw sends: v4 has no `wireAngle` to match.
 
 **Left alone in v5:** its first-run `fetch` to `webhook.site` is still there.
 The ReUp Mix build strips v4's, but that is a separate decision about someone
