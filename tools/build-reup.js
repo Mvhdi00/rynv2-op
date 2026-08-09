@@ -334,7 +334,7 @@ edit(
  * Checkboxes and text inputs bind themselves by id off the settings object.
  * ------------------------------------------------------------------ */
 
-function patchPage(constName, anchorHtml, insertHtml) {
+function patchPage(constName, anchorHtml, insertHtml, where = "before") {
   const declaration = `const ${constName} = `;
   const start = code.indexOf(declaration);
   if (start === -1) throw new Error(`page constant not found: ${constName}`);
@@ -345,8 +345,14 @@ function patchPage(constName, anchorHtml, insertHtml) {
   // eslint-disable-next-line no-eval
   const html = eval(literal);
   if (!html.includes(anchorHtml)) throw new Error(`page anchor not found in ${constName}`);
+  if (html.indexOf(anchorHtml) !== html.lastIndexOf(anchorHtml)) {
+    throw new Error(`page anchor is ambiguous in ${constName}`);
+  }
 
-  const patched = html.replace(anchorHtml, insertHtml + anchorHtml);
+  const patched = html.replace(
+    anchorHtml,
+    where === "after" ? anchorHtml + insertHtml : insertHtml + anchorHtml
+  );
   code =
     code.slice(0, start + declaration.length) +
     JSON.stringify(patched) +
@@ -445,7 +451,532 @@ ${themeButtons}\r
 }
 
 /* ------------------------------------------------------------------ *
- * 10. Driver manifest + runtime drift check
+ * 10. Precise angles
+ *
+ * Nothing in the protocol quantises a direction. The move packet ("9") carries
+ * a raw float in radians and the server feeds it straight into
+ * `cos(moveDir) / sin(moveDir)` (src/game_index.js, Player.update), and the
+ * placement angle rides along the same kind of float. What limits a client is
+ * its own input and its own search grid:
+ *
+ *   - the key vector gives 8 absolute directions and nothing between them
+ *     (game_index.js `bt`, and the client's own getAngleFromBitmask), and
+ *     vanilla even drops changes smaller than 0.3 rad on the way out;
+ *   - the placer walked the circle in 72 steps, i.e. 5 degrees.
+ *
+ * Both move onto one shared N-step grid, 144 by default: 2.5 degrees for
+ * movement and for building. The grid is also what makes the finer resolution
+ * affordable — a direction is only sent when it lands on a new step, so a full
+ * mouse sweep costs at most N packets rather than one per mousemove, against
+ * the 70 packets/second the client budgets itself (ModuleHandler.packetLimit).
+ *
+ * Reaching the extra directions needs an input that can express them, so two
+ * are added: mouse movement (the key vector is read relative to the cursor, so
+ * W means "toward the cursor") and a pair of nudge keys that rotate by whole
+ * steps. Module-computed angles — pathfinder, autopush, safewalk — are left as
+ * the raw floats they already are; they were never the thing being rounded.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "angles: AngleGrid helper",
+  `  const getAngleFromBitmask = (bitmask, rotate) => {`,
+  `  /* One circle, N steps, shared by movement and placement. Both fall back to
+   * the pre-mix resolutions when precise angles are off, so the toggle is a
+   * true bypass rather than a different setting. */
+  const AngleGrid = {
+    _steps(value, fallback) {
+      const steps = Math.round(Number(value));
+      return Number.isFinite(steps) && steps >= 4 ? steps : fallback;
+    },
+    get moveSteps() {
+      return Settings_default._preciseAngles ? this._steps(Settings_default._moveAngleSteps, 144) : 8;
+    },
+    get buildSteps() {
+      return Settings_default._preciseAngles ? this._steps(Settings_default._buildAngleSteps, 144) : 72;
+    },
+    step(steps) {
+      return Math.PI * 2 / steps;
+    },
+    /* Step index of an angle, wrapped into [0, steps) so negative radians and
+     * angles past a full turn land on the same step as their equivalents. */
+    index(angle, steps) {
+      const step = this.step(steps);
+      return (Math.round(angle / step) % steps + steps) % steps;
+    },
+    fromIndex(index, steps) {
+      return index * this.step(steps);
+    },
+    snap(angle, steps) {
+      if (angle === null || angle === undefined || !Number.isFinite(angle)) return angle;
+      return this.fromIndex(this.index(angle, steps), steps);
+    }
+  };
+  const getAngleFromBitmask = (bitmask, rotate) => {`
+);
+
+edit(
+  "angles: settings",
+  `    _autoplacerRadius: 350,
+    _placeAttempts: 4,`,
+  `    _autoplacerRadius: 350,
+    _placeAttempts: 4,
+    _preciseAngles: true,
+    _moveAngleSteps: 144,
+    _buildAngleSteps: 144,
+    _mouseMovement: false,
+    _mouseMovementKey: "",
+    _angleLeft: "KeyJ",
+    _angleRight: "KeyL",`
+);
+
+/* Precise angles are input resolution, not automation: they decide how finely
+ * a direction can be expressed, not whether the client acts on its own. They
+ * sit with the other exclusions so Legit Mode does not quietly drop the player
+ * back to 8-direction movement. */
+edit(
+  "angles: keep out of Legit Mode",
+  `"_usernameCycler" ]);`,
+  `"_usernameCycler", "_preciseAngles", "_mouseMovement" ]);`
+);
+
+/* ---- Building ---------------------------------------------------- *
+ * The placement scan and its cache were written around a literal 72. Both
+ * become a parameter, and the cache rebuilds when the resolution changes so a
+ * mid-game slider move cannot leave a half-filled array behind.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "angles: preplace cache takes a step count",
+  `  function _getCachedPrePlaceAngles(client, tickCount, cacheKey, computeAngle, forceFull = false, rotationGroups = PRE_PLACE_ROTATION, priorityIndex = -1) {
+    let clientCache = _prePlaceAngleCache.get(client);
+    if (!clientCache) {
+      clientCache = new Map;
+      _prePlaceAngleCache.set(client, clientCache);
+    }
+    let entry = clientCache.get(cacheKey);
+    if (!entry) {
+      entry = {
+        angles: new Array(72).fill(null),
+        lastTick: -1,
+        wasFull: false
+      };
+      clientCache.set(cacheKey, entry);
+    }
+    const isNewTick = entry.lastTick !== tickCount;
+    if (isNewTick) {
+      entry.lastTick = tickCount;
+      entry.wasFull = false;
+    }
+    if (forceFull && !entry.wasFull) {
+      for (let i = 0; i < 72; i++) {
+        entry.angles[i] = computeAngle(i);
+      }
+      entry.wasFull = true;
+    } else if (isNewTick) {
+      const phase = tickCount % rotationGroups;
+      for (let i = phase; i < 72; i += rotationGroups) {
+        entry.angles[i] = computeAngle(i);
+      }
+      for (let i = 0; i < 72; i++) {
+        if (entry.angles[i] === null) entry.angles[i] = computeAngle(i);
+      }
+    }
+    if (priorityIndex >= 0 && priorityIndex < 72) {`,
+  `  function _getCachedPrePlaceAngles(client, tickCount, cacheKey, computeAngle, forceFull = false, rotationGroups = PRE_PLACE_ROTATION, priorityIndex = -1, steps = 72) {
+    let clientCache = _prePlaceAngleCache.get(client);
+    if (!clientCache) {
+      clientCache = new Map;
+      _prePlaceAngleCache.set(client, clientCache);
+    }
+    let entry = clientCache.get(cacheKey);
+    if (!entry || entry.angles.length !== steps) {
+      entry = {
+        angles: new Array(steps).fill(null),
+        lastTick: -1,
+        wasFull: false
+      };
+      clientCache.set(cacheKey, entry);
+    }
+    const isNewTick = entry.lastTick !== tickCount;
+    if (isNewTick) {
+      entry.lastTick = tickCount;
+      entry.wasFull = false;
+    }
+    if (forceFull && !entry.wasFull) {
+      for (let i = 0; i < steps; i++) {
+        entry.angles[i] = computeAngle(i);
+      }
+      entry.wasFull = true;
+    } else if (isNewTick) {
+      const phase = tickCount % rotationGroups;
+      for (let i = phase; i < steps; i += rotationGroups) {
+        entry.angles[i] = computeAngle(i);
+      }
+      for (let i = 0; i < steps; i++) {
+        if (entry.angles[i] === null) entry.angles[i] = computeAngle(i);
+      }
+    }
+    if (priorityIndex >= 0 && priorityIndex < steps) {`
+);
+
+/* AutoPlacer: the quadrant it refuses to build in is a quarter of the circle,
+ * so its divisor follows the step count instead of staying at 72/4. */
+edit(
+  "angles: autoplacer preplace scan",
+  `      const retrapQuadrant = this.client._retrapQuadrant ?? -1;
+      const computeAngle = i => {
+        if (retrapQuadrant >= 0 && Math.floor(i / 18) === retrapQuadrant) {
+          return {
+            angle: i * (Math.PI * 2 / 72),
+            placeable: false,
+            perfect: false
+          };
+        }
+        const angle = i * (Math.PI * 2 / 72);`,
+  `      const retrapQuadrant = this.client._retrapQuadrant ?? -1;
+      const steps = AngleGrid.buildSteps;
+      const quadrant = steps / 4;
+      const computeAngle = i => {
+        if (retrapQuadrant >= 0 && Math.floor(i / quadrant) === retrapQuadrant) {
+          return {
+            angle: AngleGrid.fromIndex(i, steps),
+            placeable: false,
+            perfect: false
+          };
+        }
+        const angle = AngleGrid.fromIndex(i, steps);`
+);
+
+edit(
+  "angles: autoplacer preplace scan call",
+  `      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1);`,
+  `      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, -1, steps);`
+);
+
+/* AutoRetrap: same scan, plus the enemy-facing step it always refreshes. */
+edit(
+  "angles: autoretrap preplace scan",
+  `      let priorityIndex = -1;
+      let myQuadrant = -1;
+      if (enemyPos) {
+        const dirAngle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
+        const normalized = (dirAngle % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+        priorityIndex = Math.round(normalized / (Math.PI * 2 / 72)) % 72;
+        myQuadrant = Math.floor(priorityIndex / 18);
+      }
+      this.client._retrapQuadrant = myQuadrant;
+      const computeAngle = i => {
+        if (myQuadrant >= 0 && Math.floor(i / 18) !== myQuadrant) {
+          return {
+            angle: i * (Math.PI * 2 / 72),
+            placeable: false,
+            perfect: false
+          };
+        }
+        const angle = i * (Math.PI * 2 / 72);`,
+  `      let priorityIndex = -1;
+      let myQuadrant = -1;
+      const steps = AngleGrid.buildSteps;
+      const quadrant = steps / 4;
+      if (enemyPos) {
+        const dirAngle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
+        priorityIndex = AngleGrid.index(dirAngle, steps);
+        myQuadrant = Math.floor(priorityIndex / quadrant);
+      }
+      this.client._retrapQuadrant = myQuadrant;
+      const computeAngle = i => {
+        if (myQuadrant >= 0 && Math.floor(i / quadrant) !== myQuadrant) {
+          return {
+            angle: AngleGrid.fromIndex(i, steps),
+            placeable: false,
+            perfect: false
+          };
+        }
+        const angle = AngleGrid.fromIndex(i, steps);`
+);
+
+edit(
+  "angles: autoretrap preplace scan call",
+  `      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, priorityIndex);`,
+  `      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, priorityIndex, steps);`
+);
+
+/* The remaining fixed-step placement sweeps: where a trap could bounce an
+ * enemy, and whether an enemy still has a free spike slot to punish. Both were
+ * 36 steps, i.e. half the placer's own resolution; both now read the same
+ * building grid, so one setting describes all of it. */
+edit(
+  "angles: trap bounce sweep",
+  `      const ANGLE_STEPS = 36;`,
+  `      const ANGLE_STEPS = AngleGrid.buildSteps;`
+);
+
+edit(
+  "angles: enemy spike-slot sweep",
+  `      for (let i = 0; i < 36; i++) {
+        const angle = i * (Math.PI * 2 / 36);
+        const configX = enemyPos.x + placeLength * Math.cos(angle);`,
+  `      const spikeWaitSteps = AngleGrid.buildSteps;
+      for (let i = 0; i < spikeWaitSteps; i++) {
+        const angle = AngleGrid.fromIndex(i, spikeWaitSteps);
+        const configX = enemyPos.x + placeLength * Math.cos(angle);`
+);
+
+/* Auto-break picks the swing that covers the most buildings; it searched the
+ * same 72 steps the placer used, so it follows the same setting. */
+edit(
+  "angles: autobreak swing search",
+  `      for (let i = 0; i < 72; i++) {
+        const testA = i / 72 * Math.PI * 2;`,
+  `      const breakSteps = AngleGrid.buildSteps;
+      for (let i = 0; i < breakSteps; i++) {
+        const testA = AngleGrid.fromIndex(i, breakSteps);`
+);
+
+/* ---- Movement ---------------------------------------------------- *
+ * LunaSafeWalk chose a way around a spike out of 24 candidates (15 degrees).
+ * It is the one module that quantises a direction of its own, so it reads the
+ * movement grid; its result is still lerped, so nothing lands on a step by
+ * accident.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "angles: safewalk detour search",
+  `        const STEPS = 24;`,
+  `        const STEPS = AngleGrid.moveSteps;`
+);
+
+edit(
+  "angles: input handler state",
+  `    lockPosition=false;
+    mouse={`,
+  `    lockPosition=false;
+    moveNudge=0;
+    _lastSteerTime=0;
+    mouse={`
+);
+
+edit(
+  "angles: reset nudge with the rest of the input state",
+  `    reset() {
+      this.hotkeys.clear();
+      this.move = 0;
+      this.instaReset();
+    }`,
+  `    reset() {
+      this.hotkeys.clear();
+      this.move = 0;
+      this.moveNudge = 0;
+      this.instaReset();
+    }`
+);
+
+edit(
+  "angles: precise movement",
+  `    handleMovement() {
+      const angle = getAngleFromBitmask(this.move, false);
+      this.client._ModuleHandler.startMovement(angle);
+      const {isOwner: isOwner, clients: clients} = this.client;
+      if (isOwner && Spectate_default.active) {
+        for (const client2 of clients) {
+          client2._ModuleHandler.startMovement(angle);
+        }
+      }
+    }`,
+  `    /* The direction the keys are asking for. Vanilla reads the key vector as
+     * an absolute screen direction, which is 8 angles and nothing between. With
+     * mouse movement on it is read relative to the cursor instead — W is
+     * "toward the cursor", A and D strafe, S backs off — so aiming reaches
+     * every step on the grid. The nudge offset applies in either mode. */
+    getMoveAngle() {
+      const base = getAngleFromBitmask(this.move, false);
+      if (base === null || !Settings_default._preciseAngles) {
+        return base;
+      }
+      const steps = AngleGrid.moveSteps;
+      const relative = Settings_default._mouseMovement ? this.mouse.angle + base + Math.PI / 2 : base;
+      return AngleGrid.snap(relative + this.moveNudge * AngleGrid.step(steps), steps);
+    }
+    handleMovement(fromMouse = false) {
+      if (this.move === 0) {
+        this.moveNudge = 0;
+      }
+      const {isOwner: isOwner, clients: clients, _ModuleHandler: ModuleHandler} = this.client;
+      const angle = this.getMoveAngle();
+      /* Steering with the mouse is the one path that fires on an input the
+       * player never stops producing, so it is the one that has to stay inside
+       * the packet budget: nothing goes out for a direction the server already
+       * has, a module holding moveTo keeps its steering, and the rest is held
+       * to ~16/s with a reserve left for the combat modules. */
+      if (fromMouse) {
+        if (angle === null || ModuleHandler.moveTo !== "disable") return;
+        if (ModuleHandler.move_dir === angle) return;
+        const now = performance.now();
+        if (now - this._lastSteerTime < 60) return;
+        if (ModuleHandler.packetCount + 10 > ModuleHandler.packetLimit) return;
+        this._lastSteerTime = now;
+      }
+      ModuleHandler.startMovement(angle);
+      if (isOwner && Spectate_default.active) {
+        for (const client2 of clients) {
+          client2._ModuleHandler.startMovement(angle);
+        }
+      }
+    }
+    /* One grid step per press, auto-repeat included, so holding the key sweeps
+     * the circle. The offset is cleared as soon as the player stops moving, in
+     * handleMovement, rather than persisting into the next run. */
+    handleAngleKeys(event) {
+      if (!Settings_default._preciseAngles || isActiveInput() || UI_default.isMenuOpened) return false;
+      if (!this.client.myPlayer.inGame) return false;
+      const code = event.code;
+      if (code !== "" && code === Settings_default._mouseMovementKey) {
+        if (event.repeat) return true;
+        Settings_default._mouseMovement = !Settings_default._mouseMovement;
+        SaveSettings();
+        syncCheckboxUI("_mouseMovement");
+        if (this.move !== 0) this.handleMovement();
+        return true;
+      }
+      let delta = 0;
+      if (code !== "" && code === Settings_default._angleLeft) {
+        delta = -1;
+      } else if (code !== "" && code === Settings_default._angleRight) {
+        delta = 1;
+      } else {
+        return false;
+      }
+      const steps = AngleGrid.moveSteps;
+      this.moveNudge = (this.moveNudge + delta) % steps;
+      if (this.move !== 0) this.handleMovement();
+      return true;
+    }`
+);
+
+edit(
+  "angles: nudge keys ahead of the repeat guard",
+  `      if (event.ctrlKey && [ "KeyD", "KeyS", "KeyW" ].includes(event.code)) {
+        event.preventDefault();
+      }
+      if (event.repeat) {
+        return;
+      }`,
+  `      if (event.ctrlKey && [ "KeyD", "KeyS", "KeyW" ].includes(event.code)) {
+        event.preventDefault();
+      }
+      /* Ahead of the repeat guard: a held nudge key is meant to keep turning. */
+      if (this.handleAngleKeys(event)) {
+        return;
+      }
+      if (event.repeat) {
+        return;
+      }`
+);
+
+edit(
+  "angles: re-steer as the cursor moves",
+  `      this.mouse.angle = angle;
+      if (this.rotation) {`,
+  `      this.mouse.angle = angle;
+      if (this.move !== 0 && Settings_default._preciseAngles && Settings_default._mouseMovement) {
+        this.handleMovement(true);
+      }
+      if (this.rotation) {`
+);
+
+/* ---- Menu -------------------------------------------------------- */
+
+patchPage(
+  "Misc_default",
+  "\r\n\r\n    <!-- Menu -->",
+  `\r
+    <!-- Precise Angles -->\r
+    <div class="section">\r
+        <h2 class="section-title">Precise Angles</h2>\r
+\r
+        <div class="section-content">\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Precise Angles</span>\r
+                <label class="switch-checkbox">\r
+                    <input id="_preciseAngles" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Off is the old behaviour: 8 movement directions and a 72 step placement scan.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Movement Angles</span>\r
+                <label class="slider">\r
+                    <span class="slider-value"></span>\r
+                    <input id="_moveAngleSteps" type="range" step="8" min="8" max="360">\r
+                </label>\r
+                <span class="option-description">Directions the circle is cut into for movement. 144 is one step every 2.5 degrees; 8 is what the keys alone can say.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Building Angles</span>\r
+                <label class="slider">\r
+                    <span class="slider-value"></span>\r
+                    <input id="_buildAngleSteps" type="range" step="24" min="24" max="288">\r
+                </label>\r
+                <span class="option-description">Angles the placer, retrap, trap bounce and auto break search around you. Was 72.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Mouse Movement</span>\r
+                <label class="switch-checkbox">\r
+                    <input id="_mouseMovement" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Reads the movement keys relative to the cursor: W goes toward it, A and D strafe, S backs off. Aiming then reaches every angle on the grid.</span>\r
+            </div>\r
+\r
+        </div>\r
+    </div>\r
+`
+);
+
+patchPage(
+  "Keybinds_default",
+  `                <div class="content-option">\r
+                    <span class="option-title">Name Song &#127926;</span>\r
+                    <button id="_nameSong" class="hotkeyInput"></button>\r
+                </div>\r
+\r
+            </div>\r
+        </div>\r
+    </div>`,
+  `\r
+\r
+    <div class="section">\r
+        <div class="section-title">Precise Angles</div>\r
+        <div class="section-content">\r
+            <div class="content-split">\r
+\r
+                <div class="content-option">\r
+                    <span class="option-title">Rotate Move Left</span>\r
+                    <button id="_angleLeft" class="hotkeyInput"></button>\r
+                </div>\r
+\r
+                <div class="content-option">\r
+                    <span class="option-title">Rotate Move Right</span>\r
+                    <button id="_angleRight" class="hotkeyInput"></button>\r
+                </div>\r
+\r
+                <div class="content-option">\r
+                    <span class="option-title">Toggle Mouse Movement</span>\r
+                    <button id="_mouseMovementKey" class="hotkeyInput"></button>\r
+                </div>\r
+\r
+            </div>\r
+        </div>\r
+    </div>`,
+  "after"
+);
+
+/* ------------------------------------------------------------------ *
+ * 11. Driver manifest + runtime drift check
  *
  * The tables the client carries were checked against the shipped bundle at
  * build time (tools/verify-drivers.js). This records what they were checked

@@ -49,6 +49,65 @@ Luna features that were **not** ported, and why:
 - *"ai hat predict" (`autsh1`) and "ai triangulation" (`triangle2`)* — these
   are menu entries in Luna with no implementation behind them. Nothing to port.
 
+### Precise angles
+
+Nothing in the protocol quantises a direction. The move packet (`"9"`) carries
+raw radians and the server feeds them straight into `cos(moveDir) / sin(moveDir)`
+(`src/game_index.js`, `Player.update`); the placement angle is the same kind of
+float. What limits a client is its own input and its own search grid:
+
+| | Before | Now |
+|---|---|---|
+| Movement directions | 8 — the key vector, and nothing between | **144** (2.5°), slider 8–360 |
+| Placement scan | 72 steps (5°) | **144** (2.5°), slider 24–288 |
+
+Both sit on one grid, in `AngleGrid`. **Misc → Precise Angles** holds the master
+switch and the two sliders; turning it off restores 8 and 72 exactly.
+
+Reaching the extra directions needs an input that can express them, so two are
+added, both under **Keybinds → Precise Angles**:
+
+- **Mouse Movement** — the movement keys are read relative to the cursor: `W`
+  goes toward it, `A`/`D` strafe, `S` backs off. Aiming then reaches every step
+  on the grid, and diagonals stay diagonal relative to where you are looking.
+- **Rotate Move Left / Right** (`J` / `L`) — one grid step per press, auto-repeat
+  included, so holding either key sweeps the circle. The offset clears as soon
+  as you stop moving.
+
+Snapping to a grid instead of sending raw floats is what makes the finer
+resolution affordable. A direction only goes out when it lands on a new step, so
+a full 360° mouse sweep costs at most 144 move packets instead of one per
+`mousemove` — measured at 144 sends across 5000 mouse events — against the 70
+packets/second the client budgets itself (`ModuleHandler.packetLimit`). Mouse
+steering is additionally held to ~16/s and skipped entirely when the budget is
+close to spent, so it can't crowd out the combat modules.
+
+Module-computed angles — pathfinder, autopush, safewalk — are left as the raw
+floats they already were. They were never the thing being rounded. The one
+exception is `LunaSafeWalk`, which picked its way around a spike from 24
+candidates; it now uses the movement grid.
+
+On the building side the same grid drives the preplace scan, the retrap scan,
+the trap-bounce sweep and auto-break's swing search, so one setting describes
+all of it.
+
+**What the finer scan costs.** The scan is O(steps) spatial-grid queries per
+tick, so 144 doubles what 72 did. Measured against the client's own
+`SpatialHashGrid2D`, for a full tick of eight cached scans:
+
+| Objects near you | 72 steps | 144 steps | 288 steps |
+|---|---|---|---|
+| 60 (a normal fight) | 2.7 ms | 5.2 ms | 10.3 ms |
+| 150 (busy area) | 4.7 ms | 9.7 ms | 18.4 ms |
+| 500 (packed bases) | 17.0 ms | 31.2 ms | 61.1 ms |
+
+Against a 111 ms tick that leaves 144 comfortable in normal play and heavy only
+in the crowd case — which was already heavy at 72. The slider goes down to 24 if
+a machine struggles.
+
+Precise angles and mouse movement are excluded from Legit Mode: they set how
+finely a direction can be expressed, not whether the client acts on its own.
+
 ### The placer
 
 Luna's placer was already ported into RYN before this merge — `AutoPlacer`
@@ -125,6 +184,7 @@ src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
+tools/check-angles.js     precise-angle grid + placement scan, out of the build
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 
@@ -144,6 +204,7 @@ a newer RYN will surface as a build error rather than a half-merged script.
 ```sh
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
+node tools/check-angles.js ReUp_Mix.user.js    # add --cost for the scan timings
 node --check ReUp_Mix.user.js
 ```
 
@@ -156,6 +217,11 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
+- **Angles** — 42/42 checks pass: the grid wraps and snaps within half a step,
+  the eight key directions stay exact at every slider value, mouse steering
+  reaches all 144 directions for 144 packets, the master switch restores 8/72,
+  and the placement cache resizes cleanly when the resolution changes
+  mid-tick.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
@@ -174,6 +240,14 @@ understood.
 
 - `_spikeRotation`, `_millRotation` and `_usernameCycler` are excluded from
   Legit Mode — they are cosmetic and naming options, not combat automation.
+  `_preciseAngles` and `_mouseMovement` are excluded for the same reason: they
+  are input resolution, not automation.
+- `_preciseAngles` defaults to **on** at 144/144. It changes how finely a
+  direction can be expressed, not what the client does with it — the movement
+  keys, the placer and every module behave exactly as before, on a finer grid.
+  `_mouseMovement` defaults to **off**, since it re-reads WASD.
+- The nudge keys default to `J` and `L`, which nothing in the game or the
+  client already binds.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
