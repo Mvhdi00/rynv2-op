@@ -269,6 +269,38 @@ console.log("luna placer smoke test\n");
   check("resends reach the wire", r.sent.length > before, before + " -> " + r.sent.length);
 }
 
+// 6c — a spike tick claims the NEXT tick, after the preplace was queued. The
+// delayed sends land inside that tick, so they have to yield there too — a
+// check made when they were scheduled says nothing about the tick they land
+// in. This is the case the postTick guard alone does not cover.
+{
+  const doomed = ours(1, 7080, 3000, 16);
+  doomed.health = 10;
+  const r = run({ objects: [ doomed ], enemyPrimaryJustReady: true });
+  check("preplace was queued on a clear tick", r.timers.length === 3, r.timers.length + " timers");
+  const before = r.sent.length;
+  // The next tick belongs to a spike tick.
+  r.client._ModuleHandler.activeModule = "spikeTickNear";
+  for (const t of r.timers) t.fn();
+  check("delayed sends yield to a spike tick", r.sent.length === before, before + " -> " + r.sent.length);
+  // It lets go again once the spike tick is done with the tick.
+  r.client._ModuleHandler.activeModule = null;
+  for (const t of r.timers) t.fn();
+  check("delayed sends resume after it", r.sent.length > before, before + " -> " + r.sent.length);
+}
+
+// 6d — autoplacer switched off between the queue and the resend.
+{
+  const doomed = ours(1, 7080, 3000, 16);
+  doomed.health = 10;
+  const r = run({ objects: [ doomed ], enemyPrimaryJustReady: true });
+  const before = r.sent.length;
+  Settings_default._autoplacer = false;
+  for (const t of r.timers) t.fn();
+  Settings_default._autoplacer = true;
+  check("delayed sends stop when autoplacer goes off", r.sent.length === before, before + " -> " + r.sent.length);
+}
+
 // 6b — Replace off: the third send is not armed by the toggle alone.
 {
   Settings_default._replace = false;

@@ -172,10 +172,40 @@ Three deliberate differences:
   check. RYN already resolves this correctly, so the port asks it. (Same bug,
   same fix as [the placer note above](#the-placer).)
 - **Two guards that are RYN's, not Luna's.** The placer sits out a tick owned
-  by a spike-tick or sync module, and an angle it built at that is still free
-  the next tick is treated as a build the server refused and benched for 18
-  ticks. Luna has no module ordering to collide with and no shared packet
-  budget to protect.
+  by a spike-tick or sync module ([below](#not-colliding-with-spike-tick)), and
+  an angle it built at that is still free the next tick is treated as a build
+  the server refused and benched for 18 ticks. Luna has no module ordering to
+  collide with and no shared packet budget to protect.
+
+### Not colliding with spike tick
+
+`ModuleHandler.place()` opens with a `selectItem`. Swapping the held item out
+from under a spike tick mid-sequence loses the swing, so this matters more than
+the packets do.
+
+Reading `ModuleHandler.activeModule` is a sound test for it. Every spike-tick
+and sync module — `spikeTickBreak`, `spikeTickNear`, `spikeTickTrap`,
+`spikeSync`, `spikeSyncHammer`, `spikeTrap`, `teammateSpikeTrap` — runs before
+the placer in the module order and returns early once `moduleActive` is set. A
+spike tick that runs at all is therefore the first module to claim the tick,
+which is precisely when the module loop copies its name into `activeModule`.
+
+The placer checks that name in two places, not one:
+
+- at the top of `postTick`, before it decides anything;
+- **inside all three delayed sends.** Luna's preplace and replace fire on
+  `setTimeout(111 - ping)` — 70-110ms out, which lands in the *next* tick. A
+  check made when they were scheduled says nothing about the tick they arrive
+  in, so each callback re-tests before it touches the wire, and drops the
+  resend if a spike tick has taken that tick. It resumes on the tick after.
+
+`test-luna-placer.js` covers both: a spike tick owning the placer's own tick,
+and a spike tick claiming the tick a queued resend lands in.
+
+Two things the placer does *not* change, because v5 already worked this way:
+it marks `moduleActive` and `placedOnce` when it builds, exactly as the Auraro
+placer's `send()` did. So a tick the autoplacer builds on still suppresses
+hold-to-place, same as before.
 
 Everything else in v5 is untouched — the diff is the placer block and the two
 lines that registered the modules it replaced.
@@ -232,10 +262,10 @@ node --check RYN_Client_v5_LunaPlacer.user.js
 `test-luna-placer.js` runs `src/luna-placer.js` outside the game against
 stubbed managers and drives `postTick` through each decision path — traps on an
 open enemy, spikes on a trapped one, the radius and master-toggle gates, the
-spike-tick yield, the held-back preplace and its two resends, the 72-angle
-probe and its perfect-angle edges, the item cap, and the packet budget. All 21
-checks pass, and `verify-drivers.js` reports the v5 build's data tables
-unchanged against the shipped bundle.
+spike-tick yield in both places it is checked, the held-back preplace and its
+two resends, the 72-angle probe and its perfect-angle edges, the item cap, and
+the packet budget. All 25 checks pass, and `verify-drivers.js` reports the v5
+build's data tables unchanged against the shipped bundle.
 
 Current state of the ReUp Mix build:
 

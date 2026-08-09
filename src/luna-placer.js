@@ -45,11 +45,17 @@
   // How long an angle stays banned after a build that the server dropped.
   const LUNA_BAN_TICKS = 18;
 
-  // Modules that own a spike tick or a sync. They all run before the placer,
-  // and whichever claims the tick puts its name in ModuleHandler.activeModule.
-  // If one of them owns the tick the placer stays out of its way rather than
-  // spending the packets it needs. This guard is RYN's, not Luna's — Luna has
-  // no module ordering to collide with.
+  // Modules that own a spike tick or a sync. Every one of them runs before the
+  // placer in the module order and refuses to start once ModuleHandler.
+  // moduleActive is set, so a spike tick that runs at all is the first module
+  // to claim the tick — which is exactly when the loop copies its name into
+  // ModuleHandler.activeModule. Reading that name is therefore a reliable
+  // answer to "is a spike tick running right now".
+  //
+  // The placer stays out of a tick one of them owns. That matters more than
+  // packets: ModuleHandler.place() sends a selectItem, and swapping the held
+  // item out from under a tick mid-sequence loses the swing. This guard is
+  // RYN's, not Luna's — Luna has no module ordering to collide with.
   const LUNA_SPIKE_TICK_MODULES = new Set([ "spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap" ]);
   function lunaSpikeTickBusy(ModuleHandler) {
     return LUNA_SPIKE_TICK_MODULES.has(ModuleHandler.activeModule);
@@ -334,6 +340,19 @@
       return scored.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle ?? null;
     }
 
+    // Whether the placer has to keep its hands off right now. Checked at the
+    // top of postTick, and again inside each of the three delayed sends —
+    // those fire 70-110ms later, which is inside the *next* tick, so a check
+    // made when they were scheduled says nothing about the tick they land in.
+    // Without the re-check a preplace resend would land in the middle of a
+    // spike tick and swap the held item out from under it.
+    _shouldYield() {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      if (!Settings_default._autoplacer) return true;
+      if (!myPlayer || !myPlayer.inGame) return true;
+      return lunaSpikeTickBusy(ModuleHandler);
+    }
+
     // Luna's "closest angle that catches the enemy on their way": the build
     // box has to cross the segment from where they are to where they will be.
     _closestToEnemy(angles, enemyPos, enemyFut, pad) {
@@ -342,9 +361,7 @@
 
     postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
-      if (!Settings_default._autoplacer) return;
-      if (!myPlayer || !myPlayer.inGame) return;
-      if (lunaSpikeTickBusy(ModuleHandler)) return;
+      if (this._shouldYield()) return;
 
       this._tick = ModuleHandler.tickCount;
       for (const [angle, expiry] of this._bannedAngles) {
@@ -565,12 +582,18 @@
 
       // Luna keeps the aim pointed where it was attacking across all three
       // sends, so a build never drags the swing off target.
+      //
+      // All three re-check _shouldYield first. They land in the next tick, and
+      // if a spike tick claimed that one it owns the held item and the swing —
+      // a build sent into the middle of it costs the tick.
       setTimeout(() => {
+        if (this._shouldYield()) return;
         try {
           for (const _ of preObjects) PacketManager2.updateAngle(aimAngle());
         } catch (_) {}
       }, 1);
       setTimeout(() => {
+        if (this._shouldYield()) return;
         try {
           for (const obj of preObjects) {
             if (outOfBudget()) break;
@@ -581,6 +604,7 @@
       }, Math.max(1, 111 - pingTime));
       setTimeout(() => {
         if (!this._spamPrePlacer) return;
+        if (this._shouldYield()) return;
         try {
           for (const obj of preObjects) {
             if (outOfBudget()) break;
