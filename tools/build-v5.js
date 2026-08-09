@@ -33,6 +33,10 @@
  * and passes canPlaceItem a negative addRadius, so the shared helper takes both
  * as parameters. canPlaceItem queries at search radius 1, so the mask matches
  * that rather than the placer's 4.
+ *
+ * v5 also takes the feature without any new keybinds, so the nudge keys and the
+ * mouse-movement hotkey are switched off in the shared module. The mouse is then
+ * the way onto the fine grid: the Mouse Movement checkbox in Misc.
  */
 
 const fs = require("fs");
@@ -100,7 +104,7 @@ edit(
   `  const defaultSettings = {
     _primary: "Digit1",`,
   `  const defaultSettings = {
-` + Angles.SETTINGS + `
+` + Angles.settings({ nudgeKeys: false }) + `
     _primary: "Digit1",`
 );
 
@@ -120,7 +124,7 @@ edit(
       this.client._ModuleHandler.startMovement(angle);
       const {isOwner: isOwner, clients: clients} = this.client;
     }`,
-  Angles.movement()
+  Angles.movement("", { nudgeKeys: false })
 );
 
 edit(
@@ -128,12 +132,12 @@ edit(
   `    lockPosition=false;
     mouse={`,
   `    lockPosition=false;
-` + Angles.INPUT_STATE + `
+` + Angles.inputState({ nudgeKeys: false }) + `
     mouse={`
 );
 
 edit(
-  "angles: reset nudge with the rest of the input state",
+  "angles: clear the steer timer with the rest of the input state",
   `    reset() {
       this.hotkeys.clear();
       this.move = 0;
@@ -142,7 +146,6 @@ edit(
   `    reset() {
       this.hotkeys.clear();
       this.move = 0;
-      this.moveNudge = 0;
       if (this._steerTimer !== null) {
         clearTimeout(this._steerTimer);
         this._steerTimer = null;
@@ -151,11 +154,9 @@ edit(
     }`
 );
 
-edit(
-  "angles: nudge keys ahead of the repeat guard",
-  Angles.KEYDOWN_HOOK_FIND,
-  Angles.KEYDOWN_HOOK_REPLACE
-);
+/* No keydown hook here: it exists only to dispatch handleAngleKeys, and v5 was
+ * asked for the feature without new keybinds. Leaving the hook in would have
+ * called a method that is no longer generated — a TypeError on every keypress. */
 
 edit(
   "angles: re-steer as the cursor moves",
@@ -273,32 +274,8 @@ patchPage(
     </div>`
 );
 
-patchPage(
-  "Keybinds_default",
-  `        </div>
-    </div>
-</div>`,
-  `
-
-    <div class="section">
-        <div class="section-title">Precise Angles</div>
-        <div class="section-content key-grid">
-            <div class="content-option key-tile">
-                <span class="option-title">Rotate Move Left</span>
-                <button id="_angleLeft" class="hotkeyInput"></button>
-            </div>
-            <div class="content-option key-tile">
-                <span class="option-title">Rotate Move Right</span>
-                <button id="_angleRight" class="hotkeyInput"></button>
-            </div>
-            <div class="content-option key-tile">
-                <span class="option-title">Toggle Mouse Movement</span>
-                <button id="_mouseMovementKey" class="hotkeyInput"></button>
-            </div>
-        </div>
-    </div>`,
-  "after"
-);
+/* No Keybinds page section either — the three tiles bound ids that no longer
+ * exist in defaultSettings, which the menu binder reports and then ignores. */
 
 /* ------------------------------------------------------------------ */
 

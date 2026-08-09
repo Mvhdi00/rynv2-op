@@ -56,73 +56,34 @@ const ANGLE_GRID = `  const AngleGrid = {
   };
 `;
 
-const SETTINGS = `    _preciseAngles: true,
+/* `nudgeKeys` adds the J/L rotate keys and the mouse-movement hotkey. v4 keeps
+ * them; v5 was asked for the menu options without any new keybinds, and there
+ * the mouse is the only way onto the fine grid. */
+function settings({ nudgeKeys = true } = {}) {
+  return `    _preciseAngles: true,
     _moveAngleSteps: 624,
     _buildAngleSteps: 624,
-    _mouseMovement: false,
+    _mouseMovement: false,` + (nudgeKeys ? `
     _mouseMovementKey: "",
     _angleLeft: "KeyJ",
-    _angleRight: "KeyL",`;
+    _angleRight: "KeyL",` : "");
+}
 
-const INPUT_STATE = `    moveNudge=0;
-    _lastSteerTime=0;
+function inputState({ nudgeKeys = true } = {}) {
+  return (nudgeKeys ? `    moveNudge=0;
+` : "") + `    _lastSteerTime=0;
     _steerTimer=null;`;
+}
 
 /* `botFanout` is the block a client runs after its own movement send to mirror
  * it onto spectated bots; only one of the two clients has one. */
-function movement(botFanout = "") {
-  return `    /* The direction the keys are asking for. Vanilla reads the key vector as
-     * an absolute screen direction, which is 8 angles and nothing between. With
-     * mouse movement on it is read relative to the cursor instead — W is
-     * "toward the cursor", A and D strafe, S backs off — so aiming reaches
-     * every step on the grid. The nudge offset applies in either mode. */
-    getMoveAngle() {
-      const base = getAngleFromBitmask(this.move, false);
-      if (base === null || !Settings_default._preciseAngles) {
-        return base;
-      }
-      const steps = AngleGrid.moveSteps;
-      const relative = Settings_default._mouseMovement ? this.mouse.angle + base + Math.PI / 2 : base;
-      return AngleGrid.snap(relative + this.moveNudge * AngleGrid.step(steps), steps);
-    }
-    handleMovement() {
+function movement(botFanout = "", { nudgeKeys = true } = {}) {
+  const nudgeTerm = nudgeKeys ? " + this.moveNudge * AngleGrid.step(steps)" : "";
+  const nudgeReset = nudgeKeys ? `
       if (this.move === 0) {
         this.moveNudge = 0;
-      }
-      const {isOwner: isOwner, clients: clients, _ModuleHandler: ModuleHandler} = this.client;
-      const angle = this.getMoveAngle();
-      ModuleHandler.startMovement(angle);${botFanout}
-    }
-    /* Moving the mouse and holding a nudge key both produce a continuous stream
-     * of direction changes, which is the one thing that could spend the packet
-     * budget faster than the game does. They share one gate.
-     *
-     * Only the packet is held back — the angle itself keeps updating at full
-     * rate, so a finer grid never turns more slowly, it just sends the step it
-     * reached. The trailing send is what makes that safe: a change that arrives
-     * inside the window is not dropped, it is delivered when the window closes,
-     * so the direction settled on is always the one the server ends up with. */
-    steerMovement() {
-      if (this._steerTimer !== null) {
-        return;
-      }
-      const wait = 60 - (performance.now() - this._lastSteerTime);
-      if (wait > 0) {
-        this._steerTimer = setTimeout(() => {
-          this._steerTimer = null;
-          this.steerMovement();
-        }, wait);
-        return;
-      }
-      const {_ModuleHandler: ModuleHandler} = this.client;
-      if (!this.client.myPlayer.inGame || this.move === 0) return;
-      const angle = this.getMoveAngle();
-      if (angle === null || ModuleHandler.moveTo !== "disable") return;
-      if (ModuleHandler.move_dir === angle) return;
-      if (ModuleHandler.packetCount + 10 > ModuleHandler.packetLimit) return;
-      this._lastSteerTime = performance.now();
-      this.handleMovement();
-    }
+      }` : "";
+  const angleKeys = nudgeKeys ? `
     /* One grid step per press, auto-repeat included, so holding the key sweeps
      * the circle. The offset is cleared as soon as the player stops moving, in
      * handleMovement, rather than persisting into the next run. */
@@ -158,7 +119,57 @@ function movement(botFanout = "") {
       this.moveNudge = (this.moveNudge + delta * perPress) % steps;
       if (this.move !== 0) this.steerMovement();
       return true;
-    }`;
+    }` : "";
+
+  return `    /* The direction the keys are asking for. Vanilla reads the key vector as
+     * an absolute screen direction, which is 8 angles and nothing between. With
+     * mouse movement on it is read relative to the cursor instead — W is
+     * "toward the cursor", A and D strafe, S backs off — so aiming reaches
+     * every step on the grid. */
+    getMoveAngle() {
+      const base = getAngleFromBitmask(this.move, false);
+      if (base === null || !Settings_default._preciseAngles) {
+        return base;
+      }
+      const steps = AngleGrid.moveSteps;
+      const relative = Settings_default._mouseMovement ? this.mouse.angle + base + Math.PI / 2 : base;
+      return AngleGrid.snap(relative${nudgeTerm}, steps);
+    }
+    handleMovement() {${nudgeReset}
+      const {isOwner: isOwner, clients: clients, _ModuleHandler: ModuleHandler} = this.client;
+      const angle = this.getMoveAngle();
+      ModuleHandler.startMovement(angle);${botFanout}
+    }
+    /* Moving the mouse produces a continuous stream of direction changes, which
+     * is the one thing that could spend the packet budget faster than the game
+     * does, so it goes through a gate.
+     *
+     * Only the packet is held back — the angle itself keeps updating at full
+     * rate, so a finer grid never turns more slowly, it just sends the step it
+     * reached. The trailing send is what makes that safe: a change that arrives
+     * inside the window is not dropped, it is delivered when the window closes,
+     * so the direction settled on is always the one the server ends up with. */
+    steerMovement() {
+      if (this._steerTimer !== null) {
+        return;
+      }
+      const wait = 60 - (performance.now() - this._lastSteerTime);
+      if (wait > 0) {
+        this._steerTimer = setTimeout(() => {
+          this._steerTimer = null;
+          this.steerMovement();
+        }, wait);
+        return;
+      }
+      const {_ModuleHandler: ModuleHandler} = this.client;
+      if (!this.client.myPlayer.inGame || this.move === 0) return;
+      const angle = this.getMoveAngle();
+      if (angle === null || ModuleHandler.moveTo !== "disable") return;
+      if (ModuleHandler.move_dir === angle) return;
+      if (ModuleHandler.packetCount + 10 > ModuleHandler.packetLimit) return;
+      this._lastSteerTime = performance.now();
+      this.handleMovement();
+    }${angleKeys}`;
 }
 
 /* Ahead of the repeat guard, because a held nudge key is meant to keep turning. */
@@ -274,8 +285,8 @@ const COPY = {
 
 module.exports = {
   ANGLE_GRID,
-  SETTINGS,
-  INPUT_STATE,
+  settings,
+  inputState,
   movement,
   KEYDOWN_HOOK_FIND,
   KEYDOWN_HOOK_REPLACE,

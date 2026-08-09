@@ -491,7 +491,7 @@ edit(
     _placeAttempts: 4,`,
   `    _autoplacerRadius: 350,
     _placeAttempts: 4,
-` + Angles.SETTINGS
+` + Angles.settings()
 );
 
 /* Precise angles are input resolution, not automation: they decide how finely
@@ -760,7 +760,7 @@ edit(
   `    lockPosition=false;
     mouse={`,
   `    lockPosition=false;
-` + Angles.INPUT_STATE + `
+` + Angles.inputState() + `
     mouse={`
 );
 

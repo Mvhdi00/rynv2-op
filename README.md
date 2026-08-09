@@ -80,7 +80,9 @@ added, both under **Keybinds → Precise Angles**:
 - **Rotate Move Left / Right** (`J` / `L`) — turns about 2.5° per press
   whatever the grid is set to (`max(1, round(steps / 144))` steps), so a finer
   grid never makes the keys slower. Auto-repeat included; the offset clears as
-  soon as you stop moving.
+  soon as you stop moving. **ReUp Mix only** — the v5 build takes the feature
+  without any new keybinds, so there the mouse is the only way onto the fine
+  grid.
 
 #### Why it is free
 
@@ -172,6 +174,13 @@ takes the anchor, the radius adjustment and the query radius as parameters —
 Switching precise angles off puts each of those sweeps back to its own original
 count rather than to a shared stand-in, which is what `AngleGrid.buildStepsOr`
 is for.
+
+**No new keybinds in v5.** It gets the four menu options and nothing on the
+Keybinds page: no rotate keys, no mouse-movement hotkey. `Misc → Precise Angles
+→ Mouse Movement` is the way onto the fine grid there. The shared module takes
+`nudgeKeys: false` for it, which drops the settings, the offset, the key handler
+and the keydown hook together — leaving any one of them behind would have called
+a method the build no longer generates.
 
 **Left alone in v5:** its first-run `fetch` to `webhook.site` is still there.
 The ReUp Mix build strips v4's, but that is a separate decision about someone

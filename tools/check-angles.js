@@ -34,6 +34,10 @@ function region(startMarker, endMarkers) {
 /* v5 replaced RYN's AutoPlacer with the Auraro placer, which is geometric and
  * has no step count, so it carries no preplace scan cache to test. */
 const hasPrePlaceCache = src.includes("  const _prePlaceAngleCache = new WeakMap;");
+/* A build can carry the grid without the rotate keys — v5 was asked for the
+ * menu options and no new keybinds, so the mouse is its only way onto the fine
+ * grid and there is no nudge offset to test. */
+const hasNudgeKeys = src.includes("    handleAngleKeys(event) {");
 
 const TAU = Math.PI * 2;
 const deg = r => (r * 180 / Math.PI + 360) % 360;
@@ -118,28 +122,32 @@ check("no keys is no direction", input.getMoveAngle() === null);
 input.move = UP | DOWN;
 check("opposite keys cancel", input.getMoveAngle() === null);
 
-input.move = RIGHT;
-const base = input.getMoveAngle();
-/* one press is Math.max(1, round(steps / 144)) steps, so the turn rate stays
- * about 2.5 degrees per press however fine the grid is */
-const perPress = steps => Math.max(1, Math.round(steps / 144));
-for (const steps of [8, 144, 288, 624]) {
-  Settings_default._moveAngleSteps = steps;
-  input.moveNudge = perPress(steps);
-  let turned = deg(input.getMoveAngle()) - deg(base);
-  if (turned > 180) turned -= 360;
-  /* about 2.5 degrees wherever the grid can express it, and one whole step on
-   * a grid too coarse to - never less than the grid allows */
-  const want = Math.max(360 / steps, 2.5);
-  check(`a press turns ${want.toFixed(2)} deg at ${steps} steps`, Math.abs(turned - want) <= 360 / steps,
-    `${turned.toFixed(2)} deg`);
+if (!hasNudgeKeys) {
+  console.log("skip  no rotate keys in this build, so no nudge offset to test");
+} else {
+  input.move = RIGHT;
+  const base = input.getMoveAngle();
+  /* one press is Math.max(1, round(steps / 144)) steps, so the turn rate stays
+   * about 2.5 degrees per press however fine the grid is */
+  const perPress = steps => Math.max(1, Math.round(steps / 144));
+  for (const steps of [8, 144, 288, 624]) {
+    Settings_default._moveAngleSteps = steps;
+    input.moveNudge = perPress(steps);
+    let turned = deg(input.getMoveAngle()) - deg(base);
+    if (turned > 180) turned -= 360;
+    /* about 2.5 degrees wherever the grid can express it, and one whole step on
+     * a grid too coarse to - never less than the grid allows */
+    const want = Math.max(360 / steps, 2.5);
+    check(`a press turns ${want.toFixed(2)} deg at ${steps} steps`, Math.abs(turned - want) <= 360 / steps,
+      `${turned.toFixed(2)} deg`);
+  }
+  Settings_default._moveAngleSteps = 624;
+  input.moveNudge = -perPress(624);
+  check("nudging below zero wraps", near(deg(input.getMoveAngle()), 360 - 4 * 360 / 624));
+  input.moveNudge = 156;
+  check("156 steps is a quarter turn", near(deg(input.getMoveAngle()), 90));
+  input.moveNudge = 0;
 }
-Settings_default._moveAngleSteps = 624;
-input.moveNudge = -perPress(624);
-check("nudging below zero wraps", near(deg(input.getMoveAngle()), 360 - 4 * 360 / 624));
-input.moveNudge = 156;
-check("156 steps is a quarter turn", near(deg(input.getMoveAngle()), 90));
-input.moveNudge = 0;
 
 Settings_default._mouseMovement = true;
 const cursor = 33 * Math.PI / 180;

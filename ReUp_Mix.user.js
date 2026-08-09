@@ -8001,7 +8001,7 @@ window.grbtp = 35;
      * an absolute screen direction, which is 8 angles and nothing between. With
      * mouse movement on it is read relative to the cursor instead — W is
      * "toward the cursor", A and D strafe, S backs off — so aiming reaches
-     * every step on the grid. The nudge offset applies in either mode. */
+     * every step on the grid. */
     getMoveAngle() {
       const base = getAngleFromBitmask(this.move, false);
       if (base === null || !Settings_default._preciseAngles) {
@@ -8024,9 +8024,9 @@ window.grbtp = 35;
         }
       }
     }
-    /* Moving the mouse and holding a nudge key both produce a continuous stream
-     * of direction changes, which is the one thing that could spend the packet
-     * budget faster than the game does. They share one gate.
+    /* Moving the mouse produces a continuous stream of direction changes, which
+     * is the one thing that could spend the packet budget faster than the game
+     * does, so it goes through a gate.
      *
      * Only the packet is held back — the angle itself keeps updating at full
      * rate, so a finer grid never turns more slowly, it just sends the step it
@@ -22223,7 +22223,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-09T12:42:59.880Z",
+      "builtAt": "2026-08-09T13:50:42.869Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
