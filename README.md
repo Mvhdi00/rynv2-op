@@ -6,6 +6,10 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+The repo also carries a second, independent build —
+[RYN v5 with the Luna placer](#ryn-v5-with-the-luna-placer) — which leaves v4
+alone and puts Luna's autoplace / preplace / replace into RYN v5 OWNER instead.
+
 ---
 
 ## Why RYN is the base
@@ -113,19 +117,91 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+## RYN v5 with the Luna placer
+
+Build output: **`RYN_Client_v5_LunaPlacer.user.js`**
+
+A second, separate build, and the only one that touches v5. RYN v5 OWNER ships
+with the **Auraro** placer, not Luna's — v4's Luna-derived `AutoPlacer` was
+dropped for it. This build puts Luna's autoplace, preplace and replace back in,
+on top of v5.
+
+The Auraro placer it replaces is trap-only: every call site is
+`autoPlace(…, AURA_TRAP, …)` and `AURA_SPIKE` is never passed as the item to
+build. Luna's places spikes as well as traps, so this build gets the spike
+ladder back — the spike that catches a trapped enemy, the spike whose
+knockback throws them onto another spike, and the spikes that do not wall off
+your own path or your view of them.
+
+### How the three fit together
+
+Luna runs all three off one pass per tick. It rebuilds `predictObjects` — the
+builds it wants — and flags each one:
+
+| | what it is |
+|---|---|
+| **autoplace** | angles worth a spike or trap right now, sent immediately |
+| **preplace** | one angle aimed at the slot an object is about to vacate, held back and sent a tick later once the slot is free |
+| **replace** | that same preplace entry sent a third time at min-ping, for when the second send lost the race to the server |
+
+So preplace and replace are not separate decisions — they are the second and
+third send of the one preplace entry. That is why this is a single module here,
+where the Auraro split had three: `prePlacer` and `replacer` are gone from
+`staticModules` and from the module order, and Luna's `prePlace` /
+`spampreplace` toggles map onto the menu switches that were already there,
+`_prePlace` and `_replace`. The Combat page is unchanged.
+
+### What was ported, and what was not
+
+Only the data access is rewritten onto RYN's managers: `visibleObjects` becomes
+`ObjectManager.grid2D` queries, `myPlayer.items[2]`/`items[4]` become
+`getItemByType(4)`/`(7)`, and Luna's `x2/y2` and `xVel/yVel` become
+`pos.current` and `pos.future`. The geometry is carried over unchanged — the
+72-angle probe, the perfect-angle edge detection, `lineInRect`, the knockback
+alignment scoring, and both placement priority ladders.
+
+Three deliberate differences:
+
+- **`canTrapTick` and `canShamePlace` are dead.** Both gate on Luna's
+  `shameTick` / `shameGrind` toggles, and v5 has no shame-grind feature to hang
+  them on. They are left in the ladders as explicit `false` so the priority
+  order still reads 1:1 against Luna.
+- **The item limit comes from `ClientPlayer.getItemCount`.** Luna reads
+  `group.sandboxLimit || Math.max(group.limit * 3, 99)` outside sandbox too,
+  which caps everything at the sandbox number and effectively disables the
+  check. RYN already resolves this correctly, so the port asks it. (Same bug,
+  same fix as [the placer note above](#the-placer).)
+- **Two guards that are RYN's, not Luna's.** The placer sits out a tick owned
+  by a spike-tick or sync module, and an angle it built at that is still free
+  the next tick is treated as a build the server refused and benched for 18
+  ticks. Luna has no module ordering to collide with and no shared packet
+  budget to protect.
+
+Everything else in v5 is untouched — the diff is the placer block and the two
+lines that registered the modules it replaced.
+
 ## Layout
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+RYN_Client_v5_LunaPlacer.user.js
+                          the v5 build output — install this one instead for v5
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
+src/RYN_Client_v5_OWNER.js
+                          RYN v5 OWNER, base for the v5 build (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
+src/Luna_Fixed.user.js    Luna 1.1 on the current transport (input)
+src/luna-placer.js        the ported placer, spliced into the v5 build
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-luna-placer.js
+                          src/RYN_Client_v5_OWNER.js -> RYN_Client_v5_LunaPlacer.user.js
+tools/test-luna-placer.js smoke test for src/luna-placer.js
 ```
 
 ## Build
@@ -133,11 +209,13 @@ tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```sh
 node tools/extract-drivers.js    # refresh drivers from src/game_*.js
 node tools/build-reup.js         # produce ReUp_Mix.user.js
+node tools/build-luna-placer.js  # produce RYN_Client_v5_LunaPlacer.user.js
 ```
 
-Every edit in `build-reup.js` is anchored to an exact string in the base
-client, and an anchor that is missing or ambiguous fails the build. Dropping in
-a newer RYN will surface as a build error rather than a half-merged script.
+Every edit in both build scripts is anchored to an exact string or line in the
+base client, and an anchor that is missing or ambiguous fails the build.
+Dropping in a newer RYN will surface as a build error rather than a half-merged
+script.
 
 ## Verification
 
@@ -145,9 +223,21 @@ a newer RYN will surface as a build error rather than a half-merged script.
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
 node --check ReUp_Mix.user.js
+
+node tools/verify-drivers.js RYN_Client_v5_LunaPlacer.user.js
+node tools/test-luna-placer.js
+node --check RYN_Client_v5_LunaPlacer.user.js
 ```
 
-Current state of the build:
+`test-luna-placer.js` runs `src/luna-placer.js` outside the game against
+stubbed managers and drives `postTick` through each decision path — traps on an
+open enemy, spikes on a trapped one, the radius and master-toggle gates, the
+spike-tick yield, the held-back preplace and its two resends, the 72-angle
+probe and its perfect-angle edges, the item cap, and the packet budget. All 21
+checks pass, and `verify-drivers.js` reports the v5 build's data tables
+unchanged against the shipped bundle.
+
+Current state of the ReUp Mix build:
 
 - **Drivers** — hats (46), accessories (21), weapons (16), items (23), item
   groups (14) and 42 scalar config keys all match `src/game_index.js`. The
