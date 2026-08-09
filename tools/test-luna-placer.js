@@ -41,19 +41,22 @@ class Vec {
 }
 
 const SPIKE_ID = 6;   // itemGroup 2, what getItemByType(4) hands back
-const TRAP_ID = 15;   // itemGroup 4
+const TRAP_ID = 15;   // itemGroup 5, what getItemByType(7) hands back
 
+// Copied from the client's own tables, not invented — the fixtures below turn
+// on the real scales. A spike lands 35 + 49 - 5 = 79px from the player, and
+// needs 49 + 50 = 99px of clearance from a pit trap.
 const Items = {
-  6: { id: 6, scale: 35, itemGroup: 2, health: 400, placeOffset: -5 },
-  15: { id: 15, scale: 32, itemGroup: 4, health: 500, placeOffset: -20, hideFromEnemy: true },
-  16: { id: 16, scale: 45, itemGroup: 5, health: 300 },
-  17: { id: 17, scale: 25, itemGroup: 6, health: 200 }
+  6: { id: 6, name: "spikes", scale: 49, itemGroup: 2, health: 400, placeOffset: -5 },
+  15: { id: 15, name: "pit trap", scale: 50, itemGroup: 5, health: 500, placeOffset: -5, hideFromEnemy: true },
+  16: { id: 16, name: "boost pad", scale: 45, itemGroup: 6, health: 150, placeOffset: -5 },
+  17: { id: 17, name: "turret", scale: 43, itemGroup: 7, health: 800, placeOffset: -5 }
 };
 const ItemGroups = {
-  2: { id: 2, limit: 15, layer: 0 },
-  4: { id: 4, limit: 6, layer: -1 },
-  5: { id: 5, limit: 99, layer: 0 },
-  6: { id: 6, limit: 2, layer: 0 }
+  2: { id: 2, name: "Spike", limit: 15, layer: 0 },
+  5: { id: 5, name: "Trap", limit: 6, layer: -1 },
+  6: { id: 6, name: "Boost", limit: 12, sandboxLimit: 299, layer: -1 },
+  7: { id: 7, name: "Turret", limit: 2, layer: 1 }
 };
 const Config_default = { mapScale: 14400, riverWidth: 724, gatherAngle: Math.PI / 2.6 };
 const Settings_default = { _autoplacer: true, _prePlace: true, _replace: true, _autoplacerRadius: 350 };
@@ -228,11 +231,45 @@ console.log("luna placer smoke test\n");
   check("open enemy places no spikes", r.sent.every(s => s.type === 7), JSON.stringify(r.sent.map(s => s.type)));
 }
 
-// 2 — enemy standing in one of our traps: the spike ladder opens up.
+// 2 — enemy standing in one of our traps: the spike ladder opens up. The trap
+// sits just past the enemy so the near side stays clear of it — the enemy is
+// at 150px, the build lands at 79px, so a spike towards them is in contact
+// range while one behind me is not.
 {
-  const trap = ours(1, 7150, 3000, TRAP_ID);
+  const trap = ours(1, 7190, 3000, TRAP_ID);
   const r = run({ objects: [ trap ], enemyTrapped: true });
   check("trapped enemy places spikes", r.sent.some(s => s.type === 4), JSON.stringify(r.sent.map(s => s.type)));
+
+  // Rule 3 has a reach test now: no spike on the far side of me, where it
+  // could never touch the enemy. Rule 1 can still reach a little past the
+  // gate, so this asserts the far side specifically rather than the gate.
+  const item = Items[SPIKE_ID];
+  const w = 35 + item.scale + (item.placeOffset || 0);
+  let worst = 0;
+  for (const s of r.sent.filter(x => x.type === 4)) {
+    const x = 7000 + w * Math.cos(s.angle);
+    const y = 3000 + w * Math.sin(s.angle);
+    worst = Math.max(worst, Math.hypot(x - 7150, y - 3000));
+  }
+  check("no spike lands out of reach of the enemy", worst <= 120, "worst " + worst.toFixed(0) + "px");
+}
+
+// 2b — the case that prompted the reach test: enemy pinned, and the only free
+// angles are behind me. Luna would spike every one of them. Nothing should go
+// down now.
+{
+  // The trap sits on the enemy, so its 99px clearance blocks the whole near
+  // side and leaves only angles pointing away from them.
+  const trap = ours(1, 7150, 3000, TRAP_ID);
+  const r = run({ objects: [ trap ], enemyTrapped: true });
+  const item = Items[SPIKE_ID];
+  const w = 35 + item.scale + (item.placeOffset || 0);
+  const far = r.sent.filter(s => s.type === 4).filter(s => {
+    const x = 7000 + w * Math.cos(s.angle);
+    const y = 3000 + w * Math.sin(s.angle);
+    return Math.hypot(x - 7150, y - 3000) > 120;
+  });
+  check("no spikes behind me when only the far side is free", far.length === 0, far.length + " far spikes");
 }
 
 // 3 — enemy beyond the radius: Luna's 350 gate, and the setting that overrides it.

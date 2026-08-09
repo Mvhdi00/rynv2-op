@@ -58,6 +58,11 @@
   // How long an angle stays banned after a build that the server dropped.
   const LUNA_BAN_TICKS = 18;
 
+  // Slack on top of exact contact (spikeScale + enemyScale) for the reach test
+  // on autoplace spike rule 3. Small on purpose: the point is a spike that
+  // touches, not one that is merely on the right side of the map.
+  const LUNA_SPIKE_REACH_MARGIN = 5;
+
   // Modules that own a spike tick or a sync. Every one of them runs before the
   // placer in the module order and refuses to start once ModuleHandler.
   // moduleActive is set, so a spike tick that runs at all is the first module
@@ -620,8 +625,18 @@
             if (enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
             // 2: the spike whose knockback throws them onto another spike
             if (closestSpikeToKb && config === closestSpikeToKb) return true;
-            // 3: spikes that do not wall off my own path or my view of them
-            if (enemyTrapped && !blockFuture && !blockEnemy) return true;
+            // 3: spikes that do not wall off my own path or my view of them,
+            //    and that can actually reach the enemy.
+            //
+            //    Luna has no distance test here at all — while they are pinned
+            //    every free angle on the circle qualifies, including the ones
+            //    behind me. The build lands ~79px from me, so with the enemy
+            //    150px away a spike on my far side ends up 230px from them:
+            //    it cannot touch them, it spends one of the 15 spikes, and it
+            //    walls me in. This gate keeps rule 3 to spikes that are in
+            //    contact range of the enemy. Rules 1 and 2 are untouched —
+            //    both already aim at the enemy by construction.
+            if (enemyTrapped && !blockFuture && !blockEnemy && Math.hypot(config.x - enemyPos.x, config.y - enemyPos.y) < config.scale + enemyScale + LUNA_SPIKE_REACH_MARGIN) return true;
           }
           if (isTrap) {
             // 1: the trap that retraps them as they move

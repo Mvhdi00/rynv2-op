@@ -189,6 +189,39 @@ that cannot miss a gap. `test-luna-placer.js` builds a free window 1.6° wide,
 off-grid, and checks that the grid samples all miss it while the solved corners
 land inside it.
 
+### The one decision rule that was changed
+
+Luna's autoplace spike ladder ends with:
+
+```js
+// Priority 3: Place spikes that don't block LOS when enemy is trapped
+if (enemyTrapped && !spikeWillBlockLOSToFuture && !spikeWillBlockLOSToEnemy) return true;
+```
+
+There is no distance test in it. The only distance Luna checks anywhere in
+`isAutoPlaceAngle` is *the player's* distance to the enemy, not the spike's —
+so the moment the enemy is pinned, **every** free angle on the circle
+qualifies, including the ones behind the player.
+
+A build lands 79px from the player, so with the enemy 150px away a spike on the
+far side ends up 230px from them. It cannot touch them, it spends one of the 15
+spikes, and it walls the player in. Rule 3 now also requires the spike to be in
+contact range:
+
+```js
+Math.hypot(config.x - enemyPos.x, config.y - enemyPos.y)
+  < config.scale + enemyScale + LUNA_SPIKE_REACH_MARGIN   // margin 5
+```
+
+`spikeScale + enemyScale` is exact contact; the margin is deliberately small.
+Rules 1 and 2 are untouched — `closestSpikeToEnemy` and `closestSpikeToKb` both
+aim at the enemy by construction.
+
+The trap ladder is **not** changed: Luna gates both of its trap rules on
+`neitherTrapped`, so while the enemy is pinned the autoplacer stays spikes-only
+and traps come back through preplace, when the trap holding them is about to
+break. That is Luna's rule and it stands.
+
 ### Other differences from Luna
 
 - **`canTrapTick` and `canShamePlace` are dead.** Both gate on Luna's
@@ -294,7 +327,7 @@ open enemy, spikes on a trapped one, the radius and master-toggle gates, the
 spike-tick yield in both places it is checked, the held-back preplace and its
 two resends, the 72-angle probe and its perfect-angle edges, the item cap, and
 the packet budget, the tangent corners and a sub-5° gap the grid alone misses.
-All 35 checks pass, and `verify-drivers.js` reports the v5
+All 37 checks pass, and `verify-drivers.js` reports the v5
 build's data tables unchanged against the shipped bundle.
 
 Current state of the ReUp Mix build:
