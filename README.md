@@ -177,3 +177,106 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# RYN Client v5 OWNER — placer
+
+`src/RYN_Client_v5_OWNER.js` is a separate userscript from the mix above: the
+v5 OWNER client, whose placer is the auraro placer rather than RYN's own. Two
+changes were made to it, both confined to the place path — `AutoPlacer`,
+`PrePlacer`, `Replacer` and the shared `AuraPlacer` they run on. Nothing else
+in the client was touched.
+
+## Placement is one angle, and the corners are the answers
+
+Read off `src/game_index.js`:
+
+```js
+buildItem(f) {
+  const w = this.scale + f.scale + (f.placeOffset || 0);
+  const T = this.x + w * cos(this.dir), A = this.y + w * sin(this.dir);
+  if (this.canBuild(f) && a.checkItemLocation(T, A, f.scale, .6, f.id, !1, this)) { ... }
+}
+
+checkItemLocation(h, u, p, x, I, P, f) {
+  for (let w = 0; w < t.length; ++w) {
+    const T = t[w].blocker ? t[w].blocker : t[w].getScale(x, t[w].isItem);
+    if (t[w].active && i.getDistance(h, u, t[w].x, t[w].y) < p + T) return !1;
+  }
+  return !(!P && I != 18 && u >= s.mapScale/2 - s.riverWidth/2 && u <= s.mapScale/2 + s.riverWidth/2);
+}
+```
+
+The build lands on a circle of radius `w` around the player, so the only free
+variable is the angle. Each object subtracts one arc from that circle, and the
+two endpoints of that arc — where the build lands exactly tangent to the object
+— are its **corners**. Every legal placement that touches anything is one of
+them; between two corners the circle is either blocked or strictly further from
+everything.
+
+`AuraPlacer.cornerAngles(type, px, py)` enumerates the whole set: two per
+object whose rejection circle crosses the placement circle, plus up to four
+where the placement circle crosses the river bank (platforms, item 18, are the
+one item allowed in the water and so have no corner there). Each is nudged
+6e-3 rad clear of the tangent, because the angle is rounded to two decimals on
+the wire and an exact tangent lands on either side of the boundary at random.
+
+The corners are tried first in `testCanPlace`, in `autoPlace`'s open-ground
+fallback and in `PrePlacer.retrapSpam`, ahead of the fixed sweeps those used
+before.
+
+Verified by brute force against the game's rule over randomised scenes built
+from the real item table: **1884 of 1884** free arcs contain at least one
+corner, **33278 of 33278** single-blocker corners are accepted, and the π/36
+sweep the placer ran on is blind to **1.0%** of free arcs outright — a gap
+narrower than 5° falls entirely between two of its steps.
+
+## Three things it could not see
+
+- **Blockers.** Item 21 reports `blocker: 300`, and the server checks every
+  object with no distance cap. The placer scanned 200px, so a blocker was
+  invisible to it: builds aimed inside one were validated locally, sent, and
+  dropped by the server. The collision scan now reaches 540px — the largest
+  distance at which anything can reject a landing point — and `angleRanges` and
+  `calcPreplace` iterate that table instead of a 200px neighbour list.
+- **Its own 40000 cut.** `angleRanges` skipped any object past 200px before
+  asking whether it could block, which is the same blind spot again.
+- **Gaps narrower than its step.** See above.
+
+## Speed
+
+`ModuleHandler.place()` spends four packets per build — `selectItem`, `attack`,
+`stopAttack`, `whichWeapon` — against a budget of 70 per second shared with
+movement, attacks and healing. Only `attack`/`stopAttack` are per-build; the
+held item survives between them.
+
+`AuraPlacer.send()` now emits the build itself and batches: the item is
+selected once, each angle costs two packets, and the weapon comes back once
+when the module's `postTick` ends (via a `try/finally`, so the early returns
+are covered too). Nothing else sends between a placer's first and last build,
+so the wire order is unchanged — only the redundant packets are gone.
+
+| | packets |
+|---|---|
+| 7 mixed builds, before | 28 |
+| 7 mixed builds, batched | 18 |
+| traps per 70-packet second, before | 17 |
+| traps per 70-packet second, batched | **34** |
+
+Alongside that:
+
+- **One grid sweep per tick.** `nearObjs` was called inside loops that already
+  iterate objects — `radCalc` ran one per anchor — rebuilding the same `Set`
+  and the same array dozens of times a tick. It is now a single position-keyed
+  scan per tick, kept as a flat `{x, y, block, id}` table so the collision
+  tests touch no getters and allocate nothing.
+- **Squared distances.** `Math.hypot` is gone from the collision tests; only
+  the comparison mattered.
+- **`hitsToBreak` memoised per tick.** It was called once per candidate and
+  again from `urgencyScore` during the sort, each time through a `try/catch`
+  and two `getBuildingDamage` walks.
+- **Retrap gate is per tick, not 200ms.** At moomoo's 111ms tick a 200ms wall
+  clock gate is one tick and three quarters, so on the tick that mattered it
+  was as likely to be shut as open depending on where the clock landed.
+- **`AURA_MAX_PER_TICK` 2 → 3**, which the packet budget now affords.

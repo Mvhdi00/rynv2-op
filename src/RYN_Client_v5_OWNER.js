@@ -8827,24 +8827,73 @@ window.grbtp = 35;
   // so each send goes through `send()`, which refuses once the budget is spent.
   // Without it a single testCanPlace sweep would starve the rest of the tick.
   // ==========================================================================
+  //
+  // The placement rules below are read straight off the game bundle
+  // (src/game_index.js) rather than guessed, because every angle this client
+  // sends is judged by that code and nothing else:
+  //
+  //   buildItem(f):
+  //     w = this.scale + f.scale + (f.placeOffset || 0)
+  //     T = this.x + w * cos(this.dir);   A = this.y + w * sin(this.dir)
+  //     accepted only if checkItemLocation(T, A, f.scale, .6, f.id, false, this)
+  //
+  //   checkItemLocation(h, u, p, x, I, P, f):
+  //     for EVERY active object:
+  //       block = obj.blocker ? obj.blocker : obj.getScale(0.6, obj.isItem)
+  //       reject when getDistance(h, u, obj.x, obj.y) < p + block
+  //     reject when !P && I != 18 && u is inside the river band
+  //
+  //   getScale(t, i) = scale * (isItem || type == 2 || type == 3 ? 1 : .6 * t)
+  //                          * (i ? 1 : colDiv)
+  //
+  // Three things follow, and all three are what this file now implements:
+  //
+  //  1. The build always lands on a circle of radius `w` around the player.
+  //     So the whole placement problem is one-dimensional: pick an angle.
+  //  2. Each object subtracts one arc from that circle. The two endpoints of
+  //     that arc — where the build lands exactly tangent to the object — are
+  //     the only angles worth trying, because every legal spot that touches
+  //     anything is one of them. Those endpoints are the corners.
+  //  3. The server checks *every* object, with no distance cap, and a blocker
+  //     (item 21) reports `blocker: 300`. Scanning 200px around the player,
+  //     as this placer used to, silently misses those — the client happily
+  //     sends builds the server drops on the floor.
+  //
   const AURA_TWO_PI = Math.PI * 2;
   const AURA_EPS = 1e-6;
   const AURA_SCAN_RANGE = 200;
   const AURA_SPIKE = 4;
   const AURA_TRAP = 7;
   const AURA_MILL = 3;
-  const AURA_MAX_PER_TICK = 2;
+  const AURA_MAX_PER_TICK = 3;
   const AURA_MAX_HITS = 4;
   const AURA_RETRAP_STEP = Math.PI / 8;
-  const AURA_RETRAP_COOLDOWN = 200;
   const AURA_REPLACE_RANGE = 300;
   const AURA_AUTOPLACE_RADIUS = 350;
   const AURA_TRAP_REACH = 169;
   const AURA_SAME_ANGLE_CAP = 4;
 
-  function auraPlacementCost(type) {
-    return type === AURA_TRAP ? 5 : 4;
-  }
+  // Largest radius any single object can block with: the blocker's 300. A
+  // landing point sits at most (playerScale + itemScale + placeOffset) from
+  // the player, and is rejected from `itemScale + 300` away, so this is how
+  // far the collision scan has to reach to see everything the server sees.
+  const AURA_MAX_BLOCK_RADIUS = 300;
+  const AURA_BLOCK_SCAN = 130 + 110 + AURA_MAX_BLOCK_RADIUS;
+
+  // Nudge a tangent corner this far around the circle so it lands strictly
+  // clear of the object it is packed against. The server rejects on `<`, so
+  // exact tangency is legal, but the landing point is recomputed from a
+  // two-decimal wire angle and the sign of the residual is a coin flip.
+  const AURA_CORNER_NUDGE = 6e-3;
+
+  // ModuleHandler.place() spends four packets on every single build:
+  // selectItem, attack, stopAttack, whichWeapon. Only attack and stopAttack
+  // are per-build — the held item survives between them — so a run of builds
+  // of one type costs 2N + 2 instead of 4N once they are batched. The budget
+  // is 70 packets/second shared with the whole client, so that is close to
+  // twice the builds per second out of the same allowance.
+  const AURA_BATCH_OPEN_COST = 2;
+  const AURA_BATCH_PLACE_COST = 2;
 
   // Modules that build a spike tick or sync. They all run before the placer in
   // the module order, and whichever claims the tick first gets its name into
@@ -8876,6 +8925,14 @@ window.grbtp = 35;
     antiTrapped=false;
     _angleList=new Map;
     _angleListTick=-1;
+    _scanTick=-1;
+    _scanX=0;
+    _scanY=0;
+    _scanned=null;
+    _blockers=null;
+    _batchType=null;
+    _hitsTick=-1;
+    _hitsCache=new Map;
     constructor(client2) {
       this.client = client2;
     }
@@ -8888,18 +8945,90 @@ window.grbtp = 35;
       return id === null || id === void 0 ? null : Items[id];
     }
 
-    // auraro: nearObjs
-    nearObjs(x, y, range = AURA_SCAN_RANGE) {
+    // One wide grid sweep per tick, reused by everything below. auraro calls
+    // nearObjs inside loops that already iterate objects — radCalc did it once
+    // per anchor — so the same cells were being walked and the same Sets
+    // rebuilt dozens of times a tick for a result that cannot change until the
+    // next one.
+    //
+    // The sweep reaches AURA_BLOCK_SCAN, far enough to see every object that
+    // can reject a build, and is kept as a flat blocker table so the collision
+    // tests below never touch a getter or allocate.
+    scan(x, y) {
+      const tick = this.client._ModuleHandler.tickCount;
+      if (this._scanned !== null && this._scanTick === tick && Math.abs(x - this._scanX) < 1 && Math.abs(y - this._scanY) < 1) {
+        return;
+      }
       const {ObjectManager: ObjectManager2} = this.client;
-      const cells = Math.max(1, Math.ceil(range / 100));
-      const out = [];
+      const cells = Math.ceil(AURA_BLOCK_SCAN / 100);
+      const scanned = [];
+      const blockers = [];
       for (const id of ObjectManager2.grid2D.queryFull(x, y, cells)) {
         const object = ObjectManager2.objects.get(id);
         if (object === void 0) {
           continue;
         }
-        const dx = object.pos.current.x - x, dy = object.pos.current.y - y;
-        if (dx * dx + dy * dy > range * range) {
+        const p = object.pos.current;
+        const dx = p.x - x, dy = p.y - y;
+        const dist2 = dx * dx + dy * dy;
+        const block = object.placementScale;
+        // Reach of this object: it rejects a landing point from `block` plus
+        // the build's own scale away, and the landing point itself is up to
+        // 130 out. Anything further can be dropped now and never looked at.
+        const reach = block + 110 + 130;
+        if (dist2 > reach * reach) {
+          continue;
+        }
+        blockers.push({
+          x: p.x,
+          y: p.y,
+          block: block,
+          id: object.id
+        });
+        if (dist2 <= AURA_SCAN_RANGE * AURA_SCAN_RANGE) {
+          scanned.push(object);
+        }
+      }
+      this._scanTick = tick;
+      this._scanX = x;
+      this._scanY = y;
+      this._scanned = scanned;
+      this._blockers = blockers;
+    }
+
+    // The flat blocker table for (x, y) — everything the server would test a
+    // build from here against.
+    blockersAt(x, y) {
+      this.scan(x, y);
+      return this._blockers;
+    }
+
+    // auraro: nearObjs
+    nearObjs(x, y, range = AURA_SCAN_RANGE) {
+      if (range <= AURA_SCAN_RANGE) {
+        this.scan(x, y);
+        if (range === AURA_SCAN_RANGE) {
+          return this._scanned;
+        }
+        const range2 = range * range;
+        return this._scanned.filter(object => {
+          const p = object.pos.current;
+          const dx = p.x - x, dy = p.y - y;
+          return dx * dx + dy * dy <= range2;
+        });
+      }
+      const {ObjectManager: ObjectManager2} = this.client;
+      const cells = Math.max(1, Math.ceil(range / 100));
+      const out = [];
+      const range2 = range * range;
+      for (const id of ObjectManager2.grid2D.queryFull(x, y, cells)) {
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0) {
+          continue;
+        }
+        const p = object.pos.current;
+        const dx = p.x - x, dy = p.y - y;
+        if (dx * dx + dy * dy > range2) {
           continue;
         }
         out.push(object);
@@ -8929,21 +9058,60 @@ window.grbtp = 35;
       return y >= mid - half && y <= mid + half;
     }
 
+    // What one more build of `type` would cost right now: two packets for the
+    // build itself, plus the item swap when the held item is wrong. Opening
+    // the first batch also books the single weapon swap that flush() owes.
+    placeCost(type) {
+      if (this._batchType === type) {
+        return AURA_BATCH_PLACE_COST;
+      }
+      return AURA_BATCH_PLACE_COST + (this._batchType === null ? AURA_BATCH_OPEN_COST : 1);
+    }
+
     // Every placement funnels through here so the tick budget is respected.
+    //
+    // ModuleHandler.place() is not called directly any more. It re-selects the
+    // item and switches back to a weapon around every single build, and when a
+    // module lays four traps in a row that is six wasted packets out of a
+    // 70/second allowance shared with movement, attacks and healing. The build
+    // is emitted here instead: the item is selected once, each angle costs an
+    // attack and a stopAttack, and the weapon comes back once at flush().
+    // Nothing else sends between a placer's first and last build, so the wire
+    // order is unchanged — only the redundant packets are gone.
     send(type, angle) {
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (angle === null || angle === void 0 || !myPlayer.canPlace(type)) {
         return false;
       }
-      if (ModuleHandler.packetCount + auraPlacementCost(type) > ModuleHandler.packetLimit) {
+      if (ModuleHandler.packetCount + this.placeCost(type) > ModuleHandler.packetLimit) {
         return false;
       }
-      ModuleHandler.place(type, angle);
+      if (this._batchType !== type) {
+        // Straight from one item to the other — the weapon does not need to
+        // come back in between, only once at the end.
+        ModuleHandler.selectItem(type);
+        this._batchType = type;
+      }
+      ModuleHandler.totalPlaces += 1;
+      ModuleHandler.attack(angle, 1);
+      ModuleHandler.stopAttack(angle);
       ModuleHandler.placedOnce = true;
       ModuleHandler.placeAngles[0] = type;
       ModuleHandler.placeAngles[1].push(angle);
       ModuleHandler.moduleActive = true;
       return true;
+    }
+
+    // Put the weapon back. Called at the end of every placer module's postTick,
+    // including the paths that return early, so the batch never outlives the
+    // module that opened it.
+    flush() {
+      if (this._batchType === null) {
+        return;
+      }
+      this._batchType = null;
+      const ModuleHandler = this.client._ModuleHandler;
+      ModuleHandler.whichWeapon(ModuleHandler._getPredictWeapon());
     }
 
     // auraro tryPlaceAngle: never hammer the same angle more than four times
@@ -8963,11 +9131,22 @@ window.grbtp = 35;
       return this.send(type, angle);
     }
 
-    // auraro: objectManager.checkItemLocation
-    checkItemLocation(x, y, scale, itemId, objs) {
-      for (const object of objs) {
-        const p = object.pos.current;
-        if (Math.hypot(x - p.x, y - p.y) < scale + this.blockScale(object)) {
+    // objectManager.checkItemLocation, to the letter. `blockers` is the flat
+    // table from blockersAt(); it reaches AURA_BLOCK_SCAN, so a blocker item
+    // rejecting from 300px away is seen here exactly as the server sees it —
+    // the 200px scan this used to run on could not, and every build aimed into
+    // a blocker's radius was sent and thrown away.
+    //
+    // Squared distances throughout: Math.hypot is the one call in this file
+    // that ran tens of thousands of times a tick, and it is an order of
+    // magnitude slower than a multiply for no gain when only the comparison
+    // matters.
+    checkItemLocation(x, y, scale, itemId, blockers) {
+      for (let i = 0; i < blockers.length; i++) {
+        const o = blockers[i];
+        const dx = x - o.x, dy = y - o.y;
+        const thr = scale + o.block;
+        if (dx * dx + dy * dy < thr * thr) {
           return false;
         }
       }
@@ -8980,13 +9159,16 @@ window.grbtp = 35;
     // auraro: objectManager.preplaceCheck — the doomed object is skipped, and
     // the spot must overlap it. That last clause is what makes this "pre"
     // place: only the slot being freed counts.
-    preplaceCheck(x, y, scale, itemId, target, objs) {
-      for (const object of objs) {
-        if (object.id === target.id) {
+    preplaceCheck(x, y, scale, itemId, target, blockers) {
+      const targetID = target.id;
+      for (let i = 0; i < blockers.length; i++) {
+        const o = blockers[i];
+        if (o.id === targetID) {
           continue;
         }
-        const p = object.pos.current;
-        if (Math.hypot(x - p.x, y - p.y) < scale + this.blockScale(object)) {
+        const dx = x - o.x, dy = y - o.y;
+        const thr = scale + o.block;
+        if (dx * dx + dy * dy < thr * thr) {
           return false;
         }
       }
@@ -8994,7 +9176,9 @@ window.grbtp = 35;
         return false;
       }
       const t = target.pos.current;
-      return Math.hypot(x - t.x, y - t.y) <= scale + target.scale;
+      const tdx = x - t.x, tdy = y - t.y;
+      const treach = scale + target.scale;
+      return tdx * tdx + tdy * tdy <= treach * treach;
     }
 
     // The server builds at exactly this radius from the player, along
@@ -9035,8 +9219,8 @@ window.grbtp = 35;
       }
       const angle = Math.atan2(target.y - fromY, target.x - fromX);
       const landing = this.landingPoint(fromX, fromY, item, angle);
-      const objs = this.nearObjs(fromX, fromY);
-      const free = opts && opts.freeing ? this.preplaceCheck(landing.x, landing.y, item.scale, item.id, opts.freeing, objs) : this.checkItemLocation(landing.x, landing.y, item.scale, item.id, objs);
+      const blockers = this.blockersAt(fromX, fromY);
+      const free = opts && opts.freeing ? this.preplaceCheck(landing.x, landing.y, item.scale, item.id, opts.freeing, blockers) : this.checkItemLocation(landing.x, landing.y, item.scale, item.id, blockers);
       if (!free) {
         return null;
       }
@@ -9046,11 +9230,31 @@ window.grbtp = 35;
       };
     }
 
-    // auraro: objectManager.hitsToBreak
+    // The best building damage `who` can do does not change within a tick, and
+    // this is called once per candidate object and again from urgencyScore
+    // during the sort — with a try/catch and two getBuildingDamage walks every
+    // time. Memoised per tick, keyed by the pair.
     hitsToBreak(object, who) {
       if (!object || !who || !object.isDestroyable) {
         return 1 / 0;
       }
+      const tick = this.client._ModuleHandler.tickCount;
+      if (this._hitsTick !== tick) {
+        this._hitsCache.clear();
+        this._hitsTick = tick;
+      }
+      const key = object.id * 4096 + (who.id & 4095);
+      const cached = this._hitsCache.get(key);
+      if (cached !== void 0) {
+        return cached;
+      }
+      const hits = this._hitsToBreak(object, who);
+      this._hitsCache.set(key, hits);
+      return hits;
+    }
+
+    // auraro: objectManager.hitsToBreak
+    _hitsToBreak(object, who) {
       let best = 0;
       for (const id of [ who.weapon.primary, who.weapon.secondary ]) {
         if (id == null) {
@@ -9238,6 +9442,87 @@ window.grbtp = 35;
       return [ Math.atan2(baseY - hdx - py, baseX + hdy - px), Math.atan2(baseY + hdx - py, baseX - hdy - px) ];
     }
 
+    // ---- every corner the game offers --------------------------------------
+    //
+    // A corner is an angle at which the build lands exactly tangent to
+    // something — the boundary of what checkItemLocation accepts. The build
+    // always lands on one circle (radius `R` around the origin), and each
+    // object carves an arc out of it, so the corners are where that circle
+    // meets each object's rejection circle: two per object that reaches it.
+    // The river band adds up to four more, where the placement circle crosses
+    // its edges.
+    //
+    // Those angles are the whole story. A build that touches anything sits on
+    // one of them, and between two corners the circle is either blocked
+    // outright or strictly worse. The fixed π/36 sweep this placer ran on
+    // steps 5° at a time and walks straight over any gap narrower than that —
+    // gaps the server would have taken. This enumerates them instead.
+    cornerAngles(type, px, py) {
+      const item = this.item(type);
+      if (!item) {
+        return [];
+      }
+      const R = this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
+      if (!(R > 0)) {
+        return [];
+      }
+      const blockers = this.blockersAt(px, py);
+      const raw = [];
+      for (let i = 0; i < blockers.length; i++) {
+        const o = blockers[i];
+        const dx = o.x - px, dy = o.y - py;
+        const dist2 = dx * dx + dy * dy;
+        const E = item.scale + o.block;
+        const sum = R + E, diff = R - E;
+        // The two circles have to actually cross: |R - E| < dist < R + E.
+        // Outside that the object either blocks nothing or blocks the lot,
+        // and either way it has no corner to offer.
+        if (dist2 >= sum * sum || dist2 <= diff * diff || dist2 <= 0) {
+          continue;
+        }
+        const dist = Math.sqrt(dist2);
+        const cosArg = (dist2 + R * R - E * E) / (2 * dist * R);
+        if (cosArg < -1 || cosArg > 1) {
+          continue;
+        }
+        const spread = Math.acos(cosArg);
+        const base = Math.atan2(dy, dx);
+        // Out past the tangent by a hair, on both sides: the wire angle only
+        // carries two decimals, so a corner sent raw lands on either side of
+        // the boundary at the server's discretion.
+        raw.push(base + spread + AURA_CORNER_NUDGE, base - spread - AURA_CORNER_NUDGE);
+      }
+      // Where the placement circle crosses the river bank. Platforms (18) are
+      // the one item the server lets into the water, so they have no corner
+      // here.
+      if (item.id !== 18) {
+        const mid = Config_default.mapScale / 2;
+        const half = Config_default.riverWidth / 2;
+        for (const edge of [ mid - half, mid + half ]) {
+          const s = (edge - py) / R;
+          if (s <= -1 || s >= 1) {
+            continue;
+          }
+          const a = Math.asin(s);
+          raw.push(a + AURA_CORNER_NUDGE, a - AURA_CORNER_NUDGE, Math.PI - a + AURA_CORNER_NUDGE, Math.PI - a - AURA_CORNER_NUDGE);
+        }
+      }
+      // Fold to the wire's own precision — two angles the server cannot tell
+      // apart are one corner, and trying both is a wasted packet.
+      const seen = new Set;
+      const out = [];
+      for (let i = 0; i < raw.length; i++) {
+        const a = this.normalizeAngle(Math.atan2(Math.sin(raw[i]), Math.cos(raw[i])));
+        const key = Math.round(a * 100);
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        out.push(a);
+      }
+      return out;
+    }
+
     // Free arcs around (px, py) for this build type.
     angleRanges(type, px, py) {
       const item = this.item(type);
@@ -9245,21 +9530,28 @@ window.grbtp = 35;
         return;
       }
       const offset = this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
-      const objs = this.nearObjs(px, py);
+      // Over the blocker table, not a 200px neighbour list: an object only
+      // has an arc to contribute if it can reject a landing point, and a
+      // blocker does that from 300 away — far outside what this used to see.
+      const blockers = this.blockersAt(px, py);
       const rawBlocked = [];
-      for (const obj of objs) {
-        const p = obj.pos.current;
-        const dx = p.x - px, dy = p.y - py;
-        if (dx * dx + dy * dy > 40000) {
+      for (const o of blockers) {
+        const dx = o.x - px, dy = o.y - py;
+        const reach = offset + item.scale + o.block;
+        if (dx * dx + dy * dy > reach * reach) {
           continue;
         }
-        const angles = this.closestPossibleAngles(obj, type, px, py);
+        const angles = this.closestPossibleAngles({
+          x: o.x,
+          y: o.y,
+          scale: o.block
+        }, type, px, py);
         if (!angles || angles.length !== 2) {
           continue;
         }
         const [a1, a2] = angles;
-        const v1 = this.checkItemLocation(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, item.id, objs);
-        const v2 = this.checkItemLocation(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, item.id, objs);
+        const v1 = this.checkItemLocation(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, item.id, blockers);
+        const v2 = this.checkItemLocation(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, item.id, blockers);
         if (v1 && v2) {
           rawBlocked.push([ a1, a2 ]);
         } else if (v1 || v2) {
@@ -9284,21 +9576,29 @@ window.grbtp = 35;
         return;
       }
       const offset = this.client.myPlayer.scale + item.scale + (item.placeOffset || 0);
-      const objs = this.nearObjs(px, py);
+      const blockers = this.blockersAt(px, py);
       const rawBlocked = [];
-      for (const obj of objs) {
-        const p = obj.pos.current;
-        if (Math.hypot(p.x - px, p.y - py) > AURA_SCAN_RANGE || obj.id === target.id) {
+      for (const o of blockers) {
+        if (o.id === target.id) {
           continue;
         }
-        const angles = this.closestPossibleAngles(obj, type, px, py);
+        const dx = o.x - px, dy = o.y - py;
+        const reach = offset + item.scale + o.block;
+        if (dx * dx + dy * dy > reach * reach) {
+          continue;
+        }
+        const angles = this.closestPossibleAngles({
+          x: o.x,
+          y: o.y,
+          scale: o.block
+        }, type, px, py);
         if (!angles || angles.length !== 2) {
           continue;
         }
         const [a1, a2] = angles;
-        const buildAngle = Math.atan2(p.y - py, p.x - px);
-        const v1 = this.preplaceCheck(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, item.id, target, objs);
-        const v2 = this.preplaceCheck(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, item.id, target, objs);
+        const buildAngle = Math.atan2(dy, dx);
+        const v1 = this.preplaceCheck(px + offset * Math.cos(a1), py + offset * Math.sin(a1), item.scale, item.id, target, blockers);
+        const v2 = this.preplaceCheck(px + offset * Math.cos(a2), py + offset * Math.sin(a2), item.scale, item.id, target, blockers);
         if (v1 && v2) {
           rawBlocked.push([ a1, a2 ]);
         } else if (v1 || v2) {
@@ -9365,7 +9665,7 @@ window.grbtp = 35;
       const dist2 = dx * dx + dy * dy;
       const combined = objScale + item.scale;
       const combined2 = combined * combined;
-      const objs = this.nearObjs(px, py);
+      const blockers = this.blockersAt(px, py);
 
       const checkPreplace = preObj => {
         for (const bucket of this.preplaces) {
@@ -9377,7 +9677,7 @@ window.grbtp = 35;
             }
           }
         }
-        return this.checkItemLocation(preObj.x, preObj.y, preObj.scale, preObj.id, objs);
+        return this.checkItemLocation(preObj.x, preObj.y, preObj.scale, preObj.id, blockers);
       };
 
       if (dist2 >= combined2) {
@@ -9422,40 +9722,36 @@ window.grbtp = 35;
       }
       const tmpS = myPlayer.scale + item.scale + (item.placeOffset || 0);
       const px = myPlayer.pos.current.x, py = myPlayer.pos.current.y;
-      const objs = this.nearObjs(px, py);
-      const blockers = objs.map(o => {
-        const thr = item.scale + this.blockScale(o);
-        return {
-          x: o.pos.current.x,
-          y: o.pos.current.y,
-          thr2: thr * thr
-        };
-      });
-      const noOverlapThr2 = noOverlap ? Math.pow(item.scale * 2, 2) : 0;
+      const blockers = this.blockersAt(px, py);
+      // Reserved spots from builds already sent this sweep, kept apart from
+      // the shared blocker table so the per-tick scan stays reusable.
+      const claimed = [];
+      const noOverlapThr2 = noOverlap ? item.scale * 2 * (item.scale * 2) : 0;
+      const id = myPlayer.getItemByType(type);
 
       const tryAngle = relAim => {
-        if (ModuleHandler.packetCount + auraPlacementCost(type) > ModuleHandler.packetLimit) {
+        if (ModuleHandler.packetCount + this.placeCost(type) > ModuleHandler.packetLimit) {
           return false;
         }
         const tmpX = px + tmpS * Math.cos(relAim), tmpY = py + tmpS * Math.sin(relAim);
-        const id = myPlayer.getItemByType(type);
         if (id !== 18 && this.inRiver(tmpY)) {
           return false;
         }
-        for (const o of blockers) {
+        for (let i = 0; i < claimed.length; i++) {
+          const o = claimed[i];
           const dx = tmpX - o.x, dy = tmpY - o.y;
           if (dx * dx + dy * dy < o.thr2) {
             return false;
           }
         }
-        if (!this.checkItemLocation(tmpX, tmpY, item.scale, item.id, objs)) {
+        if (!this.checkItemLocation(tmpX, tmpY, item.scale, item.id, blockers)) {
           return false;
         }
         if (!this.tryPlaceAngle(type, relAim)) {
           return false;
         }
         if (noOverlap) {
-          blockers.push({
+          claimed.push({
             x: tmpX,
             y: tmpY,
             thr2: noOverlapThr2
@@ -9497,6 +9793,22 @@ window.grbtp = 35;
             }
           }
         }
+      }
+      // Then every corner the geometry allows inside the same window, nearest
+      // the middle of it first. This is the part the fixed sweep below cannot
+      // do: a free gap narrower than `plus` falls entirely between two of its
+      // steps, and a corner is precisely an angle that sits in such a gap.
+      const windowSpan = (repeat - first) * .5;
+      const windowMid = radian + first + windowSpan;
+      const corners = this.cornerAngles(type, px, py);
+      if (corners.length > 1) {
+        corners.sort((a, b) => this.angleDist(a, windowMid) - this.angleDist(b, windowMid));
+      }
+      for (let i = 0; i < corners.length; i++) {
+        if (this.angleDist(corners[i], windowMid) > windowSpan) {
+          continue;
+        }
+        tryAngle(corners[i]);
       }
       const end = loopAll ? repeat : repeat - plus * .001;
       const steps = Math.round((end - first) / plus);
@@ -9577,8 +9889,18 @@ window.grbtp = 35;
             }
           }
         } else {
+          // Open ground: nothing to pack against, so auraro's four quarter-turn
+          // angles are as good as it gets — except where the river bank runs
+          // through, which is still a corner. Those go first, aimed side.
           const fut = enemy.pos.future ?? enemy.pos.current;
           const aim = Math.atan2(fut.y - py, fut.x - px);
+          const corners = this.cornerAngles(type, px, py);
+          if (corners.length > 1) {
+            corners.sort((a, b) => this.angleDist(a, aim) - this.angleDist(b, aim));
+          }
+          for (let i = 0; i < corners.length; i++) {
+            this.tryPlaceAngle(type, corners[i]);
+          }
           for (let i = 0; i < AURA_TWO_PI; i += Math.PI / 2) {
             this.tryPlaceAngle(type, aim + i);
           }
@@ -9674,7 +9996,17 @@ window.grbtp = 35;
     reset() {
       this._tick = -1;
     }
+    // The batch opened by AuraPlacer.send() must not outlive this module: the
+    // weapon has to come back before anything else runs. Wrapping the body
+    // covers the early returns too.
     postTick() {
+      try {
+        this._postTick();
+      } finally {
+        getAuraPlacer(this.client).flush();
+      }
+    }
+    _postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (!Settings_default._autoplacer || !myPlayer || !myPlayer.inGame) {
         return;
@@ -9758,7 +10090,7 @@ window.grbtp = 35;
     _tick=-1;
     _rangeCache={};
     _rangeTick=-1;
-    _retrapLast=0;
+    _retrapLast=-1;
     constructor(client2) {
       this.client = client2;
     }
@@ -9766,7 +10098,7 @@ window.grbtp = 35;
       this._tick = -1;
       this._rangeCache = {};
       this._rangeTick = -1;
-      this._retrapLast = 0;
+      this._retrapLast = -1;
     }
 
     predictPos() {
@@ -9776,14 +10108,30 @@ window.grbtp = 35;
     // The trap holding the enemy is about to go. Auraro cycles the whole
     // circle so whichever slot frees up gets refilled; `send` stops the sweep
     // once the tick budget is gone.
+    //
+    // The gate was 200ms of wall clock, which is a tick and three quarters at
+    // moomoo's 111ms — so on the tick that mattered it was as likely to be
+    // shut as open, purely on where the clock happened to land. It is one per
+    // tick now, which is what it was reaching for.
+    //
+    // The sweep itself leads with the corners: the slot that is about to open
+    // is bounded by whatever is still standing around it, so the angle that
+    // refills it is a corner, and a π/8 cycle only lands on one by luck.
     retrapSpam(placer) {
-      const {myPlayer: myPlayer} = this.client;
-      const now = Date.now();
-      if (now - this._retrapLast < AURA_RETRAP_COOLDOWN || !myPlayer.canPlace(AURA_TRAP)) {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const tick = ModuleHandler.tickCount;
+      if (this._retrapLast === tick || !myPlayer.canPlace(AURA_TRAP)) {
         return false;
       }
-      this._retrapLast = now;
+      this._retrapLast = tick;
+      const myPos = myPlayer.pos.current;
       let sent = 0;
+      for (const a of placer.cornerAngles(AURA_TRAP, myPos.x, myPos.y)) {
+        if (!placer.send(AURA_TRAP, a)) {
+          return sent > 0;
+        }
+        sent += 1;
+      }
       for (let a = 0; a < AURA_TWO_PI; a += AURA_RETRAP_STEP) {
         if (!placer.send(AURA_TRAP, a)) {
           break;
@@ -9793,7 +10141,17 @@ window.grbtp = 35;
       return sent > 0;
     }
 
+    // The batch opened by AuraPlacer.send() must not outlive this module: the
+    // weapon has to come back before anything else runs. Wrapping the body
+    // covers the early returns too.
     postTick() {
+      try {
+        this._postTick();
+      } finally {
+        getAuraPlacer(this.client).flush();
+      }
+    }
+    _postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (!Settings_default._autoplacer || !Settings_default._prePlace || !myPlayer || !myPlayer.inGame) {
         return;
@@ -9919,7 +10277,7 @@ window.grbtp = 35;
       }
       const at = from || this.client.myPlayer.pos.current;
       const landing = placer.landingPoint(at.x, at.y, item, angle);
-      if (!placer.checkItemLocation(landing.x, landing.y, item.scale, item.id, placer.nearObjs(at.x, at.y))) {
+      if (!placer.checkItemLocation(landing.x, landing.y, item.scale, item.id, placer.blockersAt(at.x, at.y))) {
         return false;
       }
       return placer.send(type, angle);
@@ -9994,7 +10352,17 @@ window.grbtp = 35;
       return true;
     }
 
+    // The batch opened by AuraPlacer.send() must not outlive this module: the
+    // weapon has to come back before anything else runs. Wrapping the body
+    // covers the early returns too.
     postTick() {
+      try {
+        this._postTick();
+      } finally {
+        getAuraPlacer(this.client).flush();
+      }
+    }
+    _postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
       if (!Settings_default._autoplacer || !Settings_default._replace || !myPlayer || !myPlayer.inGame) {
         return;
