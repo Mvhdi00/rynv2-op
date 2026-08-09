@@ -52,16 +52,22 @@ Luna features that were **not** ported, and why:
 ### Precise angles
 
 Nothing in the protocol quantises a direction. The move packet (`"9"`) carries
-raw radians and the server feeds them straight into `cos(moveDir) / sin(moveDir)`
+raw radians that the server feeds straight into `cos(moveDir) / sin(moveDir)`
 (`src/game_index.js`, `Player.update`); the placement angle is the same kind of
-float. What limits a client is its own input and its own search grid:
+float. What limited the client was its own input and its own search grid:
 
 | | Before | Now |
 |---|---|---|
-| Movement directions | 8 — the key vector, and nothing between | **144** (2.5°), slider 8–360 |
-| Placement scan | 72 steps (5°) | **144** (2.5°), slider 24–288 |
+| Movement directions | 8 — the key vector, and nothing between | **624**, slider 8–624 |
+| Placement scan | 72 steps (5°) | **624**, slider 24–624 |
 
-Both sit on one grid, in `AngleGrid`. **Misc → Precise Angles** holds the master
+624 rather than some rounder number: the game's own client rounds every angle
+with `fixTo(angle, 2)`, so 0.01 rad is the finest direction it can express and
+628 the most it can distinguish. 624 is the largest multiple of 8 at or under
+that, and being a multiple of 8 keeps the eight key directions exactly on the
+grid at every slider position.
+
+Both grids live in `AngleGrid`. **Misc → Precise Angles** holds the master
 switch and the two sliders; turning it off restores 8 and 72 exactly.
 
 Reaching the extra directions needs an input that can express them, so two are
@@ -70,40 +76,61 @@ added, both under **Keybinds → Precise Angles**:
 - **Mouse Movement** — the movement keys are read relative to the cursor: `W`
   goes toward it, `A`/`D` strafe, `S` backs off. Aiming then reaches every step
   on the grid, and diagonals stay diagonal relative to where you are looking.
-- **Rotate Move Left / Right** (`J` / `L`) — one grid step per press, auto-repeat
-  included, so holding either key sweeps the circle. The offset clears as soon
-  as you stop moving.
+- **Rotate Move Left / Right** (`J` / `L`) — turns about 2.5° per press
+  whatever the grid is set to (`max(1, round(steps / 144))` steps), so a finer
+  grid never makes the keys slower. Auto-repeat included; the offset clears as
+  soon as you stop moving.
 
-Snapping to a grid instead of sending raw floats is what makes the finer
-resolution affordable. A direction only goes out when it lands on a new step, so
-a full 360° mouse sweep costs at most 144 move packets instead of one per
-`mousemove` — measured at 144 sends across 5000 mouse events — against the 70
-packets/second the client budgets itself (`ModuleHandler.packetLimit`). Mouse
-steering is additionally held to ~16/s and skipped entirely when the budget is
-close to spent, so it can't crowd out the combat modules.
+#### Why it is free
 
-Module-computed angles — pathfinder, autopush, safewalk — are left as the raw
-floats they already were. They were never the thing being rounded. The one
-exception is `LunaSafeWalk`, which picked its way around a spike from 24
-candidates; it now uses the movement grid.
+Two things had to stop scaling with the step count.
+
+**Packets.** Snapping to a grid instead of sending raw floats means a direction
+only goes out when it lands on a new step, so a full 360° mouse sweep costs at
+most 624 move packets instead of one per `mousemove` — measured at 624 sends
+across 20000 mouse events. Mouse steering and held nudge keys then share one
+gate: at most one packet per 60 ms, skipped entirely when the client's own 70/s
+budget (`ModuleHandler.packetLimit`) is close to spent. Only the packet is held
+back — the angle keeps updating at full rate, and a trailing send delivers the
+direction you settled on, so the throttle costs precision nowhere.
+
+**The placement scan.** `_canPlace` ran a spatial-grid query per angle — 81 cell
+lookups and a fresh `Set` each time — so 624 steps would have cost 129 ms of a
+111 ms tick. `_getPlaceableMask` solves the same question instead of sampling
+it: every candidate sits on a circle of radius `length` around you, so an object
+at distance `d` blocks one contiguous arc of it, the angles within
+`acos((d² + length² - reach²) / (2·d·length))` of the object's bearing. That is
+the law `ObjectManager.getBestPlacementAngles` already solves for its tangents,
+applied to the whole circle at once. One query, then arithmetic.
+
+The result is the same verdict `_canPlace` gave, angle for angle —
+`tools/check-angles.js` holds it to that across tangency, the 0/2π seam, objects
+that swallow the circle whole, the river rule and 300 fuzz scenes: **811,440
+agreements, 0 disagreements**, with 69% of angles blocked so both outcomes are
+exercised.
+
+What a full tick of eight cached scans costs, measured on the client's own
+`SpatialHashGrid2D`:
+
+| Objects near you | old, 8 steps | old, 72 | old, 144 | **new, 624** |
+|---|---|---|---|---|
+| 60 (a normal fight) | 0.50 ms | 4.12 ms | 8.20 ms | **0.49 ms** |
+| 150 (busy area) | 0.54 ms | 4.64 ms | 9.23 ms | **0.52 ms** |
+| 500 (packed bases) | 1.48 ms | 13.46 ms | 26.08 ms | **0.61 ms** |
+
+624 angles now cost what 8 used to, and less than that in a crowd. The slider is
+still there, but there is no longer a performance reason to move it.
+
+#### What is left alone
+
+Module-computed angles — pathfinder, autopush, safewalk — stay the raw floats
+they already were. They were never the thing being rounded. The one exception is
+`LunaSafeWalk`, which picked its way around a spike from 24 candidates; it now
+uses the movement grid.
 
 On the building side the same grid drives the preplace scan, the retrap scan,
 the trap-bounce sweep and auto-break's swing search, so one setting describes
 all of it.
-
-**What the finer scan costs.** The scan is O(steps) spatial-grid queries per
-tick, so 144 doubles what 72 did. Measured against the client's own
-`SpatialHashGrid2D`, for a full tick of eight cached scans:
-
-| Objects near you | 72 steps | 144 steps | 288 steps |
-|---|---|---|---|
-| 60 (a normal fight) | 2.7 ms | 5.2 ms | 10.3 ms |
-| 150 (busy area) | 4.7 ms | 9.7 ms | 18.4 ms |
-| 500 (packed bases) | 17.0 ms | 31.2 ms | 61.1 ms |
-
-Against a 111 ms tick that leaves 144 comfortable in normal play and heavy only
-in the crowd case — which was already heavy at 72. The slider goes down to 24 if
-a machine struggles.
 
 Precise angles and mouse movement are excluded from Legit Mode: they set how
 finely a direction can be expressed, not whether the client acts on its own.
@@ -217,11 +244,12 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
-- **Angles** — 42/42 checks pass: the grid wraps and snaps within half a step,
+- **Angles** — 48/48 checks pass: the grid wraps and snaps within half a step,
   the eight key directions stay exact at every slider value, mouse steering
-  reaches all 144 directions for 144 packets, the master switch restores 8/72,
-  and the placement cache resizes cleanly when the resolution changes
-  mid-tick.
+  reaches all 624 directions for 624 packets, a nudge press turns ~2.5° at any
+  resolution, the master switch restores 8/72, the placement cache resizes
+  cleanly mid-tick, and the analytic mask matches the `_canPlace` it replaced
+  across 811,440 angle tests.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
@@ -242,10 +270,12 @@ understood.
   Legit Mode — they are cosmetic and naming options, not combat automation.
   `_preciseAngles` and `_mouseMovement` are excluded for the same reason: they
   are input resolution, not automation.
-- `_preciseAngles` defaults to **on** at 144/144. It changes how finely a
+- `_preciseAngles` defaults to **on** at 624/624. It changes how finely a
   direction can be expressed, not what the client does with it — the movement
   keys, the placer and every module behave exactly as before, on a finer grid.
   `_mouseMovement` defaults to **off**, since it re-reads WASD.
+- A stored resolution that is missing or nonsense falls back to 624, the same
+  value as the default.
 - The nudge keys default to `J` and `L`, which nothing in the game or the
   client already binds.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted

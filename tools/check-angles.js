@@ -8,8 +8,8 @@
  *
  *   node tools/check-angles.js [ReUp_Mix.user.js] [--cost]
  *
- * --cost also runs the placement scan against the client's own spatial grid and
- * prints what a tick costs at 72 / 144 / 288 steps.
+ * --cost also times the scan against the client's own spatial grid, the shipped
+ * analytic mask next to the per-angle sampling it replaced.
  */
 
 const fs = require("fs");
@@ -50,8 +50,8 @@ function check(name, condition, detail = "") {
 
 const Settings_default = {
   _preciseAngles: true,
-  _moveAngleSteps: 144,
-  _buildAngleSteps: 144,
+  _moveAngleSteps: 624,
+  _buildAngleSteps: 624,
   _mouseMovement: false
 };
 
@@ -67,8 +67,10 @@ return { AngleGrid, Input };
 
 console.log("grid\n");
 
-check("144 steps by default", AngleGrid.moveSteps === 144 && AngleGrid.buildSteps === 144);
-check("a step is 2.5 degrees", near(deg(AngleGrid.step(144)), 2.5, 1e-12));
+check("624 steps by default", AngleGrid.moveSteps === 624 && AngleGrid.buildSteps === 624);
+check("624 is at or under what the game can express", 624 <= Math.floor(TAU / 0.01) && 624 % 8 === 0,
+  `game ceiling ${Math.floor(TAU / 0.01)}`);
+check("a step is 0.577 degrees", near(deg(AngleGrid.step(624)), 360 / 624, 1e-12));
 
 const distinct = new Set();
 for (let i = 0; i < 144; i++) distinct.add(AngleGrid.snap(AngleGrid.fromIndex(i, 144), 144).toFixed(12));
@@ -87,7 +89,7 @@ check("snap never moves an angle more than half a step",
 
 /* Every slider value is a multiple of 8, so the eight key directions stay
  * exactly representable however fine the grid is. */
-for (const steps of [8, 16, 144, 360]) {
+for (const steps of [8, 16, 144, 360, 624]) {
   check(`key directions stay exact at ${steps} steps`,
     [0, 45, 90, 135, 180, 225, 270, 315].every(d => {
       const a = d * Math.PI / 180;
@@ -113,18 +115,31 @@ check("opposite keys cancel", input.getMoveAngle() === null);
 
 input.move = RIGHT;
 const base = input.getMoveAngle();
-input.moveNudge = 1;
-check("one nudge is one step", near(deg(input.getMoveAngle()) - deg(base), 2.5, 1e-9),
-  `${deg(base)} -> ${deg(input.getMoveAngle())} deg`);
-input.moveNudge = -1;
-check("nudging below zero wraps", near(deg(input.getMoveAngle()), 357.5));
-input.moveNudge = 36;
-check("36 nudges is a quarter turn", near(deg(input.getMoveAngle()), 90));
+/* one press is Math.max(1, round(steps / 144)) steps, so the turn rate stays
+ * about 2.5 degrees per press however fine the grid is */
+const perPress = steps => Math.max(1, Math.round(steps / 144));
+for (const steps of [8, 144, 288, 624]) {
+  Settings_default._moveAngleSteps = steps;
+  input.moveNudge = perPress(steps);
+  let turned = deg(input.getMoveAngle()) - deg(base);
+  if (turned > 180) turned -= 360;
+  /* about 2.5 degrees wherever the grid can express it, and one whole step on
+   * a grid too coarse to - never less than the grid allows */
+  const want = Math.max(360 / steps, 2.5);
+  check(`a press turns ${want.toFixed(2)} deg at ${steps} steps`, Math.abs(turned - want) <= 360 / steps,
+    `${turned.toFixed(2)} deg`);
+}
+Settings_default._moveAngleSteps = 624;
+input.moveNudge = -perPress(624);
+check("nudging below zero wraps", near(deg(input.getMoveAngle()), 360 - 4 * 360 / 624));
+input.moveNudge = 156;
+check("156 steps is a quarter turn", near(deg(input.getMoveAngle()), 90));
 input.moveNudge = 0;
 
 Settings_default._mouseMovement = true;
 const cursor = 33 * Math.PI / 180;
 input.mouse.angle = cursor;
+const GRID = 624;
 const relative = [
   [UP, 0, "W goes toward the cursor"],
   [RIGHT, Math.PI / 2, "D strafes right of it"],
@@ -133,7 +148,7 @@ const relative = [
 ];
 for (const [keys, offset, name] of relative) {
   input.move = keys;
-  check(name, near(input.getMoveAngle(), AngleGrid.snap(cursor + offset, 144)));
+  check(name, near(input.getMoveAngle(), AngleGrid.snap(cursor + offset, GRID)));
 }
 
 /* A full cursor sweep has to reach every direction, and cost one packet per
@@ -141,21 +156,21 @@ for (const [keys, offset, name] of relative) {
 input.move = UP;
 const reached = new Set();
 const sweepAt = i => {
-  input.mouse.angle = parseFloat(((i / 5000) * TAU - Math.PI).toFixed(2)); // the client rounds to 2dp
+  input.mouse.angle = (i / 20000) * TAU - Math.PI;
   return input.getMoveAngle();
 };
 let sends = 0, last = sweepAt(0);
-reached.add(AngleGrid.index(last, 144));
-for (let i = 1; i < 5000; i++) {
+reached.add(AngleGrid.index(last, GRID));
+for (let i = 1; i < 20000; i++) {
   const a = sweepAt(i);
-  reached.add(AngleGrid.index(a, 144));
+  reached.add(AngleGrid.index(a, GRID));
   if (a !== last) {
     sends++;
     last = a;
   }
 }
-check("a cursor sweep reaches all 144", reached.size === 144, `${reached.size} reached`);
-check("one send per step crossed, not per mouse event", sends <= 144, `${sends} sends over 5000 mouse events`);
+check("a cursor sweep reaches all 624", reached.size === 624, `${reached.size} reached`);
+check("one send per step crossed, not per mouse event", sends <= 624, `${sends} sends over 20000 mouse events`);
 
 Settings_default._mouseMovement = false;
 Settings_default._preciseAngles = false;
@@ -169,9 +184,9 @@ Settings_default._preciseAngles = true;
 
 for (const bad of ["nonsense", 2, null, NaN]) {
   Settings_default._moveAngleSteps = bad;
-  check(`a stored ${typeof bad === "string" ? `"${bad}"` : String(bad)} falls back to 144`, AngleGrid.moveSteps === 144);
+  check(`a stored ${typeof bad === "string" ? `"${bad}"` : String(bad)} falls back to 624`, AngleGrid.moveSteps === 624);
 }
-Settings_default._moveAngleSteps = 144;
+Settings_default._moveAngleSteps = 624;
 
 /* ------------------------------------------------------------------ *
  * The placement scan cache
@@ -224,56 +239,151 @@ check("an enemy due east is quadrant 0", Math.floor(AngleGrid.index(0, 144) / qu
 check("an enemy due south is quadrant 1", Math.floor(AngleGrid.index(Math.PI / 2, 144) / quadrant) === 1);
 
 /* ------------------------------------------------------------------ *
+ * The analytic mask against the sampling original
+ *
+ * _getPlaceableMask replaced a per-angle _canPlace, so it has to give the same
+ * verdict for every angle — including at a tangent, across the 0/2pi seam, and
+ * when an object swallows the placement circle whole. Both sides run here: the
+ * mask straight out of the build, and _canPlace's own body rebuilt around the
+ * same spatial grid.
+ * ------------------------------------------------------------------ */
+
+console.log("\nanalytic mask vs sampling\n");
+
+const SpatialHashGrid2D = eval(
+  `(() => {\n${region("  class SpatialHashGrid2D {", "  class ObjectManager")}\nreturn SpatialHashGrid2D; })()`
+);
+const maskOf = eval(`(() => {
+const Items = ITEMS;
+const Config_default = CONFIG;
+${region("  function _getPlaceableMask(", "  function _getCachedPrePlaceAngles(")}
+return _getPlaceableMask;
+})()`.replace("ITEMS", "[{ scale: 49, placeOffset: -5 }]").replace("CONFIG", "{ mapScale: 14400, riverWidth: 724 }"));
+
+const ITEM_SCALE = 49;
+const LENGTH = 35 + 49 - 5;
+const MID = 14400 / 2, RIVER_HALF = 724 / 2;
+
+/* _canPlace, angle by angle, against the same grid */
+function sampling(scene, steps) {
+  const out = new Uint8Array(steps);
+  for (let i = 0; i < steps; i++) {
+    const angle = i * (TAU / steps);
+    const cx = scene.myPos.x + LENGTH * Math.cos(angle);
+    const cy = scene.myPos.y + LENGTH * Math.sin(angle);
+    let collision = false;
+    scene.grid2D.query(cx, cy, 4, id => {
+      if (collision) return;
+      const obj = scene.objects.get(id);
+      if (!obj) return;
+      if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < ITEM_SCALE + obj.placementScale) {
+        collision = true;
+      }
+    });
+    if (!collision && cy >= MID - RIVER_HALF && cy <= MID - RIVER_HALF + 724) collision = true;
+    out[i] = collision ? 0 : 1;
+  }
+  return out;
+}
+
+function build(list, at = { x: 7000, y: 3000 }) {
+  const grid2D = new SpatialHashGrid2D(100), objects = new Map;
+  list.forEach((o, i) => {
+    objects.set(i, { pos: { current: { x: o.x, y: o.y } }, placementScale: o.s });
+    grid2D.insert(o.x, o.y, o.s, i);
+  });
+  return { grid2D, objects, myPos: at };
+}
+
+let agree = 0, disagree = 0, blockedSeen = 0;
+function sameVerdict(name, list, at) {
+  const scene = build(list, at);
+  for (const steps of [8, 72, 144, 288, 624, 1440]) {
+    const a = sampling(scene, steps);
+    const b = maskOf(0, scene.myPos, scene, null, steps);
+    let first = -1;
+    for (let i = 0; i < steps; i++) {
+      if (!a[i]) blockedSeen++;
+      if (a[i] === b[i]) agree++;
+      else {
+        disagree++;
+        if (first === -1) first = i;
+      }
+    }
+    if (first !== -1) {
+      console.log(`FAIL  ${name} @ ${steps} steps, first at ${(first * 360 / steps).toFixed(2)} deg`);
+    }
+  }
+}
+
+/* well clear of the river band, which is its own case below */
+const P = { x: 7000, y: 3000 };
+for (const eps of [-0.5, -1e-9, 0, 1e-9, 0.5]) {
+  sameVerdict(`tangent${eps >= 0 ? "+" : ""}${eps}`, [{ x: P.x + LENGTH + 98 + eps, y: P.y, s: 49 }]);
+}
+sameVerdict("object swallows the circle", [{ x: P.x, y: P.y, s: 200 }]);
+sameVerdict("object on the player", [{ x: P.x, y: P.y, s: 49 }]);
+sameVerdict("almost swallows", [{ x: P.x + 1, y: P.y, s: 49 + LENGTH - 1 }]);
+sameVerdict("arc across the 0/2pi seam", [{ x: P.x + 130, y: P.y, s: 52 }]);
+sameVerdict("tree reaching in", [{ x: P.x + 200, y: P.y + 40, s: 105 }]);
+sameVerdict("nothing in range", [{ x: P.x + 2000, y: P.y, s: 110 }]);
+sameVerdict("empty", []);
+sameVerdict("four gaps", [
+  { x: P.x + 120, y: P.y, s: 45 }, { x: P.x - 120, y: P.y, s: 45 },
+  { x: P.x, y: P.y + 120, s: 45 }, { x: P.x, y: P.y - 120, s: 45 }
+]);
+sameVerdict("dense ring", Array.from({ length: 24 }, (_, i) => ({
+  x: P.x + Math.cos(i / 24 * TAU) * 150, y: P.y + Math.sin(i / 24 * TAU) * 150, s: 49
+})));
+/* on the river bank, where the river rule decides */
+sameVerdict("river bank", [{ x: P.x + 150, y: MID - RIVER_HALF - 40, s: 49 }], { x: P.x, y: MID - RIVER_HALF - 40 });
+
+let seed = 99;
+const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+for (let t = 0; t < 300; t++) {
+  sameVerdict("fuzz" + t, Array.from({ length: 1 + Math.floor(rnd() * 25) }, () => {
+    const a = rnd() * TAU, r = 100 + rnd() * 260;
+    return {
+      x: P.x + Math.cos(a) * r,
+      y: P.y + Math.sin(a) * r,
+      s: [45, 49, 52, 65, 105, 110][Math.floor(rnd() * 6)]
+    };
+  }));
+}
+
+check("the mask matches _canPlace angle for angle", disagree === 0,
+  `${agree} agreements, ${disagree} disagreements, ${(blockedSeen / (agree + disagree) * 100).toFixed(0)}% blocked`);
+
+/* ------------------------------------------------------------------ *
  * What the scan costs, on the client's own spatial grid
  * ------------------------------------------------------------------ */
 
 if (withCost) {
-  console.log("\nscan cost (one tick = eight cached scans)\n");
-
-  const SpatialHashGrid2D = eval(
-    `(() => {\n${region("  class SpatialHashGrid2D {", "  class ObjectManager")}\nreturn SpatialHashGrid2D; })()`
-  );
+  console.log("\nscan cost, ms per tick (eight cached scans)\n");
+  console.log("  objects |  per-angle sampling 72 / 144  |  analytic mask 72 / 144 / 624 / 1440");
 
   for (const [count, spread] of [[60, 400], [150, 700], [500, 700]]) {
-    const grid = new SpatialHashGrid2D(100);
-    const objects = new Map;
-    for (let i = 0; i < count; i++) {
-      const a = Math.random() * TAU, r = Math.random() * spread;
-      const object = {
-        pos: { current: { x: 7000 + Math.cos(a) * r, y: 7000 + Math.sin(a) * r } },
-        placementScale: 45
+    let s2 = count * 7919;
+    const rnd2 = () => (s2 = (s2 * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const scene = build(Array.from({ length: count }, () => {
+      const a = rnd2() * TAU, r = 140 + Math.sqrt(rnd2()) * spread;
+      return {
+        x: P.x + Math.cos(a) * r,
+        y: P.y + Math.sin(a) * r,
+        s: [45, 45, 49, 49, 52, 52, 65, 110][Math.floor(rnd2() * 8)]
       };
-      objects.set(i, object);
-      grid.insert(object.pos.current.x, object.pos.current.y, 45, i);
-    }
-    /* the shape of AutoPlacer._canPlace */
-    const canPlace = angle => {
-      const cx = 7000 + 70 * Math.cos(angle), cy = 7000 + 70 * Math.sin(angle);
-      let collision = false;
-      grid.query(cx, cy, 4, id => {
-        if (collision) return;
-        const object = objects.get(id);
-        if (!object) return;
-        if (Math.hypot(cx - object.pos.current.x, cy - object.pos.current.y) < 35 + object.placementScale) {
-          collision = true;
-        }
-      });
-      return !collision;
+    }));
+    const time = (fn, steps) => {
+      for (let i = 0; i < 30; i++) fn(scene, steps);
+      const t0 = process.hrtime.bigint();
+      for (let t = 0; t < 120; t++) for (let k = 0; k < 8; k++) fn(scene, steps);
+      return (Number(process.hrtime.bigint() - t0) / 1e6 / 120).toFixed(2);
     };
-    const tick = steps => {
-      for (let key = 0; key < 8; key++) {
-        for (let i = 0; i < steps; i++) canPlace(AngleGrid.fromIndex(i, steps));
-      }
-    };
-    for (let i = 0; i < 30; i++) tick(144); // warm up
-    const timings = [72, 144, 288].map(steps => {
-      const start = process.hrtime.bigint();
-      for (let t = 0; t < 200; t++) tick(steps);
-      return (Number(process.hrtime.bigint() - start) / 1e6 / 200).toFixed(1) + " ms";
-    });
+    const shipped = (sc, steps) => maskOf(0, sc.myPos, sc, null, steps);
     console.log(
-      `  ${String(count).padStart(3)} objects within ${spread}:  ` +
-      `72 -> ${timings[0]}   144 -> ${timings[1]}   288 -> ${timings[2]}`
+      "  " + String(count).padStart(7) + " |  " +
+      [72, 144].map(n => time(sampling, n)).join("  /  ").padEnd(28) + "  |  " +
+      [72, 144, 624, 1440].map(n => time(shipped, n)).join("  /  ")
     );
   }
   console.log("\n  a game tick is 111 ms.");

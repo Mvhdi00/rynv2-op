@@ -484,15 +484,18 @@ edit(
    * the pre-mix resolutions when precise angles are off, so the toggle is a
    * true bypass rather than a different setting. */
   const AngleGrid = {
+    /* 624 rather than 628: it is the largest multiple of 8 at or under the 628
+     * directions the game's own fixTo(angle, 2) can express, and a multiple of
+     * 8 keeps the eight key directions exactly on the grid at every setting. */
     _steps(value, fallback) {
       const steps = Math.round(Number(value));
       return Number.isFinite(steps) && steps >= 4 ? steps : fallback;
     },
     get moveSteps() {
-      return Settings_default._preciseAngles ? this._steps(Settings_default._moveAngleSteps, 144) : 8;
+      return Settings_default._preciseAngles ? this._steps(Settings_default._moveAngleSteps, 624) : 8;
     },
     get buildSteps() {
-      return Settings_default._preciseAngles ? this._steps(Settings_default._buildAngleSteps, 144) : 72;
+      return Settings_default._preciseAngles ? this._steps(Settings_default._buildAngleSteps, 624) : 72;
     },
     step(steps) {
       return Math.PI * 2 / steps;
@@ -521,8 +524,8 @@ edit(
   `    _autoplacerRadius: 350,
     _placeAttempts: 4,
     _preciseAngles: true,
-    _moveAngleSteps: 144,
-    _buildAngleSteps: 144,
+    _moveAngleSteps: 624,
+    _buildAngleSteps: 624,
     _mouseMovement: false,
     _mouseMovementKey: "",
     _angleLeft: "KeyJ",
@@ -543,7 +546,83 @@ edit(
  * The placement scan and its cache were written around a literal 72. Both
  * become a parameter, and the cache rebuilds when the resolution changes so a
  * mid-game slider move cannot leave a half-filled array behind.
+ *
+ * The scan also stops paying per angle. `_canPlace` runs a spatial-grid query
+ * for every angle it tests — 81 cell lookups and a fresh Set each time — so the
+ * cost was linear in the step count and 628 steps would have cost 129 ms of a
+ * 111 ms tick. Solving the same question analytically instead makes the cost
+ * scale with the objects around the player rather than with the resolution, and
+ * a scan at any resolution then lands well under what 72 steps used to cost.
  * ------------------------------------------------------------------ */
+
+edit(
+  "angles: analytic placement mask",
+  `  function _getCachedPrePlaceAngles(`,
+  `  /* The placeable/blocked map for one scan, from a single grid query.
+   *
+   * Every placement candidate sits on a circle of radius \`length\` around the
+   * player, so an object at distance \`d\` blocks one contiguous arc of that
+   * circle: the angles within acos((d² + length² - reach²) / (2·d·length)) of
+   * the object's own bearing, where \`reach\` is the two scales added. That is
+   * the same law ObjectManager.getBestPlacementAngles already solves for its
+   * tangents — it is just applied to the whole circle at once here.
+   *
+   * The answer is \`_canPlace\`'s answer, angle for angle, including the strict
+   * comparison at the boundary and the river rule; tools/check-angles.js holds
+   * it to that against the sampling original.
+   */
+  function _getPlaceableMask(id, myPos, ObjectManager2, excludeObj, steps) {
+    const item = Items[id];
+    const length = 35 + item.scale + (item.placeOffset || 0);
+    const mask = new Uint8Array(steps);
+    const arcs = [];
+    let blocksEverything = false;
+    /* One query around the player. Its radius covers the placement circle plus
+     * the furthest an object can reach onto it, so it is a superset of what the
+     * per-angle queries saw. */
+    ObjectManager2.grid2D.query(myPos.x, myPos.y, 4, objId => {
+      const obj = ObjectManager2.objects.get(objId);
+      if (!obj) return;
+      if (excludeObj && obj === excludeObj) return;
+      const dx = obj.pos.current.x - myPos.x;
+      const dy = obj.pos.current.y - myPos.y;
+      const distance = Math.hypot(dx, dy);
+      const reach = item.scale + obj.placementScale;
+      if (distance >= length + reach) return;
+      if (distance < reach - length) {
+        blocksEverything = true;
+        return;
+      }
+      const cosArg = (distance * distance + length * length - reach * reach) / (2 * distance * length);
+      /* also catches the NaN a zero distance produces */
+      if (!(cosArg < 1)) return;
+      arcs.push(Math.atan2(dy, dx), cosArg <= -1 ? Math.PI : Math.acos(cosArg));
+    });
+    if (blocksEverything) return mask;
+    mask.fill(1);
+    const step = Math.PI * 2 / steps;
+    for (let a = 0; a < arcs.length; a += 2) {
+      const from = arcs[a] - arcs[a + 1];
+      const to = arcs[a] + arcs[a + 1];
+      /* strictly inside the arc, matching _canPlace's strict distance test */
+      for (let k = Math.floor(from / step) + 1; k * step < to; k++) {
+        if (k * step <= from) continue;
+        mask[(k % steps + steps) % steps] = 0;
+      }
+    }
+    if (id !== 18) {
+      const mid = Config_default.mapScale / 2;
+      const riverHalf = Config_default.riverWidth / 2;
+      for (let i = 0; i < steps; i++) {
+        if (!mask[i]) continue;
+        const y = myPos.y + length * Math.sin(i * step);
+        if (y >= mid - riverHalf && y <= mid + riverHalf) mask[i] = 0;
+      }
+    }
+    return mask;
+  }
+  function _getCachedPrePlaceAngles(`
+);
 
 edit(
   "angles: preplace cache takes a step count",
@@ -636,6 +715,8 @@ edit(
   `      const retrapQuadrant = this.client._retrapQuadrant ?? -1;
       const steps = AngleGrid.buildSteps;
       const quadrant = steps / 4;
+      /* built on first use, so a scan served entirely from cache costs nothing */
+      let placeableMask = null;
       const computeAngle = i => {
         if (retrapQuadrant >= 0 && Math.floor(i / quadrant) === retrapQuadrant) {
           return {
@@ -644,13 +725,26 @@ edit(
             perfect: false
           };
         }
+        if (placeableMask === null) {
+          placeableMask = _getPlaceableMask(id, myPos, ObjectManager2, excludeObj, steps);
+        }
         const angle = AngleGrid.fromIndex(i, steps);`
 );
 
 edit(
-  "angles: autoplacer preplace scan call",
-  `      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1);`,
-  `      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, -1, steps);`
+  "angles: autoplacer reads the mask",
+  `          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
+          perfect: false
+        };
+      };
+      const forceFull = tickCount < (this.client._focusUntilTick || -1);
+      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1);`,
+  `          placeable: placeableMask[i] === 1,
+          perfect: false
+        };
+      };
+      const forceFull = tickCount < (this.client._focusUntilTick || -1);
+      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, -1, steps);`
 );
 
 /* AutoRetrap: same scan, plus the enemy-facing step it always refreshes. */
@@ -684,6 +778,7 @@ edit(
         myQuadrant = Math.floor(priorityIndex / quadrant);
       }
       this.client._retrapQuadrant = myQuadrant;
+      let placeableMask = null;
       const computeAngle = i => {
         if (myQuadrant >= 0 && Math.floor(i / quadrant) !== myQuadrant) {
           return {
@@ -692,13 +787,26 @@ edit(
             perfect: false
           };
         }
+        if (placeableMask === null) {
+          placeableMask = _getPlaceableMask(id, myPos, ObjectManager2, excludeObj, steps);
+        }
         const angle = AngleGrid.fromIndex(i, steps);`
 );
 
 edit(
-  "angles: autoretrap preplace scan call",
-  `      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, priorityIndex);`,
-  `      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, priorityIndex, steps);`
+  "angles: autoretrap reads the mask",
+  `          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
+          perfect: false
+        };
+      };
+      const forceFull = tickCount < (this.client._focusUntilTick || -1);
+      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, priorityIndex);`,
+  `          placeable: placeableMask[i] === 1,
+          perfect: false
+        };
+      };
+      const forceFull = tickCount < (this.client._focusUntilTick || -1);
+      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, priorityIndex, steps);`
 );
 
 /* The remaining fixed-step placement sweeps: where a trap could bounce an
@@ -753,6 +861,7 @@ edit(
   `    lockPosition=false;
     moveNudge=0;
     _lastSteerTime=0;
+    _steerTimer=null;
     mouse={`
 );
 
@@ -767,6 +876,10 @@ edit(
       this.hotkeys.clear();
       this.move = 0;
       this.moveNudge = 0;
+      if (this._steerTimer !== null) {
+        clearTimeout(this._steerTimer);
+        this._steerTimer = null;
+      }
       this.instaReset();
     }`
 );
@@ -797,31 +910,48 @@ edit(
       const relative = Settings_default._mouseMovement ? this.mouse.angle + base + Math.PI / 2 : base;
       return AngleGrid.snap(relative + this.moveNudge * AngleGrid.step(steps), steps);
     }
-    handleMovement(fromMouse = false) {
+    handleMovement() {
       if (this.move === 0) {
         this.moveNudge = 0;
       }
       const {isOwner: isOwner, clients: clients, _ModuleHandler: ModuleHandler} = this.client;
       const angle = this.getMoveAngle();
-      /* Steering with the mouse is the one path that fires on an input the
-       * player never stops producing, so it is the one that has to stay inside
-       * the packet budget: nothing goes out for a direction the server already
-       * has, a module holding moveTo keeps its steering, and the rest is held
-       * to ~16/s with a reserve left for the combat modules. */
-      if (fromMouse) {
-        if (angle === null || ModuleHandler.moveTo !== "disable") return;
-        if (ModuleHandler.move_dir === angle) return;
-        const now = performance.now();
-        if (now - this._lastSteerTime < 60) return;
-        if (ModuleHandler.packetCount + 10 > ModuleHandler.packetLimit) return;
-        this._lastSteerTime = now;
-      }
       ModuleHandler.startMovement(angle);
       if (isOwner && Spectate_default.active) {
         for (const client2 of clients) {
           client2._ModuleHandler.startMovement(angle);
         }
       }
+    }
+    /* Moving the mouse and holding a nudge key both produce a continuous stream
+     * of direction changes, which is the one thing that could spend the packet
+     * budget faster than the game does. They share one gate.
+     *
+     * Only the packet is held back — the angle itself keeps updating at full
+     * rate, so a finer grid never turns more slowly, it just sends the step it
+     * reached. The trailing send is what makes that safe: a change that arrives
+     * inside the window is not dropped, it is delivered when the window closes,
+     * so the direction settled on is always the one the server ends up with. */
+    steerMovement() {
+      if (this._steerTimer !== null) {
+        return;
+      }
+      const wait = 60 - (performance.now() - this._lastSteerTime);
+      if (wait > 0) {
+        this._steerTimer = setTimeout(() => {
+          this._steerTimer = null;
+          this.steerMovement();
+        }, wait);
+        return;
+      }
+      const {_ModuleHandler: ModuleHandler} = this.client;
+      if (!this.client.myPlayer.inGame || this.move === 0) return;
+      const angle = this.getMoveAngle();
+      if (angle === null || ModuleHandler.moveTo !== "disable") return;
+      if (ModuleHandler.move_dir === angle) return;
+      if (ModuleHandler.packetCount + 10 > ModuleHandler.packetLimit) return;
+      this._lastSteerTime = performance.now();
+      this.handleMovement();
     }
     /* One grid step per press, auto-repeat included, so holding the key sweeps
      * the circle. The offset is cleared as soon as the player stops moving, in
@@ -835,7 +965,7 @@ edit(
         Settings_default._mouseMovement = !Settings_default._mouseMovement;
         SaveSettings();
         syncCheckboxUI("_mouseMovement");
-        if (this.move !== 0) this.handleMovement();
+        if (this.move !== 0) this.steerMovement();
         return true;
       }
       let delta = 0;
@@ -846,9 +976,13 @@ edit(
       } else {
         return false;
       }
+      /* About 2.5 degrees per press whatever the grid is, so a finer grid does
+       * not make the keys slower to turn with. The mouse still reaches every
+       * step; the keys are the coarse control. */
       const steps = AngleGrid.moveSteps;
-      this.moveNudge = (this.moveNudge + delta) % steps;
-      if (this.move !== 0) this.handleMovement();
+      const perPress = Math.max(1, Math.round(steps / 144));
+      this.moveNudge = (this.moveNudge + delta * perPress) % steps;
+      if (this.move !== 0) this.steerMovement();
       return true;
     }`
 );
@@ -879,7 +1013,7 @@ edit(
       if (this.rotation) {`,
   `      this.mouse.angle = angle;
       if (this.move !== 0 && Settings_default._preciseAngles && Settings_default._mouseMovement) {
-        this.handleMovement(true);
+        this.steerMovement();
       }
       if (this.rotation) {`
 );
@@ -909,18 +1043,18 @@ patchPage(
                 <span class="option-title">Movement Angles</span>\r
                 <label class="slider">\r
                     <span class="slider-value"></span>\r
-                    <input id="_moveAngleSteps" type="range" step="8" min="8" max="360">\r
+                    <input id="_moveAngleSteps" type="range" step="8" min="8" max="624">\r
                 </label>\r
-                <span class="option-description">Directions the circle is cut into for movement. 144 is one step every 2.5 degrees; 8 is what the keys alone can say.</span>\r
+                <span class="option-description">Directions the circle is cut into for movement. 624 is the ceiling the game itself can express, since it rounds every angle to 0.01 rad. Costs nothing at any setting.</span>\r
             </div>\r
 \r
             <div class="content-option">\r
                 <span class="option-title">Building Angles</span>\r
                 <label class="slider">\r
                     <span class="slider-value"></span>\r
-                    <input id="_buildAngleSteps" type="range" step="24" min="24" max="288">\r
+                    <input id="_buildAngleSteps" type="range" step="24" min="24" max="624">\r
                 </label>\r
-                <span class="option-description">Angles the placer, retrap, trap bounce and auto break search around you. Was 72.</span>\r
+                <span class="option-description">Angles the placer, retrap, trap bounce and auto break search around you. Was 72. The scan is solved, not sampled, so 624 costs less than 8 used to.</span>\r
             </div>\r
 \r
             <div class="content-option">\r
