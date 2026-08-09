@@ -21,14 +21,19 @@ const target = args.find(a => !a.startsWith("--")) || "ReUp_Mix.user.js";
 const file = path.resolve(process.cwd(), target);
 const src = fs.readFileSync(file, "utf8");
 
-/* Cut a region out of the build by its opening and closing landmarks. */
-function region(startMarker, endMarker) {
+/* Cut a region out of the build by its opening and closing landmarks. The two
+ * clients put different code after the same block, so an end marker may be
+ * given as a list and the nearest one that exists wins. */
+function region(startMarker, endMarkers) {
   const a = src.indexOf(startMarker);
   if (a === -1) throw new Error(`not found in ${target}: ${startMarker.trim()}`);
-  const b = src.indexOf(endMarker, a);
-  if (b === -1) throw new Error(`no end for ${startMarker.trim()}`);
-  return src.slice(a, b);
+  const ends = [].concat(endMarkers).map(m => src.indexOf(m, a)).filter(i => i !== -1);
+  if (!ends.length) throw new Error(`no end for ${startMarker.trim()}`);
+  return src.slice(a, Math.min(...ends));
 }
+/* v5 replaced RYN's AutoPlacer with the Auraro placer, which is geometric and
+ * has no step count, so it carries no preplace scan cache to test. */
+const hasPrePlaceCache = src.includes("  const _prePlaceAngleCache = new WeakMap;");
 
 const TAU = Math.PI * 2;
 const deg = r => (r * 180 / Math.PI + 360) % 360;
@@ -67,7 +72,7 @@ return { AngleGrid, Input };
 
 console.log("grid\n");
 
-check("624 steps by default", AngleGrid.moveSteps === 624 && AngleGrid.buildSteps === 624);
+check("624 steps by default", AngleGrid.moveSteps === 624 && AngleGrid.buildStepsOr(72) === 624);
 check("624 is at or under what the game can express", 624 <= Math.floor(TAU / 0.01) && 624 % 8 === 0,
   `game ceiling ${Math.floor(TAU / 0.01)}`);
 check("a step is 0.577 degrees", near(deg(AngleGrid.step(624)), 360 / 624, 1e-12));
@@ -174,7 +179,8 @@ check("one send per step crossed, not per mouse event", sends <= 624, `${sends} 
 
 Settings_default._mouseMovement = false;
 Settings_default._preciseAngles = false;
-check("off restores 8 move steps and 72 build steps", AngleGrid.moveSteps === 8 && AngleGrid.buildSteps === 72);
+check("off puts every sweep back to its own step count",
+  AngleGrid.moveSteps === 8 && AngleGrid.buildStepsOr(72) === 72 && AngleGrid.buildStepsOr(36) === 36);
 input.move = UP;
 input.moveNudge = 5;
 input.mouse.angle = 1.2;
@@ -192,51 +198,55 @@ Settings_default._moveAngleSteps = 624;
  * The placement scan cache
  * ------------------------------------------------------------------ */
 
-console.log("\nplacement scan\n");
+if (!hasPrePlaceCache) {
+  console.log("\nplacement scan\n\nskip  no preplace scan cache in this client (geometric placer)\n");
+} else {
+  console.log("\nplacement scan\n");
 
-const { _getCachedPrePlaceAngles } = eval(`(() => {
-${region("  const AngleGrid = {", "  const getAngleFromBitmask")}
-${region("  const _prePlaceAngleCache = new WeakMap;", "  class AutoPlacer {")}
-return { _getCachedPrePlaceAngles };
-})()`);
+  const { _getCachedPrePlaceAngles } = eval(`(() => {
+  ${region("  const AngleGrid = {", "  const getAngleFromBitmask")}
+  ${region("  const _prePlaceAngleCache = new WeakMap;", "  class AutoPlacer {")}
+  return { _getCachedPrePlaceAngles };
+  })()`);
 
-const client = {};
-let computed = 0;
-const compute = steps => i => {
-  computed++;
-  return { angle: AngleGrid.fromIndex(i, steps), placeable: i % 2 === 0 };
-};
+  const client = {};
+  let computed = 0;
+  const compute = steps => i => {
+    computed++;
+    return { angle: AngleGrid.fromIndex(i, steps), placeable: i % 2 === 0 };
+  };
 
-computed = 0;
-let angles = _getCachedPrePlaceAngles(client, 1, "k", compute(144), false, 1, -1, 144);
-check("scans 144 angles", angles.length === 144);
-check("computes each one once", computed === 144, `${computed} computes`);
-check("leaves no gaps", angles.every(e => e !== null));
-check("last angle is one step short of a full turn",
-  Math.abs(angles[143].angle - (TAU - AngleGrid.step(144))) < 1e-12);
+  computed = 0;
+  let angles = _getCachedPrePlaceAngles(client, 1, "k", compute(144), false, 1, -1, 144);
+  check("scans 144 angles", angles.length === 144);
+  check("computes each one once", computed === 144, `${computed} computes`);
+  check("leaves no gaps", angles.every(e => e !== null));
+  check("last angle is one step short of a full turn",
+    Math.abs(angles[143].angle - (TAU - AngleGrid.step(144))) < 1e-12);
 
-computed = 0;
-_getCachedPrePlaceAngles(client, 1, "k", compute(144), false, 1, -1, 144);
-check("a second call in the same tick is free", computed === 0);
+  computed = 0;
+  _getCachedPrePlaceAngles(client, 1, "k", compute(144), false, 1, -1, 144);
+  check("a second call in the same tick is free", computed === 0);
 
-/* Moving the slider mid-game must not leave a half-filled array behind. */
-angles = _getCachedPrePlaceAngles(client, 1, "k", compute(72), false, 1, -1, 72);
-check("resizes down to 72 within a tick", angles.length === 72 && angles.every(e => e !== null));
-angles = _getCachedPrePlaceAngles(client, 2, "k", compute(288), false, 1, -1, 288);
-check("resizes up to 288", angles.length === 288 && angles.every(e => e !== null));
+  /* Moving the slider mid-game must not leave a half-filled array behind. */
+  angles = _getCachedPrePlaceAngles(client, 1, "k", compute(72), false, 1, -1, 72);
+  check("resizes down to 72 within a tick", angles.length === 72 && angles.every(e => e !== null));
+  angles = _getCachedPrePlaceAngles(client, 2, "k", compute(288), false, 1, -1, 288);
+  check("resizes up to 288", angles.length === 288 && angles.every(e => e !== null));
 
-angles = _getCachedPrePlaceAngles(client, 3, "p", compute(144), false, 2, 100, 144);
-check("refreshes the enemy-facing step off-phase", angles[100] !== null && angles.length === 144);
-check("ignores an out-of-range priority index",
-  _getCachedPrePlaceAngles(client, 4, "p", compute(144), false, 2, 200, 144).length === 144);
+  angles = _getCachedPrePlaceAngles(client, 3, "p", compute(144), false, 2, 100, 144);
+  check("refreshes the enemy-facing step off-phase", angles[100] !== null && angles.length === 144);
+  check("ignores an out-of-range priority index",
+    _getCachedPrePlaceAngles(client, 4, "p", compute(144), false, 2, 200, 144).length === 144);
 
-const quadrant = 144 / 4;
-const bins = {};
-for (let i = 0; i < 144; i++) bins[Math.floor(i / quadrant)] = (bins[Math.floor(i / quadrant)] || 0) + 1;
-check("four equal quadrants", Object.keys(bins).length === 4 && Object.values(bins).every(n => n === 36),
-  JSON.stringify(bins));
-check("an enemy due east is quadrant 0", Math.floor(AngleGrid.index(0, 144) / quadrant) === 0);
-check("an enemy due south is quadrant 1", Math.floor(AngleGrid.index(Math.PI / 2, 144) / quadrant) === 1);
+  const quadrant = 144 / 4;
+  const bins = {};
+  for (let i = 0; i < 144; i++) bins[Math.floor(i / quadrant)] = (bins[Math.floor(i / quadrant)] || 0) + 1;
+  check("four equal quadrants", Object.keys(bins).length === 4 && Object.values(bins).every(n => n === 36),
+    JSON.stringify(bins));
+  check("an enemy due east is quadrant 0", Math.floor(AngleGrid.index(0, 144) / quadrant) === 0);
+  check("an enemy due south is quadrant 1", Math.floor(AngleGrid.index(Math.PI / 2, 144) / quadrant) === 1);
+}
 
 /* ------------------------------------------------------------------ *
  * The analytic mask against the sampling original
@@ -256,7 +266,7 @@ const SpatialHashGrid2D = eval(
 const maskOf = eval(`(() => {
 const Items = ITEMS;
 const Config_default = CONFIG;
-${region("  function _getPlaceableMask(", "  function _getCachedPrePlaceAngles(")}
+${region("  function _getPlaceableMask(", ["  function _getCachedPrePlaceAngles(", "  class SpatialHashGrid2D {"])}
 return _getPlaceableMask;
 })()`.replace("ITEMS", "[{ scale: 49, placeOffset: -5 }]").replace("CONFIG", "{ mapScale: 14400, riverWidth: 724 }"));
 
@@ -351,7 +361,7 @@ for (let t = 0; t < 300; t++) {
   }));
 }
 
-check("the mask matches _canPlace angle for angle", disagree === 0,
+check("the mask matches the sampling it replaced, angle for angle", disagree === 0,
   `${agree} agreements, ${disagree} disagreements, ${(blockedSeen / (agree + disagree) * 100).toFixed(0)}% blocked`);
 
 /* ------------------------------------------------------------------ *

@@ -4,7 +4,8 @@ A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client
 features RYN never had, built against the game bundles in `src/` and verified
 against them.
 
-Build output: **`ReUp_Mix.user.js`**
+Build outputs: **`ReUp_Mix.user.js`** (RYN v4 + Luna) and
+**`RYN_v5_OWNER.user.js`** (RYN v5 OWNER + precise angles).
 
 ---
 
@@ -68,7 +69,7 @@ that, and being a multiple of 8 keeps the eight key directions exactly on the
 grid at every slider position.
 
 Both grids live in `AngleGrid`. **Misc → Precise Angles** holds the master
-switch and the two sliders; turning it off restores 8 and 72 exactly.
+switch and the two sliders; turning it off puts every sweep back to the step count it was written with.
 
 Reaching the extra directions needs an input that can express them, so two are
 added, both under **Keybinds → Precise Angles**:
@@ -134,6 +135,47 @@ all of it.
 
 Precise angles and mouse movement are excluded from Legit Mode: they set how
 finely a direction can be expressed, not whether the client acts on its own.
+
+### The same patch on RYN v5 OWNER
+
+`src/RYN_Client_v5_OWNER.js` gets the same feature, built by `tools/build-v5.js`
+into `RYN_v5_OWNER.user.js`. v5 is not v4 with more on it — it is a different
+client — and the two halves of the patch land very differently on it.
+
+**Movement is the same code.** v5 carries the same `InputHandler` and the same
+`getAngleFromBitmask`, so it had the same 8 directions and nothing between them.
+That half is character-for-character the v4 patch; it lives in
+`tools/precise-angles.js` so the two builds cannot drift apart.
+
+**Building is already solved in v5.** It replaced RYN's `AutoPlacer` with the
+Auraro placer, which decides geometrically — it builds the blocked arcs around
+the player, inverts them into free arcs, and takes the free angle nearest what
+it is aiming at. There is no step count in it to raise, and its placement angles
+are already exact. So there is no preplace scan here to convert, and no claim
+that the placer got finer.
+
+What the building slider drives in v5 is the three sweeps that still walk fixed
+step counts:
+
+| Sweep | Was | Cost per step |
+|---|---|---|
+| Trap bounce | 36 | arithmetic |
+| Auto-break swing search | 72 | arithmetic |
+| Enemy spike slots | 36 | one `canPlaceItem` grid query |
+
+Only the third one cost anything per step, so only the third one gets
+`_getPlaceableMask`. It sweeps a circle around the *enemy* rather than the
+player and passes `canPlaceItem` a negative `addRadius`, so the shared helper
+takes the anchor, the radius adjustment and the query radius as parameters —
+`canPlaceItem` queries at search radius 1, not the placer's 4.
+
+Switching precise angles off puts each of those sweeps back to its own original
+count rather than to a shared stand-in, which is what `AngleGrid.buildStepsOr`
+is for.
+
+**Left alone in v5:** its first-run `fetch` to `webhook.site` is still there.
+The ReUp Mix build strips v4's, but that is a separate decision about someone
+else's client — it is at the top of `RYN_v5_OWNER.user.js` if you want it gone.
 
 ### The placer
 
@@ -202,9 +244,11 @@ but nothing in the client needs it. It is stripped from the build.
 ## Layout
 
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
+ReUp_Mix.user.js          build output: RYN v4 + Luna features + precise angles
+RYN_v5_OWNER.user.js      build output: RYN v5 OWNER + precise angles
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
+src/RYN_Client_v5_OWNER.js  RYN v5 OWNER (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
@@ -212,7 +256,9 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/check-angles.js     precise-angle grid + placement scan, out of the build
+tools/precise-angles.js   the precise-angle patch, shared by both builds
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-v5.js         src/RYN_Client_v5_OWNER.js -> RYN_v5_OWNER.user.js
 ```
 
 ## Build
@@ -220,6 +266,7 @@ tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```sh
 node tools/extract-drivers.js    # refresh drivers from src/game_*.js
 node tools/build-reup.js         # produce ReUp_Mix.user.js
+node tools/build-v5.js           # produce RYN_v5_OWNER.user.js
 ```
 
 Every edit in `build-reup.js` is anchored to an exact string in the base
@@ -229,10 +276,12 @@ a newer RYN will surface as a build error rather than a half-merged script.
 ## Verification
 
 ```sh
-node tools/verify-drivers.js ReUp_Mix.user.js
-node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
-node tools/check-angles.js ReUp_Mix.user.js    # add --cost for the scan timings
-node --check ReUp_Mix.user.js
+for out in ReUp_Mix.user.js RYN_v5_OWNER.user.js; do
+  node tools/verify-drivers.js "$out"
+  node tools/check-hooks.js "$out"      # needs: npm i --no-save terser
+  node tools/check-angles.js "$out"     # add --cost for the scan timings
+  node --check "$out"
+done
 ```
 
 Current state of the build:
@@ -244,6 +293,8 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
+- **v5 OWNER** — drivers match the shipped bundle, 41/41 of its hooks bind,
+  and the angle checks pass against its build too.
 - **Angles** — 48/48 checks pass: the grid wraps and snaps within half a step,
   the eight key directions stay exact at every slider value, mouse steering
   reaches all 624 directions for 624 packets, a nudge press turns ~2.5° at any
