@@ -8618,6 +8618,7 @@ window.grbtp = 35;
         }
       }
       let [target, secondTarget] = this.getDestroyingObject();
+      let fromPathBreak = false;
       if (target === null) {
         // Nothing of the enemy's worth breaking. Luna's second priority takes
         // the slot: clear one of my own out of the way.
@@ -8636,6 +8637,7 @@ window.grbtp = 35;
         if (ModuleHandler.packetCount >= PATH_BREAK_PACKET_GATE) return;
         target = this._pathBreakTarget(myPlayer, EnemyManager2.nearestEnemy, ObjectManager3);
         if (target === null) return;
+        fromPathBreak = true;
       }
       const type = this.getDestroyingWeapon(target);
       if (type === null) {
@@ -8658,6 +8660,7 @@ window.grbtp = 35;
         return;
       }
       this.client._ModuleHandler._autoBreakActive = true;
+      this.client._ModuleHandler._pathBreakActive = fromPathBreak;
       const angle1 = pos1.angle(pos2);
       this.client._ModuleHandler._lastBreakAngle = angle1;
       if (myPlayer.isTrapped && myTrapOnEnemy === null) {
@@ -9160,7 +9163,17 @@ window.grbtp = 35;
     _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped) {
       const ModuleHandler = this.client._ModuleHandler;
       let findObject = null;
-      const autoGathering = ModuleHandler._autoBreakActive || ModuleHandler.autoattack || ModuleHandler.forceWeapon !== null;
+      // A path break is excluded. This branch exists to claim the ground under
+      // something I am about to knock down, and `findAngle` is sorted by
+      // distance to it, so the build lands where the old one stood. Against an
+      // enemy structure that is the point — break it, take the spot. Against
+      // one of mine broken specifically to free the group cap it is a loop
+      // that eats itself: path break takes the trap down, the preplacer puts
+      // an identical one back in the same place, the cap never frees, and both
+      // halves are paid for in packets and resources. _isItemLimit even credits
+      // the dying trap back, so the cap check passes and makes the rebuild
+      // likelier rather than less.
+      const autoGathering = !ModuleHandler._pathBreakActive && (ModuleHandler._autoBreakActive || ModuleHandler.autoattack || ModuleHandler.forceWeapon !== null);
       if (autoGathering) {
         const predictType = ModuleHandler._getPredictWeapon();
         const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
@@ -14074,6 +14087,11 @@ window.grbtp = 35;
       this.activeModule = null;
       if (!this._autoBreakActive) this._lastBreakAngle = null;
       this._autoBreakActive = false;
+      // Set alongside _autoBreakActive when the break is a path break — one of
+      // my own builds, taken down to clear the way and free the group cap. The
+      // aim still has to follow it, so _autoBreakActive stays on; what changes
+      // is that the preplacer must not treat the slot as one worth claiming.
+      this._pathBreakActive = false;
       this._comboAttack = false;
       this.tickCount += 1;
       this.sentAngle = 0;
