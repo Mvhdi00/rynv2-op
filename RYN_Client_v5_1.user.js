@@ -8928,6 +8928,14 @@ window.grbtp = 35;
   // the same refused spot. Half the old sample step.
   const LUNA_BAN_TOLERANCE = LUNA_ANGLE_STEP / 2;
 
+  // How many preplace angles to queue per opening slot. Luna commits to one,
+  // which is also one point of failure: a refused build lands nothing and the
+  // enemy walks. Whiteout v4 scores every candidate and places down the list
+  // while its budget holds; this is the same idea kept narrow. Each is a
+  // separate build, so three costs three builds of the allowance — the send
+  // loop's budget check still bounds it.
+  const PREPLACE_CANDIDATES = 3;
+
   // ── Primary trap ──────────────────────────────────────────────────────────
   // Luna has no notion of a "first" trap: its autoplace ladder walks spikes
   // before traps and its trap rules bottom out in `if (neitherTrapped) return
@@ -9567,13 +9575,34 @@ window.grbtp = 35;
           // and the enemy would walk. When the doomed object is that trap, the
           // trap is asked first.
           const retrapping = enemyTrapped !== null && findObject === enemyTrapped;
-          let findAngle = null;
+
+          // Luna commits to exactly one preplace angle, and if the server
+          // refuses it — someone else built there first, the timing missed the
+          // window, the resources were not there when the timer fired —
+          // nothing lands and the enemy walks out of a trap that was supposed
+          // to be replaced. One candidate is one point of failure.
+          //
+          // Whiteout v4 does not work that way: it scores every candidate,
+          // sorts by score, and places down the list while the budget holds.
+          // The same idea here, kept narrow — the best few rather than all of
+          // them. _addPredictObject already drops anything overlapping a build
+          // this tick has queued, so the survivors are spread rather than
+          // stacked, and on a retrap that spread is the point: they step out
+          // of one and into the next.
+          const doomedPos = findObject.pos.current;
+          const byDistanceToSlot = (a, b) => Math.hypot(doomedPos.x - a.x, doomedPos.y - a.y) - Math.hypot(doomedPos.x - b.x, doomedPos.y - b.y);
+          const ordered = [];
           for (const angles of retrapping ? [ trapAngles, spikeAngles ] : [ spikeAngles, trapAngles ]) {
-            if (findAngle) break;
-            findAngle = angles.filter(a => a.placeable && isPrePlaceAngle(a)).sort((a, b) => Math.hypot(findObject.pos.current.x - a.x, findObject.pos.current.y - a.y) - Math.hypot(findObject.pos.current.x - b.x, findObject.pos.current.y - b.y))[0] ?? null;
+            for (const a of angles.filter(a => a.placeable && isPrePlaceAngle(a)).sort(byDistanceToSlot)) ordered.push(a);
           }
-          if (findAngle) {
-            this._addPredictObject(findAngle.id, findAngle.angle, true, myPos);
+          let queued = 0;
+          for (const a of ordered) {
+            if (queued >= PREPLACE_CANDIDATES) break;
+            const before = this._predictObjects.length;
+            this._addPredictObject(a.id, a.angle, true, myPos);
+            if (this._predictObjects.length > before) queued += 1;
+          }
+          if (queued > 0) {
             this._lastPrePlaceObj = findObject;
           }
         }
