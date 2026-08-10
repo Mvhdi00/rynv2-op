@@ -10642,8 +10642,24 @@ window.grbtp = 35;
     //
     // So: trapped with a free enemy still stands down, trapped with a trapped
     // enemy goes ahead.
+    // What actually decides whether the exchange works while I am pinned is
+    // whether a spike can be put where it touches them.
+    // EnemyManager.nearestSpikePlacerAngle is already exactly that set — it
+    // keeps only angles whose spike lands within `collisionScale + spikeScale`
+    // of the enemy — so when it is non-empty the damage comes from contact and
+    // needs no knockback from either of us.
+    //
+    // Requiring them to be trapped as well was too narrow, and it failed in
+    // the one moment this is for. An enemy breaking out of my trap sets
+    // deletedObjects — which is the breaker's whole trigger — and clears their
+    // isTrapped in the same tick. So the tick where the break happens is the
+    // tick bothTrapped collapses, and with me still pinned the gate shut on
+    // precisely the swing it was meant to allow, while we stood next to each
+    // other.
+    const touchAngles = EnemyManager2.nearestSpikePlacerAngle;
+    const canTouchThem = Array.isArray(touchAngles) ? touchAngles.length > 0 : !!touchAngles;
     const bothTrapped = myPlayer.isTrapped && nearest.isTrapped;
-    if (myPlayer.isTrapped && !bothTrapped) {
+    if (myPlayer.isTrapped && !bothTrapped && !canTouchThem) {
       return null;
     }
 
@@ -10654,7 +10670,11 @@ window.grbtp = 35;
     // will not behave; the both-trapped exchange does not use one, and the
     // stamp is refreshed every tick I stay trapped, so it would block that
     // case forever.
-    if (!bothTrapped && ModuleHandler.tickCount - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
+    // Same exemption, for the same reason: the grace exists for a knockback
+    // that will not behave yet, and a spike already touching them does not use
+    // one. The stamp is refreshed on every tick spent trapped, so without this
+    // the window never opens while I am held.
+    if (!bothTrapped && !canTouchThem && ModuleHandler.tickCount - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
       return null;
     }
 
