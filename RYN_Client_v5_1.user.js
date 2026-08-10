@@ -8924,9 +8924,10 @@ window.grbtp = 35;
   // How long an angle stays banned after a build that the server dropped.
   const LUNA_BAN_TICKS = 18;
 
-  // How far off a solved angle may sit from a banned one and still count as
-  // the same refused spot. Half the old sample step.
-  const LUNA_BAN_TOLERANCE = LUNA_ANGLE_STEP / 2;
+  // How near a candidate has to land to a refused spot to count as the same
+  // one. Roughly a small build's radius, so a retry has to be genuinely
+  // elsewhere on the ground rather than a fraction of a degree over.
+  const LUNA_BAN_RADIUS = 30;
 
   // How many preplace angles to queue per opening slot. Luna commits to one,
   // which is also one point of failure: a refused build lands nothing and the
@@ -8978,8 +8979,8 @@ window.grbtp = 35;
     moduleName="autoPlacer";
     client;
     _predictObjects=[];
-    _placedAngles=[];
-    _bannedAngles=new Map;
+    _placedSpots=[];
+    _bannedSpots=[];
     _angleCache=new Map;
     _angleCacheTick=-1;
     _tick=0;
@@ -8994,8 +8995,8 @@ window.grbtp = 35;
     }
     reset() {
       this._predictObjects = [];
-      this._placedAngles = [];
-      this._bannedAngles.clear();
+      this._placedSpots = [];
+      this._bannedSpots.length = 0;
       this._angleCache.clear();
       this._angleCacheTick = -1;
       this._lastPrePlaceObj = null;
@@ -9060,18 +9061,28 @@ window.grbtp = 35;
     // being replaced, and the placer refuses on the strength of a trap that is
     // already dead. Only my own builds count against my cap, so the object has
     // to be one of mine.
-    // Bans used to be looked up by exact key, which worked only because every
-    // angle was a multiple of the 5-degree step and so reproduced bit for bit
-    // each tick. Solved arcs move with the player and the objects around them,
-    // so an angle is never exactly the one banned a tick ago and an exact-key
-    // lookup would never hit again. The tolerance matches the one the ban is
-    // set with, and the map holds at most a couple of ticks' worth of places,
-    // so a scan is cheaper than keeping a second index.
-    _isBanned(angle) {
-      for (const banned of this._bannedAngles.keys()) {
-        let diff = Math.abs(banned - angle) % TWO_PI;
-        if (diff > Math.PI) diff = TWO_PI - diff;
-        if (diff < LUNA_BAN_TOLERANCE) return true;
+    // What the server refused is a place on the ground, not a direction from
+    // me. Banning the angle confuses the two: walk a step and the same angle
+    // points at open ground, while the spot that was actually refused now sits
+    // at a different angle — so a legitimate build is blocked and the refused
+    // one is offered straight back.
+    //
+    // Whiteout v4 gets at this from the other side, expiring a used angle once
+    // the player is no longer near it (`cdf(player, x) <= x.offset + 20`)
+    // rather than on a timer alone. Storing the world position instead makes
+    // that fall out for free: bans move out of range as I move, and stay put
+    // over the ground they belong to.
+    _banSpot(x, y, tick) {
+      this._bannedSpots.push({
+        x: x,
+        y: y,
+        expiry: tick + LUNA_BAN_TICKS
+      });
+    }
+
+    _isBannedSpot(x, y) {
+      for (const spot of this._bannedSpots) {
+        if (Math.hypot(spot.x - x, spot.y - y) < LUNA_BAN_RADIUS) return true;
       }
       return false;
     }
@@ -9396,8 +9407,8 @@ window.grbtp = 35;
       const placerLimit = Math.min(ModuleHandler.packetLimit, PLACER_PACKET_GATE);
 
       this._tick = ModuleHandler.tickCount;
-      for (const [angle, expiry] of this._bannedAngles) {
-        if (this._tick > expiry) this._bannedAngles.delete(angle);
+      for (let i = this._bannedSpots.length - 1; i >= 0; i--) {
+        if (this._tick > this._bannedSpots[i].expiry) this._bannedSpots.splice(i, 1);
       }
 
       const enemy = EnemyManager2.nearestEnemy;
@@ -9505,18 +9516,18 @@ window.grbtp = 35;
       // being read against a tick they were never sent in and banned for a
       // refusal that never happened; they carry their own tick stamp now and
       // are skipped until the tick after the one they were sent in.
-      if (this._placedAngles.length > 0) {
+      if (this._placedSpots.length > 0) {
         const checked = [ ...this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null), ...this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) ];
         const stillPending = [];
-        for (const placed of this._placedAngles) {
+        for (const placed of this._placedSpots) {
           if (placed.tick >= this._tick) {
             stillPending.push(placed);
             continue;
           }
-          const match = checked.find(a => Math.abs(a.angle - placed.angle) < .01);
-          if (match && match.placeable) this._bannedAngles.set(placed.angle, this._tick + LUNA_BAN_TICKS);
+          const match = checked.find(a => Math.hypot(a.x - placed.x, a.y - placed.y) < LUNA_BAN_RADIUS);
+          if (match && match.placeable) this._banSpot(placed.x, placed.y, this._tick);
         }
-        this._placedAngles = stillPending;
+        this._placedSpots = stillPending;
       }
 
       // ────────────────────────────────────────────────────────────────────
@@ -9630,7 +9641,7 @@ window.grbtp = 35;
         // the enemy's projected path — the same test Luna uses for
         // `closestTrapToEnemy`, run against the extrapolated path rather than
         // the single-tick one.
-        const candidates = this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null).filter(a => a.placeable && !this._isBanned(a.angle) && this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, predX, predY));
+        const candidates = this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null).filter(a => a.placeable && !this._isBannedSpot(a.x, a.y) && this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, predX, predY));
 
         // Nearest to where they are heading, not to where they stand: of two
         // traps on the path, the one further along it is the one they cannot
@@ -9645,7 +9656,7 @@ window.grbtp = 35;
       {
         const spikeAngles = this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null);
         const trapAngles = this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null);
-        const notBanned = a => !this._isBanned(a.angle);
+        const notBanned = a => !this._isBannedSpot(a.x, a.y);
         const validSpike = spikeAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validTrap = trapAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validAngles = [ ...validSpike, ...validTrap ];
@@ -9704,8 +9715,9 @@ window.grbtp = 35;
         ModuleHandler.placeAngles[0] = type;
         ModuleHandler.placeAngles[1].push(obj.angle);
         ModuleHandler.moduleActive = true;
-        this._placedAngles.push({
-          angle: obj.angle,
+        this._placedSpots.push({
+          x: obj.x,
+          y: obj.y,
           tick: sendTick
         });
       };
@@ -9737,8 +9749,25 @@ window.grbtp = 35;
       this._preplaceSentTick = this._tick;
 
       const socket = this.client.SocketManager;
+      const tickMs = socket?.TICK ?? 111;
       const pingTime = socket?.pong ?? 0;
       const minPingTime = Number.isFinite(socket?.minPingTime) ? socket.minPingTime : 0;
+      // `pong` is a round trip — `performance.now() - startPing`, measured
+      // across the ping and its answer. A packet needs half of it to reach the
+      // server, so a send meant to arrive as the next tick opens goes out at
+      // TICK - pong/2.
+      //
+      // Luna subtracts the whole round trip, and Whiteout copies it
+      // (`game.tickRate - window.pingTime`). That leaves half a ping: at 100ms
+      // the build arrives 50ms early, before the object it is replacing has
+      // died, and the server refuses it. This client already has the right
+      // convention in two of its own modules — ReverseInstakill sends at
+      // `TICK - pong / 2` and Instakill._packetDelay at `tick - pong * 0.6` —
+      // it was only the ported placer that kept Luna's version.
+      //
+      // Clamped like _packetDelay: never inside the first 8ms of the tick, and
+      // never later than 10ms before the next one.
+      const sendDelay = ping => Math.max(8, Math.min(tickMs - ping / 2, tickMs - 10));
       const aimAngle = () => ModuleHandler._autoBreakActive && ModuleHandler._lastBreakAngle !== null && ModuleHandler._lastBreakAngle !== undefined ? ModuleHandler._lastBreakAngle : ModuleHandler._currentAngle ?? 0;
       // Read at schedule time, not at fire time: the third send lands inside
       // the next tick, which has already cleared `_spamPrePlacer` for its own
@@ -9760,7 +9789,7 @@ window.grbtp = 35;
             PacketManager2.updateAngle(aimAngle());
           }
         } catch (_) {}
-      }, Math.max(1, 111 - pingTime));
+      }, sendDelay(pingTime));
       setTimeout(() => {
         if (!spamPrePlacer) return;
         try {
@@ -9770,7 +9799,7 @@ window.grbtp = 35;
             PacketManager2.updateAngle(aimAngle());
           }
         } catch (_) {}
-      }, Math.max(1, 111 - minPingTime));
+      }, sendDelay(minPingTime));
     }
   }
   class TrapAnimal {
