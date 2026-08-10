@@ -9190,14 +9190,27 @@ window.grbtp = 35;
         let weaponToCheck = null;
         // Luna checks the enemy's secondary only when it is the great hammer,
         // and their primary only when it swings inside 400ms.
-        if (secID === 10 && secJustReady) {
-          weaponToCheck = secID;
-        }
-        if (weaponToCheck === null && primID !== null && primJustReady) {
-          const wd = DataHandler_default?.getWeapon?.(primID);
-          if (wd && (wd.speed ?? 999) <= 400) weaponToCheck = primID;
-        }
-        if (weaponToCheck !== null) {
+        // Luna narrows this to two weapons: the secondary only when it is the
+        // great hammer, and the primary only when it swings inside 400ms.
+        // Anything slower was assumed not worth predicting — but the swing
+        // that frees a trapped enemy is worth predicting whatever it is
+        // holding, and a slow primary breaking out was the commonest way the
+        // retrap was missed. Both type restrictions are gone.
+        //
+        // What is kept is the edge that actually carries the signal: the
+        // weapon came off reload this tick, so the swing is imminent. That,
+        // plus the health test below (the building dies to this one hit), is
+        // what keeps this from firing on every tick an enemy stands near a
+        // wall. Both ready weapons are tried, hardest-hitting first, so a
+        // ready secondary that cannot reach does not shadow a primary that
+        // can.
+        const readyWeapons = [];
+        if (secID !== null && secID !== undefined && secJustReady) readyWeapons.push(secID);
+        if (primID !== null && primID !== undefined && primJustReady) readyWeapons.push(primID);
+        readyWeapons.sort((a, b) => (enemy.getBuildingDamage?.(b, true) ?? 0) - (enemy.getBuildingDamage?.(a, true) ?? 0));
+        for (const candidateWeapon of readyWeapons) {
+          if (findObject) break;
+          weaponToCheck = candidateWeapon;
           const wd = DataHandler_default?.getWeapon?.(weaponToCheck);
           if (wd) {
             const weaponRange = wd.range ?? 0;
