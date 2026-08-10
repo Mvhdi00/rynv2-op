@@ -516,5 +516,55 @@ console.log("luna placer smoke test\n");
   check("enemy trap is not our trap", r.sent.every(s => s.type === 7), JSON.stringify(r.sent.map(s => s.type)));
 }
 
+// 11 — fuzz. ModuleHandler runs the module list with no try/catch, so anything
+// this module throws takes the whole tick with it. Randomised layouts, toggles
+// and item availability, including the degenerate cases: no spike, no trap,
+// neither, objects stacked on the player, and the enemy exactly on top of us.
+{
+  let threw = null, runs = 0;
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  for (let i = 0; i < 4000 && !threw; i++) {
+    const objects = [];
+    const count = Math.floor(Math.random() * 8);
+    for (let k = 0; k < count; k++) {
+      objects.push(new PlayerObject(k + 1,
+        7000 + (Math.random() - .5) * 500,
+        3000 + (Math.random() - .5) * 500,
+        pick([ SPIKE_ID, TRAP_ID, 16, 17 ]),
+        pick([ 1, 2 ])));
+    }
+    const env = makeClient({
+      enemyX: 7000 + (Math.random() - .5) * 800,
+      enemyY: 3000 + (Math.random() - .5) * 800,
+      objects: objects,
+      imTrapped: Math.random() < .5,
+      enemySpikeDamage: Math.random() < .5 ? 1 : 0,
+      enemyPrimaryJustReady: Math.random() < .5,
+      packetLimit: pick([ 0, 5, 70, 200 ])
+    });
+    // Sometimes the player has no spike, no trap, or neither.
+    const haveSpike = Math.random() < .8, haveTrap = Math.random() < .8;
+    env.client.myPlayer.getItemByType = type => type === 4 ? haveSpike ? SPIKE_ID : null : type === 7 ? haveTrap ? TRAP_ID : null : null;
+    env.client.myPlayer.canPlace = () => Math.random() < .9;
+    Settings_default._prePlace = Math.random() < .5;
+    Settings_default._replace = Math.random() < .5;
+    Settings_default._autoplacerRadius = pick([ 100, 350, 450 ]);
+    timers = [];
+    try {
+      runs += 1;
+      const placer = new AutoPlacer(env.client);
+      placer.postTick();
+      for (const t of timers) t.fn();
+      placer.reset();
+    } catch (e) {
+      threw = e;
+    }
+  }
+  Settings_default._prePlace = true;
+  Settings_default._replace = true;
+  Settings_default._autoplacerRadius = 350;
+  check("postTick never throws across " + runs + " randomised ticks", threw === null, threw && (threw.message + "\n" + threw.stack));
+}
+
 console.log("\n" + (failures === 0 ? "all checks passed" : failures + " check(s) failed"));
 process.exit(failures === 0 ? 0 : 1);
