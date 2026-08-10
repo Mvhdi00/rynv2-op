@@ -8860,9 +8860,11 @@ window.grbtp = 35;
   // Luna has no notion of a "first" trap: its autoplace ladder walks spikes
   // before traps and its trap rules bottom out in `if (neitherTrapped) return
   // true`, so every free angle qualifies equally. That is fine at Luna's
-  // budget — it owned 119 packets a tick. Here the whole client shares 70, a
-  // build costs 5, and the spike ladder alone will claim all 14 slots, so
-  // traps reach the wire only when the spikes happen to run out of angles.
+  // budget. Here the whole client shares 70 packets a second — PacketManager
+  // zeroes the counter on a 1s interval, not per tick — and a build costs 5.
+  // That is 14 builds a second across every module, roughly one and a half per
+  // tick, and the spike ladder alone will claim all of them, so traps reach
+  // the wire only when the spikes happen to run out of angles.
   //
   // A trap is what opens the combo, though: a spike on an untrapped enemy is
   // chip damage, a spike on a trapped one is the kill. So the trap that pins
@@ -9295,7 +9297,7 @@ window.grbtp = 35;
 
       // Not Luna's: an angle we built at last tick that is still free this
       // tick is an angle the server refused. Sit it out rather than spend the
-      // tick's packets on it again.
+      // allowance on it again.
       //
       // Only the angles sent inside this tick are judged here. The preplace
       // sends run from timers that land mid-next-tick, so their angles were
@@ -9388,7 +9390,7 @@ window.grbtp = 35;
       // PRIMARY TRAP — not Luna's
       // ────────────────────────────────────────────────────────────────────
       // The trap that opens the combo, decided and queued before the spike
-      // ladder gets a look at the tick's packets.
+      // ladder gets a look at the allowance.
       //
       // Luna's trap angles are scored against `xVel/yVel` — the enemy's
       // position one tick out, which is where they already are by the time the
@@ -9488,8 +9490,8 @@ window.grbtp = 35;
 
       // Spikes are held to a ceiling that keeps room for the traps still in
       // the queue behind them. Without it the spike ladder — whose third rule
-      // passes any angle that does not wall off my own path — takes all
-      // fourteen of the tick's builds and no trap ever reaches the wire.
+      // passes any angle that does not wall off my own path — takes the whole
+      // second's allowance and no trap ever reaches the wire.
       let trapsQueued = 0;
       for (const obj of this._predictObjects) {
         if (!obj.preplace && obj.id === trapId) trapsQueued += 1;
