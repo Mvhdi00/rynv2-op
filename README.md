@@ -325,6 +325,83 @@ hold-to-place, same as before.
 Everything else in v5 is untouched — the diff is the placer block and the two
 lines that registered the modules it replaced.
 
+---
+
+## remedy 4.1 on the current transport
+
+Build output: **`Remedy_4.1_Fixed.user.js`**
+
+remedy 4.1 speaks the pre-2024 wire format. It encodes msgpack `[type, args]`
+straight to `WebSocket.send` and reads inbound frames the same way. The shipped
+game stopped working like that: on `io-init` it negotiates a per-connection
+opcode permutation and an HMAC key, and from then on every **client** frame is
+
+```
+[ 6 HMAC bytes ][ msgpack([ opcodeNumber, args, sequence ]) ]
+```
+
+while **server** frames stay plain msgpack but carry a permuted numeric opcode
+instead of the letter. Three things follow, and all three were happening:
+
+- every packet remedy sent was dropped by the server — unsigned, wrong opcode,
+  no sequence;
+- its own `WebSocket.prototype.send` hook called `msgpack.decode` on a signed
+  frame, which is not valid msgpack;
+- its inbound handler looked up `events[number]` in a table keyed by letters,
+  so nothing but the numeric opcodes `0`–`9` could ever match, and those by
+  accident.
+
+`src/remedy-transport.js` implements the real thing, transcribed from
+`src/game_index.js` — `Co` (seeded PRNG), `Oi` (alphabet shuffle), `Po` (seed →
+both tables), `Ro` (hex key), `Vt` (sha256), `Ao`/`Eo` (HMAC, truncated to
+`jt = 6`), with `Ht = 1` as the secure-mode flag and `Io = 1` as the table salt.
+Legacy mode is preserved: if `io-init[3]` does not match, everything falls back
+to plain msgpack exactly as the bundle does.
+
+`tools/build-remedy.js` rewires every wire site onto it. remedy's outbound hook
+already decoded, inspected and **re-encoded** each frame before forwarding, so
+that one funnel now seals everything — which conveniently means a single
+sequence counter for the socket, rather than remedy's and the game's own
+counters interleaving on the same connection. Bot sockets in `connectBot` are
+separate connections with their own key, tables and sequence, so each gets its
+own channel via `RemedyWire.create()`.
+
+Four `msgpack.encode` calls are deliberately left alone: they are the
+`packets.push([...])` entries feeding remedy's own packet inspector, which
+records the logical packet and never reaches the wire.
+
+### Verification
+
+`tools/test-remedy-transport.js` is a differential test, not a set of expected
+values: it lifts `Co`, `Oi`, `Po`, `Ro`, `Vt`, `Ao` and `Eo` out of
+`src/game_index.js` by source range, runs both implementations, and compares.
+
+- the opcode tables match the bundle's for **1000 random seeds**, both
+  directions;
+- HMAC signatures match the bundle's `Eo` across ten key lengths and eleven
+  body lengths, chosen to straddle the sha256 padding boundaries at 55/56 and
+  63/64/65 bytes — the test asserts the bodies really do cross a block
+  boundary rather than trusting that they do;
+- a whole frame is checked the way the server checks it: signature over the
+  body, body carrying the permuted opcode and a sequence that increments once
+  per frame;
+- opcodes outside the alphabet are refused rather than sent malformed, which is
+  what the bundle does;
+- legacy mode stays plain, and `io-init` is readable before any table exists.
+
+```sh
+node tools/build-remedy.js
+node tools/test-remedy-transport.js
+node --check Remedy_4.1_Fixed.user.js
+```
+
+**Not covered.** This fixes the transport only. remedy's data tables, its
+placement maths and its module logic were not audited against the bundle — the
+client connects and speaks correctly now, which is a precondition for anything
+else being testable, not a clean bill of health.
+
+---
+
 ## Layout
 
 ```
