@@ -8864,9 +8864,11 @@ window.grbtp = 35;
   // Sakuna 44.1 solves this by tiering: a hard stop for everything at 120/s,
   // but building alone is cut off at `secPacket < 97`, leaving the top of the
   // range for movement, attacks and heals. auraro 5.5 tiers the same way and
-  // lower still (insta 69, sync 60). This is that gate, at Sakuna's number.
-  // `packetLimit` stays the ceiling for every other module.
-  const PLACER_PACKET_GATE = 97;
+  // lower still (insta 69, sync 60). This is that gate, set a little above
+  // Sakuna's number to keep more building throughput. `packetLimit` stays the
+  // ceiling for every other module, so the reserve left above this gate is
+  // what a heal draws on.
+  const PLACER_PACKET_GATE = 105;
 
   // How long an angle stays banned after a build that the server dropped.
   const LUNA_BAN_TICKS = 18;
