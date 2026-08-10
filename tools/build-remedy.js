@@ -34,6 +34,32 @@ function fail(message) {
 let text = fs.readFileSync(BASE, "utf8");
 const transport = fs.readFileSync(TRANSPORT, "utf8").replace(/\n+$/, "");
 
+// remedy ships with no userscript metadata block at all — it opens on a plain
+// /* */ comment — so a manager has nothing to install. The block has to be the
+// first thing in the file.
+//
+// document-start is not cosmetic here: remedy replaces
+// WebSocket.prototype.send at top level, and that has to be in place before the
+// game opens its socket or the hook never sees a frame. It bundles its own
+// msgpack and asks for no GM_* API, so no @require and no @grant.
+const HEADER = [
+  "// ==UserScript==",
+  "// @name            Remedy 4.1 (transport fixed)",
+  "// @namespace       remedy-fixed",
+  "// @version         4.1.1",
+  "// @description     remedy 4.1 rebuilt against the current moomoo.io transport",
+  "// @author          remedy, transport rebuilt against the shipped bundle",
+  "// @match           *://moomoo.io/*",
+  "// @match           *://*.moomoo.io/*",
+  "// @run-at          document-start",
+  "// @grant           none",
+  "// ==/UserScript==",
+  "",
+  ""
+];
+
+if (/==UserScript==/.test(text)) fail("base already carries a userscript header");
+
 function rewrite(what, pattern, replacement, expected) {
   const hits = text.match(pattern);
   const got = hits ? hits.length : 0;
@@ -154,6 +180,13 @@ rewrite(
 // ── done ─────────────────────────────────────────────────────────────────────
 
 const leftover = text.match(/msgpack\.(encode|decode)\(/g) || [];
+
+// Match whatever line ending the base uses so the header does not stand out.
+const eol = text.indexOf("\r\n") !== -1 ? "\r\n" : "\n";
+text = HEADER.join(eol) + text;
+
+if (!/^\/\/ ==UserScript==/.test(text)) fail("header did not land at the top of the file");
+
 fs.writeFileSync(OUT, text);
 console.log("build-remedy: wrote " + path.relative(ROOT, OUT) + " (" + text.split("\n").length + " lines)");
 console.log("build-remedy: " + leftover.length + " raw msgpack call(s) remain (packet-log copies and dead code)");

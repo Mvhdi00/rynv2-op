@@ -358,6 +358,13 @@ both tables), `Ro` (hex key), `Vt` (sha256), `Ao`/`Eo` (HMAC, truncated to
 Legacy mode is preserved: if `io-init[3]` does not match, everything falls back
 to plain msgpack exactly as the bundle does.
 
+remedy also ships with no userscript metadata block — it opens on a plain `/* */`
+comment, so a manager has nothing to install. The build prepends one.
+`@run-at document-start` is load-bearing rather than cosmetic: remedy replaces
+`WebSocket.prototype.send` at top level, and that has to be in place before the
+game opens its socket or the hook never sees a frame. It bundles its own
+msgpack and asks for no `GM_*` API, so no `@require` and no `@grant`.
+
 `tools/build-remedy.js` rewires every wire site onto it. remedy's outbound hook
 already decoded, inspected and **re-encoded** each frame before forwarding, so
 that one funnel now seals everything — which conveniently means a single

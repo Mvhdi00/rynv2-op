@@ -1,3 +1,15 @@
+// ==UserScript==
+// @name            Remedy 4.1 (transport fixed)
+// @namespace       remedy-fixed
+// @version         4.1.1
+// @description     remedy 4.1 rebuilt against the current moomoo.io transport
+// @author          remedy, transport rebuilt against the shipped bundle
+// @match           *://moomoo.io/*
+// @match           *://*.moomoo.io/*
+// @run-at          document-start
+// @grant           none
+// ==/UserScript==
+
 /*
 
     say this shit
