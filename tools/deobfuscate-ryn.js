@@ -165,7 +165,7 @@ while (added) {
 
 // ── 4. replace the calls ─────────────────────────────────────────────────────
 
-let replaced = 0, failed = 0;
+let replaced = 0, failed = 0, rotationRemoved = 0;
 
 traverse(ast, {
   CallExpression(p) {
@@ -209,11 +209,67 @@ traverse(ast, {
     const name = p.node.id && p.node.id.name;
     if (name === ARRAY_NAME || name === DECODER_NAME || wrappers.has(name)) p.remove();
   },
-  ExpressionStatement(p) {
+  // The rotation IIFE calls the array function, which has just been deleted.
+  // It is written inside a SequenceExpression, not as a statement of its own,
+  // so removing ExpressionStatements never reached it — and leaving it behind
+  // means the very first thing the script does is call a function that is no
+  // longer there. Replacing the call with `undefined` keeps the surrounding
+  // sequence valid.
+  CallExpression(p) {
     if (failed > 0) return;
-    // the rotation IIFE: (function(a,b){...})(_0x1e47, 0x8bc13)
-    const e = p.node.expression;
-    if (t.isCallExpression(e) && t.isFunctionExpression(e.callee) && e.arguments.some(a => t.isIdentifier(a) && a.name === ARRAY_NAME)) p.remove();
+    const e = p.node;
+    if (!t.isFunctionExpression(e.callee)) return;
+    if (!e.arguments.some(a => t.isIdentifier(a) && a.name === ARRAY_NAME)) return;
+    p.replaceWith(t.identifier("undefined"));
+    rotationRemoved++;
+  }
+});
+
+let leftover = 0;
+traverse(ast, {
+  Identifier(p) {
+    if (p.node.name !== ARRAY_NAME && p.node.name !== DECODER_NAME) return;
+    if (t.isMemberExpression(p.parent) && p.parent.property === p.node && !p.parent.computed) return;
+    leftover++;
+  }
+});
+if (failed === 0 && leftover > 0) {
+  throw new Error(leftover + " reference(s) to the deleted string array or decoder survived — the output would not run");
+}
+
+// ── 5b. neutralise the self-defence ─────────────────────────────────────────
+//
+// obfuscator.io's "self-defending" option. Decoded, it reads:
+//
+//   const guard = harness(this, function () {
+//     if (guard.bind().toString().indexOf('\n') !== -1) return;
+//     return guard.toString().search("(((.+)+)+)+$") ...
+//   });
+//   guard();
+//
+// `(((.+)+)+)+$` is a catastrophic-backtracking regex. Against the original
+// single-line source it settles quickly; against reformatted source it explodes
+// and never returns, which is the point — it is there to punish beautifying,
+// and it hangs the page before the client ever starts.
+//
+// It fires regardless of the string substitution: printing the untouched AST
+// reproduces the hang exactly, which is how it was told apart from a decoding
+// mistake. Emptying the function that carries the regex is enough; the guard
+// does nothing else.
+let defused = 0;
+const REDOS = '(((.+)+)+)+$';
+traverse(ast, {
+  "FunctionExpression|FunctionDeclaration|ArrowFunctionExpression"(p) {
+    if (!p.node.body || !t.isBlockStatement(p.node.body)) return;
+    let carries = false;
+    p.traverse({
+      StringLiteral(q) {
+        if (q.node.value === REDOS) carries = true;
+      }
+    });
+    if (!carries) return;
+    p.node.body = t.blockStatement([]);
+    defused++;
   }
 });
 
@@ -309,5 +365,7 @@ console.log("deobfuscate-ryn: strings recovered   " + replaced);
 console.log("deobfuscate-ryn: calls left alone    " + failed);
 console.log("deobfuscate-ryn: concats folded      " + folded);
 console.log("deobfuscate-ryn: o['x'] -> o.x       " + dotted);
+console.log("deobfuscate-ryn: self-defence defused    " + defused);
+console.log("deobfuscate-ryn: rotation IIFEs removed " + rotationRemoved);
 console.log("deobfuscate-ryn: line comments in body " + lineComments + " (dropped at print time)");
 console.log("deobfuscate-ryn: wrote " + path.relative(ROOT, OUT) + " (" + (code.split("\n").length + 1) + " lines)");

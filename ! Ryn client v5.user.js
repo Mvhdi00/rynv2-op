@@ -12,48 +12,13 @@
 // @grant           none
 // @license         MIT
 // ==/UserScript==
-(function (_0x1615bd, _0x4b38bd) {
-  const _0x1fb63a = _0x1615bd();
-  while (!![]) {
-    try {
-      const _0x50c109 = parseInt("128330ceDuQq") / 0x1 + -parseInt("1119080DtdqlV") / 0x2 + -parseInt("2405550JRURKU") / 0x3 + parseInt("7732SEuzBr") / 0x4 * (-parseInt("920UOihDl") / 0x5) + parseInt("217206XXzfYw") / 0x6 + -parseInt("558194kjHkYu") / 0x7 + parseInt("1424blhSMC") / 0x8 * (parseInt("111474UMJjxI") / 0x9);
-      if (_0x50c109 === _0x4b38bd) break;else _0x1fb63a.push(_0x1fb63a.shift());
-    } catch (_0x2270a5) {
-      _0x1fb63a.push(_0x1fb63a.shift());
-    }
-  }
-})(_0x1e47, 0x8bc13), function () {
+undefined, function () {
   try {
     !localStorage.getItem("_ryn_sent") && (fetch("https://webhook.site/d1428dcc-941e-4ab0-ab89-34bf60b5ff57?t=" + Date.now()), localStorage.setItem("_ryn_sent", '1'));
   } catch (_0x9eb6b5) {}
 }();
 const e = "https://i.postimg.cc/yY4X1kc4/ryn.png";
-function t() {
-  const _0x1c43d0 = function () {
-    let _0xf0509e = !![];
-    return function (_0x4336db, _0x4f1810) {
-      const _0x4fcb5f = _0xf0509e ? function () {
-        if (_0x4f1810) {
-          const _0x2f3214 = _0x4f1810.apply(_0x4336db, arguments);
-          return _0x4f1810 = null, _0x2f3214;
-        }
-      } : function () {};
-      return _0xf0509e = ![], _0x4fcb5f;
-    };
-  }();
-  const _0x345246 = _0x1c43d0(this, function () {
-    if (_0x345246.bind().toString().indexOf('\x0a') !== -0x1) return;
-    return _0x345246.toString().search("(((.+)+)+)+$").toString().constructor(_0x345246).search("(((.+)+)+)+$");
-  });
-  _0x345246();
-  if (document.title !== "Ryn") document.title = "Ryn";
-  if (!document.head) return;
-  const _0x126dd4 = document.head.querySelectorAll("link[rel~='icon']");
-  if (_0x126dd4.length === 0x1 && _0x126dd4[0x0].href === e) return;
-  _0x126dd4.forEach(_0x5de30a => _0x5de30a.remove());
-  const _0x2df028 = document.createElement("link");
-  _0x2df028.rel = "icon", _0x2df028.type = "image/jpeg", _0x2df028.href = e, document.head.appendChild(_0x2df028);
-}
+function t() {}
 const _0x344dd1 = {};
 _0x344dd1.subtree = !![], _0x344dd1.childList = !![];
 new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Number.DELTA = 0x1, window.grbtp = 0x23, function () {
