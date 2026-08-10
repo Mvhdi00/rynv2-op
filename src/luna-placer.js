@@ -38,11 +38,25 @@
   const LUNA_TWO_PI = Math.PI * 2;
   const LUNA_ANGLE_STEP = LUNA_TWO_PI / LUNA_ANGLE_STEPS;
 
-  // Two candidate angles closer together than this are the same build.
-  const LUNA_ANGLE_EPS = 1e-4;
-
-  // How far a tangent corner is pushed off the object it is packed against.
-  const LUNA_CORNER_NUDGE = 6e-3;
+  // Every angle this client sends goes through PacketManager's wireAngle:
+  //
+  //   parseFloat(Math.atan2(Math.sin(a), Math.cos(a)).toFixed(2))
+  //
+  // so the server only ever sees multiples of 0.01 rad (0.573°) in (-π, π].
+  // There are about 629 sendable angles in total and nothing in between.
+  //
+  // That makes deciding on any other angle meaningless: the placer would judge
+  // a landing point the server never evaluates. At the 79px landing radius the
+  // rounding moves the build up to 0.4px, which is nothing in the middle of a
+  // wide gap and fatal on a corner, where the build is tangent by construction
+  // and 0.4px the wrong way is a rejection.
+  //
+  // So every candidate is snapped to the wire grid *before* it is checked, and
+  // the snapped value is what gets sent. What the placer decides and what the
+  // server evaluates are then the same number.
+  const LUNA_WIRE_STEP = .01;
+  const lunaNormalizeAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
+  const lunaWireAngle = a => parseFloat(lunaNormalizeAngle(a).toFixed(2));
 
   // Cells of the 100px spatial grid to sweep for corner-producing objects.
   // An object only reaches the landing circle from within w + itemScale +
@@ -210,14 +224,31 @@
         if (cos < -1 || cos > 1) return false;
         const delta = Math.acos(cos);
         const alpha = Math.atan2(dy, dx);
-        // Nudged off the object it is packed against. The server rejects on
-        // `<`, so exact tangency is legal, but the landing point is recomputed
-        // from a rounded wire angle and the sign of the residual is a coin
-        // flip. Each corner moves away from the object, never into it.
-        out.push(alpha + delta + LUNA_CORNER_NUDGE, alpha - delta - LUNA_CORNER_NUDGE);
+        // Snapped to the first sendable angle *outside* the blocked arc rather
+        // than nudged by a constant. A constant nudge is not wrong so much as
+        // beside the point: it is applied to an angle that then gets rounded
+        // to the wire grid anyway, so the spot that was reasoned about is not
+        // the spot the server judges. Stepping straight to the neighbouring
+        // wire angle picks the tightest placement that can actually be sent,
+        // and the clearance is whatever the grid leaves — 0.008px to 0.79px
+        // here — instead of a nominal 0.47px measured at a phantom angle.
+        out.push(this._wireStepOut(alpha + delta, 1), this._wireStepOut(alpha - delta, -1));
         return false;
       });
       return out;
+    }
+
+    // The nearest sendable angle strictly past `a` in direction `sign`. Exact
+    // tangency is legal by the server's own test (it rejects on `<`), but the
+    // landing point is recomputed from the rounded angle, so a corner sitting
+    // exactly on a wire angle is decided by float residue. One more step off
+    // costs 0.01 rad — 0.79px of clearance — and removes the coin flip.
+    _wireStepOut(a, sign) {
+      const n = lunaNormalizeAngle(a);
+      const steps = sign > 0 ? Math.ceil(n / LUNA_WIRE_STEP) : Math.floor(n / LUNA_WIRE_STEP);
+      let v = steps * LUNA_WIRE_STEP;
+      if (Math.abs(v - n) < 1e-9) v += sign * LUNA_WIRE_STEP;
+      return lunaWireAngle(v);
     }
 
     // Luna getPrePlaceAngles + getPerfectAngles: probe 72 evenly spaced
@@ -248,40 +279,35 @@
       const cached = this._angleCache.get(key);
       if (cached) return cached;
 
-      const wrap = a => (a % LUNA_TWO_PI + LUNA_TWO_PI) % LUNA_TWO_PI;
-      const candidates = [];
+      // Snap first, then de-duplicate: two raw candidates that round to the
+      // same wire angle are the same build, and after snapping that is exact
+      // equality rather than an epsilon compare. Corner wins over grid sample
+      // when both land on the same wire angle.
+      const candidates = new Map;
+      const add = (raw, corner) => {
+        const wire = lunaWireAngle(raw);
+        if (!Number.isFinite(wire)) return;
+        if (corner || !candidates.has(wire)) candidates.set(wire, corner || !!candidates.get(wire));
+      };
       for (let i = 0; i < LUNA_ANGLE_STEPS; i++) {
-        candidates.push({
-          angle: i * LUNA_ANGLE_STEP,
-          corner: false
-        });
+        add(i * LUNA_ANGLE_STEP, false);
       }
       for (const raw of this._cornerAngles(id, myPos, ObjectManager2, excludeObj)) {
-        candidates.push({
-          angle: wrap(raw),
-          corner: true
-        });
+        add(raw, true);
       }
-      candidates.sort((a, b) => a.angle - b.angle);
 
+      // Wire angles live in (-π, π]; the ring is walked in [0, 2π) so that
+      // "next angle round the circle" is what the perfect-edge test sees. The
+      // wire value is kept as the angle — it is what gets sent, and re-wrapping
+      // it into [0, 2π) would push it off the 0.01 grid.
+      const wrap = a => (a % LUNA_TWO_PI + LUNA_TWO_PI) % LUNA_TWO_PI;
       const getConfig = this._getConfig(id, myPos);
-      const angles = [];
-      for (const candidate of candidates) {
-        // Two corners from neighbouring objects can land on top of each other,
-        // and a corner can coincide with a grid sample. Same angle, same
-        // build — keep one.
-        const last = angles[angles.length - 1];
-        if (last && candidate.angle - last.angle < LUNA_ANGLE_EPS) {
-          if (candidate.corner) last.corner = true;
-          continue;
-        }
-        angles.push({
-          ...getConfig(candidate.angle),
-          corner: candidate.corner,
-          placeable: this._canPlace(id, candidate.angle, myPos, ObjectManager2, excludeObj),
-          perfect: false
-        });
-      }
+      const angles = [ ...candidates.entries() ].sort((a, b) => wrap(a[0]) - wrap(b[0])).map(([wire, corner]) => ({
+        ...getConfig(wire),
+        corner: corner,
+        placeable: this._canPlace(id, wire, myPos, ObjectManager2, excludeObj),
+        perfect: false
+      }));
       for (let i = 1; i < angles.length; i++) {
         if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
         if (angles[i - 1].placeable && !angles[i].placeable) angles[i - 1].perfect = true;

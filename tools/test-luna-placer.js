@@ -218,6 +218,7 @@ function run(opts) {
   return { placer: placer, sent: env.sent, timers: timers, client: env.client };
 }
 
+const lunaSnap = a => parseFloat(Math.atan2(Math.sin(a), Math.cos(a)).toFixed(2));
 const ours = (id, x, y, type) => new PlayerObject(id, x, y, type, 1);
 const theirs = (id, x, y, type) => new PlayerObject(id, x, y, type, 2);
 
@@ -392,14 +393,22 @@ console.log("luna placer smoke test\n");
     check("corner clears the object", got >= want, got.toFixed(2) + " vs " + want);
   }
 
+  // Angles are wire values in (-π, π]; the ring is ordered around [0, 2π).
+  const wrap = a => (a % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
   let sorted = true, duped = false;
   for (let i = 1; i < angles.length; i++) {
-    if (angles[i].angle < angles[i - 1].angle) sorted = false;
-    if (angles[i].angle - angles[i - 1].angle < 1e-9) duped = true;
+    if (wrap(angles[i].angle) < wrap(angles[i - 1].angle)) sorted = false;
+    if (angles[i].angle === angles[i - 1].angle) duped = true;
   }
   check("ring stays sorted", sorted);
   check("ring has no duplicate angles", !duped);
   check("grid samples are still all there", angles.length >= 72, angles.length + " entries");
+
+  // Every angle must be one the client can actually send: wireAngle is
+  // idempotent on it, and it sits on the 0.01 rad grid.
+  const wireAngle = a => parseFloat(Math.atan2(Math.sin(a), Math.cos(a)).toFixed(2));
+  const offGrid = angles.filter(a => wireAngle(a.angle) !== a.angle);
+  check("every angle is a sendable wire angle", offGrid.length === 0, offGrid.length + " off-grid: " + JSON.stringify(offGrid.slice(0, 3).map(a => a.angle)));
 }
 
 // 7c — the case the 5° grid alone cannot solve: a gap between two objects that
@@ -428,6 +437,58 @@ console.log("luna placer smoke test\n");
   const cornerFound = angles.some(x => x.corner && x.placeable && Math.abs(x.angle - gapCentre) < halfGap);
   check("a sub-5° gap exists that the grid misses", !gridFound);
   check("the solved corners find it anyway", cornerFound);
+}
+
+// 7d — the wire grid. Every angle the client sends goes through
+//   wireAngle = parseFloat(atan2(sin,cos).toFixed(2))
+// so the server only ever evaluates multiples of 0.01 rad. Judging an angle
+// the server never sees is the defect: a raw angle and the angle it rounds to
+// can fall on opposite sides of an object's edge, so the placer calls a spot
+// free and the server drops the build (or the reverse — a legal spot skipped).
+{
+  const item = Items[SPIKE_ID];
+  const w = 35 + item.scale + (item.placeOffset || 0);
+  const R = item.scale + Items[16].scale;
+  const d = 120;
+  const wireAngle = a => parseFloat(Math.atan2(Math.sin(a), Math.cos(a)).toFixed(2));
+  // One object dead ahead: the blocked arc is [-blockedHalf, +blockedHalf].
+  const blockedHalf = Math.acos((w * w + d * d - R * R) / (2 * w * d));
+  const free = angle => Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle))) > blockedHalf;
+
+  let disagree = 0, n = 0;
+  for (let k = -300; k <= 300; k++) {
+    const raw = blockedHalf + k * 1e-4;
+    n += 1;
+    if (free(raw) !== free(wireAngle(raw))) disagree += 1;
+  }
+  check("raw and sent angles can disagree on the same spot", disagree > 0, disagree + "/" + n + " disagree");
+
+  // Snapping first removes the gap by construction: the angle checked is the
+  // angle sent, so the two verdicts are the same number.
+  let mismatched = 0;
+  for (let k = -300; k <= 300; k++) {
+    const snapped = lunaSnap(blockedHalf + k * 1e-4);
+    if (free(snapped) !== free(wireAngle(snapped))) mismatched += 1;
+  }
+  check("snapped angles never disagree with themselves", mismatched === 0, mismatched + " mismatched");
+
+  // And the corner stepper: sweep the object's bearing so tangency lands at
+  // every offset relative to the grid, and check both corners come out on the
+  // free side of that object's arc every time.
+  const env = makeClient({});
+  const placer = new AutoPlacer(env.client);
+  const angleFrom = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  let inside = 0, worst = Infinity;
+  for (let k = 0; k < 600; k++) {
+    const alpha = k * 1e-3;
+    for (const sign of [ 1, -1 ]) {
+      const got = placer._wireStepOut(alpha + sign * blockedHalf, sign);
+      const gap = angleFrom(got, alpha) - blockedHalf;
+      if (gap < 0) inside += 1;
+      worst = Math.min(worst, gap);
+    }
+  }
+  check("a stepped-out corner is always on the free side", inside === 0, inside + " inside, tightest +" + (worst * w).toFixed(3) + "px");
 }
 
 // 8 — item limit: at the cap, nothing of that kind is proposed.

@@ -189,6 +189,59 @@ that cannot miss a gap. `test-luna-placer.js` builds a free window 1.6° wide,
 off-grid, and checks that the grid samples all miss it while the solved corners
 land inside it.
 
+### Deciding on angles the server can actually receive
+
+Every angle this client sends goes through `PacketManager`'s own quantiser:
+
+```js
+const wireAngle = angle => parseFloat(Math.atan2(Math.sin(angle), Math.cos(angle)).toFixed(2));
+```
+
+`attack`, `stopAttack` and `updateAngle` all pass through it, so the server
+only ever sees multiples of **0.01 rad (0.573°)** in `(-π, π]` — about 629
+sendable angles, and nothing in between.
+
+That makes any other angle a fiction. The placer used to probe `i·2π/72`
+(0.0873, 0.1745, …) and decide from that, while the server judged 0.09, 0.17.
+The gap is up to 0.005 rad, which at the 79px landing radius moves the build
+about 0.4px — nothing in the middle of a wide gap, and decisive on the angles
+Luna actually prefers, since a "perfect" angle is by definition the one packed
+against an object. The placer would call a spot free that the server drops, or
+skip one that was legal.
+
+Candidates are now snapped to the wire grid **before** they are checked, and
+the snapped value is what gets sent, so the angle reasoned about and the angle
+judged are the same number. De-duplication becomes exact equality rather than
+an epsilon compare, and the banned-angle keys become stable.
+
+The corners changed with it. A constant nudge off the tangency was never wrong
+— 6e-3 rad clears the 0.005 rounding either way — but it was measured at an
+angle that then got rounded anyway. Each corner now steps straight to the first
+sendable angle past tangency, which is both exact and tighter: measured across
+the sweep, clearance runs 0.008px to 0.79px, against a nominal 0.474px that was
+never quite where it claimed to be.
+
+### Rules checked against the bundle, not assumed
+
+The placement maths is transcribed from `src/game_index.js` rather than
+guessed, and the client's own tables were re-checked against it:
+
+| bundle | client |
+|---|---|
+| `buildItem`: `w = this.scale + f.scale + (f.placeOffset \|\| 0)` | `_getConfig` uses `35 + scale + placeOffset` ✓ |
+| `checkItemLocation`: reject when `getDistance < p + block` | `_canPlace` ✓ |
+| `block = obj.blocker ? obj.blocker : obj.getScale(.6, obj.isItem)` | `obj.placementScale` ✓ |
+| `getScale(t,i) = scale * (isItem \|\| type==2 \|\| type==3 ? 1 : .6*t) * (i ? 1 : colDiv)` | `PlayerObject` → `scale`; `Resource` → `scale * .36` for types 0/1, `scale` for 2/3 ✓ |
+| river band rejected unless `id == 18` | ✓ |
+
+The `colDiv` factor looks like a discrepancy and is not: `getScale` applies it
+only when `i` is false, and `i` is `isItem`. Player-built items are `isItem`,
+so they never reach it; natural resources do, but none of them carry `colDiv`
+in the item table — it appears only on sapling, pit trap, boost pad, healing
+pad, blocker and teleporter, all of which are items. `o.colDiv || 1` is
+therefore always 1 on the path that uses it. Likewise `blocker: 300` is on the
+blocker alone, which is why keying it to `item.id === 21` is safe.
+
 ### The one decision rule that was changed
 
 Luna's autoplace spike ladder ends with:
@@ -326,8 +379,9 @@ stubbed managers and drives `postTick` through each decision path — traps on a
 open enemy, spikes on a trapped one, the radius and master-toggle gates, the
 spike-tick yield in both places it is checked, the held-back preplace and its
 two resends, the 72-angle probe and its perfect-angle edges, the item cap, and
-the packet budget, the tangent corners and a sub-5° gap the grid alone misses.
-All 37 checks pass, and `verify-drivers.js` reports the v5
+the packet budget, the tangent corners, a sub-5° gap the grid alone misses, and
+the wire-grid snapping.
+All 41 checks pass, and `verify-drivers.js` reports the v5
 build's data tables unchanged against the shipped bundle.
 
 Current state of the ReUp Mix build:
