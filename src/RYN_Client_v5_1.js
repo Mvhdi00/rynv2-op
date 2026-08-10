@@ -8543,11 +8543,11 @@ window.grbtp = 35;
       }
       // Being trapped normally overrides whatever else claimed the tick —
       // getting out is worth more than any other swing, so this deliberately
-      // does not defer. The mutual-trap spike tick is the one case it cannot
-      // see: that module already weighed the trap and decided it is not going
-      // anywhere this tick, and taking the swing back now would leave the
-      // spike it just placed sitting there doing nothing.
-      if (ModuleHandler.moduleActive && (!myPlayer.isTrapped || ModuleHandler._spikeTickTrappedHold)) {
+      // does not defer. Two modules know better and say so with the hold:
+      // the mutual-trap spike tick, which already weighed this trap and
+      // decided it is not going anywhere, and Anti Spike Tick, which is
+      // breaking this exact trap on a hat schedule this path would trample.
+      if (ModuleHandler.moduleActive && (!myPlayer.isTrapped || ModuleHandler._trappedSwingHold)) {
         return;
       }
       const beneficial = this._beneficialBreakTarget(myPlayer, EnemyManager2.nearestEnemy, ObjectManager3, PlayerManager3);
@@ -10109,6 +10109,108 @@ window.grbtp = 35;
     // right there.
     return ModuleHandler.tickCount - state.counterTick <= SPIKE_TICK_COUNTER_GRACE;
   };
+  // ── Anti Spike Tick, second half: get out of the trap ──────────────────────
+  // The gate above only ever decides when not to open a tick of my own. It
+  // does nothing about the position the tick is actually won from, which is me
+  // standing in someone else's trap with a spike going down beside me. Pinned,
+  // every swing they land is a free tick and no read is going to save it. The
+  // answer is not to out-trade them, it is to stop being in the trap.
+  //
+  // Breaking it is two jobs on two different ticks, and they want opposite
+  // hats:
+  //   1. the opener — get the trap down in as few swings as possible. Hammer
+  //      with Tank Gear, 3.3x on buildings, the hardest single hit this client
+  //      can put into a trap.
+  //   2. everything after it — spent standing still inside the trap waiting on
+  //      a reload with an enemy in range. Soldier Helmet, because in that
+  //      window the swings landing on me are worth more than the ones I am
+  //      landing on the trap, and the reload is dead time either way.
+  // Wearing the damage hat straight through is the whole reason the break
+  // loses: it buys a fraction of a swing and pays for it with the tick it was
+  // trying to avoid.
+  const ANTI_SPIKE_TICK_RANGE = SPIKE_TICK_COUNTER_RANGE;
+  class AntiSpikeTick {
+    moduleName="antiSpikeTick";
+    client;
+    trap=null;
+    opened=false;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.trap = null;
+      this.opened = false;
+    }
+    // Someone close enough, free enough and loaded enough to tick me while I
+    // cannot move. A hostile spike already on me counts as well — at that
+    // point it is not a threat to read, it is a tick in progress.
+    threatened() {
+      const {EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
+      if (EnemyManager2.collidingSpike || EnemyManager2.willCollideSpike) {
+        return true;
+      }
+      const enemies = PlayerManager2.enemies;
+      for (let i = 0; i < enemies.length; i++) {
+        const enemy = enemies[i];
+        if (enemy.canPlaceSpike && !enemy.isTrapped && enemy.isReloaded(0, 1) && myPlayer.collidingSimple(enemy, ANTI_SPIKE_TICK_RANGE)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    postTick() {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      // trappedIn is only ever a trap hostile to whoever stands in it, so this
+      // is always an enemy's trap and never one of my own.
+      const trap = myPlayer.trappedIn;
+      if (!Settings_default._antiSpikeTick || !myPlayer.isTrapped || trap === null) {
+        this.reset();
+        return;
+      }
+      // A different trap is a different sequence. The opener is owed to every
+      // trap, not to every time I happen to be stuck.
+      if (this.trap !== trap) {
+        this.trap = trap;
+        this.opened = false;
+      }
+      // No hammer, no opener worth the name — 3.3x of a stick is still a
+      // stick. Autobreak's own trapped path is the better answer then, and it
+      // still runs, because this never claims the tick.
+      const secondary = myPlayer.getItemByType(1);
+      if (secondary !== 10) {
+        return;
+      }
+      if (!this.threatened()) {
+        return;
+      }
+      const hammerRange = DataHandler_default.getWeapon(secondary).range + trap.collisionScale;
+      if (!myPlayer.collidingSimple(trap, hammerRange)) {
+        return;
+      }
+      const reloading = ModuleHandler.staticModules.reloading;
+      const canSwing = reloading.isReloaded(1);
+      // Tank only on the tick the swing actually goes out. A reload spent
+      // wearing it is the worst of both — none of its damage, and none of the
+      // defense I am standing there needing. Without it in the store there is
+      // no opener to speak of and the whole break runs in soldier.
+      const opener = canSwing && !this.opened && ModuleHandler.canBuy(0, 40);
+      ModuleHandler.moduleActive = true;
+      ModuleHandler._trappedSwingHold = true;
+      ModuleHandler.useAngle = myPlayer.pos.current.angle(trap.pos.current);
+      if (opener) {
+        ModuleHandler.forceHat = 40;
+      } else if (ModuleHandler.canBuy(0, 6)) {
+        ModuleHandler.forceHat = 6;
+        ModuleHandler.shouldEquipSoldier = true;
+      }
+      if (!canSwing) {
+        return;
+      }
+      ModuleHandler.forceWeapon = 1;
+      ModuleHandler.shouldAttack = true;
+      this.opened = true;
+    }
+  }
   // Sakuna's nearBreakType == "NearSpikes" branch: a spike already sitting on
   // top of you takes the tick, because ticking the enemy does not stop it from
   // chewing you. Gated on autobreak the same way Sakuna gates it, so turning
@@ -10342,7 +10444,7 @@ window.grbtp = 35;
         // deferring to anything the moment I am trapped, and the turret half
         // of a mutual-trap tick is exactly when I am.
         if (holdsTrapped && !alreadyClaimed && ModuleHandler.moduleActive) {
-          ModuleHandler._spikeTickTrappedHold = true;
+          ModuleHandler._trappedSwingHold = true;
         }
         this.turretTarget = null;
         return;
@@ -10354,7 +10456,7 @@ window.grbtp = 35;
       const locked = spikeTickMutualTrap(this.client);
       if (locked !== null) {
         spikeTickHit(this.client, locked);
-        ModuleHandler._spikeTickTrappedHold = true;
+        ModuleHandler._trappedSwingHold = true;
         this.useTurret = true;
         this.turretHoldsTrapped = true;
         this.turretTarget = locked;
@@ -11780,7 +11882,11 @@ window.grbtp = 35;
     }
     notSave() {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      return ModuleHandler.forceHat === 40 || EnemyManager2.instaThreat() || EnemyManager2.collidingSpike || myPlayer.wasTrapped() || ModuleHandler.currentType === 2;
+      // _trappedSwingHold: this is the one hat swap that does not check
+      // moduleActive first, and a bull reset in the middle of an Anti Spike
+      // Tick break would take the soldier straight back off in the window it
+      // was put on for. forceHat === 40 already covers the opener tick.
+      return ModuleHandler.forceHat === 40 || ModuleHandler._trappedSwingHold || EnemyManager2.instaThreat() || EnemyManager2.collidingSpike || myPlayer.wasTrapped() || ModuleHandler.currentType === 2;
     }
     postTick() {
       const {_ModuleHandler: ModuleHandler} = this.client;
@@ -13495,7 +13601,7 @@ window.grbtp = 35;
     attacked;
     canHitEntity=false;
     moduleActive=false;
-    _spikeTickTrappedHold=false;
+    _trappedSwingHold=false;
     useAngle=null;
     useWeapon=null;
     useItem=null;
@@ -13535,6 +13641,7 @@ window.grbtp = 35;
         antiSync: new AntiSync_default(client2),
         spikeSyncHammer: new SpikeSyncHammer(client2),
         spikeSync: new SpikeSync(client2),
+        antiSpikeTick: new AntiSpikeTick(client2),
         spikeTickBreak: new SpikeTickBreak(client2),
         spikeTickNear: new SpikeTickNear(client2),
         spikeTickTrap: new SpikeTickTrap(client2),
@@ -13586,7 +13693,7 @@ window.grbtp = 35;
         rynLink: new RYNLinkModule(client2)
       };
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.movement ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.antiSpikeTick, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
       this.reset();
     }
     movementReset() {
@@ -13896,7 +14003,7 @@ window.grbtp = 35;
       if (!this._autoBreakActive) this._lastBreakAngle = null;
       this._autoBreakActive = false;
       this._comboAttack = false;
-      this._spikeTickTrappedHold = false;
+      this._trappedSwingHold = false;
       this.tickCount += 1;
       this.sentAngle = 0;
       this.sentHatEquip = false;
