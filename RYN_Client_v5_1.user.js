@@ -13901,7 +13901,20 @@ window.grbtp = 35;
       return this.client.PacketManager.packetCount;
     }
     set packetCount(_v) {}
-    packetLimit=70;
+    // Packets per second, not per tick — PacketManager zeroes the counter on a
+    // 1s interval. Shared by every module.
+    //
+    // 70 was well under what the field runs: Luna gates builds at 119/s,
+    // Sakuna refuses to send anything at all above 120/s (its "Anti Kick"
+    // stop), and Sakuna and auraro both carry `secMax = 110`. 115 sits below
+    // that 120 stop with 5 packets of room.
+    //
+    // Note this is one number for the whole client, where Sakuna keeps a
+    // second, lower gate for building specifically (`secPacket < 97`) so
+    // placement cannot crowd out movement, attacks and heals. Without that
+    // split the placer here is free to spend the allowance down to the last
+    // packet, and a heavy building second can leave the essentials short.
+    packetLimit=115;
     postTick() {
       this._flushShameHealQueue();
       if (Settings_default._circleRotation && this.move_dir === null) {
