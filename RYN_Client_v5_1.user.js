@@ -8627,6 +8627,12 @@ window.grbtp = 35;
         // is a bad trade, and the reserve above PLACER_PACKET_GATE belongs to
         // heals. This only spends what is left below both.
         if (!Settings_default._pathBreak) return;
+        // Not while pinned. This module's early exit is
+        // `moduleActive && !isTrapped`, so being trapped lets it run even when
+        // another module already owns the tick — right for breaking the trap
+        // that holds me, wrong for tidying. Trapped there is no path to clear,
+        // and the swing belongs to whatever is actually on me.
+        if (myPlayer.isTrapped) return;
         if (ModuleHandler.packetCount >= PATH_BREAK_PACKET_GATE) return;
         target = this._pathBreakTarget(myPlayer, EnemyManager2.nearestEnemy, ObjectManager3);
         if (target === null) return;
@@ -9192,9 +9198,6 @@ window.grbtp = 35;
         const primJustReady = primReload && primReload.previous < primReload.max && primReload.current >= primReload.max;
         const secID = enemy.weapon?.secondary ?? null;
         const primID = enemy.weapon?.primary ?? null;
-        let weaponToCheck = null;
-        // Luna checks the enemy's secondary only when it is the great hammer,
-        // and their primary only when it swings inside 400ms.
         // Luna narrows this to two weapons: the secondary only when it is the
         // great hammer, and the primary only when it swings inside 400ms.
         // Anything slower was assumed not worth predicting — but the swing
@@ -9215,11 +9218,10 @@ window.grbtp = 35;
         readyWeapons.sort((a, b) => (enemy.getBuildingDamage?.(b, true) ?? 0) - (enemy.getBuildingDamage?.(a, true) ?? 0));
         for (const candidateWeapon of readyWeapons) {
           if (findObject) break;
-          weaponToCheck = candidateWeapon;
-          const wd = DataHandler_default?.getWeapon?.(weaponToCheck);
+          const wd = DataHandler_default?.getWeapon?.(candidateWeapon);
           if (wd) {
             const weaponRange = wd.range ?? 0;
-            const dmgToBuilding = enemy.getBuildingDamage?.(weaponToCheck, true) ?? 50;
+            const dmgToBuilding = enemy.getBuildingDamage?.(candidateWeapon, true) ?? 50;
             const candidates = [];
             ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
               const obj = ObjectManager2.objects.get(id);
