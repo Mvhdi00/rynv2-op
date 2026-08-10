@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-// src/Ryn_V5_obfuscated.user.js -> Ryn_V5_deobfuscated.user.js
+// src/Ryn_V5_obfuscated.user.js -> "! Ryn client v5.user.js"
 //
 // The file is obfuscator.io output: a rotated string array, an RC4 +
 // base64 decoder, and per-scope wrapper functions that offset the index before
@@ -31,7 +31,7 @@ const t = require("@babel/types");
 
 const ROOT = path.join(__dirname, "..");
 const IN = path.join(ROOT, "src", "Ryn_V5_obfuscated.user.js");
-const OUT = path.join(ROOT, "Ryn_V5_deobfuscated.user.js");
+const OUT = path.join(ROOT, "! Ryn client v5.user.js");
 
 const source = fs.readFileSync(IN, "utf8");
 
