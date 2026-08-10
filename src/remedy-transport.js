@@ -264,9 +264,63 @@ const RemedyWire = (function() {
     };
     }
 
+    const main = createChannel();
+
+    // remedy attaches its message listener the first time the game calls
+    // WebSocket.send:
+    //
+    //     if (!WS) { WS = this; WS.addEventListener("message", ...); }
+    //
+    // io-init arrives from the server the moment the socket opens, before the
+    // game has sent anything, so that listener is always too late to see it —
+    // and io-init is the only place the key and the opcode tables ever appear.
+    // Miss it and every frame goes out as plain msgpack and is dropped, which
+    // looks like joining a game and never spawning.
+    //
+    // The socket is wrapped at construction instead. The bundle takes its
+    // reference once, at module scope (`const kn = window.WebSocket`), and this
+    // script runs at document-start, so the wrapper is in place first.
+    //
+    // Bot sockets come through the same constructor but own their channel:
+    // connectBot assigns ws.wire synchronously right after `new WebSocket`,
+    // while messages only arrive on a later turn, so `socket.wire` is a
+    // reliable "not the main socket" test by the time anything is received.
+    function install(scope) {
+        const target = scope || (typeof window !== "undefined" ? window : null);
+        if (!target) return false;
+        const Native = target.WebSocket;
+        if (!Native || Native.__remedyWired) return false;
+
+        function Wrapped(url, protocols) {
+            const socket = protocols === undefined ? new Native(url) : new Native(url, protocols);
+            socket.addEventListener("message", function(event) {
+                if (socket.wire) return;
+                try {
+                    const parsed = codec().decode(new Uint8Array(event.data));
+                    if (parsed && parsed[0] === "io-init") {
+                        main.init(parsed[1]);
+                    }
+                } catch (e) {}
+            });
+            return socket;
+        }
+
+        Wrapped.prototype = Native.prototype;
+        Wrapped.__remedyWired = true;
+        Wrapped.__native = Native;
+        for (const key of [ "CONNECTING", "OPEN", "CLOSING", "CLOSED" ]) {
+            Wrapped[key] = Native[key];
+        }
+        target.WebSocket = Wrapped;
+        return true;
+    }
+
+    install();
+
     return {
         SIGNATURE_BYTES: SIGNATURE_BYTES,
         create: createChannel,
-        main: createChannel()
+        install: install,
+        main: main
     };
 })();

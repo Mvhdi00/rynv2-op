@@ -205,5 +205,66 @@ check("signature width matches the bundle", box.RemedyWire.SIGNATURE_BYTES === r
   check("io-init is readable before the tables exist", decoded !== null && decoded[0] === "io-init" && decoded[1][0] === 7);
 }
 
+// The reason the first build joined a game and never spawned: remedy only
+// attaches its message listener on the first WebSocket.send, and io-init has
+// already been and gone by then. The transport wraps the constructor so it
+// sees io-init itself.
+{
+  const messages = [];
+  class FakeSocket {
+    constructor(url) {
+      this.url = url;
+      this.listeners = [];
+    }
+    addEventListener(type, fn) {
+      if (type === "message") this.listeners.push(fn);
+    }
+    deliver(value) {
+      for (const fn of this.listeners) fn({ data: fakeMsgpack.encode(value) });
+    }
+  }
+  FakeSocket.CONNECTING = 0;
+  FakeSocket.OPEN = 1;
+  FakeSocket.CLOSING = 2;
+  FakeSocket.CLOSED = 3;
+
+  const scope = { WebSocket: FakeSocket };
+  check("install wraps the constructor", box.RemedyWire.install(scope) === true);
+  check("install is idempotent", box.RemedyWire.install(scope) === false);
+  check("readyState constants survive", scope.WebSocket.OPEN === 1 && scope.WebSocket.CLOSED === 3);
+
+  wire.reset();
+  check("no tables before io-init", wire.active === false);
+
+  // The game's socket: io-init arrives before anything is ever sent.
+  const game = new scope.WebSocket("wss://example");
+  check("wrapper returns a real socket", game instanceof FakeSocket && game.url === "wss://example");
+  game.deliver([ "io-init", [ 7, 555555, "aabbccddeeff", 1 ] ]);
+  check("io-init is captured at construction, before any send", wire.active === true);
+
+  // And the frames it produces are the signed kind.
+  const frame = wire.encode("F", [ 1, 0 ]);
+  check("the main channel now seals frames", frame !== null && frame.length > wire.SIGNATURE_BYTES);
+
+  // A bot socket carries its own channel and must not clobber the main one.
+  const before = wire.encode("D", [ 0 ]);
+  const bot = new scope.WebSocket("wss://bot");
+  bot.wire = box.RemedyWire.create();
+  bot.deliver([ "io-init", [ 9, 111111, "0011223344", 1 ] ]);
+  const after = wire.encode("D", [ 0 ]);
+  const body = b => JSON.parse(Buffer.from(b.subarray(wire.SIGNATURE_BYTES)).toString("utf8"));
+  check("a bot's io-init leaves the main channel alone", body(before)[0] === body(after)[0], body(before)[0] + " vs " + body(after)[0]);
+
+  // connectBot handles its own io-init through ws.onmessage — the wrapper
+  // deliberately stays out of it — so the bot's tables come from there.
+  bot.wire.init([ 9, 111111, "0011223344", 1 ]);
+  check("the bot's own handler gives it tables", bot.wire.active === true);
+  // Different seeds, so the two channels must map the same letter differently.
+  const botOpcode = body(bot.wire.encode("D", [ 0 ]))[0];
+  const mainOpcode = body(after)[0];
+  check("bot and main seal with their own tables", botOpcode !== mainOpcode, "both mapped D to " + mainOpcode);
+  messages.length = 0;
+}
+
 console.log("\n" + (failures === 0 ? "all checks passed" : failures + " check(s) failed"));
 process.exit(failures === 0 ? 0 : 1);
