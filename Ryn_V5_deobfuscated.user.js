@@ -1,19 +1,5 @@
 // ==UserScript==
-// @name            ! Ryn V5
-// @author          By : Raptor
-// @description     ! have fun
-// @icon            https://i.postimg.cc/DmkhSqn3/rynv2.webp
-// @version         v5
-// @match           *://moomoo.io/
-// @match           *://moomoo.io/?server*
-// @match           *://*.moomoo.io/
-// @match           *://*.moomoo.io/?server*
-// @run-at          document-start
-// @grant           none
-// @license         MIT
-// ==/UserScript==
-// ==UserScript==
-// @name            ! Ryn V5
+// @name            ! Ryn client v5
 // @author          By : Raptor
 // @description     ! have fun
 // @icon            https://i.postimg.cc/DmkhSqn3/rynv2.webp
@@ -5906,19 +5892,10 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
   function auraPlacementCost(type) {
     return type === AURA_TRAP ? 5 : 4;
   }
-
-  // Modules that build a spike tick or sync. They all run before the placer in
-  // the module order, and whichever claims the tick first gets its name into
-  // ModuleHandler.activeModule — so if one of these owns the tick, preplace and
-  // replace stay out of its way rather than spending the slot and the packets.
   const AURA_SPIKE_TICK_MODULES = new Set(["spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap"]);
   function auraSpikeTickBusy(ModuleHandler) {
     return AURA_SPIKE_TICK_MODULES.has(ModuleHandler.activeModule);
   }
-
-  // Auraro keeps one global `autoPlace` object whose state (preplaces, ranges,
-  // radObjs) is shared between autoplace, preplace and replace within a tick.
-  // The three RYN modules share one the same way.
   function getAuraPlacer(_0x4cf5fe) {
     if (!_0x4cf5fe._auraPlacer) {
       _0x4cf5fe._auraPlacer = new AuraPlacer(_0x4cf5fe);
@@ -5939,16 +5916,10 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
     constructor(client2) {
       this._0x4cf5fe = client2;
     }
-
-    // ---- data access, rewritten onto RYN ------------------------------------
-
-    // auraro: items.list[player.items[id]]
     item(type) {
       const id = this._0x4cf5fe.myPlayer.getItemByType(type);
       return id === null || id === void 0 ? null : _0x3a006b[id];
     }
-
-    // auraro: nearObjs
     nearObjs(x, y, range = AURA_SCAN_RANGE) {
       const {
         ObjectManager: ObjectManager2
@@ -5972,15 +5943,10 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
     isTeamObject(object) {
       return !this._0x4cf5fe.PlayerManager.isEnemyByID(object.ownerID, this._0x4cf5fe.myPlayer);
     }
-
-    // auraro: obj.hideFromEnemy — a pit trap the enemy cannot see yet. Giving
-    // its position away by building on it is worse than losing it.
     isHiddenTrap(object) {
       const item = _0x3a006b[object.type];
       return !!(item && item.hideFromEnemy);
     }
-
-    // auraro: tmp.blocker ? tmp.blocker : tmp.getScale(0.6, tmp.isItem)
     blockScale(object) {
       return object.placementScale;
     }
@@ -5989,8 +5955,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       const half = _0x575230.riverWidth / 2;
       return y >= mid - half && y <= mid + half;
     }
-
-    // Every placement funnels through here so the tick budget is respected.
     send(type, angle) {
       const {
         _ModuleHandler: ModuleHandler,
@@ -6009,9 +5973,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       ModuleHandler.moduleActive = true;
       return true;
     }
-
-    // auraro tryPlaceAngle: never hammer the same angle more than four times
-    // in one tick.
     tryPlaceAngle(type, angle) {
       const tick = this._0x4cf5fe._ModuleHandler.tickCount;
       if (this._angleListTick !== tick) {
@@ -6026,8 +5987,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       this._angleList.set(key, count + 1);
       return this.send(type, angle);
     }
-
-    // auraro: objectManager.checkItemLocation
     checkItemLocation(x, y, scale, itemId, objs) {
       for (const object of objs) {
         const p = object.pos.current;
@@ -6040,10 +5999,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       }
       return true;
     }
-
-    // auraro: objectManager.preplaceCheck — the doomed object is skipped, and
-    // the spot must overlap it. That last clause is what makes this "pre"
-    // place: only the slot being freed counts.
     preplaceCheck(x, y, scale, itemId, target, objs) {
       for (const object of objs) {
         if (object.id === target.id) {
@@ -6060,18 +6015,9 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       const t = target.pos.current;
       return Math.hypot(x - t.x, y - t.y) <= scale + target.scale;
     }
-
-    // The server builds at exactly this radius from the player, along
-    // player.dir. From the game bundle's buildItem:
-    //   w = this.scale + f.scale + (f.placeOffset || 0)
-    //   x = this.x + w * cos(this.dir);  y = this.y + w * sin(this.dir)
     placeRadius(item) {
       return this._0x4cf5fe.myPlayer.scale + item.scale + (item.placeOffset || 0);
     }
-
-    // RYN rounds the angle to two decimals on the wire, so this is the angle
-    // the server actually sees. Worth mirroring: it is the precision floor,
-    // about 0.3px of arc at a trap's 62px radius.
     wireAngleOf(angle) {
       return parseFloat(Math.atan2(Math.sin(angle), Math.cos(angle)).toFixed(2));
     }
@@ -6083,14 +6029,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         y: fromY + r * Math.sin(a)
       };
     }
-
-    // Aim straight at where the old build stood. The build lands on the ray at
-    // a fixed radius, so this is the closest the geometry can get; the residual
-    // is |distance(us, target) - radius| and no angle can beat it.
-    //
-    // `target` is a remembered world position, not a bearing — that is the
-    // whole point. Returns null when the spot it would land on is not free,
-    // in which case the caller falls back to the nearest free arc.
     rebuildAngle(target, fromX, fromY, type, opts) {
       const item = this.item(type);
       if (!item) {
@@ -6108,8 +6046,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         miss: Math.hypot(landing.x - target.x, landing.y - target.y)
       };
     }
-
-    // auraro: objectManager.hitsToBreak
     hitsToBreak(object, who) {
       if (!object || !who || !object.isDestroyable) {
         return 1 / 0;
@@ -6134,14 +6070,9 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       }
       return Math.ceil(object.health / best);
     }
-
-    // auraro: objectManager.canBeBroken — RYN already flags this per tick.
     canBeBroken(object) {
       return object.canBeDestroyed && object.destroyingTick === this._0x4cf5fe._ModuleHandler.tickCount;
     }
-
-    // ---- auraro geometry ----------------------------------------------------
-
     normalizeAngle(a) {
       return a < 0 ? a + AURA_TWO_PI : a > AURA_TWO_PI ? a - AURA_TWO_PI : a;
     }
@@ -6261,9 +6192,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       }
       return result;
     }
-
-    // The two angles at which an item placed around us just touches `obj`.
-    // A single-element result means it is too far away to block anything.
     closestPossibleAngles(obj, type, px, py) {
       const item = this.item(type);
       if (!item) {
@@ -6297,8 +6225,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         hdx = hInv * dx;
       return [Math.atan2(baseY - hdx - py, baseX + hdy - px), Math.atan2(baseY + hdx - py, baseX - hdy - px)];
     }
-
-    // Free arcs around (px, py) for this build type.
     angleRanges(type, px, py) {
       const item = this.item(type);
       if (!item) {
@@ -6336,9 +6262,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       this.ranges[type] = this.invertArcs(this.mergeBlocked(rawBlocked));
       this.rangesUpdated[type] = true;
     }
-
-    // Same, but treating `target` as already gone — the arcs that open up when
-    // it breaks.
     calcPreplace(target, type, px, py) {
       const item = this.item(type);
       if (!item) {
@@ -6373,8 +6296,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       }
       this.preplaceRanges[type] = this.invertArcs(this.mergeBlocked(rawBlocked));
     }
-
-    // Lower is more urgent: fewest hits from death, then closest.
     urgencyScore(obj, who) {
       return this.hitsToBreak(obj, who) + this._0x4cf5fe.myPlayer.pos.current.distance(obj.pos.current) * .01;
     }
@@ -6385,8 +6306,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       const spd = fut ? Math.hypot(fut.x - who.pos.current.x, fut.y - who.pos.current.y) : 0;
       return dist - spd <= weaponRange;
     }
-
-    // The trap pinning `enemy`, when it is one of ours.
     enemyTrap(enemy) {
       if (!enemy || !enemy.isTrapped) {
         return null;
@@ -6394,11 +6313,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       const trap = enemy.trappedIn;
       return trap && this.isTeamObject(trap) ? trap : null;
     }
-
-    // ---- auraro placement ---------------------------------------------------
-
-    // auraro createObj: a hypothetical build at `direct`, used to reserve the
-    // spot so two placements in one tick cannot claim the same ground.
     createObj(item, direct, px, py) {
       const offset = this._0x4cf5fe.myPlayer.scale + item.scale + (item.placeOffset || 0);
       return {
@@ -6409,17 +6323,9 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         y: py + offset * Math.sin(direct)
       };
     }
-
-    // auraro radCalc: the angles at which `item` can be laid against `obj`,
-    // skipping any that collide with something already reserved this tick.
     radCalc(obj, direct, item, mode, px, py) {
       const offset = this._0x4cf5fe.myPlayer.scale + item.scale + (item.placeOffset || 0);
       const objPos = obj.pos.current;
-      // The +0.01 is auraro's, borrowed from closestPossibleAngles. A tangent
-      // candidate lands at exactly `objScale + item.scale` from the anchor,
-      // which is the same value checkItemLocation rejects below, so at world
-      // coordinates floating point decides — measured at a ~50/50 coin flip.
-      // The slack pushes the candidate a hair clear and makes it deterministic.
       const objScale = this.blockScale(obj) + .01;
       const dx = objPos.x - px,
         dy = objPos.y - py;
@@ -6472,9 +6378,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       }
       return result;
     }
-
-    // auraro testCanPlace: sweep a fan of angles outward from `radian` and
-    // drop a build at every one that is actually free.
     testCanPlace(type, first = -(Math.PI / 2), repeat = Math.PI / 2, plus = Math.PI / 36, radian = 0, loopAll = false, noOverlap = false) {
       const {
         myPlayer: myPlayer,
@@ -6534,9 +6437,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         });
         return true;
       };
-
-      // auraro first tries the two angles where the build would touch the
-      // enemy, then falls back to sweeping outward from the middle.
       const enemy = this._0x4cf5fe.EnemyManager.nearestEnemy;
       if (enemy && !loopAll) {
         const ePos = enemy.pos.current;
@@ -6583,23 +6483,14 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         tryAngle(radian + end);
       }
     }
-
-    // auraro protect: wall off the side away from `aim` so we cannot be
-    // walked into a trap.
     protect(aim) {
       if (!_0x35d81b._antiTrapProtect) {
         return;
       }
-      // Auraro walls off with a trap arc and a spike arc; trap-only here.
       this.testCanPlace(AURA_TRAP, -(Math.PI / 2), Math.PI / 2, Math.PI / 6, aim + Math.PI, true);
       this.testCanPlace(AURA_TRAP, -(Math.PI / 3), Math.PI / 3, Math.PI / 6, aim + Math.PI, true);
       this.antiTrapped = true;
     }
-
-    // auraro autoPlace.
-    //   mode 0 — lay `type` against every nearby object, `type2` as fallback
-    //   mode 1 — extend our own spikes/traps that already sit near the enemy,
-    //            then fall through to mode 0
     autoPlace(mode, type, type2, again) {
       const {
         myPlayer: myPlayer,
@@ -6628,7 +6519,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
             const direct = Math.atan2(obj.pos.current.y - py, obj.pos.current.x - px);
             const placeAngles = this.radCalc(obj, direct, item, void 0, px, py);
             if (placeAngles.length) {
-              // A spike that lands touching the enemy goes down first.
               let placedContact = false;
               if (type === AURA_SPIKE) {
                 for (const angle of placeAngles) {
@@ -6660,15 +6550,11 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         }
         return;
       }
-      // mode 1
       const enemyPos = enemy.pos.current;
       this.radObjs = this.nearObjs(px, py).filter(obj => {
         if (!this.isTeamObject(obj)) {
           return false;
         }
-        // auraro: `id == 4 ? obj.dmg : obj.trap` — a trap goes down next to an
-        // existing spike, a spike next to an existing trap. Pairing them is
-        // the point; extending like with like just spams one item.
         const matches = type === AURA_TRAP ? obj.itemGroup === 2 : obj.type === 15;
         return matches && obj.pos.current.distance(enemyPos) < 500;
       });
@@ -6678,18 +6564,12 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
           this.send(type, angle);
         }
       }
-      // With both types given, auraro swaps and runs again, then falls back to
-      // mode 0. Trap-only leaves nothing to swap to, so it goes straight to
-      // the mode-0 fallback with the one type it has.
       if (again && type2) {
         this.autoPlace(mode, type2, type, false);
       } else if (this.preplaces[1].length < 1) {
         this.autoPlace(0, type2 || type, type2 ? type : null);
       }
     }
-
-    // auraro findPlacementAngle: clamp the free arcs to the angles that touch
-    // the doomed build, then aim inside what is left.
     findPlacementAngle(type, build, px, py, enemy) {
       const item = this.item(type);
       if (!item || !build) {
@@ -6713,8 +6593,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
           return this.closeToAngle(Math.atan2(trap.pos.current.y - py, trap.pos.current.x - px), ranges);
         }
         if (type === AURA_TRAP) {
-          // Aim the new trap so they are knocked into a spike already sitting
-          // against the old one.
           const enemyPos = enemy.pos.current;
           const spike = this.nearObjs(enemyPos.x, enemyPos.y, 300).filter(o => o.isSpike && this.isTeamObject(o) && o.pos.current.distance(trap.pos.current) <= trap.scale + o.scale + 69).sort((a, b) => a.pos.current.distance(trap.pos.current) - b.pos.current.distance(trap.pos.current))[0];
           if (spike) {
@@ -6736,9 +6614,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       return this.closeToAngle(Math.atan2(build.pos.current.y - py, build.pos.current.x - px), ranges);
     }
   }
-
-  // Auraro's per-tick dispatcher: reset the shared state, then pick which
-  // autoPlace shape to run from how far the enemy is and who is pinned.
   class AutoPlacer {
     moduleName = "autoPlacer";
     _0x4cf5fe;
@@ -6775,14 +6650,10 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       if (dist > (_0x35d81b._autoplacerRadius ?? AURA_AUTOPLACE_RADIUS)) {
         return;
       }
-      // Shared per-tick state, cleared exactly where auraro clears it.
       placer.preplaces[0] = [];
       placer.preplaces[1] = [];
       placer.rangesUpdated[AURA_SPIKE] = false;
       placer.rangesUpdated[AURA_TRAP] = false;
-
-      // Trap-only, so auraro's spike/trap alternation collapses: what is left
-      // of its dispatch is which *shape* to run, mode 0 or mode 1.
       const pushing = _0x35d81b._autoPush && dist <= (_0x35d81b._autoPushRange ?? 250);
       if (pushing) {
         if (dist <= 169 || dist > 222) {
@@ -6805,10 +6676,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       }
     }
   }
-
-  // Where the server will think we are when it processes the build. auraro
-  // runs its movement sim two ticks out for preplace; replace is reacting to
-  // something that already happened, so it only needs one.
   function auraPredictPos(client2, ticks) {
     const myPlayer = client2.myPlayer;
     try {
@@ -6849,10 +6716,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
     predictPos() {
       return auraPredictPos(this._0x4cf5fe, 2);
     }
-
-    // The trap holding the enemy is about to go. Auraro cycles the whole
-    // circle so whichever slot frees up gets refilled; `send` stops the sweep
-    // once the tick budget is gone.
     retrapSpam(placer) {
       const {
         myPlayer: myPlayer
@@ -6900,21 +6763,15 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       if (!myPlayer.canPlace(AURA_TRAP)) {
         return;
       }
-      // auraro clears the preplace arcs before every run.
       placer.preplaceRanges = {};
       const replaceable = [];
       for (const obj of placer.nearObjs(myPos.x, myPos.y)) {
         if (!(obj instanceof _0xcd92ac) || !obj.isDestroyable) {
           continue;
         }
-        // auraro takes any placed item, including the enemy's — a slot they
-        // are about to lose is worth claiming. It only skips our own traps
-        // that are still hidden from them.
         if (placer.isTeamObject(obj) && placer.isHiddenTrap(obj)) {
           continue;
         }
-        // Both gates, as auraro has them: it has to actually die this tick,
-        // and be within the swing threshold.
         if (!placer.canBeBroken(obj)) {
           continue;
         }
@@ -6949,15 +6806,9 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
           }
           continue;
         }
-        // Traps only. Auraro would spike here when the enemy is pinned by
-        // something else; leaving spikes to the spike-tick modules keeps the
-        // two from fighting over the same slot.
         if (!myPlayer.canPlace(AURA_TRAP)) {
           continue;
         }
-        // Straight at the slot it is about to free. preplaceCheck is the right
-        // test here: it skips the doomed build and demands the landing overlap
-        // it, which is exactly "the same place".
         const exact = placer.rebuildAngle(obj.pos.current, pred.x, pred.y, AURA_TRAP, {
           freeing: obj
         });
@@ -6989,8 +6840,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
     reset() {
       this._tick = -1;
     }
-
-    // auraro checkPlace: only send it if the spot is actually free.
     checkPlace(placer, type, angle, from) {
       const item = placer.item(type);
       if (!item) {
@@ -7003,8 +6852,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       }
       return placer.send(type, angle);
     }
-
-    // auraro autoReplace, one destroyed building at a time.
     autoReplace(placer, building, enemy) {
       const {
         myPlayer: myPlayer
@@ -7013,15 +6860,12 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       if (myPos.distance(building.pos.current) > AURA_REPLACE_RANGE) {
         return false;
       }
-      // auraro bails on a healthy build the enemy cannot even reach yet.
       const hits = placer.hitsToBreak(building, enemy);
       const primary = enemy.weapon.primary;
       const reach = primary != null && _0x390dfc.isWeapon(primary) ? _0x390dfc.getWeapon(primary).range + building.scale : 300;
       if (hits > 3 && !placer.inPredictedRange(enemy, reach)) {
         return false;
       }
-      // Everything below aims from where the server will have us, not from
-      // where we are now — the packet is processed a tick later.
       const pred = auraPredictPos(this._0x4cf5fe, 1);
       placer.rangesUpdated[AURA_TRAP] = false;
       placer.angleRanges(AURA_TRAP, pred.x, pred.y);
@@ -7030,8 +6874,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       const enemyFut = enemy.pos.future ?? enemy.pos.current;
       const aimDir = Math.atan2(enemyFut.y - pred.y, enemyFut.x - pred.x);
       const enemyTrap = placer.enemyTrap(enemy);
-
-      // 1. They just got out — trap where they are heading.
       if (enemy.wasTrapped && enemy.wasTrapped()) {
         if (rTrap && rTrap.length) {
           placer.send(AURA_TRAP, placer.closeToAngle(aimDir, rTrap));
@@ -7041,8 +6883,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         this.checkPlace(placer, AURA_TRAP, aimDir - .17, pred);
         return true;
       }
-      // 2. Still pinned and in reach — chain another trap onto the one that
-      //    has them. Auraro spikes here; spikes are the spike tick's job.
       if (enemyTrap && myPos.distance(enemyTrap.pos.current) <= AURA_TRAP_REACH) {
         if (rTrap && rTrap.length) {
           const trapDir = Math.atan2(enemyTrap.pos.current.y - myPos.y, enemyTrap.pos.current.x - myPos.x);
@@ -7050,8 +6890,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         }
         return true;
       }
-      // 3. We escaped and this was what held us — two opposed traps, so we do
-      //    not walk straight back into a retrap.
       if (myPlayer.wasTrapped && myPlayer.wasTrapped() && myPlayer.trappedInPrev && myPlayer.trappedInPrev.id === building.id) {
         if (rTrap && rTrap.length) {
           const rand = Math.random() * AURA_TWO_PI;
@@ -7060,9 +6898,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         }
         return true;
       }
-      // 4. Otherwise rebuild it where it stood. Aiming at the remembered
-      //    position beats snapping to the nearest free arc, which is what this
-      //    used to do and why it landed off to the side.
       const exact = placer.rebuildAngle(building.pos.current, pred.x, pred.y, AURA_TRAP);
       if (exact) {
         placer.send(AURA_TRAP, exact.angle);
@@ -7103,8 +6938,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       const placer = getAuraPlacer(this._0x4cf5fe);
       placer.replaced = false;
       let handled = 0;
-
-      // Buildings that actually went down this tick.
       for (const building of ObjectManager2.deletedObjects) {
         if (handled >= AURA_MAX_PER_TICK) {
           return;
@@ -7119,8 +6952,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       if (handled > 0) {
         return;
       }
-      // auraro also replaces pre-emptively, on the first of ours that is one
-      // or two hits from dying.
       for (const obj of placer.nearObjs(myPos.x, myPos.y, AURA_REPLACE_RANGE)) {
         if (!(obj instanceof _0xcd92ac) || !obj.isDestroyable || !placer.isTeamObject(obj)) {
           continue;
@@ -7161,8 +6992,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         }
       } catch (e) {}
       const box = doc && doc.getElementById("_autoplacer");
-      // Wait until the client has wired its own onchange, otherwise attachCheckboxes
-      // runs after us and writes the stored value straight back over the sync.
       if (!box || typeof box.onchange !== "function") {
         if (++tries < 300) setTimeout(tick, 100);
         return;
@@ -7185,8 +7014,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
     };
     setTimeout(tick, 100);
   }
-  // Preplace and Replace are slaved to Autoplacer, so they no longer carry their
-  // own hotkey tiles.
   const RYN_PP_KEYS = html => html;
   class _0x412b96 {
     static CLOSE_PADDING = 0x19;
@@ -7728,19 +7555,11 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
   const SPIKE_TICK_BREAK_GAP = 90;
   const SPIKE_TICK_TOUCH_SLACK = 1.05;
   const SPIKE_TICK_TRAP_RANGE = 110;
-  // Sakuna's own numbers, ported alongside the gates that use them.
-  //   checkspiketick():      Date.now() - player.intrapTime > 300  (~3 ticks)
-  //   checkAntiSpikeTick():  near.dist2 <= 180, latched for 200ms  (~2 ticks)
-  //   killObject():          objDist < items.weapons[primary].range + 70
-  //   hasNearSpikes:         tmp.scale + min(primary.range, 75)
   const SPIKE_TICK_TRAP_GRACE = 3;
   const SPIKE_TICK_COUNTER_RANGE = 180;
   const SPIKE_TICK_COUNTER_GRACE = 2;
   const SPIKE_TICK_BREAK_REACH = 70;
   const SPIKE_TICK_NEAR_SPIKE_REACH = 75;
-  // Two tick stamps per _0x4cf5fe, for the gates below. They cannot live on
-  // EnemyManager, which wipes its state at the top of every tick — the whole
-  // point of a stamp is how long ago something was true.
   const SPIKE_TICK_STATE = new WeakMap();
   const spikeTickState = client2 => {
     let state = SPIKE_TICK_STATE.get(client2);
@@ -7753,14 +7572,7 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
     }
     return state;
   };
-  // Sakuna's checkAntiSpikeTick, which all three of its spike ticks are gated
-  // on. Two ways to lose the exchange you are about to open:
-  //   1. they swing first and you fly into a spike (emySpikeHit)
-  //   2. they drop a spike on you and tick you instead (the 200ms latch)
   const spikeTickCounterThreat = (client2, state) => {
-    // Sakuna keeps this behind its own `antispiketick` checkbox, on by default.
-    // It is the gate that decides how often a tick opens at all, so it is worth
-    // being able to turn off and compare.
     if (!_0x35d81b._antiSpikeTick) {
       return false;
     }
@@ -7770,16 +7582,9 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       PlayerManager: PlayerManager2,
       myPlayer: myPlayer
     } = client2;
-    // The enemy swings first and you fly into a spike. This is Sakuna's
-    // emySpikeHit; RYN works it out with a proper knockback cone in
-    // checkCollision, which is strictly better than Sakuna's projection.
     if (EnemyManager2.possibleToKnockback && !myPlayer.isTrapped) {
       return true;
     }
-    // Or they are standing close enough to drop a spike that touches you, with
-    // a primary ready to swing — one tick from ticking you instead.
-    // canPlaceSpike was already worked out this tick by canPossiblyInstakill,
-    // so this is a read of existing state, not a second scan.
     const enemies = PlayerManager2.enemies;
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
@@ -7789,16 +7594,8 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         break;
       }
     }
-    // Sakuna latches this for 200ms rather than reading it live: one frame of
-    // the enemy being out of position is not a window, they are still standing
-    // right there.
     return ModuleHandler.tickCount - state.counterTick <= SPIKE_TICK_COUNTER_GRACE;
   };
-  // Sakuna's nearBreakType == "NearSpikes" branch: a spike already sitting on
-  // top of you takes the tick, because ticking the enemy does not stop it from
-  // chewing you. Gated on autobreak the same way Sakuna gates it, so turning
-  // autobreak off does not quietly disable the spike ticks with nothing left
-  // to break the spike.
   const spikeTickNearSpike = client2 => {
     if (!_0x35d81b._autobreak) {
       return false;
@@ -7824,8 +7621,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       EnemyManager: EnemyManager2,
       myPlayer: myPlayer
     } = client2;
-    // Stamped before any exit: all three modules call this every tick, so the
-    // stamp cannot be missed the way it would be behind one of the gates.
     const state = spikeTickState(client2);
     if (myPlayer.isTrapped) {
       state.trapTick = ModuleHandler.tickCount;
@@ -7840,10 +7635,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
     if (nearest === null || myPlayer.isTrapped) {
       return null;
     }
-    // Leaving a trap is not the same as being free: for the next few ticks the
-    // knockback the whole tick is built on does not land the way it is
-    // predicted here, so the swing is spent for nothing. RYN only ever checked
-    // isTrapped, which covers exactly one tick.
     if (ModuleHandler.tickCount - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
       return null;
     }
@@ -7887,9 +7678,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
     }
     ModuleHandler.moduleActive = true;
     ModuleHandler.forceHat = 53;
-    // Sakuna holds my.autoAim across both halves of insta(5) so the aim stays
-    // on the target through the turret half instead of snapping back to the
-    // mouse the tick after the swing.
     if (enemy) {
       ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
     }
@@ -7919,11 +7707,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       }
       const pos1 = myPlayer.pos.current;
       const pos2 = nearest.pos.current;
-      // Sakuna requires the break to be inside the primary's own reach as well
-      // as inside 170: `objDist < items.weapons[primary].range + 70`. With a
-      // long primary the flat 170 binds first, but a short one (a hammer or a
-      // stick as primary) reaches nowhere near that far, and swinging at a
-      // break you cannot cover is a wasted tick.
       const primaryReach = _0x390dfc.getWeapon(myPlayer.getItemByType(0)).range + SPIKE_TICK_BREAK_REACH;
       let broken = false;
       for (const object of ObjectManager2.deletedObjects) {
@@ -7992,12 +7775,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       if (nearest === null) {
         return;
       }
-      // Sakuna guards its predictive branch with `!tmpObj.inTrap`, and it has
-      // to: a trapped enemy does not move when you hit them, so the knockback
-      // this branch is built on never happens. getActualMaxKnockback does not
-      // know about traps, so nearestEnemySpikeCollider will happily name one.
-      // Standing on the spike already (isTouchingDamage) still counts — the
-      // spike ticks them whether they can be pushed or not.
       const knockedInto = !nearest.isTrapped && EnemyManager2.nearestEnemySpikeCollider === nearest && EnemyManager2.spikeCollider !== null;
       if (!knockedInto && !this.isTouchingDamage(nearest)) {
         return;
@@ -8063,11 +7840,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         return;
       }
       const trap = trapped.trappedIn;
-      // The whole tick is worth nothing if the hammer does not actually take
-      // the trap down on this swing. The 3.3x here is Tank Gear, so wear it —
-      // Sakuna asks for the same 3.3 and then equips Turret Gear, which leaves
-      // the swing at 88 against a trap it just decided was worth 292. The
-      // turret shot is not lost, it lands on the follow-up tick below.
       if (trap === null || trap.health > myPlayer.getBuildingDamage(secondary, true)) {
         return;
       }
@@ -12964,9 +12736,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       this.ctx = null;
       this.last = 0;
     }
-
-    // Particles are pooled: grown once to the high-water mark, never freed,
-    // and recycled in place when they leave the screen.
     _respawn(d, anywhere) {
       d.x = Math.random() * (this.w + 240) - 120;
       d.y = anywhere ? Math.random() * this.h : -Math.random() * 60 - 10;
@@ -13009,7 +12778,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       if (!game || !this._ensure(game)) {
         return;
       }
-      // Resizing a canvas reallocates it, so only touch it when it moved.
       const cw = game.clientWidth,
         ch = game.clientHeight;
       if (this.w !== game.width || this.h !== game.height || this.cw !== cw || this.ch !== ch) {
@@ -13025,7 +12793,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
       }
       let dt = (now - this.last) / 1e3;
       this.last = now;
-      // A backgrounded tab hands back a huge delta; treat it as one frame.
       if (!(dt > 0) || dt > .1) {
         dt = 1 / 60;
       }
@@ -13040,8 +12807,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         this._grow(want);
       }
       this.count = want;
-
-      // Ease across the biome line so it morphs instead of snapping.
       const target = myPlayer.pos.current.y <= _0x575230.snowBiomeTop ? 1 : 0;
       this.snow += (target - this.snow) * Math.min(1, dt * 1.6);
       const snow = this.snow;
@@ -13061,8 +12826,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
           this._respawn(d, false);
         }
       }
-
-      // Rain: every streak in one path, stroked once.
       if (snow < .985) {
         ctx.globalAlpha = .32 * (1 - snow);
         ctx.strokeStyle = "#cfe0ff";
@@ -13075,9 +12838,6 @@ new MutationObserver(t).observe(document, _0x344dd1), t(), Math.LN1 = 0x64, Numb
         }
         ctx.stroke();
       }
-
-      // Snow: every flake in one path, filled once. The moveTo before each arc
-      // keeps them from being joined into one outline.
       if (snow > .015) {
         ctx.globalAlpha = .8 * snow;
         ctx.fillStyle = "#ffffff";

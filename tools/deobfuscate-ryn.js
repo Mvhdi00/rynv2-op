@@ -268,8 +268,39 @@ traverse(ast, {
 
 // ── 7. write it out ──────────────────────────────────────────────────────────
 
-const header = source.slice(0, source.indexOf("(function(")).trimEnd();
-const code = generate(ast, { comments: true, jsescOption: { minimal: true }, retainLines: false }).code;
+// The metadata block is prepended by hand, and generate() is told to drop
+// comments — otherwise Babel re-emits the same block as leading comments on the
+// first statement and the file ends up with two of them. Dropping them also
+// clears every // comment out of the body, which is all the obfuscator left.
+const header = source
+  .slice(0, source.indexOf("(function("))
+  .trimEnd()
+  .replace(/^(\/\/ @name\s+).*$/m, "$1! Ryn client v5");
+
+if (!/@name\s+! Ryn client v5/.test(header)) throw new Error("could not set @name");
+
+// shouldPrintComment is explicit because `comments: false` alone still keeps
+// anything matching @license or @preserve, which is Babel's default, and the
+// obfuscator wraps its output in exactly such a comment.
+const code = generate(ast, {
+  comments: false,
+  shouldPrintComment: () => false,
+  jsescOption: { minimal: true },
+  retainLines: false
+}).code;
+
+// Checked on the AST, not the printed text: the client embeds CSS in template
+// literals, and those legitimately contain lines starting with //.
+let lineComments = 0;
+traverse(ast, {
+  enter(p) {
+    for (const key of [ "leadingComments", "trailingComments", "innerComments" ]) {
+      const list = p.node[key];
+      if (list) lineComments += list.filter(c => c.type === "CommentLine").length;
+    }
+  }
+});
+if (code.length === 0) throw new Error("generator produced nothing");
 
 fs.writeFileSync(OUT, header + "\n" + code + "\n");
 
@@ -278,4 +309,5 @@ console.log("deobfuscate-ryn: strings recovered   " + replaced);
 console.log("deobfuscate-ryn: calls left alone    " + failed);
 console.log("deobfuscate-ryn: concats folded      " + folded);
 console.log("deobfuscate-ryn: o['x'] -> o.x       " + dotted);
+console.log("deobfuscate-ryn: line comments in body " + lineComments + " (dropped at print time)");
 console.log("deobfuscate-ryn: wrote " + path.relative(ROOT, OUT) + " (" + (code.split("\n").length + 1) + " lines)");
