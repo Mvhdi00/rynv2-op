@@ -122,6 +122,12 @@ its clearance grow until something is found.
 | **Cancelling** | Press the key again, touch any movement key, arrive, or die. |
 | **Menu** | Combat → Utility → Path Break, with Break obstacles / Avoid spikes / Show path under it. |
 
+While a route is running the overlay prints one line of state — distance left,
+plan length, whether the search is running, blocked or came back partial, and
+whether the breaker is swinging. A route that does nothing and a route that was
+never started look identical from the outside, and this client works hard to
+keep the console shut.
+
 The overlay draws the planned route in world space on its own canvas, and costs
 nothing while no route is active. A route the search could not finish is drawn
 dashed and dimmer — that is the best approach found so far, not a way through,
@@ -142,6 +148,13 @@ takes over. When it is a resource, you will stand there until you cancel.
 
 Bot clients carry the module but never get a target, so no bot ever starts a
 search or spawns a worker.
+
+Starting a Worker from a blob URL is the one thing here a page can refuse
+outright. If it is refused, Path Break says so in the status line and falls back
+to walking the straight line to the target, breaker still running — and
+`postTick` is wrapped so that nothing in the module can throw into
+`ModuleHandler`'s module loop, which has no handler of its own and would drop
+every module ordered after this one for the rest of the session.
 
 ## Verification
 
@@ -207,6 +220,14 @@ The counter-threat check stays live. It is the one that says you will lose this
 exchange, and its first clause already exempts a trapped player, so inside the
 window it can only fire on an enemy who is free to drop a spike on you — which
 is a real reason not to swing.
+
+`shouldIgnoreModule()` stands down too, and that one is the gate that was
+actually swallowing the tick. It is RYN's own addition — Sakuna's
+`checkspiketick` has no danger gate at all, only `checkAntiSpikeTick`, which is
+the counter-threat check above. And what it means is "potential damage would
+kill me this tick", which pinned beside an enemy with spikes on you is all but
+guaranteed. Left in front of the window it never lets the window open, so
+lifting `isTrapped` on its own changed nothing.
 
 ## The retrap keeps priority
 

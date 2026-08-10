@@ -491,6 +491,7 @@ self.onmessage = function (e) {
     requestID = 0;
     stuckTicks = 0;
     worker = null;
+    workerBlocked = false;
 
     constructor(client2) {
       this.client = client2;
@@ -558,22 +559,36 @@ self.onmessage = function (e) {
       ModuleHandler.reverse_move_dir = null;
     }
 
+    // Returns null if a Worker cannot be had. Constructing one off a blob URL
+    // is the one thing here a page can forbid outright, and when it throws it
+    // has to degrade to walking the straight line rather than take the tick —
+    // and with it every module ordered after this one — down with it.
     _getWorker() {
       if (this.worker !== null) {
         return this.worker;
       }
-      const blob = new Blob([ PATHBREAK_WORKER_SRC ], {
-        type: "application/javascript"
-      });
-      const worker = new Worker(URL.createObjectURL(blob));
-      worker.onmessage = event => this._onResult(event.data);
-      worker.onerror = event => {
-        Logger.warn("Path Break worker error: " + event.message);
-        this.pending = false;
-        this.worker = null;
-      };
-      this.worker = worker;
-      return worker;
+      if (this.workerBlocked) {
+        return null;
+      }
+      try {
+        const blob = new Blob([ PATHBREAK_WORKER_SRC ], {
+          type: "application/javascript"
+        });
+        const worker = new Worker(URL.createObjectURL(blob));
+        worker.onmessage = event => this._onResult(event.data);
+        worker.onerror = event => {
+          Logger.warn("Path Break: search worker failed - " + (event.message || "no detail") + ". Falling back to straight-line walking.");
+          this.pending = false;
+          this.worker = null;
+          this.workerBlocked = true;
+        };
+        this.worker = worker;
+        return worker;
+      } catch (error) {
+        Logger.warn("Path Break: could not start the search worker (" + error.message + "). Falling back to straight-line walking.");
+        this.workerBlocked = true;
+        return null;
+      }
     }
 
     // Walk in `angle`. This is what startMovement does when nothing else has
@@ -736,7 +751,11 @@ self.onmessage = function (e) {
     }
 
     _dispatch() {
-      if (this.pending || !this.active) {
+      if (this.pending || !this.active || this.workerBlocked) {
+        return;
+      }
+      const worker = this._getWorker();
+      if (worker === null) {
         return;
       }
       let message;
@@ -745,8 +764,15 @@ self.onmessage = function (e) {
       } catch (error) {
         return;
       }
+      // Set only once the send is certain to be attempted: a pending flag left
+      // standing after a failed dispatch stops the module forever.
       this.pending = true;
-      this._getWorker().postMessage(message);
+      try {
+        worker.postMessage(message);
+      } catch (error) {
+        this.pending = false;
+        this.workerBlocked = true;
+      }
     }
 
     // The one enemy building standing in the corridor we are walking down, or
@@ -824,7 +850,22 @@ self.onmessage = function (e) {
       return best;
     }
 
+    // ModuleHandler runs the module list without a try/catch, so anything that
+    // throws in here takes out every module ordered after it — safeWalk among
+    // them — for the rest of the session, while the ones before it keep
+    // working. That failure reads as "this one feature does nothing" and hides
+    // the fact that three others quietly died with it. Not worth the risk for
+    // a module that is optional by design.
     postTick() {
+      try {
+        this._tick();
+      } catch (error) {
+        Logger.warn("Path Break: " + error.message);
+        this.stop();
+      }
+    }
+
+    _tick() {
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
       if (!Settings_default._pathBreak || !myPlayer.inGame) {
         if (this.active) {
@@ -975,6 +1016,29 @@ self.onmessage = function (e) {
       ctx.arc(blockerPos.x - offset.x, blockerPos.y - offset.y, blocker.collisionScale + 8, 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.restore();
+
+    // A route either works or it does nothing, and from the outside those look
+    // identical — no path drawn could be a dead worker, a target that never got
+    // set, or a search that found nothing. One line of state tells them apart
+    // without a console, which this client tries fairly hard to keep shut.
+    ctx.save();
+    ctx.globalAlpha = .85;
+    ctx.font = "600 13px Orbitron, monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    const plan = module.workerBlocked
+      ? "search off (worker blocked) - walking straight"
+      : module.waypoints.length > 0
+        ? `${module.waypoints.length} ticks${module.reachesTarget ? "" : " (partial)"}`
+        : module.pending ? "searching" : "no plan yet";
+    const away = Math.round(client.myPlayer.pos.current.distance(target));
+    const line = `PATH BREAK  ${away}u  |  ${plan}${blocker ? "  |  breaking" : ""}`;
+    ctx.fillStyle = "rgba(0,0,0,.55)";
+    const width = ctx.measureText(line).width;
+    ctx.fillRect(12, 12, width + 16, 24);
+    ctx.fillStyle = "#d9c2ff";
+    ctx.fillText(line, 20, 17);
     ctx.restore();
   }
 

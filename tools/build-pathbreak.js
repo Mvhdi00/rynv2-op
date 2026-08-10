@@ -455,15 +455,30 @@ edit(
  * on you — which is a genuine reason not to swing. */
 edit(
   "spike tick: let the pinned window through",
-  `    const nearest = EnemyManager2.nearestEnemy;
+  `    if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
+      return null;
+    }
+    const nearest = EnemyManager2.nearestEnemy;
     if (nearest === null || myPlayer.isTrapped) {
       return null;
     }`,
-  `    const nearest = EnemyManager2.nearestEnemy;
+  `    if (ModuleHandler.moduleActive) {
+      return null;
+    }
+    const nearest = EnemyManager2.nearestEnemy;
     if (nearest === null) {
       return null;
     }
     const pinnedWindow = spikeTickTrappedWindow(client2, nearest);
+    // shouldIgnoreModule is RYN's own addition — Sakuna's checkspiketick has no
+    // danger gate at all, only the counter-threat check further down. And the
+    // flag is "potential damage would kill me this tick", which pinned beside
+    // an enemy with spikes on you is all but guaranteed. Leaving it in front of
+    // the window means the window never opens: this is the gate that was
+    // actually swallowing the tick, not isTrapped.
+    if (!pinnedWindow && EnemyManager2.shouldIgnoreModule()) {
+      return null;
+    }
     if (myPlayer.isTrapped && !pinnedWindow) {
       return null;
     }`
