@@ -8983,9 +8983,21 @@ window.grbtp = 35;
     // outside sandbox too, which caps everything at the sandbox number; RYN
     // already resolves this correctly in ClientPlayer.getItemCount, so the
     // limit comes from there.
-    _isItemLimit(id, myPlayer) {
-      const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
-      return !!limit && count >= limit;
+    //
+    // `excludeObj` is the object a preplace is betting on losing. The whole
+    // point of a preplace is that by the time the build lands that object is
+    // gone, which frees its slot in the group as surely as it frees the ground
+    // it stood on — the collision set already drops it, and the count has to
+    // drop with it. Without this, a retrap at a full trap cap reads as capped
+    // and every angle comes back empty: the trap dying is exactly the trap
+    // being replaced, and the placer refuses on the strength of a trap that is
+    // already dead. Only my own builds count against my cap, so the object has
+    // to be one of mine.
+    _isItemLimit(id, myPlayer, excludeObj) {
+      const group = Items[id].itemGroup;
+      const {count: count, limit: limit} = myPlayer.getItemCount(group);
+      const freed = excludeObj && excludeObj.itemGroup === group && myPlayer.objects?.has(excludeObj) ? 1 : 0;
+      return !!limit && count - freed >= limit;
     }
 
     // Luna getPrePlaceAngles + getPerfectAngles: probe 72 evenly spaced
@@ -8999,7 +9011,7 @@ window.grbtp = 35;
     // same objects back anyway.
     _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
       if (id === null || id === undefined) return [];
-      if (this._isItemLimit(id, myPlayer)) return [];
+      if (this._isItemLimit(id, myPlayer, excludeObj)) return [];
       const tick = this.client._ModuleHandler.tickCount;
       if (this._angleCacheTick !== tick) {
         this._angleCache.clear();
@@ -9050,7 +9062,7 @@ window.grbtp = 35;
     // one I am about to break myself while gathering, or one the enemy is
     // about to break with a weapon that just came off reload. Whichever it is,
     // the closest to the enemy wins, and finding one arms the replace resend.
-    _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2) {
+    _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped) {
       const ModuleHandler = this.client._ModuleHandler;
       let findObject = null;
       const autoGathering = ModuleHandler._autoBreakActive || ModuleHandler.autoattack || ModuleHandler.forceWeapon !== null;
@@ -9112,7 +9124,16 @@ window.grbtp = 35;
               if (!obj || !(obj instanceof PlayerObject)) return false;
               // Luna skips anything the enemy cannot see yet — a pit trap they
               // have not walked into is not a slot about to open.
-              if (Items[obj.type] && Items[obj.type].hideFromEnemy) return false;
+              //
+              // The one they are standing in is the exception, and Luna misses
+              // it: a pit trap is `hideFromEnemy`, so the trap holding them is
+              // filtered out here, so it can never come back as `findObject`,
+              // so the retrap rule further down — which fires only when the
+              // thing about to break IS that trap — has no way to be reached.
+              // The rule is written in Luna and dead in Luna. An enemy inside a
+              // trap plainly knows it is there, and breaking out is exactly
+              // what they are doing, so that one trap stays in the running.
+              if (Items[obj.type] && Items[obj.type].hideFromEnemy && obj !== enemyTrapped) return false;
               if (enemyPos.distance(obj.pos.current) - obj.scale > weaponRange) return false;
               if (obj.health <= dmgToBuilding) candidates.push(obj);
               return false;
@@ -9298,8 +9319,14 @@ window.grbtp = 35;
       // ────────────────────────────────────────────────────────────────────
       // PRE PLACER — Luna getPredictObjects, first half
       // ────────────────────────────────────────────────────────────────────
-      if (Settings_default._prePlace && myPos.distance(enemyPos) < 300 && !(imTrapped && myPlayer.spikeDamage > 0)) {
-        const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2);
+      // Luna stands the preplacer down while I am pinned and bleeding, on the
+      // grounds that I have worse problems than queueing builds. That holds
+      // right up until the enemy is in a trap of mine: keeping them there is
+      // worth more than the packets it costs, and it is the one case where the
+      // preplacer is doing something for me rather than to them. So a trapped
+      // enemy overrides the stand-down.
+      if (Settings_default._prePlace && myPos.distance(enemyPos) < 300 && (enemyTrapped !== null || !(imTrapped && myPlayer.spikeDamage > 0))) {
+        const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped);
         if (findObject) {
           // Luna drops the doomed object out of the collision set, so the
           // angles it is standing on come back placeable.
@@ -9313,16 +9340,20 @@ window.grbtp = 35;
 
           const isPrePlaceAngle = config => {
             if (myPos.distance(enemyPos) > 350) return false;
-            const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-            const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
+            const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer, findObject);
+            const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer, findObject);
             const {blockFuture: blockFuture, blockEnemy: blockEnemy, canSpikeTick: canSpikeTick, canRetrap: canRetrap} = _los(config);
             if (isSpike && canSpikeTick && canTrapTick()) return true;
             if (isTrap && canRetrap && canShamePlace()) return true;
             // 1: the spike that catches a trapped enemy
             if (isSpike && enemyTrapped && findObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            // 2: retrap an enemy already taking spike damage, when the trap
-            //    holding them is the thing about to break
-            if (isTrap && enemy.spikeDamage > 0 && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
+            // 2: retrap — the trap holding them is the thing about to break,
+            //    so a fresh one goes down in the same breath it dies in.
+            //    Luna also required them to be taking spike damage; that made
+            //    the rule a way to hold someone on spikes rather than a way to
+            //    keep them trapped at all, and a trapped enemy with no spike on
+            //    them yet is precisely the one worth keeping.
+            if (isTrap && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
             // 3: the spike whose knockback throws them onto another spike
             if (isSpike && closestSpikeToKb && config === closestSpikeToKb && !canShamePlace()) return true;
             // 4: any spike that does not wall off my own path or my view of them
@@ -9334,8 +9365,15 @@ window.grbtp = 35;
 
           // Spikes first, then traps; within each, the angle nearest the slot
           // that is opening.
+          //
+          // Except when the slot opening is the trap holding them. Only one
+          // preplace goes out per tick, and the knockback-spike rule will
+          // happily take it — so the retrap would lose its own tick to a spike
+          // and the enemy would walk. When the doomed object is that trap, the
+          // trap is asked first.
+          const retrapping = enemyTrapped !== null && findObject === enemyTrapped;
           let findAngle = null;
-          for (const angles of [ spikeAngles, trapAngles ]) {
+          for (const angles of retrapping ? [ trapAngles, spikeAngles ] : [ spikeAngles, trapAngles ]) {
             if (findAngle) break;
             findAngle = angles.filter(a => a.placeable && isPrePlaceAngle(a)).sort((a, b) => Math.hypot(findObject.pos.current.x - a.x, findObject.pos.current.y - a.y) - Math.hypot(findObject.pos.current.x - b.x, findObject.pos.current.y - b.y))[0] ?? null;
           }
