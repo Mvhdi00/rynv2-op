@@ -8994,6 +8994,9 @@ window.grbtp = 35;
     // the tick after, so the spike ticks read this and stand down while it is
     // current rather than compete for the same packets and the same aim.
     _preplaceSentTick=-99;
+    // Bearing to the enemy this tick, offered to the solver as an exact
+    // candidate. Null outside a fight.
+    _preferAngle=null;
     constructor(client2) {
       this.client = client2;
     }
@@ -9006,6 +9009,7 @@ window.grbtp = 35;
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
       this._preplaceSentTick = -99;
+      this._preferAngle = null;
     }
 
     // UTILS.lineInRect, unchanged.
@@ -9201,6 +9205,16 @@ window.grbtp = 35;
           const span = (e - s + Math.PI * 2) % (Math.PI * 2) || Math.PI * 2;
           for (let t = LUNA_ANGLE_STEP; t < span; t += LUNA_ANGLE_STEP) push(s + t, false);
           if (span > 1e-6) push(e, true);
+          // The arc ends are exact but its interior is still Luna's 5-degree
+          // grid, and the one interior angle that matters is the bearing
+          // straight at the enemy — that is where a trap lands on them rather
+          // than beside them, and where closestTrapToEnemy is looking. Offered
+          // to the nearest grid sample it is up to seven units off, which on a
+          // trap of scale 50 is the difference between catching them and not.
+          // When it falls in this arc it is offered exactly.
+          if (this._preferAngle !== null && arcContains(s, e, normalizeArcAngle(this._preferAngle))) {
+            push(this._preferAngle, false);
+          }
         }
       }
       this._angleCache.set(key, angles);
@@ -9405,7 +9419,24 @@ window.grbtp = 35;
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
       if (!Settings_default._autoplacer) return;
       if (!myPlayer || !myPlayer.inGame) return;
-      if (lunaSpikeTickBusy(ModuleHandler)) return;
+      // A spike tick owning the tick used to end this module outright, which
+      // is what made the two collide. The collision is real but narrow: a
+      // spike tick is a swing sent *this* tick, and `place` reselects the item
+      // and swings, so a build emitted alongside it drags the swing off target
+      // and wastes it. That is the immediate half of the placer.
+      //
+      // The preplace half is not sent this tick at all — it goes out from a
+      // timer inside the next one, after the swing has already left. Killing
+      // it here bought the spike tick nothing and cost the retrap everything:
+      // an enemy sitting in a trap while any of the three spike ticks opened
+      // simply never got a replacement, which is one of the ways they were
+      // still walking out.
+      //
+      // So the tick is shared rather than surrendered. Nothing is emitted now,
+      // and the preplace is still computed and scheduled. spikeTickTarget
+      // stands down on the tick those timers fire, so the two alternate
+      // cleanly instead of one starving the other.
+      const spikeTickOwnsTick = lunaSpikeTickBusy(ModuleHandler);
 
       // Every budget test in this module reads this, never packetLimit.
       const placerLimit = Math.min(ModuleHandler.packetLimit, PLACER_PACKET_GATE);
@@ -9427,6 +9458,7 @@ window.grbtp = 35;
       const enemyPos = enemy.pos.current;
       const enemyFut = enemy.pos.future ?? enemyPos;
       const enemyScale = enemy.collisionScale;
+      this._preferAngle = myPos.angle(enemyPos);
 
       // Luna's spikes_our / traps_our: everything around the enemy that is not
       // an enemy's.
@@ -9749,6 +9781,7 @@ window.grbtp = 35;
       // their timer runs.
       const preplaceHold = () => preplacesQueued * LUNA_PLACE_COST;
       for (const obj of this._predictObjects) {
+        if (spikeTickOwnsTick) break;
         if (obj.preplace) continue;
         if (outOfBudget()) break;
         if (ModuleHandler.packetCount + LUNA_PLACE_COST + preplaceHold() > placerLimit) break;
@@ -10485,7 +10518,8 @@ window.grbtp = 35;
     if (state === void 0) {
       state = {
         trapTick: -99,
-        counterTick: -99
+        counterTick: -99,
+        yieldTick: -99
       };
       SPIKE_TICK_STATE.set(client2, state);
     }
@@ -10599,17 +10633,24 @@ window.grbtp = 35;
       return null;
     }
 
-    // Preplace and replace get first refusal. The placer queues a preplace on
-    // one tick and its timers put it on the wire during the next, so a spike
-    // tick opening in that window competes for the same packets and drags the
-    // aim off the build it is mid-way through sending. When the placer has one
-    // in flight this stands down and takes the tick after instead.
+    // Preplace and replace get first refusal, but only ever for one tick in a
+    // row.
     //
-    // This is the other half of lunaSpikeTickBusy, which has the placer yield
-    // to a spike tick that already owns the tick. Together: whichever of the
-    // two committed first keeps it.
+    // Giving way whenever the placer had something in flight was meant as
+    // "preplace now, spike tick next tick". It is not, once the prediction is
+    // any good: a trapped enemy with a loaded weapon produces a preplace on
+    // every single tick, so the condition was permanently true and all three
+    // spike ticks were switched off for the whole engagement. Simulated over
+    // ten ticks of both wanting to act, the spike tick got one.
+    //
+    // Yielding twice running is therefore refused. The placer still takes the
+    // contested tick — its build is the more perishable of the two, being
+    // aimed at a slot that is about to open — and the spike tick takes the
+    // next one, which is what alternating was supposed to mean.
     const placer = ModuleHandler.staticModules.autoPlacer;
-    if (placer && ModuleHandler.tickCount - placer._preplaceSentTick <= 1) {
+    const contested = placer && ModuleHandler.tickCount - placer._preplaceSentTick <= 1;
+    if (contested && state.yieldTick !== ModuleHandler.tickCount - 1) {
+      state.yieldTick = ModuleHandler.tickCount;
       return null;
     }
     if (spikeTickCounterThreat(client2, state) || spikeTickNearSpike(client2)) {
