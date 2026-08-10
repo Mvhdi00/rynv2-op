@@ -2,18 +2,22 @@
 /*
  * build-pathbreak.js
  *
- * Builds RYN_PathBreak.user.js from RYN Client v5 (the Luna-placer variant) by
- * folding in Path Break: tick-accurate pathfinding that breaks through what
- * blocks it.
+ * Builds RYN_PathBreak.user.js from RYN Client v5 (the Luna-placer variant).
  *
- * v5 ships `ModuleHandler.followPath` and `ModuleHandler.endTarget` — a
- * minimap click sets them and the minimap draws a marker for them — but no
- * code anywhere reads them to move the player. The pathfinder v4 had
- * (`LunaPathfinder`) was dropped from v5 and nothing replaced it, so the
- * marker is all that is left of the feature. Path Break fills that hole.
+ * Two features go in:
  *
- * The implementation lives in src/pathbreak.js and is spliced in verbatim, so
- * it can be read and syntax-checked on its own.
+ * 1. Path Break — tick-accurate pathfinding that breaks through what blocks
+ *    it. v5 ships `ModuleHandler.followPath` and `ModuleHandler.endTarget`; a
+ *    minimap click sets them and the minimap draws a marker for them, but no
+ *    code anywhere reads them to move the player. The pathfinder v4 had
+ *    (`LunaPathfinder`) was dropped from v5 and nothing replaced it, so the
+ *    marker is all that is left of the feature. Path Break fills that hole.
+ *    It lives in src/pathbreak.js and is spliced in verbatim, so it can be
+ *    read and syntax-checked on its own.
+ *
+ * 2. Spike tick while pinned — the spike ticks currently switch off the moment
+ *    you are trapped, which throws away the one case where being trapped does
+ *    not matter: the enemy pinned in your own trap, right next to you.
  *
  *   node tools/build-pathbreak.js
  */
@@ -288,6 +292,201 @@ edit(
           client._ModuleHandler.endTarget._setXY(posX, posY);
           client._ModuleHandler.followPath = true;
         }`
+);
+
+/* ==================================================================== *
+ * Spike tick while pinned
+ *
+ * Every spike tick goes through spikeTickTarget, and spikeTickTarget bails the
+ * moment `myPlayer.isTrapped` — plus a three-tick grace after breaking out.
+ * That is Sakuna's `Date.now() - player.intrapTime > 300`, ported, and as a
+ * general rule it is right: pinned in someone's trap you should be breaking
+ * out and healing, not spending swings.
+ *
+ * It is wrong in exactly one situation. The enemy is pinned in *your* trap,
+ * directly beside you. Neither of you can move, so neither of you can
+ * disengage. Your placement still works — nearestSpikePlacerAngle is computed
+ * without reference to your own trapped state — and so does your swing. And
+ * the knockback the tick is built on is theirs, not yours, so your being
+ * pinned does not touch it. That is a kill, and the blanket gate throws it
+ * away.
+ *
+ * The retrap keeps priority: a fresh trap is worth more than a tick, so this
+ * window only opens once there is no trap left to place.
+ * ==================================================================== */
+
+edit(
+  "settings: spike tick while pinned",
+  `    _antiSpikeTick: true,`,
+  `    _antiSpikeTick: true,
+    _spikeTickTrapped: true,`
+);
+
+const ANTI_SPIKE_TICK_OPTION = asLiteral(
+  `            <div class="content-option">\r
+                <label class="option-title" for="_antiSpikeTick">Anti Spike Tick</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_antiSpikeTick" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+            </div>\r
+`
+);
+
+const TRAPPED_TICK_OPTION = asLiteral(
+  `            <div class="content-option">\r
+                <label class="option-title" for="_spikeTickTrapped">Spike Tick (pinned)</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_spikeTickTrapped" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Keeps ticking while you are trapped, but only when the enemy is pinned in your own trap beside you and there is no trap left to place.</span>\r
+            </div>\r
+`
+);
+
+edit(
+  "menu: Spike Tick (pinned) option",
+  ANTI_SPIKE_TICK_OPTION,
+  ANTI_SPIKE_TICK_OPTION + TRAPPED_TICK_OPTION
+);
+
+/* The per-client tick stamps the spike ticks already keep. Two more fields so
+ * the window's answer is declared in the same place as the rest of the shape,
+ * rather than appearing out of nowhere as an undefined the first time it is
+ * read. */
+edit(
+  "spike tick: window cache fields",
+  `      state = {
+        trapTick: -99,
+        counterTick: -99
+      };`,
+  `      state = {
+        trapTick: -99,
+        counterTick: -99,
+        windowTick: -99,
+        window: false
+      };`
+);
+
+/* How wide an arc in front of the enemy counts as "somewhere to put a trap",
+ * and how finely it is probed. Twelve probes over 120 degrees is a placement
+ * every 11 degrees, which is finer than the trap's own footprint at contact
+ * range — if none of them is free, there is no trap going down. */
+edit(
+  "spike tick: pinned-window helpers",
+  "  const spikeTickTarget = (client2, enabled) => {",
+  `  const SPIKE_TICK_TRAPPED_ARC = Math.PI / 3;
+  const SPIKE_TICK_TRAPPED_PROBES = 12;
+
+  // Is there anywhere to put a trap on them? Resources, the item limit and the
+  // trap itself are all checked by canPlace; the arc probe is what catches the
+  // case the limit does not — every angle that would land on them is already
+  // occupied, usually by the trap they are standing in.
+  const spikeTickCanRetrap = (client2, enemy) => {
+    const {myPlayer: myPlayer} = client2;
+    if (!myPlayer.canPlace(7)) {
+      return false;
+    }
+    const toEnemy = myPlayer.pos.current.angle(enemy.pos.current);
+    const step = SPIKE_TICK_TRAPPED_ARC * 2 / (SPIKE_TICK_TRAPPED_PROBES - 1);
+    for (let i = 0; i < SPIKE_TICK_TRAPPED_PROBES; i++) {
+      if (myPlayer.canPlaceObject(7, toEnemy - SPIKE_TICK_TRAPPED_ARC + step * i)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // The one situation where being pinned does not end the tick. Every clause
+  // is load-bearing: both pinned, their trap is ours (both of us stuck in
+  // enemy traps is what the original gate is actually about), close enough to
+  // swing, and no trap left to place.
+  const spikeTickTrappedWindow = (client2, enemy) => {
+    if (!Settings_default._spikeTickTrapped) {
+      return false;
+    }
+    const {myPlayer: myPlayer, PlayerManager: PlayerManager2} = client2;
+    if (!myPlayer.isTrapped || !enemy.isTrapped) {
+      return false;
+    }
+    // All three spike ticks ask this the same tick with the same answer, and
+    // the retrap probe underneath is a dozen grid queries. Work it out once.
+    const state = spikeTickState(client2);
+    const tick = client2._ModuleHandler.tickCount;
+    if (state.windowTick === tick) {
+      return state.window;
+    }
+    state.windowTick = tick;
+    state.window = false;
+    const trap = enemy.trappedIn;
+    if (trap === null || trap === undefined) {
+      return false;
+    }
+    try {
+      if (PlayerManager2.isEnemyByID(trap.ownerID, myPlayer)) {
+        return false;
+      }
+    } catch (error) {
+      return false;
+    }
+    if (!myPlayer.collidingSimple(enemy, SPIKE_TICK_TRAP_RANGE)) {
+      return false;
+    }
+    state.window = !spikeTickCanRetrap(client2, enemy);
+    return state.window;
+  };
+
+  const spikeTickTarget = (client2, enabled) => {`
+);
+
+/* The gate itself. Three checks stand down inside the window:
+ *
+ *   isTrapped        the whole point
+ *   the trap grace   it exists to cover the ticks after breaking out, and we
+ *                    have not broken out
+ *   nearBreakType    "a spike is chewing you, break it instead" — true, but
+ *                    killing the enemy pinned next to you ends the chewing
+ *                    too, and autobreak is still running either way
+ *
+ * The counter-threat check stays live. It is the one that says you will lose
+ * this exchange, and its first clause already exempts a trapped player, so
+ * inside the window it can only fire on an enemy who is free to drop a spike
+ * on you — which is a genuine reason not to swing. */
+edit(
+  "spike tick: let the pinned window through",
+  `    const nearest = EnemyManager2.nearestEnemy;
+    if (nearest === null || myPlayer.isTrapped) {
+      return null;
+    }`,
+  `    const nearest = EnemyManager2.nearestEnemy;
+    if (nearest === null) {
+      return null;
+    }
+    const pinnedWindow = spikeTickTrappedWindow(client2, nearest);
+    if (myPlayer.isTrapped && !pinnedWindow) {
+      return null;
+    }`
+);
+
+edit(
+  "spike tick: pinned window skips the break-out grace",
+  `    if (ModuleHandler.tickCount - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
+      return null;
+    }`,
+  `    if (!pinnedWindow && ModuleHandler.tickCount - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
+      return null;
+    }`
+);
+
+edit(
+  "spike tick: pinned window outranks breaking the spike on you",
+  `    if (spikeTickCounterThreat(client2, state) || spikeTickNearSpike(client2)) {
+      return null;
+    }`,
+  `    if (spikeTickCounterThreat(client2, state) || (!pinnedWindow && spikeTickNearSpike(client2))) {
+      return null;
+    }`
 );
 
 /* ------------------------------------------------------------------ */

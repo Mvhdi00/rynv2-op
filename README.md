@@ -5,7 +5,7 @@ anchored patch script, and verified against the game bundles in `src/`.
 
 | Build output | Base | What it adds |
 |---|---|---|
-| **`RYN_PathBreak.user.js`** | RYN Client v5 (Luna placer) | Path Break — tick-accurate pathfinding that breaks through what blocks it |
+| **`RYN_PathBreak.user.js`** | RYN Client v5 (Luna placer) | Path Break — tick-accurate pathfinding that breaks through what blocks it; spike tick that survives being pinned |
 | **`ReUp_Mix.user.js`** | RYN Client v4 | The Luna Client features RYN never had |
 
 Both builds strip RYN's first-run beacon to `webhook.site` — see
@@ -165,6 +165,88 @@ than part of a tick.
 
 Drivers and hooks are unaffected by the patch and still pass: tables match the
 shipped bundle, 41/41 hooks bind.
+
+---
+
+# Spike tick while pinned
+
+Same build. Separate change, small enough to live in the patch script rather
+than a source file of its own.
+
+## The gate
+
+Every spike tick — break, near and trap — goes through `spikeTickTarget`, and
+`spikeTickTarget` bails the moment `myPlayer.isTrapped`, plus a three-tick grace
+after breaking out. That is Sakuna's `Date.now() - player.intrapTime > 300`,
+ported faithfully, and as a general rule it is right: pinned in someone's trap
+you should be breaking out and healing, not spending swings on a knockback you
+cannot follow up.
+
+It is wrong in exactly one situation, and it is a situation you win:
+
+- You are trapped.
+- The enemy is pinned in **your** trap, directly beside you.
+- There is no trap left to place on them.
+
+Neither of you can move, so neither of you can disengage. Your placement still
+works — `nearestSpikePlacerAngle` is computed without any reference to your own
+trapped state, and `AutoPlacer` still drops the spike that catches a trapped
+enemy. Your swing still works. And the knockback the whole tick is built on is
+*theirs*, not yours, so your being pinned does not touch it. The blanket gate
+throws that away.
+
+`spikeTickTrappedWindow` is the exception. Inside it, three checks stand down:
+
+| Check | Why it stands down |
+|---|---|
+| `isTrapped` | the whole point |
+| the three-tick break-out grace | it covers the ticks *after* breaking out, and we have not broken out |
+| `spikeTickNearSpike` | "a spike is chewing you, break it instead" is true, but killing the enemy pinned next to you ends the chewing too, and Autobreak is still running either way |
+
+The counter-threat check stays live. It is the one that says you will lose this
+exchange, and its first clause already exempts a trapped player, so inside the
+window it can only fire on an enemy who is free to drop a spike on you — which
+is a real reason not to swing.
+
+## The retrap keeps priority
+
+A fresh trap is worth more than a tick, so the window only opens once there is
+no trap to place. "No trap to place" is two things, and both have to be true:
+`canPlace(7)` covers the trap being in your inventory, affordable, and under the
+item limit; an arc probe covers the case the limit does not — a trap in hand
+with every angle that would land on them already occupied, usually by the trap
+they are standing in. Twelve probes across 120° in front of them is a placement
+every 11°, finer than the trap's own footprint at contact range.
+
+All three spike ticks ask the same question on the same tick, and the probe
+underneath is a dozen grid queries, so the answer is memoised in the tick stamps
+the spike ticks already keep.
+
+Outside the window nothing changes: when you are not trapped,
+`spikeTickTrappedWindow` returns on its second line and all three gates behave
+exactly as they did.
+
+## Using it
+
+Combat → Instakills → **Spike Tick (pinned)**, under the other spike tick
+sub-options. Defaults on — but it is a sub-option of **Spike Tick**, which ships
+off in v5. Turn that on first or none of this runs.
+
+## Verification
+
+```sh
+node tools/test-spiketick.js
+```
+
+Lifts `spikeTickTrappedWindow` out of the build and drives it against stubs: the
+situation it exists for, then one case per clause in isolation — setting off,
+not trapped, enemy not trapped, both stuck in *enemy* traps, trap object
+missing, trap owner not resolvable, out of swing range, exactly at swing range,
+retrap available, trap in hand with every angle blocked, trap in hand with an
+angle free, no trap in hand — plus the memoisation holding within a tick and
+not across one. Fourteen cases, all passing. A missing clause here does not
+crash; it makes the client swing at the wrong moment, which is invisible until
+it costs a kill.
 
 ---
 
@@ -329,6 +411,7 @@ tools/extract-drivers.js    game bundle  -> drivers/game-drivers.json
 tools/build-pathbreak.js    src/RYN_Client_v5.js + src/pathbreak.js -> RYN_PathBreak.user.js
 tools/build-reup.js         src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/test-pathbreak.js     drives the Path Break search worker
+tools/test-spiketick.js     drives the pinned-spike-tick window
 tools/verify-drivers.js     client tables vs. drivers/game-drivers.json
 tools/check-hooks.js        client's bundle-rewrite hooks vs. the game bundle
 ```
