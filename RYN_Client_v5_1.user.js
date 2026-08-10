@@ -8932,10 +8932,14 @@ window.grbtp = 35;
   // How many preplace angles to queue per opening slot. Luna commits to one,
   // which is also one point of failure: a refused build lands nothing and the
   // enemy walks. Whiteout v4 scores every candidate and places down the list
-  // while its budget holds; this is the same idea kept narrow. Each is a
-  // separate build, so three costs three builds of the allowance — the send
-  // loop's budget check still bounds it.
-  const PREPLACE_CANDIDATES = 3;
+  // while its budget holds; this is the same idea kept narrow.
+  //
+  // Three was tried and was too many. Each is a separate build, so a retrap
+  // cost three of them per send and two sends, and against a 105 allowance
+  // shared with everything else that is most of a second spent on one slot —
+  // it read in play as the whole placer going sluggish. Two keeps the second
+  // chance that was the point of this while halving what it costs.
+  const PREPLACE_CANDIDATES = 2;
 
   // ── Primary trap ──────────────────────────────────────────────────────────
   // Luna has no notion of a "first" trap: its autoplace ladder walks spikes
@@ -9727,12 +9731,27 @@ window.grbtp = 35;
       // passes any angle that does not wall off my own path — takes the whole
       // second's allowance and no trap ever reaches the wire.
       let trapsQueued = 0;
+      let preplacesQueued = 0;
       for (const obj of this._predictObjects) {
-        if (!obj.preplace && obj.id === trapId) trapsQueued += 1;
+        if (obj.preplace) preplacesQueued += 1; else if (obj.id === trapId) trapsQueued += 1;
       }
+
+      // A preplace is queued now and sent from a timer that fires inside the
+      // next tick, so it spends after everything below has already spent. That
+      // ordering was starving it: the autoplace spike ladder passes any angle
+      // that does not wall off my own path, it runs first, and by the time the
+      // timer fired `outOfBudget` was true — the enemy sat in a trap and the
+      // replacement never went out at all. The one build that matters most was
+      // living on whatever the spray happened to leave.
+      //
+      // So the preplaces are paid for before anything discretionary: their
+      // share is held out of the allowance here and released to them when
+      // their timer runs.
+      const preplaceHold = () => preplacesQueued * LUNA_PLACE_COST;
       for (const obj of this._predictObjects) {
         if (obj.preplace) continue;
         if (outOfBudget()) break;
+        if (ModuleHandler.packetCount + LUNA_PLACE_COST + preplaceHold() > placerLimit) break;
         const isTrapObj = obj.id === trapId;
         if (isTrapObj) {
           trapsQueued -= 1;
@@ -9752,22 +9771,23 @@ window.grbtp = 35;
       const tickMs = socket?.TICK ?? 111;
       const pingTime = socket?.pong ?? 0;
       const minPingTime = Number.isFinite(socket?.minPingTime) ? socket.minPingTime : 0;
-      // `pong` is a round trip — `performance.now() - startPing`, measured
-      // across the ping and its answer. A packet needs half of it to reach the
-      // server, so a send meant to arrive as the next tick opens goes out at
-      // TICK - pong/2.
+      // Luna's timing, and Whiteout v4's independently
+      // (`game.tickRate - window.pingTime`): send the whole round trip ahead of
+      // the tick, not half of it.
       //
-      // Luna subtracts the whole round trip, and Whiteout copies it
-      // (`game.tickRate - window.pingTime`). That leaves half a ping: at 100ms
-      // the build arrives 50ms early, before the object it is replacing has
-      // died, and the server refuses it. This client already has the right
-      // convention in two of its own modules — ReverseInstakill sends at
-      // `TICK - pong / 2` and Instakill._packetDelay at `tick - pong * 0.6` —
-      // it was only the ported placer that kept Luna's version.
+      // Half was tried here on the reasoning that `pong` is a round trip, so a
+      // packet only needs half of it to arrive, and that TICK - pong/2 should
+      // therefore land exactly as the next tick opens. In play it was worse —
+      // slower and less consistent — and the derivation is the weaker evidence:
+      // it assumes the client tick and the server tick are in phase, when the
+      // local tick is itself driven by arriving packets and so already sits
+      // most of a trip behind. Two clients tuned over a lot of play agree on
+      // the full round trip; that is what the placer uses.
       //
-      // Clamped like _packetDelay: never inside the first 8ms of the tick, and
-      // never later than 10ms before the next one.
-      const sendDelay = ping => Math.max(8, Math.min(tickMs - ping / 2, tickMs - 10));
+      // ReverseInstakill and Instakill._packetDelay do use half, but they are
+      // aiming a swing inside the current tick rather than a build into a slot
+      // that opens on the next one, so they are not the same measurement.
+      const sendDelay = ping => Math.max(1, tickMs - ping);
       const aimAngle = () => ModuleHandler._autoBreakActive && ModuleHandler._lastBreakAngle !== null && ModuleHandler._lastBreakAngle !== undefined ? ModuleHandler._lastBreakAngle : ModuleHandler._currentAngle ?? 0;
       // Read at schedule time, not at fire time: the third send lands inside
       // the next tick, which has already cleared `_spamPrePlacer` for its own
