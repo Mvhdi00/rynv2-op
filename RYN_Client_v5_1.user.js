@@ -8853,6 +8853,21 @@ window.grbtp = 35;
   // is written against ModuleHandler's counter and limit.
   const LUNA_PLACE_COST = 5;
 
+  // The placer's own ceiling, under the client-wide `packetLimit`.
+  //
+  // A single shared number has one failure mode, and it is the expensive one:
+  // building is the highest-volume thing this client does and the least
+  // important thing it does, so it drains the second's allowance and then a
+  // heal — three packets, the difference between living and not — finds
+  // nothing left. A missed spike costs a spike. A missed heal costs the round.
+  //
+  // Sakuna 44.1 solves this by tiering: a hard stop for everything at 120/s,
+  // but building alone is cut off at `secPacket < 97`, leaving the top of the
+  // range for movement, attacks and heals. auraro 5.5 tiers the same way and
+  // lower still (insta 69, sync 60). This is that gate, at Sakuna's number.
+  // `packetLimit` stays the ceiling for every other module.
+  const PLACER_PACKET_GATE = 97;
+
   // How long an angle stays banned after a build that the server dropped.
   const LUNA_BAN_TICKS = 18;
 
@@ -9206,6 +9221,9 @@ window.grbtp = 35;
       if (!myPlayer || !myPlayer.inGame) return;
       if (lunaSpikeTickBusy(ModuleHandler)) return;
 
+      // Every budget test in this module reads this, never packetLimit.
+      const placerLimit = Math.min(ModuleHandler.packetLimit, PLACER_PACKET_GATE);
+
       this._tick = ModuleHandler.tickCount;
       for (const [angle, expiry] of this._bannedAngles) {
         if (this._tick > expiry) this._bannedAngles.delete(angle);
@@ -9288,7 +9306,7 @@ window.grbtp = 35;
       this._predictObjects = [];
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
-      if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) return;
+      if (ModuleHandler.packetCount >= placerLimit) return;
 
       // Luna's `spampreplace`, armed by a slot having actually opened. The
       // other arming site is _getPrePlaceObject, exactly as in Luna; the
@@ -9466,8 +9484,8 @@ window.grbtp = 35;
       // SEND — autoplace now, preplace next tick, replace at min ping
       // ────────────────────────────────────────────────────────────────────
       const typeOf = obj => obj.id === trapId ? LUNA_TRAP_TYPE : LUNA_SPIKE_TYPE;
-      const outOfBudget = () => ModuleHandler.packetCount + LUNA_PLACE_COST > ModuleHandler.packetLimit;
-      const placesLeft = () => Math.floor((ModuleHandler.packetLimit - ModuleHandler.packetCount) / LUNA_PLACE_COST);
+      const outOfBudget = () => ModuleHandler.packetCount + LUNA_PLACE_COST > placerLimit;
+      const placesLeft = () => Math.max(0, Math.floor((placerLimit - ModuleHandler.packetCount) / LUNA_PLACE_COST));
       // The tick this send belongs to. Timer sends land inside the next tick,
       // so they stamp the tick they were scheduled from and the refusal check
       // leaves them alone until the tick after that.
