@@ -9225,9 +9225,24 @@ window.grbtp = 35;
         // wall. Both ready weapons are tried, hardest-hitting first, so a
         // ready secondary that cannot reach does not shadow a primary that
         // can.
+        // The just-came-off-reload edge is true for exactly one tick, which is
+        // right for a wall somewhere: predict the swing that is happening now,
+        // not every tick an armed enemy stands near masonry.
+        //
+        // It is wrong for the trap holding them. Someone pinned does not swing
+        // the instant the bar fills — they line the shot up first — and the
+        // moment the edge passes the prediction stops, so the break that
+        // actually frees them is the one never seen. While they are in a trap
+        // of mine the threat is standing, not momentary, so the test drops to
+        // simply "the weapon is ready". The health check still requires the
+        // trap to die to this one hit, and only that trap is in reach of this
+        // relaxation, so it does not turn into a general-purpose spam.
+        const holdingThem = enemyTrapped !== null && enemyTrapped !== undefined;
+        const secUsable = holdingThem ? !!secReload && secReload.current >= secReload.max : secJustReady;
+        const primUsable = holdingThem ? !!primReload && primReload.current >= primReload.max : primJustReady;
         const readyWeapons = [];
-        if (secID !== null && secID !== undefined && secJustReady) readyWeapons.push(secID);
-        if (primID !== null && primID !== undefined && primJustReady) readyWeapons.push(primID);
+        if (secID !== null && secID !== undefined && secUsable) readyWeapons.push(secID);
+        if (primID !== null && primID !== undefined && primUsable) readyWeapons.push(primID);
         readyWeapons.sort((a, b) => (enemy.getBuildingDamage?.(b, true) ?? 0) - (enemy.getBuildingDamage?.(a, true) ?? 0));
         for (const candidateWeapon of readyWeapons) {
           if (findObject) break;
@@ -9357,6 +9372,18 @@ window.grbtp = 35;
       const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < t.scale) ?? null;
       const imTrapped = !!myPlayer.isTrapped;
       const neitherTrapped = !enemyTrapped && !imTrapped;
+      // Luna gates every trap rule on neitherTrapped, so the moment an enemy
+      // breaks out while I am still pinned, nothing may be placed — the one
+      // instant a trap in their path is worth the most is the instant it is
+      // forbidden. Being pinned makes me unable to chase; it does not make the
+      // ground in front of them any less trappable, and the trap is thrown at
+      // their position, not walked to.
+      //
+      // So the aimed rules — the primary trap and the retrap-the-runner rule —
+      // ask only whether the enemy is free. The indiscriminate rule below,
+      // which passes every angle, keeps neitherTrapped: relaxing that one
+      // would empty the trap cap into the ground the moment I got pinned.
+      const enemyFree = !enemyTrapped;
       const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
 
       // Both Luna toggles behind these are absent from this client, so both
@@ -9516,7 +9543,7 @@ window.grbtp = 35;
       // Here the current→future step is extrapolated TRAP_LOOKAHEAD_TICKS out
       // and the trap is aimed at the far end of that path, so it is sitting on
       // the ground they are about to cross.
-      if (Settings_default._primaryTrap && trapId !== null && neitherTrapped && !this._isItemLimit(trapId, myPlayer) && myPos.distance(enemyPos) <= TRAP_PRIMARY_RANGE) {
+      if (Settings_default._primaryTrap && trapId !== null && enemyFree && !this._isItemLimit(trapId, myPlayer) && myPos.distance(enemyPos) <= TRAP_PRIMARY_RANGE) {
         const stepX = enemyFut.x - enemyPos.x;
         const stepY = enemyFut.y - enemyPos.y;
         const predX = enemyPos.x + stepX * TRAP_LOOKAHEAD_TICKS;
@@ -9564,7 +9591,7 @@ window.grbtp = 35;
           }
           if (isTrap) {
             // 1: the trap that retraps them as they move
-            if (closestTrapToEnemy && config === closestTrapToEnemy && neitherTrapped) return true;
+            if (closestTrapToEnemy && config === closestTrapToEnemy && enemyFree) return true;
             // 2: any trap, while neither of us is pinned
             if (neitherTrapped) return true;
           }
