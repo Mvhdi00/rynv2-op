@@ -17207,9 +17207,30 @@ window.grbtp = 35;
     _offset: new Vector_default,
     _gameInit(token) {},
     async startGame() {
-      const token = await gameToken;
-      if (typeof token !== "string" || token.length === 0) {
-        Logger.error("Failed to generate altcha token..");
+      const usable = t => typeof t === "string" && t.length > 0;
+      let token = null;
+      try {
+        token = await gameToken;
+      } catch (e) {
+        Logger.warn("altcha: the solve started at load failed (" + (e && e.message || e) + "), retrying");
+      }
+      if (!usable(token)) {
+        try {
+          token = await altcha.generate();
+        } catch (e) {
+          Logger.warn("altcha: retry failed (" + (e && e.message || e) + ")");
+          token = null;
+        }
+      }
+      if (!usable(token)) {
+        const own = this._myClient && this._myClient._turnstileToken;
+        if (usable(own)) {
+          Logger.warn("altcha: falling back to the token the game obtained itself");
+          token = own;
+        }
+      }
+      if (!usable(token)) {
+        Logger.error("Failed to generate altcha token.. cannot spawn");
         return;
       }
       this._gameInit(token);

@@ -69,6 +69,54 @@ text = replaceOnce(
   "module order prePlacer/replacer"
 );
 
+// The spawn path. `gameToken` is one altcha solve fired at page load, and
+// startGame awaits that same settled promise every time. If it rejected — a
+// hiccup on the fetch to api.moomoo.io/verify, a rate limit, a blocked blob
+// worker — then `await` *throws*, so the check below it never ran, nothing was
+// logged, and _gameInit was never called. The play button did nothing, and
+// kept doing nothing for the rest of the session, because the same rejected
+// promise was awaited on every attempt.
+//
+// Each attempt now falls forward: the cached solve, then a fresh one (cleanup()
+// empties the worker pool, so re-solving is safe), then the token the game
+// obtained for itself, which the captureTurnstile hook already stores.
+text = replaceOnce(
+  text,
+  "    async startGame() {\n      const token = await gameToken;\n      if (typeof token !== \"string\" || token.length === 0) {\n        Logger.error(\"Failed to generate altcha token..\");\n        return;\n      }\n      this._gameInit(token);\n    }",
+  [
+    "    async startGame() {",
+    "      const usable = t => typeof t === \"string\" && t.length > 0;",
+    "      let token = null;",
+    "      try {",
+    "        token = await gameToken;",
+    "      } catch (e) {",
+    "        Logger.warn(\"altcha: the solve started at load failed (\" + (e && e.message || e) + \"), retrying\");",
+    "      }",
+    "      if (!usable(token)) {",
+    "        try {",
+    "          token = await altcha.generate();",
+    "        } catch (e) {",
+    "          Logger.warn(\"altcha: retry failed (\" + (e && e.message || e) + \")\");",
+    "          token = null;",
+    "        }",
+    "      }",
+    "      if (!usable(token)) {",
+    "        const own = this._myClient && this._myClient._turnstileToken;",
+    "        if (usable(own)) {",
+    "          Logger.warn(\"altcha: falling back to the token the game obtained itself\");",
+    "          token = own;",
+    "        }",
+    "      }",
+    "      if (!usable(token)) {",
+    "        Logger.error(\"Failed to generate altcha token.. cannot spawn\");",
+    "        return;",
+    "      }",
+    "      this._gameInit(token);",
+    "    }"
+  ].join("\n"),
+  "startGame altcha path"
+);
+
 const stale = text.match(/PrePlacer_default|Replacer_default|AuraPlacer|AURA_[A-Z_]+/g);
 if (stale) fail("stale references to the old placer remain: " + [ ...new Set(stale) ].join(", "));
 
