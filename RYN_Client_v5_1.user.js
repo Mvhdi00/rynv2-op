@@ -8987,6 +8987,10 @@ window.grbtp = 35;
     _tick=0;
     _lastPrePlaceObj=null;
     _spamPrePlacer=false;
+    // The tick a preplace was queued on. Its timers land on the wire during
+    // the tick after, so the spike ticks read this and stand down while it is
+    // current rather than compete for the same packets and the same aim.
+    _preplaceSentTick=-99;
     constructor(client2) {
       this.client = client2;
     }
@@ -8998,6 +9002,7 @@ window.grbtp = 35;
       this._angleCacheTick = -1;
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
+      this._preplaceSentTick = -99;
     }
 
     // UTILS.lineInRect, unchanged.
@@ -9608,6 +9613,9 @@ window.grbtp = 35;
 
       const preObjects = this._predictObjects.filter(o => o.preplace);
       if (preObjects.length === 0) return;
+      // Claim the next tick before scheduling: the spike ticks run ahead of
+      // this module, so they read the stamp on the tick the timers fire.
+      this._preplaceSentTick = this._tick;
 
       const socket = this.client.SocketManager;
       const pingTime = socket?.pong ?? 0;
@@ -10387,14 +10395,53 @@ window.grbtp = 35;
       return null;
     }
     const nearest = EnemyManager2.nearestEnemy;
-    if (nearest === null || myPlayer.isTrapped) {
+    if (nearest === null) {
       return null;
     }
+
+    // Being trapped used to end the tick outright, and for the ordinary case
+    // it should: the exchange is built on knockback, and a trapped player
+    // neither pushes off nor gets pushed, so the swing is spent for nothing.
+    //
+    // With both of us trapped it is a different exchange, and a sound one.
+    // nearestSpikePlacerAngle only keeps angles whose spike physically touches
+    // the enemy (`distance <= collisionScale + spikeScale`), so the damage
+    // comes from contact, not from a push — no knockback is needed for it to
+    // land. A trapped enemy cannot step off the spike either. And my own
+    // trapped state is protection here rather than exposure, which the counter
+    // check already knows: its first branch is `possibleToKnockback &&
+    // !myPlayer.isTrapped`, because a trapped player cannot be knocked into a
+    // spike in return.
+    //
+    // So: trapped with a free enemy still stands down, trapped with a trapped
+    // enemy goes ahead.
+    const bothTrapped = myPlayer.isTrapped && nearest.isTrapped;
+    if (myPlayer.isTrapped && !bothTrapped) {
+      return null;
+    }
+
     // Leaving a trap is not the same as being free: for the next few ticks the
     // knockback the whole tick is built on does not land the way it is
     // predicted here, so the swing is spent for nothing. RYN only ever checked
-    // isTrapped, which covers exactly one tick.
-    if (ModuleHandler.tickCount - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
+    // isTrapped, which covers exactly one tick. The grace is about a push that
+    // will not behave; the both-trapped exchange does not use one, and the
+    // stamp is refreshed every tick I stay trapped, so it would block that
+    // case forever.
+    if (!bothTrapped && ModuleHandler.tickCount - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
+      return null;
+    }
+
+    // Preplace and replace get first refusal. The placer queues a preplace on
+    // one tick and its timers put it on the wire during the next, so a spike
+    // tick opening in that window competes for the same packets and drags the
+    // aim off the build it is mid-way through sending. When the placer has one
+    // in flight this stands down and takes the tick after instead.
+    //
+    // This is the other half of lunaSpikeTickBusy, which has the placer yield
+    // to a spike tick that already owns the tick. Together: whichever of the
+    // two committed first keeps it.
+    const placer = ModuleHandler.staticModules.autoPlacer;
+    if (placer && ModuleHandler.tickCount - placer._preplaceSentTick <= 1) {
       return null;
     }
     if (spikeTickCounterThreat(client2, state) || spikeTickNearSpike(client2)) {
