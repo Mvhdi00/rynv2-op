@@ -14137,65 +14137,220 @@ window.grbtp = 35;
     }
   }
 
-  // Owns the table of what runs. A feature is a record, not a position: it
-  // says which phase it belongs to and how it ranks inside that phase, so
-  // reordering is an edit to one number rather than a move within an array
-  // whose order nothing documents.
+  // The six domains a feature can belong to. Grouping is not decoration: it is
+  // how a whole area is reasoned about, reset, or switched off without knowing
+  // the names of the things inside it.
+  const RYN_DOMAIN = Object.freeze({
+    COMBAT: "combat",
+    PLACEMENT: "placement",
+    MOVEMENT: "movement",
+    DEFENSE: "defense",
+    AUTOMATION: "automation",
+    UTILITY: "utility"
+  });
+
+  // A registered feature. Everything a scheduler needs to place it, run it,
+  // pay for it and tear it down lives here rather than in a shared handler.
+  //
+  //   state    the feature's own box; nobody else writes to it
+  //   needs    ids that must run first, resolved by the scheduler
+  //   cost     packets this feature may spend when it acts
+  //   when     an execution condition evaluated per tick
+  //   reset    what to undo on death or respawn
+  class RynFeature {
+    id;
+    domain;
+    phase;
+    priority;
+    needs;
+    cost;
+    owner;
+    run;
+    when;
+    onReset;
+    state = {};
+    ran = 0;
+    spent = 0;
+    lastTick = -1;
+    constructor(spec) {
+      this.id = spec.id;
+      this.domain = spec.domain;
+      this.phase = spec.phase;
+      this.priority = spec.priority ?? 0;
+      this.needs = spec.needs ?? [];
+      this.cost = spec.cost ?? 0;
+      this.owner = spec.owner ?? null;
+      this.run = spec.run;
+      this.when = spec.when ?? null;
+      this.onReset = spec.onReset ?? null;
+    }
+    reset() {
+      this.state = {};
+      this.spent = 0;
+      this.lastTick = -1;
+      if (this.onReset !== null) this.onReset(this);
+    }
+  }
+
+  // Owns the packet allowance and hands it out against resolved order rather
+  // than arrival order. Before this, roughly thirty call sites each read a
+  // shared counter and decided for themselves, which is why the highest-value
+  // work could be starved by whatever happened to run earlier.
+  class RynBudget {
+    _spent = 0;
+    limit = 0;
+    reserved = 0;
+    open(limit) {
+      this.limit = limit;
+      this._spent = 0;
+      this.reserved = 0;
+    }
+    // Hold capacity back for work that has not run yet but must not be starved.
+    reserve(amount) {
+      this.reserved += Math.max(0, amount);
+    }
+    release(amount) {
+      this.reserved = Math.max(0, this.reserved - Math.max(0, amount));
+    }
+    // Can this feature act without eating into what is held back?
+    affords(cost, ignoreReserve = false) {
+      const ceiling = this.limit - (ignoreReserve ? 0 : this.reserved);
+      return this._spent + cost <= ceiling;
+    }
+    take(cost) {
+      this._spent += cost;
+      return this._spent;
+    }
+    get spent() {
+      return this._spent;
+    }
+    get free() {
+      return Math.max(0, this.limit - this._spent - this.reserved);
+    }
+  }
+
+  // Owns the table of what runs, and the order it runs in. A feature is a
+  // record, not a position: it declares its phase, what it must follow, and
+  // how it ranks against its peers, so reordering is an edit to a declaration
+  // rather than a move of code whose order nothing documents.
   class RynRegistry {
     _byPhase = new Map;
+    _byId = new Map;
+    _schedule = new Map;
     constructor() {
-      for (const phase of RYN_PHASE_ORDER) this._byPhase.set(phase, []);
+      for (const phase of RYN_PHASE_ORDER) {
+        this._byPhase.set(phase, []);
+        this._schedule.set(phase, null);
+      }
     }
-    add(feature) {
-      const {id: id, phase: phase, run: run} = feature;
-      if (!id || !this._byPhase.has(phase) || typeof run !== "function") {
-        Logger.error(`RynRegistry: refused "${id}" -- needs an id, a known phase and a run()`);
+    add(spec) {
+      if (!spec || !spec.id || !this._byPhase.has(spec.phase) || typeof spec.run !== "function") {
+        Logger.error(`RynRegistry: refused "${spec && spec.id}" -- needs an id, a known phase and a run()`);
         return null;
       }
-      const record = {
-        id: id,
-        phase: phase,
-        rank: feature.rank ?? 0,
-        run: run,
-        owner: feature.owner ?? null,
-        enabled: feature.enabled ?? (() => true)
-      };
-      const list = this._byPhase.get(phase);
-      list.push(record);
-      list.sort((a, b) => a.rank - b.rank);
-      return record;
+      if (this._byId.has(spec.id)) {
+        Logger.error(`RynRegistry: "${spec.id}" is already registered`);
+        return this._byId.get(spec.id);
+      }
+      const feature = new RynFeature(spec);
+      this._byId.set(feature.id, feature);
+      this._byPhase.get(feature.phase).push(feature);
+      this._schedule.set(feature.phase, null);
+      return feature;
     }
     remove(id) {
-      for (const list of this._byPhase.values()) {
-        const i = list.findIndex(r => r.id === id);
-        if (i !== -1) {
-          list.splice(i, 1);
-          return true;
-        }
-      }
-      return false;
+      const feature = this._byId.get(id);
+      if (feature === undefined) return false;
+      this._byId.delete(id);
+      const list = this._byPhase.get(feature.phase);
+      list.splice(list.indexOf(feature), 1);
+      this._schedule.set(feature.phase, null);
+      return true;
+    }
+    get(id) {
+      return this._byId.get(id) ?? null;
     }
     of(phase) {
       return this._byPhase.get(phase) ?? [];
     }
+    inDomain(domain) {
+      const out = [];
+      for (const feature of this._byId.values()) {
+        if (feature.domain === domain) out.push(feature);
+      }
+      return out;
+    }
+    // Priority orders peers; `needs` overrides it. A feature that must follow
+    // another follows it whatever the priorities say, so a dependency cannot be
+    // silently broken by retuning a number. Kahn's algorithm over the declared
+    // edges, with ties broken by priority so the result is stable.
+    schedule(phase) {
+      const cached = this._schedule.get(phase);
+      if (cached !== null && cached !== undefined) return cached;
+      const list = this._byPhase.get(phase) ?? [];
+      const byId = new Map(list.map(f => [ f.id, f ]));
+      const indegree = new Map(list.map(f => [ f.id, 0 ]));
+      const dependents = new Map(list.map(f => [ f.id, [] ]));
+      for (const feature of list) {
+        for (const need of feature.needs) {
+          if (!byId.has(need)) continue;
+          indegree.set(feature.id, indegree.get(feature.id) + 1);
+          dependents.get(need).push(feature.id);
+        }
+      }
+      const ready = list.filter(f => indegree.get(f.id) === 0).sort((a, b) => a.priority - b.priority);
+      const ordered = [];
+      while (ready.length > 0) {
+        const feature = ready.shift();
+        ordered.push(feature);
+        for (const id of dependents.get(feature.id)) {
+          const left = indegree.get(id) - 1;
+          indegree.set(id, left);
+          if (left === 0) {
+            const next = byId.get(id);
+            let at = ready.findIndex(f => f.priority > next.priority);
+            if (at === -1) at = ready.length;
+            ready.splice(at, 0, next);
+          }
+        }
+      }
+      // A cycle leaves features unplaced. Report it and append them by
+      // priority rather than dropping work on the floor.
+      if (ordered.length !== list.length) {
+        const stuck = list.filter(f => !ordered.includes(f));
+        Logger.error(`RynRegistry: dependency cycle in ${phase} -- ${stuck.map(f => f.id).join(", ")}`);
+        for (const feature of stuck.sort((a, b) => a.priority - b.priority)) ordered.push(feature);
+      }
+      this._schedule.set(phase, ordered);
+      return ordered;
+    }
+    resetAll(domain = null) {
+      for (const feature of this._byId.values()) {
+        if (domain === null || feature.domain === domain) feature.reset();
+      }
+    }
     get size() {
-      let n = 0;
-      for (const list of this._byPhase.values()) n += list.length;
-      return n;
+      return this._byId.size;
     }
     clear() {
-      for (const list of this._byPhase.values()) list.length = 0;
+      this._byId.clear();
+      for (const phase of RYN_PHASE_ORDER) {
+        this._byPhase.get(phase).length = 0;
+        this._schedule.set(phase, null);
+      }
     }
   }
 
-  // Owns lifecycle state and nothing else. It holds the clock, the bus and the
-  // registry so there is one place to reach them from, and delegates rather
-  // than shadowing so there is never a second copy of the truth.
+  // Owns lifecycle state and the allowance, and nothing else. It holds the
+  // clock, the bus, the registry and the budget so there is one place to reach
+  // them from, and delegates rather than shadowing so there is never a second
+  // copy of the truth.
   class RynRuntime {
     client;
     clock = new RynClock;
     events = new RynEvents;
     registry = new RynRegistry;
+    budget = new RynBudget;
     state = "cold";
     constructor(client2) {
       this.client = client2;
@@ -14212,11 +14367,18 @@ window.grbtp = 35;
     spawned() {
       this.state = "alive";
       this.clock.reset();
+      this.registry.resetAll();
       this.events.emit("player:spawn", this);
     }
     died() {
       this.state = "attached";
+      this.registry.resetAll();
       this.events.emit("player:death", this);
+    }
+    // Wipe one area without naming the things inside it.
+    resetDomain(domain) {
+      this.registry.resetAll(domain);
+      this.events.emit("domain:reset", domain);
     }
     teardown() {
       this.events.emit("runtime:teardown", this);
@@ -14228,27 +14390,88 @@ window.grbtp = 35;
     get alive() {
       return this.state === "alive";
     }
-    // Walk one phase. Returns how many features actually ran, which is what
-    // lets a caller tell "nothing wanted this phase" from "the phase is empty".
+    // Walk one phase in scheduled order, honouring each feature's execution
+    // condition and what it can afford. A feature that declares a cost is not
+    // offered the tick unless the allowance covers it, so budget is enforced
+    // once here instead of at every call site that used to read the counter.
     runPhase(phase, ctx) {
-      const list = this.registry.of(phase);
-      if (list.length === 0) return 0;
+      const ordered = this.registry.schedule(phase);
+      if (ordered.length === 0) return 0;
       this.clock.enter(phase);
+      const tick = this.clock.tick;
       let ran = 0;
-      for (let i = 0; i < list.length; i++) {
-        const record = list[i];
+      for (let i = 0; i < ordered.length; i++) {
+        const feature = ordered[i];
         try {
-          if (record.enabled(ctx) === false) continue;
-          record.run(ctx, record);
+          if (feature.when !== null && feature.when(ctx, feature) === false) continue;
+          if (feature.cost > 0 && !this.budget.affords(feature.cost)) continue;
+          feature.run(ctx, feature);
+          feature.lastTick = tick;
+          feature.ran += 1;
           ran += 1;
         } catch (err) {
-          Logger.error(`RynRuntime: feature "${record.id}" threw in ${phase} -- ${err && err.message}`);
+          Logger.error(`RynRuntime: feature "${feature.id}" threw in ${phase} -- ${err && err.message}`);
         }
       }
       this.clock.leave();
+      this.events.emit("phase:done", {
+        phase: phase,
+        ran: ran,
+        of: ordered.length
+      });
       return ran;
     }
   }
+
+  // Which domain each unit belongs to. Every one of the sixty-four is placed;
+  // an unlisted id falls to UTILITY and is reported, so a new feature cannot
+  // quietly escape classification.
+  const RYN_UNIT_DOMAIN = Object.freeze({
+    // Combat — opening or finishing an exchange.
+    instakill: RYN_DOMAIN.COMBAT, smartInsta: RYN_DOMAIN.COMBAT,
+    reverseInstakill: RYN_DOMAIN.COMBAT, musketBowInsta: RYN_DOMAIN.COMBAT,
+    bowInsta: RYN_DOMAIN.COMBAT, platformMusket: RYN_DOMAIN.COMBAT,
+    swordKatanaInsta: RYN_DOMAIN.COMBAT, spikeGearInsta: RYN_DOMAIN.COMBAT,
+    toolHammerSpearInsta: RYN_DOMAIN.COMBAT, spikeTickBreak: RYN_DOMAIN.COMBAT,
+    spikeTickNear: RYN_DOMAIN.COMBAT, spikeTickTrap: RYN_DOMAIN.COMBAT,
+    trapTick: RYN_DOMAIN.COMBAT, spikeSync: RYN_DOMAIN.COMBAT,
+    spikeSyncHammer: RYN_DOMAIN.COMBAT, turretSync: RYN_DOMAIN.COMBAT,
+    autoSync: RYN_DOMAIN.COMBAT, preAttack: RYN_DOMAIN.COMBAT,
+    updateAttack: RYN_DOMAIN.COMBAT, useAttacking: RYN_DOMAIN.COMBAT,
+
+    // Placement — putting buildings on the ground.
+    autoPlacer: RYN_DOMAIN.PLACEMENT, placer: RYN_DOMAIN.PLACEMENT,
+    autoMill: RYN_DOMAIN.PLACEMENT, spikeTrap: RYN_DOMAIN.PLACEMENT,
+    teammateSpikeTrap: RYN_DOMAIN.PLACEMENT, trapAnimal: RYN_DOMAIN.PLACEMENT,
+    placementDefense: RYN_DOMAIN.PLACEMENT, trapKB: RYN_DOMAIN.PLACEMENT,
+
+    // Movement — where the player goes.
+    movement: RYN_DOMAIN.MOVEMENT, autoPush: RYN_DOMAIN.MOVEMENT,
+    safeWalk: RYN_DOMAIN.MOVEMENT, dashMovement: RYN_DOMAIN.MOVEMENT,
+    updateAngle: RYN_DOMAIN.MOVEMENT,
+
+    // Defense — surviving what the other side is doing.
+    antiInsta: RYN_DOMAIN.DEFENSE, antiSync: RYN_DOMAIN.DEFENSE,
+    antiRetrap: RYN_DOMAIN.DEFENSE, antiTrapProtect: RYN_DOMAIN.DEFENSE,
+    antiTrapStar: RYN_DOMAIN.DEFENSE, antiSpikePush: RYN_DOMAIN.DEFENSE,
+    autoShield: RYN_DOMAIN.DEFENSE, guardModule: RYN_DOMAIN.DEFENSE,
+    shameReset: RYN_DOMAIN.DEFENSE, adaptiveGearSwitching: RYN_DOMAIN.DEFENSE,
+
+    // Automation — things done without being asked.
+    autoBreak: RYN_DOMAIN.AUTOMATION, autoPlay: RYN_DOMAIN.AUTOMATION,
+    autoGrind: RYN_DOMAIN.AUTOMATION, autoSteal: RYN_DOMAIN.AUTOMATION,
+    turretSteal: RYN_DOMAIN.AUTOMATION, autoBuy: RYN_DOMAIN.AUTOMATION,
+    autoAccept: RYN_DOMAIN.AUTOMATION, clanJoiner: RYN_DOMAIN.AUTOMATION,
+    postKillCleanup: RYN_DOMAIN.AUTOMATION, winCleanup: RYN_DOMAIN.AUTOMATION,
+
+    // Utility — gear, bookkeeping, everything supporting the rest.
+    tempData: RYN_DOMAIN.UTILITY, reloading: RYN_DOMAIN.UTILITY,
+    useDestroying: RYN_DOMAIN.UTILITY, useFastest: RYN_DOMAIN.UTILITY,
+    utilityHat: RYN_DOMAIN.UTILITY, autoHat: RYN_DOMAIN.UTILITY,
+    defaultAcc: RYN_DOMAIN.UTILITY, defaultHat: RYN_DOMAIN.UTILITY,
+    killChat: RYN_DOMAIN.UTILITY, deathProvoke: RYN_DOMAIN.UTILITY,
+    rynLink: RYN_DOMAIN.UTILITY
+  });
 
   const ARBITER_BOT_BAND = 1000;
 
@@ -14413,9 +14636,14 @@ window.grbtp = 35;
       this.attacked = false;
       this.canHitEntity = false;
       this.autoattack = false;
-      for (const module of this.modules) {
-        if ("reset" in module) {
-          module.reset();
+      // Feature cleanup belongs to the runtime, which knows every registered
+      // feature and its onReset. Before units are enrolled there is nothing to
+      // walk, so the array is the fallback for that window only.
+      if (this._unitsRegistered) {
+        this.client.runtime.registry.resetAll();
+      } else {
+        for (const module of this.modules) {
+          if ("reset" in module) module.reset();
         }
       }
       if (isOwner) {
@@ -14695,29 +14923,42 @@ window.grbtp = 35;
     // split the placer here is free to spend the allowance down to the last
     // packet, and a heavy building second can leave the essentials short.
     packetLimit=115;
-    // Units register once and keep their record. Rank is seeded from the array
-    // position they used to be walked in, so the resolved order reproduces what
-    // the old loop produced -- the difference is that the number is written
-    // down, and moving a unit is an edit to it rather than a move of code.
+    // Units are enrolled as features. Each carries its own domain, priority,
+    // execution condition and reset, so the handler no longer holds the list,
+    // the order, or the cleanup — it only knows how to enrol what it was
+    // constructed with.
+    //
+    // Priority is seeded from the array position each unit used to be walked
+    // in, so the scheduled order reproduces the old loop. The difference is
+    // that the number is now written down and a unit can be moved without
+    // moving code, and `needs` can override it where an ordering is a real
+    // dependency rather than a habit.
     _unitsRegistered=false;
     _registerUnits(runtime) {
       if (this._unitsRegistered) return;
       this._unitsRegistered = true;
       const arbiter = this._arbiter;
-      const enrol = (unit, rank, ownerOnly) => {
+      const enrol = (unit, priority, botOnly) => {
+        const domain = RYN_UNIT_DOMAIN[unit.unitID];
+        if (domain === undefined) {
+          Logger.error(`RYN: "${unit.unitID}" has no domain -- filed under utility`);
+        }
         runtime.registry.add({
           id: unit.unitID,
+          domain: domain ?? RYN_DOMAIN.UTILITY,
           phase: RYN_PHASE.DECIDE,
-          rank: rank,
+          priority: priority,
           owner: unit,
-          enabled: () => ownerOnly === false ? this.client.isOwner === false : true,
-          run: () => arbiter.offer(unit, rank)
+          when: botOnly ? () => this.client.isOwner === false : null,
+          onReset: typeof unit.reset === "function" ? () => unit.reset() : null,
+          run: () => arbiter.offer(unit, priority)
         });
       };
-      for (let i = 0; i < this.botModules.length; i++) enrol(this.botModules[i], i, false);
-      for (let i = 0; i < this.modules.length; i++) enrol(this.modules[i], ARBITER_BOT_BAND + i, true);
+      for (let i = 0; i < this.botModules.length; i++) enrol(this.botModules[i], i, true);
+      for (let i = 0; i < this.modules.length; i++) enrol(this.modules[i], ARBITER_BOT_BAND + i, false);
       runtime.events.emit("units:registered", runtime.registry.size);
     }
+
     runTick() {
       this._flushShameHealQueue();
       if (Settings_ref._circleRotation && this.move_dir === null) {
@@ -14765,6 +15006,7 @@ window.grbtp = 35;
       // longer holds the unit list or the order.
       const runtime = this.client.runtime;
       runtime.clock.advance();
+      runtime.budget.open(this.packetLimit - this.packetCount);
       this._registerUnits(runtime);
       this._arbiter.begin();
       runtime.runPhase(RYN_PHASE.DECIDE, this);
