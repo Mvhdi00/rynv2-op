@@ -253,8 +253,7 @@ window.grbtp = 35;
     ws.binaryType = "arraybuffer";
     return ws;
   };
-  const createSocket_ref = createSocket;
-  const Hooker = new class {
+    const Hooker = new class {
     createRecursiveHook(target, prop, callback) {
       let newValue = target[prop];
       (function recursiveHook() {
@@ -303,8 +302,7 @@ window.grbtp = 35;
       configurable: true
     });
   };
-  const Hooker_ref = Hooker;
-  const Config = {
+    const Config = {
     maxScreenWidth: 1920,
     maxScreenHeight: 1080,
     serverUpdateRate: 9,
@@ -357,8 +355,7 @@ window.grbtp = 35;
     mapPingTime: 2200,
     skinColors: ["#bf8f54", "#cbb091", "#896c4b", "#fadadc", "#ececec", "#c37373", "#4c4c4c", "#ecaff7", "#738cc3", "#8bc373"]
   };
-  const Config_ref = Config;
-  const WeaponTypeString = [ "primary", "secondary" ];
+    const WeaponTypeString = [ "primary", "secondary" ];
   const Weapons = [ {
     id: 0,
     itemType: 0,
@@ -1426,8 +1423,7 @@ window.grbtp = 35;
       return this.x + ":" + this.y;
     }
   }
-  const Vector_ref = Vector;
-  const getAngle = (x1, y1, x2, y2) => Math.atan2(y2 - y1, x2 - x1);
+    const getAngle = (x1, y1, x2, y2) => Math.atan2(y2 - y1, x2 - x1);
   const getDistance = (x1, y1, x2, y2) => Math.hypot(x1 - x2, y1 - y2);
   const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
   const fixTo = (value, fraction) => parseFloat(value.toFixed(fraction));
@@ -1501,7 +1497,7 @@ window.grbtp = 35;
     const u = (q_p.x * r.y - q_p.y * r.x) / rxs;
     return t >= 0 && t <= 1 && u >= 0 && u <= 1;
   };
-  const lineIntersectsRect = (lineStart, lineEnd, rectStart, rectEnd) => pointInsideRect(lineStart, rectStart, rectEnd) || pointInsideRect(lineEnd, rectStart, rectEnd) || lineIntersectsLine(lineStart, lineEnd, rectStart, new Vector_ref(rectEnd.x, rectStart.y)) || lineIntersectsLine(lineStart, lineEnd, new Vector_ref(rectEnd.x, rectStart.y), rectEnd) || lineIntersectsLine(lineStart, lineEnd, rectEnd, new Vector_ref(rectStart.x, rectEnd.y)) || lineIntersectsLine(lineStart, lineEnd, new Vector_ref(rectStart.x, rectEnd.y), rectStart);
+  const lineIntersectsRect = (lineStart, lineEnd, rectStart, rectEnd) => pointInsideRect(lineStart, rectStart, rectEnd) || pointInsideRect(lineEnd, rectStart, rectEnd) || lineIntersectsLine(lineStart, lineEnd, rectStart, new Vector(rectEnd.x, rectStart.y)) || lineIntersectsLine(lineStart, lineEnd, new Vector(rectEnd.x, rectStart.y), rectEnd) || lineIntersectsLine(lineStart, lineEnd, rectEnd, new Vector(rectStart.x, rectEnd.y)) || lineIntersectsLine(lineStart, lineEnd, new Vector(rectStart.x, rectEnd.y), rectStart);
   const isActiveInput = () => {
     const active = document.activeElement || document.body;
     return active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
@@ -1613,14 +1609,14 @@ window.grbtp = 35;
   };
   const pointInRiver = position => {
     const y = position.y;
-    const below = y >= Config_ref.mapScale / 2 - Config_ref.riverWidth / 2;
-    const above = y <= Config_ref.mapScale / 2 + Config_ref.riverWidth / 2;
+    const below = y >= Config.mapScale / 2 - Config.riverWidth / 2;
+    const above = y <= Config.mapScale / 2 + Config.riverWidth / 2;
     return below && above;
   };
-  const pointInDesert = position => position.y >= Config_ref.mapScale - Config_ref.snowBiomeTop;
+  const pointInDesert = position => position.y >= Config.mapScale - Config.snowBiomeTop;
   const inRange = (value, min, max) => value >= min && value <= max;
   const targetInsideRect = (target, rectPos, radius) => {
-    const screen = new Vector_ref(1920, 1080).div(2).add(radius);
+    const screen = new Vector(1920, 1080).div(2).add(radius);
     const rectStart = rectPos.copy().sub(screen);
     const rectEnd = rectPos.copy().add(screen);
     return pointInsideRect(target, rectStart, rectEnd);
@@ -2390,8 +2386,7 @@ window.grbtp = 35;
       return "ignoreCollision" in Items[id];
     }
   };
-  const DataHandler_ref = DataHandler;
-  class ObjectItem {
+    class ObjectItem {
     id;
     pos;
     angle;
@@ -2399,7 +2394,7 @@ window.grbtp = 35;
     constructor(id, x, y, angle, scale) {
       this.id = id;
       this.pos = {
-        current: new Vector_ref(x, y)
+        current: new Vector(x, y)
       };
       this.angle = angle;
       this.scale = scale;
@@ -2493,7 +2488,7 @@ window.grbtp = 35;
     getDamage() {
       if (this.isSpike) {
         const type = this.type;
-        return DataHandler_ref.getItem(type).damage;
+        return DataHandler.getItem(type).damage;
       }
       return 0;
     }
@@ -2504,9 +2499,9 @@ window.grbtp = 35;
   class Entity {
     id=-1;
     pos={
-      previous: new Vector_ref,
-      current: new Vector_ref,
-      future: new Vector_ref
+      previous: new Vector,
+      current: new Vector,
+      future: new Vector
     };
     angle=0;
     scale=0;
@@ -2532,7 +2527,7 @@ window.grbtp = 35;
     }
     getFuturePosition(speed) {
       const pos = this.pos.current.copy();
-      return pos.add(Vector_ref.fromAngle(this.move_dir, speed));
+      return pos.add(Vector.fromAngle(this.move_dir, speed));
     }
     colliding(object, radius) {
       const {previous: a0, current: a1, future: a2} = this.pos;
@@ -2571,8 +2566,7 @@ window.grbtp = 35;
       return true;
     }
   }
-  const Entity_ref = Entity;
-  class EnemyManager {
+    class EnemyManager {
     client;
     dangerousEnemies=[];
     _nearestEnemy=[ null, null ];
@@ -2909,8 +2903,8 @@ window.grbtp = 35;
           const {primary: primary, secondary: secondary} = myPlayer.weapon;
           if (isPlayerObject && object.isDestroyable && secondary === 10 && primary !== null && primary !== 8) {
             const damage = myPlayer.getBuildingDamage(secondary, true);
-            const primaryRange = DataHandler_ref.getWeapon(primary).range + target.hitScale;
-            const secondaryRange = DataHandler_ref.getWeapon(secondary).range + object.hitScale;
+            const primaryRange = DataHandler.getWeapon(primary).range + target.hitScale;
+            const secondaryRange = DataHandler.getWeapon(secondary).range + object.hitScale;
             if (myPlayer.collidingSimple(target, primaryRange) && myPlayer.collidingSimple(object, secondaryRange) && object.health <= damage) {
               const itemType = 4;
               const spikeID = myPlayer.getItemByType(itemType);
@@ -3156,15 +3150,14 @@ window.grbtp = 35;
         }
       }
       if (this.client.isOwner) {
-        GameUI_ref.updateSpikeDamage(actualSpikeDamage);
-        GameUI_ref.updatePotentialDamage(`${this.potentialDamage}, ${this.primaryDamage}`);
-        GameUI_ref.updateDangerState(`${this.detectedDangerEnemy}, ${this.detectedEnemy}, ${this.dangerWithoutSoldier}, ${this.rangedBowInsta}`);
-        GameUI_ref.updateCollideSpike(this.collidingSpike);
+        GameUI.updateSpikeDamage(actualSpikeDamage);
+        GameUI.updatePotentialDamage(`${this.potentialDamage}, ${this.primaryDamage}`);
+        GameUI.updateDangerState(`${this.detectedDangerEnemy}, ${this.detectedEnemy}, ${this.dangerWithoutSoldier}, ${this.rangedBowInsta}`);
+        GameUI.updateCollideSpike(this.collidingSpike);
       }
     }
   }
-  const EnemyManager_ref = EnemyManager;
-  class LeaderboardManager {
+    class LeaderboardManager {
     client;
     list=new Set;
     constructor(client) {
@@ -3187,8 +3180,7 @@ window.grbtp = 35;
       }
     }
   }
-  const LeaderboardManager_ref = LeaderboardManager;
-  const HatPredictor = new class {
+    const HatPredictor = new class {
     transitions=new Map;
     train(history) {
       this.transitions.clear();
@@ -3218,10 +3210,9 @@ window.grbtp = 35;
       return predictedHat;
     }
   };
-  const HatPredictor_ref = HatPredictor;
-  const scale_value = window.grbtp;
+    const scale_value = window.grbtp;
   delete window.grbtp;
-  class Player extends Entity_ref {
+  class Player extends Entity {
     currentItem=-1;
     clanName=null;
     isLeader=false;
@@ -3364,7 +3355,7 @@ window.grbtp = 35;
       this.angle = angle;
       this.currentItem = currentItem;
       this.weapon.oldCurrent = this.weapon.current;
-      const weaponType = DataHandler_ref.getWeapon(this.weapon.current).itemType;
+      const weaponType = DataHandler.getWeapon(this.weapon.current).itemType;
       this.oldWeapon[weaponType] = this.weapon.current;
       this.weapon.current = currentWeapon;
       this.variant.current = weaponVariant;
@@ -3420,8 +3411,8 @@ window.grbtp = 35;
         this.poisonCount = Math.max(this.poisonCount - 1, 0);
       }
       if (this.futureHat === null) {
-        HatPredictor_ref.train(this.hatHistory);
-        this.futureHat = HatPredictor_ref.predict(hatID);
+        HatPredictor.train(this.hatHistory);
+        this.futureHat = HatPredictor.predict(hatID);
       }
       const reload = this.reload;
       reload[0].previous = reload[0].current;
@@ -3520,7 +3511,7 @@ window.grbtp = 35;
       if (this.currentItem !== -1) {
         return;
       }
-      const weapon = DataHandler_ref.getWeapon(this.weapon.current);
+      const weapon = DataHandler.getWeapon(this.weapon.current);
       const reload = this.reload[weapon.itemType];
       this.increaseReload(reload);
       if ("projectile" in weapon) {
@@ -3584,11 +3575,11 @@ window.grbtp = 35;
       const secondary = inventory[1];
       const spike = inventory[4];
       if (primary && secondary) {
-        if ("isUpgrade" in DataHandler_ref.getWeapon(primary) && "isUpgrade" in DataHandler_ref.getWeapon(secondary)) {
+        if ("isUpgrade" in DataHandler.getWeapon(primary) && "isUpgrade" in DataHandler.getWeapon(secondary)) {
           return true;
         }
       }
-      return primary && DataHandler_ref.getWeapon(primary).age === 8 || secondary && DataHandler_ref.getWeapon(secondary).age === 9 || spike && Items[spike].age === 9 || inventory[5] === 12 || inventory[9] === 20;
+      return primary && DataHandler.getWeapon(primary).age === 8 || secondary && DataHandler.getWeapon(secondary).age === 9 || spike && Items[spike].age === 9 || inventory[5] === 12 || inventory[9] === 20;
     }
     predictPrimary(id) {
       if (id === 11) {
@@ -3607,32 +3598,32 @@ window.grbtp = 35;
     }
     predictWeapons() {
       const {current: current, oldCurrent: oldCurrent} = this.weapon;
-      const weapon = DataHandler_ref.getWeapon(current);
+      const weapon = DataHandler.getWeapon(current);
       const type = WeaponTypeString[weapon.itemType];
       const reload = this.reload[weapon.itemType];
       const oldWeapon = this.oldWeapon[weapon.itemType];
-      const upgradedWeapon = oldWeapon === null || current !== oldWeapon && weapon.itemType === DataHandler_ref.getWeapon(oldWeapon).itemType;
+      const upgradedWeapon = oldWeapon === null || current !== oldWeapon && weapon.itemType === DataHandler.getWeapon(oldWeapon).itemType;
       if (reload.max === -1 || upgradedWeapon) {
         this.updateMaxReload(reload, weapon.id);
       }
       this.globalInventory[weapon.itemType] = current;
       this.variant[type] = this.variant.current;
       const currentType = this.weapon[type];
-      if (currentType === null || weapon.age > DataHandler_ref.getWeapon(currentType).age) {
+      if (currentType === null || weapon.age > DataHandler.getWeapon(currentType).age) {
         this.weapon[type] = current;
       }
       const primary = this.globalInventory[0];
       const secondary = this.globalInventory[1];
-      const notPrimaryUpgrade = primary === null || !("isUpgrade" in DataHandler_ref.getWeapon(primary));
-      const notSecondaryUpgrade = secondary === null || !("isUpgrade" in DataHandler_ref.getWeapon(secondary));
-      if (DataHandler_ref.isSecondary(current) && notPrimaryUpgrade) {
+      const notPrimaryUpgrade = primary === null || !("isUpgrade" in DataHandler.getWeapon(primary));
+      const notSecondaryUpgrade = secondary === null || !("isUpgrade" in DataHandler.getWeapon(secondary));
+      if (DataHandler.isSecondary(current) && notPrimaryUpgrade) {
         const predicted = this.predictPrimary(current);
-        if (primary === null || DataHandler_ref.getWeapon(predicted).upgradeType === DataHandler_ref.getWeapon(primary).upgradeType) {
+        if (primary === null || DataHandler.getWeapon(predicted).upgradeType === DataHandler.getWeapon(primary).upgradeType) {
           this.weapon.primary = predicted;
         }
-      } else if (DataHandler_ref.isPrimary(current) && notSecondaryUpgrade) {
+      } else if (DataHandler.isPrimary(current) && notSecondaryUpgrade) {
         const predicted = this.predictSecondary(current);
-        if (predicted === null || secondary === null || DataHandler_ref.getWeapon(predicted).upgradeType === DataHandler_ref.getWeapon(secondary).upgradeType) {
+        if (predicted === null || secondary === null || DataHandler.getWeapon(predicted).upgradeType === DataHandler.getWeapon(secondary).upgradeType) {
           this.weapon.secondary = predicted;
         }
       }
@@ -3653,7 +3644,7 @@ window.grbtp = 35;
       }
     }
     getWeaponVariant(id) {
-      const type = DataHandler_ref.getWeapon(id || 0).itemType;
+      const type = DataHandler.getWeapon(id || 0).itemType;
       const variant = this.variant[WeaponTypeString[type]];
       return {
         current: variant,
@@ -3661,7 +3652,7 @@ window.grbtp = 35;
       };
     }
     getBuildingDamage(id, isTank = false) {
-      const weapon = DataHandler_ref.getWeapon(id);
+      const weapon = DataHandler.getWeapon(id);
       const variant = WeaponVariants[this.getWeaponVariant(id).current];
       let damage = weapon.damage * variant.val;
       if ("sDmg" in weapon) {
@@ -3675,13 +3666,13 @@ window.grbtp = 35;
     }
     getMaxBuildingDamage(object, isTank = true) {
       const {primary: primary, secondary: secondary} = this.weapon;
-      if (DataHandler_ref.isMelee(secondary) && secondary === 10 && this.isReloaded(1, 1)) {
-        if (this.collidingSimple(object, DataHandler_ref.getWeapon(secondary).range + object.hitScale)) {
+      if (DataHandler.isMelee(secondary) && secondary === 10 && this.isReloaded(1, 1)) {
+        if (this.collidingSimple(object, DataHandler.getWeapon(secondary).range + object.hitScale)) {
           return this.getBuildingDamage(secondary, isTank);
         }
       }
-      if (DataHandler_ref.isMelee(primary) && this.isReloaded(0, 1)) {
-        if (this.collidingSimple(object, DataHandler_ref.getWeapon(primary).range + object.hitScale)) {
+      if (DataHandler.isMelee(primary) && this.isReloaded(0, 1)) {
+        if (this.collidingSimple(object, DataHandler.getWeapon(primary).range + object.hitScale)) {
           return this.getBuildingDamage(primary, isTank);
         }
       }
@@ -3701,7 +3692,7 @@ window.grbtp = 35;
         return -1;
       }
       const reloadSpeed = hat === 20 ? Hats[hat].atkSpd : 1;
-      const speed = DataHandler_ref.getWeapon(id).speed * reloadSpeed;
+      const speed = DataHandler.getWeapon(id).speed * reloadSpeed;
       return Math.ceil(speed / this.client.SocketManager.TICK);
     }
     getWeaponSpeedMult() {
@@ -3712,9 +3703,9 @@ window.grbtp = 35;
     }
     getMaxWeaponRange() {
       const {primary: primary, secondary: secondary} = this.weapon;
-      const primaryRange = DataHandler_ref.getWeapon(primary).range;
-      if (DataHandler_ref.isMelee(secondary)) {
-        const range = DataHandler_ref.getWeapon(secondary).range;
+      const primaryRange = DataHandler.getWeapon(primary).range;
+      if (DataHandler.isMelee(secondary)) {
+        const range = DataHandler.getWeapon(secondary).range;
         if (range > primaryRange) {
           return range;
         }
@@ -3725,27 +3716,27 @@ window.grbtp = 35;
       if (weaponID === null) {
         return 0;
       }
-      const range = DataHandler_ref.getWeapon(weaponID).range;
-      if (DataHandler_ref.isMelee(weaponID)) {
+      const range = DataHandler.getWeapon(weaponID).range;
+      if (DataHandler.isMelee(weaponID)) {
         return range + this.hitScale;
       }
       return range + this.collisionScale;
     }
     getMaxWeaponDamage(id, lookingShield, addBull = true) {
-      if (DataHandler_ref.isMelee(id)) {
+      if (DataHandler.isMelee(id)) {
         const bull = Hats[7];
         const variant = this.getWeaponVariant(id).current;
-        let damage = DataHandler_ref.getWeapon(id).damage;
+        let damage = DataHandler.getWeapon(id).damage;
         if (addBull) {
           damage *= bull.dmgMultO;
         }
         damage *= WeaponVariants[variant].val;
         if (lookingShield) {
-          damage *= DataHandler_ref.getWeapon(11).shield;
+          damage *= DataHandler.getWeapon(11).shield;
         }
         return damage;
-      } else if (DataHandler_ref.isShootable(id) && !lookingShield) {
-        const projectile = DataHandler_ref.getProjectile(id);
+      } else if (DataHandler.isShootable(id) && !lookingShield) {
+        const projectile = DataHandler.getProjectile(id);
         return projectile.damage;
       }
       return 0;
@@ -3754,17 +3745,17 @@ window.grbtp = 35;
       let knockback = 33.3;
       const {primary: primary, secondary: secondary} = this.weapon;
       if (primary != null) {
-        knockback += DataHandler_ref.getWeapon(primary).knockback;
+        knockback += DataHandler.getWeapon(primary).knockback;
       }
       if (secondary != null) {
-        knockback += DataHandler_ref.getWeapon(secondary).knockback;
+        knockback += DataHandler.getWeapon(secondary).knockback;
       }
       return knockback;
     }
     getPrimaryKnockback(target) {
       const {primary: primary} = this.weapon;
       if (primary !== null && this.isReloaded(0, 1)) {
-        const {range: range, knockback: knockback} = DataHandler_ref.getWeapon(primary);
+        const {range: range, knockback: knockback} = DataHandler.getWeapon(primary);
         if (this.collidingEntity(target, range)) {
           return knockback;
         }
@@ -3776,13 +3767,13 @@ window.grbtp = 35;
       const {primary: primary, secondary: secondary} = this.weapon;
       const hitScale = target.hitScale;
       if (primary !== null && this.isReloaded(0, 1)) {
-        const {range: range, knockback: knockback} = DataHandler_ref.getWeapon(primary);
+        const {range: range, knockback: knockback} = DataHandler.getWeapon(primary);
         if (this.collidingEntity(target, range + hitScale)) {
           output += knockback;
         }
       }
       if (secondary !== null && this.isReloaded(1, 1)) {
-        const {range: range, knockback: knockback} = DataHandler_ref.getWeapon(secondary);
+        const {range: range, knockback: knockback} = DataHandler.getWeapon(secondary);
         if (this.collidingEntity(target, range + hitScale)) {
           output += knockback;
         }
@@ -3858,7 +3849,7 @@ window.grbtp = 35;
       const primaryVariant = this.getWeaponVariant(primary).current;
       const isDiamondPolearm = primary === 5 && primaryVariant >= 2;
       const collidingPrimary = myPlayer.collidingEntity(this, primaryRange);
-      const collidingSecondary = myPlayer.collidingEntity(this, DataHandler_ref.isShootable(secondary) ? primaryRange : secondaryRange);
+      const collidingSecondary = myPlayer.collidingEntity(this, DataHandler.isShootable(secondary) ? primaryRange : secondaryRange);
       const collidingTurret = myPlayer.collidingEntity(this, turretRange);
       let spikeSyncDamage = 0;
       let includeTurret = false;
@@ -3874,7 +3865,7 @@ window.grbtp = 35;
         if (this.isReloaded(1, 1)) {
           this.potentialDamage += secondaryDamage;
         }
-        if (DataHandler_ref.isMelee(secondary)) {
+        if (DataHandler.isMelee(secondary)) {
           includeTurret = true;
         }
       }
@@ -3918,8 +3909,7 @@ window.grbtp = 35;
       return 0;
     }
   }
-  const Player_ref = Player;
-  const resizeEvent = new Event("resize");
+    const resizeEvent = new Event("resize");
   const ZoomHandler = new class {
     _scale={
       Default: {
@@ -3931,8 +3921,8 @@ window.grbtp = 35;
         _h: 1080
       },
       _smooth: {
-        _w: Hooker_ref.linker(1920),
-        _h: Hooker_ref.linker(1080)
+        _w: Hooker.linker(1920),
+        _h: Hooker.linker(1080)
       }
     };
     getScale() {
@@ -3968,14 +3958,13 @@ window.grbtp = 35;
       window.dispatchEvent(resizeEvent);
     }
   };
-  const ZoomHandler_ref = ZoomHandler;
-  const renderText = (ctx, text, size = 25, posx = 10, posy = 9) => {
+    const renderText = (ctx, text, size = 25, posx = 10, posy = 9) => {
     ctx.save();
     ctx.font = `700 ${size}px sans-serif`;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const scale = ZoomHandler_ref.getScale();
+    const scale = ZoomHandler.getScale();
     ctx.scale(scale, scale);
     ctx.fillStyle = "#eaeaea";
     ctx.strokeStyle = "#1f2029";
@@ -4279,7 +4268,7 @@ window.grbtp = 35;
       ctx.globalAlpha = previous;
     }
     _preRender() {
-      ZoomHandler_ref.smoothUpdate();
+      ZoomHandler.smoothUpdate();
       this.patchMyNameColor();
     }
     _postRender() {
@@ -4304,7 +4293,7 @@ window.grbtp = 35;
       this.totalTimes.push(now);
       const fps = this.totalTimes.length;
       if (now - this.lastLogTime >= 1e3) {
-        GameUI_ref.updateFPS(fps);
+        GameUI.updateFPS(fps);
         this.lastLogTime = now;
       }
       const canvas = document.querySelector("#gameCanvas");
@@ -4345,24 +4334,24 @@ window.grbtp = 35;
       const width = ctx.canvas.width;
       const height = ctx.canvas.height;
       ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, width, Config_ref.snowBiomeTop / Config_ref.mapScale * height);
+      ctx.fillRect(0, 0, width, Config.snowBiomeTop / Config.mapScale * height);
       ctx.fillStyle = "#dbc666";
-      ctx.fillRect(0, 12e3 / Config_ref.mapScale * height, width, height);
+      ctx.fillRect(0, 12e3 / Config.mapScale * height, width, height);
       ctx.fillStyle = "#91b2db";
-      const startY = (Config_ref.mapScale / 2 - Config_ref.riverWidth / 2) / Config_ref.mapScale * height;
-      ctx.fillRect(0, startY, width, Config_ref.riverWidth / Config_ref.mapScale * height);
+      const startY = (Config.mapScale / 2 - Config.riverWidth / 2) / Config.mapScale * height;
+      ctx.fillRect(0, startY, width, Config.riverWidth / Config.mapScale * height);
       const {services: ryn, myPlayer: myPlayer} = client;
       ctx.globalAlpha = 1;
       const markSize = 8;
       if (ryn.motion.followPath) {
-        const pos = ryn.motion.endTarget.copy().div(Config_ref.mapScale).mult(width);
+        const pos = ryn.motion.endTarget.copy().div(Config.mapScale).mult(width);
         ctx.fillStyle = "#c2383d";
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, markSize, 0, 2 * Math.PI);
         ctx.fill();
       }
       if (myPlayer.teleported) {
-        const pos = myPlayer.teleportPos.copy().div(Config_ref.mapScale).mult(width);
+        const pos = myPlayer.teleportPos.copy().div(Config.mapScale).mult(width);
         ctx.fillStyle = "#d76edb";
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, markSize, 0, 2 * Math.PI);
@@ -4781,8 +4770,8 @@ window.grbtp = 35;
       ctx.restore();
     }
     renderDistance(ctx, entity, player) {
-      const pos1 = new Vector_ref(player.x, player.y);
-      const pos2 = new Vector_ref(entity.x, entity.y);
+      const pos1 = new Vector(player.x, player.y);
+      const pos2 = new Vector(entity.x, entity.y);
       const entityTarget = client.PlayerManager.getEntity(entity.sid, !!entity.isPlayer);
       if (entityTarget === null) {
         return;
@@ -4799,7 +4788,7 @@ window.grbtp = 35;
       ctx.fill();
     }
     barContent(ctx, x, y, w, h, fill, color) {
-      const barPad = Config_ref.barPad;
+      const barPad = Config.barPad;
       ctx.fillStyle = color;
       this.roundRect(ctx, x + barPad, y + barPad, (w - barPad * 2) * fill, h - barPad * 2, 7);
       ctx.fill();
@@ -4816,7 +4805,7 @@ window.grbtp = 35;
       return nameY;
     }
     getContainerHeight(entity) {
-      const {barHeight: barHeight, barPad: barPad} = Config_ref;
+      const {barHeight: barHeight, barPad: barPad} = Config;
       let height = barHeight;
       if (entity.isPlayer) {
         const smallBarHeight = barHeight - 4;
@@ -4834,7 +4823,7 @@ window.grbtp = 35;
       return height;
     }
     renderBar(ctx, entity) {
-      const {barWidth: barWidth, barHeight: barHeight, barPad: barPad} = Config_ref;
+      const {barWidth: barWidth, barHeight: barHeight, barPad: barPad} = Config;
       const smallBarHeight = barHeight - 4;
       const totalWidth = barWidth + barPad;
       const scale = entity.scale + 34;
@@ -4846,7 +4835,7 @@ window.grbtp = 35;
       const player = entity.isPlayer && PlayerManager.playerData.get(entity.sid);
       const animal = entity.isAI && PlayerManager.animalData.get(entity.sid);
       let height = 0;
-      if (player instanceof Player_ref) {
+      if (player instanceof Player) {
         const [primary, secondary, turret] = player.reload;
         if (Settings_ref._playerTurretReloadBar) {
           this.barContainer(ctx, x, y + height, totalWidth * 2, smallBarHeight);
@@ -4878,7 +4867,7 @@ window.grbtp = 35;
       if (!Settings_ref._renderHP) {
         return;
       }
-      const {barPad: barPad, nameY: nameY} = Config_ref;
+      const {barPad: barPad, nameY: nameY} = Config;
       const containerHeight = this.getContainerHeight(entity);
       const text = `${Math.floor(entity.health)}`;
       const offset = entity.scale + nameY + barPad + containerHeight;
@@ -4906,7 +4895,7 @@ window.grbtp = 35;
       }
       const _offset = RYN._offset;
       const x = entity.x - _offset.x;
-      const y = entity.y - _offset.y - entity.scale - Config_ref.nameY - 26;
+      const y = entity.y - _offset.y - entity.scale - Config.nameY - 26;
       ctx.save();
       ctx.fillStyle = SHAME_COUNTER_COLOR;
       ctx.strokeStyle = "#22252b";
@@ -4923,7 +4912,7 @@ window.grbtp = 35;
       const _offset = RYN._offset;
       const x = object.x + object.xWiggle - _offset.x;
       const y = object.y + object.yWiggle - _offset.y;
-      const height = Config_ref.barHeight * .5 * sizeMult;
+      const height = Config.barHeight * .5 * sizeMult;
       const defaultScale = 10 + height / 2;
       const scale = defaultScale + 1 + offset;
       ctx.save();
@@ -4946,8 +4935,7 @@ window.grbtp = 35;
       return defaultScale - 3;
     }
   };
-  const Renderer_ref = Renderer;
-  const Animals = [ {
+    const Animals = [ {
     id: 0,
     src: "cow_1",
     hostile: false,
@@ -5158,8 +5146,7 @@ window.grbtp = 35;
     minSpawnRange: .85,
     maxSpawnRange: .9
   } ];
-  const Animals_ref = Animals;
-  const colors = [ [ "orange", "red" ], [ "aqua", "blue" ] ];
+    const colors = [ [ "orange", "red" ], [ "aqua", "blue" ] ];
   const EntityRenderer = new class {
     start=Date.now();
     step=0;
@@ -5169,9 +5156,9 @@ window.grbtp = 35;
       }
       const {myPlayer: myPlayer} = client;
       const current = myPlayer.weapon.current;
-      if (DataHandler_ref.isMelee(current)) {
-        const weapon = DataHandler_ref.getWeapon(current);
-        Renderer_ref.hexagon(ctx, player.x, player.y, weapon.range, "#f5cb42", .5, 1);
+      if (DataHandler.isMelee(current)) {
+        const weapon = DataHandler.getWeapon(current);
+        Renderer.hexagon(ctx, player.x, player.y, weapon.range, "#f5cb42", .5, 1);
       }
     }
     drawPlacement(ctx) {
@@ -5191,13 +5178,13 @@ window.grbtp = 35;
       for (let i = 0; i < angles.length; i++) {
         const angle = angles[i];
         const pos = myPlayer.pos.current.addDirection(angle, dist);
-        Renderer_ref.itemSprite(ctx, id, pos.x, pos.y, angle, Settings_ref._placementPreviewOpacity ?? .35);
+        Renderer.itemSprite(ctx, id, pos.x, pos.y, angle, Settings_ref._placementPreviewOpacity ?? .35);
       }
     }
     drawEntityHP(ctx, entity) {
-      Renderer_ref.renderBar(ctx, entity);
-      Renderer_ref.renderHP(ctx, entity);
-      Renderer_ref.renderShame(ctx, entity);
+      Renderer.renderBar(ctx, entity);
+      Renderer.renderHP(ctx, entity);
+      Renderer.renderShame(ctx, entity);
     }
     drawHitScale(ctx, entity) {
       if (!Settings_ref._weaponHitbox) {
@@ -5207,24 +5194,24 @@ window.grbtp = 35;
       const type = entity.isPlayer ? PlayerManager.playerData : PlayerManager.animalData;
       const target = type.get(entity.sid);
       if (target !== void 0) {
-        Renderer_ref.hexagon(ctx, entity.x, entity.y, target.hitScale, "#3f4ec4", .5, 1);
+        Renderer.hexagon(ctx, entity.x, entity.y, target.hitScale, "#3f4ec4", .5, 1);
       }
       if (entity.isAI && entity.index === 6) {
-        const moostafa = Animals_ref[6];
-        Renderer_ref.hexagon(ctx, entity.x, entity.y, moostafa.hitRange, "#f5cb42", .5, 1);
+        const moostafa = Animals[6];
+        Renderer.hexagon(ctx, entity.x, entity.y, moostafa.hitRange, "#f5cb42", .5, 1);
       }
     }
     drawDanger(ctx, entity) {}
     _render(ctx, entity, player) {
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2, services: ryn, ObjectManager: ObjectManager, InputHandler: InputHandler} = client;
       const isMyPlayer = entity === player;
-      const pos = new Vector_ref(entity.x, entity.y);
+      const pos = new Vector(entity.x, entity.y);
       if (isMyPlayer) {
         const now = Date.now();
         this.step = now - this.start;
         this.start = now;
         if (Settings_ref._displayPlayerAngle) {
-          Renderer_ref.line(ctx, pos, pos.addDirection(client.myPlayer.angle, 70), "#e9adf0");
+          Renderer.line(ctx, pos, pos.addDirection(client.myPlayer.angle, 70), "#e9adf0");
         }
         this.drawWeaponHitbox(ctx, player);
         this.drawPlacement(ctx);
@@ -5233,8 +5220,8 @@ window.grbtp = 35;
           const pushPos = autoPushModule ? autoPushModule.pushPos : null;
           const nearestPushSpike = client.EnemyManager.nearestPushSpike;
           if (pushPos !== null && nearestPushSpike !== null) {
-            Renderer_ref.line(ctx, pos, pushPos, "#a855f7", .85, 2);
-            Renderer_ref.line(ctx, pushPos, nearestPushSpike.pos.current, "#a855f7", .85, 2);
+            Renderer.line(ctx, pos, pushPos, "#a855f7", .85, 2);
+            Renderer.line(ctx, pushPos, nearestPushSpike.pos.current, "#a855f7", .85, 2);
           }
         }
         if (client.InputHandler.instaToggle) {
@@ -5244,7 +5231,7 @@ window.grbtp = 35;
             const ep = enemy.pos.current;
             const dist = pos.distance(ep);
             const primary = myPlayer.getItemByType(0);
-            const baseRange = primary !== null ? (DataHandler_ref.getWeapon(primary)?.range ?? 110) + (enemy.hitScale ?? 35) : 145;
+            const baseRange = primary !== null ? (DataHandler.getWeapon(primary)?.range ?? 110) + (enemy.hitScale ?? 35) : 145;
             const secondary = myPlayer.getItemByType(1);
             const shield = client.PlayerManager.lookingShield(enemy, myPlayer);
             const pdmg = myPlayer.getMaxWeaponDamage(primary, shield);
@@ -5298,24 +5285,23 @@ window.grbtp = 35;
         } catch (e) {}
       }
       if (Settings_ref._collisionHitbox) {
-        Renderer_ref.square(ctx, entity.x, entity.y, entity.scale, "#c7fff2", .5, 1);
+        Renderer.square(ctx, entity.x, entity.y, entity.scale, "#c7fff2", .5, 1);
       }
       if (!isMyPlayer) {
         this.drawHitScale(ctx, entity);
       }
       const instakillTarget = InputHandler.instakillTarget;
       if (entity.isPlayer && instakillTarget !== null && entity.sid === instakillTarget.id) {
-        Renderer_ref.drawTarget(ctx, entity);
+        Renderer.drawTarget(ctx, entity);
         const {bowInsta: bowInsta} = ryn.features.units;
         if (bowInsta.active) {
-          Renderer_ref.circle(ctx, entity.x, entity.y, bowInsta.distMin, "#eda0ee", .4, 1);
-          Renderer_ref.circle(ctx, entity.x, entity.y, bowInsta.distMax, "#eda0ee", .4, 1);
+          Renderer.circle(ctx, entity.x, entity.y, bowInsta.distMin, "#eda0ee", .4, 1);
+          Renderer.circle(ctx, entity.x, entity.y, bowInsta.distMax, "#eda0ee", .4, 1);
         }
       }
     }
   };
-  const EntityRenderer_ref = EntityRenderer;
-  class SpatialHashGrid2D {
+    class SpatialHashGrid2D {
     cellSize=0;
     grid=new Map;
     constructor(cellSize) {
@@ -5415,8 +5401,7 @@ window.grbtp = 35;
       return b.danger - a.danger;
     }
   }
-  const Sorting_ref = Sorting;
-  // How many candidate angles a placement helper hands back. Four is one per
+    // How many candidate angles a placement helper hands back. Four is one per
   // quadrant, which is enough spread that a refused angle has an alternative
   // pointing somewhere genuinely different.
   //
@@ -5547,7 +5532,7 @@ window.grbtp = 35;
     }
     getBestPlacementAngles(options) {
       const {position: position, id: id, targetAngle: targetAngle, ignoreID: ignoreID, reduce: reduce, preplace: preplace, fill: fill} = options;
-      const item = DataHandler_ref.getItem(id);
+      const item = DataHandler.getItem(id);
       const {myPlayer: myPlayer, services: ryn} = this.client;
       const length = myPlayer.getItemPlaceScale(id);
       const angles = [];
@@ -5584,9 +5569,9 @@ window.grbtp = 35;
           return finalAngles.slice(0, PLACE_ATTEMPTS);
         }
       }
-      let anglesSorted = finalAngles.sort(Sorting_ref.byAngleDistance(targetAngle));
+      let anglesSorted = finalAngles.sort(Sorting.byAngleDistance(targetAngle));
       if (reduce) {
-        if (!DataHandler_ref.canMoveOnTop(id) && ryn.motion.move_dir !== null && myPlayer.speed !== 0) {
+        if (!DataHandler.canMoveOnTop(id) && ryn.motion.move_dir !== null && myPlayer.speed !== 0) {
           const scale = item.scale;
           const offset = Math.asin(2 * scale / (2 * length));
           anglesSorted = anglesSorted.filter(angle => getAngleDist(angle, ryn.motion.move_dir) > offset);
@@ -5596,8 +5581,7 @@ window.grbtp = 35;
       return anglesSorted;
     }
   }
-  const ObjectManager_ref = ObjectManager;
-  const _RYNCrypto = function() {
+    const _RYNCrypto = function() {
     const _Do = new Uint32Array([ 1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298 ]);
     function _j(e, t) {
       return e >>> t | e << 32 - t;
@@ -6273,7 +6257,7 @@ window.grbtp = 35;
     }
   }
 
-  class Animal extends Entity_ref {
+  class Animal extends Entity {
     type;
     prevHealth=0;
     currentHealth=0;
@@ -6286,7 +6270,7 @@ window.grbtp = 35;
       super(client2);
     }
     canBeTrapped() {
-      return !("noTrap" in Animals_ref[this.type]);
+      return !("noTrap" in Animals[this.type]);
     }
     update(id, type, x, y, angle, health, nameIndex) {
       this.id = id;
@@ -6294,7 +6278,7 @@ window.grbtp = 35;
       this.pos.previous.setVec(this.pos.current);
       this.pos.current._setXY(x, y);
       this.setFuturePosition();
-      const animal = Animals_ref[type];
+      const animal = Animals[type];
       this.angle = angle;
       this.prevHealth = this.currentHealth;
       this.currentHealth = health;
@@ -6311,13 +6295,13 @@ window.grbtp = 35;
     }
     get attackRange() {
       if (this.type === 6) {
-        return Animals_ref[this.type].hitRange + Config_ref.playerScale;
+        return Animals[this.type].hitRange + Config.playerScale;
       }
       return this.scale;
     }
     get collisionRange() {
       if (this.type === 6) {
-        return Animals_ref[this.type].hitRange + Config_ref.playerScale;
+        return Animals[this.type].hitRange + Config.playerScale;
       }
       return this.scale + 60;
     }
@@ -6325,9 +6309,8 @@ window.grbtp = 35;
       return this.isHostile;
     }
   }
-  const Animal_ref = Animal;
-  class MovementSimulation {
-    speed=Config_ref.playerSpeed;
+    class MovementSimulation {
+    speed=Config.playerSpeed;
     scale=35;
     slowMult=1;
     xVel=0;
@@ -6354,10 +6337,10 @@ window.grbtp = 35;
       this.spikeCollision = false;
     }
     getPos() {
-      return new Vector_ref(this.x, this.y);
+      return new Vector(this.x, this.y);
     }
     getSpeed() {
-      return new Vector_ref(this.xVel, this.yVel).length * this.TICK;
+      return new Vector(this.xVel, this.yVel).length * this.TICK;
     }
     checkCollision(player, target, delta, isEnemyObject) {
       delta = delta || 1;
@@ -6369,7 +6352,7 @@ window.grbtp = 35;
         return false;
       }
       const scale = player.collisionScale + target.collisionScale;
-      const isPlayer = target instanceof Player_ref;
+      const isPlayer = target instanceof Player;
       if (isPlayer || !target.canMoveOnTop()) {
         const tmpDir = getAngle(pos2.x, pos2.y, pos1.x, pos1.y);
         if (isPlayer) {
@@ -6420,28 +6403,28 @@ window.grbtp = 35;
       const pos = this.getPos();
       const skin = Hats[autoHat.getNextHat()];
       const tail = Accessories[autoHat.getNextAcc()];
-      const weapon = DataHandler_ref.getWeapon(autoHat.getNextWeaponID());
+      const weapon = DataHandler.getWeapon(autoHat.getNextWeaponID());
       const weaponSpd = weapon.spdMult || 1;
       const skinSpd = "spdMult" in skin ? skin.spdMult : 1;
       const tailSpd = "spdMult" in tail ? tail.spdMult : 1;
-      const inSnow = pos.y <= Config_ref.snowBiomeTop && !("coldM" in skin);
-      const snowMult = inSnow ? Config_ref.snowSpeed : 1;
+      const inSnow = pos.y <= Config.snowBiomeTop && !("coldM" in skin);
+      const snowMult = inSnow ? Config.snowSpeed : 1;
       const buildMult = autoHat.getNextItemID() >= 0 ? .5 : 1;
       if (this.lockMove) {
         this.xVel = 0;
         this.yVel = 0;
       } else {
         let spdMult = buildMult * weaponSpd * skinSpd * tailSpd * snowMult * this.slowMult;
-        const riverMin = Config_ref.mapScale / 2 - Config_ref.riverWidth / 2;
-        const riverMax = Config_ref.mapScale / 2 + Config_ref.riverWidth / 2;
+        const riverMin = Config.mapScale / 2 - Config.riverWidth / 2;
+        const riverMax = Config.mapScale / 2 + Config.riverWidth / 2;
         const inRiver = !myPlayer.onPlatform && pos.y >= riverMin && pos.y <= riverMax;
         if (inRiver) {
           if ("watrImm" in skin) {
             spdMult *= .75;
-            this.xVel += Config_ref.waterCurrent * .4 * delta;
+            this.xVel += Config.waterCurrent * .4 * delta;
           } else {
             spdMult *= .33;
-            this.xVel += Config_ref.waterCurrent * delta;
+            this.xVel += Config.waterCurrent * delta;
           }
         }
         const moveDir = client2.services.motion.move_dir;
@@ -6483,29 +6466,29 @@ window.grbtp = 35;
         this.checkCollision(myPlayer, nearestEnemy, 1, false);
       }
       if (this.xVel) {
-        this.xVel *= Math.pow(Config_ref.playerDecel, delta);
+        this.xVel *= Math.pow(Config.playerDecel, delta);
         if (this.xVel >= -.01 && this.xVel <= .01) {
           this.xVel = 0;
         }
       }
       if (this.yVel) {
-        this.yVel *= Math.pow(Config_ref.playerDecel, delta);
+        this.yVel *= Math.pow(Config.playerDecel, delta);
         if (this.yVel >= -.01 && this.yVel <= .01) {
           this.yVel = 0;
         }
       }
-      this.x = clamp(this.x, this.scale, Config_ref.mapScale - this.scale);
-      this.y = clamp(this.y, this.scale, Config_ref.mapScale - this.scale);
+      this.x = clamp(this.x, this.scale, Config.mapScale - this.scale);
+      this.y = clamp(this.y, this.scale, Config.mapScale - this.scale);
     }
   }
-  class ClientPlayer extends Player_ref {
+  class ClientPlayer extends Player {
     inventory={};
     weaponXP=[ {}, {} ];
     itemCount=new Map;
     resources={};
     tempGold=0;
-    deathPosition=new Vector_ref;
-    teleportPos=new Vector_ref;
+    deathPosition=new Vector;
+    teleportPos=new Vector;
     teleported=false;
     inGame=false;
     wasDead=true;
@@ -6582,7 +6565,7 @@ window.grbtp = 35;
     }
     getBestDestroyingWeapon(target = null) {
       const primaryID = this.getItemByType(0);
-      const primary = DataHandler_ref.getWeapon(primaryID);
+      const primary = DataHandler.getWeapon(primaryID);
       const secondaryID = this.getItemByType(1);
       const isHammer = secondaryID === 10;
       const notStick = primary.damage !== 1;
@@ -6593,7 +6576,7 @@ window.grbtp = 35;
         return 0;
       }
       if (target != null && isHammer && notStick && notPolearm && this.isTrapped) {
-        const hammerRange = DataHandler_ref.getWeapon(secondaryID).range + target.hitScale + 1;
+        const hammerRange = DataHandler.getWeapon(secondaryID).range + target.hitScale + 1;
         const primaryRange = primary.range + target.hitScale;
         const pos1 = this.pos.current;
         const pos2 = target.pos.current;
@@ -6612,18 +6595,18 @@ window.grbtp = 35;
     }
     getWeaponRangeByType(type) {
       const item = this.getItemByType(type);
-      if (DataHandler_ref.isMelee(item)) {
-        return DataHandler_ref.getWeapon(item).range;
+      if (DataHandler.isMelee(item)) {
+        return DataHandler.getWeapon(item).range;
       }
       return 0;
     }
     getFastestWeapon() {
-      const primary = DataHandler_ref.getWeapon(this.getItemByType(0));
+      const primary = DataHandler.getWeapon(this.getItemByType(0));
       const secondaryID = this.getItemByType(1);
       if (secondaryID === null) {
         return 0;
       }
-      const secondary = DataHandler_ref.getWeapon(secondaryID);
+      const secondary = DataHandler.getWeapon(secondaryID);
       if (primary.spdMult > secondary.spdMult) {
         return 0;
       }
@@ -6647,9 +6630,9 @@ window.grbtp = 35;
     getMaxWeaponRangeClient() {
       const primary = this.inventory[0];
       const secondary = this.inventory[1];
-      const primaryRange = DataHandler_ref.getWeapon(primary).range;
-      if (DataHandler_ref.isMelee(secondary)) {
-        const range = DataHandler_ref.getWeapon(secondary).range;
+      const primaryRange = DataHandler.getWeapon(primary).range;
+      if (DataHandler.isMelee(secondary)) {
+        const range = DataHandler.getWeapon(secondary).range;
         if (range > primaryRange) {
           return range;
         }
@@ -6659,9 +6642,9 @@ window.grbtp = 35;
     getMaxRangeTypeDestroy() {
       const primaryID = this.inventory[0];
       const secondaryID = this.inventory[1];
-      const primary = DataHandler_ref.getWeapon(primaryID);
-      if (DataHandler_ref.isMelee(secondaryID)) {
-        const secondary = DataHandler_ref.getWeapon(secondaryID);
+      const primary = DataHandler.getWeapon(primaryID);
+      if (DataHandler.isMelee(secondaryID)) {
+        const secondary = DataHandler.getWeapon(secondaryID);
         if (secondaryID === 10 && secondary.range > primary.range) {
           return {
             type: 1,
@@ -6727,7 +6710,7 @@ window.grbtp = 35;
       ryn.actions.updateAngle(mouse.sentAngle, true);
       if (!isOwner) {
         const owner = this.client.ownerClient;
-        UI_ref.updateBotOption(this.client, "title");
+        UI.updateBotOption(this.client, "title");
         owner.clientIDList.add(this.id);
         units.tempData.setAttacking(owner.services.actions.attacking);
         units.tempData.setStore(0, owner.services.loadout.store[0].actual);
@@ -6744,7 +6727,7 @@ window.grbtp = 35;
       }
     }
     isUpgradeWeapon(id) {
-      const weapon = DataHandler_ref.getWeapon(id);
+      const weapon = DataHandler.getWeapon(id);
       if ("upgradeOf" in weapon) {
         return this.inventory[weapon.itemType] === weapon.upgradeOf;
       }
@@ -6778,7 +6761,7 @@ window.grbtp = 35;
       this.age = age;
       // Bots share this path; only the player's own age belongs on the HUD.
       if (this.client.isOwner) {
-        GameUI_ref.updateAge(age);
+        GameUI.updateAge(age);
       }
     }
     upgradeItem(id) {
@@ -6793,7 +6776,7 @@ window.grbtp = 35;
         }
       }
       if (id < 16) {
-        const weapon = DataHandler_ref.getWeapon(id);
+        const weapon = DataHandler.getWeapon(id);
         this.inventory[weapon.itemType] = id;
         const XP = this.weaponXP[weapon.itemType];
         XP.current = 0;
@@ -6823,7 +6806,7 @@ window.grbtp = 35;
     updateItemCount(group, count) {
       this.itemCount.set(group, count);
       if (this.client.isOwner) {
-        GameUI_ref.updateItemCount(group);
+        GameUI.updateItemCount(group);
       }
     }
     updateResources(type, amount) {
@@ -6843,7 +6826,7 @@ window.grbtp = 35;
         this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "totalKills", by: difference });
         this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "globalKills", by: difference, global: true });
         if (this.client.isOwner) {
-          GameUI_ref.updateTotalKills(this.totalKills);
+          GameUI.updateTotalKills(this.totalKills);
         }
         return;
       }
@@ -6851,7 +6834,7 @@ window.grbtp = 35;
     }
     updateWeaponXP(amount) {
       const {next: next} = this.getWeaponVariant(this.weapon.current);
-      const XP = this.weaponXP[DataHandler_ref.getWeapon(this.weapon.current).itemType];
+      const XP = this.weaponXP[DataHandler.getWeapon(this.weapon.current).itemType];
       const maxXP = WeaponVariants[next].needXP;
       XP.current += amount;
       if (XP.max !== -1 && XP.current >= XP.max) {
@@ -6894,7 +6877,7 @@ window.grbtp = 35;
     }
     spawn(customName) {
       const name = customName || this.client._botCustomName || window.localStorage.getItem("moo_name") || "";
-      const skin = this.client.isOwner ? Number(window.localStorage.getItem("skin_color")) || 0 : Math.floor(Math.random() * Config_ref.skinColors.length);
+      const skin = this.client.isOwner ? Number(window.localStorage.getItem("skin_color")) || 0 : Math.floor(Math.random() * Config.skinColors.length);
       this.client.network.emit("spawn", name, 1, skin === 10 ? "constructor" : skin);
     }
     handleJoinRequest(id, name) {
@@ -6924,8 +6907,8 @@ window.grbtp = 35;
       this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "deaths", by: 1 });
       this.deaths += 1;
       if (this.client.isOwner) {
-        GameUI_ref.reset();
-        GameUI_ref.updateTotalDeaths(this.deaths);
+        GameUI.reset();
+        GameUI.updateTotalDeaths(this.deaths);
       }
       if (window._gbot1v1BotID !== null && this.client === window._gbot1v1BotID) {
         setTimeout(() => {
@@ -6950,8 +6933,7 @@ window.grbtp = 35;
       }
     }
   }
-  const ClientPlayer_ref = ClientPlayer;
-  class PlayerManager {
+    class PlayerManager {
     playerData=new Map;
     players=[];
     enemies=[];
@@ -6983,7 +6965,7 @@ window.grbtp = 35;
       if (socketID === this.client.clientID && myPlayer.id === -1) {
         myPlayer.playerInit(id);
       }
-      const player = this.playerData.get(id) || new Player_ref(this.client);
+      const player = this.playerData.get(id) || new Player(this.client);
       if (!this.playerData.has(id)) {
         this.playerData.set(id, player);
       }
@@ -7011,8 +6993,8 @@ window.grbtp = 35;
       const pos = target.pos.current;
       const distance = player.pos.current.distance(pos);
       const angle = player.pos.current.angle(pos);
-      const range = DataHandler_ref.getWeapon(weaponID).range + target.hitScale;
-      return distance <= range && getAngleDist(angle, player.angle) <= Config_ref.gatherAngle;
+      const range = DataHandler.getWeapon(weaponID).range + target.hitScale;
+      return distance <= range && getAngleDist(angle, player.angle) <= Config.gatherAngle;
     }
     attackPlayer(id, gathering, weaponID) {
       const player = this.playerData.get(id);
@@ -7026,7 +7008,7 @@ window.grbtp = 35;
       if (isMyPlayer && !myPlayer.inGame) {
         return;
       }
-      const weapon = DataHandler_ref.getWeapon(weaponID);
+      const weapon = DataHandler.getWeapon(weaponID);
       const type = weapon.itemType;
       player.updateMaxReload(reload[type], weaponID);
       player.resetCurrentReload(reload[type]);
@@ -7084,7 +7066,7 @@ window.grbtp = 35;
       for (let i = 0; i < buffer.length; i += 7) {
         const id = buffer[i];
         if (!this.animalData.has(id)) {
-          this.animalData.set(id, new Animal_ref(this.client));
+          this.animalData.set(id, new Animal(this.client));
         }
         const animal = this.animalData.get(id);
         animal.update(id, buffer[i + 1], buffer[i + 2], buffer[i + 3], buffer[i + 4], buffer[i + 5], buffer[i + 6]);
@@ -7127,16 +7109,16 @@ window.grbtp = 35;
       if (player == null) {
         throw Error("isEnemyByID Error: Failed to find an owner!");
       }
-      if (player instanceof ClientPlayer_ref) {
+      if (player instanceof ClientPlayer) {
         return player.isEnemyByID(target.id);
       }
-      if (target instanceof ClientPlayer_ref) {
+      if (target instanceof ClientPlayer) {
         return target.isEnemyByID(player.id);
       }
       return this.isEnemy(player, target);
     }
     isEnemyTarget(owner, target) {
-      if (target instanceof Animal_ref) {
+      if (target instanceof Animal) {
         return true;
       }
       if (!this.client.isOwner) {
@@ -7146,13 +7128,13 @@ window.grbtp = 35;
       return this.isEnemyByID(owner.id, target);
     }
     canShoot(ownerID, target) {
-      return target instanceof Animal_ref || this.isEnemyByID(ownerID, target);
+      return target instanceof Animal || this.isEnemyByID(ownerID, target);
     }
     canMoveOnTop(object) {
       if (object instanceof Resource) {
         return false;
       }
-      const item = DataHandler_ref.getItem(object.type);
+      const item = DataHandler.getItem(object.type);
       const isEnemyObject = this.isEnemyByID(object.ownerID, this.client.myPlayer);
       if ("ignoreCollision" in item && (object.type !== 15 || !isEnemyObject)) {
         return true;
@@ -7160,7 +7142,7 @@ window.grbtp = 35;
       return false;
     }
     lookingShield(owner, target) {
-      if (owner instanceof Animal_ref) {
+      if (owner instanceof Animal) {
         return false;
       }
       const weapon = owner.weapon.current;
@@ -7172,11 +7154,10 @@ window.grbtp = 35;
       const pos2 = target.pos.current;
       const angle = pos1.angle(pos2);
       const ownerAngle = myPlayer.isMyPlayerByID(owner.id) ? ryn.actions.mouse.sentAngle : owner.angle;
-      return getAngleDist(angle, ownerAngle) <= Config_ref.shieldAngle;
+      return getAngleDist(angle, ownerAngle) <= Config.shieldAngle;
     }
   }
-  const PlayerManager_ref = PlayerManager;
-  class ProjectileManager {
+    class ProjectileManager {
     client;
     projectiles=new Map;
     ignoreCreation=new Map;
@@ -7248,8 +7229,7 @@ window.grbtp = 35;
       this.toRemove.clear();
     }
   }
-  const ProjectileManager_ref = ProjectileManager;
-  class Projectile {
+    class Projectile {
     pos={};
     angle;
     range;
@@ -7285,8 +7265,7 @@ window.grbtp = 35;
       return this.life <= 0;
     }
   }
-  const Projectile_ref = Projectile;
-  const StoreHandler = new class {
+    const StoreHandler = new class {
     isOpened=false;
     store=[ {
       previous: -1,
@@ -7324,7 +7303,7 @@ window.grbtp = 35;
         const scale = Math.sign(event.deltaY) * 50;
         itemHolder.scroll(0, itemHolder.scrollTop + scale);
       });
-      const {gameUI: gameUI} = GameUI_ref.getElements();
+      const {gameUI: gameUI} = GameUI.getElements();
       gameUI.appendChild(storeContainer);
     }
     getTextEquip(type, id, price) {
@@ -7355,11 +7334,11 @@ window.grbtp = 35;
       return div.firstElementChild;
     }
     fillStore(type) {
-      const {itemHolder: itemHolder} = GameUI_ref.getElements();
+      const {itemHolder: itemHolder} = GameUI.getElements();
       itemHolder.innerHTML = "";
       const items = Settings_ref._storeItems[type];
       for (const id of items) {
-        const item = DataHandler_ref.getStoreItem(type, id);
+        const item = DataHandler.getStoreItem(type, id);
         const element = this.generateStoreElement(type, id, item.name, item.price, "topSprite" in item);
         itemHolder.appendChild(element);
       }
@@ -7394,25 +7373,25 @@ window.grbtp = 35;
       }
     }
     closeStore() {
-      const {storeContainer: storeContainer, itemHolder: itemHolder} = GameUI_ref.getElements();
+      const {storeContainer: storeContainer, itemHolder: itemHolder} = GameUI.getElements();
       itemHolder.innerHTML = "";
       storeContainer.style.display = "none";
       this.isOpened = false;
     }
     openStore() {
-      GameUI_ref.closePopups();
-      const {storeContainer: storeContainer} = GameUI_ref.getElements();
+      GameUI.closePopups();
+      const {storeContainer: storeContainer} = GameUI.getElements();
       this.fillStore(this.currentType);
       storeContainer.style.display = "";
       storeContainer.classList.remove("closedItem");
       this.isOpened = true;
     }
     toggleStore() {
-      const {storeContainer: storeContainer, itemHolder: itemHolder} = GameUI_ref.getElements();
+      const {storeContainer: storeContainer, itemHolder: itemHolder} = GameUI.getElements();
       if (this.isOpened) {
         itemHolder.innerHTML = "";
       } else {
-        GameUI_ref.closePopups();
+        GameUI.closePopups();
         this.fillStore(this.currentType);
       }
       storeContainer.style.display = storeContainer.style.display === "none" ? "" : "none";
@@ -7422,8 +7401,7 @@ window.grbtp = 35;
       this.createStore(0);
     }
   };
-  const StoreHandler_ref = StoreHandler;
-  class SocketManager {
+    class SocketManager {
     client;
     socket=null;
     PacketQueue=[];
@@ -7470,7 +7448,7 @@ window.grbtp = 35;
       }
       if (!Number.isFinite(this.pong) || this.pong < 0) this.pong = 0;
       if (this.client.isOwner) {
-        GameUI_ref.updatePing(this.pong);
+        GameUI.updatePing(this.pong);
       }
       clearTimeout(this.pingTimeout);
       this.pingTimeout = setTimeout(() => {
@@ -7506,7 +7484,7 @@ window.grbtp = 35;
         } catch (e) {}
         this.client.network.emit("ping");
         if (this.client.isOwner) {
-          GameUI_ref.loadGame();
+          GameUI.loadGame();
           Logger.test("Successfully connected to a server..");
         } else {
           this.client.myPlayer.spawn();
@@ -7617,7 +7595,7 @@ window.grbtp = 35;
             const owner = PlayerManager2.playerData.get(turret.ownerID);
             if (owner !== void 0) {
               const projTurret = Projectiles[1];
-              const projectile = new Projectile_ref(angle, projTurret.range, projTurret.speed, projTurret.index, projTurret.layer, -1);
+              const projectile = new Projectile(angle, projTurret.range, projTurret.speed, projTurret.index, projTurret.layer, -1);
               projectile.pos.current = turret.pos.current.copy();
               projectile.ownerClient = owner;
               turret.projectile = projectile;
@@ -7646,8 +7624,8 @@ window.grbtp = 35;
             ProjectileManager2.ignoreCreation.delete(key);
             return;
           }
-          const projectile = new Projectile_ref(angle, temp[4], temp[5], temp[6], temp[7], temp[8]);
-          projectile.pos.current = projectile.formatFromCurrent(new Vector_ref(x, y), false);
+          const projectile = new Projectile(angle, temp[4], temp[5], temp[6], temp[7], temp[8]);
+          projectile.pos.current = projectile.formatFromCurrent(new Vector(x, y), false);
           ProjectileManager2.createProjectile(projectile);
           break;
         }
@@ -7711,7 +7689,7 @@ window.grbtp = 35;
        case "5":
         {
           const action = temp[1] === 0 ? 1 : 0;
-          StoreHandler_ref.updateStoreState(temp[3], action, temp[2]);
+          StoreHandler.updateStoreState(temp[3], action, temp[2]);
           if (temp[1] === 0) {
             const boughtStorage = ryn.loadout.bought[temp[3]];
             if (boughtStorage !== void 0) {
@@ -7743,8 +7721,7 @@ window.grbtp = 35;
       }
     }
   }
-  const SocketManager_ref = SocketManager;
-  // Telemetry, recorded by subscription rather than by reaching into a manager.
+    // Telemetry, recorded by subscription rather than by reaching into a manager.
   //
   // Nine sites used to assign onto StatsManager from inside gameplay -- a unit
   // that had just dodged a sync wrote the counter itself, which meant every
@@ -7844,49 +7821,49 @@ window.grbtp = 35;
       if (!this.client.isOwner) {
         return;
       }
-      UI_ref.updateStats("_totalKills", this._totalKills);
+      UI.updateStats("_totalKills", this._totalKills);
     }
     set globalKills(value) {
       this._globalKills += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_ref.updateStats("_globalKills", this._globalKills);
+      UI.updateStats("_globalKills", this._globalKills);
     }
     set deaths(value) {
       this._deaths += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_ref.updateStats("_deaths", this._deaths);
+      UI.updateStats("_deaths", this._deaths);
     }
     set autoSyncTimes(value) {
       this._autoSyncTimes += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_ref.updateStats("_autoSyncTimes", this._autoSyncTimes);
+      UI.updateStats("_autoSyncTimes", this._autoSyncTimes);
     }
     set spikeSyncHammerTimes(value) {
       this._spikeSyncHammerTimes += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_ref.updateStats("_spikeSyncHammerTimes", this._spikeSyncHammerTimes);
+      UI.updateStats("_spikeSyncHammerTimes", this._spikeSyncHammerTimes);
     }
     set spikeSyncTimes(value) {
       this._spikeSyncTimes += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_ref.updateStats("_spikeSyncTimes", this._spikeSyncTimes);
+      UI.updateStats("_spikeSyncTimes", this._spikeSyncTimes);
     }
   }
   class InputHandler {
     client;
     hotkeys=new Map;
     move;
-    lastPosition=new Vector_ref(0, 0);
+    lastPosition=new Vector(0, 0);
     lockPosition=false;
     mouse={
       x: 0,
@@ -7916,7 +7893,7 @@ window.grbtp = 35;
       window.addEventListener("mouseup", event => this.handleMouseup(event), true);
       window.addEventListener("mousemove", event => this.handleMouseMove(event), true);
       window.addEventListener("mouseover", event => this.handleMouseMove(event), true);
-      window.addEventListener("wheel", event => ZoomHandler_ref.handler(event), true);
+      window.addEventListener("wheel", event => ZoomHandler.handler(event), true);
     }
     placementHandler(type, code) {
       const {isOwner: isOwner, clients: clients} = this.client;
@@ -7937,11 +7914,11 @@ window.grbtp = 35;
       }
       const {myPlayer: myPlayer} = this.client;
       const pos = myPlayer.pos.future;
-      const {_w: w, _h: h} = ZoomHandler_ref._scale.current;
+      const {_w: w, _h: h} = ZoomHandler._scale.current;
       const scale = Math.max(window.innerWidth / w, window.innerHeight / h);
       const cursorX = (this.mouse.x - window.innerWidth / 2) / scale;
       const cursorY = (this.mouse.y - window.innerHeight / 2) / scale;
-      return new Vector_ref(pos.x + cursorX, pos.y + cursorY);
+      return new Vector(pos.x + cursorX, pos.y + cursorY);
     }
     getMovePosition(force = false) {
       if (!force && this.lockPosition) {
@@ -7992,15 +7969,15 @@ window.grbtp = 35;
       if (event.repeat) {
         return;
       }
-      if (UI_ref.isActiveButton()) {
+      if (UI.isActiveButton()) {
         return;
       }
       const isInput = isActiveInput();
       if (event.code === Settings_ref._toggleMenu && !isInput) {
-        UI_ref.toggleMenu();
+        UI.toggleMenu();
       }
-      if (event.code === Settings_ref._toggleChat && !UI_ref.isMenuOpened) {
-        GameUI_ref.handleEnter(event);
+      if (event.code === Settings_ref._toggleChat && !UI.isMenuOpened) {
+        GameUI.handleEnter(event);
       }
       if (!this.client.myPlayer.inGame) {
         return;
@@ -8098,7 +8075,7 @@ window.grbtp = 35;
       }
       if (event.code === Settings_ref._spawnBot) {
         try {
-          const doc = UI_ref.frame && UI_ref.frame.document;
+          const doc = UI.frame && UI.frame.document;
           if (doc) {
             const addBtn = doc.querySelector("#add-bot-dynamic");
             if (addBtn) {
@@ -8262,14 +8239,14 @@ window.grbtp = 35;
       if (event.code === Settings_ref._autoMillKey) {
         try {
           Settings_ref._automill = !Settings_ref._automill;
-          const autoMillEl = UI_ref.frame && UI_ref.frame.document && UI_ref.frame.document.getElementById("_automill");
+          const autoMillEl = UI.frame && UI.frame.document && UI.frame.document.getElementById("_automill");
           if (autoMillEl) autoMillEl.checked = Settings_ref._automill;
         } catch (_) {}
       }
       if (event.code === Settings_ref._dashMovementKey) {
         try {
           Settings_ref._dashMovement = !Settings_ref._dashMovement;
-          const dashEl = UI_ref.frame && UI_ref.frame.document && UI_ref.frame.document.getElementById("_dashMovement");
+          const dashEl = UI.frame && UI.frame.document && UI.frame.document.getElementById("_dashMovement");
           if (dashEl) dashEl.checked = Settings_ref._dashMovement;
         } catch (_) {}
       }
@@ -8278,7 +8255,7 @@ window.grbtp = 35;
           const grindMod = window.client.services.features?.units?.autoGrind;
           if (Settings_ref._autoGrind || !grindMod || !grindMod.isFullyUpgraded()) {
             Settings_ref._autoGrind = !Settings_ref._autoGrind;
-            const grindEl = UI_ref.frame && UI_ref.frame.document && UI_ref.frame.document.getElementById("_autoGrind");
+            const grindEl = UI.frame && UI.frame.document && UI.frame.document.getElementById("_autoGrind");
             if (grindEl) grindEl.checked = Settings_ref._autoGrind;
           }
         } catch (_) {}
@@ -8308,7 +8285,7 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
-      if (UI_ref.isMenuOpened) {
+      if (UI.isMenuOpened) {
         return;
       }
     }
@@ -8441,8 +8418,7 @@ window.grbtp = 35;
       this.handleBuy(1);
     }
   }
-  const TempData_ref = TempData;
-  window._gbot1v1BotID = null;
+    window._gbot1v1BotID = null;
   window._gbot1v1LastBuild = 0;
   window._gbot1v1WinCleanup = null;
   class Movement {
@@ -8774,8 +8750,7 @@ window.grbtp = 35;
       }
     }
   }
-  const Movement_ref = Movement;
-  class ClanJoiner {
+    class ClanJoiner {
     unitID="clanJoiner";
     client;
     joinCount=0;
@@ -8835,8 +8810,7 @@ window.grbtp = 35;
       }
     }
   }
-  const ClanJoiner_ref = ClanJoiner;
-
+  
   class Autobreak {
     unitID="autoBreak";
     client;
@@ -8916,8 +8890,8 @@ window.grbtp = 35;
       if (id === null) {
         return 0;
       }
-      if (DataHandler_ref.isMelee(id)) {
-        return DataHandler_ref.getWeapon(id).range + target.hitScale;
+      if (DataHandler.isMelee(id)) {
+        return DataHandler.getWeapon(id).range + target.hitScale;
       }
       return 0;
     }
@@ -8967,7 +8941,7 @@ window.grbtp = 35;
       // finish: the swing landed at a third of the assumed damage and the
       // building survived. Only count it when we are already wearing it.
       const primaryDamage = myPlayer.getBuildingDamage(primary, myPlayer.hatID === 40);
-      const _pw = DataHandler_ref?.getWeapon?.(primary);
+      const _pw = DataHandler?.getWeapon?.(primary);
       const isFastPrimary = (_pw?.speed ?? 1e9) < 400;
       const canOneHitWithPrimary = primaryDamage >= target.health;
       if (isFastPrimary && canOneHitWithPrimary && inPrimaryRange) {
@@ -8997,7 +8971,7 @@ window.grbtp = 35;
       const myPos = myPlayer.pos.current;
       const enemyPos = enemy.pos.current;
       const hammerDmg = myPlayer.getBuildingDamage?.(secondary, myPlayer.hatID === 40) ?? 0;
-      const hammerWD = DataHandler_ref.getWeapon(secondary);
+      const hammerWD = DataHandler.getWeapon(secondary);
       const spikeItem = Items[spikeId];
       const spikeReach = spikeItem.scale + enemy.collisionScale;
       let best = null, bestScore = -Infinity;
@@ -9218,8 +9192,7 @@ window.grbtp = 35;
       bid.moveTo = pos0.angle(this.pushPos);
     }
   }
-  const AutoPush_ref = AutoPush;
-  class AutoPlay {
+    class AutoPlay {
     unitID="autoPlay";
     client;
     circleDirection=1;
@@ -9279,8 +9252,7 @@ window.grbtp = 35;
       ryn.motion.start(moveAngle);
     }
   }
-  const AutoPlay_ref = AutoPlay;
-  class TrapTick {
+    class TrapTick {
     unitID="trapTick";
     client;
     constructor(client2) {
@@ -9289,8 +9261,7 @@ window.grbtp = 35;
     reset() {}
     runTick(bid) {}
   }
-  const TrapTick_ref = TrapTick;
-  // ==========================================================================
+    // ==========================================================================
   // Placer — autoplace, preplace and replace
   //
   // One pass per tick produces one list: the builds RYN wants on the ground,
@@ -9565,333 +9536,6 @@ window.grbtp = 35;
     return Array.isArray(angles) ? angles.length > 0 : !!angles;
   }
 
-  // ==========================================================================
-  // RYN placement subsystem
-  //
-  // The placer this stands beside is one 900-line class that generates angles,
-  // judges them, decides what to build, spends the allowance and drives the
-  // send timers. Adding an object type meant editing predicates in the middle
-  // of it, and geometry could not be exercised without a live client.
-  //
-  // Four owners, and geometry never touches the wire:
-  //
-  //   RynPlacementState     what is pending, refused, on cooldown, spent
-  //   RynPlacementEngine    candidate generation and the three validations
-  //   RynPlacementSolver    scoring and selection, from registered rules
-  //   RynPlacementExecutor  a decision turned into actions, sent through net
-  //
-  // Object types are entries in a table. Spikes, traps and mills are three
-  // rows; a fourth is a row, not a branch somewhere inside a predicate.
-  // ==========================================================================
-
-  // What the engine needs to know about a placeable thing. `itemType` is the
-  // slot the game selects by; everything else is read off the item at runtime
-  // so a new row needs no numbers copied into it.
-  const RYN_PLACEABLE = Object.freeze({
-    spike: {
-      key: "spike",
-      itemType: ITEM_SPIKE,
-      group: 2,
-      cost: PLACE_PACKET_COST,
-      priority: RYN_NET_PRIORITY.ACTION
-    },
-    trap: {
-      key: "trap",
-      itemType: ITEM_TRAP,
-      group: 5,
-      cost: PLACE_PACKET_COST,
-      priority: RYN_NET_PRIORITY.ACTION
-    },
-    mill: {
-      key: "mill",
-      itemType: 3,
-      group: 3,
-      cost: PLACE_PACKET_COST,
-      priority: RYN_NET_PRIORITY.BACKGROUND
-    }
-  });
-
-  // A candidate is a place a build could go, with the facts a rule needs to
-  // judge it. Deliberately inert: no rule, no scoring, no side effect.
-  class RynPlacementCandidate {
-    profile;
-    itemID;
-    angle;
-    x;
-    y;
-    scale;
-    flush;
-    score = 0;
-    reasons = [];
-    constructor(profile, itemID, angle, x, y, scale, flush) {
-      this.profile = profile;
-      this.itemID = itemID;
-      this.angle = angle;
-      this.x = x;
-      this.y = y;
-      this.scale = scale;
-      this.flush = flush;
-    }
-    // Rules add to a candidate rather than returning a verdict, so the reason
-    // a placement won is inspectable instead of being lost in a boolean.
-    credit(points, why) {
-      this.score += points;
-      this.reasons.push(why);
-      return this;
-    }
-  }
-
-  // Owns what has happened and what is in flight. Nothing here computes; it
-  // remembers, so the engine and solver can stay pure.
-  class RynPlacementState {
-    _banned = [];
-    _placed = [];
-    _pending = [];
-    _cooldown = new Map;
-    _spentThisTick = 0;
-    tick = 0;
-    beginTick(tick) {
-      this.tick = tick;
-      this._spentThisTick = 0;
-      for (let i = this._banned.length - 1; i >= 0; i--) {
-        if (tick > this._banned[i].expiry) this._banned.splice(i, 1);
-      }
-      for (const [key, until] of this._cooldown) {
-        if (tick > until) this._cooldown.delete(key);
-      }
-    }
-    // A refusal belongs to a place on the ground, not to a direction from the
-    // player -- walk a step and the same angle points somewhere else.
-    ban(x, y, ticks) {
-      this._banned.push({
-        x: x,
-        y: y,
-        expiry: this.tick + ticks
-      });
-    }
-    isBanned(x, y, radius) {
-      for (const spot of this._banned) {
-        if (Math.hypot(spot.x - x, spot.y - y) < radius) return true;
-      }
-      return false;
-    }
-    cool(key, ticks) {
-      this._cooldown.set(key, this.tick + ticks);
-    }
-    isCooling(key) {
-      return this._cooldown.has(key);
-    }
-    recordSent(candidate, tick) {
-      this._placed.push({
-        x: candidate.x,
-        y: candidate.y,
-        tick: tick
-      });
-      this._spentThisTick += 1;
-      if (this._placed.length > 32) this._placed.shift();
-    }
-    // Sends scheduled from a timer land in the next tick, so history is judged
-    // against the tick it was sent in rather than the tick reading it.
-    settled(tick) {
-      return this._placed.filter(entry => entry.tick < tick);
-    }
-    forget(entries) {
-      this._placed = this._placed.filter(entry => !entries.includes(entry));
-    }
-    addPending(candidate, kind) {
-      this._pending.push({
-        candidate: candidate,
-        kind: kind
-      });
-    }
-    takePending(kind) {
-      const out = this._pending.filter(p => p.kind === kind);
-      this._pending = this._pending.filter(p => p.kind !== kind);
-      return out;
-    }
-    get spentThisTick() {
-      return this._spentThisTick;
-    }
-    get pendingCount() {
-      return this._pending.length;
-    }
-    reset() {
-      this._banned.length = 0;
-      this._placed.length = 0;
-      this._pending.length = 0;
-      this._cooldown.clear();
-      this._spentThisTick = 0;
-    }
-  }
-
-  // Generates candidates and validates them. Three validations, kept apart so
-  // each can be reasoned about and tested alone:
-  //
-  //   geometric  where the ring is, and which arcs of it are free
-  //   collision  which objects deny which arcs (solved, not sampled)
-  //   range      the river band, and the caller's distance ceiling
-  //
-  // No rule, no scoring, no packet. Given the same world it returns the same
-  // candidates, which is what makes it testable without a client.
-  class RynPlacementEngine {
-    world;
-    constructor(world) {
-      this.world = world;
-    }
-    ringRadius(item) {
-      return Config_ref.playerScale + item.scale + (item.placeOffset || 0);
-    }
-    // The exact arc one object denies, from the intersection of the ring a
-    // build lands on with the disc the object keeps clear.
-    blockedArc(objX, objY, objScale, ringR, itemScale, originX, originY) {
-      const dx = objX - originX;
-      const dy = objY - originY;
-      const dist = Math.hypot(dx, dy);
-      const deny = itemScale + objScale;
-      if (dist < 1e-6) return deny >= ringR ? ARC_FULL : null;
-      if (dist - ringR > deny || ringR - dist > deny) return null;
-      if (deny >= dist + ringR) return ARC_FULL;
-      const a = (dist * dist - deny * deny + ringR * ringR) / (2 * dist);
-      const h = Math.sqrt(Math.max(0, ringR * ringR - a * a));
-      const px = originX + a / dist * dx;
-      const py = originY + a / dist * dy;
-      const a1 = Math.atan2(py - h / dist * dx - originY, px + h / dist * dy - originX);
-      const a2 = Math.atan2(py + h / dist * dx - originY, px - h / dist * dy - originX);
-      const toObj = normalizeArcAngle(Math.atan2(dy, dx));
-      const s = normalizeArcAngle(a1);
-      const e = normalizeArcAngle(a2);
-      return arcContains(s, e, toObj) ? [ s, e ] : [ e, s ];
-    }
-    inRiver(y, itemID) {
-      if (itemID === 18) return false;
-      const mid = Config_ref.mapScale / 2;
-      const half = Config_ref.riverWidth / 2;
-      return y >= mid - half && y <= mid + half;
-    }
-    // `prefer` is offered exactly when it lands in a free arc, so the one angle
-    // that matters most is never rounded to a sample.
-    candidates(profile, itemID, origin, obstacles, opts = {}) {
-      const item = Items[itemID];
-      if (item === undefined) return [];
-      const ringR = this.ringRadius(item);
-      const step = opts.step ?? ANGLE_STEP;
-      const exclude = opts.exclude ?? null;
-      const blocked = [];
-      for (const obj of obstacles) {
-        if (exclude !== null && obj === exclude) continue;
-        const arc = this.blockedArc(obj.x, obj.y, obj.scale, ringR, item.scale, origin.x, origin.y);
-        if (arc === ARC_FULL) return [];
-        if (arc !== null) blocked.push(arc);
-      }
-      const out = [];
-      const emit = (angle, flush) => {
-        const a = normalizeArcAngle(angle);
-        const x = origin.x + ringR * Math.cos(a);
-        const y = origin.y + ringR * Math.sin(a);
-        if (this.inRiver(y, itemID)) return;
-        if (opts.maxFrom !== undefined && Math.hypot(x - opts.maxFrom.x, y - opts.maxFrom.y) > opts.maxRange) return;
-        out.push(new RynPlacementCandidate(profile, itemID, a, x, y, item.scale, flush));
-      };
-      for (const [start, end] of invertArcs(mergeArcs(blocked))) {
-        emit(start, true);
-        const span = (end - start + TWO_PI) % TWO_PI || TWO_PI;
-        for (let t = step; t < span; t += step) emit(start + t, false);
-        if (span > ARC_EPS) emit(end, true);
-        if (opts.prefer !== undefined && arcContains(start, end, normalizeArcAngle(opts.prefer))) {
-          emit(opts.prefer, false);
-        }
-      }
-      return out;
-    }
-  }
-
-  // Scores candidates from registered rules and picks winners. A rule is a
-  // record, so what the placer considers is a list that can be read, extended
-  // and reordered -- not a ladder of predicates buried in one method.
-  //
-  // Rules are scored, not short-circuited, so two reasons to place somewhere
-  // beat one. Ordering the weights the way the old ladder was ordered
-  // reproduces its choices while making the next reason additive.
-  class RynPlacementSolver {
-    _rules = [];
-    addRule(rule) {
-      if (!rule || !rule.id || typeof rule.apply !== "function") {
-        Logger.error(`RynPlacementSolver: refused rule "${rule && rule.id}"`);
-        return null;
-      }
-      this._rules.push({
-        id: rule.id,
-        item: rule.item ?? null,
-        weight: rule.weight ?? 0,
-        apply: rule.apply
-      });
-      this._rules.sort((a, b) => b.weight - a.weight);
-      return rule.id;
-    }
-    removeRule(id) {
-      const i = this._rules.findIndex(r => r.id === id);
-      if (i !== -1) this._rules.splice(i, 1);
-      return i !== -1;
-    }
-    get rules() {
-      return this._rules.map(r => r.id);
-    }
-    score(candidates, ctx) {
-      for (const candidate of candidates) {
-        candidate.score = 0;
-        candidate.reasons.length = 0;
-        for (const rule of this._rules) {
-          if (rule.item !== null && rule.item !== candidate.profile.key) continue;
-          if (rule.apply(candidate, ctx) === true) candidate.credit(rule.weight, rule.id);
-        }
-      }
-      return candidates;
-    }
-    // Only candidates a rule actually wanted. Ties break toward the flush
-    // angle, which is the one packed against something.
-    select(candidates, ctx, limit = 1) {
-      const wanted = this.score(candidates, ctx).filter(c => c.score > 0);
-      wanted.sort((a, b) => b.score - a.score || (a.flush === b.flush ? 0 : a.flush ? -1 : 1));
-      return wanted.slice(0, limit);
-    }
-  }
-
-  // Turns a decision into actions. The only part of this subsystem that knows
-  // packets exist, and it reaches the wire through the net layer rather than
-  // touching a socket or counting for itself.
-  class RynPlacementExecutor {
-    client;
-    state;
-    constructor(client2, state) {
-      this.client = client2;
-      this.state = state;
-    }
-    // Returns the candidates that actually went out, so the caller records
-    // history from what happened rather than what was intended.
-    execute(candidates, opts = {}) {
-      const ryn = this.client.services;
-      const myPlayer = this.client.myPlayer;
-      // Affordability is asked of the network, not read off the allowance. A
-      // placement is a sequence of wire actions, so what it can afford is the
-      // network's answer to give.
-      const network = this.client.network;
-      const tick = opts.tick ?? this.state.tick;
-      const sent = [];
-      for (const candidate of candidates) {
-        const profile = candidate.profile;
-        if (!network.budget.affords(profile.cost, profile.priority)) break;
-        if (!myPlayer.canPlace(profile.itemType)) continue;
-        ryn.actions.place(profile.itemType, candidate.angle);
-        ryn.ledger.placedOnce = true;
-        ryn.ledger.placeAngles[0] = profile.itemType;
-        ryn.ledger.placeAngles[1].push(candidate.angle);
-        this.state.recordSent(candidate, tick);
-        sent.push(candidate);
-      }
-      return sent;
-    }
-  }
-
   class AutoPlacer {
     unitID="autoPlacer";
     client;
@@ -10102,8 +9746,8 @@ window.grbtp = 35;
         // to merge with the rest -- it stays a per-candidate test.
         const dry = cfg => {
           if (id === 18) return true;
-          const mid = Config_ref.mapScale / 2;
-          const riverHalf = Config_ref.riverWidth / 2;
+          const mid = Config.mapScale / 2;
+          const riverHalf = Config.riverWidth / 2;
           return !(cfg.y >= mid - riverHalf && cfg.y <= mid + riverHalf);
         };
         const push = (angle, perfect) => {
@@ -10180,11 +9824,11 @@ window.grbtp = 35;
         const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
         const predictReady = myWeapon !== null && myWeapon !== undefined && myPlayer.isReloaded(predictType, 0);
         if (predictReady) {
-          const wd = DataHandler_ref?.getWeapon?.(myWeapon);
+          const wd = DataHandler?.getWeapon?.(myWeapon);
           if (wd) {
             const myRange = wd.range ?? 0;
             const myDmg = myPlayer.getBuildingDamage?.(myWeapon, myPlayer.hatID === 40) ?? 0;
-            const gatherAngle = Config_ref.gatherAngle;
+            const gatherAngle = Config.gatherAngle;
             const myFut = myPlayer.pos.future ?? myPos;
             const attackAngle = ryn.ledger.breakActive && ryn.ledger.breakAngle !== null && ryn.ledger.breakAngle !== undefined ? ryn.ledger.breakAngle : ryn.actions.currentAngle ?? myPos.angle(enemyPos);
             const candidates = [];
@@ -10245,7 +9889,7 @@ window.grbtp = 35;
         readyWeapons.sort((a, b) => (enemy.getBuildingDamage?.(b, true) ?? 0) - (enemy.getBuildingDamage?.(a, true) ?? 0));
         for (const candidateWeapon of readyWeapons) {
           if (findObject) break;
-          const wd = DataHandler_ref?.getWeapon?.(candidateWeapon);
+          const wd = DataHandler?.getWeapon?.(candidateWeapon);
           if (wd) {
             const weaponRange = wd.range ?? 0;
             const dmgToBuilding = enemy.getBuildingDamage?.(candidateWeapon, true) ?? 50;
@@ -10855,7 +10499,7 @@ window.grbtp = 35;
       //
       // NEEDS VALIDATION: 25 units is under one tick of movement (33), so a
       // fast animal can cross the margin between the check and the placement.
-      const activationRange = animal.collisionRange + Config_ref.playerScale + TrapAnimal.CLOSE_PADDING;
+      const activationRange = animal.collisionRange + Config.playerScale + TrapAnimal.CLOSE_PADDING;
       if (distToAnimal > activationRange) {
         this.reset();
         return;
@@ -10886,8 +10530,7 @@ window.grbtp = 35;
 
     }
   }
-  const AutoPlacer_ref = AutoPlacer;
-  class AntiRetrap {
+    class AntiRetrap {
       unitID="antiRetrap";
       client;
       constructor(client2) {
@@ -10911,7 +10554,7 @@ window.grbtp = 35;
           if (nearestEnemy === null || nearestTrap === null || nearestTrap.health > damage || !isHammer || !isReloadedSecondary) {
               return;
           }
-          const range = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
+          const range = DataHandler.getWeapon(primary).range + nearestEnemy.hitScale;
           if (!myPlayer.collidingEntity(nearestEnemy, range)) {
               return;
           }
@@ -11157,11 +10800,11 @@ window.grbtp = 35;
       }
       const primary1 = myPlayer.getItemByType(0);
       const primaryDamage1 = myPlayer.getMaxWeaponDamage(primary1, false);
-      const range1 = DataHandler_ref.getWeapon(primary1).range + nearestEnemy.hitScale;
+      const range1 = DataHandler.getWeapon(primary1).range + nearestEnemy.hitScale;
       const isPrimaryReloaded1 = reloading.isReloaded(0);
       const primary2 = nearestEnemyToNearestEnemy.weapon.primary;
       const primaryDamage2 = nearestEnemyToNearestEnemy.getMaxWeaponDamage(primary2, false);
-      const range2 = DataHandler_ref.getWeapon(primary2).range + nearestEnemy.hitScale;
+      const range2 = DataHandler.getWeapon(primary2).range + nearestEnemy.hitScale;
       const isPrimaryReloaded2 = nearestEnemyToNearestEnemy.isReloaded(0, 0);
       const soldierDefense = Hats[6].dmgMult;
       const totalDamage = (primaryDamage1 + primaryDamage2) * soldierDefense;
@@ -11193,285 +10836,6 @@ window.grbtp = 35;
       }
     }
   }
-  // ==========================================================================
-  // RYN combat subsystem
-  //
-  // What this stands beside: combat lived in twenty units that each reached
-  // into EnemyManager for a target, recomputed threat from raw fields, guessed
-  // at where an enemy would be, and wrote weapon and hat intent themselves.
-  // The same question was answered differently in different files, and the
-  // prediction arithmetic could not be checked without a live fight.
-  //
-  // Five owners, and the mathematics is pure:
-  //
-  //   RynTargetTracker    who matters, and what we know about them over time
-  //   RynThreatAnalyzer   how dangerous that is, from damage and distance
-  //   RynPrediction       where they will be and when they can swing
-  //   RynCombatPlanner    what should happen
-  //   RynCombatExecutor   making it happen, through the net layer
-  //
-  // RynPrediction is deliberately static and free of client state: every
-  // method takes numbers and returns numbers, so it can be exercised against
-  // the game's own constants without a socket.
-  // ==========================================================================
-
-  // What kind of action the planner settled on. Named so a decision can be
-  // logged and compared rather than inferred from which fields got written.
-  const RYN_COMBAT_ACTION = Object.freeze({
-    NONE: "none",
-    SWING: "swing",
-    SPIKE_TICK: "spikeTick",
-    BURST: "burst",
-    DISENGAGE: "disengage"
-  });
-
-  // Pure motion and timing mathematics. Nothing here reads the client.
-  //
-  // The constants are the game's own: playerSpeed .0016 and playerDecel .993,
-  // read from Config rather than fitted. The step below is the bundle's
-  // integration -- velocity decays by decel^ms and acceleration is applied over
-  // the same interval -- so a prediction made here is the motion the server
-  // will run, not a straight line drawn through two samples.
-  class RynPrediction {
-    // One integration step. `ms` is the interval, `moveAngle` null when the
-    // target is not holding a direction.
-    static step(state, moveAngle, ms, speedMult = 1) {
-      const decay = Math.pow(Config_ref.playerDecel, ms);
-      let vx = state.vx * decay;
-      let vy = state.vy * decay;
-      if (moveAngle !== null && moveAngle !== undefined) {
-        const accel = Config_ref.playerSpeed * speedMult * ms;
-        vx += Math.cos(moveAngle) * accel;
-        vy += Math.sin(moveAngle) * accel;
-      }
-      return {
-        x: state.x + vx * ms,
-        y: state.y + vy * ms,
-        vx: vx,
-        vy: vy
-      };
-    }
-    // Where a target ends up after `ticks` of holding `moveAngle`.
-    static project(state, moveAngle, ticks, tickMs = 1e3 / 9, speedMult = 1) {
-      let out = {
-        x: state.x,
-        y: state.y,
-        vx: state.vx ?? 0,
-        vy: state.vy ?? 0
-      };
-      for (let i = 0; i < ticks; i++) out = RynPrediction.step(out, moveAngle, tickMs, speedMult);
-      return out;
-    }
-    // The straight line the old placer drew, kept so the two can be compared
-    // rather than one silently replacing the other.
-    static linear(state, ticks) {
-      return {
-        x: state.x + (state.vx ?? 0) * ticks,
-        y: state.y + (state.vy ?? 0) * ticks,
-        vx: state.vx ?? 0,
-        vy: state.vy ?? 0
-      };
-    }
-    // Ticks until a weapon can swing again. -1 when it never will.
-    static ticksToReady(reload) {
-      if (!reload || !Number.isFinite(reload.current) || !Number.isFinite(reload.max)) return -1;
-      if (reload.current >= reload.max) return 0;
-      const perTick = reload.max - (reload.previous ?? reload.max);
-      if (perTick <= 0) return -1;
-      return Math.ceil((reload.max - reload.current) / perTick);
-    }
-    // The tick a weapon crosses from reloading to ready is the tick a swing
-    // becomes imminent; standing ready is a different fact and is reported
-    // separately so a caller can ask for whichever it means.
-    static swingWindow(reload) {
-      if (!reload) return {
-        ready: false,
-        justReady: false
-      };
-      const ready = reload.current >= reload.max;
-      const wasReloading = (reload.previous ?? reload.max) < reload.max;
-      return {
-        ready: ready,
-        justReady: ready && wasReloading
-      };
-    }
-    // Where a projectile and a mover meet, or null if they do not. Solves the
-    // quadratic rather than stepping, so the answer does not depend on how
-    // finely it is sampled.
-    static intercept(shooter, target, projectileSpeed) {
-      const rx = target.x - shooter.x;
-      const ry = target.y - shooter.y;
-      const vx = target.vx ?? 0;
-      const vy = target.vy ?? 0;
-      const a = vx * vx + vy * vy - projectileSpeed * projectileSpeed;
-      const b = 2 * (rx * vx + ry * vy);
-      const c = rx * rx + ry * ry;
-      let t;
-      if (Math.abs(a) < 1e-9) {
-        if (Math.abs(b) < 1e-9) return null;
-        t = -c / b;
-      } else {
-        const disc = b * b - 4 * a * c;
-        if (disc < 0) return null;
-        const root = Math.sqrt(disc);
-        const t1 = (-b - root) / (2 * a);
-        const t2 = (-b + root) / (2 * a);
-        t = Math.min(t1, t2) >= 0 ? Math.min(t1, t2) : Math.max(t1, t2);
-      }
-      if (!Number.isFinite(t) || t < 0) return null;
-      return {
-        t: t,
-        x: target.x + vx * t,
-        y: target.y + vy * t
-      };
-    }
-  }
-
-  // Who matters, and what we know about them across ticks. Units asked
-  // EnemyManager for `nearestEnemy` and each kept their own notion of how long
-  // a fight had been going; this keeps it once.
-  class RynTargetTracker {
-    client;
-    current = null;
-    previous = null;
-    heldFor = 0;
-    firstSeenTick = -1;
-    _history = new Map;
-    constructor(client2) {
-      this.client = client2;
-    }
-    update(tick) {
-      const nearest = this.client.EnemyManager.nearestEnemy ?? null;
-      if (nearest !== this.current) {
-        this.previous = this.current;
-        this.current = nearest;
-        this.heldFor = 0;
-        this.firstSeenTick = nearest === null ? -1 : tick;
-      } else if (nearest !== null) {
-        this.heldFor += 1;
-      }
-      if (nearest !== null) {
-        const seen = this._history.get(nearest.id) ?? {
-          ticks: 0,
-          lastTick: tick
-        };
-        seen.ticks += 1;
-        seen.lastTick = tick;
-        this._history.set(nearest.id, seen);
-      }
-      return this.current;
-    }
-    // Motion in the shape RynPrediction expects, from the two positions the
-    // world already carries.
-    motionOf(entity, tickMs = 1e3 / 9) {
-      if (entity === null || entity === undefined) return null;
-      const cur = entity.pos.current;
-      const fut = entity.pos.future ?? cur;
-      return {
-        x: cur.x,
-        y: cur.y,
-        vx: (fut.x - cur.x) / tickMs,
-        vy: (fut.y - cur.y) / tickMs
-      };
-    }
-    familiarity(entity) {
-      return entity === null ? 0 : (this._history.get(entity.id)?.ticks ?? 0);
-    }
-    reset() {
-      this.current = null;
-      this.previous = null;
-      this.heldFor = 0;
-      this.firstSeenTick = -1;
-      this._history.clear();
-    }
-  }
-
-  // How dangerous the situation is. Reads what EnemyManager already computed
-  // rather than recomputing damage per unit, and returns one shape so twenty
-  // callers stop each deriving their own answer.
-  class RynThreatAnalyzer {
-    client;
-    constructor(client2) {
-      this.client = client2;
-    }
-    assess(target) {
-      const em = this.client.EnemyManager;
-      const me = this.client.myPlayer;
-      const incoming = em.potentialDamage + Math.max(em.potentialSpikeDamage, em.potentialSpikeKnockbackDamage);
-      const health = me.currentHealth ?? 100;
-      const distance = target === null ? Infinity : me.pos.current.distance(target.pos.current);
-      return {
-        target: target,
-        incoming: incoming,
-        health: health,
-        // What fraction of what is left this exchange could take.
-        lethality: health > 0 ? incoming / health : 1,
-        lethal: incoming >= health,
-        distance: distance,
-        knockbackRisk: em.possibleToKnockback === true && me.isTrapped !== true,
-        flagged: em.detectedDangerEnemy === true || em.detectedEnemy === true || em.dangerWithoutSoldier === true
-      };
-    }
-  }
-
-  // Decides what should happen. Returns a decision; writes nothing. Keeping
-  // this free of side effects is what stops a combat unit reaching into
-  // movement or gear to arrange its own preconditions.
-  class RynCombatPlanner {
-    _options = [];
-    addOption(option) {
-      if (!option || !option.id || typeof option.consider !== "function") {
-        Logger.error(`RynCombatPlanner: refused option "${option && option.id}"`);
-        return null;
-      }
-      this._options.push({
-        id: option.id,
-        weight: option.weight ?? 0,
-        consider: option.consider
-      });
-      this._options.sort((a, b) => b.weight - a.weight);
-      return option.id;
-    }
-    get options() {
-      return this._options.map(o => o.id);
-    }
-    plan(ctx) {
-      for (const option of this._options) {
-        const decision = option.consider(ctx);
-        if (decision !== null && decision !== undefined && decision.action !== RYN_COMBAT_ACTION.NONE) {
-          return {
-            ...decision,
-            by: option.id
-          };
-        }
-      }
-      return {
-        action: RYN_COMBAT_ACTION.NONE,
-        by: null
-      };
-    }
-  }
-
-  // Carries a decision out. The only part of this subsystem that writes intent
-  // or reaches the wire, and it does so through the bid it was handed rather
-  // than by mutating anything shared.
-  class RynCombatExecutor {
-    client;
-    constructor(client2) {
-      this.client = client2;
-    }
-    apply(decision, bid) {
-      if (decision === null || decision.action === RYN_COMBAT_ACTION.NONE) return false;
-      if (decision.angle !== undefined) bid.useAngle = decision.angle;
-      if (decision.weapon !== undefined) bid.forceWeapon = decision.weapon;
-      if (decision.hat !== undefined) bid.forceHat = decision.hat;
-      if (decision.attack === true) bid.shouldAttack = true;
-      if (decision.claim !== false) bid.claim = true;
-      this.client.runtime.events.emit("combat:decision", decision);
-      return true;
-    }
-  }
-
   class Instakill {
     unitID="instakill";
     client;
@@ -11521,7 +10885,7 @@ window.grbtp = 35;
       }
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
-      if (secondary === null || !DataHandler_ref.isShootable(secondary)) return;
+      if (secondary === null || !DataHandler.isShootable(secondary)) return;
       const lookingShield = PlayerManager2.lookingShield(nearestEnemy, myPlayer);
       const primaryDamage = myPlayer.getMaxWeaponDamage(primary, lookingShield);
       const secondaryDamage = myPlayer.getMaxWeaponDamage(secondary, lookingShield);
@@ -11537,7 +10901,7 @@ window.grbtp = 35;
       const primaryReloaded = reloading.isReloaded(0);
       const secondaryReloaded = reloading.isReloaded(1, 1);
       const turretReloaded = reloading.isReloaded(2, 1);
-      const baseRange = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
+      const baseRange = DataHandler.getWeapon(primary).range + nearestEnemy.hitScale;
       if (this.phase === 1) {
         bid.claim = true;
         bid.useAngle = angle;
@@ -11667,7 +11031,7 @@ window.grbtp = 35;
       const dist = pos0.distance(ep);
       const primary = mp.getItemByType(0);
       const secondary = mp.getItemByType(1);
-      if (secondary === null || !DataHandler_ref.isShootable(secondary)) return;
+      if (secondary === null || !DataHandler.isShootable(secondary)) return;
       const lookingShield = PM.lookingShield(enemy, mp);
       const primaryDmg = mp.getMaxWeaponDamage(primary, lookingShield);
       const secondaryDmg = mp.getMaxWeaponDamage(secondary, lookingShield);
@@ -11726,7 +11090,7 @@ window.grbtp = 35;
         const primaryReloaded = reloading.isReloaded(0);
         const secondaryReloaded = reloading.isReloaded(1, 1);
         const turretReloaded = reloading.isReloaded(2, 1);
-        const baseRange = DataHandler_ref.getWeapon(primary).range + enemy.hitScale;
+        const baseRange = DataHandler.getWeapon(primary).range + enemy.hitScale;
         const inRange = mp.collidingEntity(enemy, baseRange);
         const canFireNow = primaryReloaded && secondaryReloaded && inRange;
         const dmgWithoutTurret = primaryDmg + secondaryDmg;
@@ -11906,7 +11270,7 @@ window.grbtp = 35;
     if (primary === null) {
       return false;
     }
-    const reach = spike.scale + Math.min(DataHandler_ref.getWeapon(primary).range, SPIKE_TICK_NEAR_SPIKE_REACH);
+    const reach = spike.scale + Math.min(DataHandler.getWeapon(primary).range, SPIKE_TICK_NEAR_SPIKE_REACH);
     return myPlayer.collidingSimple(spike, reach);
   };
   const spikeTickTarget = (client2, enabled) => {
@@ -12012,7 +11376,7 @@ window.grbtp = 35;
     if (!ryn.features.units.reloading.isReloaded(0)) {
       return null;
     }
-    const range = Math.min(SPIKE_TICK_RANGE, DataHandler_ref.getWeapon(primary).range + nearest.hitScale);
+    const range = Math.min(SPIKE_TICK_RANGE, DataHandler.getWeapon(primary).range + nearest.hitScale);
     return myPlayer.collidingSimple(nearest, range) ? nearest : null;
   };
   const spikeTickHit = (client2, enemy, bid) => {
@@ -12067,7 +11431,7 @@ window.grbtp = 35;
       // the flat range. With a long primary the flat range binds first, but a
       // short one -- a hammer or a stick as primary -- reaches nowhere near
       // that far, and swinging at a break you cannot cover is a wasted tick.
-      const primaryReach = DataHandler_ref.getWeapon(myPlayer.getItemByType(0)).range + SPIKE_TICK_BREAK_REACH;
+      const primaryReach = DataHandler.getWeapon(myPlayer.getItemByType(0)).range + SPIKE_TICK_BREAK_REACH;
       let broken = false;
       for (const object of ObjectManager2.deletedObjects) {
         const pos3 = object.pos.current;
@@ -12253,7 +11617,7 @@ window.grbtp = 35;
         return;
       }
       if (!EnemyManager2.shouldIgnoreModule() && nearest !== null && EnemyManager2.canSpikeSync && placementAngles !== null && isPolearm && primaryReloaded) {
-        const spear = DataHandler_ref.getWeapon(primary);
+        const spear = DataHandler.getWeapon(primary);
         const range = spear.range + nearest.hitScale;
         const canAttack = myPlayer.collidingSimple(nearest, range);
         if (!canAttack) {
@@ -12346,7 +11710,7 @@ window.grbtp = 35;
         if (nearestLowHPObject === null) {
           return;
         }
-        const hammer = DataHandler_ref.getWeapon(secondary);
+        const hammer = DataHandler.getWeapon(secondary);
         const playerRange = hammer.range + nearestSyncEnemy.hitScale;
         const trapRange = hammer.range + nearestLowHPObject.hitScale;
         const canAttackEnemy = myPlayer.collidingSimple(nearestSyncEnemy, playerRange);
@@ -12458,8 +11822,7 @@ window.grbtp = 35;
       }
     }
   }
-  const AdaptiveGearSwitching_ref = AdaptiveGearSwitching;
-  class AntiSync {
+    class AntiSync {
     unitID="antiSync";
     client;
     _lastDamageTime=0;
@@ -12480,7 +11843,7 @@ window.grbtp = 35;
       const secondaryReloaded = this.client.services.features.units.reloading.isReloaded(1);
       if (primaryReloaded && secondaryReloaded) {
         const dist = this.client.myPlayer.pos.current.distance(nearestEnemy.pos.current);
-        const enemyRange = (DataHandler_ref.getWeapon(nearestEnemy.getItemByType(0) ?? 0)?.range ?? 35) + this.client.myPlayer.hitScale;
+        const enemyRange = (DataHandler.getWeapon(nearestEnemy.getItemByType(0) ?? 0)?.range ?? 35) + this.client.myPlayer.hitScale;
         if (dist < enemyRange * 1.2) {
           return true;
         }
@@ -12582,8 +11945,7 @@ window.grbtp = 35;
       this._incomingAttacks = this._incomingAttacks.filter(attack => now - attack.timestamp < 1000);
     }
   }
-  const AntiSync_ref = AntiSync;
-  class ToolHammerSpearInsta {
+    class ToolHammerSpearInsta {
     unitID="toolHammerSpearInsta";
     client;
     nearestTarget=null;
@@ -12632,7 +11994,7 @@ window.grbtp = 35;
       const {reloading: reloading} = ryn.features.units;
       const primaryReloaded = reloading.isReloaded(0);
       const turretReloaded = reloading.isReloaded(2);
-      const range = DataHandler_ref.getWeapon(0).range + nearestEnemy.hitScale;
+      const range = DataHandler.getWeapon(0).range + nearestEnemy.hitScale;
       if (!primaryReloaded || !turretReloaded || !myPlayer.collidingEntity(nearestEnemy, range)) {
         return;
       }
@@ -12676,8 +12038,7 @@ window.grbtp = 35;
       ryn.ledger.placedOnce = true;
     }
   }
-  const Placer_ref = Placer;
-  class PreAttack {
+    class PreAttack {
     unitID="preAttack";
     client;
     constructor(client2) {
@@ -12698,8 +12059,7 @@ window.grbtp = 35;
       bid.shouldAttack = canAttack;
     }
   }
-  const PreAttack_ref = PreAttack;
-  class Reloading {
+    class Reloading {
     unitID="reloading";
     client;
     clientReload=[ {}, {}, {} ];
@@ -12766,8 +12126,7 @@ window.grbtp = 35;
       this.clientReload[2].current = myPlayer.reload[2].current;
     }
   }
-  const Reloading_ref = Reloading;
-  class UpdateAngle {
+    class UpdateAngle {
     unitID="updateAngle";
     client;
     constructor(client2) {
@@ -12800,8 +12159,7 @@ window.grbtp = 35;
       }
     }
   }
-  const UpdateAngle_ref = UpdateAngle;
-  class UpdateAttack {
+    class UpdateAttack {
     unitID="updateAttack";
     client;
     didReset=false;
@@ -12856,8 +12214,7 @@ window.grbtp = 35;
       }
     }
   }
-  const UpdateAttack_ref = UpdateAttack;
-  class UseAttacking {
+    class UseAttacking {
     unitID="useAttacking";
     client;
     constructor(client2) {
@@ -12871,7 +12228,7 @@ window.grbtp = 35;
       const nearestObject = EnemyManager2.nearestObject;
       const primaryID = myPlayer.getItemByType(0);
       const secondaryID = myPlayer.getItemByType(1);
-      const primary = DataHandler_ref.getWeapon(primaryID);
+      const primary = DataHandler.getWeapon(primaryID);
       const range = primary.range;
       if (nearestEnemy !== null) {
         const pos2 = nearestEnemy.pos.future;
@@ -12879,7 +12236,7 @@ window.grbtp = 35;
         if (myPlayer.collidingEntity(nearestEnemy, range + nearestEnemy.hitScale)) {
           return [ 0, angle ];
         }
-        if (DataHandler_ref.isShootable(secondaryID) && !ryn.actions.autoattack) {
+        if (DataHandler.isShootable(secondaryID) && !ryn.actions.autoattack) {
           return [ 1, angle ];
         }
       }
@@ -12889,7 +12246,7 @@ window.grbtp = 35;
         if (myPlayer.collidingEntity(nearestAnimal, range + nearestAnimal.hitScale)) {
           return [ 0, angle ];
         }
-        if (DataHandler_ref.isShootable(secondaryID) && !ryn.actions.autoattack) {
+        if (DataHandler.isShootable(secondaryID) && !ryn.actions.autoattack) {
           return [ 1, angle ];
         }
       }
@@ -12979,11 +12336,11 @@ window.grbtp = 35;
       if (id === 11) {
         return null;
       }
-      if (DataHandler_ref.isShootable(id)) {
+      if (DataHandler.isShootable(id)) {
         ryn.ledger.canHitEntity = true;
         return 20;
       }
-      const weapon = DataHandler_ref.getWeapon(id);
+      const weapon = DataHandler.getWeapon(id);
       const range = weapon.range;
       if (weapon.damage <= 1) {
         return null;
@@ -13094,7 +12451,7 @@ window.grbtp = 35;
         const angle = i * (Math.PI * 2 / 36);
         const configX = enemyPos.x + placeLength * Math.cos(angle);
         const configY = enemyPos.y + placeLength * Math.sin(angle);
-        const configPos = new Vector_ref(configX, configY);
+        const configPos = new Vector(configX, configY);
         const canPlace = ObjectManager2.canPlaceItem(spikeId, configPos, 0.6 * spikeScale - spikeScale);
         if (canPlace) {
           const distToMe = Math.hypot(myPos.x - configX, myPos.y - configY);
@@ -13181,7 +12538,7 @@ window.grbtp = 35;
         const hasMeleeCombo = primary === 5 || primary === 4 || primary === 3;
         const hasRangedCombo = secondary === 12 || secondary === 13 || secondary === 15;
         if (hasMeleeCombo && hasRangedCombo) {
-          const weaponData = DataHandler_ref.getWeapon(primary);
+          const weaponData = DataHandler.getWeapon(primary);
           const totalRange = weaponData.range + myPlayer.collisionScale + nearestEnemy.collisionScale;
           const distance = myPlayer.pos.current.distance(nearestEnemy.pos.current);
           if (distance <= totalRange + 35) {
@@ -13234,8 +12591,7 @@ window.grbtp = 35;
       }
     }
   }
-  const AntiInsta_ref = AntiInsta;
-  class Autohat {
+    class Autohat {
     unitID="autoHat";
     client;
     constructor(client2) {
@@ -13295,8 +12651,7 @@ window.grbtp = 35;
       }
     }
   }
-  const Autohat_ref = Autohat;
-  class DefaultAcc {
+    class DefaultAcc {
     unitID="defaultAcc";
     client;
     constructor(client2) {
@@ -13307,8 +12662,8 @@ window.grbtp = 35;
       const {reloading: reloading} = ryn.features.units;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
-      const isMelee1 = DataHandler_ref.isMelee(primary);
-      const isMelee2 = DataHandler_ref.isMelee(secondary);
+      const isMelee1 = DataHandler.isMelee(primary);
+      const isMelee2 = DataHandler.isMelee(secondary);
       return isMelee1 && primary === 8 || isMelee1 && !reloading.isReloaded(0, 3) || isMelee2 && !reloading.isReloaded(1, 3);
     }
     getBestCurrentAcc() {
@@ -13406,7 +12761,7 @@ window.grbtp = 35;
       if (!ryn.motion.isMoving && myPlayer.speed <= 5 && !_empNearbyTurret) {
         const _nearestStill = EnemyManager2.nearestEnemy;
         const _primary = myPlayer.getItemByType(0);
-        const _weaponRange = _primary !== null ? DataHandler_ref.getWeapon(_primary).range + (_nearestStill?.hitScale || 35) : 85;
+        const _weaponRange = _primary !== null ? DataHandler.getWeapon(_primary).range + (_nearestStill?.hitScale || 35) : 85;
         const _isCloseStill = _nearestStill !== null && myPlayer.pos.current.distance(_nearestStill.pos.current) <= _weaponRange + 20;
         if (!_isCloseStill && !EnemyManager2.detectedEnemy && !EnemyManager2.detectedDangerEnemy) {
           if (this.canWearCowboy()) return 5;
@@ -13532,8 +12887,7 @@ window.grbtp = 35;
       }
     }
   }
-  const ShameReset_ref = ShameReset;
-  class AutoAccept {
+    class AutoAccept {
     unitID="autoAccept";
     client;
     prevClan=null;
@@ -13564,7 +12918,7 @@ window.grbtp = 35;
           myPlayer.joinRequests.shift();
           this.client.pendingJoins.delete(id);
           if (isOwner) {
-            GameUI_ref.clearNotication();
+            GameUI.clearNotication();
           }
         } else {
           break;
@@ -13572,12 +12926,11 @@ window.grbtp = 35;
       }
       const nextID = myPlayer.joinRequests[0];
       if (isOwner && nextID !== void 0) {
-        GameUI_ref.createRequest(nextID);
+        GameUI.createRequest(nextID);
       }
     }
   }
-  const AutoAccept_ref = AutoAccept;
-  class AutoBuy {
+    class AutoBuy {
     unitID="autoBuy";
     client;
     buyIndex=0;
@@ -13685,7 +13038,7 @@ window.grbtp = 35;
         if (Settings_ref._autoGrind) {
           Settings_ref._autoGrind = false;
           this.grindAngle = null;
-          const grindEl = UI_ref?.frame?.document?.getElementById("_autoGrind");
+          const grindEl = UI?.frame?.document?.getElementById("_autoGrind");
           if (grindEl) grindEl.checked = false;
         }
         return;
@@ -13811,8 +13164,7 @@ window.grbtp = 35;
       }
     }
   }
-  const Automill_ref = Automill;
-  class AutoSteal {
+    class AutoSteal {
     unitID="autoSteal";
     client;
     constructor(client2) {
@@ -13829,7 +13181,7 @@ window.grbtp = 35;
       }
       const {reloading: reloading} = ryn.features.units;
       const primary = myPlayer.getItemByType(0);
-      const range = DataHandler_ref.getWeapon(primary).range + nearestLowEntity.hitScale;
+      const range = DataHandler.getWeapon(primary).range + nearestLowEntity.hitScale;
       if (!myPlayer.collidingSimple(nearestLowEntity, range) || !reloading.isReloaded(0)) {
         return;
       }
@@ -13890,7 +13242,7 @@ window.grbtp = 35;
       const primaryReloaded = reloading.isReloaded(0, 1);
       const secondaryReloaded = reloading.isReloaded(1);
       const turretReloaded = reloading.isReloaded(2);
-      const baseRange = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
+      const baseRange = DataHandler.getWeapon(primary).range + nearestEnemy.hitScale;
       const predictedRange = baseRange + nearestEnemy.speed;
       const inRange = myPlayer.collidingEntity(nearestEnemy, baseRange) || myPlayer.collidingEntity(nearestEnemy, predictedRange);
       const myPosCur = myPlayer.pos.current;
@@ -14030,8 +13382,7 @@ window.grbtp = 35;
       this._lastPlaceTick = this._tick;
     }
   }
-  const PlatformMusket_ref = PlatformMusket;
-  class BowInsta {
+    class BowInsta {
     unitID="bowInsta";
     client;
     targetEnemy=null;
@@ -14157,7 +13508,7 @@ window.grbtp = 35;
           return;
         }
         const distance1 = pos1.distance(pos2);
-        const placementScale = DataHandler_ref.getItem(id).scale;
+        const placementScale = DataHandler.getItem(id).scale;
         for (const angle2 of angles) {
           const pos3 = pos1.addDirection(angle2, length);
           const rectStart = pos3.copy().sub(placementScale);
@@ -14353,7 +13704,7 @@ window.grbtp = 35;
       if (myPlayer.age < 8 || myPlayer.upgradeAge >= 9 || !isSword || !primaryReloaded || !ryn.loadout.canBuy(0, 7)) {
         return;
       }
-      const range = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
+      const range = DataHandler.getWeapon(primary).range + nearestEnemy.hitScale;
       if (!myPlayer.collidingEntity(nearestEnemy, range)) {
         return;
       }
@@ -14390,8 +13741,8 @@ window.grbtp = 35;
       if (primary2 === null) {
         return;
       }
-      const range1 = DataHandler_ref.getWeapon(primary1).range + nearestEnemy.hitScale;
-      const range2 = DataHandler_ref.getWeapon(primary2).range + myPlayer.hitScale;
+      const range1 = DataHandler.getWeapon(primary1).range + nearestEnemy.hitScale;
+      const range2 = DataHandler.getWeapon(primary2).range + myPlayer.hitScale;
       if (!myPlayer.collidingSimple(nearestEnemy, range1) || !nearestEnemy.collidingSimple(myPlayer, range2)) {
         return;
       }
@@ -14506,7 +13857,7 @@ window.grbtp = 35;
         return;
       }
       const primary = myPlayer.getItemByType(0);
-      const weapon = DataHandler_ref.getWeapon(primary);
+      const weapon = DataHandler.getWeapon(primary);
       if (weapon.damage < 20) {
         return;
       }
@@ -14547,11 +13898,11 @@ window.grbtp = 35;
       }
       const hasHammer = secondary === 10;
       const primaryDamage = myPlayer.getBuildingDamage(primary, true);
-      const canOneHit = primaryDamage >= DataHandler_ref.getItem(16).health;
+      const canOneHit = primaryDamage >= DataHandler.getItem(16).health;
       let weaponType = null;
       if (canOneHit) {
-        const primaryData = DataHandler_ref.getWeapon(primary);
-        const secondaryData = DataHandler_ref.isMelee(secondary) && DataHandler_ref.getWeapon(secondary) || null;
+        const primaryData = DataHandler.getWeapon(primary);
+        const secondaryData = DataHandler.isMelee(secondary) && DataHandler.getWeapon(secondary) || null;
         if (secondaryData === null || primaryData.speed <= secondaryData.speed) {
           weaponType = 0;
         } else {
@@ -14737,7 +14088,7 @@ window.grbtp = 35;
             const justFired = activeShooters.length > 0 ? activeShooters.reduce((a, b) => myPos.distance(a.pos.current) < myPos.distance(b.pos.current) ? a : b) : null;
             const target = justFired ?? bestEnemy ?? rangedEnemies[0];
             let bestAngle = myPos.angle(target.pos.current);
-            const shieldHalfAngle = typeof Config_ref !== "undefined" && Config_ref.shieldAngle ? Config_ref.shieldAngle : Math.PI / 3;
+            const shieldHalfAngle = typeof Config !== "undefined" && Config.shieldAngle ? Config.shieldAngle : Math.PI / 3;
             let maxCovered = 0;
             for (const candidate of rangedEnemies) {
               const ca = myPos.angle(candidate.pos.current);
@@ -14974,11 +14325,11 @@ window.grbtp = 35;
       const pos3 = secondNearestEnemy.pos.current;
       const distance = pos1.distance(pos3);
       const primary = secondNearestEnemy.weapon.primary;
-      const weaponRange = DataHandler_ref.getWeapon(primary).range;
+      const weaponRange = DataHandler.getWeapon(primary).range;
       const range = weaponRange + myPlayer.hitScale;
       const angle2 = pos1.angle(pos3);
       const middleAngle = findMiddleAngle(angle, angle2);
-      if (distance <= range && getAngleDist(angle, middleAngle) <= Config_ref.gatherAngle && getAngleDist(angle2, middleAngle) <= Config_ref.gatherAngle) {
+      if (distance <= range && getAngleDist(angle, middleAngle) <= Config.gatherAngle && getAngleDist(angle2, middleAngle) <= Config.gatherAngle) {
         return middleAngle;
       }
       return angle;
@@ -15160,7 +14511,7 @@ window.grbtp = 35;
       if (!primaryReloaded) {
         return;
       }
-      const range = DataHandler_ref.getWeapon(myPlayer.getItemByType(0)).range + nearestEnemy.hitScale;
+      const range = DataHandler.getWeapon(myPlayer.getItemByType(0)).range + nearestEnemy.hitScale;
       if (!myPlayer.collidingSimple(nearestEnemy, range)) {
         return;
       }
@@ -15193,7 +14544,7 @@ window.grbtp = 35;
       if (!isDaggers) {
         return;
       }
-      const primaryRange = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
+      const primaryRange = DataHandler.getWeapon(primary).range + nearestEnemy.hitScale;
       if (!myPlayer.collidingSimple(nearestEnemy, primaryRange)) {
         return;
       }
@@ -15904,7 +15255,7 @@ window.grbtp = 35;
       this.spikeDamage = myPlayer.spikeDamage ?? 0;
       this.hatID = myPlayer.hatID ?? null;
       this.weapon = myPlayer.getItemByType?.(0) ?? null;
-      this.scale = Config_ref.playerScale;
+      this.scale = Config.playerScale;
       return this;
     }
   }
@@ -15947,8 +15298,8 @@ window.grbtp = 35;
       this.tick = tick;
       this.tickMs = tickMs;
       this.sandbox = sandbox === true;
-      this.mapScale = Config_ref.mapScale;
-      this.riverWidth = Config_ref.riverWidth;
+      this.mapScale = Config.mapScale;
+      this.riverWidth = Config.riverWidth;
       return this;
     }
     inRiver(y) {
@@ -16307,12 +15658,12 @@ window.grbtp = 35;
     }
     canBuy(type, id) {
       if (id === -1) return false;
-      const price = DataHandler_ref.getStore(type)[id].price;
+      const price = DataHandler.getStore(type)[id].price;
       const player = this._deps.player();
       return this.bought[type].has(id) || player.tempGold >= price && player.isSandbox;
     }
     buy(type, id, force = false) {
-      const store2 = DataHandler_ref.getStore(type);
+      const store2 = DataHandler.getStore(type);
       const player = this._deps.player();
       if (!player.inGame) return false;
       if (force) {
@@ -16356,8 +15707,8 @@ window.grbtp = 35;
       if (isItem) id += 16;
       this._deps.net().emit("upgradeItem", id);
       this._deps.player().upgradeItem(id);
-      if (DataHandler_ref.isWeapon(id)) {
-        this._deps.features.units.reloading.updateMaxReload(DataHandler_ref.getWeapon(id).type);
+      if (DataHandler.isWeapon(id)) {
+        this._deps.features.units.reloading.updateMaxReload(DataHandler.getWeapon(id).type);
       }
     }
     selectItem(type) {
@@ -16398,8 +15749,8 @@ window.grbtp = 35;
       if (hasPrim && reloading(0)) return 0;
       if (actions.attacking === 2 && hasSec) return 1;
       if (actions.attacking === 1 && hasPrim) return 0;
-      const pW = hasPrim ? DataHandler_ref?.getWeapon?.(prim) : null;
-      const sW = hasSec ? DataHandler_ref?.getWeapon?.(sec) : null;
+      const pW = hasPrim ? DataHandler?.getWeapon?.(prim) : null;
+      const sW = hasSec ? DataHandler?.getWeapon?.(sec) : null;
       if (pW?.name?.toLowerCase().includes("dagger")) return 0;
       if (sW?.name?.toLowerCase().includes("hammer")) return 1;
       return hasPrim ? 0 : hasSec ? 1 : this.weapon;
@@ -16418,9 +15769,9 @@ window.grbtp = 35;
   class RynMotion {
     move_dir = null;
     reverse_move_dir = null;
-    followTarget = new Vector_ref(0, 0);
-    lookTarget = new Vector_ref(0, 0);
-    endTarget = new Vector_ref(0, 0);
+    followTarget = new Vector(0, 0);
+    lookTarget = new Vector(0, 0);
+    endTarget = new Vector(0, 0);
     followPath = false;
     circleOffset = 0;
     targetSpeed = 65;
@@ -16645,7 +15996,6 @@ window.grbtp = 35;
     input = new RynInputState;
     network = new RynNetworkState;
     combat = new RynCombatState;
-    placement = null;
     bot = new RynBotState;
     ui = new RynUIState;
     // The five that carry what ModuleHandler used to hold, plus the kernel
@@ -16730,17 +16080,17 @@ window.grbtp = 35;
   // owns "what exists", and nothing else needs to know how the list is made.
   function buildRynUnits(client2) {
     return {
-        tempData: new TempData_ref(client2),
-        movement: new Movement_ref(client2),
-        clanJoiner: new ClanJoiner_ref(client2),
-        autoAccept: new AutoAccept_ref(client2),
+        tempData: new TempData(client2),
+        movement: new Movement(client2),
+        clanJoiner: new ClanJoiner(client2),
+        autoAccept: new AutoAccept(client2),
         autoBuy: new AutoBuy(client2),
         defaultHat: new DefaultHat(client2),
-        reloading: new Reloading_ref(client2),
+        reloading: new Reloading(client2),
         defaultAcc: new DefaultAcc(client2),
         autoSync: new AutoSync(client2),
-        adaptiveGearSwitching: new AdaptiveGearSwitching_ref(client2),
-        antiSync: new AntiSync_ref(client2),
+        adaptiveGearSwitching: new AdaptiveGearSwitching(client2),
+        antiSync: new AntiSync(client2),
         spikeSyncHammer: new SpikeSyncHammer(client2),
         spikeSync: new SpikeSync(client2),
         spikeTickBreak: new SpikeTickBreak(client2),
@@ -16766,8 +16116,8 @@ window.grbtp = 35;
         useDestroying: new UseDestroying(client2),
         useAttacking: new UseAttacking(client2),
         utilityHat: new UtilityHat(client2),
-        antiInsta: new AntiInsta_ref(client2),
-        shameReset: new ShameReset_ref(client2),
+        antiInsta: new AntiInsta(client2),
+        shameReset: new ShameReset(client2),
         trapKB: new TrapKB(client2),
         autoShield: new AutoShield(client2),
         guardModule: new GuardModule(client2),
@@ -16777,17 +16127,17 @@ window.grbtp = 35;
         antiTrapProtect: new AntiTrapProtect(client2),
         antiTrapStar: new AntiTrapStar(client2),
         antiRetrap: new AntiRetrap(client2),
-        autoPush: new AutoPush_ref(client2),
-        autoPlay: new AutoPlay_ref(client2),
-        trapTick: new TrapTick_ref(client2),
-        autoPlacer: new AutoPlacer_ref(client2),
-        placer: new Placer_ref(client2),
-        autoMill: new Automill_ref(client2),
+        autoPush: new AutoPush(client2),
+        autoPlay: new AutoPlay(client2),
+        trapTick: new TrapTick(client2),
+        autoPlacer: new AutoPlacer(client2),
+        placer: new Placer(client2),
+        autoMill: new Automill(client2),
         autoGrind: new AutoGrind(client2),
-        preAttack: new PreAttack_ref(client2),
-        autoHat: new Autohat_ref(client2),
-        updateAttack: new UpdateAttack_ref(client2),
-        updateAngle: new UpdateAngle_ref(client2),
+        preAttack: new PreAttack(client2),
+        autoHat: new Autohat(client2),
+        updateAttack: new UpdateAttack(client2),
+        updateAngle: new UpdateAngle(client2),
         killChat: new KillChat(client2),
         deathProvoke: new DeathProvoke(client2),
         safeWalk: new SafeWalk(client2),
@@ -16949,7 +16299,7 @@ window.grbtp = 35;
         const nearest = em.nearestEnemy;
         const isDanger = em.detectedDangerEnemy || em.detectedEnemy || em.dangerWithoutSoldier;
         const primary = mp.getItemByType(0);
-        const atkRange = primary !== null ? DataHandler_ref.getWeapon(primary).range + (nearest?.hitScale || 35) : 85;
+        const atkRange = primary !== null ? DataHandler.getWeapon(primary).range + (nearest?.hitScale || 35) : 85;
         const isClose = nearest !== null && mp.pos.current.distance(nearest.pos.current) <= atkRange + 20;
         if (isDanger || isClose) {
           svc.intent.forceHat = 6;
@@ -16994,11 +16344,11 @@ window.grbtp = 35;
       priority: 90, owns: [], when: () => client2.isOwner,
       run: () => {
         const sched = runtime.scheduler;
-        GameUI_ref.updateFastQ(svc.ledger.didAntiInsta);
-        GameUI_ref.updatePlaces(svc.ledger.totalPlaces);
-        GameUI_ref.updateActiveModule(svc.intent.activeFeature + ", " + runtime.clock.tick);
-        GameUI_ref.updateEquipHat(`${svc.loadout.store[0].last},  ${svc.intent.shouldEquipSoldier}`);
-        GameUI_ref.updateModulePerformance(`${sched.lastDuration}/${sched.maxDuration}`);
+        GameUI.updateFastQ(svc.ledger.didAntiInsta);
+        GameUI.updatePlaces(svc.ledger.totalPlaces);
+        GameUI.updateActiveModule(svc.intent.activeFeature + ", " + runtime.clock.tick);
+        GameUI.updateEquipHat(`${svc.loadout.store[0].last},  ${svc.intent.shouldEquipSoldier}`);
+        GameUI.updateModulePerformance(`${sched.lastDuration}/${sched.maxDuration}`);
       }
     });
   }
@@ -17083,20 +16433,20 @@ window.grbtp = 35;
       // Rate accounting is the budget's, and the readout is a subscriber to it.
       this.runtime.services.network.bindSender(this.netBudget);
       this.netBudget.onRoll = spent => {
-        if (this.isOwner) GameUI_ref.updatePackets(spent);
+        if (this.isOwner) GameUI.updatePackets(spent);
       };
       this.telemetry = new RynTelemetry(this);
-      this.SocketManager = new SocketManager_ref(this);
-      this.ObjectManager = new ObjectManager_ref(this);
-      this.PlayerManager = new PlayerManager_ref(this);
-      this.ProjectileManager = new ProjectileManager_ref(this);
-      this.LeaderboardManager = new LeaderboardManager_ref(this);
-      this.EnemyManager = new EnemyManager_ref(this);
+      this.SocketManager = new SocketManager(this);
+      this.ObjectManager = new ObjectManager(this);
+      this.PlayerManager = new PlayerManager(this);
+      this.ProjectileManager = new ProjectileManager(this);
+      this.LeaderboardManager = new LeaderboardManager(this);
+      this.EnemyManager = new EnemyManager(this);
       // Units are built here, where ModuleHandler used to be constructed, so
       // anything they touch at construction sees the same client as before.
       // The registry owns the table; the runtime owns when they run.
       this.runtime.registry.install(buildRynUnits(this));
-      this.myPlayer = new ClientPlayer_ref(this);
+      this.myPlayer = new ClientPlayer(this);
       enrolRynUnits(this.runtime, this);
       this.InputHandler = new InputHandler(this);
       this.StatsManager = new StatsManager(this);
@@ -17132,8 +16482,7 @@ window.grbtp = 35;
       this.myPlayer.spawn();
     }
   }
-  const PlayerClient_ref = PlayerClient;
-  const UI = new class {
+    const UI = new class {
     frame;
     activeHotkeyInput=null;
     activeInput=null;
@@ -17643,7 +16992,7 @@ window.grbtp = 35;
 
        case "_hideHUD":
         {
-          const {gameUI: gameUI} = GameUI_ref.getElements();
+          const {gameUI: gameUI} = GameUI.getElements();
           if (checked) {
             gameUI.classList.add("hidden");
           } else {
@@ -17854,7 +17203,7 @@ window.grbtp = 35;
           }
         }
         this.addBotConnecting();
-        const socket = await createSocket_ref(ws.url);
+        const socket = await createSocket(ws.url);
         socket.addEventListener("close", () => {
           this.removeBotConnecting();
           if (rowId) {
@@ -17863,7 +17212,7 @@ window.grbtp = 35;
           }
         });
         socket.onopen = () => {
-          const player = new PlayerClient_ref(client);
+          const player = new PlayerClient(client);
           player.codec.Encoder = client.codec.Encoder;
           player.codec.Decoder = client.codec.Decoder;
           player._botCustomName = botName;
@@ -18670,8 +18019,7 @@ window.grbtp = 35;
       }
     }
   };
-  const UI_ref = UI;
-  window._rynUI = UI_ref;
+    window._rynUI = UI;
 
   const FORMATION_IDS = new Set([ "none", "circle", "heart", "triangle", "square", "column", "hline" ]);
   const defaultSettings = {
@@ -18858,7 +18206,7 @@ window.grbtp = 35;
       settings[key] = defaultSettings[key];
     }
     SaveSettings();
-    UI_ref.resetFrame();
+    UI.resetFrame();
   };
   const Settings_ref = settings;
   // Preplace and Replace are slaved to Autoplacer: they no longer have their own
@@ -18868,7 +18216,7 @@ window.grbtp = 35;
     Settings_ref._prePlace = on;
     Settings_ref._replace = on;
     try {
-      const doc = UI_ref.frame && UI_ref.frame.document;
+      const doc = UI.frame && UI.frame.document;
       if (!doc) return;
       for (const id of [ "_autoplacer", "_prePlace", "_replace" ]) {
         const el = doc.getElementById(id);
@@ -18920,13 +18268,13 @@ window.grbtp = 35;
     }
     createSkinColors() {
       const skin_color = CustomStorage.get("skin_color") || 0;
-      const index = typeof skin_color === "number" && skin_color >= 0 && skin_color < Config_ref.skinColors.length ? skin_color : 0;
+      const index = typeof skin_color === "number" && skin_color >= 0 && skin_color < Config.skinColors.length ? skin_color : 0;
       const {setupCard: setupCard} = this.getElements();
       const skinHolder = document.createElement("div");
       skinHolder.id = "ryn-skin-holder";
       let prevIndex = index;
-      for (let i = 0; i < Config_ref.skinColors.length; i++) {
-        const color = Config_ref.skinColors[i];
+      for (let i = 0; i < Config.skinColors.length; i++) {
+        const color = Config.skinColors[i];
         const div = document.createElement("div");
         div.classList.add("skinColorItem");
         if (i === index) {
@@ -19059,7 +18407,7 @@ window.grbtp = 35;
         const value = chatBox.value;
         if (value.length > 0) {
           this.handleChatMessage(client, value);
-          if (GameUI_ref._chatSync) {
+          if (GameUI._chatSync) {
             for (const bot of client.clients) {
               this.handleChatMessage(bot, value);
             }
@@ -19317,7 +18665,7 @@ window.grbtp = 35;
       }
     }
     reset() {
-      StoreHandler_ref.closeStore();
+      StoreHandler.closeStore();
     }
     openClanMenu() {
       const {clanButton: clanButton} = this.getElements();
@@ -19325,8 +18673,7 @@ window.grbtp = 35;
       clanButton.click();
     }
   };
-  const GameUI_ref = GameUI;
-  class Logger {
+    class Logger {
     static staticLog=console?.log || function() {};
     static staticError=console?.error || function() {};
     static staticWarn=console?.warn || function() {};
@@ -19442,9 +18789,8 @@ window.grbtp = 35;
       this.code = left + this.code + right;
     }
   }
-  const Regexer_ref = Regexer;
-  const formatCode2 = code => {
-    const Hook = new Regexer_ref(code);
+    const formatCode2 = code => {
+    const Hook = new Regexer(code);
     if (!isProd) {
       Hook.code = 'console?.log("Loaded bundle..");' + Hook.code;
     }
@@ -19572,8 +18918,7 @@ window.grbtp = 35;
       });
     }
   };
-  const Injector_ref = Injector;
-  const resetGame = loadedFast => {
+    const resetGame = loadedFast => {
     const scriptExecuteHandler = node => {
       node.addEventListener("beforescriptexecute", event => {
         event.preventDefault();
@@ -19595,7 +18940,7 @@ window.grbtp = 35;
         Logger.test("Found script element, resolving..");
         scriptExecuteHandler(node);
         if (loadedFast) {
-          Injector_ref.init(node);
+          Injector.init(node);
         }
       }
     };
@@ -19650,7 +18995,7 @@ window.grbtp = 35;
       win.requestAnimFrame = function() {
         delete win.requestAnimFrame;
         if (scriptBundle !== null) {
-          Injector_ref.init(scriptBundle);
+          Injector.init(scriptBundle);
         }
       };
       blockProperty(win, "requestAnimFrame");
@@ -19708,7 +19053,7 @@ window.grbtp = 35;
     const deleteProp = (target, name) => {
       delete target[name];
     };
-    Hooker_ref.createRecursiveHook(window, "config", (that, config) => {
+    Hooker.createRecursiveHook(window, "config", (that, config) => {
       deleteProp(that, "openLink");
       deleteProp(that, "aJoinReq");
       deleteProp(that, "follmoo");
@@ -19732,11 +19077,11 @@ window.grbtp = 35;
       Logger.log("Intercepted config..");
       return loadedFast;
     });
-    Hooker_ref.createRecursiveHook(Object.prototype, "initialBufferSize", _this => {
+    Hooker.createRecursiveHook(Object.prototype, "initialBufferSize", _this => {
       client.codec.Encoder = _this;
       return true;
     });
-    Hooker_ref.createRecursiveHook(Object.prototype, "maxExtLength", _this => {
+    Hooker.createRecursiveHook(Object.prototype, "maxExtLength", _this => {
       client.codec.Decoder = _this;
       Logger.log("Hooked decoder..");
       return true;
@@ -19832,58 +19177,7 @@ window.grbtp = 35;
       configurable: true
     });
   };
-  const resetGame_ref = resetGame;
-  class DeadPlayer {
-    moveAngle;
-    skinColor;
-    angle;
-    weapon;
-    variant;
-    hatID;
-    accID;
-    rotation;
-    baseTime=2e3;
-    elapsedTime=0;
-    pos=new Vector_ref;
-    lerpPos=new Vector_ref;
-    acc=7;
-    velocity=0;
-    opacity=1;
-    shortSign;
-    constructor(startPos, moveAngle, skin, rotation, weapon, variant, hatID, accID, impulse) {
-      this.moveAngle = moveAngle;
-      this.skinColor = skin;
-      this.angle = rotation;
-      this.weapon = weapon;
-      this.variant = variant;
-      this.hatID = hatID;
-      this.accID = accID;
-      this.rotation = rotation;
-      this.pos.setVec(startPos);
-      this.lerpPos.setVec(startPos);
-      this.shortSign = Math.sign(shortAngle(this.angle, this.moveAngle));
-      this.acc = (impulse || 10) / 10 * 75;
-    }
-    update(delta) {
-      this.elapsedTime += delta;
-      const progress = Math.min(this.elapsedTime / this.baseTime, 1);
-      const easedProgress = easeOutQuad(progress);
-      this.opacity = 1 - easedProgress;
-      const dt = delta / 1e3;
-      const blend = 1 - Math.exp(-10 * dt);
-      const PI3 = Math.PI;
-      const rotationSpeed = (1 - easedProgress) / PI3 * blend;
-      if (!Settings_ref._lowQuality) this.rotation += rotationSpeed * this.shortSign;
-      this.velocity = this.acc * (1 - easedProgress);
-      this.pos.add(Vector_ref.fromAngle(this.moveAngle, this.velocity * dt));
-      this.lerpPos.x = lerp(this.lerpPos.x, this.pos.x, blend);
-      this.lerpPos.y = lerp(this.lerpPos.y, this.pos.y, blend);
-    }
-    isFinished() {
-      return this.elapsedTime >= this.baseTime;
-    }
-  }
-  const DeadPlayerHandler = new class {
+      const DeadPlayerHandler = new class {
     deadPlayers=new Set;
     start=Date.now();
     add(player) {
@@ -19962,7 +19256,7 @@ window.grbtp = 35;
       const {health: health, maxHealth: maxHealth, angle: angle} = object;
       const perc = health / maxHealth;
       const color = isEnemyObj ? Settings_ref._itemHealthBarEnemyColor : Settings_ref._itemHealthBarColor;
-      return Renderer_ref.circularBar(ctx, entity, perc, angle, color, 0, 1.4);
+      return Renderer.circularBar(ctx, entity, perc, angle, color, 0, 1.4);
     }
     renderWindmill(entity) {
       const item = Items[entity.id];
@@ -19977,30 +19271,30 @@ window.grbtp = 35;
       const x = entity.x + entity.xWiggle;
       const y = entity.y + entity.yWiggle;
       if (Settings_ref._collisionHitbox) {
-        Renderer_ref.square(ctx, x, y, object.collisionScale, "#c7fff2", .5, 1);
+        Renderer.square(ctx, x, y, object.collisionScale, "#c7fff2", .5, 1);
       }
       if (Settings_ref._weaponHitbox) {
-        Renderer_ref.hexagon(ctx, x, y, object.hitScale, "#3f4ec4", .5, 1);
+        Renderer.hexagon(ctx, x, y, object.hitScale, "#3f4ec4", .5, 1);
       }
       if (Settings_ref._placementHitbox) {
-        Renderer_ref.diamond(ctx, x, y, object.placementScale, "#73b9ba", .5, 1);
+        Renderer.diamond(ctx, x, y, object.placementScale, "#73b9ba", .5, 1);
       }
     }
     _render(ctx) {
-      if (Renderer_ref._renderObjects.length === 0) {
+      if (Renderer._renderObjects.length === 0) {
         return;
       }
       const {ObjectManager: ObjectManager2, services: ryn, myPlayer: myPlayer} = client;
       const _cx = myPlayer && myPlayer.inGame ? myPlayer.pos.current.x : 0;
       const _cy = myPlayer && myPlayer.inGame ? myPlayer.pos.current.y : 0;
-      const _vw = ZoomHandler_ref._scale.current._w * 0.55;
-      const _vh = ZoomHandler_ref._scale.current._h * 0.55;
+      const _vw = ZoomHandler._scale.current._w * 0.55;
+      const _vh = ZoomHandler._scale.current._h * 0.55;
       const _maxObj = Settings_ref._lowQuality ? 80 : Infinity;
       let _objCount = 0;
       if (Settings_ref._lowQuality && myPlayer && myPlayer.inGame) {
-        Renderer_ref._renderObjects.sort((a, b) => (a.x - _cx) * (a.x - _cx) + (a.y - _cy) * (a.y - _cy) - ((b.x - _cx) * (b.x - _cx) + (b.y - _cy) * (b.y - _cy)));
+        Renderer._renderObjects.sort((a, b) => (a.x - _cx) * (a.x - _cx) + (a.y - _cy) * (a.y - _cy) - ((b.x - _cx) * (b.x - _cx) + (b.y - _cy) * (b.y - _cy)));
       }
-      for (const entity of Renderer_ref._renderObjects) {
+      for (const entity of Renderer._renderObjects) {
         if (_objCount++ >= _maxObj) break;
         if (Settings_ref._lowQuality && (Math.abs(entity.x - _cx) > _vw || Math.abs(entity.y - _cy) > _vh)) continue;
         const object = ObjectManager2.objects.get(entity.sid);
@@ -20013,22 +19307,22 @@ window.grbtp = 35;
         }
         this.renderCollisions(ctx, entity, object);
       }
-      Renderer_ref._renderObjects.length = 0;
+      Renderer._renderObjects.length = 0;
     }
     volcanoBoxSize=940;
     volcanoAggressionRadius=1440;
-    volcanoBoxPos=new Vector_ref(14400, 14400).sub(this.volcanoBoxSize);
-    volcanoPos=new Vector_ref(13960, 13960);
+    volcanoBoxPos=new Vector(14400, 14400).sub(this.volcanoBoxSize);
+    volcanoPos=new Vector(13960, 13960);
     _preRender(ctx) {
       if (Settings_ref._lowQuality) {
         ctx.imageSmoothingEnabled = false;
         ctx.shadowColor = "transparent";
         const ox = RYN._offset.x, oy = RYN._offset.y;
-        const cdx = Math.abs(ox - Renderer_ref._staticCacheOffset.x);
-        const cdy = Math.abs(oy - Renderer_ref._staticCacheOffset.y);
-        if (Renderer_ref._staticCacheDirty || cdx > 150 || cdy > 150) {
-          Renderer_ref._staticCacheDirty = false;
-          Renderer_ref._staticCacheOffset = {
+        const cdx = Math.abs(ox - Renderer._staticCacheOffset.x);
+        const cdy = Math.abs(oy - Renderer._staticCacheOffset.y);
+        if (Renderer._staticCacheDirty || cdx > 150 || cdy > 150) {
+          Renderer._staticCacheDirty = false;
+          Renderer._staticCacheOffset = {
             x: ox,
             y: oy
           };
@@ -20053,15 +19347,14 @@ window.grbtp = 35;
       ctx.restore();
       if (client.myPlayer.diedOnce) {
         const {x: x2, y: y2} = client.myPlayer.deathPosition;
-        Renderer_ref.cross(ctx, x2, y2, 50, 15, "#cc5151");
+        Renderer.cross(ctx, x2, y2, 50, 15, "#cc5151");
       }
       if (Settings_ref._positionPrediction && client.myPlayer.inGame) {
         DeadPlayerHandler.render(ctx, client.myPlayer.simulation.getPos(), client.myPlayer.simulation.spikeCollision ? "red" : "yellow");
       }
     }
   };
-  const ObjectRenderer_ref = ObjectRenderer;
-  const isProd = true;
+    const isProd = true;
   const version = isProd ? "5.9.4" : "Dev";
   const loadedFast = document.head === null;
   if (!loadedFast) {
@@ -20069,7 +19362,7 @@ window.grbtp = 35;
   }
   Logger.test("RYN Client initialization..");
   const gameToken = altcha.generate();
-  const client = new PlayerClient_ref;
+  const client = new PlayerClient;
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {
       const socket = new target(...args);
@@ -20225,7 +19518,7 @@ window.grbtp = 35;
       this.count = want;
 
       // Ease across the biome line so it morphs instead of snapping.
-      const target = myPlayer.pos.current.y <= Config_ref.snowBiomeTop ? 1 : 0;
+      const target = myPlayer.pos.current.y <= Config.snowBiomeTop ? 1 : 0;
       this.snow += (target - this.snow) * Math.min(1, dt * 1.6);
       const snow = this.snow;
 
@@ -20290,16 +19583,16 @@ window.grbtp = 35;
   const RYN = {
     _myClient: client,
     _settings: Settings_ref,
-    _Renderer: Renderer_ref,
-    _ZoomHandler: ZoomHandler_ref,
+    _Renderer: Renderer,
+    _ZoomHandler: ZoomHandler,
     _hooks: {
-      _EntityRenderer: EntityRenderer_ref,
-      _ObjectRenderer: ObjectRenderer_ref,
+      _EntityRenderer: EntityRenderer,
+      _ObjectRenderer: ObjectRenderer,
       _renderPlayer: function() {}
     },
     _config: {},
     version: version,
-    _offset: new Vector_ref,
+    _offset: new Vector,
     _gameInit(token) {},
     async startGame() {
       const token = await gameToken;
@@ -20334,13 +19627,13 @@ window.grbtp = 35;
       } catch (e) {}
     }, 500);
   } catch (e) {}
-  resetGame_ref(loadedFast);
+  resetGame(loadedFast);
   const contentLoaded = () => {
     Logger.test("Menu initialization..");
     client.InputHandler.init();
-    GameUI_ref.init();
-    UI_ref.init();
-    StoreHandler_ref.init();
+    GameUI.init();
+    UI.init();
+    StoreHandler.init();
   };
   window.addEventListener("DOMContentLoaded", contentLoaded);
   if (document.readyState !== "loading") {
@@ -20348,7 +19641,7 @@ window.grbtp = 35;
   }
   const onload = () => {
     Logger.test("Page loaded..");
-    const {enterGame: enterGame} = GameUI_ref.getElements();
+    const {enterGame: enterGame} = GameUI.getElements();
     enterGame.classList.remove("disabled");
   };
   let _autoChatIndex = 0;
@@ -20464,14 +19757,14 @@ window.grbtp = 35;
       };
       const slotHasPrimary = ids.some(id => id < 16 && (() => {
         try {
-          return DataHandler_ref.getWeapon(id).type === 0;
+          return DataHandler.getWeapon(id).type === 0;
         } catch (e) {
           return false;
         }
       })());
       const slotHasSecondary = ids.some(id => id < 16 && (() => {
         try {
-          return DataHandler_ref.getWeapon(id).type === 1;
+          return DataHandler.getWeapon(id).type === 1;
         } catch (e) {
           return false;
         }
@@ -20503,7 +19796,7 @@ window.grbtp = 35;
           for (const id of ids) {
             if (id < 16) {
               try {
-                if (DataHandler_ref.getWeapon(id).type === 0) {
+                if (DataHandler.getWeapon(id).type === 0) {
                   target = id;
                   break;
                 }
@@ -22759,7 +22052,7 @@ window.grbtp = 35;
   };
   setInterval(() => {
     try {
-      const frame = UI_ref.frame && UI_ref.frame.target;
+      const frame = UI.frame && UI.frame.target;
       if (!frame || !frame.contentDocument) return;
       const page = frame.contentDocument.querySelector('.menu-page[data-id="1"]');
       if (page && !page._targetAttached) {
@@ -23064,7 +22357,7 @@ window.grbtp = 35;
   }
   setInterval(function() {
     try {
-      var frame = UI_ref.frame && UI_ref.frame.target;
+      var frame = UI.frame && UI.frame.target;
       if (!frame || !frame.contentDocument) return;
       var si = frame.contentDocument.getElementById("ryn-search-input");
       if (si && !si._rynSI) _initRynSearch(frame.contentDocument);
@@ -23222,7 +22515,7 @@ window.grbtp = 35;
         try {
           const priID = myPlayer.getItemByType(0);
           if (priID !== null && priID !== undefined) {
-            range = DataHandler_ref.getWeapon(priID).range + (target.hitScale || target.collisionScale || 0);
+            range = DataHandler.getWeapon(priID).range + (target.hitScale || target.collisionScale || 0);
           }
         } catch (_) {}
         const dist = Math.hypot(tPos.x - myPos.x, tPos.y - myPos.y);
