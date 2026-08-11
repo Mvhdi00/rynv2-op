@@ -10856,6 +10856,285 @@ window.grbtp = 35;
       }
     }
   }
+  // ==========================================================================
+  // RYN combat subsystem
+  //
+  // What this stands beside: combat lived in twenty units that each reached
+  // into EnemyManager for a target, recomputed threat from raw fields, guessed
+  // at where an enemy would be, and wrote weapon and hat intent themselves.
+  // The same question was answered differently in different files, and the
+  // prediction arithmetic could not be checked without a live fight.
+  //
+  // Five owners, and the mathematics is pure:
+  //
+  //   RynTargetTracker    who matters, and what we know about them over time
+  //   RynThreatAnalyzer   how dangerous that is, from damage and distance
+  //   RynPrediction       where they will be and when they can swing
+  //   RynCombatPlanner    what should happen
+  //   RynCombatExecutor   making it happen, through the net layer
+  //
+  // RynPrediction is deliberately static and free of client state: every
+  // method takes numbers and returns numbers, so it can be exercised against
+  // the game's own constants without a socket.
+  // ==========================================================================
+
+  // What kind of action the planner settled on. Named so a decision can be
+  // logged and compared rather than inferred from which fields got written.
+  const RYN_COMBAT_ACTION = Object.freeze({
+    NONE: "none",
+    SWING: "swing",
+    SPIKE_TICK: "spikeTick",
+    BURST: "burst",
+    DISENGAGE: "disengage"
+  });
+
+  // Pure motion and timing mathematics. Nothing here reads the client.
+  //
+  // The constants are the game's own: playerSpeed .0016 and playerDecel .993,
+  // read from Config rather than fitted. The step below is the bundle's
+  // integration -- velocity decays by decel^ms and acceleration is applied over
+  // the same interval -- so a prediction made here is the motion the server
+  // will run, not a straight line drawn through two samples.
+  class RynPrediction {
+    // One integration step. `ms` is the interval, `moveAngle` null when the
+    // target is not holding a direction.
+    static step(state, moveAngle, ms, speedMult = 1) {
+      const decay = Math.pow(Config_ref.playerDecel, ms);
+      let vx = state.vx * decay;
+      let vy = state.vy * decay;
+      if (moveAngle !== null && moveAngle !== undefined) {
+        const accel = Config_ref.playerSpeed * speedMult * ms;
+        vx += Math.cos(moveAngle) * accel;
+        vy += Math.sin(moveAngle) * accel;
+      }
+      return {
+        x: state.x + vx * ms,
+        y: state.y + vy * ms,
+        vx: vx,
+        vy: vy
+      };
+    }
+    // Where a target ends up after `ticks` of holding `moveAngle`.
+    static project(state, moveAngle, ticks, tickMs = 1e3 / 9, speedMult = 1) {
+      let out = {
+        x: state.x,
+        y: state.y,
+        vx: state.vx ?? 0,
+        vy: state.vy ?? 0
+      };
+      for (let i = 0; i < ticks; i++) out = RynPrediction.step(out, moveAngle, tickMs, speedMult);
+      return out;
+    }
+    // The straight line the old placer drew, kept so the two can be compared
+    // rather than one silently replacing the other.
+    static linear(state, ticks) {
+      return {
+        x: state.x + (state.vx ?? 0) * ticks,
+        y: state.y + (state.vy ?? 0) * ticks,
+        vx: state.vx ?? 0,
+        vy: state.vy ?? 0
+      };
+    }
+    // Ticks until a weapon can swing again. -1 when it never will.
+    static ticksToReady(reload) {
+      if (!reload || !Number.isFinite(reload.current) || !Number.isFinite(reload.max)) return -1;
+      if (reload.current >= reload.max) return 0;
+      const perTick = reload.max - (reload.previous ?? reload.max);
+      if (perTick <= 0) return -1;
+      return Math.ceil((reload.max - reload.current) / perTick);
+    }
+    // The tick a weapon crosses from reloading to ready is the tick a swing
+    // becomes imminent; standing ready is a different fact and is reported
+    // separately so a caller can ask for whichever it means.
+    static swingWindow(reload) {
+      if (!reload) return {
+        ready: false,
+        justReady: false
+      };
+      const ready = reload.current >= reload.max;
+      const wasReloading = (reload.previous ?? reload.max) < reload.max;
+      return {
+        ready: ready,
+        justReady: ready && wasReloading
+      };
+    }
+    // Where a projectile and a mover meet, or null if they do not. Solves the
+    // quadratic rather than stepping, so the answer does not depend on how
+    // finely it is sampled.
+    static intercept(shooter, target, projectileSpeed) {
+      const rx = target.x - shooter.x;
+      const ry = target.y - shooter.y;
+      const vx = target.vx ?? 0;
+      const vy = target.vy ?? 0;
+      const a = vx * vx + vy * vy - projectileSpeed * projectileSpeed;
+      const b = 2 * (rx * vx + ry * vy);
+      const c = rx * rx + ry * ry;
+      let t;
+      if (Math.abs(a) < 1e-9) {
+        if (Math.abs(b) < 1e-9) return null;
+        t = -c / b;
+      } else {
+        const disc = b * b - 4 * a * c;
+        if (disc < 0) return null;
+        const root = Math.sqrt(disc);
+        const t1 = (-b - root) / (2 * a);
+        const t2 = (-b + root) / (2 * a);
+        t = Math.min(t1, t2) >= 0 ? Math.min(t1, t2) : Math.max(t1, t2);
+      }
+      if (!Number.isFinite(t) || t < 0) return null;
+      return {
+        t: t,
+        x: target.x + vx * t,
+        y: target.y + vy * t
+      };
+    }
+  }
+
+  // Who matters, and what we know about them across ticks. Units asked
+  // EnemyManager for `nearestEnemy` and each kept their own notion of how long
+  // a fight had been going; this keeps it once.
+  class RynTargetTracker {
+    client;
+    current = null;
+    previous = null;
+    heldFor = 0;
+    firstSeenTick = -1;
+    _history = new Map;
+    constructor(client2) {
+      this.client = client2;
+    }
+    update(tick) {
+      const nearest = this.client.EnemyManager.nearestEnemy ?? null;
+      if (nearest !== this.current) {
+        this.previous = this.current;
+        this.current = nearest;
+        this.heldFor = 0;
+        this.firstSeenTick = nearest === null ? -1 : tick;
+      } else if (nearest !== null) {
+        this.heldFor += 1;
+      }
+      if (nearest !== null) {
+        const seen = this._history.get(nearest.id) ?? {
+          ticks: 0,
+          lastTick: tick
+        };
+        seen.ticks += 1;
+        seen.lastTick = tick;
+        this._history.set(nearest.id, seen);
+      }
+      return this.current;
+    }
+    // Motion in the shape RynPrediction expects, from the two positions the
+    // world already carries.
+    motionOf(entity, tickMs = 1e3 / 9) {
+      if (entity === null || entity === undefined) return null;
+      const cur = entity.pos.current;
+      const fut = entity.pos.future ?? cur;
+      return {
+        x: cur.x,
+        y: cur.y,
+        vx: (fut.x - cur.x) / tickMs,
+        vy: (fut.y - cur.y) / tickMs
+      };
+    }
+    familiarity(entity) {
+      return entity === null ? 0 : (this._history.get(entity.id)?.ticks ?? 0);
+    }
+    reset() {
+      this.current = null;
+      this.previous = null;
+      this.heldFor = 0;
+      this.firstSeenTick = -1;
+      this._history.clear();
+    }
+  }
+
+  // How dangerous the situation is. Reads what EnemyManager already computed
+  // rather than recomputing damage per unit, and returns one shape so twenty
+  // callers stop each deriving their own answer.
+  class RynThreatAnalyzer {
+    client;
+    constructor(client2) {
+      this.client = client2;
+    }
+    assess(target) {
+      const em = this.client.EnemyManager;
+      const me = this.client.myPlayer;
+      const incoming = em.potentialDamage + Math.max(em.potentialSpikeDamage, em.potentialSpikeKnockbackDamage);
+      const health = me.currentHealth ?? 100;
+      const distance = target === null ? Infinity : me.pos.current.distance(target.pos.current);
+      return {
+        target: target,
+        incoming: incoming,
+        health: health,
+        // What fraction of what is left this exchange could take.
+        lethality: health > 0 ? incoming / health : 1,
+        lethal: incoming >= health,
+        distance: distance,
+        knockbackRisk: em.possibleToKnockback === true && me.isTrapped !== true,
+        flagged: em.detectedDangerEnemy === true || em.detectedEnemy === true || em.dangerWithoutSoldier === true
+      };
+    }
+  }
+
+  // Decides what should happen. Returns a decision; writes nothing. Keeping
+  // this free of side effects is what stops a combat unit reaching into
+  // movement or gear to arrange its own preconditions.
+  class RynCombatPlanner {
+    _options = [];
+    addOption(option) {
+      if (!option || !option.id || typeof option.consider !== "function") {
+        Logger.error(`RynCombatPlanner: refused option "${option && option.id}"`);
+        return null;
+      }
+      this._options.push({
+        id: option.id,
+        weight: option.weight ?? 0,
+        consider: option.consider
+      });
+      this._options.sort((a, b) => b.weight - a.weight);
+      return option.id;
+    }
+    get options() {
+      return this._options.map(o => o.id);
+    }
+    plan(ctx) {
+      for (const option of this._options) {
+        const decision = option.consider(ctx);
+        if (decision !== null && decision !== undefined && decision.action !== RYN_COMBAT_ACTION.NONE) {
+          return {
+            ...decision,
+            by: option.id
+          };
+        }
+      }
+      return {
+        action: RYN_COMBAT_ACTION.NONE,
+        by: null
+      };
+    }
+  }
+
+  // Carries a decision out. The only part of this subsystem that writes intent
+  // or reaches the wire, and it does so through the bid it was handed rather
+  // than by mutating anything shared.
+  class RynCombatExecutor {
+    client;
+    constructor(client2) {
+      this.client = client2;
+    }
+    apply(decision, bid) {
+      if (decision === null || decision.action === RYN_COMBAT_ACTION.NONE) return false;
+      if (decision.angle !== undefined) bid.useAngle = decision.angle;
+      if (decision.weapon !== undefined) bid.forceWeapon = decision.weapon;
+      if (decision.hat !== undefined) bid.forceHat = decision.hat;
+      if (decision.attack === true) bid.shouldAttack = true;
+      if (decision.claim !== false) bid.moduleActive = true;
+      this.client.runtime.events.emit("combat:decision", decision);
+      return true;
+    }
+  }
+
   class Instakill {
     unitID="instakill";
     client;
