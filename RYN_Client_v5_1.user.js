@@ -5498,7 +5498,7 @@ window.grbtp = 35;
       }
       return turret.reload > turret.maxReload - tick;
     }
-    runTick() {
+    runTick(bid) {
       for (const [id, turret] of this.reloadingTurrets) {
         turret.reload += 1;
         if (turret.reload >= turret.maxReload) {
@@ -6660,7 +6660,7 @@ window.grbtp = 35;
         EnemyManager2.handleAnimal(animal);
       }
     }
-    runTick() {
+    runTick(bid) {
       const {EnemyManager: EnemyManager2, ProjectileManager: ProjectileManager, ObjectManager: ObjectManager2, myPlayer: myPlayer, isOwner: isOwner, _Core: ModuleHandler} = this.client;
       ModuleHandler.moduleStart = performance.now();
       if (myPlayer && myPlayer.inGame) {
@@ -6804,7 +6804,7 @@ window.grbtp = 35;
         }
       }
     }
-    runTick() {
+    runTick(bid) {
       this.projectiles.clear();
       this.totalDamage = 0;
       for (const proj of this.dangerProjectiles) {
@@ -7478,7 +7478,7 @@ window.grbtp = 35;
       }
       return myPlayer.pos.future;
     }
-    runTick() {}
+    runTick(bid) {}
     toggleBotPosition() {
       const state = !this.lockPosition;
       if (state) {
@@ -7956,7 +7956,7 @@ window.grbtp = 35;
       const temp = ModuleHandler.canBuy(type, id) ? id : 0;
       ModuleHandler._equip(type, temp, true);
     }
-    runTick() {
+    runTick(bid) {
       this.handleBuy(0);
       this.handleBuy(1);
     }
@@ -8226,7 +8226,7 @@ window.grbtp = 35;
       const {previous: previous, current: current} = this.client.myPlayer.pos;
       return previous.distance(pos) <= radius || current.distance(pos) <= radius;
     }
-    runTick() {
+    runTick(bid) {
       const {InputHandler: InputHandler2} = this.client.ownerClient;
       const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       if (ModuleHandler._scatterActive || ModuleHandler._scatterReturning) return;
@@ -8304,7 +8304,7 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       if (Settings_ref._botIndividualClans) {
         this._individualClanTick();
         return;
@@ -8541,12 +8541,12 @@ window.grbtp = 35;
       });
       return best;
     }
-    runTick() {
+    runTick(bid) {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
       if (!Settings_ref._autobreak) {
         return;
       }
-      if (ModuleHandler.moduleActive && !myPlayer.isTrapped) {
+      if (ModuleHandler._arbiter.claimedAbove && !myPlayer.isTrapped) {
         return;
       }
       const beneficial = this._beneficialBreakTarget(myPlayer, EnemyManager2.nearestEnemy, ObjectManager3, PlayerManager3);
@@ -8555,11 +8555,11 @@ window.grbtp = 35;
         const {reloading: reloading} = ModuleHandler.unitTable;
         if (reloading.isReloaded(1)) {
           const bPos = beneficial.pos.current;
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.forceWeapon = 1;
-          ModuleHandler.useAngle = myPlayer.pos.current.angle(bPos);
-          ModuleHandler.forceHat = 40;
-          ModuleHandler.shouldAttack = true;
+          bid.moduleActive = true;
+          bid.forceWeapon = 1;
+          bid.useAngle = myPlayer.pos.current.angle(bPos);
+          bid.forceHat = 40;
+          bid.shouldAttack = true;
           return;
         }
       }
@@ -8593,11 +8593,11 @@ window.grbtp = 35;
       if (myPlayer.isTrapped && myTrapOnEnemy === null) {
         const {reloading: _rl} = ModuleHandler.unitTable;
         if (_rl.isReloaded(type)) {
-          ModuleHandler.forceWeapon = type;
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.useAngle = angle1;
-          ModuleHandler.forceHat = 40;
-          ModuleHandler.shouldAttack = true;
+          bid.forceWeapon = type;
+          bid.moduleActive = true;
+          bid.useAngle = angle1;
+          bid.forceHat = 40;
+          bid.shouldAttack = true;
         }
         return;
       }
@@ -8657,15 +8657,15 @@ window.grbtp = 35;
       const totalDamage = EnemyManager2.primaryDamage + EnemyManager2.potentialSpikeDamage;
       const shouldIgnore = EnemyManager2.instaThreat() || nearestEnemy !== null && nearestEnemy.reload[0].previous !== nearestEnemy.reload[0].current && myPlayer.currentHealth <= totalDamage && myPlayer.currentHealth > totalDamage * .75;
       const {reloading: reloading} = ModuleHandler.unitTable;
-      ModuleHandler.forceWeapon = type;
+      bid.forceWeapon = type;
       const urgentRetrapRisk = myPlayer.isTrapped && target.type === 15 && this.enemyCanRetrapMe(myPlayer, nearestEnemy, this.client.ObjectManager);
       if (reloading.isReloaded(type) && !shouldIgnore) {
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = angle;
+        bid.moduleActive = true;
+        bid.useAngle = angle;
         if (!isEnoughDamage || urgentRetrapRisk) {
-          ModuleHandler.forceHat = 40;
+          bid.forceHat = 40;
         }
-        ModuleHandler.shouldAttack = true;
+        bid.shouldAttack = true;
       }
     }
   }
@@ -8679,14 +8679,14 @@ window.grbtp = 35;
     reset() {
       this.pushPos = null;
     }
-    runTick() {
+    runTick(bid) {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
       this.pushPos = null;
       const nearestEnemyPush = EnemyManager2.nearestEnemyPush;
       const nearestPushSpike = EnemyManager2.nearestPushSpike;
       EnemyManager2.nearestEnemyPush = null;
       EnemyManager2.nearestPushSpike = null;
-      if (ModuleHandler.moduleActive || !Settings_ref._autoPush || ModuleHandler.moveTo !== "disable") {
+      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._autoPush || ModuleHandler.moveTo !== "disable") {
         return;
       }
       if (nearestEnemyPush === null || nearestPushSpike === null) {
@@ -8724,7 +8724,7 @@ window.grbtp = 35;
         }
       }
       this.pushPos = pos2.addDirection(angleFromSpikeToEnemy, distanceFromSpikeToEnemy + 250);
-      ModuleHandler.moveTo = pos0.angle(this.pushPos);
+      bid.moveTo = pos0.angle(this.pushPos);
       EnemyManager2.nearestEnemyPush = nearestEnemyPush;
       EnemyManager2.nearestPushSpike = nearestPushSpike;
       const activationScale2 = nearestEnemyPush.collisionScale * 3.2;
@@ -8735,7 +8735,7 @@ window.grbtp = 35;
         return;
       }
       this.pushPos = pushPos;
-      ModuleHandler.moveTo = pos0.angle(this.pushPos);
+      bid.moveTo = pos0.angle(this.pushPos);
     }
   }
   const AutoPush_ref = AutoPush;
@@ -8774,7 +8774,7 @@ window.grbtp = 35;
       });
       return blocked;
     }
-    runTick() {
+    runTick(bid) {
       if (!Settings_ref._autoPlay) return;
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
@@ -8807,7 +8807,7 @@ window.grbtp = 35;
       this.client = client2;
     }
     reset() {}
-    runTick() {}
+    runTick(bid) {}
   }
   const TrapTick_ref = TrapTick;
   // ==========================================================================
@@ -9444,7 +9444,7 @@ window.grbtp = 35;
       return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
     }
 
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
       if (!Settings_ref._autoplacer) return;
       if (!myPlayer || !myPlayer.inGame) return;
@@ -9810,7 +9810,7 @@ window.grbtp = 35;
         ModuleHandler.placedOnce = true;
         ModuleHandler.placeAngles[0] = type;
         ModuleHandler.placeAngles[1].push(obj.angle);
-        ModuleHandler.moduleActive = true;
+        bid.moduleActive = true;
         this._placedSpots.push({
           x: obj.x,
           y: obj.y,
@@ -9941,10 +9941,10 @@ window.grbtp = 35;
     _bestAngle(angles, targetAngle) {
       return angles.reduce((best, a) => this._angleDist(a, targetAngle) < this._angleDist(best, targetAngle) ? a : best, angles[0]);
     }
-    runTick() {
+    runTick(bid) {
       if (!Settings_ref._trapAnimal) return;
       const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2} = this.client;
-      if (ModuleHandler.moduleActive || ModuleHandler.placedOnce) return;
+      if (ModuleHandler._arbiter.claimedAbove || ModuleHandler.placedOnce) return;
       const animal = EnemyManager2.nearestDangerAnimal;
       if (!animal || !this.ANIMAL_IDS.has(animal.type)) {
         this.reset();
@@ -9993,9 +9993,9 @@ window.grbtp = 35;
       constructor(client2) {
           this.client = client2;
       }
-      runTick() {
+      runTick(bid) {
           const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-          if (ModuleHandler.moduleActive || !Settings_ref._antiRetrap) {
+          if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._antiRetrap) {
               return;
           }
           const {reloading: reloading} = ModuleHandler.unitTable;
@@ -10019,12 +10019,12 @@ window.grbtp = 35;
           const pos2 = nearestEnemy.pos.current;
           const angle = pos1.angle(pos2);
           if (isReloadedPrimary) {
-              ModuleHandler.moduleActive = true;
-              ModuleHandler.forceWeapon = 0;
-              ModuleHandler.useAngle = angle;
-              ModuleHandler.shouldAttack = true;
+              bid.moduleActive = true;
+              bid.forceWeapon = 0;
+              bid.useAngle = angle;
+              bid.shouldAttack = true;
               if (turretReloaded) {
-                  ModuleHandler.forceHat = 53;
+                  bid.forceHat = 53;
               }
           }
       }
@@ -10057,11 +10057,11 @@ window.grbtp = 35;
       if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
       return true;
     }
-    runTick() {
+    runTick(bid) {
       if (!Settings_ref._antiTrapProtect) return;
       const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _Core: ModuleHandler} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
-      if (ModuleHandler.moduleActive) return;
+      if (ModuleHandler._arbiter.claimedAbove) return;
       const trap = myPlayer.trappedIn;
       if (trap === null) {
         this._protected = false;
@@ -10095,7 +10095,7 @@ window.grbtp = 35;
       }
       if (placedAny) {
         ModuleHandler.placedOnce = true;
-        ModuleHandler.moduleActive = true;
+        bid.moduleActive = true;
       }
       this._protected = true;
     }
@@ -10178,13 +10178,13 @@ window.grbtp = 35;
       if (d > Math.PI) d = 2 * Math.PI - d;
       return d;
     }
-    runTick() {
+    runTick(bid) {
       if (!Settings_ref._antiTrapStar) {
         this._protected = false;
         return;
       }
       const {myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2, _Core: ModuleHandler, PlayerManager: PlayerManager2} = this.client;
-      if (!myPlayer || !myPlayer.inGame || ModuleHandler.moduleActive) return;
+      if (!myPlayer || !myPlayer.inGame || ModuleHandler._arbiter.claimedAbove) return;
       if (myPlayer.trappedIn) {
         this._protected = false;
         return;
@@ -10219,7 +10219,7 @@ window.grbtp = 35;
       const placed = this._protect(trapAim + Math.PI, agnes, myPos, ObjectManager2, ModuleHandler, spikeID);
       if (placed) {
         ModuleHandler.placedOnce = true;
-        ModuleHandler.moduleActive = true;
+        bid.moduleActive = true;
         this._protected = true;
       }
     }
@@ -10234,9 +10234,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_ref._autoSync) {
+      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._autoSync) {
         this.useTurret = false;
         return;
       }
@@ -10250,8 +10250,8 @@ window.grbtp = 35;
       if (this.useTurret) {
         this.useTurret = false;
         if (turretReloaded) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.forceHat = 53;
+          bid.moduleActive = true;
+          bid.forceHat = 53;
         }
         return;
       }
@@ -10277,17 +10277,17 @@ window.grbtp = 35;
       const pos2 = nearestEnemy.pos.future;
       const angleToEnemy = pos1.angle(pos2);
       if (!isPrimaryReloaded1) {
-        ModuleHandler.forceWeapon = 0;
+        bid.forceWeapon = 0;
         if (isPrimaryReloaded2) {
-          ModuleHandler.moduleActive = true;
+          bid.moduleActive = true;
         }
       }
       if (isPrimaryReloaded1 && isPrimaryReloaded2) {
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = angleToEnemy;
-        ModuleHandler.forceHat = 7;
-        ModuleHandler.forceWeapon = 0;
-        ModuleHandler.shouldAttack = true;
+        bid.moduleActive = true;
+        bid.useAngle = angleToEnemy;
+        bid.forceHat = 7;
+        bid.forceWeapon = 0;
+        bid.shouldAttack = true;
         this.useTurret = true;
         this.client.StatsManager.autoSyncTimes = 1;
       }
@@ -10328,7 +10328,7 @@ window.grbtp = 35;
     _futureRange(enemy, basePrimaryRange, ticks) {
       return basePrimaryRange + enemy.speed * ticks;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _Core: ModuleHandler, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
       if (!InputHandler2.instaToggle) {
         this.reset();
@@ -10360,11 +10360,11 @@ window.grbtp = 35;
       const turretReloaded = reloading.isReloaded(2, 1);
       const baseRange = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
       if (this.phase === 1) {
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = angle;
-        ModuleHandler.forceHat = shieldBypass ? 7 : 53;
-        ModuleHandler.forceWeapon = shieldBypass ? 0 : 1;
-        ModuleHandler.shouldAttack = true;
+        bid.moduleActive = true;
+        bid.useAngle = angle;
+        bid.forceHat = shieldBypass ? 7 : 53;
+        bid.forceWeapon = shieldBypass ? 0 : 1;
+        bid.shouldAttack = true;
         const delay = this._packetDelay(SocketManager2);
         setTimeout(() => {
           try {
@@ -10378,15 +10378,15 @@ window.grbtp = 35;
       const myPosCur = myPlayer.pos.current;
       const ticks = this._ticksToRange(myPosCur, nearestEnemy, baseRange);
       if (ticks > 0 && ticks <= 2) {
-        ModuleHandler.forceHat = shieldBypass ? 53 : 7;
+        bid.forceHat = shieldBypass ? 53 : 7;
       }
       if (ticks <= 3 && ModuleHandler.canBuy(0, 53)) {
-        ModuleHandler.useAngle = angle;
+        bid.useAngle = angle;
       }
       const predictedRange = this._futureRange(nearestEnemy, baseRange, 1);
       const inRange = myPlayer.collidingEntity(nearestEnemy, baseRange) || myPlayer.collidingEntity(nearestEnemy, predictedRange);
       if (!inRange && ticks <= 1 && primaryReloaded && secondaryReloaded && turretReloaded) {
-        ModuleHandler.moveTo = myPosCur.angle(nearestEnemy.pos.current);
+        bid.moveTo = myPosCur.angle(nearestEnemy.pos.current);
       }
       const baiting = ModuleHandler.moveTo !== "disable" && ticks <= 1;
       if (!primaryReloaded || !secondaryReloaded || !turretReloaded || !inRange && !baiting) {
@@ -10400,11 +10400,11 @@ window.grbtp = 35;
           ModuleHandler.placedOnce = true;
         }
       }
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
-      ModuleHandler.forceHat = shieldBypass ? 53 : 7;
-      ModuleHandler.forceWeapon = shieldBypass ? 1 : 0;
-      ModuleHandler.shouldAttack = true;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
+      bid.forceHat = shieldBypass ? 53 : 7;
+      bid.forceWeapon = shieldBypass ? 1 : 0;
+      bid.shouldAttack = true;
       this.targetEnemy = nearestEnemy;
       this.phase = 1;
     }
@@ -10445,7 +10445,7 @@ window.grbtp = 35;
       const side = this.client.myPlayer.tickCount % 2 === 0 ? 1 : -1;
       return baseAngle + offsetRad * side;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: mp, EnemyManager: EM, _Core: MH, ObjectManager: OM, PlayerManager: PM, InputHandler: IH} = this.client;
       if (this._setupCool > 0) this._setupCool--;
       const enemy = EM.nearestEnemy;
@@ -10467,7 +10467,7 @@ window.grbtp = 35;
       }
       if (enemy === null) return;
       if (!this._shouldArm(mp, enemy, MH)) return;
-      if (MH.moduleActive) return;
+      if (ModuleHandler._arbiter.claimedAbove) return;
       const pos0 = mp.pos.current;
       const ep = enemy.pos.current;
       const anglEnm = pos0.angle(ep);
@@ -10541,11 +10541,11 @@ window.grbtp = 35;
         if (canFireNow && (turretReloaded || killsWithout)) {
           const shieldBypass = lookingShield && secondaryDmg > primaryDmg;
           IH.instakillTarget = enemy;
-          MH.moduleActive = true;
-          MH.useAngle = anglEnm;
-          MH.forceHat = turretReloaded ? shieldBypass ? 53 : 7 : shieldBypass ? 53 : 6;
-          MH.forceWeapon = shieldBypass ? 1 : 0;
-          MH.shouldAttack = true;
+          bid.moduleActive = true;
+          bid.useAngle = anglEnm;
+          bid.forceHat = turretReloaded ? shieldBypass ? 53 : 7 : shieldBypass ? 53 : 6;
+          bid.forceWeapon = shieldBypass ? 1 : 0;
+          bid.shouldAttack = true;
           this.reset();
           this._setupCool = this.SETUP_COOLDOWN;
           this._fightTicks = 0;
@@ -10653,7 +10653,7 @@ window.grbtp = 35;
     if (!Settings_ref._spikeTick || !enabled) {
       return null;
     }
-    if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
+    if (ModuleHandler._arbiter.claimedAbove || EnemyManager2.shouldIgnoreModule()) {
       return null;
     }
     const nearest = EnemyManager2.nearestEnemy;
@@ -10748,30 +10748,30 @@ window.grbtp = 35;
     const range = Math.min(SPIKE_TICK_RANGE, DataHandler_ref.getWeapon(primary).range + nearest.hitScale);
     return myPlayer.collidingSimple(nearest, range) ? nearest : null;
   };
-  const spikeTickHit = (client2, enemy) => {
+  const spikeTickHit = (client2, enemy, bid) => {
     const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     EnemyManager2.attemptSpikePlacement();
-    ModuleHandler.moduleActive = true;
-    ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
-    ModuleHandler.forceHat = 7;
-    ModuleHandler.forceWeapon = 0;
-    ModuleHandler.shouldAttack = true;
+    bid.moduleActive = true;
+    bid.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
+    bid.forceHat = 7;
+    bid.forceWeapon = 0;
+    bid.shouldAttack = true;
   };
-  const spikeTickTurret = (client2, enemy) => {
+  const spikeTickTurret = (client2, enemy, bid) => {
     const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
-    if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
+    if (ModuleHandler._arbiter.claimedAbove || EnemyManager2.shouldIgnoreModule()) {
       return;
     }
     if (!ModuleHandler.unitTable.reloading.isReloaded(2)) {
       return;
     }
-    ModuleHandler.moduleActive = true;
-    ModuleHandler.forceHat = 53;
+    bid.moduleActive = true;
+    bid.forceHat = 53;
     // Sakuna holds my.autoAim across both halves of insta(5) so the aim stays
     // on the target through the turret half instead of snapping back to the
     // mouse the tick after the swing.
     if (enemy) {
-      ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
+      bid.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
     }
   };
   class SpikeTickBreak {
@@ -10782,10 +10782,10 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       if (this.useTurret) {
         this.useTurret = false;
-        spikeTickTurret(this.client, this.turretTarget);
+        spikeTickTurret(this.client, this.turretTarget, bid);
         this.turretTarget = null;
         return;
       }
@@ -10814,7 +10814,7 @@ window.grbtp = 35;
       if (!broken) {
         return;
       }
-      spikeTickHit(this.client, nearest);
+      spikeTickHit(this.client, nearest, bid);
       this.useTurret = true;
       this.turretTarget = nearest;
     }
@@ -10853,10 +10853,10 @@ window.grbtp = 35;
       });
       return touching;
     }
-    runTick() {
+    runTick(bid) {
       if (this.useTurret) {
         this.useTurret = false;
-        spikeTickTurret(this.client, this.turretTarget);
+        spikeTickTurret(this.client, this.turretTarget, bid);
         this.turretTarget = null;
         return;
       }
@@ -10875,7 +10875,7 @@ window.grbtp = 35;
       if (!knockedInto && !this.isTouchingDamage(nearest)) {
         return;
       }
-      spikeTickHit(this.client, nearest);
+      spikeTickHit(this.client, nearest, bid);
       this.useTurret = true;
       this.turretTarget = nearest;
     }
@@ -10897,19 +10897,19 @@ window.grbtp = 35;
       }
       return !enemy.isReloaded(slot, 0) && enemy.isReloaded(slot, 1);
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (this.useTurret) {
         this.useTurret = false;
-        spikeTickTurret(this.client, this.turretTarget);
+        spikeTickTurret(this.client, this.turretTarget, bid);
         this.turretTarget = null;
         return;
       }
       if (this.target !== null) {
         const enemy = this.target;
         this.target = null;
-        if (!ModuleHandler.moduleActive) {
-          spikeTickHit(this.client, enemy);
+        if (!ModuleHandler._arbiter.claimedAbove) {
+          spikeTickHit(this.client, enemy, bid);
           this.useTurret = true;
           this.turretTarget = enemy;
         }
@@ -10946,11 +10946,11 @@ window.grbtp = 35;
       if (!this.aboutToReload(trapped)) {
         return;
       }
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = myPlayer.pos.current.angle(trapped.pos.current);
-      ModuleHandler.forceHat = 40;
-      ModuleHandler.forceWeapon = 1;
-      ModuleHandler.shouldAttack = true;
+      bid.moduleActive = true;
+      bid.useAngle = myPlayer.pos.current.angle(trapped.pos.current);
+      bid.forceHat = 40;
+      bid.forceWeapon = 1;
+      bid.shouldAttack = true;
       this.target = trapped;
     }
   }
@@ -10961,9 +10961,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_ref._spikeSync) {
+      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._spikeSync) {
         this.useTurret = false;
         return;
       }
@@ -10977,8 +10977,8 @@ window.grbtp = 35;
       if (this.useTurret) {
         this.useTurret = false;
         if (turretReloaded && !EnemyManager2.shouldIgnoreModule()) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.forceHat = 53;
+          bid.moduleActive = true;
+          bid.forceHat = 53;
         }
         return;
       }
@@ -10999,11 +10999,11 @@ window.grbtp = 35;
         ModuleHandler.placedOnce = true;
         ModuleHandler.placeAngles[0] = itemType;
         ModuleHandler.placeAngles[1] = placementAngles;
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = angleTo;
-        ModuleHandler.forceHat = 7;
-        ModuleHandler.forceWeapon = 0;
-        ModuleHandler.shouldAttack = true;
+        bid.moduleActive = true;
+        bid.useAngle = angleTo;
+        bid.forceHat = 7;
+        bid.forceWeapon = 0;
+        bid.shouldAttack = true;
         this.client.StatsManager.spikeSyncTimes = 1;
         this.useTurret = true;
       }
@@ -11017,9 +11017,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_ref._spikeSyncHammer || EnemyManager2.shouldIgnoreModule()) {
+      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._spikeSyncHammer || EnemyManager2.shouldIgnoreModule()) {
         this.targetEnemy = null;
         this.useTurret = false;
         return;
@@ -11035,8 +11035,8 @@ window.grbtp = 35;
       const turretReloaded = reloading.isReloaded(2);
       if (this.useTurret) {
         if (turretReloaded) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.forceHat = 53;
+          bid.moduleActive = true;
+          bid.forceHat = 53;
         }
         this.useTurret = false;
         return;
@@ -11061,11 +11061,11 @@ window.grbtp = 35;
           ModuleHandler.placedOnce = true;
           ModuleHandler.placeAngles[0] = itemType;
           ModuleHandler.placeAngles[1] = placementAngles;
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.useAngle = futureAngle;
-          ModuleHandler.forceHat = 7;
-          ModuleHandler.forceWeapon = 0;
-          ModuleHandler.shouldAttack = true;
+          bid.moduleActive = true;
+          bid.useAngle = futureAngle;
+          bid.forceHat = 7;
+          bid.forceWeapon = 0;
+          bid.shouldAttack = true;
         }
         this.targetEnemy = null;
         this.useTurret = true;
@@ -11113,11 +11113,11 @@ window.grbtp = 35;
         if (possibleAngles.length !== 0) {
           ModuleHandler.placeAngles[0] = itemType;
           ModuleHandler.placeAngles[1] = possibleAngles;
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.useAngle = middleAngle;
-          ModuleHandler.forceHat = 40;
-          ModuleHandler.forceWeapon = 1;
-          ModuleHandler.shouldAttack = true;
+          bid.moduleActive = true;
+          bid.useAngle = middleAngle;
+          bid.forceHat = 40;
+          bid.forceWeapon = 1;
+          bid.shouldAttack = true;
           this.targetEnemy = nearestSyncEnemy;
           this.client.StatsManager.spikeSyncHammerTimes = 1;
         }
@@ -11167,7 +11167,7 @@ window.grbtp = 35;
       }
       return 7;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2, _Core: ModuleHandler} = this.client;
       if (!Settings_ref._adaptiveGearSwitching) {
         return;
@@ -11182,7 +11182,7 @@ window.grbtp = 35;
       const optimalGear = this._selectOptimalGear(myPlayer, nearestEnemy, ObjectManager2);
       const currentHat = myPlayer.hatID ?? -1;
       if (currentHat !== optimalGear && ModuleHandler.canBuy?.(0, optimalGear)) {
-        ModuleHandler.forceHat = optimalGear;
+        bid.forceHat = optimalGear;
         this._lastGearSwitch = currentTime;
         this.client.StatsManager.gearSwitches = (this.client.StatsManager.gearSwitches ?? 0) + 1;
       }
@@ -11226,7 +11226,7 @@ window.grbtp = 35;
       }
       return Infinity;
     }
-    _executeDodge(myPlayer, nearestEnemy) {
+    _executeDodge(myPlayer, nearestEnemy, bid) {
       const ModuleHandler = this.client._Core;
       const angleToEnemy = myPlayer.pos.current.angle(nearestEnemy.pos.current);
       const dodgeAngles = [ angleToEnemy + Math.PI / 2, angleToEnemy - Math.PI / 2, angleToEnemy + Math.PI ];
@@ -11235,8 +11235,8 @@ window.grbtp = 35;
         x: Math.cos(randomDodge),
         y: Math.sin(randomDodge)
       });
-      ModuleHandler.forceHat = 7;
-      ModuleHandler.shouldAttack = false;
+      bid.forceHat = 7;
+      bid.shouldAttack = false;
       this._dodgeActive = true;
       this._lastDodgeTime = Date.now();
     }
@@ -11263,7 +11263,7 @@ window.grbtp = 35;
       const timeDiff = Math.abs(recentAttacks[1].timestamp - recentAttacks[0].timestamp);
       return timeDiff < this._syncKillThreshold;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _Core: ModuleHandler} = this.client;
       if (!Settings_ref._antiSync || myPlayer.shameActive) {
         return;
@@ -11279,8 +11279,8 @@ window.grbtp = 35;
           this._pendingHealDeadline = null;
           this._pendingHealsNeeded = 0;
         }
-        ModuleHandler.shouldAttack = false;
-        ModuleHandler.moduleActive = false;
+        bid.shouldAttack = false;
+        bid.moduleActive = false;
         return;
       }
       if (this._isSyncKillDetected()) {
@@ -11296,15 +11296,15 @@ window.grbtp = 35;
           this._pendingHealDeadline = Date.now() + this._SHAME_SAFE_DELAY;
           this._pendingHealsNeeded = healsNeeded;
         }
-        this._executeDodge(myPlayer, nearestEnemy);
-        ModuleHandler.shouldAttack = false;
-        ModuleHandler.moduleActive = false;
+        this._executeDodge(myPlayer, nearestEnemy, bid);
+        bid.shouldAttack = false;
+        bid.moduleActive = false;
         return;
       }
       const syncDanger = this._predictSyncMoment(myPlayer, nearestEnemy);
       if (syncDanger === 0) {
         if (Date.now() - this._lastDodgeTime > this._dodgeCooldown) {
-          this._executeDodge(myPlayer, nearestEnemy);
+          this._executeDodge(myPlayer, nearestEnemy, bid);
           this.client.StatsManager.antiSyncDodges = (this.client.StatsManager.antiSyncDodges ?? 0) + 1;
         }
       }
@@ -11321,9 +11321,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_ref._toolSpearInsta) {
+      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._toolSpearInsta) {
         this.nearestTarget = null;
         return;
       }
@@ -11333,8 +11333,8 @@ window.grbtp = 35;
       }
       if (this.useTurret) {
         if (ModuleHandler.canBuy(0, 53)) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.forceHat = 53;
+          bid.moduleActive = true;
+          bid.forceHat = 53;
         }
         this.useTurret = false;
         return;
@@ -11346,11 +11346,11 @@ window.grbtp = 35;
       if (this.nearestTarget !== null) {
         const pos22 = this.nearestTarget.pos.current;
         const angle2 = pos1.angle(pos22);
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = angle2;
-        ModuleHandler.forceHat = 7;
-        ModuleHandler.forceWeapon = 0;
-        ModuleHandler.shouldAttack = true;
+        bid.moduleActive = true;
+        bid.useAngle = angle2;
+        bid.forceHat = 7;
+        bid.forceWeapon = 0;
+        bid.shouldAttack = true;
         ModuleHandler._upgradeItem(5);
         this.nearestTarget = null;
         this.useTurret = true;
@@ -11366,11 +11366,11 @@ window.grbtp = 35;
       if (!primaryReloaded || !turretReloaded || !myPlayer.collidingEntity(nearestEnemy, range)) {
         return;
       }
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
-      ModuleHandler.forceHat = 7;
-      ModuleHandler.forceWeapon = 0;
-      ModuleHandler.shouldAttack = true;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
+      bid.forceHat = 7;
+      bid.forceWeapon = 0;
+      bid.shouldAttack = true;
       this.nearestTarget = nearestEnemy;
     }
   }
@@ -11380,7 +11380,7 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       const {currentType: currentType, placedOnce: placedOnce, healedOnce: healedOnce, _currentAngle: currentAngle} = ModuleHandler;
       if (!myPlayer.canPlace(currentType)) {
@@ -11416,13 +11416,13 @@ window.grbtp = 35;
       const weaponType = type !== null ? type : weapon;
       return unitTable.reloading.isReloaded(weaponType);
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler} = this.client;
       const {useWeapon: useWeapon, weapon: weapon, forceWeapon: forceWeapon} = ModuleHandler;
       const nextWeapon = forceWeapon !== null ? forceWeapon : useWeapon;
       const forceReloaded = this.isReloadedByType(nextWeapon);
       const canAttack = ModuleHandler.shouldAttack && (forceReloaded && this.isReloadedByType(weapon) || forceWeapon !== null && forceReloaded);
-      ModuleHandler.shouldAttack = canAttack;
+      bid.shouldAttack = canAttack;
     }
   }
   const PreAttack_ref = PreAttack;
@@ -11480,7 +11480,7 @@ window.grbtp = 35;
       const reload = this.clientReload[type];
       return reload.current === 0;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer} = this.client;
       const primaryReload = myPlayer.reload[0].current;
       const secondaryReload = myPlayer.reload[1].current;
@@ -11500,7 +11500,7 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const mh = this.client._Core;
       if (mh._scatterActive && mh._scatterAngle !== undefined) {
         mh._currentAngle = mh._scatterAngle;
@@ -11545,7 +11545,7 @@ window.grbtp = 35;
       }
       return currentAngle;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       const {useWeapon: useWeapon, forceWeapon: forceWeapon, weapon: weapon, attacking: attacking, useItem: useItem, sentAngle: sentAngle, unitTable: unitTable} = ModuleHandler;
       const {reloading: reloading} = unitTable;
@@ -11622,9 +11622,9 @@ window.grbtp = 35;
       }
       return null;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler} = this.client;
-      if (ModuleHandler.moduleActive || ModuleHandler.attackingState !== 1 || ModuleHandler.forceWeapon !== null) {
+      if (ModuleHandler._arbiter.claimedAbove || ModuleHandler.attackingState !== 1 || ModuleHandler.forceWeapon !== null) {
         return;
       }
       if (ModuleHandler._autoFarmActive) {
@@ -11635,11 +11635,11 @@ window.grbtp = 35;
         return;
       }
       const [type, angle] = weaponType;
-      ModuleHandler.forceWeapon = type;
+      bid.forceWeapon = type;
       if (angle !== null) {
-        ModuleHandler.useAngle = angle;
+        bid.useAngle = angle;
       }
-      ModuleHandler.shouldAttack = true;
+      bid.shouldAttack = true;
     }
   }
   class UseDestroying {
@@ -11648,9 +11648,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler.moduleActive || ModuleHandler.attackingState !== 2 || ModuleHandler.forceWeapon !== null) {
+      if (ModuleHandler._arbiter.claimedAbove || ModuleHandler.attackingState !== 2 || ModuleHandler.forceWeapon !== null) {
         return;
       }
       if (ModuleHandler._autoFarmActive) {
@@ -11658,8 +11658,8 @@ window.grbtp = 35;
       }
       const nearestObject = EnemyManager2.nearestPlayerObject;
       const type = myPlayer.getBestDestroyingWeapon(nearestObject);
-      ModuleHandler.forceWeapon = type;
-      ModuleHandler.shouldAttack = true;
+      bid.forceWeapon = type;
+      bid.shouldAttack = true;
     }
   }
   class UseFastest {
@@ -11668,9 +11668,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
-      if (ModuleHandler.moduleActive) {
+      if (ModuleHandler._arbiter.claimedAbove) {
         return;
       }
       if (ModuleHandler._autoFarmActive) {
@@ -11680,11 +11680,11 @@ window.grbtp = 35;
       const type = myPlayer.getFastestWeapon();
       const reverse_type = type === 0 ? 1 : 0;
       if (!reloading.isReloaded(type)) {
-        ModuleHandler.useWeapon = type;
+        bid.useWeapon = type;
       } else if (!reloading.isReloaded(reverse_type) && myPlayer.getItemByType(reverse_type) !== null) {
-        ModuleHandler.useWeapon = reverse_type;
+        bid.useWeapon = reverse_type;
       } else {
-        ModuleHandler.useWeapon = type;
+        bid.useWeapon = type;
       }
     }
   }
@@ -11727,9 +11727,9 @@ window.grbtp = 35;
       }
       return null;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive) {
+      if (ModuleHandler._arbiter.claimedAbove) {
         return;
       }
       const {forceWeapon: forceWeapon, useWeapon: useWeapon, weapon: weapon} = ModuleHandler;
@@ -11749,7 +11749,7 @@ window.grbtp = 35;
         }
       }
       if (hat !== null) {
-        ModuleHandler.useHat = hat;
+        bid.useHat = hat;
       }
     }
   }
@@ -11851,7 +11851,7 @@ window.grbtp = 35;
       }
       return false;
     }
-    runTick() {
+    runTick(bid) {
       this.forceHeal = false;
       if (!Settings_ref._autoheal) {
         return;
@@ -11871,7 +11871,7 @@ window.grbtp = 35;
         if (this.antiSmartTick(myPlayer, nearestEnemy, ModuleHandler, ObjectManager2, PlayerManager2)) {
           ModuleHandler.healedOnce = true;
           ModuleHandler.didAntiInsta = true;
-          ModuleHandler.shouldAttack = false;
+          bid.shouldAttack = false;
           const hits = Math.max(needTimes + 1, 3);
           for (let i = 0; i < hits; i++) ModuleHandler.heal();
           return;
@@ -12005,7 +12005,7 @@ window.grbtp = 35;
       }
       return myPlayer.currentItem;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler} = this.client;
       if (!ModuleHandler.sentHatEquip) {
         this.handleEquip(0, ModuleHandler.useHat);
@@ -12077,10 +12077,10 @@ window.grbtp = 35;
       }
       return 0;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler} = this.client;
       const acc = this.getBestCurrentAcc();
-      ModuleHandler.useAcc = acc;
+      bid.useAcc = acc;
     }
   }
   class DefaultHat {
@@ -12099,7 +12099,7 @@ window.grbtp = 35;
       }
       return !EnemyManager2.nearestEnemyInRangeOf(COWBOY_DROP_RANGE, EnemyManager2.nearestEnemy);
     }
-    getBestCurrentHat() {
+    getBestCurrentHat(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const {current: current, future: future} = myPlayer.pos;
       const {actual: actual} = ModuleHandler.getHatStore();
@@ -12136,8 +12136,8 @@ window.grbtp = 35;
       if (useSoldier) {
         if (Settings_ref._antienemy) {
           if (EnemyManager2.detectedDangerEnemy || EnemyManager2.detectedEnemy || EnemyManager2.reverseInsta || EnemyManager2.toolHammerInsta || EnemyManager2.rangedBowInsta) {
-            ModuleHandler.shouldEquipSoldier = true;
-            ModuleHandler.forceHat = 6;
+            bid.shouldEquipSoldier = true;
+            bid.forceHat = 6;
             return 6;
           }
           if (useBull && myPlayer.shameCount > 0 || EnemyManager2.dangerWithoutSoldier) {
@@ -12182,10 +12182,10 @@ window.grbtp = 35;
       }
       return 0;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler} = this.client;
-      const hat = this.getBestCurrentHat();
-      ModuleHandler.useHat = hat;
+      const hat = this.getBestCurrentHat(bid);
+      bid.useHat = hat;
     }
   }
   class SafeWalk {
@@ -12198,7 +12198,7 @@ window.grbtp = 35;
     reset() {
       this.movingState = false;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2} = this.client;
       const {prevMoveTo: prevMoveTo, moveTo: moveTo} = ModuleHandler;
       if (prevMoveTo !== moveTo) {
@@ -12238,12 +12238,12 @@ window.grbtp = 35;
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       return ModuleHandler.forceHat === 40 || EnemyManager2.instaThreat() || EnemyManager2.collidingSpike || myPlayer.wasTrapped() || ModuleHandler.currentType === 2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler} = this.client;
       if (Settings_ref._autoheal && !this.notSave() && (this.shouldReset || this.tickToggle)) {
         this.tickToggle = true;
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.forceHat = 7;
+        bid.moduleActive = true;
+        bid.forceHat = 7;
       }
     }
     healthUpdate() {
@@ -12261,7 +12261,7 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, clientIDList: clientIDList, PacketManager: PacketManager2, isOwner: isOwner} = this.client;
       const currentClan = myPlayer.clanName;
       if (currentClan !== this.prevClan) {
@@ -12308,7 +12308,7 @@ window.grbtp = 35;
     boughtEverything() {
       return this.buyIndex >= this.buyList.length;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (this.boughtEverything() || !myPlayer.isSandbox) {
         return;
@@ -12399,7 +12399,7 @@ window.grbtp = 35;
       ModuleHandler.placeAngles[1].push(angle);
       return true;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
       if (this.isFullyUpgraded()) {
         if (Settings_ref._autoGrind) {
@@ -12410,7 +12410,7 @@ window.grbtp = 35;
         }
         return;
       }
-      if (!Settings_ref._autoGrind || ModuleHandler.moduleActive || ModuleHandler.healedOnce || myPlayer.speed > 5) {
+      if (!Settings_ref._autoGrind || ModuleHandler._arbiter.claimedAbove || ModuleHandler.healedOnce || myPlayer.speed > 5) {
         this.grindAngle = null;
         return;
       }
@@ -12454,7 +12454,7 @@ window.grbtp = 35;
         }
         if (placed) {
           ModuleHandler.placedOnce = true;
-          ModuleHandler.moduleActive = true;
+          bid.moduleActive = true;
         }
         return;
       }
@@ -12464,11 +12464,11 @@ window.grbtp = 35;
       const action = this.getGrindAction(nearestTurret);
       if (action === null) return;
       if (reloading.isReloaded(action.weapon)) {
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = middleAngle;
-        ModuleHandler.forceHat = action.hat;
-        ModuleHandler.forceWeapon = action.weapon;
-        ModuleHandler.shouldAttack = true;
+        bid.moduleActive = true;
+        bid.useAngle = middleAngle;
+        bid.forceHat = action.hat;
+        bid.forceWeapon = action.weapon;
+        bid.shouldAttack = true;
       }
     }
   }
@@ -12503,7 +12503,7 @@ window.grbtp = 35;
       ModuleHandler.placeAngles[0] = type;
       ModuleHandler.placeAngles[1].push(angle);
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       this.toggle = true;
       if (!this.canAutomill) {
@@ -12538,9 +12538,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_ref._autoSteal) {
+      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._autoSteal) {
         return;
       }
       const nearestLowEntity = EnemyManager2.nearestLowEntity;
@@ -12563,13 +12563,13 @@ window.grbtp = 35;
       if (!canKill) {
         return;
       }
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
       if (maxDamage < nearestLowEntity.currentHealth) {
-        ModuleHandler.forceHat = 7;
+        bid.forceHat = 7;
       }
-      ModuleHandler.forceWeapon = 0;
-      ModuleHandler.shouldAttack = true;
+      bid.forceWeapon = 0;
+      bid.shouldAttack = true;
     }
   }
   class ReverseInstakill {
@@ -12582,7 +12582,7 @@ window.grbtp = 35;
     reset() {
       this.targetEnemy = null;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _Core: ModuleHandler, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
       if (!InputHandler2.instaToggle) {
         this.reset();
@@ -12616,14 +12616,14 @@ window.grbtp = 35;
       const myPosCur = myPlayer.pos.current;
       const dist = myPosCur.distance(nearestEnemy.pos.current);
       if (dist < baseRange * 2.5 && ModuleHandler.canBuy(0, 53)) {
-        ModuleHandler.useAngle = angle;
+        bid.useAngle = angle;
       }
       if (this.targetEnemy !== null) {
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = angle;
-        ModuleHandler.forceHat = 7;
-        ModuleHandler.forceWeapon = 0;
-        ModuleHandler.shouldAttack = true;
+        bid.moduleActive = true;
+        bid.useAngle = angle;
+        bid.forceHat = 7;
+        bid.forceWeapon = 0;
+        bid.shouldAttack = true;
         const delay = SocketManager2.TICK - SocketManager2.pong / 2;
         setTimeout(() => {
           try {
@@ -12637,14 +12637,14 @@ window.grbtp = 35;
       }
       const ticks = nearestEnemy.speed > 0 ? Math.max(0, (dist - baseRange) / nearestEnemy.speed) : 0;
       if (!inRange && ticks <= 1 && primaryReloaded && secondaryReloaded && turretReloaded) {
-        ModuleHandler.moveTo = myPosCur.angle(nearestEnemy.pos.current);
+        bid.moveTo = myPosCur.angle(nearestEnemy.pos.current);
       }
       if (!primaryReloaded || !secondaryReloaded || !turretReloaded || !inRange && ticks > 1) return;
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
-      ModuleHandler.forceHat = 53;
-      ModuleHandler.forceWeapon = 1;
-      ModuleHandler.shouldAttack = true;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
+      bid.forceHat = 53;
+      bid.forceWeapon = 1;
+      bid.shouldAttack = true;
       this.targetEnemy = nearestEnemy;
     }
   }
@@ -12664,7 +12664,7 @@ window.grbtp = 35;
       this.tickAction = 0;
       this.active = false;
     }
-    runTick() {
+    runTick(bid) {
       const {EnemyManager: EnemyManager2, _Core: ModuleHandler, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
       if (!InputHandler2.instaToggle || !Settings_ref._musketBowInsta) {
         this.reset();
@@ -12684,21 +12684,21 @@ window.grbtp = 35;
       InputHandler2.instakillTarget = nearest;
       if (this.targetEnemy !== null) {
         if (this.tickAction === 2) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.useAngle = angle;
-          ModuleHandler.forceWeapon = 1;
-          ModuleHandler.shouldAttack = true;
-          ModuleHandler.moveTo = null;
+          bid.moduleActive = true;
+          bid.useAngle = angle;
+          bid.forceWeapon = 1;
+          bid.shouldAttack = true;
+          bid.moveTo = null;
           this.reset();
           InputHandler2.instaReset();
           return;
         }
         if (this.tickAction === 1) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.useAngle = angle;
-          ModuleHandler.forceWeapon = 1;
-          ModuleHandler.shouldAttack = true;
-          ModuleHandler.moveTo = null;
+          bid.moduleActive = true;
+          bid.useAngle = angle;
+          bid.forceWeapon = 1;
+          bid.shouldAttack = true;
+          bid.moveTo = null;
           ModuleHandler._upgradeItem(15);
           this.tickAction = 2;
           return;
@@ -12712,16 +12712,16 @@ window.grbtp = 35;
       if (!useTurret || !reloading.isReloaded(2) || !inRange(distance, this.distMin, this.distMax)) {
         return;
       }
-      ModuleHandler.moveTo = null;
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
-      ModuleHandler.forceHat = 53;
-      ModuleHandler.forceWeapon = 0;
-      ModuleHandler.shouldAttack = true;
+      bid.moveTo = null;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
+      bid.forceHat = 53;
+      bid.forceWeapon = 0;
+      bid.shouldAttack = true;
       ModuleHandler._upgradeItem(9);
       ModuleHandler._upgradeItem(18, true);
-      ModuleHandler.forceWeapon = 1;
-      ModuleHandler.shouldAttack = true;
+      bid.forceWeapon = 1;
+      bid.shouldAttack = true;
       this.tickAction = 1;
       this.targetEnemy = nearestEnemy;
     }
@@ -12734,11 +12734,11 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       this._tick += 1;
       const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (!Settings_ref._platformMusket) return;
-      if (ModuleHandler.moduleActive) return;
+      if (ModuleHandler._arbiter.claimedAbove) return;
       if (ModuleHandler.forceWeapon !== 1 || !ModuleHandler.shouldAttack) return;
       const secondaryID = myPlayer.getItemByType(1);
       if (secondaryID !== 15) return;
@@ -12767,7 +12767,7 @@ window.grbtp = 35;
       this.tickAction = 0;
       this.active = false;
     }
-    runTick() {
+    runTick(bid) {
       const {EnemyManager: EnemyManager2, _Core: ModuleHandler, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
       if (!InputHandler2.instaToggle) {
         this.reset();
@@ -12787,22 +12787,22 @@ window.grbtp = 35;
       InputHandler2.instakillTarget = nearest;
       if (this.targetEnemy !== null) {
         if (this.tickAction === 2) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.useAngle = angle;
-          ModuleHandler.forceWeapon = 1;
-          ModuleHandler.shouldAttack = true;
-          ModuleHandler.moveTo = null;
+          bid.moduleActive = true;
+          bid.useAngle = angle;
+          bid.forceWeapon = 1;
+          bid.shouldAttack = true;
+          bid.moveTo = null;
           ModuleHandler._upgradeItem(15);
           this.reset();
           InputHandler2.instaReset();
           return;
         }
         if (this.tickAction === 1) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.useAngle = angle;
-          ModuleHandler.forceWeapon = 1;
-          ModuleHandler.shouldAttack = true;
-          ModuleHandler.moveTo = null;
+          bid.moduleActive = true;
+          bid.useAngle = angle;
+          bid.forceWeapon = 1;
+          bid.shouldAttack = true;
+          bid.moveTo = null;
           ModuleHandler._upgradeItem(12);
           this.tickAction = 2;
           return;
@@ -12819,12 +12819,12 @@ window.grbtp = 35;
       if (!useTurret || !reloading.isReloaded(2) || !inRange(distance, this.distMin, this.distMax)) {
         return;
       }
-      ModuleHandler.moveTo = null;
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
-      ModuleHandler.forceHat = 53;
-      ModuleHandler.forceWeapon = 1;
-      ModuleHandler.shouldAttack = true;
+      bid.moveTo = null;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
+      bid.forceHat = 53;
+      bid.forceWeapon = 1;
+      bid.shouldAttack = true;
       if (myPlayer.upgradeAge === 6) {
         ModuleHandler._upgradeItem(9);
       }
@@ -12847,7 +12847,7 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler, ProjectileManager: ProjectileManager2, ObjectManager: ObjectManager2} = this.client;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       if (nearestEnemy === null || !Settings_ref._placementDefense) {
@@ -12899,9 +12899,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_ref._turretSteal) {
+      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._turretSteal) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestTurretEntity;
@@ -12918,8 +12918,8 @@ window.grbtp = 35;
       if (!reloading.isReloaded(2)) {
         return;
       }
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.forceHat = 53;
+      bid.moduleActive = true;
+      bid.forceHat = 53;
     }
   }
   class KillChat {
@@ -12928,7 +12928,7 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
       if (!Settings_ref._killMessage || !myPlayer.killedSomeone || myPlayer.resources.kills === 0) {
         return;
@@ -12968,7 +12968,7 @@ window.grbtp = 35;
       const template = pool[Math.floor(Math.random() * pool.length)];
       return this._clip(this._fillName(template));
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, PacketManager: PacketManager2, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = this.client;
       if (!Settings_ref._deathProvoke) {
         this._lastKills = -1;
@@ -13016,10 +13016,10 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
       const nearestEnemy = EnemyManager2.nearestEnemy;
-      if (ModuleHandler.moduleActive || !nearestEnemy) {
+      if (ModuleHandler._arbiter.claimedAbove || !nearestEnemy) {
         this.nearestTarget = null;
         this.useTurret = false;
         return;
@@ -13030,8 +13030,8 @@ window.grbtp = 35;
       if (this.useTurret) {
         this.useTurret = false;
         if (turretReloaded && ModuleHandler.canBuy(0, 53)) {
-          ModuleHandler.moduleActive = true;
-          ModuleHandler.forceHat = 53;
+          bid.moduleActive = true;
+          bid.forceHat = 53;
         }
         return;
       }
@@ -13042,10 +13042,10 @@ window.grbtp = 35;
       if (target !== null) {
         const pos22 = target.pos.current;
         const angle2 = pos1.angle(pos22);
-        ModuleHandler.useAngle = angle2;
-        ModuleHandler.forceHat = 7;
-        ModuleHandler.forceWeapon = 0;
-        ModuleHandler.shouldAttack = true;
+        bid.useAngle = angle2;
+        bid.forceHat = 7;
+        bid.forceWeapon = 0;
+        bid.shouldAttack = true;
         if (myPlayer.upgradeAge === 3) {
           ModuleHandler._upgradeItem(1, true);
         }
@@ -13079,11 +13079,11 @@ window.grbtp = 35;
       }
       const pos2 = nearestEnemy.pos.future;
       const angle = pos1.angle(pos2);
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
-      ModuleHandler.forceHat = 7;
-      ModuleHandler.forceWeapon = 0;
-      ModuleHandler.shouldAttack = true;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
+      bid.forceHat = 7;
+      bid.forceWeapon = 0;
+      bid.shouldAttack = true;
       this.nearestTarget = nearestEnemy;
     }
   }
@@ -13093,9 +13093,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || EnemyManager2.instaThreat() || EnemyManager2.spikeSyncThreat || !Settings_ref._spikeGearInsta) {
+      if (ModuleHandler._arbiter.claimedAbove || EnemyManager2.instaThreat() || EnemyManager2.spikeSyncThreat || !Settings_ref._spikeGearInsta) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -13115,15 +13115,15 @@ window.grbtp = 35;
       if (!myPlayer.collidingSimple(nearestEnemy, range1) || !nearestEnemy.collidingSimple(myPlayer, range2)) {
         return;
       }
-      ModuleHandler.forceHat = 11;
+      bid.forceHat = 11;
       if (nearestEnemy.hatID !== 7 || !nearestEnemy.isEmptyReload(0) || myPlayer.hatID !== 11) {
         return;
       }
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
-      ModuleHandler.forceHat = 7;
-      ModuleHandler.forceWeapon = 0;
-      ModuleHandler.shouldAttack = true;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
+      bid.forceHat = 7;
+      bid.forceWeapon = 0;
+      bid.shouldAttack = true;
     }
   }
   class TeammateSpikeTrap {
@@ -13132,9 +13132,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, InputHandler: InputHandler2, PlayerManager: PlayerManager2, myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
-      if (ModuleHandler.moduleActive) {
+      if (ModuleHandler._arbiter.claimedAbove) {
         return;
       }
       if (!InputHandler2.instaToggle) {
@@ -13178,9 +13178,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler.moduleActive) {
+      if (ModuleHandler._arbiter.claimedAbove) {
         return;
       }
       const trapId = myPlayer.getItemByType(7);
@@ -13216,9 +13216,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_ref._turretSync) {
+      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._turretSync) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -13238,11 +13238,11 @@ window.grbtp = 35;
       const pos1 = myPlayer.pos.current;
       const pos2 = nearestEnemy.pos.current;
       const angle = pos1.angle(pos2);
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
-      ModuleHandler.forceHat = 7;
-      ModuleHandler.forceWeapon = 0;
-      ModuleHandler.shouldAttack = true;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
+      bid.forceHat = 7;
+      bid.forceWeapon = 0;
+      bid.shouldAttack = true;
     }
   }
   class DashMovement {
@@ -13251,7 +13251,7 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       const {currentType: currentType, _currentAngle: currentAngle} = ModuleHandler;
       if (!myPlayer.canPlace(currentType) || !Settings_ref._dashMovement) {
@@ -13291,14 +13291,14 @@ window.grbtp = 35;
       const prevWeapon = ModuleHandler.currentHolding;
       const dashAngle = ModuleHandler.move_dir !== null ? ModuleHandler.move_dir : currentAngle;
       ModuleHandler.place(currentType, dashAngle);
-      ModuleHandler.useAngle = dashAngle;
-      ModuleHandler.useHat = 40;
+      bid.useAngle = dashAngle;
+      bid.useHat = 40;
       if (ModuleHandler.canBuy(1, 11)) {
-        ModuleHandler.useAcc = 11;
+        bid.useAcc = 11;
       }
-      ModuleHandler.forceWeapon = weaponType;
-      ModuleHandler.shouldAttack = true;
-      ModuleHandler.useWeapon = prevWeapon;
+      bid.forceWeapon = weaponType;
+      bid.shouldAttack = true;
+      bid.useWeapon = prevWeapon;
     }
   }
   class GuardModule {
@@ -13384,18 +13384,18 @@ window.grbtp = 35;
       } catch (e) {}
       return false;
     }
-    _forceWeapon(MH, type, attack) {
+    _forceWeapon(MH, type, attack, bid) {
       const id = this.client.myPlayer.getItemByType(type);
       if (id === null || id === undefined) return;
       this.client.PacketManager.selectItemByID(id, type === 1);
       MH.currentHolding = type;
       MH.weapon = type;
-      MH.forceWeapon = null;
-      MH.useWeapon = null;
-      MH.shouldAttack = attack;
-      MH.moduleActive = true;
+      bid.forceWeapon = null;
+      bid.useWeapon = null;
+      bid.shouldAttack = attack;
+      bid.moduleActive = true;
     }
-    runTick() {
+    runTick(bid) {
       if (!Settings_ref._shieldGuard) return;
       const oc = this.client.ownerClient;
       const {guardCount: gc, isGuard: isGuard, botIndex: botIndex} = this._resolveGuard();
@@ -13507,8 +13507,8 @@ window.grbtp = 35;
               d !== null ? MH.startMovement(d) : MH.stopMovement();
             }
             MH._currentAngle = bestAngle;
-            MH.useAngle = null;
-            this._forceWeapon(MH, 1, false);
+            bid.useAngle = null;
+            this._forceWeapon(MH, 1, false, bid);
             return;
           } else {
             this._rsRotState = null;
@@ -13539,8 +13539,8 @@ window.grbtp = 35;
             d !== null ? MH.startMovement(d) : MH.stopMovement();
           }
           MH._currentAngle = baseAngle;
-          MH.useAngle = null;
-          this._forceWeapon(MH, 1, false);
+          bid.useAngle = null;
+          this._forceWeapon(MH, 1, false, bid);
           return;
         }
       }
@@ -13560,8 +13560,8 @@ window.grbtp = 35;
           } catch (e) {}
           const en = enemies[0];
           MH._currentAngle = en ? en.angle : MH._currentAngle ?? 0;
-          MH.useAngle = null;
-          this._forceWeapon(MH, 1, false);
+          bid.useAngle = null;
+          this._forceWeapon(MH, 1, false, bid);
           return;
         }
       }
@@ -13576,8 +13576,8 @@ window.grbtp = 35;
             MH.stopMovement();
           }
           MH._currentAngle = myPos.angle(baitPos);
-          MH.useAngle = null;
-          this._forceWeapon(MH, 1, false);
+          bid.useAngle = null;
+          this._forceWeapon(MH, 1, false, bid);
           return;
         }
       }
@@ -13597,18 +13597,18 @@ window.grbtp = 35;
             ownerDir !== null ? MH.startMovement(ownerDir) : MH.stopMovement();
           }
           MH._currentAngle = enemyAngle;
-          MH.useAngle = null;
+          bid.useAngle = null;
           const canWall = myPlayer.canPlace(3);
           const canMill = myPlayer.canPlace(6) || myPlayer.canPlace(7);
           if (canWall) {
             MH.place(3, enemyAngle);
-            MH.moduleActive = true;
+            bid.moduleActive = true;
           } else if (canMill) {
             const millType = myPlayer.canPlace(6) ? 6 : 7;
             MH.place(millType, enemyAngle);
-            MH.moduleActive = true;
+            bid.moduleActive = true;
           } else {
-            this._forceWeapon(MH, 1, false);
+            this._forceWeapon(MH, 1, false, bid);
           }
         } else {
           const frontPos = ownerPos.addDirection(enemyAngle, GUARD_FRONT_DIST);
@@ -13620,7 +13620,7 @@ window.grbtp = 35;
             ownerDir !== null ? MH.startMovement(ownerDir) : MH.stopMovement();
           }
           MH._currentAngle = enemyAngle;
-          MH.useAngle = null;
+          bid.useAngle = null;
           const ATTACK_DIST = 80;
           if (distToEnemy < ATTACK_DIST && !forceShield) {
             const dagId = myPlayer.getItemByType(0);
@@ -13628,13 +13628,13 @@ window.grbtp = 35;
               this.client.PacketManager.selectItemByID(dagId, false);
               MH.currentHolding = 0;
               MH.weapon = 0;
-              MH.forceWeapon = null;
-              MH.useWeapon = null;
-              MH.shouldAttack = true;
-              MH.moduleActive = true;
+              bid.forceWeapon = null;
+              bid.useWeapon = null;
+              bid.shouldAttack = true;
+              bid.moduleActive = true;
             }
           } else {
-            this._forceWeapon(MH, 1, false);
+            this._forceWeapon(MH, 1, false, bid);
           }
         }
       } else {
@@ -13647,8 +13647,8 @@ window.grbtp = 35;
           ownerDir !== null ? MH.startMovement(ownerDir) : MH.stopMovement();
         }
         MH._currentAngle = ownerFacing;
-        MH.useAngle = null;
-        this._forceWeapon(MH, 1, false);
+        bid.useAngle = null;
+        this._forceWeapon(MH, 1, false, bid);
       }
     }
   }
@@ -13680,9 +13680,9 @@ window.grbtp = 35;
       }
       return angle;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = this.client;
-      if (ModuleHandler.moduleActive) return;
+      if (ModuleHandler._arbiter.claimedAbove) return;
       const secondary = myPlayer.getItemByType(1);
       const hasShield = secondary === 11;
       if (!hasShield) return;
@@ -13779,20 +13779,20 @@ window.grbtp = 35;
                 this.client.PacketManager.updateAngle(shieldAngle);
                 this.client._Core.mouse.sentAngle = shieldAngle;
               } catch (_) {}
-              ModuleHandler.moduleActive = true;
-              ModuleHandler.forceWeapon = 0;
-              ModuleHandler.useAngle = shieldAngle;
-              ModuleHandler.shouldAttack = true;
+              bid.moduleActive = true;
+              bid.forceWeapon = 0;
+              bid.useAngle = shieldAngle;
+              bid.shouldAttack = true;
               return;
             }
             try {
               this.client.PacketManager.updateAngle(shieldAngle);
               this.client._Core.mouse.sentAngle = shieldAngle;
             } catch (_) {}
-            ModuleHandler.moduleActive = true;
-            ModuleHandler.forceWeapon = 1;
-            ModuleHandler.useAngle = shieldAngle;
-            ModuleHandler.shouldAttack = true;
+            bid.moduleActive = true;
+            bid.forceWeapon = 1;
+            bid.useAngle = shieldAngle;
+            bid.shouldAttack = true;
             return;
           }
           if (bestTarget) {
@@ -13803,10 +13803,10 @@ window.grbtp = 35;
                 this.client.PacketManager.updateAngle(preAngle);
                 this.client._Core.mouse.sentAngle = preAngle;
               } catch (_) {}
-              ModuleHandler.moduleActive = true;
-              ModuleHandler.forceWeapon = 1;
-              ModuleHandler.useAngle = preAngle;
-              ModuleHandler.shouldAttack = true;
+              bid.moduleActive = true;
+              bid.forceWeapon = 1;
+              bid.useAngle = preAngle;
+              bid.shouldAttack = true;
               return;
             }
           }
@@ -13818,10 +13818,10 @@ window.grbtp = 35;
       const shouldActivate = EnemyManager2.weaponDamageThreat();
       if (!shouldActivate) return;
       const angle = this.getProtectAngle();
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.forceWeapon = 1;
-      ModuleHandler.useAngle = angle;
-      ModuleHandler.shouldAttack = true;
+      bid.moduleActive = true;
+      bid.forceWeapon = 1;
+      bid.useAngle = angle;
+      bid.shouldAttack = true;
     }
   }
   class TrapKB {
@@ -13830,10 +13830,10 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const nearestEnemy = EnemyManager2.nearestKBTrapEnemy;
-      if (nearestEnemy === null || nearestEnemy.isTrapped || ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule() || !Settings_ref._trapKB) {
+      if (nearestEnemy === null || nearestEnemy.isTrapped || ModuleHandler._arbiter.claimedAbove || EnemyManager2.shouldIgnoreModule() || !Settings_ref._trapKB) {
         return;
       }
       const pos1 = myPlayer.pos.current;
@@ -13849,13 +13849,13 @@ window.grbtp = 35;
       if (!myPlayer.collidingSimple(nearestEnemy, range)) {
         return;
       }
-      ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = angle;
+      bid.moduleActive = true;
+      bid.useAngle = angle;
       if (turretReloaded) {
-        ModuleHandler.forceHat = 53;
+        bid.forceHat = 53;
       }
-      ModuleHandler.forceWeapon = 0;
-      ModuleHandler.shouldAttack = true;
+      bid.forceWeapon = 0;
+      bid.shouldAttack = true;
     }
   }
   class AntiSpikePush {
@@ -13864,9 +13864,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (!Settings_ref._antiSpikePush || ModuleHandler.moduleActive) {
+      if (!Settings_ref._antiSpikePush || ModuleHandler._arbiter.claimedAbove) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -13888,14 +13888,14 @@ window.grbtp = 35;
       const {reloading: reloading} = ModuleHandler.unitTable;
       const primaryReloaded = reloading.isReloaded(0);
       const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
-      ModuleHandler.forceWeapon = 0;
+      bid.forceWeapon = 0;
       if (primaryReloaded) {
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = angle;
+        bid.moduleActive = true;
+        bid.useAngle = angle;
         if (turretReloaded) {
-          ModuleHandler.forceHat = 53;
+          bid.forceHat = 53;
         }
-        ModuleHandler.shouldAttack = true;
+        bid.shouldAttack = true;
       }
     }
   }
@@ -13905,13 +13905,128 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    runTick() {
+    runTick(bid) {
       RYNLink.runTick(this.client);
     }
   }
+  // ==========================================================================
+  // Tick arbitration
+  //
+  // The system this replaces: every unit wrote its wishes straight onto one
+  // shared object — moduleActive, forceWeapon, shouldAttack, useAngle — and
+  // whoever ran first won, so array position was the priority and nothing said
+  // so. Every coordination problem in this client came out of that. Yielding
+  // needed a unit to guess who else had already written (lunaSpikeTickBusy);
+  // handing a tick over needed a stamp read a tick later (_preplaceSentTick);
+  // making one thing outrank another needed a bespoke predicate
+  // (spikeTickKillWindow); and the packet allowance went to whoever ran
+  // earliest rather than to whatever mattered most.
+  //
+  // Here a unit mutates nothing. It fills in its own TickBid — what it wants,
+  // and what that costs — and the Arbiter decides. Priority is a number in one
+  // table instead of an emergent property of an array, so outranking something
+  // is an edit to that table rather than a new special case, and the allowance
+  // is handed out against the resolved order rather than first-come.
+  //
+  // Bids are collected in priority order and `claimedAbove` reports whether
+  // anything above has already taken the tick, which is the same answer the
+  // old shared flag gave at that point in the loop.
+  // ==========================================================================
+  class TickBid {
+    unitID;
+    priority;
+    cost = 0;
+    // Exclusive: at most one claiming bid is committed per tick.
+    moduleActive = false;
+    // Advisory: merged from the winner downwards, highest priority first.
+    useWeapon = null;
+    useItem = null;
+    forceWeapon = null;
+    useHat = null;
+    forceHat = null;
+    shouldEquipSoldier = false;
+    useAcc = null;
+    useAngle = null;
+    shouldAttack = false;
+    moveTo = undefined;
+    constructor(unitID, priority) {
+      this.unitID = unitID;
+      this.priority = priority;
+    }
+    get claimed() {
+      return this.moduleActive;
+    }
+  }
+
+  const ARBITER_ADVISORY = [ "useWeapon", "useItem", "forceWeapon", "useHat", "forceHat", "useAcc", "useAngle" ];
+
+  class Arbiter {
+    core;
+    bids = [];
+    _claimedAbove = false;
+    constructor(core) {
+      this.core = core;
+    }
+    // True once any higher-priority unit has claimed this tick.
+    get claimedAbove() {
+      return this._claimedAbove;
+    }
+    begin() {
+      this.bids.length = 0;
+      this._claimedAbove = false;
+    }
+    // Run one unit against a bid of its own and file it.
+    offer(unit, priority) {
+      const bid = new TickBid(unit.unitID, priority);
+      unit.runTick(bid);
+      if (bid.claimed) {
+        this._claimedAbove = true;
+      }
+      this.bids.push(bid);
+      return bid;
+    }
+    // Highest priority wins the claim; advisory fields fill from the winner
+    // down, each taken by the first bid that expressed one.
+    resolve() {
+      const ordered = this.bids.slice().sort((a, b) => a.priority - b.priority);
+      const winner = ordered.find(b => b.claimed) ?? null;
+      const out = {
+        winner: winner,
+        moduleActive: winner !== null,
+        activeModule: winner ? winner.unitID : null,
+        shouldAttack: false,
+        shouldEquipSoldier: false,
+        moveTo: undefined
+      };
+      for (const field of ARBITER_ADVISORY) out[field] = null;
+      for (const bid of ordered) {
+        for (const field of ARBITER_ADVISORY) {
+          if (out[field] === null && bid[field] !== null) out[field] = bid[field];
+        }
+        if (bid.shouldAttack) out.shouldAttack = true;
+        if (bid.shouldEquipSoldier) out.shouldEquipSoldier = true;
+        if (out.moveTo === undefined && bid.moveTo !== undefined) out.moveTo = bid.moveTo;
+      }
+      return out;
+    }
+    // Write the resolved intent where the send phase reads it.
+    commit(resolved) {
+      const core = this.core;
+      core.moduleActive = resolved.moduleActive;
+      core.activeModule = resolved.activeModule;
+      core.shouldAttack = resolved.shouldAttack;
+      core.shouldEquipSoldier = resolved.shouldEquipSoldier;
+      for (const field of ARBITER_ADVISORY) core[field] = resolved[field];
+      if (resolved.moveTo !== undefined) core.moveTo = resolved.moveTo;
+    }
+  }
+
+  const ARBITER_BOT_BAND = 1000;
+
   class ModuleHandler {
     client;
     unitTable={};
+    _arbiter=new Arbiter(this);
     botModules;
     modules;
     store=[ {
@@ -14351,7 +14466,7 @@ window.grbtp = 35;
     // split the placer here is free to spend the allowance down to the last
     // packet, and a heavy building second can leave the essentials short.
     packetLimit=115;
-    runTick() {
+    runTick(bid) {
       this._flushShameHealQueue();
       if (Settings_ref._circleRotation && this.move_dir === null) {
         const rotationSpeed = this.targetSpeed / Settings_ref._circleRadius;
@@ -14386,18 +14501,24 @@ window.grbtp = 35;
       this.shouldAttack = false;
       this.prevMoveTo = this.moveTo;
       this.moveTo = "disable";
+      // Collect, resolve, commit. Units are offered the tick in priority
+      // order and answer with a bid; nothing they do reaches the send phase
+      // until the Arbiter has ruled on all of them.
+      //
+      // The order of `this.modules` seeds the priority table, so the ruling
+      // matches what running in that order used to produce — the difference
+      // is that the order is now a number a unit can be moved within, not an
+      // accident of where it sits in an array.
+      this._arbiter.begin();
       if (!isOwner) {
-        for (const botModule of this.botModules) {
-          botModule.runTick();
+        for (let i = 0; i < this.botModules.length; i++) {
+          this._arbiter.offer(this.botModules[i], i);
         }
       }
-      for (const module of this.modules) {
-        const prevg = this.moduleActive;
-        module.runTick();
-        if (!prevg && this.moduleActive) {
-          this.activeModule = module.unitID;
-        }
+      for (let i = 0; i < this.modules.length; i++) {
+        this._arbiter.offer(this.modules[i], ARBITER_BOT_BAND + i);
       }
+      this._arbiter.commit(this._arbiter.resolve());
       const _em = this.client.EnemyManager;
       const _mp = this.client.myPlayer;
       const _canSoldier = this.canBuy(0, 6);
@@ -20535,17 +20656,17 @@ window.grbtp = 35;
       }
       return chosen;
     }
-    runTick() {
+    runTick(bid) {
       const {myPlayer: myPlayer, _Core: _Core} = this.client;
       if (!myPlayer || !myPlayer.inGame || !myPlayer.pos) return;
       if (!Settings_ref._botAutoFarmEnabled) return;
-      _Core.moduleActive = false;
+      bid.moduleActive = false;
       _Core.attackingState = 0;
       const needed = this._neededTypes();
       if (needed === null) {
         _Core._autoFarmActive = true;
-        _Core.shouldAttack = false;
-        _Core.forceWeapon = null;
+        bid.shouldAttack = false;
+        bid.forceWeapon = null;
         try {
           const ownerPos = this.client.ownerClient && this.client.ownerClient.myPlayer && this.client.ownerClient.myPlayer.pos && this.client.ownerClient.myPlayer.pos.current;
           if (ownerPos) {
@@ -20583,12 +20704,12 @@ window.grbtp = 35;
         if (_Core.mouse) _Core.mouse.sentAngle = angle;
         if (dist > range - 5) {
           _Core.startMovement(angle, true);
-          _Core.shouldAttack = false;
+          bid.shouldAttack = false;
         } else {
           _Core.startMovement(null);
-          _Core.useAngle = angle;
-          _Core.forceWeapon = 0;
-          _Core.shouldAttack = true;
+          bid.useAngle = angle;
+          bid.forceWeapon = 0;
+          bid.shouldAttack = true;
         }
       } else {
         try {
@@ -20612,7 +20733,7 @@ window.grbtp = 35;
         } catch (_) {
           _Core.startMovement(null);
         }
-        _Core.shouldAttack = false;
+        bid.shouldAttack = false;
       }
     }
   }
@@ -20642,7 +20763,7 @@ window.grbtp = 35;
       targets.sort((a, b) => myPos.distance(a.pos.current) - myPos.distance(b.pos.current));
       return targets;
     }
-    runTick() {
+    runTick(bid) {
       if (window._gbot1v1BotID === null || this.client !== window._gbot1v1BotID) return;
       const myPlayer = this.client.myPlayer;
       if (!myPlayer.inGame) {
@@ -20663,8 +20784,8 @@ window.grbtp = 35;
         this._cleanupActive = false;
         this._currentTarget = null;
         MH.startMovement(null);
-        MH.shouldAttack = false;
-        MH.forceWeapon = null;
+        bid.shouldAttack = false;
+        bid.forceWeapon = null;
         return;
       }
       const myPos = myPlayer.pos.current;
@@ -20678,13 +20799,13 @@ window.grbtp = 35;
       const angle = myPos.angle(targetPos);
       if (dist > breakRange) {
         MH.startMovement(angle, true);
-        MH.shouldAttack = false;
-        MH.forceWeapon = null;
+        bid.shouldAttack = false;
+        bid.forceWeapon = null;
       } else {
         MH.startMovement(null, true);
-        MH.useAngle = angle;
-        MH.forceWeapon = 0;
-        MH.shouldAttack = true;
+        bid.useAngle = angle;
+        bid.forceWeapon = 0;
+        bid.shouldAttack = true;
       }
     }
   }
@@ -20733,7 +20854,7 @@ window.grbtp = 35;
       }
       return targets;
     }
-    runTick() {
+    runTick(bid) {
       const task = window._gbot1v1WinCleanup;
       if (!task || !task.active || task.bot !== this.client) return;
       if (window._gbot1v1BotID === this.client) {
@@ -20751,8 +20872,8 @@ window.grbtp = 35;
       if (this._cleanupQueue.length === 0) {
         task.active = false;
         MH.startMovement(null);
-        MH.shouldAttack = false;
-        MH.forceWeapon = null;
+        bid.shouldAttack = false;
+        bid.forceWeapon = null;
         return;
       }
       const myPos = myPlayer.pos.current;
@@ -20764,13 +20885,13 @@ window.grbtp = 35;
       const angle = myPos.angle(targetPos);
       if (dist > breakRange) {
         MH.startMovement(angle, true);
-        MH.shouldAttack = false;
-        MH.forceWeapon = null;
+        bid.shouldAttack = false;
+        bid.forceWeapon = null;
       } else {
         MH.startMovement(null, true);
-        MH.useAngle = angle;
-        MH.forceWeapon = 0;
-        MH.shouldAttack = true;
+        bid.useAngle = angle;
+        bid.forceWeapon = 0;
+        bid.shouldAttack = true;
       }
     }
   }
