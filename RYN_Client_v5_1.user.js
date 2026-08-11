@@ -9247,6 +9247,330 @@ window.grbtp = 35;
     return Array.isArray(angles) ? angles.length > 0 : !!angles;
   }
 
+  // ==========================================================================
+  // RYN placement subsystem
+  //
+  // The placer this stands beside is one 900-line class that generates angles,
+  // judges them, decides what to build, spends the allowance and drives the
+  // send timers. Adding an object type meant editing predicates in the middle
+  // of it, and geometry could not be exercised without a live client.
+  //
+  // Four owners, and geometry never touches the wire:
+  //
+  //   RynPlacementState     what is pending, refused, on cooldown, spent
+  //   RynPlacementEngine    candidate generation and the three validations
+  //   RynPlacementSolver    scoring and selection, from registered rules
+  //   RynPlacementExecutor  a decision turned into actions, sent through net
+  //
+  // Object types are entries in a table. Spikes, traps and mills are three
+  // rows; a fourth is a row, not a branch somewhere inside a predicate.
+  // ==========================================================================
+
+  // What the engine needs to know about a placeable thing. `itemType` is the
+  // slot the game selects by; everything else is read off the item at runtime
+  // so a new row needs no numbers copied into it.
+  const RYN_PLACEABLE = Object.freeze({
+    spike: {
+      key: "spike",
+      itemType: LUNA_SPIKE_TYPE,
+      group: 2,
+      cost: LUNA_PLACE_COST,
+      priority: RYN_NET_PRIORITY.ACTION
+    },
+    trap: {
+      key: "trap",
+      itemType: LUNA_TRAP_TYPE,
+      group: 5,
+      cost: LUNA_PLACE_COST,
+      priority: RYN_NET_PRIORITY.ACTION
+    },
+    mill: {
+      key: "mill",
+      itemType: 3,
+      group: 3,
+      cost: LUNA_PLACE_COST,
+      priority: RYN_NET_PRIORITY.BACKGROUND
+    }
+  });
+
+  // A candidate is a place a build could go, with the facts a rule needs to
+  // judge it. Deliberately inert: no rule, no scoring, no side effect.
+  class RynPlacementCandidate {
+    profile;
+    itemID;
+    angle;
+    x;
+    y;
+    scale;
+    flush;
+    score = 0;
+    reasons = [];
+    constructor(profile, itemID, angle, x, y, scale, flush) {
+      this.profile = profile;
+      this.itemID = itemID;
+      this.angle = angle;
+      this.x = x;
+      this.y = y;
+      this.scale = scale;
+      this.flush = flush;
+    }
+    // Rules add to a candidate rather than returning a verdict, so the reason
+    // a placement won is inspectable instead of being lost in a boolean.
+    credit(points, why) {
+      this.score += points;
+      this.reasons.push(why);
+      return this;
+    }
+  }
+
+  // Owns what has happened and what is in flight. Nothing here computes; it
+  // remembers, so the engine and solver can stay pure.
+  class RynPlacementState {
+    _banned = [];
+    _placed = [];
+    _pending = [];
+    _cooldown = new Map;
+    _spentThisTick = 0;
+    tick = 0;
+    beginTick(tick) {
+      this.tick = tick;
+      this._spentThisTick = 0;
+      for (let i = this._banned.length - 1; i >= 0; i--) {
+        if (tick > this._banned[i].expiry) this._banned.splice(i, 1);
+      }
+      for (const [key, until] of this._cooldown) {
+        if (tick > until) this._cooldown.delete(key);
+      }
+    }
+    // A refusal belongs to a place on the ground, not to a direction from the
+    // player -- walk a step and the same angle points somewhere else.
+    ban(x, y, ticks) {
+      this._banned.push({
+        x: x,
+        y: y,
+        expiry: this.tick + ticks
+      });
+    }
+    isBanned(x, y, radius) {
+      for (const spot of this._banned) {
+        if (Math.hypot(spot.x - x, spot.y - y) < radius) return true;
+      }
+      return false;
+    }
+    cool(key, ticks) {
+      this._cooldown.set(key, this.tick + ticks);
+    }
+    isCooling(key) {
+      return this._cooldown.has(key);
+    }
+    recordSent(candidate, tick) {
+      this._placed.push({
+        x: candidate.x,
+        y: candidate.y,
+        tick: tick
+      });
+      this._spentThisTick += 1;
+      if (this._placed.length > 32) this._placed.shift();
+    }
+    // Sends scheduled from a timer land in the next tick, so history is judged
+    // against the tick it was sent in rather than the tick reading it.
+    settled(tick) {
+      return this._placed.filter(entry => entry.tick < tick);
+    }
+    forget(entries) {
+      this._placed = this._placed.filter(entry => !entries.includes(entry));
+    }
+    addPending(candidate, kind) {
+      this._pending.push({
+        candidate: candidate,
+        kind: kind
+      });
+    }
+    takePending(kind) {
+      const out = this._pending.filter(p => p.kind === kind);
+      this._pending = this._pending.filter(p => p.kind !== kind);
+      return out;
+    }
+    get spentThisTick() {
+      return this._spentThisTick;
+    }
+    get pendingCount() {
+      return this._pending.length;
+    }
+    reset() {
+      this._banned.length = 0;
+      this._placed.length = 0;
+      this._pending.length = 0;
+      this._cooldown.clear();
+      this._spentThisTick = 0;
+    }
+  }
+
+  // Generates candidates and validates them. Three validations, kept apart so
+  // each can be reasoned about and tested alone:
+  //
+  //   geometric  where the ring is, and which arcs of it are free
+  //   collision  which objects deny which arcs (solved, not sampled)
+  //   range      the river band, and the caller's distance ceiling
+  //
+  // No rule, no scoring, no packet. Given the same world it returns the same
+  // candidates, which is what makes it testable without a client.
+  class RynPlacementEngine {
+    world;
+    constructor(world) {
+      this.world = world;
+    }
+    ringRadius(item) {
+      return Config_ref.playerScale + item.scale + (item.placeOffset || 0);
+    }
+    // The exact arc one object denies, from the intersection of the ring a
+    // build lands on with the disc the object keeps clear.
+    blockedArc(objX, objY, objScale, ringR, itemScale, originX, originY) {
+      const dx = objX - originX;
+      const dy = objY - originY;
+      const dist = Math.hypot(dx, dy);
+      const deny = itemScale + objScale;
+      if (dist < 1e-6) return deny >= ringR ? ARC_FULL : null;
+      if (dist - ringR > deny || ringR - dist > deny) return null;
+      if (deny >= dist + ringR) return ARC_FULL;
+      const a = (dist * dist - deny * deny + ringR * ringR) / (2 * dist);
+      const h = Math.sqrt(Math.max(0, ringR * ringR - a * a));
+      const px = originX + a / dist * dx;
+      const py = originY + a / dist * dy;
+      const a1 = Math.atan2(py - h / dist * dx - originY, px + h / dist * dy - originX);
+      const a2 = Math.atan2(py + h / dist * dx - originY, px - h / dist * dy - originX);
+      const toObj = normalizeArcAngle(Math.atan2(dy, dx));
+      const s = normalizeArcAngle(a1);
+      const e = normalizeArcAngle(a2);
+      return arcContains(s, e, toObj) ? [ s, e ] : [ e, s ];
+    }
+    inRiver(y, itemID) {
+      if (itemID === 18) return false;
+      const mid = Config_ref.mapScale / 2;
+      const half = Config_ref.riverWidth / 2;
+      return y >= mid - half && y <= mid + half;
+    }
+    // `prefer` is offered exactly when it lands in a free arc, so the one angle
+    // that matters most is never rounded to a sample.
+    candidates(profile, itemID, origin, obstacles, opts = {}) {
+      const item = Items[itemID];
+      if (item === undefined) return [];
+      const ringR = this.ringRadius(item);
+      const step = opts.step ?? LUNA_ANGLE_STEP;
+      const exclude = opts.exclude ?? null;
+      const blocked = [];
+      for (const obj of obstacles) {
+        if (exclude !== null && obj === exclude) continue;
+        const arc = this.blockedArc(obj.x, obj.y, obj.scale, ringR, item.scale, origin.x, origin.y);
+        if (arc === ARC_FULL) return [];
+        if (arc !== null) blocked.push(arc);
+      }
+      const out = [];
+      const emit = (angle, flush) => {
+        const a = normalizeArcAngle(angle);
+        const x = origin.x + ringR * Math.cos(a);
+        const y = origin.y + ringR * Math.sin(a);
+        if (this.inRiver(y, itemID)) return;
+        if (opts.maxFrom !== undefined && Math.hypot(x - opts.maxFrom.x, y - opts.maxFrom.y) > opts.maxRange) return;
+        out.push(new RynPlacementCandidate(profile, itemID, a, x, y, item.scale, flush));
+      };
+      for (const [start, end] of invertArcs(mergeArcs(blocked))) {
+        emit(start, true);
+        const span = (end - start + TWO_PI) % TWO_PI || TWO_PI;
+        for (let t = step; t < span; t += step) emit(start + t, false);
+        if (span > ARC_EPS) emit(end, true);
+        if (opts.prefer !== undefined && arcContains(start, end, normalizeArcAngle(opts.prefer))) {
+          emit(opts.prefer, false);
+        }
+      }
+      return out;
+    }
+  }
+
+  // Scores candidates from registered rules and picks winners. A rule is a
+  // record, so what the placer considers is a list that can be read, extended
+  // and reordered -- not a ladder of predicates buried in one method.
+  //
+  // Rules are scored, not short-circuited, so two reasons to place somewhere
+  // beat one. Ordering the weights the way the old ladder was ordered
+  // reproduces its choices while making the next reason additive.
+  class RynPlacementSolver {
+    _rules = [];
+    addRule(rule) {
+      if (!rule || !rule.id || typeof rule.apply !== "function") {
+        Logger.error(`RynPlacementSolver: refused rule "${rule && rule.id}"`);
+        return null;
+      }
+      this._rules.push({
+        id: rule.id,
+        item: rule.item ?? null,
+        weight: rule.weight ?? 0,
+        apply: rule.apply
+      });
+      this._rules.sort((a, b) => b.weight - a.weight);
+      return rule.id;
+    }
+    removeRule(id) {
+      const i = this._rules.findIndex(r => r.id === id);
+      if (i !== -1) this._rules.splice(i, 1);
+      return i !== -1;
+    }
+    get rules() {
+      return this._rules.map(r => r.id);
+    }
+    score(candidates, ctx) {
+      for (const candidate of candidates) {
+        candidate.score = 0;
+        candidate.reasons.length = 0;
+        for (const rule of this._rules) {
+          if (rule.item !== null && rule.item !== candidate.profile.key) continue;
+          if (rule.apply(candidate, ctx) === true) candidate.credit(rule.weight, rule.id);
+        }
+      }
+      return candidates;
+    }
+    // Only candidates a rule actually wanted. Ties break toward the flush
+    // angle, which is the one packed against something.
+    select(candidates, ctx, limit = 1) {
+      const wanted = this.score(candidates, ctx).filter(c => c.score > 0);
+      wanted.sort((a, b) => b.score - a.score || (a.flush === b.flush ? 0 : a.flush ? -1 : 1));
+      return wanted.slice(0, limit);
+    }
+  }
+
+  // Turns a decision into actions. The only part of this subsystem that knows
+  // packets exist, and it reaches the wire through the net layer rather than
+  // touching a socket or counting for itself.
+  class RynPlacementExecutor {
+    client;
+    state;
+    constructor(client2, state) {
+      this.client = client2;
+      this.state = state;
+    }
+    // Returns the candidates that actually went out, so the caller records
+    // history from what happened rather than what was intended.
+    execute(candidates, opts = {}) {
+      const core = this.client._Core;
+      const myPlayer = this.client.myPlayer;
+      const budget = this.client.netBudget;
+      const tick = opts.tick ?? this.state.tick;
+      const sent = [];
+      for (const candidate of candidates) {
+        const profile = candidate.profile;
+        if (!budget.affords(profile.cost, profile.priority)) break;
+        if (!myPlayer.canPlace(profile.itemType)) continue;
+        core.place(profile.itemType, candidate.angle);
+        core.placedOnce = true;
+        core.placeAngles[0] = profile.itemType;
+        core.placeAngles[1].push(candidate.angle);
+        this.state.recordSent(candidate, tick);
+        sent.push(candidate);
+      }
+      return sent;
+    }
+  }
+
   class AutoPlacer {
     unitID="autoPlacer";
     client;
