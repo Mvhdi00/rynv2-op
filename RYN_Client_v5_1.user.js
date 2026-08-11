@@ -15244,6 +15244,7 @@ window.grbtp = 35;
     events = new RynEvents;
     registry = new RynRegistry;
     budget = new RynBudget;
+    services = new RynServices;
     state = "cold";
     constructor(client2) {
       this.client = client2;
@@ -15319,6 +15320,247 @@ window.grbtp = 35;
   // Which domain each unit belongs to. Every one of the sixty-four is placed;
   // an unlisted id falls to UTILITY and is reported, so a new feature cannot
   // quietly escape classification.
+  // ==========================================================================
+  // RYN state services
+  //
+  // What this replaces: one client object carried every manager, and a system
+  // that needed the nearest enemy took the whole thing to get it. Reference
+  // counts hid how narrow the real need was -- EnemyManager was read 73 times
+  // through three members, ObjectManager 62 times through five. A system was
+  // handed a container when it wanted two fields.
+  //
+  // Nine services, each owning one thing and populated once per tick in the
+  // SAMPLE phase. A system asks the runtime for the services it needs and
+  // receives those, not a container it could reach anything through.
+  //
+  // These are snapshots, not wrappers. Reading one does not reach back into a
+  // manager, so what a system saw is fixed for the tick it saw it in -- which
+  // is what makes a decision reproducible.
+  // ==========================================================================
+
+  // Where the local player is and what they are holding. The one service that
+  // is genuinely large, because the player genuinely is.
+  class RynLocalPlayerState {
+    alive = false;
+    x = 0;
+    y = 0;
+    futureX = 0;
+    futureY = 0;
+    vx = 0;
+    vy = 0;
+    health = 100;
+    trapped = false;
+    trappedIn = null;
+    shameCount = 0;
+    spikeDamage = 0;
+    hatID = null;
+    weapon = null;
+    scale = 35;
+    sample(myPlayer, tickMs) {
+      this.alive = myPlayer.inGame === true;
+      const cur = myPlayer.pos.current;
+      const fut = myPlayer.pos.future ?? cur;
+      this.x = cur.x;
+      this.y = cur.y;
+      this.futureX = fut.x;
+      this.futureY = fut.y;
+      this.vx = (fut.x - cur.x) / tickMs;
+      this.vy = (fut.y - cur.y) / tickMs;
+      this.health = myPlayer.currentHealth ?? 100;
+      this.trapped = myPlayer.isTrapped === true;
+      this.trappedIn = myPlayer.trappedIn ?? null;
+      this.shameCount = myPlayer.shameCount ?? 0;
+      this.spikeDamage = myPlayer.spikeDamage ?? 0;
+      this.hatID = myPlayer.hatID ?? null;
+      this.weapon = myPlayer.getItemByType?.(0) ?? null;
+      this.scale = Config_ref.playerScale;
+      return this;
+    }
+  }
+
+  // Everything placed on the ground, and the grid that finds it. Replaces
+  // ObjectManager's five-member surface.
+  class RynEntityState {
+    objects = null;
+    grid = null;
+    deleted = null;
+    sample(objectManager) {
+      this.objects = objectManager.objects;
+      this.grid = objectManager.grid2D;
+      this.deleted = objectManager.deletedObjects;
+      return this;
+    }
+    near(x, y, cells, visit) {
+      return this.grid === null ? false : this.grid.query(x, y, cells, visit);
+    }
+    get(id) {
+      return this.objects === null ? undefined : this.objects.get(id);
+    }
+    has(id) {
+      return this.objects !== null && this.objects.has(id);
+    }
+    get brokeThisTick() {
+      return this.deleted !== null && this.deleted.size > 0;
+    }
+  }
+
+  // The world as a whole: the tick it belongs to and the map facts a decision
+  // needs. Small on purpose -- most of the world is entities.
+  class RynWorldState {
+    tick = 0;
+    tickMs = 1e3 / 9;
+    sandbox = false;
+    mapScale = 0;
+    riverWidth = 0;
+    sample(tick, tickMs, sandbox) {
+      this.tick = tick;
+      this.tickMs = tickMs;
+      this.sandbox = sandbox === true;
+      this.mapScale = Config_ref.mapScale;
+      this.riverWidth = Config_ref.riverWidth;
+      return this;
+    }
+    inRiver(y) {
+      const mid = this.mapScale / 2;
+      const half = this.riverWidth / 2;
+      return y >= mid - half && y <= mid + half;
+    }
+  }
+
+  // What the player is asking for. Replaces InputHandler's ten-member surface
+  // for anything that only wants to know what is held down.
+  class RynInputState {
+    move = 0;
+    mouseX = 0;
+    mouseY = 0;
+    instaToggle = false;
+    instakillTarget = null;
+    sample(input) {
+      this.move = input.move ?? 0;
+      this.mouseX = input.mouse?.x ?? 0;
+      this.mouseY = input.mouse?.y ?? 0;
+      this.instaToggle = input.instaToggle === true;
+      this.instakillTarget = input.instakillTarget ?? null;
+      return this;
+    }
+  }
+
+  // The connection as gameplay sees it: latency and what is left to spend.
+  // Nothing here can reach a socket.
+  class RynNetworkState {
+    connected = false;
+    ping = 0;
+    minPing = 0;
+    drift = 0;
+    spent = 0;
+    limit = 0;
+    sample(transport, socketManager, budget, clock) {
+      this.connected = transport.open === true;
+      this.ping = socketManager.pong ?? 0;
+      this.minPing = Number.isFinite(socketManager.minPingTime) ? socketManager.minPingTime : 0;
+      this.drift = clock.drift;
+      this.spent = budget.spent;
+      this.limit = budget.limit;
+      return this;
+    }
+    get free() {
+      return Math.max(0, this.limit - this.spent);
+    }
+  }
+
+  // Who we are fighting and how dangerous it is. Replaces EnemyManager's
+  // three-member surface, which 73 references were reaching a container for.
+  class RynCombatState {
+    target = null;
+    targetX = 0;
+    targetY = 0;
+    targetFutureX = 0;
+    targetFutureY = 0;
+    distance = Infinity;
+    targetTrapped = false;
+    incoming = 0;
+    flagged = false;
+    knockbackRisk = false;
+    spikePlacerAngles = null;
+    sample(enemyManager, local) {
+      const target = enemyManager.nearestEnemy ?? null;
+      this.target = target;
+      this.spikePlacerAngles = enemyManager.nearestSpikePlacerAngle ?? null;
+      this.incoming = (enemyManager.potentialDamage ?? 0) + Math.max(enemyManager.potentialSpikeDamage ?? 0, enemyManager.potentialSpikeKnockbackDamage ?? 0);
+      this.flagged = enemyManager.detectedDangerEnemy === true || enemyManager.detectedEnemy === true || enemyManager.dangerWithoutSoldier === true;
+      this.knockbackRisk = enemyManager.possibleToKnockback === true && local.trapped !== true;
+      if (target === null) {
+        this.targetX = this.targetY = this.targetFutureX = this.targetFutureY = 0;
+        this.distance = Infinity;
+        this.targetTrapped = false;
+        return this;
+      }
+      const cur = target.pos.current;
+      const fut = target.pos.future ?? cur;
+      this.targetX = cur.x;
+      this.targetY = cur.y;
+      this.targetFutureX = fut.x;
+      this.targetFutureY = fut.y;
+      this.distance = Math.hypot(cur.x - local.x, cur.y - local.y);
+      this.targetTrapped = target.isTrapped === true;
+      return this;
+    }
+    get hasTarget() {
+      return this.target !== null;
+    }
+  }
+
+  // Whether this client is the one at the keyboard, and what it is running as.
+  class RynBotState {
+    owner = true;
+    botCount = 0;
+    sample(client2) {
+      this.owner = client2.isOwner === true;
+      this.botCount = client2.clients?.size ?? 0;
+      return this;
+    }
+  }
+
+  // What the interface is showing. Read by anything that reports rather than
+  // decides, so a display cannot pull a manager in behind it.
+  class RynUIState {
+    menuOpen = false;
+    ping = 0;
+    packets = 0;
+    sample(net) {
+      this.ping = net.ping;
+      this.packets = net.spent;
+      return this;
+    }
+  }
+
+  // Everything a system might be given, assembled once and handed out by name.
+  // A system asks for what it needs; it is never passed the container.
+  class RynServices {
+    local = new RynLocalPlayerState;
+    entities = new RynEntityState;
+    world = new RynWorldState;
+    input = new RynInputState;
+    network = new RynNetworkState;
+    combat = new RynCombatState;
+    placement = null;
+    bot = new RynBotState;
+    ui = new RynUIState;
+    // Named services only. Asking for one that does not exist is an error at
+    // the point of asking rather than an undefined read somewhere later.
+    provide(names) {
+      const out = {};
+      for (const name of names) {
+        if (!(name in this)) {
+          Logger.error(`RynServices: no service named "${name}"`);
+          continue;
+        }
+        out[name] = this[name];
+      }
+      return out;
+    }
+  }
+
   const RYN_UNIT_DOMAIN = Object.freeze({
     // Combat — opening or finishing an exchange.
     instakill: RYN_DOMAIN.COMBAT, smartInsta: RYN_DOMAIN.COMBAT,
@@ -15826,6 +16068,22 @@ window.grbtp = 35;
     // that the number is now written down and a unit can be moved without
     // moving code, and `needs` can override it where an ordering is a real
     // dependency rather than a habit.
+    // One read of the world per tick, in dependency order: the local player
+    // first because combat measures distance from it, then the rest.
+    _sampleServices(runtime) {
+      const c = this.client;
+      const svc = runtime.services;
+      const tickMs = c.SocketManager.TICK ?? 1e3 / 9;
+      svc.world.sample(runtime.clock.tick, tickMs, c.SocketManager.isSandbox);
+      svc.local.sample(c.myPlayer, tickMs);
+      svc.entities.sample(c.ObjectManager);
+      svc.input.sample(c.InputHandler);
+      svc.network.sample(c.transport, c.SocketManager, c.netBudget, runtime.clock);
+      svc.combat.sample(c.EnemyManager, svc.local);
+      svc.bot.sample(c);
+      svc.ui.sample(svc.network);
+      runtime.events.emit("services:sampled", svc);
+    }
     _unitsRegistered=false;
     _registerUnits(runtime) {
       if (this._unitsRegistered) return;
@@ -15901,6 +16159,11 @@ window.grbtp = 35;
       runtime.clock.advance();
       runtime.budget.open(this.packetLimit - this.packetCount);
       this._registerUnits(runtime);
+      // SAMPLE: the world is read once, into services a system can be handed.
+      // Everything after this reads a snapshot rather than reaching back
+      // through a container, so what a system saw is fixed for its tick.
+      this._sampleServices(runtime);
+      runtime.runPhase(RYN_PHASE.SAMPLE, this);
       this._arbiter.begin();
       runtime.runPhase(RYN_PHASE.DECIDE, this);
       this._arbiter.commit(this._arbiter.resolve());
