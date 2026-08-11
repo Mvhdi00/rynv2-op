@@ -9435,19 +9435,21 @@ window.grbtp = 35;
   // ── Primary trap ──────────────────────────────────────────────────────────
   // A placement ladder that walks spikes before traps and treats every free
   // angle as equally worth building is only fair when builds are cheap. They
-  // are not cheap here. The whole client shares one allowance that rolls on a
+  // are not cheap here: the whole client shares one allowance that rolls on a
   // 1s interval, the placer may spend at most PLACER_PACKET_GATE of it, and a
-  // build costs PLACE_PACKET_COST -- about twenty builds a second across every
-  // feature, roughly two per tick. A spike ladder walking a full ring of free
-  // angles claims all of them, and traps reach the wire only when the spikes
-  // happen to run out of ground.
+  // build costs PLACE_PACKET_COST.
   //
-  // That ordering is backwards for what actually wins a fight. A spike on an
-  // untrapped enemy is chip damage; a spike on a trapped one is the kill. The
-  // trap that pins them is worth more than any spike that tick, so it is
-  // reserved a slice of the allowance up front instead of competing for the
-  // leftovers.
-  const TRAP_RESERVED_PLACES = 6;
+  // That ordering is also backwards for what wins a fight. A spike on an
+  // untrapped enemy is chip damage; a spike on a trapped one is the kill.
+  //
+  // This used to be enforced by reserving a slice of the allowance for traps
+  // before the spike ladder could reach it -- a fixed ordering standing in for
+  // a judgement, in a system that had no way to judge. It has one now: the
+  // scorer's tactical term rates a trap on a free enemy twice what it rates a
+  // spike, the planner searches sets rather than walking a list, and the
+  // diversity guard stops either kind taking a whole plan while the other has
+  // work worth doing. The reserve is gone because those three say the same
+  // thing better, and by score rather than by type.
 
   // How far ahead of the enemy the primary trap is thrown.
   //
@@ -10072,6 +10074,87 @@ window.grbtp = 35;
     }
   }
 
+  // ── Replace ───────────────────────────────────────────────────────────────
+  // A replace opportunity is a piece of ground that was mine and is not any
+  // more. Something I built came down -- broken by them, or by me -- and the
+  // ground it held is now open. That ground was worth holding a moment ago, so
+  // it is worth refilling before they walk through the hole.
+  //
+  // Detection is a diff, not a feed. Each tick the watch takes the ids of my
+  // buildings near the fight; an id that was in last tick's set and is not in
+  // this one has gone, and its last known footprint is the vacancy. Nothing
+  // subscribes, nothing is cleared by anyone else, and the answer does not
+  // depend on which order the managers ran in.
+  //
+  // A vacancy is short-lived on purpose. It says "this just opened", and a
+  // moment later that is no longer news -- the ordinary placer already sees the
+  // ground as free and will consider it on merit like any other angle.
+  const REPLACE_VACANCY_TICKS = 4;
+
+  class RynReplaceWatch {
+    _held = new Map;       // id -> footprint, as of last tick
+    _open = [];            // vacancies still worth acting on
+    _tick = -1;
+
+    // Diff this tick's buildings against last tick's. Returns the vacancies
+    // that opened, and keeps them for as long as they are news.
+    scan(client2, myPlayer, origin, radius, tick) {
+      if (this._tick === tick) return this._open;
+      this._tick = tick;
+
+      const seen = new Map;
+      client2.ObjectManager.grid2D.query(origin.x, origin.y, 3, id => {
+        const obj = client2.ObjectManager.objects.get(id);
+        if (!obj || !(obj instanceof PlayerObject)) return false;
+        // Only my own, and only near enough to matter: someone else's wall
+        // coming down is not a hole in my ground.
+        if (client2.PlayerManager.isEnemyByID(obj.ownerID, myPlayer)) return false;
+        if (origin.distance(obj.pos.current) > radius) return false;
+        seen.set(obj.id, {
+          x: obj.pos.current.x,
+          y: obj.pos.current.y,
+          scale: obj.scale,
+          itemGroup: obj.itemGroup,
+          mine: myPlayer.objects?.has(obj) === true
+        });
+        return false;
+      });
+
+      for (const [id, was] of this._held) {
+        if (seen.has(id)) continue;
+        this._open.push({
+          x: was.x, y: was.y, scale: was.scale,
+          itemGroup: was.itemGroup, mine: was.mine,
+          opened: tick, expires: tick + REPLACE_VACANCY_TICKS
+        });
+      }
+      this._held = seen;
+
+      for (let i = this._open.length - 1; i >= 0; i--) {
+        if (tick > this._open[i].expires) this._open.splice(i, 1);
+      }
+      return this._open;
+    }
+
+    // A vacancy is settled once something stands on it again -- whoever built
+    // there, and whether or not it was this engine that asked for it.
+    settle(x, y) {
+      for (let i = this._open.length - 1; i >= 0; i--) {
+        const v = this._open[i];
+        if (Math.hypot(v.x - x, v.y - y) < v.scale) this._open.splice(i, 1);
+      }
+    }
+
+    get open() {
+      return this._open;
+    }
+    reset() {
+      this._held.clear();
+      this._open.length = 0;
+      this._tick = -1;
+    }
+  }
+
   // ── Preplace book ─────────────────────────────────────────────────────────
   // Candidates that have been planned but not yet sent, kept apart from what
   // has actually gone out. An executed placement is a fact and lives in
@@ -10328,8 +10411,17 @@ window.grbtp = 35;
     //    something -- it is where they land when they break out -- but not what
     //    a trap on a free one is worth.
     _tactical(c, ctx) {
-      if (ctx.enemyTrapped) return c.role.damages ? 1 : .35;
-      return c.role.pins ? 1 : .5;
+      // Ground that was mine a moment ago and is open now was worth holding,
+      // and the hole is where they are heading. That is the strongest reason
+      // to build there is -- but it is still a score, so a better build
+      // elsewhere can still win.
+      // Role fit occupies the lower seven tenths so the refill has somewhere to
+      // go: clamping a role that already scores 1 would swallow the bonus and
+      // the term would say nothing about replace at all.
+      const refill = c.fills !== undefined && c.fills !== null ? .3 : 0;
+      const fit = ctx.enemyTrapped ? (c.role.damages ? .7 : .25)
+                                   : (c.role.pins ? .7 : .35);
+      return Math.min(1, fit + refill);
     }
 
     // 3. Enclosure. Of the directions the enemy could leave in, how many does
@@ -10519,19 +10611,27 @@ window.grbtp = 35;
   }
 
   // ── Planner ───────────────────────────────────────────────────────────────
-  // The part that stops this being a ladder. Given every legal placement and
-  // what the tick can afford, choose the best *set* -- not the first angle that
-  // passes a rule, and not the top N scores either.
+  // The part that stops this being a ladder. It does not walk a ranked list
+  // taking whatever fits, and it does not run spikes before traps or traps
+  // before spikes. It searches for the best *set*.
   //
-  // Two builds can be worth more together than apart. A trap pins them and a
-  // spike touching that ground is the exchange; taken separately the spike is
-  // chip damage and the trap is a delay. So combinations are scored as
-  // combinations before singles are considered, or the planner spends its whole
-  // budget on two copies of whichever half scored higher alone.
+  // Two builds can be worth more together than apart -- a trap pins them and a
+  // spike touching that ground is the exchange, where alone the spike is chip
+  // damage and the trap is a delay. A ranked walk cannot see that, because it
+  // has already spent the budget on two copies of whichever half scored higher
+  // by itself.
   //
-  // Beyond that: ranked by score, greedy with overlap rejection. The true
-  // optimum is a packing problem, the candidate count is small, and a build
-  // that overlaps a better one was never compatible with it.
+  // So: take the strongest handful, enumerate the sets that fit the budget,
+  // score each set as its members plus every synergy between them, and keep the
+  // best one that has no conflict inside it. The candidate count is small and
+  // the budget is two or three, so the search is a few hundred combinations at
+  // worst -- cheaper than the geometry that produced the candidates.
+  //
+  // Ordering falls out of the score. If a spike goes first it is because the
+  // spike was worth more this tick, not because spikes go first.
+  const PLAN_SEARCH_WIDTH = 8;
+  const PLAN_SEARCH_DEPTH = 3;
+
   class RynPlacementPlanner {
     constructor(scorer) {
       this.scorer = scorer;
@@ -10539,77 +10639,86 @@ window.grbtp = 35;
 
     plan(candidates, ctx) {
       const w = this.scorer.w;
-      const conflict = ctx.conflict;
-      // The packet-waste guard: a candidate that only scores for being legal
-      // never reaches the wire.
-      const ranked = candidates.filter(c => c.score >= w.minUtility).sort((a, b) => b.score - a.score);
-      if (ranked.length === 0) return [];
+      // The packet-waste guard: a build that scores only for being legal never
+      // reaches the wire.
+      const pool = candidates
+        .filter(c => c.score >= w.minUtility && this._admissible(c, ctx))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, PLAN_SEARCH_WIDTH);
+      if (pool.length === 0) return [];
 
-      const chosen = [];
-      const taken = [];
-      let openings = 0;
-      let pinsTaken = 0;
+      const depth = Math.max(1, Math.min(ctx.budget, PLAN_SEARCH_DEPTH));
+      let best = null, bestValue = -Infinity;
 
-      // Pinning builds get first refusal on a slice of the allowance: a trap is
-      // what opens the exchange, and a ladder that spends on damage first never
-      // reaches it.
-      const reserve = Math.min(ctx.budget, Math.floor(TRAP_RESERVED_PLACES / PLACE_PACKET_COST) + 1);
-
-      const admissible = cand => {
-        if (chosen.includes(cand)) return false;
-        // A build waiting on ground to clear costs two sends, not one, and
-        // three against one opening slot was measured in play as the whole
-        // placer going sluggish. Two keeps the second chance.
-        if (cand.reason !== RYN_PLACE_REASON.IMMEDIATE && openings >= PREPLACE_CANDIDATES) return false;
-        if (ctx.capped(cand.itemId, cand.blockedBy)) return false;
-        // Ground a send is already flying towards, or that the server refused.
-        // This is also what keeps an immediate build off the spot a delayed one
-        // is holding: the delayed send marked it when it was planned.
-        if (ctx.memory.blocked(cand.x, cand.y)) return false;
-        // Ground an open preplace is holding -- but only while that preplace is
-        // worth more. A bet placed first must never block a better build simply
-        // for having been placed first.
-        if (ctx.book !== undefined && ctx.book.holds(cand)) return false;
-        if (conflict.collides(cand, taken)) return false;
-        return true;
+      // Every subset up to `depth`, checked for internal conflict as it grows
+      // so impossible sets are abandoned early rather than scored and thrown
+      // away.
+      const walk = (start, chosen, value) => {
+        if (chosen.length > 0 && value > bestValue) {
+          bestValue = value;
+          best = chosen.slice();
+        }
+        if (chosen.length >= depth) return;
+        for (let i = start; i < pool.length; i++) {
+          const cand = pool[i];
+          if (this._conflicts(cand, chosen, ctx)) continue;
+          let added = cand.score;
+          for (const other of chosen) added += this._pairValue(other, cand, ctx);
+          chosen.push(cand);
+          walk(i + 1, chosen, value + added);
+          chosen.pop();
+        }
       };
-      const take = cand => {
-        chosen.push(cand);
-        taken.push(cand);
-        if (cand.role.pins) pinsTaken += 1;
-        if (cand.reason !== RYN_PLACE_REASON.IMMEDIATE) openings += 1;
-      };
+      walk(0, [], 0);
+      if (best === null) return [];
 
-      // Pass 1: the best pair, if two builds fit and a pair is worth more than
-      // the two best singles. Only the strongest few are considered from each
-      // side -- the tail cannot win a pair it could not win alone.
-      if (ctx.budget >= 2) {
-        const pins = ranked.filter(c => c.role.pins).slice(0, 4);
-        const dmgs = ranked.filter(c => c.role.damages).slice(0, 4);
-        let best = null, bestVal = -Infinity;
-        for (const pin of pins) {
-          for (const dmg of dmgs) {
-            if (conflict.collides(pin, [ dmg ])) continue;
-            const val = pin.score + dmg.score + this.scorer.synergy(pin, dmg, ctx);
-            if (val > bestVal) { bestVal = val; best = [ pin, dmg ]; }
-          }
-        }
-        if (best !== null && this.scorer.synergy(best[0], best[1], ctx) > 0) {
-          for (const c of best) if (admissible(c)) take(c);
-        }
-      }
+      // One role must not take the whole plan while the other has work worth
+      // doing. This is not an ordering -- it is a guard against a single kind
+      // of build crowding out the thing that makes it worth anything.
+      return this._diversify(best, pool, ctx);
+    }
 
-      // Pass 2: pinning builds against their reserve, then everything on merit.
-      for (const pass of [ "pins", "all" ]) {
-        for (const cand of ranked) {
-          if (chosen.length >= ctx.budget) break;
-          if (pass === "pins" && !cand.role.pins) continue;
-          if (pass === "pins" && pinsTaken >= reserve) break;
-          if (!admissible(cand)) continue;
-          take(cand);
-        }
-      }
-      return chosen.slice(0, ctx.budget);
+    _pairValue(a, b, ctx) {
+      return a.role.pins ? this.scorer.synergy(a, b, ctx) : this.scorer.synergy(b, a, ctx);
+    }
+
+    _admissible(cand, ctx) {
+      // A build waiting on ground to clear costs two sends, not one, and three
+      // against one opening slot was measured in play as the whole placer going
+      // sluggish.
+      if (ctx.capped(cand.itemId, cand.blockedBy)) return false;
+      // Ground a send is already flying towards, or that the server refused.
+      // This is also what keeps an immediate build off the spot a delayed one
+      // is holding: the delayed send marked it when it was planned.
+      if (ctx.memory.blocked(cand.x, cand.y)) return false;
+      // Ground an open preplace is holding -- but only while that preplace is
+      // worth more. A bet placed first must never block a better build simply
+      // for having been placed first.
+      if (ctx.book !== undefined && ctx.book.holds(cand)) return false;
+      return true;
+    }
+
+    _conflicts(cand, chosen, ctx) {
+      if (ctx.conflict.collides(cand, chosen)) return true;
+      let openings = cand.reason !== RYN_PLACE_REASON.IMMEDIATE ? 1 : 0;
+      for (const c of chosen) if (c.reason !== RYN_PLACE_REASON.IMMEDIATE) openings += 1;
+      if (openings > PREPLACE_CANDIDATES) return true;
+      return false;
+    }
+
+    _diversify(set, pool, ctx) {
+      if (set.length < 2) return set;
+      const pins = set.filter(c => c.role.pins).length;
+      if (pins !== 0 && pins !== set.length) return set;
+      const missing = pins === 0;
+      const other = pool.find(c => c.role.pins === missing && !set.includes(c) && !ctx.conflict.collides(c, set.slice(0, set.length - 1)));
+      if (other === undefined) return set;
+      // Swap the weakest member for the best build of the absent role, but only
+      // where that role is what the fight actually calls for -- the tactical
+      // term already says which, so the swap follows the score rather than a
+      // rule about types.
+      const weakest = set[set.length - 1];
+      return other.score >= weakest.score * .6 ? set.slice(0, set.length - 1).concat(other) : set;
     }
   }
 
@@ -10644,20 +10753,45 @@ window.grbtp = 35;
   class RynPlacementExecutor {
     client;
     memory;
-    constructor(client2, memory) {
+    watch = null;
+    constructor(client2, memory, watch = null) {
       this.client = client2;
       this.memory = memory;
+      this.watch = watch;
     }
-    fire(cand, tick) {
-      const ryn = this.client.services;
+    // Everything a build needs to still be true at the moment it goes out.
+    // A plan is made from a reading of the world and sent from a later one --
+    // the cap may have filled, the resources may have gone, and somebody may
+    // have built on the ground while the timer ran. The cheapest refused build
+    // is the one that was never sent.
+    valid(cand) {
       const myPlayer = this.client.myPlayer;
       if (!myPlayer || !myPlayer.inGame) return false;
       if (!myPlayer.canPlace(cand.role.itemType)) return false;
+      const OM = this.client.ObjectManager;
+      if (OM === undefined || OM === null) return true;
+      let clear = true;
+      OM.grid2D.query(cand.x, cand.y, 1, id => {
+        const obj = OM.objects.get(id);
+        if (!obj) return false;
+        if (Math.hypot(cand.x - obj.pos.current.x, cand.y - obj.pos.current.y) < cand.scale + obj.placementScale) {
+          clear = false;
+          return true;
+        }
+        return false;
+      });
+      return clear;
+    }
+
+    fire(cand, tick) {
+      const ryn = this.client.services;
+      if (!this.valid(cand)) return false;
       ryn.actions.place(cand.role.itemType, cand.angle);
       ryn.ledger.placedOnce = true;
       ryn.ledger.placeAngles[0] = cand.role.itemType;
       ryn.ledger.placeAngles[1].push(cand.angle);
       this.memory.pending(cand.x, cand.y, cand.scale, tick);
+      if (this.watch !== null) this.watch.settle(cand.x, cand.y);
       return true;
     }
     // Has the target left the ground this build was chosen for? Past the
@@ -10702,6 +10836,7 @@ window.grbtp = 35;
     threat = new RynThreatAnalyzer;
     estimator = new RynMotionEstimator;
     book = new RynPreplaceBook;
+    watch = new RynReplaceWatch;
     scorer = new RynPlacementScorer(RYN_PLACE_UTILITY);
     planner;
     conflict = new RynConflictResolver;
@@ -10712,7 +10847,7 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
       this.planner = new RynPlacementPlanner(this.scorer);
-      this.executor = new RynPlacementExecutor(client2, this.memory);
+      this.executor = new RynPlacementExecutor(client2, this.memory, this.watch);
     }
 
     reset() {
@@ -10720,6 +10855,7 @@ window.grbtp = 35;
       this.threat.doomed.clear();
       this.estimator.reset();
       this.book.clear();
+      this.watch.reset();
       this.lastPlan = [];
     }
 
@@ -10744,6 +10880,11 @@ window.grbtp = 35;
       // reservation on ground nobody is walking to -- and holding it would keep
       // this tick's work off that ground for no reason.
       this.book.review(tick, enemy, this.threat.motion);
+
+      // What came down since last tick. Ground that was mine a moment ago and
+      // is open now is the strongest reason to build there is: it was worth
+      // holding, and the hole is where they will go.
+      const vacancies = this.watch.scan(client2, myPlayer, myPlayer.pos.current, ctx.radius, tick);
 
       const myPos = myPlayer.pos.current;
       const enemyPos = enemy.pos.current;
@@ -10811,6 +10952,18 @@ window.grbtp = 35;
             if (a !== null) all.push(a);
           }
         }
+        // Ground that just opened, asked of every role separately. Whether a
+        // spike or a trap belongs in the hole is a scoring question, not one
+        // answered by which loop runs first.
+        for (const v of vacancies) {
+          if (v.expires < tick) continue;
+          const a = this.candidates.anchored(myPos, item, itemId, role, now, v, item.scale, RYN_PLACE_REASON.RESEND, null);
+          if (a !== null) {
+            a.fills = v;
+            all.push(a);
+          }
+        }
+
         if (role.damages && this.threat.trappedIn !== null) {
           const t = this.threat.trappedIn.pos.current;
           const away = Math.atan2(enemyPos.y - t.y, enemyPos.x - t.x);
