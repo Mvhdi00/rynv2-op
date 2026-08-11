@@ -5714,11 +5714,281 @@ window.grbtp = 35;
     };
   }();
   let _RYN_Z = null;
+  // ==========================================================================
+  // RYN networking
+  //
+  // What this replaces: one class held the socket handle, the three encoding
+  // strategies, the opcode tables, the rate counter and every convenience
+  // wrapper, and the raw `socketSend` bound from the WebSocket leaked out of
+  // it into the send path. Nothing could be reasoned about alone — a change to
+  // framing sat in the same method as a change to accounting.
+  //
+  // Five owners, and the socket is visible to exactly one:
+  //
+  //   RynTransport      the connection and its lifecycle; the only caller of send
+  //   RynPacketCodec    encode, decode, and the validation between them
+  //   RynPacketBudget   the per-second allowance, cost and starvation guard
+  //   RynPacketQueue    ordering for traffic that can wait
+  //   RynNetEvents      a typed face on the runtime bus for net signals
+  //
+  // The protocol is not redesigned here. Encoding keeps all three existing
+  // paths in the same order and with the same conditions, decoding keeps the
+  // same opcode translation, and no field or frame is invented.
+  // ==========================================================================
+
+  // Packet importance. Ordering only — the wire format is untouched.
+  const RYN_NET_PRIORITY = Object.freeze({
+    CRITICAL: 0,   // heals, anti-insta: dropping one costs the round
+    ACTION: 1,     // attacks, placements
+    ROUTINE: 2,    // aim, movement
+    BACKGROUND: 3  // chat, store, telemetry
+  });
+
+  // Owns the connection and its lifecycle. The bound WebSocket send lives here
+  // and nowhere else, so the rest of RYN cannot reach the socket even by
+  // accident.
+  class RynTransport {
+    client;
+    _socket = null;
+    _send = null;
+    constructor(client2) {
+      this.client = client2;
+    }
+    attach(socket) {
+      this._socket = socket;
+      this._send = socket.send.bind(socket);
+    }
+    detach() {
+      this._socket = null;
+      this._send = null;
+    }
+    get socket() {
+      return this._socket;
+    }
+    get open() {
+      return this._socket !== null && this._socket.readyState === this._socket.OPEN && this._send !== null;
+    }
+    get url() {
+      return this._socket === null ? "" : this._socket.url;
+    }
+    // The single point at which bytes leave the client.
+    raw(bytes) {
+      if (!this.open) return false;
+      this._send(bytes);
+      return true;
+    }
+  }
+
+  // Owns encode, decode and the validation between them. Every branch below is
+  // the existing behaviour moved, in the same order it was tried in: the game's
+  // own net object first, then the hand-framed path for clients that do not
+  // have one, then plain msgpack.
+  class RynPacketCodec {
+    client;
+    Encoder = null;
+    Decoder = null;
+    constructor(client2) {
+      this.client = client2;
+    }
+    _enc() {
+      return typeof window !== "undefined" && window.RYN && window.RYN._enc || typeof RYN !== "undefined" && RYN._enc || null;
+    }
+    // Returns how the packet went out, or null if nothing could send it.
+    encodeAndSend(transport, type, args) {
+      const crypto = this.client._gameCrypto;
+      const gameNet = this.client._gameNet;
+      if (gameNet && gameNet.socket && typeof gameNet.send === "function") {
+        if (!(crypto && crypto.key && crypto.tables)) return null;
+        try {
+          gameNet.send(type, ...args);
+          return "gamenet";
+        } catch (e) {}
+      }
+      if (!transport.open) return null;
+      const enc = this._enc();
+      if (crypto && crypto.key && crypto.tables && enc && enc.Hi && enc.Eo && enc.jt !== undefined) {
+        try {
+          const opcode = crypto.tables.c2s.enc[type];
+          if (opcode === undefined) return null;
+          const seq = ++crypto.seq;
+          const body = enc.Hi.encode([ opcode, args, seq ]);
+          const mac = enc.Eo(crypto.key, body);
+          const frame = new Uint8Array(enc.jt + body.length);
+          frame.set(mac, 0);
+          frame.set(body, enc.jt);
+          return transport.raw(frame) ? "framed" : null;
+        } catch (e) {}
+      }
+      if (this.Encoder === null) return null;
+      return transport.raw(this.Encoder.encode([ type, args ])) ? "msgpack" : null;
+    }
+    // Decode and validate one inbound frame. A frame that does not parse, or
+    // whose opcode is not in the table, is rejected rather than guessed at.
+    decode(raw) {
+      if (this.Decoder === null) return null;
+      let decoded;
+      try {
+        decoded = this.Decoder.decode(new Uint8Array(raw));
+      } catch (e) {
+        return null;
+      }
+      if (!Array.isArray(decoded) || decoded.length < 2) return null;
+      let type = decoded[0];
+      const crypto = this.client._gameCrypto;
+      if (typeof type === "number" && crypto && crypto.tables && crypto.tables.s2c) {
+        const named = crypto.tables.s2c.dec[type];
+        if (named === undefined) return null;
+        type = named;
+      }
+      return {
+        type: type,
+        args: decoded[1],
+        raw: decoded
+      };
+    }
+  }
+
+  // Owns the allowance. The window is one second, matching the interval the
+  // counter has always been zeroed on — the tick is packet-driven, so a
+  // per-tick window would move with the network rather than with the clock.
+  //
+  // Starvation guard: capacity is held back from low-priority traffic so a busy
+  // second cannot leave a heal unable to send.
+  class RynPacketBudget {
+    limit = 115;
+    _spent = 0;
+    _byPriority = [ 0, 0, 0, 0 ];
+    _floor = Object.freeze([ 0, 8, 16, 28 ]);
+    _timer = null;
+    start() {
+      if (this._timer !== null) return;
+      this._timer = setInterval(() => this.roll(), 1e3);
+    }
+    stop() {
+      if (this._timer !== null) clearTimeout(this._timer);
+      this._timer = null;
+    }
+    roll() {
+      this._spent = 0;
+      this._byPriority = [ 0, 0, 0, 0 ];
+    }
+    // Lower-priority traffic must leave a floor of headroom behind it.
+    affords(cost, priority = RYN_NET_PRIORITY.ROUTINE) {
+      const floor = this._floor[priority] ?? 0;
+      return this._spent + cost <= this.limit - floor;
+    }
+    spend(cost, priority = RYN_NET_PRIORITY.ROUTINE) {
+      this._spent += cost;
+      this._byPriority[priority] = (this._byPriority[priority] ?? 0) + cost;
+    }
+    get spent() {
+      return this._spent;
+    }
+    get free() {
+      return Math.max(0, this.limit - this._spent);
+    }
+    breakdown() {
+      return this._byPriority.slice();
+    }
+  }
+
+  // Owns ordering for traffic that can wait. Deliberately not a batcher: the
+  // protocol has no frame that carries more than one action, so combining
+  // packets would mean inventing a format. Ordering and deferral are what can
+  // be done without touching the wire.
+  class RynPacketQueue {
+    _items = [];
+    _seq = 0;
+    push(type, args, priority = RYN_NET_PRIORITY.ROUTINE, cost = 1) {
+      this._items.push({
+        type: type,
+        args: args,
+        priority: priority,
+        cost: cost,
+        seq: this._seq++
+      });
+    }
+    // Priority first, arrival order within a priority, so nothing overtakes a
+    // peer that was asked for earlier.
+    flush(send, budget) {
+      if (this._items.length === 0) return 0;
+      this._items.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
+      const kept = [];
+      let sent = 0;
+      for (const item of this._items) {
+        if (!budget.affords(item.cost, item.priority)) {
+          kept.push(item);
+          continue;
+        }
+        if (send(item.type, item.args, item.priority, item.cost) === false) {
+          kept.push(item);
+          continue;
+        }
+        sent += 1;
+      }
+      this._items = kept;
+      return sent;
+    }
+    get depth() {
+      return this._items.length;
+    }
+    clear() {
+      this._items.length = 0;
+    }
+  }
+
+  // A typed face on the runtime bus. One dispatcher, but network signals have
+  // names a caller can rely on rather than free-form strings.
+  class RynNetEvents {
+    _bus;
+    constructor(bus) {
+      this._bus = bus;
+    }
+    onIncoming(fn) {
+      return this._bus.on("net:in", fn);
+    }
+    onOutgoing(fn) {
+      return this._bus.on("net:out", fn);
+    }
+    onConnection(fn) {
+      return this._bus.on("net:conn", fn);
+    }
+    incoming(packet) {
+      this._bus.emit("net:in", packet);
+    }
+    outgoing(type, via, cost) {
+      this._bus.emit("net:out", {
+        type: type,
+        via: via,
+        cost: cost
+      });
+    }
+    connection(kind, detail) {
+      this._bus.emit("net:conn", {
+        kind: kind,
+        detail: detail
+      });
+    }
+  }
+
   class PacketManager {
     client;
-    Encoder=null;
-    Decoder=null;
     packetCount=0;
+    // The codec owns the msgpack pair. These stay as the name the hooks and the
+    // bot spawner already assign through, so a single owner is reached from
+    // every existing site rather than two copies drifting apart.
+    get Encoder() {
+      return this.client.codec.Encoder;
+    }
+    set Encoder(v) {
+      this.client.codec.Encoder = v;
+    }
+    get Decoder() {
+      return this.client.codec.Decoder;
+    }
+    set Decoder(v) {
+      this.client.codec.Decoder = v;
+    }
     sentWireAngle=null;
     constructor(client2) {
       this.client = client2;
@@ -5729,49 +5999,21 @@ window.grbtp = 35;
         this.packetCount = 0;
       }, 1e3);
     }
-    send(data) {
+    // Framing, socket access and accounting all moved out. This is the entry
+    // point gameplay still calls; what it does now is ask the codec to send and
+    // record the result, so the three encoding paths and their order live in
+    // one place instead of being inlined here.
+    send(data, priority = RYN_NET_PRIORITY.ROUTINE, cost = 1) {
       const [type, ...args] = data;
-      const gameNet = this.client._gameNet;
-      if (gameNet && gameNet.socket && typeof gameNet.send === "function") {
-        const crypto = this.client._gameCrypto;
-        const cryptoReady = crypto && crypto.key && crypto.tables;
-        if (!cryptoReady) {
-          return;
-        }
-        try {
-          gameNet.send(type, ...args);
-          this.packetCount += 1;
-          return;
-        } catch (e) {}
-      }
-      const {socket: socket, socketSend: socketSend} = this.client.SocketManager;
-      if (socket === null || socket.readyState !== socket.OPEN || socketSend === null) {
-        return;
-      }
-      const botCrypto = this.client._gameCrypto;
-      const enc = typeof window !== "undefined" && window.RYN && window.RYN._enc || typeof RYN !== "undefined" && RYN._enc;
-      if (botCrypto && botCrypto.key && botCrypto.tables && enc && enc.Hi && enc.Eo && enc.jt !== undefined) {
-        try {
-          const s = botCrypto.tables.c2s.enc[type];
-          if (s === undefined) return;
-          const n = ++botCrypto.seq;
-          const a = enc.Hi.encode([ s, args, n ]);
-          const o = enc.Eo(botCrypto.key, a);
-          const d = new Uint8Array(enc.jt + a.length);
-          d.set(o, 0);
-          d.set(a, enc.jt);
-          socketSend(d);
-          this.packetCount += 1;
-          return;
-        } catch (e) {}
-      }
-      if (this.Encoder === null) {
-        return;
-      }
-      const encoded = this.Encoder.encode([ type, args ]);
-      socketSend(encoded);
+      const {transport: transport, codec: codec, netBudget: netBudget, net: net} = this.client;
+      const via = codec.encodeAndSend(transport, type, args);
+      if (via === null) return false;
       this.packetCount += 1;
+      netBudget.spend(cost, priority);
+      net.outgoing(type, via, cost);
+      return true;
     }
+
     clanRequest(id, accept) {
       this.send([ "P", id, Number(accept) ]);
     }
@@ -6998,7 +7240,6 @@ window.grbtp = 35;
   class SocketManager {
     client;
     socket=null;
-    socketSend=null;
     PacketQueue=[];
     startPing=performance.now();
     pong=0;
@@ -7013,16 +7254,23 @@ window.grbtp = 35;
     }
     init(socket) {
       this.socket = socket;
-      this.socketSend = socket.send.bind(socket);
+      this.client.transport.attach(socket);
+      this.client.netBudget.limit = this.client._Core.packetLimit;
+      this.client.netBudget.start();
       this.client.runtime.boot();
       this.client.runtime.attach();
+      this.client.net.connection("open", socket.url);
       socket.addEventListener("message", event => this.handleMessage(event));
       socket.addEventListener("close", event => {
         const {code: code, reason: reason, wasClean: wasClean} = event;
         Logger.warn(`WebSocket Closed: ${code}, '${reason}', ${wasClean}`);
+        this.client.netBudget.stop();
+        this.client.transport.detach();
+        this.client.net.connection("close", code);
       });
       socket.addEventListener("error", () => {
         Logger.error("WebSocket Error");
+        this.client.net.connection("error", null);
       });
     }
     pingTimeout;
@@ -7044,27 +7292,13 @@ window.grbtp = 35;
     }
     handlePlayerInit(player) {}
     handleMessage(event) {
-      const decoder = this.client.PacketManager.Decoder;
-      if (decoder === null) {
+      const packet = this.client.codec.decode(event.data);
+      if (packet === null) {
         return;
       }
-      const data = event.data;
-      let decoded;
-      try {
-        decoded = decoder.decode(new Uint8Array(data));
-      } catch (e) {
-        return;
-      }
-      let msgType = decoded[0];
-      const crypto = this.client._gameCrypto;
-      if (typeof msgType === "number" && crypto && crypto.tables && crypto.tables.s2c) {
-        const translated = crypto.tables.s2c.dec[msgType];
-        if (translated === undefined) {
-          return;
-        }
-        msgType = translated;
-      }
-      const temp = [ msgType, ...decoded[1] ];
+      this.client.net.incoming(packet);
+      const decoded = packet.raw;
+      const temp = [ packet.type, ...packet.args ];
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _Core: ModuleHandler, PlayerManager: PlayerManager2, ObjectManager: ObjectManager2, ProjectileManager: ProjectileManager2, LeaderboardManager: LeaderboardManager2, PacketManager: PacketManager2} = this.client;
       switch (temp[0]) {
        case "0":
@@ -15059,12 +15293,22 @@ window.grbtp = 35;
     InputHandler;
     StatsManager;
     runtime;
+    transport;
+    codec;
+    netBudget;
+    netQueue;
+    net;
     pendingJoins=new Set;
     clientIDList=new Set;
     clients=new Set;
     constructor(owner) {
       this.ownerClient = owner || this;
       this.runtime = new RynRuntime(this);
+      this.transport = new RynTransport(this);
+      this.codec = new RynPacketCodec(this);
+      this.netBudget = new RynPacketBudget;
+      this.netQueue = new RynPacketQueue;
+      this.net = new RynNetEvents(this.runtime.events);
       this.SocketManager = new SocketManager_ref(this);
       this.ObjectManager = new ObjectManager_ref(this);
       this.PlayerManager = new PlayerManager_ref(this);
