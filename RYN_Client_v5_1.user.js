@@ -6256,6 +6256,7 @@ window.grbtp = 35;
         this.wasDead = false;
         this.prevKills = 0;
         this.onFirstTickAfterSpawn();
+        this.client.runtime.spawned();
       }
       const {_Core: ModuleHandler, PlayerManager: PlayerManager} = this.client;
       this.killedSomeone = false;
@@ -6475,6 +6476,7 @@ window.grbtp = 35;
       this.resetWeaponXP();
       const {_Core: ModuleHandler, PlayerManager: PlayerManager} = this.client;
       ModuleHandler.reset();
+      this.client.runtime.died();
       this.inGame = false;
       this.wasDead = true;
       this.upgradeOrder.length = 0;
@@ -7012,6 +7014,8 @@ window.grbtp = 35;
     init(socket) {
       this.socket = socket;
       this.socketSend = socket.send.bind(socket);
+      this.client.runtime.boot();
+      this.client.runtime.attach();
       socket.addEventListener("message", event => this.handleMessage(event));
       socket.addEventListener("close", event => {
         const {code: code, reason: reason, wasClean: wasClean} = event;
@@ -7025,6 +7029,7 @@ window.grbtp = 35;
     minPingTime=Infinity;
     handlePing() {
       this.pong = Math.round(performance.now() - this.startPing);
+      this.client.runtime.clock.noteRoundTrip(this.pong);
       if (Number.isFinite(this.pong) && this.pong >= 0 && this.pong < this.minPingTime) {
         this.minPingTime = this.pong;
       }
@@ -14021,6 +14026,230 @@ window.grbtp = 35;
     }
   }
 
+  // ==========================================================================
+  // RYN kernel
+  //
+  // What this replaces: there was no runtime. A packet arrived, a manager
+  // called the next manager, and eventually something called into the unit
+  // loop — the tick was whatever that chain happened to do, in whatever order
+  // the call sites happened to be written. Nothing named the stages, so
+  // "before targets are resolved" or "after the send" were facts you had to
+  // reconstruct by reading, and every new feature had to guess where it fit.
+  //
+  // Four objects with one job each, and no object that owns everything:
+  //
+  //   RynClock     counts ticks and walks the phases; owns time
+  //   RynEvents    routes named signals; owns subscriptions
+  //   RynRegistry  holds what runs, where, and in what order; owns the table
+  //   RynRuntime   drives boot/spawn/death/teardown; owns lifecycle state
+  //
+  // RynRuntime holds the other three but does not do their work — asking it
+  // for the tick number gets you `runtime.clock.tick`, not a field it shadows.
+  // ==========================================================================
+
+  // The stages of a tick, in the order they run. Naming them is the point: a
+  // feature declares the stage it belongs to instead of relying on where it
+  // was pushed into an array.
+  const RYN_PHASE = Object.freeze({
+    SAMPLE: "sample",   // wire -> state
+    DERIVE: "derive",   // state -> derived views
+    DECIDE: "decide",   // derived views -> intents
+    COMMIT: "commit",   // intents -> one resolved plan
+    EMIT: "emit"        // plan -> packets
+  });
+  const RYN_PHASE_ORDER = [ RYN_PHASE.SAMPLE, RYN_PHASE.DERIVE, RYN_PHASE.DECIDE, RYN_PHASE.COMMIT, RYN_PHASE.EMIT ];
+
+  // Owns time. The tick is driven by an arriving packet rather than a clock,
+  // so the local tick trails the server by most of a round trip — `drift`
+  // records that instead of leaving it as folklore in timing constants.
+  class RynClock {
+    tick = 0;
+    phase = null;
+    startedAt = 0;
+    lastTickAt = 0;
+    interval = 0;
+    drift = 0;
+    advance(now = performance.now()) {
+      if (this.lastTickAt !== 0) this.interval = now - this.lastTickAt;
+      this.lastTickAt = now;
+      this.startedAt = now;
+      this.tick += 1;
+      this.phase = null;
+      return this.tick;
+    }
+    enter(phase) {
+      this.phase = phase;
+    }
+    leave() {
+      this.phase = null;
+    }
+    // How far into the current tick we are, in ms.
+    get elapsed() {
+      return performance.now() - this.startedAt;
+    }
+    noteRoundTrip(ms) {
+      if (Number.isFinite(ms) && ms >= 0) this.drift = ms / 2;
+    }
+    reset() {
+      this.tick = 0;
+      this.phase = null;
+      this.startedAt = 0;
+      this.lastTickAt = 0;
+      this.interval = 0;
+    }
+  }
+
+  // Owns subscriptions. Signals are named strings so a producer never needs a
+  // handle on its consumers — which is what forced managers to call each other
+  // directly and made the dependency graph fully connected.
+  class RynEvents {
+    _handlers = new Map;
+    on(signal, fn) {
+      let list = this._handlers.get(signal);
+      if (list === undefined) {
+        list = [];
+        this._handlers.set(signal, list);
+      }
+      list.push(fn);
+      return () => this.off(signal, fn);
+    }
+    off(signal, fn) {
+      const list = this._handlers.get(signal);
+      if (list === undefined) return;
+      const i = list.indexOf(fn);
+      if (i !== -1) list.splice(i, 1);
+    }
+    // A throwing subscriber must not take the tick down with it.
+    emit(signal, payload) {
+      const list = this._handlers.get(signal);
+      if (list === undefined) return 0;
+      for (let i = 0; i < list.length; i++) {
+        try {
+          list[i](payload);
+        } catch (err) {
+          Logger.error(`RynEvents: "${signal}" handler failed -- ${err && err.message}`);
+        }
+      }
+      return list.length;
+    }
+    clear() {
+      this._handlers.clear();
+    }
+  }
+
+  // Owns the table of what runs. A feature is a record, not a position: it
+  // says which phase it belongs to and how it ranks inside that phase, so
+  // reordering is an edit to one number rather than a move within an array
+  // whose order nothing documents.
+  class RynRegistry {
+    _byPhase = new Map;
+    constructor() {
+      for (const phase of RYN_PHASE_ORDER) this._byPhase.set(phase, []);
+    }
+    add(feature) {
+      const {id: id, phase: phase, run: run} = feature;
+      if (!id || !this._byPhase.has(phase) || typeof run !== "function") {
+        Logger.error(`RynRegistry: refused "${id}" -- needs an id, a known phase and a run()`);
+        return null;
+      }
+      const record = {
+        id: id,
+        phase: phase,
+        rank: feature.rank ?? 0,
+        run: run,
+        owner: feature.owner ?? null,
+        enabled: feature.enabled ?? (() => true)
+      };
+      const list = this._byPhase.get(phase);
+      list.push(record);
+      list.sort((a, b) => a.rank - b.rank);
+      return record;
+    }
+    remove(id) {
+      for (const list of this._byPhase.values()) {
+        const i = list.findIndex(r => r.id === id);
+        if (i !== -1) {
+          list.splice(i, 1);
+          return true;
+        }
+      }
+      return false;
+    }
+    of(phase) {
+      return this._byPhase.get(phase) ?? [];
+    }
+    get size() {
+      let n = 0;
+      for (const list of this._byPhase.values()) n += list.length;
+      return n;
+    }
+    clear() {
+      for (const list of this._byPhase.values()) list.length = 0;
+    }
+  }
+
+  // Owns lifecycle state and nothing else. It holds the clock, the bus and the
+  // registry so there is one place to reach them from, and delegates rather
+  // than shadowing so there is never a second copy of the truth.
+  class RynRuntime {
+    client;
+    clock = new RynClock;
+    events = new RynEvents;
+    registry = new RynRegistry;
+    state = "cold";
+    constructor(client2) {
+      this.client = client2;
+    }
+    boot() {
+      if (this.state !== "cold") return;
+      this.state = "booted";
+      this.events.emit("runtime:boot", this);
+    }
+    attach() {
+      this.state = "attached";
+      this.events.emit("runtime:attach", this);
+    }
+    spawned() {
+      this.state = "alive";
+      this.clock.reset();
+      this.events.emit("player:spawn", this);
+    }
+    died() {
+      this.state = "attached";
+      this.events.emit("player:death", this);
+    }
+    teardown() {
+      this.events.emit("runtime:teardown", this);
+      this.registry.clear();
+      this.events.clear();
+      this.clock.reset();
+      this.state = "cold";
+    }
+    get alive() {
+      return this.state === "alive";
+    }
+    // Walk one phase. Returns how many features actually ran, which is what
+    // lets a caller tell "nothing wanted this phase" from "the phase is empty".
+    runPhase(phase, ctx) {
+      const list = this.registry.of(phase);
+      if (list.length === 0) return 0;
+      this.clock.enter(phase);
+      let ran = 0;
+      for (let i = 0; i < list.length; i++) {
+        const record = list[i];
+        try {
+          if (record.enabled(ctx) === false) continue;
+          record.run(ctx, record);
+          ran += 1;
+        } catch (err) {
+          Logger.error(`RynRuntime: feature "${record.id}" threw in ${phase} -- ${err && err.message}`);
+        }
+      }
+      this.clock.leave();
+      return ran;
+    }
+  }
+
   const ARBITER_BOT_BAND = 1000;
 
   class ModuleHandler {
@@ -14466,7 +14695,30 @@ window.grbtp = 35;
     // split the placer here is free to spend the allowance down to the last
     // packet, and a heavy building second can leave the essentials short.
     packetLimit=115;
-    runTick(bid) {
+    // Units register once and keep their record. Rank is seeded from the array
+    // position they used to be walked in, so the resolved order reproduces what
+    // the old loop produced -- the difference is that the number is written
+    // down, and moving a unit is an edit to it rather than a move of code.
+    _unitsRegistered=false;
+    _registerUnits(runtime) {
+      if (this._unitsRegistered) return;
+      this._unitsRegistered = true;
+      const arbiter = this._arbiter;
+      const enrol = (unit, rank, ownerOnly) => {
+        runtime.registry.add({
+          id: unit.unitID,
+          phase: RYN_PHASE.DECIDE,
+          rank: rank,
+          owner: unit,
+          enabled: () => ownerOnly === false ? this.client.isOwner === false : true,
+          run: () => arbiter.offer(unit, rank)
+        });
+      };
+      for (let i = 0; i < this.botModules.length; i++) enrol(this.botModules[i], i, false);
+      for (let i = 0; i < this.modules.length; i++) enrol(this.modules[i], ARBITER_BOT_BAND + i, true);
+      runtime.events.emit("units:registered", runtime.registry.size);
+    }
+    runTick() {
       this._flushShameHealQueue();
       if (Settings_ref._circleRotation && this.move_dir === null) {
         const rotationSpeed = this.targetSpeed / Settings_ref._circleRadius;
@@ -14509,15 +14761,13 @@ window.grbtp = 35;
       // matches what running in that order used to produce — the difference
       // is that the order is now a number a unit can be moved within, not an
       // accident of where it sits in an array.
+      // DECIDE, then COMMIT. The runtime walks the phase; this method no
+      // longer holds the unit list or the order.
+      const runtime = this.client.runtime;
+      runtime.clock.advance();
+      this._registerUnits(runtime);
       this._arbiter.begin();
-      if (!isOwner) {
-        for (let i = 0; i < this.botModules.length; i++) {
-          this._arbiter.offer(this.botModules[i], i);
-        }
-      }
-      for (let i = 0; i < this.modules.length; i++) {
-        this._arbiter.offer(this.modules[i], ARBITER_BOT_BAND + i);
-      }
+      runtime.runPhase(RYN_PHASE.DECIDE, this);
       this._arbiter.commit(this._arbiter.resolve());
       const _em = this.client.EnemyManager;
       const _mp = this.client.myPlayer;
@@ -14566,11 +14816,13 @@ window.grbtp = 35;
     PacketManager;
     InputHandler;
     StatsManager;
+    runtime;
     pendingJoins=new Set;
     clientIDList=new Set;
     clients=new Set;
     constructor(owner) {
       this.ownerClient = owner || this;
+      this.runtime = new RynRuntime(this);
       this.SocketManager = new SocketManager_ref(this);
       this.ObjectManager = new ObjectManager_ref(this);
       this.PlayerManager = new PlayerManager_ref(this);
