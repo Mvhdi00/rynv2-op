@@ -253,7 +253,7 @@ window.grbtp = 35;
     ws.binaryType = "arraybuffer";
     return ws;
   };
-  const createSocket_default = createSocket;
+  const createSocket_ref = createSocket;
   const Hooker = new class {
     createRecursiveHook(target, prop, callback) {
       let newValue = target[prop];
@@ -303,7 +303,7 @@ window.grbtp = 35;
       configurable: true
     });
   };
-  const Hooker_default = Hooker;
+  const Hooker_ref = Hooker;
   const Config = {
     maxScreenWidth: 1920,
     maxScreenHeight: 1080,
@@ -357,7 +357,7 @@ window.grbtp = 35;
     mapPingTime: 2200,
     skinColors: ["#bf8f54", "#cbb091", "#896c4b", "#fadadc", "#ececec", "#c37373", "#4c4c4c", "#ecaff7", "#738cc3", "#8bc373"]
   };
-  const Config_default = Config;
+  const Config_ref = Config;
   const WeaponTypeString = [ "primary", "secondary" ];
   const Weapons = [ {
     id: 0,
@@ -1426,7 +1426,7 @@ window.grbtp = 35;
       return this.x + ":" + this.y;
     }
   }
-  const Vector_default = Vector;
+  const Vector_ref = Vector;
   const getAngle = (x1, y1, x2, y2) => Math.atan2(y2 - y1, x2 - x1);
   const getDistance = (x1, y1, x2, y2) => Math.hypot(x1 - x2, y1 - y2);
   const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -1501,7 +1501,7 @@ window.grbtp = 35;
     const u = (q_p.x * r.y - q_p.y * r.x) / rxs;
     return t >= 0 && t <= 1 && u >= 0 && u <= 1;
   };
-  const lineIntersectsRect = (lineStart, lineEnd, rectStart, rectEnd) => pointInsideRect(lineStart, rectStart, rectEnd) || pointInsideRect(lineEnd, rectStart, rectEnd) || lineIntersectsLine(lineStart, lineEnd, rectStart, new Vector_default(rectEnd.x, rectStart.y)) || lineIntersectsLine(lineStart, lineEnd, new Vector_default(rectEnd.x, rectStart.y), rectEnd) || lineIntersectsLine(lineStart, lineEnd, rectEnd, new Vector_default(rectStart.x, rectEnd.y)) || lineIntersectsLine(lineStart, lineEnd, new Vector_default(rectStart.x, rectEnd.y), rectStart);
+  const lineIntersectsRect = (lineStart, lineEnd, rectStart, rectEnd) => pointInsideRect(lineStart, rectStart, rectEnd) || pointInsideRect(lineEnd, rectStart, rectEnd) || lineIntersectsLine(lineStart, lineEnd, rectStart, new Vector_ref(rectEnd.x, rectStart.y)) || lineIntersectsLine(lineStart, lineEnd, new Vector_ref(rectEnd.x, rectStart.y), rectEnd) || lineIntersectsLine(lineStart, lineEnd, rectEnd, new Vector_ref(rectStart.x, rectEnd.y)) || lineIntersectsLine(lineStart, lineEnd, new Vector_ref(rectStart.x, rectEnd.y), rectStart);
   const isActiveInput = () => {
     const active = document.activeElement || document.body;
     return active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
@@ -1613,14 +1613,14 @@ window.grbtp = 35;
   };
   const pointInRiver = position => {
     const y = position.y;
-    const below = y >= Config_default.mapScale / 2 - Config_default.riverWidth / 2;
-    const above = y <= Config_default.mapScale / 2 + Config_default.riverWidth / 2;
+    const below = y >= Config_ref.mapScale / 2 - Config_ref.riverWidth / 2;
+    const above = y <= Config_ref.mapScale / 2 + Config_ref.riverWidth / 2;
     return below && above;
   };
-  const pointInDesert = position => position.y >= Config_default.mapScale - Config_default.snowBiomeTop;
+  const pointInDesert = position => position.y >= Config_ref.mapScale - Config_ref.snowBiomeTop;
   const inRange = (value, min, max) => value >= min && value <= max;
   const targetInsideRect = (target, rectPos, radius) => {
-    const screen = new Vector_default(1920, 1080).div(2).add(radius);
+    const screen = new Vector_ref(1920, 1080).div(2).add(radius);
     const rectStart = rectPos.copy().sub(screen);
     const rectEnd = rectPos.copy().add(screen);
     return pointInsideRect(target, rectStart, rectEnd);
@@ -1690,18 +1690,18 @@ window.grbtp = 35;
       return has;
     }
   }
-  const Header_default = "<header>\r\n  <div id=\"credits\"></div>\r\n  <div style=\"display:flex;align-items:center;gap:8px;margin-left:auto;\">\r\n    <div id=\"ryn-search-wrap\"><input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search...\" autocomplete=\"off\" spellcheck=\"false\"><span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span><div id=\"ryn-search-dropdown\"></div></div>\r\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" class=\"icon\">\r\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\r\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\r\n    </svg>\r\n  </div>\r\n</header>";
-  const Navbar_default = "<div id=\"navbar-container\">\n  <button data-id=\"1\" class=\"open-menu active\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"2\"/>\n      <rect x=\"5\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"9\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"13\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"17\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"5\" y=\"12\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"9\" y=\"12\" width=\"6\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"17\" y=\"12\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n    </svg>\n    <span class=\"nav-label\">KEYS</span>\n  </button>\n  <button data-id=\"2\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <line x1=\"3\" y1=\"3\" x2=\"21\" y2=\"21\"/>\n      <path d=\"M3 3l5 2 11 11-2 5\"/>\n      <path d=\"M21 3l-5 2L5 16l2 5\"/>\n      <line x1=\"9\" y1=\"9\" x2=\"6\" y2=\"12\"/>\n      <line x1=\"15\" y1=\"9\" x2=\"18\" y2=\"12\"/>\n    </svg>\n    <span class=\"nav-label\">COMBAT</span>\n  </button>\n  <button data-id=\"3\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <path d=\"M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z\"/>\n      <circle cx=\"12\" cy=\"12\" r=\"2.5\"/>\n      <path d=\"M12 3v1.5M12 19.5V21M3 12H1.5M22.5 12H21M5.6 5.6l-1-1M19.4 18.4l-1-1M18.4 5.6l1-1M4.6 18.4l1-1\"/>\n    </svg>\n    <span class=\"nav-label\">VISUALS</span>\n  </button>\n  <button data-id=\"4\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <circle cx=\"12\" cy=\"12\" r=\"3\"/>\n      <path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z\"/>\n    </svg>\n    <span class=\"nav-label\">MISC</span>\n  </button>\n  <button data-id=\"5\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <circle cx=\"12\" cy=\"5\" r=\"2\"/>\n      <path d=\"M12 7v3\"/>\n      <rect x=\"7\" y=\"10\" width=\"10\" height=\"7\" rx=\"2\"/>\n      <circle cx=\"10\" cy=\"13\" r=\"1\" fill=\"currentColor\"/>\n      <circle cx=\"14\" cy=\"13\" r=\"1\" fill=\"currentColor\"/>\n      <path d=\"M10 16h4\"/>\n      <path d=\"M7 13H5M19 13h-2M9 21v-4M15 21v-4\"/>\n    </svg>\n    <span class=\"nav-label\">BOTS</span>\n  </button>\n  <button data-id=\"7\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <path d=\"M9 18V5l12-2v13\"/>\n      <path d=\"M9 9l12-2\"/>\n      <circle cx=\"6\" cy=\"18\" r=\"3\"/>\n      <circle cx=\"18\" cy=\"16\" r=\"3\"/>\n    </svg>\n    <span class=\"nav-label\">MUSIC</span>\n  </button>\n\n</div>";
-  const Devtool_default = "<div class=\"menu-page\" data-id=\"6\" style=\"display:none;\">\r\n    <div class=\"page-title\">Devtool</div>\r\n    <p class=\"page-description\">Test RYN Client and report about bugs!</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Statistics</h2>\r\n\r\n        <div class=\"section-content small-section\">\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Total kills: </span>\r\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Global kills with bots: </span>\r\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Deaths: </span>\r\n                <span id=\"_deaths\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Autosync: </span>\r\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">SSHammer: </span>\r\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Spike sync: </span>\r\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Author: </span>\r\n                <span id=\"author\" class=\"text-value\">RYN</span>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-title\">Keybinds</div>\n    <p class=\"page-description\">Click a key to rebind it, then press the new key. A key bound twice turns red on both tiles.</p>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Food</span>\n                <button id=\"_food\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Wall</span>\n                <button id=\"_wall\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spike</span>\n                <button id=\"_spike\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Windmill</span>\n                <button id=\"_windmill\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Farm</span>\n                <button id=\"_farm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Trap</span>\n                <button id=\"_trap\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Turret</span>\n                <button id=\"_turret\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn</span>\n                <button id=\"_spawn\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Menu</span>\n                <button id=\"_toggleMenu\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Instakill</span>\n                <button id=\"_instakill\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn Bot</span>\n                <button id=\"_spawnBot\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Kill All Bots</span>\n                <button id=\"_killAllBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Bot Auto-Attack</span>\n                <button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Auto Farm</span>\n                <button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Repel Alts</span>\n                <button id=\"_repelAlts\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Scatter Bots</span>\n                <button id=\"_scatterBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Freeze Bots</span>\n                <button id=\"_freezeBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Lock bot position</span>\n                <button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Spikes</span>\n                <button id=\"_fourSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Traps</span>\n                <button id=\"_fourTraps\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Boost Spike Rush</span>\n                <button id=\"_boostSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Automill</span>\n                <button id=\"_autoMillKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Dash</span>\n                <button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Auto Grind</span>\n                <button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Autoplacer</span>\n                <button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it — you do not have to hit the switch.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick\">Spike Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"sub-options\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickBreak\">Spike Tick (break)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickNear\">Spike Tick (near)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickNear\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickTrap\">Spike Tick (trap)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikeTick\">Anti Spike Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoplacer radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_prePlace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_replace\">Replace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_replace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_primaryTrap\">Primary Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_primaryTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeFallback\">Spike Fallback</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeFallback\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\r\n    <div class=\"page-title\">Visuals</div>\r\n    <p class=\"page-description\">Choose what gets drawn on screen. Turn off anything you do not need for a cleaner view.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Names</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Name</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_myNameColor\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Mark RYN Players</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_markRynPlayers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Player ID</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_showPlayerID\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Player HUD</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Turret Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_playerTurretReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Render HP</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_renderHP\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Position Prediction</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_positionPrediction\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">World Tint</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Purple Tint</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_objectTint\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Tint Transparency</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Weather<span class=\"sec-sub\">Rain over the map, turning to snow in the snow biome.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weather\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Intensity</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Structures</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Mine/Clan)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Enemy)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarEnemyColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBarEnemy\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">myPlayer</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Display player angle</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_displayPlayerAngle\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Interface</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Hide game HUD</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_hideHUD\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Low Quality Mode</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lowQuality\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Hitboxes</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Collision hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_collisionHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Possible placement</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_possiblePlacement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\r\n    <div class=\"page-title\">Misc</div>\r\n    <p class=\"page-description\">Customize misc settings, add autochat messages, reset settings</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Legit Mode</h2>\r\n        <div class=\"section-content\">\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Other</h2>\r\n\r\n        <div class=\"section-content\">\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kill Message</span>\r\n                <div class=\"option-content\">\r\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_killMessage\" type=\"checkbox\">\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Provoke on Kill</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_deathProvoke\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autospawn</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autospawn\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoaccept</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoaccept\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Interval</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\">\r\n                </label>\r\n            </div>\r\n            <div id=\"autoChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoChatMsg\" class=\"option-button\">+ Add Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Bot Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable Player Chat</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoBotChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div id=\"autoBotChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">+ Add Player Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\r\n    <div class=\"page-title\">Bots</div>\r\n    <p class=\"page-description\">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Controller</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Follow cursor</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_followCursor\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Stop movement radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"flex-direction:column;align-items:flex-start;gap:8px;\">\r\n                <span class=\"option-title\" style=\"margin-bottom:2px;\">Formation</span>\r\n                <div id=\"_formationGrid\" style=\"display:flex;flex-wrap:wrap;gap:6px;width:100%;\"></div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_circleRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bots own clan</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botIndividualClans\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto random bot names</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRandomBotNames\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id=\"bot-container\" class=\"section-content\"></div>\r\n        <div id=\"dynamic-bot-list\" style=\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\"></div>\r\n        <div class=\"content-option\" style=\"margin-top:10px;justify-content:center;\">\r\n            <button id=\"add-bot-dynamic\" class=\"option-button\" style=\"display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;\">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Bot Weapons</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:'';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid=\"-1\"],.bot-sec-weapon-btn[data-swid=\"-1\"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Primary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\"><span class=\"wpn-name\">Tool Hammer</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\"><span class=\"wpn-name\">Hand Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\"><span class=\"wpn-name\">Great Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\"><span class=\"wpn-name\">Short Sword</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\"><span class=\"wpn-name\">Katana</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\"><span class=\"wpn-name\">Polearm</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\"><span class=\"wpn-name\">Bat</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\"><span class=\"wpn-name\">Daggers</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\"><span class=\"wpn-name\">Stick</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Secondary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\"><span class=\"wpn-name\">Hunting Bow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\"><span class=\"wpn-name\">Great Hammer</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\"><span class=\"wpn-name\">Wooden Shield</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\"><span class=\"wpn-name\">Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\"><span class=\"wpn-name\">Repeater Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\"><span class=\"wpn-name\">Mc Grabby</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\"><span class=\"wpn-name\">Musket</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class=\"content-option\" style=\"margin-top:2px;\">\r\n                <span class=\"option-title\">Platform w/ Musket</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_platformMusket\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Age 4 Building</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n            <div>\r\n                <div class=\"wpn-label\">Age 4 Building</div>\r\n                <div class=\"wpn-grid\" id=\"bot-age4-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\"><span class=\"wpn-name\">Trap</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\"><span class=\"wpn-name\">Boost Pad</span></div>\r\n                </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section\" style=\"margin-top:6px;\">\r\n        <div class=\"section\" style=\"margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;\">\r\n        <div class=\"section-title\" style=\"font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;\">Auto Farm</div>\r\n\r\n        <div style=\"display:flex;flex-direction:column;gap:10px;\">\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Farm Mode</span>\r\n                <p style=\"font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;\">Bots automatically gather resources. In <b style=\"color:rgba(200,195,220,0.85);\">Single</b> mode they target one resource type. In <b style=\"color:rgba(200,195,220,0.85);\">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style=\"display:flex;gap:8px;margin-top:2px;\">\r\n                    <button id=\"_farmModeSingle\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Single</button>\r\n                    <button id=\"_farmModeNearest\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            <div id=\"_farmTypeRow\" style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Resource Type</span>\r\n                <div style=\"display:flex;gap:8px;\">\r\n                    <button data-farm-type=\"0\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Wood</button>\r\n                    <button data-farm-type=\"1\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Food</button>\r\n                    <button data-farm-type=\"2\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Stone</button>\r\n                    <button data-farm-type=\"3\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Gold</button>\r\n                </div>\r\n                <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\r\n            </div>\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Limit</span>\r\n                <div style=\"display:flex;align-items:center;gap:12px;\">\r\n                    <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\" style=\"width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;\">\r\n                    <span style=\"font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;\">Bots stop and return to you when they reach this amount. Set to <b style=\"color:rgba(200,195,220,0.7);\">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>";
-  const Music_default = "<div class=\"menu-page\" data-id=\"7\">\r\n<style>\r\n@keyframes ryn-eq{0%,100%{height:3px;}50%{height:15px;}}\r\n@keyframes ryn-like-pop{0%{transform:scale(1);}45%{transform:scale(1.45);}100%{transform:scale(1);}}\r\n@keyframes rm-fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}\r\n\r\n.rm-root{\r\n  --rm-bg:#0B0B10;\r\n  --rm-panel:#141420;\r\n  --rm-panel-hi:#1B1B2B;\r\n  --rm-line:rgba(255,255,255,0.07);\r\n  --rm-accent:#7A42F4;\r\n  --rm-accent2:#3A86FF;\r\n  --rm-text:#FFFFFF;\r\n  --rm-mute:rgba(255,255,255,0.62);\r\n  --rm-dim:rgba(255,255,255,0.34);\r\n  display:flex;flex-direction:column;gap:14px;\r\n  font-family:'Inter','Poppins',sans-serif;\r\n  animation:rm-fade 240ms ease;\r\n}\r\n\r\n.rm-player{\r\n  position:relative;overflow:hidden;\r\n  padding:18px 18px 14px;border-radius:14px;\r\n  background:\r\n    radial-gradient(120% 130% at 0% 0%,rgba(122,66,244,.28),transparent 58%),\r\n    linear-gradient(160deg,#1E1830 0%,#12111E 55%,#0B0B10 100%);\r\n  border:1px solid var(--rm-line);\r\n  box-shadow:0 12px 34px -16px rgba(0,0,0,.9);\r\n}\r\n.rm-player::before{\r\n  content:'';position:absolute;inset:0;pointer-events:none;\r\n  background:linear-gradient(180deg,rgba(255,255,255,.05),transparent 40%);\r\n}\r\n.rm-np-row{display:flex;align-items:center;gap:15px;margin-bottom:14px;position:relative;}\r\n\r\n.rm-art{\r\n  width:74px;height:74px;flex-shrink:0;position:relative;overflow:hidden;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:1.7em;border-radius:8px;\r\n  background:linear-gradient(140deg,#2A2140,#141323);\r\n  border:none;\r\n  box-shadow:0 8px 22px -8px rgba(0,0,0,.85);\r\n  transition:box-shadow 300ms ease;\r\n}\r\n.rm-art.playing{box-shadow:0 10px 26px -8px rgba(122,66,244,.6);}\r\n.rm-eq{display:none;gap:3px;align-items:flex-end;height:18px;}\r\n.rm-art.playing .rm-eq{display:flex;}\r\n.rm-eq-bar{\r\n  width:3px;border-radius:2px;\r\n  background:linear-gradient(180deg,var(--rm-accent),var(--rm-accent2));\r\n  animation:ryn-eq .9s ease-in-out infinite;\r\n}\r\n.rm-eq-bar:nth-child(2){animation-delay:.15s;}\r\n.rm-eq-bar:nth-child(3){animation-delay:.3s;}\r\n.rm-eq-bar:nth-child(4){animation-delay:.45s;}\r\n\r\n.rm-meta{flex:1;min-width:0;}\r\n.rm-title{\r\n  font-size:1.16em;font-weight:700;letter-spacing:-.015em;line-height:1.25;\r\n  color:var(--rm-text);\r\n  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;\r\n  overflow:hidden;word-break:break-word;\r\n}\r\n.rm-artist{\r\n  margin-top:4px;font-size:.78em;font-weight:400;color:var(--rm-mute);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-badge{\r\n  display:inline-block;margin-top:6px;padding:2px 9px;\r\n  font-size:.64em;font-weight:600;letter-spacing:.05em;text-transform:uppercase;\r\n  color:var(--rm-mute);background:rgba(255,255,255,.08);border-radius:999px;\r\n  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-actions{display:flex;gap:4px;align-items:center;flex-shrink:0;}\r\n.rm-like-btn,.rm-save-now-btn{\r\n  width:36px;height:36px;display:flex;align-items:center;justify-content:center;\r\n  font-size:1.15em;cursor:pointer;border-radius:50%;\r\n  color:var(--rm-dim);background:transparent;border:none;\r\n  transition:color 170ms,background 170ms,transform 170ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-like-btn:hover,.rm-save-now-btn:hover{\r\n  color:var(--rm-text);background:rgba(255,255,255,.11);transform:scale(1.1);\r\n}\r\n.rm-like-btn.on{\r\n  color:#ff4d6d;animation:ryn-like-pop 340ms cubic-bezier(.34,1.5,.5,1);\r\n  text-shadow:0 0 12px rgba(255,77,109,.55);\r\n}\r\n.rm-save-now-btn.on{color:var(--rm-accent2);text-shadow:0 0 12px rgba(58,134,255,.5);}\r\n\r\n.rm-prog-wrap{margin-bottom:10px;position:relative;}\r\n.rm-prog-rail{\r\n  height:4px;border-radius:4px;cursor:pointer;\r\n  background:rgba(255,255,255,.13);position:relative;\r\n  transition:height 140ms ease;\r\n}\r\n.rm-prog-wrap:hover .rm-prog-rail{height:6px;}\r\n.rm-prog-fill{\r\n  height:100%;border-radius:4px;position:relative;\r\n  background:linear-gradient(90deg,var(--rm-accent),var(--rm-accent2));\r\n}\r\n.rm-prog-fill::after{\r\n  content:'';position:absolute;right:-5px;top:50%;\r\n  width:11px;height:11px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%) scale(0);\r\n  transition:transform 160ms ease;\r\n  box-shadow:0 2px 6px rgba(0,0,0,.5);\r\n}\r\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\r\n.rm-times{display:flex;justify-content:space-between;margin-top:5px;}\r\n.rm-time{font-size:.66em;font-weight:500;color:var(--rm-dim);font-variant-numeric:tabular-nums;}\r\n\r\n.rm-ctrl{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:12px;position:relative;}\r\n.rm-btn{\r\n  width:32px;height:32px;display:flex;align-items:center;justify-content:center;\r\n  background:transparent;border:none;border-radius:50%;\r\n  color:var(--rm-mute);font-size:.86em;cursor:pointer;\r\n  transition:color 160ms,transform 160ms;\r\n}\r\n.rm-btn:hover{color:var(--rm-text);transform:scale(1.1);}\r\n.rm-btn.on{color:var(--rm-accent);}\r\n.rm-play-btn{\r\n  width:46px;height:46px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  background:#fff;border:none;border-radius:50%;\r\n  color:#0B0B10;font-size:1.05em;cursor:pointer;\r\n  box-shadow:0 6px 18px -6px rgba(0,0,0,.7);\r\n  transition:transform 170ms cubic-bezier(.34,1.5,.5,1),box-shadow 170ms;\r\n}\r\n.rm-play-btn:hover{transform:scale(1.07);box-shadow:0 8px 22px -6px rgba(122,66,244,.7);}\r\n.rm-play-btn:active{transform:scale(.97);}\r\n\r\n.rm-vol{display:flex;align-items:center;gap:9px;position:relative;}\r\n.rm-vol-icon{font-size:.82em;color:var(--rm-dim);flex-shrink:0;}\r\n.rm-vol-val{font-size:.66em;color:var(--rm-dim);min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}\r\n\r\n.rm-sec{\r\n  background:var(--rm-panel);\r\n  border:1px solid var(--rm-line);border-radius:12px;overflow:hidden;\r\n  transition:border-color 200ms;\r\n}\r\n.rm-sec:hover{border-color:rgba(255,255,255,.12);}\r\n.rm-sec-head{\r\n  display:flex;align-items:center;gap:9px;\r\n  padding:12px 15px;cursor:pointer;user-select:none;\r\n  transition:background 160ms;\r\n}\r\n.rm-sec-head:hover{background:rgba(255,255,255,.035);}\r\n.rm-sec-dot{\r\n  width:6px;height:6px;border-radius:50%;flex-shrink:0;\r\n  background:var(--rm-accent);box-shadow:0 0 8px rgba(122,66,244,.7);\r\n}\r\n.rm-sec-title{\r\n  flex:1;font-size:.74em;font-weight:700;\r\n  letter-spacing:.12em;text-transform:uppercase;color:var(--rm-mute);\r\n}\r\n.rm-sec-arrow{font-size:.62em;color:var(--rm-dim);transition:transform 220ms ease;}\r\n.rm-sec.open .rm-sec-arrow{transform:rotate(90deg);}\r\n.rm-sec-body{padding:0 12px 12px;display:none;flex-direction:column;gap:9px;}\r\n.rm-sec.open .rm-sec-body{display:flex;animation:rm-fade 200ms ease;}\r\n\r\n.rm-filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px;}\r\n.rm-filter-btn{\r\n  padding:5px 13px;border-radius:999px;cursor:pointer;\r\n  font-size:.7em;font-weight:600;\r\n  background:rgba(255,255,255,.07);border:none;color:var(--rm-mute);\r\n  transition:background 160ms,color 160ms;\r\n}\r\n.rm-filter-btn:hover{background:rgba(255,255,255,.13);color:var(--rm-text);}\r\n.rm-filter-btn.active{background:#fff;color:#0B0B10;}\r\n\r\n.rm-song-row{\r\n  display:flex;align-items:center;gap:13px;\r\n  padding:10px 12px;border-radius:8px;cursor:pointer;\r\n  border:none;position:relative;\r\n  transition:background 140ms;\r\n}\r\n.rm-song-row:hover{background:rgba(255,255,255,.07);}\r\n.rm-song-row.active{background:rgba(122,66,244,.13);}\r\n.rm-song-row.active .rm-stitle{color:var(--rm-accent);}\r\n.rm-song-row.active .rm-snum{color:var(--rm-accent);}\r\n\r\n.rm-snum{\r\n  width:20px;flex-shrink:0;text-align:center;\r\n  font-size:.78em;font-weight:500;color:var(--rm-dim);\r\n  font-variant-numeric:tabular-nums;\r\n  transition:color 140ms;\r\n}\r\n.rm-song-row:hover .rm-snum{font-size:0;color:transparent;}\r\n.rm-song-row:hover .rm-snum::after{\r\n  content:'\\25B6';font-size:11px;color:var(--rm-text);\r\n}\r\n.rm-stitle{\r\n  flex:1;min-width:0;\r\n  font-size:.92em;font-weight:600;color:var(--rm-text);\r\n  letter-spacing:-.005em;\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-sartist{\r\n  flex-shrink:1;min-width:0;max-width:32%;\r\n  font-size:.76em;font-weight:400;color:var(--rm-dim);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n\r\n.rm-s-icons{\r\n  display:flex;gap:4px;flex-shrink:0;align-items:center;\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-song-row:hover .rm-s-icons,\r\n.rm-song-row.active .rm-s-icons{opacity:1;}\r\n\r\n.rm-s-like,.rm-s-save,.rm-sdel{\r\n  width:26px;height:26px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.9em;cursor:pointer;line-height:1;border-radius:50%;\r\n  color:var(--rm-dim);\r\n  transition:color 150ms,background 150ms,transform 150ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-s-like:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-save:hover{color:var(--rm-accent2);background:rgba(58,134,255,.14);transform:scale(1.12);}\r\n.rm-sdel:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-like.on{color:#ff4d6d;opacity:1;}\r\n.rm-s-save.on{color:var(--rm-accent2);opacity:1;}\r\n\r\n.rm-song-row .rm-s-like.on,\r\n.rm-song-row .rm-s-save.on{opacity:1;}\r\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\r\n\r\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;}\r\n.rm-album-card{\r\n  position:relative;padding:11px;border-radius:9px;cursor:pointer;\r\n  background:var(--rm-panel-hi);border:none;\r\n  transition:background 180ms,transform 180ms;\r\n}\r\n.rm-album-card:hover{background:#25253A;transform:translateY(-2px);}\r\n.rm-album-icon{\r\n  width:100%;aspect-ratio:1;border-radius:6px;margin-bottom:8px;\r\n  display:flex;align-items:center;justify-content:center;font-size:1.5em;\r\n  background:linear-gradient(140deg,#2E2450,#171628);\r\n  box-shadow:0 5px 14px -6px rgba(0,0,0,.8);\r\n}\r\n.rm-album-name{\r\n  font-size:.76em;font-weight:600;color:var(--rm-text);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-count{margin-top:2px;font-size:.66em;color:var(--rm-dim);}\r\n.rm-album-del{\r\n  position:absolute;top:6px;right:6px;\r\n  width:19px;height:19px;border-radius:50%;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.62em;cursor:pointer;\r\n  background:rgba(0,0,0,.6);color:var(--rm-dim);\r\n  opacity:0;transition:opacity 150ms,color 150ms;\r\n}\r\n.rm-album-card:hover .rm-album-del{opacity:1;}\r\n.rm-album-del:hover{color:#ff4d6d;}\r\n\r\n.rm-inp,.rm-sel{\r\n  width:100%;padding:9px 12px;\r\n  background:var(--rm-panel-hi);border:1px solid transparent;border-radius:7px;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.78em;color:var(--rm-text);\r\n  outline:none;transition:border-color 160ms,background 160ms;\r\n}\r\n.rm-inp::placeholder{color:var(--rm-dim);}\r\n.rm-inp:focus,.rm-sel:focus{border-color:var(--rm-accent);background:#20203200;}\r\n\r\ntextarea.rm-inp{\r\n  min-height:74px;max-height:170px;resize:vertical;\r\n  line-height:1.55;white-space:pre-wrap;word-break:break-word;\r\n  font-family:'JetBrains Mono','Inter',monospace;font-size:.72em;\r\n}\r\n.rm-btn-full{\r\n  width:100%;padding:9px;border-radius:999px;cursor:pointer;\r\n  background:rgba(255,255,255,.09);border:none;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.75em;font-weight:600;color:var(--rm-text);\r\n  transition:background 160ms,transform 160ms;\r\n}\r\n.rm-btn-full:hover{background:rgba(255,255,255,.16);}\r\n.rm-btn-primary{\r\n  background:#fff;color:#0B0B10;\r\n}\r\n.rm-btn-primary:hover{background:#EDEDF5;transform:scale(1.015);}\r\n.rm-badge{\r\n  display:inline-block;padding:2px 8px;border-radius:999px;\r\n  font-size:.64em;font-weight:600;\r\n  background:rgba(122,66,244,.18);color:var(--rm-accent);\r\n}\r\n\r\n.rm-sync-row{\r\n  display:flex;align-items:center;justify-content:space-between;gap:11px;\r\n  padding:7px 10px;border-radius:7px;\r\n  transition:background 140ms;\r\n}\r\n.rm-sync-row:hover{background:rgba(255,255,255,.04);}\r\n.rm-sync-label{font-size:.76em;color:var(--rm-mute);flex:1;min-width:0;}\r\n\r\n.rm-toast{\r\n  position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(12px);\r\n  padding:9px 18px;border-radius:999px;z-index:99999;\r\n  background:#fff;color:#0B0B10;\r\n  font-size:.75em;font-weight:600;\r\n  box-shadow:0 10px 30px rgba(0,0,0,.6);\r\n  opacity:0;pointer-events:none;\r\n  transition:opacity 240ms ease,transform 240ms ease;\r\n}\r\n.rm-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}\r\n\r\n.rm-root .switch-checkbox{position:relative;width:38px;height:21px;flex-shrink:0;}\r\n.rm-root .switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n.rm-root .switch-checkbox span{\r\n  position:absolute;inset:0;cursor:pointer;border-radius:999px;\r\n  background:rgba(255,255,255,.16);\r\n  transition:background 220ms ease;\r\n}\r\n.rm-root .switch-checkbox span::before{\r\n  content:'';position:absolute;left:3px;top:50%;\r\n  width:15px;height:15px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%);\r\n  transition:left 240ms cubic-bezier(.34,1.4,.5,1);\r\n}\r\n.rm-root .switch-checkbox input:checked + span{background:var(--rm-accent);}\r\n.rm-root .switch-checkbox input:checked + span::before{left:calc(100% - 18px);}\r\n\r\n.rm-root .slider{display:flex;align-items:center;gap:9px;flex:1;}\r\n.rm-root .slider input[type=\"range\"]{\r\n  -webkit-appearance:none;flex:1;height:4px;border-radius:4px;\r\n  outline:none;border:none;cursor:pointer;\r\n  background:linear-gradient(90deg,#fff var(--val,50%),rgba(255,255,255,.16) var(--val,50%));\r\n}\r\n.rm-root .slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;width:12px;height:12px;border-radius:50%;\r\n  background:#fff;border:none;\r\n  box-shadow:0 1px 4px rgba(0,0,0,.5);\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-root .slider:hover input[type=\"range\"]::-webkit-slider-thumb{opacity:1;}\r\n.rm-root .slider-value{\r\n  font-size:.68em;font-weight:500;color:var(--rm-dim);\r\n  min-width:30px;text-align:right;font-variant-numeric:tabular-nums;\r\n}\r\n\r\n.rm-note{display:none;}\r\n.rm-btn.rm-on{color:var(--rm-accent);}\r\n\r\n.rm-guide{background:var(--rm-panel);border:1px solid var(--rm-line);border-radius:14px;padding:14px 16px;margin:0 0 12px;}\n.rm-guide summary{cursor:pointer;list-style:none;font-weight:700;font-size:13px;color:#cfc4ff;letter-spacing:.03em;display:flex;align-items:center;gap:8px;}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{content:\"?\";flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:rgba(160,120,255,.22);color:#d8ccff;font-size:11px;display:grid;place-items:center;}\n.rm-guide[open] summary{margin-bottom:10px;}\n.rm-guide ol{margin:0;padding-left:18px;color:#9b95ad;font-size:12px;line-height:2;}\n.rm-guide li{margin:0;}\n.rm-guide code{background:#0d0d1a;color:#cc88ff;padding:2px 7px;border-radius:4px;font-size:11.5px;}\n.rm-guide a{color:#b58cff;text-decoration:none;border-bottom:1px dotted rgba(181,140,255,.5);}\n.rm-guide a:hover{color:#fff;border-bottom-color:#fff;}\n.rm-guide .rm-guide-note{margin-top:10px;color:#6f6a80;font-size:11px;line-height:1.7;}\n</style>\r\n\r\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\r\n<div class=\"rm-root\">\n<details class=\"rm-guide\">\n  <summary>How to add a song with its lyrics</summary>\n  <ol>\n    <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n    <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n    <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n    <li>Open <b>Add Song</b> below, fill in the <b>Title</b>, and pick the <code>.mp3</code> in the file box (or paste a direct link in <b>URL</b>).</li>\n    <li>In the <b>LRC SYNC</b> box inside the same form, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area under it.</li>\n    <li>Press <b>Add Song</b>. It shows up in <b>Library</b> with its lyrics attached.</li>\n</ol>\n  <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n</details>\n\n<div class=\"rm-player\">\r\n  <div class=\"rm-np-row\">\r\n    <div class=\"rm-art\" id=\"rm-art\"><span class=\"rm-note\">&#9835;</span><div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div></div>\r\n    <div class=\"rm-meta\">\r\n      <div id=\"music-title\" class=\"rm-title\" data-i18n=\"rm_no_song\">No song selected</div>\r\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\r\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\r\n    </div>\r\n    <div class=\"rm-actions\">\r\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\" data-i18n-title=\"rm_t_like\">&#9825;</button>\r\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\" data-i18n-title=\"rm_t_save\">&#128190;</button>\r\n    </div>\r\n  </div>\r\n  <div class=\"rm-prog-wrap\">\r\n    <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\r\n    <div class=\"rm-times\"><span id=\"music-time-current\" class=\"rm-time\">0:00</span><span id=\"music-time-total\" class=\"rm-time\">0:00</span></div>\r\n  </div>\r\n  <div class=\"rm-ctrl\">\r\n    <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\" data-i18n-title=\"rm_t_prev\">&#9664;&#9664;</button>\r\n    <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play/Pause\" data-i18n-title=\"rm_t_play\">&#9654;</button>\r\n    <button id=\"music-next\" class=\"rm-btn\" title=\"Next\" data-i18n-title=\"rm_t_next\">&#9654;&#9654;</button>\r\n    <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\" data-i18n-title=\"rm_t_loop\">&#8635;</button>\r\n    <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" data-i18n=\"rm_shf\" style=\"font-size:0.7em;letter-spacing:0.1em;\">SHF</button>\r\n  </div>\r\n  <div class=\"rm-vol\"><span class=\"rm-vol-icon\">&#9834;</span><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\" style=\"flex:1;accent-color:#7A42F4;height:3px;cursor:pointer;\"><span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span></div>\r\n</div>\r\n\r\n<div class=\"rm-sec\" id=\"rm-sec-albums\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_albums\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\r\n    <div style=\"display:flex;gap:6px;\"><input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_new_album_ph\" placeholder=\"New album name...\" maxlength=\"30\" style=\"flex:1;\"><button id=\"add-album\" class=\"rm-btn\" data-i18n=\"rm_add_btn\" style=\"flex-shrink:0;padding:5px 12px;\">+ Add</button></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_library\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-filter-bar\" class=\"rm-filter-bar\"><button class=\"rm-filter-btn active\" data-filter=\"\" data-i18n=\"rm_all_songs\">All Songs</button><button class=\"rm-filter-btn\" data-filter=\"__liked\" data-i18n=\"rm_liked\">&#9829; Liked</button></div>\r\n    <div id=\"song-list\" style=\"display:flex;flex-direction:column;gap:1px;\"></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_add_song_title\">Add Song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:5px;\">\r\n      <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_title_ph\" placeholder=\"Title *\" maxlength=\"50\">\r\n      <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_artist_ph\" placeholder=\"Artist\" maxlength=\"30\">\r\n      <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_url_ph\" placeholder=\"URL (.mp3  .ogg  .wav)\">\r\n      <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;\">\r\n      <select id=\"song-album-select\" class=\"rm-sel\"><option value=\"\" data-i18n=\"rm_no_album\">No Album</option></select>\r\n      <div style=\"background:rgba(3,8,18,0.6);border-radius:7px;padding:8px;border:1px solid rgba(122,66,244,0.08);\">\r\n        <div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;\"><span style=\"font-family:Orbitron,monospace;font-size:0.66em;font-weight:700;color:rgba(122,66,244,0.5);letter-spacing:0.1em;\" data-i18n=\"rm_lrc_sync\">LRC SYNC</span><span id=\"lrc-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.6);\"></span></div>\r\n        <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;margin-bottom:5px;\">\r\n        <textarea id=\"song-lyrics-input\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\" style=\"width:100%;box-sizing:border-box;background:rgba(3,8,18,0.8);border:1px solid rgba(122,66,244,0.15);border-radius:4px;color:#bde0f0;padding:5px 7px;font-size:11px;outline:none;height:60px;resize:vertical;font-family:monospace;\"></textarea>\r\n        <label style=\"display:flex;align-items:center;gap:5px;cursor:pointer;font-size:0.78em;color:rgba(122,66,244,0.45);margin-top:5px;\"><input id=\"song-autosync\" type=\"checkbox\" style=\"accent-color:#7A42F4;\"> <span data-i18n=\"rm_autosync\">Auto-play &amp; sync when added</span></label>\r\n      </div>\r\n      <div style=\"display:flex;gap:6px;margin-top:2px;\"><button id=\"add-song\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_add_song_btn\">&#x2B22; Add Song</button><button id=\"save-song-btn\" class=\"rm-btn-primary\" data-i18n=\"rm_save_btn\">&#x2713; Save</button></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_chat_sync_title\">Chat Sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_enable_chat_sync\">Enable Chat Sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.1);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_mixed_sync\">Mixed Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_me_bots\">ME+BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_mixed_sync_example\">You: line &#8594; Bots: line &#8594; You ...</div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_bots_only_sync\">Bots Only Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_bots\">BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_bots_only_example\">Bot1: line 1 &bull; Bot2: line 2 &bull; Bot3: line 3 ...</div>\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_unified_sync\">Unified Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_all\">ALL</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_unified_example\">You + every bot post the same line at the same moment</div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.07);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_auto_delay\">Auto Delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_sync_bot\">Sync Bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" style=\"background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.7em;font-weight:700;padding:5px 18px;letter-spacing:0.1em;font-family:Orbitron,monospace;transition:all 0.2s;border-radius:4px;\">OFF</button></div>\r\n    <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span style=\"font-size:0.8em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_delay\">Delay</span><label class=\"slider\"><span class=\"slider-value\"></span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\" style=\"width:110px;\"></label></div>\r\n    <div style=\"display:flex;gap:6px;margin-top:6px;\"><button id=\"bm-test-chat\" style=\"flex:1;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:5px 10px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_test_chat\">&#9654; Test Chat</button><span id=\"bm-test-chat-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.45);align-self:center;\"></span></div>\r\n    <div style=\"margin-top:6px;\"><button id=\"bm-send-all-lyrics\" style=\"width:100%;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:6px 10px;font-family:Rajdhani,sans-serif;letter-spacing:0.05em;transition:all 0.15s;\">&#9836; Send All Lyrics: OFF</button><div id=\"bm-send-lyrics-status\" style=\"font-size:0.66em;color:rgba(122,66,244,0.45);text-align:center;margin-top:3px;\"></div></div>\r\n    <div id=\"bm-dbg-wrap\" style=\"display:none;margin-top:5px;\"><pre id=\"bm-dbg-box\" style=\"background:#13101e;border:1px solid rgba(122,66,244,0.15);border-radius:4px;padding:5px 7px;font-size:0.63em;color:rgba(122,66,244,0.45);font-family:monospace;white-space:pre-wrap;max-height:110px;overflow-y:auto;margin:0;\"></pre></div>\r\n    <button id=\"bm-dbg-toggle\" style=\"width:100%;margin-top:4px;background:rgba(122,66,244,0.03);border:1px solid rgba(122,66,244,0.08);border-radius:4px;color:rgba(122,66,244,0.38);cursor:pointer;font-size:0.66em;padding:3px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_show_debug\">Show Debug Log</button>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_backup_restore\">Backup &amp; Restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:6px;\">\r\n      <span style=\"font-size:0.77em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_backup_desc\">Export your library to JSON — restore anytime.</span>\r\n      <div style=\"display:flex;gap:6px;margin-top:4px;\"><button id=\"music-export-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_export\">&#x2B07; Export</button><button id=\"music-import-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_import\">&#x2B06; Import</button><input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\"></div>\r\n      <div id=\"music-backup-status\" style=\"font-size:0.73em;color:rgba(122,66,244,0.6);text-align:center;min-height:16px;\"></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n</div></div>";
-  const styles_default = "@import \"https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700&family=Poppins:wght@400;500;600;700;800&display=swap\";\r\n\r\n*{user-select:none;box-sizing:border-box;}\r\n\r\n:root{\r\n  --bg:#1A1A24;\r\n  --bg-glass:rgba(26,26,36,0.82);\r\n  --accent:#7A42F4;\r\n  --accent2:#3A86FF;\r\n  --border:rgba(255,255,255,0.07);\r\n  --border-active:rgba(122,66,244,0.5);\r\n  --text:#FFFFFF;\r\n  --text-muted:rgba(200,200,215,0.75);\r\n  --text-dim:rgba(200,200,215,0.4);\r\n  --red:#ff4d6d;\r\n  --green:#00d68f;\r\n  --yellow:#ffd60a;\r\n  --font-head:'Poppins','Inter',sans-serif;\r\n  --font-body:'Inter','Poppins',sans-serif;\r\n}\r\n\r\n@keyframes slide-in-top{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}\r\n@keyframes toclose{from{opacity:1;transform:scale(1) translateY(0);}to{opacity:0;transform:scale(0.98) translateY(-4px);}}\r\n@keyframes toopen{from{opacity:0;transform:scale(0.98) translateY(-4px);}to{opacity:1;transform:scale(1) translateY(0);}}\r\n@keyframes dot-blink{0%,100%{opacity:1;}50%{opacity:0.2;}}\r\n@keyframes shimmer{0%{background-position:-200% 0;}100%{background-position:200% 0;}}\r\n@keyframes ripple{from{opacity:.4;transform:scale(0);}to{opacity:0;transform:scale(1.4);}}\r\n\r\nhtml,body{margin:0;padding:0;overflow:hidden;background:transparent;}\r\n*{font-family:var(--font-body);color:var(--text);opacity:1;}\r\nh1,h2{margin:0;font-family:var(--font-head);}\r\np{margin:0;color:var(--text-muted);}\r\nbutton{border:none;outline:none;cursor:pointer;}\r\n\r\n#menu-container{\r\n  position:absolute;top:50%;left:50%;\r\n  transform:translate(-50%,-50%);\r\n  width:1280px;height:720px;\r\n  display:flex;justify-content:center;align-items:center;\r\n}\r\n\r\n#menu-wrapper{\r\n  position:relative;\r\n  width:92%;height:90%;\r\n  background:rgba(25,25,25,0.45);\r\n  border:1px solid rgba(255,255,255,0.2);\r\n  border-radius:20px;\r\n  overflow:hidden;\r\n  backdrop-filter:blur(25px);\r\n  -webkit-backdrop-filter:blur(25px);\r\n  box-shadow:0 8px 32px 0 rgba(0,0,0,0.2),inset 0 1px 1px rgba(255,255,255,0.1);\r\n  display:flex;flex-direction:column;\r\n}\r\n\r\n#menu-wrapper::before{\r\n  content:'';position:absolute;top:0;left:0;right:0;\r\n  height:1px;\r\n  background:transparent;\r\n  z-index:10;pointer-events:none;display:none;\r\n}\r\n\r\n#menu-wrapper.toclose{animation:150ms ease-in toclose forwards;}\r\n#menu-wrapper.toopen{animation:200ms cubic-bezier(.34,1.4,.64,1) toopen forwards;}\r\n\r\nheader{\r\n  position:relative;z-index:5;\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  height:46px;min-height:46px;\r\n  padding:0 18px;\r\n  background:transparent;\r\n  border-bottom:1px solid var(--border);\r\n  flex-shrink:0;\r\n}\r\n\r\nheader .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.75em;\r\n  font-weight:700;\r\n  letter-spacing:0.22em;\r\n  text-transform:uppercase;\r\n  background:linear-gradient(90deg,#7A42F4,#3A86FF,#a07af4,#7A42F4);\r\n  background-size:200% auto;\r\n  -webkit-background-clip:text;-webkit-text-fill-color:transparent;\r\n  animation:shimmer 5s linear infinite;\r\n}\r\n\r\nheader #credits{display:flex;align-items:center;gap:10px;height:46px;}\r\nheader #logo{display:block;height:28px;width:auto;filter:drop-shadow(0 0 6px rgba(122,66,244,0.6));}\r\n\r\nheader #close-button{\r\n  display:flex;align-items:center;justify-content:center;\r\n  width:26px;height:26px;\r\n  fill:none;stroke:var(--text-dim);stroke-width:1.6;\r\n  cursor:pointer;\r\n  border-radius:5px;\r\n  border:1px solid transparent;\r\n  background:transparent;\r\n  transition:all 160ms;\r\n  padding:5px;\r\n}\r\nheader #close-button:hover{\r\n  stroke:var(--text);background:rgba(255,77,109,0.1);\r\n  border-color:rgba(255,77,109,0.35);\r\n}\r\n\r\nmain{\r\n  display:flex;flex-direction:row;\r\n  flex:1;min-height:0;\r\n  position:relative;z-index:2;\r\n}\r\n\r\n#navbar-container{\r\n  display:flex;flex-direction:column;\r\n  width:172px;min-width:172px;\r\n  background:rgba(15,15,15,0.3);backdrop-filter:blur(25px);-webkit-backdrop-filter:blur(25px);\r\n  border-right:1px solid rgba(255,255,255,0.1);\r\n  padding:0;\r\n  gap:0;\r\n  position:relative;flex-shrink:0;overflow:hidden;\r\n  justify-content:space-evenly;\r\n  }\r\n\r\n.open-menu{\r\n  position:relative;\r\n  display:flex;flex-direction:row;\r\n  align-items:center;justify-content:flex-start;\r\n  gap:10px;\r\n  width:100%;height:66px;\r\n  background:transparent;\r\n  border:none;\r\n  border-left:3px solid transparent;\r\n  border-bottom:1px solid rgba(255,255,255,0.05);\r\n  color:var(--text-dim);opacity:0.7;\r\n  transition:color 140ms,border-color 140ms,background 140ms,transform 100ms,opacity 100ms;\r\n  cursor:pointer;\r\n  padding:0 18px;\r\n  overflow:hidden;box-sizing:border-box;\r\n}\r\n\r\n.open-menu:hover{\r\n  color:rgba(255,255,255,0.85);opacity:1;\r\n  background:rgba(255,255,255,0.04);\r\n  border-left-color:rgba(122,66,244,0.5);\r\n}\r\n\r\n.open-menu:active{\r\n  transform:scale(0.96);\r\n  opacity:0.75;\r\n}\r\n\r\n.open-menu.active{\r\n  color:var(--text);\r\n  background:rgba(122,66,244,0.12);\r\n  border-left:3px solid var(--accent);\r\n  pointer-events:none;\r\n}\r\n\r\n.open-menu.active .nav-icon{\r\n  filter:drop-shadow(0 0 5px rgba(122,66,244,0.9));\r\n}\r\n\r\n.nav-icon{width:24px;height:24px;transition:all 140ms;flex-shrink:0;}\r\n\r\n.nav-label{\r\n  font-family:var(--font-head);\r\n  font-size:0.93em;\r\n  letter-spacing:0.04em;\r\n  font-weight:700;\r\n  text-transform:uppercase;\r\n  line-height:1;\r\n  transition:all 140ms;\r\n}\r\n\r\n.open-menu .ripple{\r\n  position:absolute;z-index:5;\r\n  background:rgba(122,66,244,0.15);\r\n  border-radius:50%;opacity:0;\r\n  animation:ripple 550ms;\r\n  pointer-events:none;\r\n}\r\n\r\n#page-container{\r\n  flex:1;min-width:0;\r\n  overflow-y:auto;overflow-x:hidden;\r\n  scroll-behavior:smooth;\r\n  padding:0;\r\n}\r\n\r\n#page-container::-webkit-scrollbar{width:2px;}\r\n#page-container::-webkit-scrollbar-track{background:transparent;}\r\n#page-container::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.25);border-radius:2px;}\r\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(122,66,244,0.45);}\r\n\r\n.menu-page{display:none;}\r\n.menu-page.opened{\r\n  display:block;\r\n  padding:16px 20px;\r\n  animation:slide-in-top 140ms ease-out;\r\n}\r\n\r\n.menu-page .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:1.05em;font-weight:700;\r\n  letter-spacing:0.05em;\r\n  color:var(--text);\r\n  text-transform:uppercase;\r\n  margin-bottom:2px;\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page .page-title::before{\r\n  content:'';display:inline-block;\r\n  width:2px;height:0.9em;\r\n  background:linear-gradient(180deg,var(--accent),var(--accent2));\r\n  border-radius:2px;flex-shrink:0;\r\n}\r\n\r\n.page-description{\r\n  font-size:0.75em;color:var(--text-dim);\r\n  margin-bottom:14px;\r\n  letter-spacing:0.01em;\r\n  padding-left:10px;\r\n  font-weight:400;\r\n}\r\n\r\n.menu-page>.section{\r\n  margin-bottom:10px;\r\n  background:transparent;\r\n  border:1px solid var(--border);\r\n  border-radius:7px;\r\n  overflow:visible;\r\n  transition:border-color 200ms;\r\n  position:relative;\r\n}\r\n.menu-page>.section:hover{border-color:rgba(122,66,244,0.22);}\r\n\r\n.section-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.68em;\r\n  font-weight:600;\r\n  letter-spacing:0.12em;\r\n  text-transform:uppercase;\r\n  color:rgba(122,66,244,0.6);\r\n  padding:6px 12px;\r\n  background:rgba(122,66,244,0.03);\r\n  border-bottom:1px solid var(--border);\r\n  display:flex;align-items:center;gap:6px;\r\n}\r\n.section-title::before{\r\n  content:'';width:3px;height:3px;\r\n  background:var(--accent);border-radius:50%;\r\n  box-shadow:0 0 5px var(--accent);flex-shrink:0;\r\n  opacity:0.7;\r\n}\r\n\r\n.section-content{display:flex;flex-direction:column;gap:0;}\r\n.small-section{font-size:0.85rem;}\r\n\r\n.section-content.split{flex-direction:row;gap:0;}\r\n.content-split{flex:1;display:flex;flex-direction:column;}\r\n.content-split:first-child{border-right:1px solid rgba(255,255,255,0.05);}\r\n\r\n.content-option{\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  min-height:42px;padding:6px 12px;\r\n  border-bottom:1px solid rgba(255,255,255,0.03);\r\n  transition:background 150ms;\r\n  position:relative;\r\n  overflow:visible;\r\n}\r\n.content-option:last-child{border-bottom:none;}\r\n.content-option:hover{background:rgba(122,66,244,0.04);}\r\n\r\n.content-option.centered{justify-content:center;}\r\n.content-option.left-flex{justify-content:flex-start;gap:12px;}\r\n.content-option.text{justify-content:flex-start;}\r\n\r\n.option-title{\r\n  font-size:1.06em;\r\n  font-weight:500;\r\n  color:rgba(215,215,230,0.8);\r\n  letter-spacing:0.01em;\r\n  transition:color 150ms;\r\n}\r\n.content-option:hover .option-title{color:#FFFFFF;}\r\n\r\n.option-content{display:flex;align-items:center;gap:7px;}\r\n\r\n.text-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.8em;color:var(--accent);\r\n  font-weight:600;\r\n}\r\n.simplified{\r\n  font-family:var(--font-body)!important;\r\n  font-size:0.78em!important;\r\n  color:var(--text-dim)!important;\r\n  font-weight:400!important;\r\n  line-height:1.6;\r\n}\r\n.highlight{color:var(--accent)!important;}\r\n\r\n\r\n.hotkeyInput{\r\n  min-width:48px;height:24px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;font-weight:600;\r\n  color:rgba(200,175,255,0.8);\r\n  letter-spacing:0.04em;\r\n  padding:0 7px;\r\n  transition:all 140ms;\r\n  display:flex;align-items:center;justify-content:center;\r\n}\r\n.hotkeyInput:hover{\r\n  background:rgba(122,66,244,0.12);\r\n  border-color:rgba(122,66,244,0.5);\r\n}\r\n.hotkeyInput.active{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:var(--accent);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.2);\r\n  animation:dot-blink 0.8s ease infinite;\r\n}\r\n.hotkeyInput.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n.switch-checkbox{\r\n  position:relative;width:52px;height:30px;flex-shrink:0;\r\n}\r\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n\r\n.switch-checkbox span{\r\n  position:absolute;inset:0;\r\n  background:rgba(255,255,255,0.05);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:10px;\r\n  cursor:pointer;\r\n  transition:all 220ms;\r\n}\r\n.switch-checkbox span::before{\r\n  content:'';position:absolute;\r\n  left:3px;top:50%;transform:translateY(-50%);\r\n  width:20px;height:20px;\r\n  background:rgba(255,255,255,0.25);\r\n  border-radius:50%;\r\n  transition:all 220ms cubic-bezier(.34,1.4,.64,1);\r\n}\r\n.switch-checkbox input:checked + span{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:rgba(122,66,244,0.55);\r\n}\r\n.switch-checkbox input:checked + span::before{\r\n  left:calc(100% - 23px);\r\n  background:#7A42F4;\r\n  box-shadow:0 0 7px rgba(122,66,244,0.7);\r\n}\r\n\r\n.option-button{\r\n  padding:5px 16px;\r\n  background:rgba(122,66,244,0.1);\r\n  border:1px solid rgba(122,66,244,0.35);\r\n  border-radius:5px;\r\n  font-family:var(--font-head);\r\n  font-size:0.66em;font-weight:600;\r\n  letter-spacing:0.06em;\r\n  color:#FFFFFF;\r\n  text-transform:uppercase;\r\n  transition:all 140ms;\r\n}\r\n.option-button:hover{\r\n  background:rgba(122,66,244,0.22);\r\n  border-color:rgba(122,66,244,0.65);\r\n  box-shadow:0 0 12px rgba(122,66,244,0.2);\r\n}\r\n\r\n.ryn-social-btn:hover{\r\n  background:rgba(122,66,244,0.22)!important;\r\n  border-color:rgba(122,66,244,0.7)!important;\r\n  box-shadow:0 0 12px rgba(122,66,244,0.25);\r\n  transform:translateY(-1px);\r\n}\r\n.ryn-social-btn svg{width:19px;height:19px;}\r\n.ryn-social-big:hover{\r\n  background:rgba(122,66,244,0.13)!important;\r\n  border-color:rgba(122,66,244,0.8)!important;\r\n  box-shadow:0 0 22px rgba(122,66,244,0.3);\r\n  transform:translateY(-3px);\r\n}\r\n.ryn-social-big svg{width:44px;height:44px;}\r\n\r\n.option-button.red{\r\n  background:rgba(255,77,109,0.08)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n.option-button.red:hover{\r\n  background:rgba(255,77,109,0.15)!important;\r\n  border-color:rgba(255,77,109,0.6)!important;\r\n  box-shadow:0 0 10px rgba(255,77,109,0.2)!important;\r\n}\r\n\r\n.input{\r\n  height:24px;width:175px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-body);\r\n  font-size:0.72em;font-weight:400;\r\n  color:var(--text);\r\n  text-align:center;\r\n  transition:all 140ms;\r\n  padding:0 7px;\r\n}\r\n.input:focus{\r\n  outline:none;\r\n  border-color:rgba(122,66,244,0.5);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.1);\r\n  background:rgba(122,66,244,0.05);\r\n}\r\n\r\ninput[id][type=\"color\"]{\r\n  width:46px;height:22px;\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  padding:1px;\r\n  background:transparent;\r\n  cursor:pointer;\r\n  transition:border-color 140ms;\r\n}\r\ninput[id][type=\"color\"]:hover{border-color:rgba(122,66,244,0.5);}\r\n\r\n.reset-color{\r\n  width:16px;height:9px;\r\n  background:var(--data-color,var(--accent));\r\n  border-radius:5px;\r\n  border:none;cursor:pointer;\r\n  box-shadow:0 0 4px currentColor;\r\n  flex-shrink:0;\r\n}\r\n\r\n.slider{display:flex;align-items:center;gap:7px;}\r\n.slider input[type=\"range\"]{\r\n  -webkit-appearance:none;\r\n  width:100px;height:2px;\r\n  background:linear-gradient(90deg,var(--accent2) var(--val,50%),rgba(255,255,255,0.07) var(--val,50%));\r\n  border-radius:2px;\r\n  border:none;outline:none;cursor:pointer;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;\r\n  width:11px;height:11px;\r\n  border-radius:50%;\r\n  background:var(--accent2);\r\n  box-shadow:0 0 5px rgba(58,134,255,0.5);\r\n  border:2px solid var(--bg);\r\n  transition:transform 120ms;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb:hover{transform:scale(1.25);}\r\n.slider-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;color:var(--accent2);\r\n  min-width:28px;text-align:right;font-weight:600;\r\n}\r\n\r\n.disconnect-button{\r\n  width:16px;height:16px;\r\n  fill:rgba(255,255,255,0.12);\r\n  cursor:pointer;transition:fill 180ms;flex-shrink:0;\r\n}\r\n.content-option:hover .disconnect-button{fill:rgba(255,77,109,0.45);}\r\n.disconnect-button:hover{fill:#cc4444!important;}\r\n\r\n.key-badge{\r\n  display:inline-flex;align-items:center;justify-content:center;\r\n  min-width:24px;height:18px;padding:0 4px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:3px;\r\n  font-family:var(--font-head);\r\n  font-size:0.6em;font-weight:600;\r\n  color:rgba(180,155,255,0.75);\r\n}\r\n\r\n#bot-container{padding:2px 0;}\r\n\r\n.icon{width:48px;height:48px;}\r\n.small-icon{width:16px;height:16px;}\r\n\r\n.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.3)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n#ryn-search-wrap{position:relative;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:0 10px;height:30px;transition:border-color 160ms,box-shadow 160ms;min-width:185px;}\r\n#ryn-search-wrap:focus-within{border-color:rgba(122,66,244,0.55);box-shadow:0 0 0 2px rgba(122,66,244,0.12);background:rgba(122,66,244,0.05);}\r\n#ryn-search-input{flex:1;background:transparent;border:none;outline:none;font-family:var(--font-body);font-size:0.75em;color:var(--text);min-width:0;}\r\n#ryn-search-input::placeholder{color:rgba(200,200,215,0.3);}\r\n#ryn-search-clear{font-size:0.65em;color:rgba(200,200,215,0.3);cursor:pointer;flex-shrink:0;display:none;transition:color 120ms;line-height:1;}\r\n#ryn-search-clear:hover{color:rgba(255,77,109,0.8);}\r\n#ryn-search-dropdown{display:none;position:absolute;top:calc(100% + 6px);right:0;width:280px;max-height:320px;overflow-y:auto;background:rgba(18,15,30,0.98);border:1px solid rgba(122,66,244,0.3);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.7);z-index:9999;padding:4px;}\r\n#ryn-search-dropdown::-webkit-scrollbar{width:2px;}\r\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.3);border-radius:2px;}\r\n.ryn-si{display:flex;flex-direction:column;gap:2px;padding:7px 10px;border-radius:5px;cursor:pointer;transition:background 120ms;border:1px solid transparent;}\r\n.ryn-si:hover,.ryn-si.ryn-fx{background:rgba(122,66,244,0.12);border-color:rgba(122,66,244,0.22);}\r\n.ryn-st{font-size:0.8em;font-weight:600;color:#FFFFFF;line-height:1.3;}\r\n.ryn-st mark{background:rgba(122,66,244,0.4);color:#FFFFFF;border-radius:2px;padding:0 1px;}\r\n.ryn-sp{font-size:0.68em;color:rgba(122,66,244,0.55);font-family:var(--font-head);letter-spacing:0.06em;text-transform:uppercase;}\r\n.ryn-se{text-align:center;padding:18px 12px;font-size:0.77em;color:rgba(200,200,215,0.3);font-style:italic;}\r\n.ryn-sl{font-size:0.62em;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(122,66,244,0.4);padding:5px 10px 2px;margin-top:2px;}\r\n\r\n.menu-page[data-id=\"3\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\n\r\n.menu-page[data-id=\"3\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"3\"] .option-title{\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n  transition:color 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .option-content{gap:9px;}\r\n\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]{\r\n  width:21px;height:21px;padding:0;\r\n  border:none;border-radius:50%;\r\n  background:transparent;cursor:pointer;overflow:hidden;\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.16),0 2px 5px rgba(0,0,0,0.4);\r\n  transition:transform 160ms ease,box-shadow 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch-wrapper{padding:0;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch{border:none;border-radius:50%;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]:hover{\r\n  transform:scale(1.14);\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.34),0 3px 9px rgba(0,0,0,0.55);\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) input[type=\"color\"]{\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.3),0 0 9px rgba(122,66,244,0.4);\r\n}\r\n\r\n.menu-page[data-id=\"3\"] .reset-color{\r\n  width:11px;height:11px;border-radius:50%;\r\n  opacity:0;\r\n  transition:opacity 160ms ease,transform 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover .reset-color{opacity:0.85;}\r\n.menu-page[data-id=\"3\"] .reset-color:hover{opacity:1;transform:scale(1.28);}\r\n\r\n.menu-page[data-id=\"3\"] .section-title{\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page[data-id=\"3\"] .section-title::before{\r\n  content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::before{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\nlabel.option-title{\r\n  cursor:pointer;user-select:none;\r\n  flex:1;min-width:0;\r\n  transition:color 150ms ease;\r\n}\r\nlabel.option-title:hover{color:var(--text);}\r\nlabel.option-title:active{opacity:0.7;}\r\n\r\n.menu-page[data-id=\"2\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"2\"] .section-title{\r\n  display:flex;flex-direction:column;align-items:flex-start;gap:3px;\r\n}\r\n.sec-sub{\r\n  font-family:var(--font-body);\r\n  font-size:0.78em;font-weight:400;letter-spacing:0;\r\n  text-transform:none;color:var(--text-dim);\r\n  line-height:1.45;\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .section-title::after{\r\n  content:'';position:absolute;top:14px;right:14px;\r\n  width:5px;height:5px;border-radius:50%;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .section{position:relative;}\r\n.menu-page[data-id=\"2\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::after{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\n.menu-page[data-id=\"1\"] .key-grid{\n  display:grid;\n  grid-template-columns:repeat(auto-fill,minmax(228px,1fr));\n  gap:8px;\n  padding:10px 12px;\n}\n.menu-page[data-id=\"1\"] .key-tile{\n  display:flex;align-items:center;justify-content:space-between;gap:10px;\n  min-height:38px;padding:7px 10px;\n  background:rgba(255,255,255,0.02);\n  border:1px solid rgba(255,255,255,0.06);\n  border-radius:8px;\n  transition:background 150ms,border-color 150ms,transform 150ms;\n}\n.menu-page[data-id=\"1\"] .key-tile:hover{\n  background:rgba(122,66,244,0.07);\n  border-color:rgba(122,66,244,0.4);\n  transform:translateY(-1px);\n}\n.menu-page[data-id=\"1\"] .key-tile .option-title{\n  font-size:0.86em;font-weight:500;\n  color:rgba(215,215,230,0.85);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.menu-page[data-id=\"1\"] .key-tile .hotkeyInput{\n  min-width:58px;height:26px;flex-shrink:0;\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.active){\n  border-color:var(--accent);\n  background:rgba(122,66,244,0.1);\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.red){\n  border-color:rgba(255,77,109,0.4);\n  background:rgba(255,77,109,0.05);\n}\n\n.sub-options{\n  border-left:2px solid rgba(122,66,244,0.35);\n  margin:0 0 0 12px;\n  transition:opacity 200ms;\n}\n.sub-options .content-option{\n  padding-left:16px;\n  min-height:38px;\n}\n.sub-options .option-title{\n  font-size:0.95em;\n  color:rgba(200,200,215,0.7);\n}\n.sub-options .content-option:last-child{border-bottom:none;}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:0.3;\n  pointer-events:none;\n}\n";
-  const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton,\r\n#ageBarBody,\r\n#ageBar,\r\n#ageText,\r\n#upgradeCounter,\r\n#chatButton {\r\n    display: none!important;\r\n}\r\n\r\n#foodDisplay,\r\n#woodDisplay,\r\n#stoneDisplay,\r\n#scoreDisplay,\r\n.resourceDisplay,\r\n#mapDisplay,\r\n#leaderboard,\r\n.gameButton,\r\n#storeButton,\r\n#allianceButton,\r\n#leaderboardButton {\r\n    opacity: 0.45;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    border: 2px solid rgba(80,30,160,0.45) !important;\r\n    border-radius: 4px !important;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 62%;\r\n    left: 50%;\r\n    transform: translate(-50%, -50%);\r\n    font-size: 1.05em;\r\n    font-weight: 700;\r\n    color: #b98cff;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
-  const Store_default = "#ryn-store-container {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 10px;\r\n    max-width: 400px;\r\n    width: 100%;\r\n\r\n    position: absolute;\r\n    top: 50%;\r\n    left: 50%;\r\n    transform: translate(-50%, -50%) scale(0.9);\r\n}\r\n\r\n#ryn-store-toggle {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    padding: 10px;\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    color: #fff;\r\n    border-radius: 4px;\r\n    cursor: pointer;\r\n    font-size: 20px;\r\n    pointer-events: all;\r\n}\r\n\r\n#ryn-store-items {\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    max-height: 200px;\r\n    height: 100%;\r\n    padding: 10px;\r\n    overflow-y: scroll;\r\n    border-radius: 4px;\r\n    pointer-events: all;\r\n    scrollbar-width: none;\r\n}\r\n\r\n#ryn-store-items::-webkit-scrollbar {\r\n    display: none;\r\n    width: 0;\r\n    height: 0;\r\n    background: transparent;\r\n}\r\n\r\n.storeItemContainer {\r\n    display: flex;\r\n    align-items: center;\r\n    gap: 10px;\r\n    padding: 5px;\r\n    height: 50px;\r\n    box-sizing: border-box;\r\n    overflow: hidden;\r\n}\r\n\r\n.storeHat {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    width: 45px;\r\n    height: 45px;\r\n    margin-top: -5px;\r\n    pointer-events: none;\r\n}\r\n\r\n.storeItemName {\r\n    color: #fff;\r\n    font-size: 20px;\r\n}\r\n\r\n.equipButton {\r\n    margin-left: auto;\r\n    color: #80eefc;\r\n    cursor: pointer;\r\n    font-size: 35px;\r\n}";
+  const Header_ref = "<header>\r\n  <div id=\"credits\"></div>\r\n  <div style=\"display:flex;align-items:center;gap:8px;margin-left:auto;\">\r\n    <div id=\"ryn-search-wrap\"><input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search...\" autocomplete=\"off\" spellcheck=\"false\"><span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span><div id=\"ryn-search-dropdown\"></div></div>\r\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" class=\"icon\">\r\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\r\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\r\n    </svg>\r\n  </div>\r\n</header>";
+  const Navbar_ref = "<div id=\"navbar-container\">\n  <button data-id=\"1\" class=\"open-menu active\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"2\"/>\n      <rect x=\"5\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"9\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"13\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"17\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"5\" y=\"12\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"9\" y=\"12\" width=\"6\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"17\" y=\"12\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n    </svg>\n    <span class=\"nav-label\">KEYS</span>\n  </button>\n  <button data-id=\"2\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <line x1=\"3\" y1=\"3\" x2=\"21\" y2=\"21\"/>\n      <path d=\"M3 3l5 2 11 11-2 5\"/>\n      <path d=\"M21 3l-5 2L5 16l2 5\"/>\n      <line x1=\"9\" y1=\"9\" x2=\"6\" y2=\"12\"/>\n      <line x1=\"15\" y1=\"9\" x2=\"18\" y2=\"12\"/>\n    </svg>\n    <span class=\"nav-label\">COMBAT</span>\n  </button>\n  <button data-id=\"3\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <path d=\"M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z\"/>\n      <circle cx=\"12\" cy=\"12\" r=\"2.5\"/>\n      <path d=\"M12 3v1.5M12 19.5V21M3 12H1.5M22.5 12H21M5.6 5.6l-1-1M19.4 18.4l-1-1M18.4 5.6l1-1M4.6 18.4l1-1\"/>\n    </svg>\n    <span class=\"nav-label\">VISUALS</span>\n  </button>\n  <button data-id=\"4\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <circle cx=\"12\" cy=\"12\" r=\"3\"/>\n      <path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z\"/>\n    </svg>\n    <span class=\"nav-label\">MISC</span>\n  </button>\n  <button data-id=\"5\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <circle cx=\"12\" cy=\"5\" r=\"2\"/>\n      <path d=\"M12 7v3\"/>\n      <rect x=\"7\" y=\"10\" width=\"10\" height=\"7\" rx=\"2\"/>\n      <circle cx=\"10\" cy=\"13\" r=\"1\" fill=\"currentColor\"/>\n      <circle cx=\"14\" cy=\"13\" r=\"1\" fill=\"currentColor\"/>\n      <path d=\"M10 16h4\"/>\n      <path d=\"M7 13H5M19 13h-2M9 21v-4M15 21v-4\"/>\n    </svg>\n    <span class=\"nav-label\">BOTS</span>\n  </button>\n  <button data-id=\"7\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <path d=\"M9 18V5l12-2v13\"/>\n      <path d=\"M9 9l12-2\"/>\n      <circle cx=\"6\" cy=\"18\" r=\"3\"/>\n      <circle cx=\"18\" cy=\"16\" r=\"3\"/>\n    </svg>\n    <span class=\"nav-label\">MUSIC</span>\n  </button>\n\n</div>";
+  const Devtool_ref = "<div class=\"menu-page\" data-id=\"6\" style=\"display:none;\">\r\n    <div class=\"page-title\">Devtool</div>\r\n    <p class=\"page-description\">Test RYN Client and report about bugs!</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Statistics</h2>\r\n\r\n        <div class=\"section-content small-section\">\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Total kills: </span>\r\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Global kills with bots: </span>\r\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Deaths: </span>\r\n                <span id=\"_deaths\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Autosync: </span>\r\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">SSHammer: </span>\r\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Spike sync: </span>\r\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Author: </span>\r\n                <span id=\"author\" class=\"text-value\">RYN</span>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n</div>";
+  const Keybinds_ref = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-title\">Keybinds</div>\n    <p class=\"page-description\">Click a key to rebind it, then press the new key. A key bound twice turns red on both tiles.</p>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Food</span>\n                <button id=\"_food\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Wall</span>\n                <button id=\"_wall\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spike</span>\n                <button id=\"_spike\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Windmill</span>\n                <button id=\"_windmill\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Farm</span>\n                <button id=\"_farm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Trap</span>\n                <button id=\"_trap\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Turret</span>\n                <button id=\"_turret\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn</span>\n                <button id=\"_spawn\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Menu</span>\n                <button id=\"_toggleMenu\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Instakill</span>\n                <button id=\"_instakill\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn Bot</span>\n                <button id=\"_spawnBot\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Kill All Bots</span>\n                <button id=\"_killAllBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Bot Auto-Attack</span>\n                <button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Auto Farm</span>\n                <button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Repel Alts</span>\n                <button id=\"_repelAlts\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Scatter Bots</span>\n                <button id=\"_scatterBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Freeze Bots</span>\n                <button id=\"_freezeBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Lock bot position</span>\n                <button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Spikes</span>\n                <button id=\"_fourSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Traps</span>\n                <button id=\"_fourTraps\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Boost Spike Rush</span>\n                <button id=\"_boostSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Automill</span>\n                <button id=\"_autoMillKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Dash</span>\n                <button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Auto Grind</span>\n                <button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Autoplacer</span>\n                <button id=\"_autoplacerKey\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Combat_ref = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it — you do not have to hit the switch.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick\">Spike Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"sub-options\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickBreak\">Spike Tick (break)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickNear\">Spike Tick (near)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickNear\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickTrap\">Spike Tick (trap)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikeTick\">Anti Spike Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoplacer radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_prePlace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_replace\">Replace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_replace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_primaryTrap\">Primary Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_primaryTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeFallback\">Spike Fallback</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeFallback\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
+  const Visuals_ref = "<div class=\"menu-page\" data-id=\"3\">\r\n    <div class=\"page-title\">Visuals</div>\r\n    <p class=\"page-description\">Choose what gets drawn on screen. Turn off anything you do not need for a cleaner view.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Names</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Name</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_myNameColor\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Mark RYN Players</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_markRynPlayers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Player ID</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_showPlayerID\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Player HUD</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Turret Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_playerTurretReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Render HP</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_renderHP\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Position Prediction</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_positionPrediction\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">World Tint</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Purple Tint</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_objectTint\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Tint Transparency</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Weather<span class=\"sec-sub\">Rain over the map, turning to snow in the snow biome.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weather\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Intensity</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Structures</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Mine/Clan)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Enemy)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarEnemyColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBarEnemy\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">myPlayer</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Display player angle</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_displayPlayerAngle\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Interface</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Hide game HUD</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_hideHUD\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Low Quality Mode</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lowQuality\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Hitboxes</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Collision hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_collisionHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Possible placement</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_possiblePlacement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
+  const Misc_ref = "<div class=\"menu-page\" data-id=\"4\">\r\n    <div class=\"page-title\">Misc</div>\r\n    <p class=\"page-description\">Customize misc settings, add autochat messages, reset settings</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Legit Mode</h2>\r\n        <div class=\"section-content\">\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Other</h2>\r\n\r\n        <div class=\"section-content\">\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kill Message</span>\r\n                <div class=\"option-content\">\r\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_killMessage\" type=\"checkbox\">\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Provoke on Kill</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_deathProvoke\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autospawn</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autospawn\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoaccept</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoaccept\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Interval</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\">\r\n                </label>\r\n            </div>\r\n            <div id=\"autoChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoChatMsg\" class=\"option-button\">+ Add Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Bot Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable Player Chat</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoBotChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div id=\"autoBotChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">+ Add Player Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
+  const Bots_ref = "<div class=\"menu-page\" data-id=\"5\">\r\n    <div class=\"page-title\">Bots</div>\r\n    <p class=\"page-description\">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Controller</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Follow cursor</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_followCursor\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Stop movement radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"flex-direction:column;align-items:flex-start;gap:8px;\">\r\n                <span class=\"option-title\" style=\"margin-bottom:2px;\">Formation</span>\r\n                <div id=\"_formationGrid\" style=\"display:flex;flex-wrap:wrap;gap:6px;width:100%;\"></div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_circleRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bots own clan</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botIndividualClans\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto random bot names</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRandomBotNames\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id=\"bot-container\" class=\"section-content\"></div>\r\n        <div id=\"dynamic-bot-list\" style=\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\"></div>\r\n        <div class=\"content-option\" style=\"margin-top:10px;justify-content:center;\">\r\n            <button id=\"add-bot-dynamic\" class=\"option-button\" style=\"display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;\">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Bot Weapons</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:'';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid=\"-1\"],.bot-sec-weapon-btn[data-swid=\"-1\"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Primary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\"><span class=\"wpn-name\">Tool Hammer</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\"><span class=\"wpn-name\">Hand Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\"><span class=\"wpn-name\">Great Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\"><span class=\"wpn-name\">Short Sword</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\"><span class=\"wpn-name\">Katana</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\"><span class=\"wpn-name\">Polearm</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\"><span class=\"wpn-name\">Bat</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\"><span class=\"wpn-name\">Daggers</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\"><span class=\"wpn-name\">Stick</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Secondary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\"><span class=\"wpn-name\">Hunting Bow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\"><span class=\"wpn-name\">Great Hammer</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\"><span class=\"wpn-name\">Wooden Shield</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\"><span class=\"wpn-name\">Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\"><span class=\"wpn-name\">Repeater Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\"><span class=\"wpn-name\">Mc Grabby</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\"><span class=\"wpn-name\">Musket</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class=\"content-option\" style=\"margin-top:2px;\">\r\n                <span class=\"option-title\">Platform w/ Musket</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_platformMusket\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Age 4 Building</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n            <div>\r\n                <div class=\"wpn-label\">Age 4 Building</div>\r\n                <div class=\"wpn-grid\" id=\"bot-age4-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\"><span class=\"wpn-name\">Trap</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\"><span class=\"wpn-name\">Boost Pad</span></div>\r\n                </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section\" style=\"margin-top:6px;\">\r\n        <div class=\"section\" style=\"margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;\">\r\n        <div class=\"section-title\" style=\"font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;\">Auto Farm</div>\r\n\r\n        <div style=\"display:flex;flex-direction:column;gap:10px;\">\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Farm Mode</span>\r\n                <p style=\"font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;\">Bots automatically gather resources. In <b style=\"color:rgba(200,195,220,0.85);\">Single</b> mode they target one resource type. In <b style=\"color:rgba(200,195,220,0.85);\">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style=\"display:flex;gap:8px;margin-top:2px;\">\r\n                    <button id=\"_farmModeSingle\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Single</button>\r\n                    <button id=\"_farmModeNearest\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            <div id=\"_farmTypeRow\" style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Resource Type</span>\r\n                <div style=\"display:flex;gap:8px;\">\r\n                    <button data-farm-type=\"0\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Wood</button>\r\n                    <button data-farm-type=\"1\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Food</button>\r\n                    <button data-farm-type=\"2\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Stone</button>\r\n                    <button data-farm-type=\"3\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Gold</button>\r\n                </div>\r\n                <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\r\n            </div>\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Limit</span>\r\n                <div style=\"display:flex;align-items:center;gap:12px;\">\r\n                    <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\" style=\"width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;\">\r\n                    <span style=\"font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;\">Bots stop and return to you when they reach this amount. Set to <b style=\"color:rgba(200,195,220,0.7);\">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>";
+  const Music_ref = "<div class=\"menu-page\" data-id=\"7\">\r\n<style>\r\n@keyframes ryn-eq{0%,100%{height:3px;}50%{height:15px;}}\r\n@keyframes ryn-like-pop{0%{transform:scale(1);}45%{transform:scale(1.45);}100%{transform:scale(1);}}\r\n@keyframes rm-fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}\r\n\r\n.rm-root{\r\n  --rm-bg:#0B0B10;\r\n  --rm-panel:#141420;\r\n  --rm-panel-hi:#1B1B2B;\r\n  --rm-line:rgba(255,255,255,0.07);\r\n  --rm-accent:#7A42F4;\r\n  --rm-accent2:#3A86FF;\r\n  --rm-text:#FFFFFF;\r\n  --rm-mute:rgba(255,255,255,0.62);\r\n  --rm-dim:rgba(255,255,255,0.34);\r\n  display:flex;flex-direction:column;gap:14px;\r\n  font-family:'Inter','Poppins',sans-serif;\r\n  animation:rm-fade 240ms ease;\r\n}\r\n\r\n.rm-player{\r\n  position:relative;overflow:hidden;\r\n  padding:18px 18px 14px;border-radius:14px;\r\n  background:\r\n    radial-gradient(120% 130% at 0% 0%,rgba(122,66,244,.28),transparent 58%),\r\n    linear-gradient(160deg,#1E1830 0%,#12111E 55%,#0B0B10 100%);\r\n  border:1px solid var(--rm-line);\r\n  box-shadow:0 12px 34px -16px rgba(0,0,0,.9);\r\n}\r\n.rm-player::before{\r\n  content:'';position:absolute;inset:0;pointer-events:none;\r\n  background:linear-gradient(180deg,rgba(255,255,255,.05),transparent 40%);\r\n}\r\n.rm-np-row{display:flex;align-items:center;gap:15px;margin-bottom:14px;position:relative;}\r\n\r\n.rm-art{\r\n  width:74px;height:74px;flex-shrink:0;position:relative;overflow:hidden;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:1.7em;border-radius:8px;\r\n  background:linear-gradient(140deg,#2A2140,#141323);\r\n  border:none;\r\n  box-shadow:0 8px 22px -8px rgba(0,0,0,.85);\r\n  transition:box-shadow 300ms ease;\r\n}\r\n.rm-art.playing{box-shadow:0 10px 26px -8px rgba(122,66,244,.6);}\r\n.rm-eq{display:none;gap:3px;align-items:flex-end;height:18px;}\r\n.rm-art.playing .rm-eq{display:flex;}\r\n.rm-eq-bar{\r\n  width:3px;border-radius:2px;\r\n  background:linear-gradient(180deg,var(--rm-accent),var(--rm-accent2));\r\n  animation:ryn-eq .9s ease-in-out infinite;\r\n}\r\n.rm-eq-bar:nth-child(2){animation-delay:.15s;}\r\n.rm-eq-bar:nth-child(3){animation-delay:.3s;}\r\n.rm-eq-bar:nth-child(4){animation-delay:.45s;}\r\n\r\n.rm-meta{flex:1;min-width:0;}\r\n.rm-title{\r\n  font-size:1.16em;font-weight:700;letter-spacing:-.015em;line-height:1.25;\r\n  color:var(--rm-text);\r\n  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;\r\n  overflow:hidden;word-break:break-word;\r\n}\r\n.rm-artist{\r\n  margin-top:4px;font-size:.78em;font-weight:400;color:var(--rm-mute);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-badge{\r\n  display:inline-block;margin-top:6px;padding:2px 9px;\r\n  font-size:.64em;font-weight:600;letter-spacing:.05em;text-transform:uppercase;\r\n  color:var(--rm-mute);background:rgba(255,255,255,.08);border-radius:999px;\r\n  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-actions{display:flex;gap:4px;align-items:center;flex-shrink:0;}\r\n.rm-like-btn,.rm-save-now-btn{\r\n  width:36px;height:36px;display:flex;align-items:center;justify-content:center;\r\n  font-size:1.15em;cursor:pointer;border-radius:50%;\r\n  color:var(--rm-dim);background:transparent;border:none;\r\n  transition:color 170ms,background 170ms,transform 170ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-like-btn:hover,.rm-save-now-btn:hover{\r\n  color:var(--rm-text);background:rgba(255,255,255,.11);transform:scale(1.1);\r\n}\r\n.rm-like-btn.on{\r\n  color:#ff4d6d;animation:ryn-like-pop 340ms cubic-bezier(.34,1.5,.5,1);\r\n  text-shadow:0 0 12px rgba(255,77,109,.55);\r\n}\r\n.rm-save-now-btn.on{color:var(--rm-accent2);text-shadow:0 0 12px rgba(58,134,255,.5);}\r\n\r\n.rm-prog-wrap{margin-bottom:10px;position:relative;}\r\n.rm-prog-rail{\r\n  height:4px;border-radius:4px;cursor:pointer;\r\n  background:rgba(255,255,255,.13);position:relative;\r\n  transition:height 140ms ease;\r\n}\r\n.rm-prog-wrap:hover .rm-prog-rail{height:6px;}\r\n.rm-prog-fill{\r\n  height:100%;border-radius:4px;position:relative;\r\n  background:linear-gradient(90deg,var(--rm-accent),var(--rm-accent2));\r\n}\r\n.rm-prog-fill::after{\r\n  content:'';position:absolute;right:-5px;top:50%;\r\n  width:11px;height:11px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%) scale(0);\r\n  transition:transform 160ms ease;\r\n  box-shadow:0 2px 6px rgba(0,0,0,.5);\r\n}\r\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\r\n.rm-times{display:flex;justify-content:space-between;margin-top:5px;}\r\n.rm-time{font-size:.66em;font-weight:500;color:var(--rm-dim);font-variant-numeric:tabular-nums;}\r\n\r\n.rm-ctrl{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:12px;position:relative;}\r\n.rm-btn{\r\n  width:32px;height:32px;display:flex;align-items:center;justify-content:center;\r\n  background:transparent;border:none;border-radius:50%;\r\n  color:var(--rm-mute);font-size:.86em;cursor:pointer;\r\n  transition:color 160ms,transform 160ms;\r\n}\r\n.rm-btn:hover{color:var(--rm-text);transform:scale(1.1);}\r\n.rm-btn.on{color:var(--rm-accent);}\r\n.rm-play-btn{\r\n  width:46px;height:46px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  background:#fff;border:none;border-radius:50%;\r\n  color:#0B0B10;font-size:1.05em;cursor:pointer;\r\n  box-shadow:0 6px 18px -6px rgba(0,0,0,.7);\r\n  transition:transform 170ms cubic-bezier(.34,1.5,.5,1),box-shadow 170ms;\r\n}\r\n.rm-play-btn:hover{transform:scale(1.07);box-shadow:0 8px 22px -6px rgba(122,66,244,.7);}\r\n.rm-play-btn:active{transform:scale(.97);}\r\n\r\n.rm-vol{display:flex;align-items:center;gap:9px;position:relative;}\r\n.rm-vol-icon{font-size:.82em;color:var(--rm-dim);flex-shrink:0;}\r\n.rm-vol-val{font-size:.66em;color:var(--rm-dim);min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}\r\n\r\n.rm-sec{\r\n  background:var(--rm-panel);\r\n  border:1px solid var(--rm-line);border-radius:12px;overflow:hidden;\r\n  transition:border-color 200ms;\r\n}\r\n.rm-sec:hover{border-color:rgba(255,255,255,.12);}\r\n.rm-sec-head{\r\n  display:flex;align-items:center;gap:9px;\r\n  padding:12px 15px;cursor:pointer;user-select:none;\r\n  transition:background 160ms;\r\n}\r\n.rm-sec-head:hover{background:rgba(255,255,255,.035);}\r\n.rm-sec-dot{\r\n  width:6px;height:6px;border-radius:50%;flex-shrink:0;\r\n  background:var(--rm-accent);box-shadow:0 0 8px rgba(122,66,244,.7);\r\n}\r\n.rm-sec-title{\r\n  flex:1;font-size:.74em;font-weight:700;\r\n  letter-spacing:.12em;text-transform:uppercase;color:var(--rm-mute);\r\n}\r\n.rm-sec-arrow{font-size:.62em;color:var(--rm-dim);transition:transform 220ms ease;}\r\n.rm-sec.open .rm-sec-arrow{transform:rotate(90deg);}\r\n.rm-sec-body{padding:0 12px 12px;display:none;flex-direction:column;gap:9px;}\r\n.rm-sec.open .rm-sec-body{display:flex;animation:rm-fade 200ms ease;}\r\n\r\n.rm-filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px;}\r\n.rm-filter-btn{\r\n  padding:5px 13px;border-radius:999px;cursor:pointer;\r\n  font-size:.7em;font-weight:600;\r\n  background:rgba(255,255,255,.07);border:none;color:var(--rm-mute);\r\n  transition:background 160ms,color 160ms;\r\n}\r\n.rm-filter-btn:hover{background:rgba(255,255,255,.13);color:var(--rm-text);}\r\n.rm-filter-btn.active{background:#fff;color:#0B0B10;}\r\n\r\n.rm-song-row{\r\n  display:flex;align-items:center;gap:13px;\r\n  padding:10px 12px;border-radius:8px;cursor:pointer;\r\n  border:none;position:relative;\r\n  transition:background 140ms;\r\n}\r\n.rm-song-row:hover{background:rgba(255,255,255,.07);}\r\n.rm-song-row.active{background:rgba(122,66,244,.13);}\r\n.rm-song-row.active .rm-stitle{color:var(--rm-accent);}\r\n.rm-song-row.active .rm-snum{color:var(--rm-accent);}\r\n\r\n.rm-snum{\r\n  width:20px;flex-shrink:0;text-align:center;\r\n  font-size:.78em;font-weight:500;color:var(--rm-dim);\r\n  font-variant-numeric:tabular-nums;\r\n  transition:color 140ms;\r\n}\r\n.rm-song-row:hover .rm-snum{font-size:0;color:transparent;}\r\n.rm-song-row:hover .rm-snum::after{\r\n  content:'\\25B6';font-size:11px;color:var(--rm-text);\r\n}\r\n.rm-stitle{\r\n  flex:1;min-width:0;\r\n  font-size:.92em;font-weight:600;color:var(--rm-text);\r\n  letter-spacing:-.005em;\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-sartist{\r\n  flex-shrink:1;min-width:0;max-width:32%;\r\n  font-size:.76em;font-weight:400;color:var(--rm-dim);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n\r\n.rm-s-icons{\r\n  display:flex;gap:4px;flex-shrink:0;align-items:center;\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-song-row:hover .rm-s-icons,\r\n.rm-song-row.active .rm-s-icons{opacity:1;}\r\n\r\n.rm-s-like,.rm-s-save,.rm-sdel{\r\n  width:26px;height:26px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.9em;cursor:pointer;line-height:1;border-radius:50%;\r\n  color:var(--rm-dim);\r\n  transition:color 150ms,background 150ms,transform 150ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-s-like:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-save:hover{color:var(--rm-accent2);background:rgba(58,134,255,.14);transform:scale(1.12);}\r\n.rm-sdel:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-like.on{color:#ff4d6d;opacity:1;}\r\n.rm-s-save.on{color:var(--rm-accent2);opacity:1;}\r\n\r\n.rm-song-row .rm-s-like.on,\r\n.rm-song-row .rm-s-save.on{opacity:1;}\r\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\r\n\r\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;}\r\n.rm-album-card{\r\n  position:relative;padding:11px;border-radius:9px;cursor:pointer;\r\n  background:var(--rm-panel-hi);border:none;\r\n  transition:background 180ms,transform 180ms;\r\n}\r\n.rm-album-card:hover{background:#25253A;transform:translateY(-2px);}\r\n.rm-album-icon{\r\n  width:100%;aspect-ratio:1;border-radius:6px;margin-bottom:8px;\r\n  display:flex;align-items:center;justify-content:center;font-size:1.5em;\r\n  background:linear-gradient(140deg,#2E2450,#171628);\r\n  box-shadow:0 5px 14px -6px rgba(0,0,0,.8);\r\n}\r\n.rm-album-name{\r\n  font-size:.76em;font-weight:600;color:var(--rm-text);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-count{margin-top:2px;font-size:.66em;color:var(--rm-dim);}\r\n.rm-album-del{\r\n  position:absolute;top:6px;right:6px;\r\n  width:19px;height:19px;border-radius:50%;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.62em;cursor:pointer;\r\n  background:rgba(0,0,0,.6);color:var(--rm-dim);\r\n  opacity:0;transition:opacity 150ms,color 150ms;\r\n}\r\n.rm-album-card:hover .rm-album-del{opacity:1;}\r\n.rm-album-del:hover{color:#ff4d6d;}\r\n\r\n.rm-inp,.rm-sel{\r\n  width:100%;padding:9px 12px;\r\n  background:var(--rm-panel-hi);border:1px solid transparent;border-radius:7px;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.78em;color:var(--rm-text);\r\n  outline:none;transition:border-color 160ms,background 160ms;\r\n}\r\n.rm-inp::placeholder{color:var(--rm-dim);}\r\n.rm-inp:focus,.rm-sel:focus{border-color:var(--rm-accent);background:#20203200;}\r\n\r\ntextarea.rm-inp{\r\n  min-height:74px;max-height:170px;resize:vertical;\r\n  line-height:1.55;white-space:pre-wrap;word-break:break-word;\r\n  font-family:'JetBrains Mono','Inter',monospace;font-size:.72em;\r\n}\r\n.rm-btn-full{\r\n  width:100%;padding:9px;border-radius:999px;cursor:pointer;\r\n  background:rgba(255,255,255,.09);border:none;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.75em;font-weight:600;color:var(--rm-text);\r\n  transition:background 160ms,transform 160ms;\r\n}\r\n.rm-btn-full:hover{background:rgba(255,255,255,.16);}\r\n.rm-btn-primary{\r\n  background:#fff;color:#0B0B10;\r\n}\r\n.rm-btn-primary:hover{background:#EDEDF5;transform:scale(1.015);}\r\n.rm-badge{\r\n  display:inline-block;padding:2px 8px;border-radius:999px;\r\n  font-size:.64em;font-weight:600;\r\n  background:rgba(122,66,244,.18);color:var(--rm-accent);\r\n}\r\n\r\n.rm-sync-row{\r\n  display:flex;align-items:center;justify-content:space-between;gap:11px;\r\n  padding:7px 10px;border-radius:7px;\r\n  transition:background 140ms;\r\n}\r\n.rm-sync-row:hover{background:rgba(255,255,255,.04);}\r\n.rm-sync-label{font-size:.76em;color:var(--rm-mute);flex:1;min-width:0;}\r\n\r\n.rm-toast{\r\n  position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(12px);\r\n  padding:9px 18px;border-radius:999px;z-index:99999;\r\n  background:#fff;color:#0B0B10;\r\n  font-size:.75em;font-weight:600;\r\n  box-shadow:0 10px 30px rgba(0,0,0,.6);\r\n  opacity:0;pointer-events:none;\r\n  transition:opacity 240ms ease,transform 240ms ease;\r\n}\r\n.rm-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}\r\n\r\n.rm-root .switch-checkbox{position:relative;width:38px;height:21px;flex-shrink:0;}\r\n.rm-root .switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n.rm-root .switch-checkbox span{\r\n  position:absolute;inset:0;cursor:pointer;border-radius:999px;\r\n  background:rgba(255,255,255,.16);\r\n  transition:background 220ms ease;\r\n}\r\n.rm-root .switch-checkbox span::before{\r\n  content:'';position:absolute;left:3px;top:50%;\r\n  width:15px;height:15px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%);\r\n  transition:left 240ms cubic-bezier(.34,1.4,.5,1);\r\n}\r\n.rm-root .switch-checkbox input:checked + span{background:var(--rm-accent);}\r\n.rm-root .switch-checkbox input:checked + span::before{left:calc(100% - 18px);}\r\n\r\n.rm-root .slider{display:flex;align-items:center;gap:9px;flex:1;}\r\n.rm-root .slider input[type=\"range\"]{\r\n  -webkit-appearance:none;flex:1;height:4px;border-radius:4px;\r\n  outline:none;border:none;cursor:pointer;\r\n  background:linear-gradient(90deg,#fff var(--val,50%),rgba(255,255,255,.16) var(--val,50%));\r\n}\r\n.rm-root .slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;width:12px;height:12px;border-radius:50%;\r\n  background:#fff;border:none;\r\n  box-shadow:0 1px 4px rgba(0,0,0,.5);\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-root .slider:hover input[type=\"range\"]::-webkit-slider-thumb{opacity:1;}\r\n.rm-root .slider-value{\r\n  font-size:.68em;font-weight:500;color:var(--rm-dim);\r\n  min-width:30px;text-align:right;font-variant-numeric:tabular-nums;\r\n}\r\n\r\n.rm-note{display:none;}\r\n.rm-btn.rm-on{color:var(--rm-accent);}\r\n\r\n.rm-guide{background:var(--rm-panel);border:1px solid var(--rm-line);border-radius:14px;padding:14px 16px;margin:0 0 12px;}\n.rm-guide summary{cursor:pointer;list-style:none;font-weight:700;font-size:13px;color:#cfc4ff;letter-spacing:.03em;display:flex;align-items:center;gap:8px;}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{content:\"?\";flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:rgba(160,120,255,.22);color:#d8ccff;font-size:11px;display:grid;place-items:center;}\n.rm-guide[open] summary{margin-bottom:10px;}\n.rm-guide ol{margin:0;padding-left:18px;color:#9b95ad;font-size:12px;line-height:2;}\n.rm-guide li{margin:0;}\n.rm-guide code{background:#0d0d1a;color:#cc88ff;padding:2px 7px;border-radius:4px;font-size:11.5px;}\n.rm-guide a{color:#b58cff;text-decoration:none;border-bottom:1px dotted rgba(181,140,255,.5);}\n.rm-guide a:hover{color:#fff;border-bottom-color:#fff;}\n.rm-guide .rm-guide-note{margin-top:10px;color:#6f6a80;font-size:11px;line-height:1.7;}\n</style>\r\n\r\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\r\n<div class=\"rm-root\">\n<details class=\"rm-guide\">\n  <summary>How to add a song with its lyrics</summary>\n  <ol>\n    <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n    <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n    <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n    <li>Open <b>Add Song</b> below, fill in the <b>Title</b>, and pick the <code>.mp3</code> in the file box (or paste a direct link in <b>URL</b>).</li>\n    <li>In the <b>LRC SYNC</b> box inside the same form, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area under it.</li>\n    <li>Press <b>Add Song</b>. It shows up in <b>Library</b> with its lyrics attached.</li>\n</ol>\n  <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n</details>\n\n<div class=\"rm-player\">\r\n  <div class=\"rm-np-row\">\r\n    <div class=\"rm-art\" id=\"rm-art\"><span class=\"rm-note\">&#9835;</span><div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div></div>\r\n    <div class=\"rm-meta\">\r\n      <div id=\"music-title\" class=\"rm-title\" data-i18n=\"rm_no_song\">No song selected</div>\r\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\r\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\r\n    </div>\r\n    <div class=\"rm-actions\">\r\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\" data-i18n-title=\"rm_t_like\">&#9825;</button>\r\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\" data-i18n-title=\"rm_t_save\">&#128190;</button>\r\n    </div>\r\n  </div>\r\n  <div class=\"rm-prog-wrap\">\r\n    <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\r\n    <div class=\"rm-times\"><span id=\"music-time-current\" class=\"rm-time\">0:00</span><span id=\"music-time-total\" class=\"rm-time\">0:00</span></div>\r\n  </div>\r\n  <div class=\"rm-ctrl\">\r\n    <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\" data-i18n-title=\"rm_t_prev\">&#9664;&#9664;</button>\r\n    <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play/Pause\" data-i18n-title=\"rm_t_play\">&#9654;</button>\r\n    <button id=\"music-next\" class=\"rm-btn\" title=\"Next\" data-i18n-title=\"rm_t_next\">&#9654;&#9654;</button>\r\n    <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\" data-i18n-title=\"rm_t_loop\">&#8635;</button>\r\n    <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" data-i18n=\"rm_shf\" style=\"font-size:0.7em;letter-spacing:0.1em;\">SHF</button>\r\n  </div>\r\n  <div class=\"rm-vol\"><span class=\"rm-vol-icon\">&#9834;</span><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\" style=\"flex:1;accent-color:#7A42F4;height:3px;cursor:pointer;\"><span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span></div>\r\n</div>\r\n\r\n<div class=\"rm-sec\" id=\"rm-sec-albums\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_albums\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\r\n    <div style=\"display:flex;gap:6px;\"><input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_new_album_ph\" placeholder=\"New album name...\" maxlength=\"30\" style=\"flex:1;\"><button id=\"add-album\" class=\"rm-btn\" data-i18n=\"rm_add_btn\" style=\"flex-shrink:0;padding:5px 12px;\">+ Add</button></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_library\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-filter-bar\" class=\"rm-filter-bar\"><button class=\"rm-filter-btn active\" data-filter=\"\" data-i18n=\"rm_all_songs\">All Songs</button><button class=\"rm-filter-btn\" data-filter=\"__liked\" data-i18n=\"rm_liked\">&#9829; Liked</button></div>\r\n    <div id=\"song-list\" style=\"display:flex;flex-direction:column;gap:1px;\"></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_add_song_title\">Add Song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:5px;\">\r\n      <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_title_ph\" placeholder=\"Title *\" maxlength=\"50\">\r\n      <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_artist_ph\" placeholder=\"Artist\" maxlength=\"30\">\r\n      <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_url_ph\" placeholder=\"URL (.mp3  .ogg  .wav)\">\r\n      <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;\">\r\n      <select id=\"song-album-select\" class=\"rm-sel\"><option value=\"\" data-i18n=\"rm_no_album\">No Album</option></select>\r\n      <div style=\"background:rgba(3,8,18,0.6);border-radius:7px;padding:8px;border:1px solid rgba(122,66,244,0.08);\">\r\n        <div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;\"><span style=\"font-family:Orbitron,monospace;font-size:0.66em;font-weight:700;color:rgba(122,66,244,0.5);letter-spacing:0.1em;\" data-i18n=\"rm_lrc_sync\">LRC SYNC</span><span id=\"lrc-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.6);\"></span></div>\r\n        <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;margin-bottom:5px;\">\r\n        <textarea id=\"song-lyrics-input\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\" style=\"width:100%;box-sizing:border-box;background:rgba(3,8,18,0.8);border:1px solid rgba(122,66,244,0.15);border-radius:4px;color:#bde0f0;padding:5px 7px;font-size:11px;outline:none;height:60px;resize:vertical;font-family:monospace;\"></textarea>\r\n        <label style=\"display:flex;align-items:center;gap:5px;cursor:pointer;font-size:0.78em;color:rgba(122,66,244,0.45);margin-top:5px;\"><input id=\"song-autosync\" type=\"checkbox\" style=\"accent-color:#7A42F4;\"> <span data-i18n=\"rm_autosync\">Auto-play &amp; sync when added</span></label>\r\n      </div>\r\n      <div style=\"display:flex;gap:6px;margin-top:2px;\"><button id=\"add-song\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_add_song_btn\">&#x2B22; Add Song</button><button id=\"save-song-btn\" class=\"rm-btn-primary\" data-i18n=\"rm_save_btn\">&#x2713; Save</button></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_chat_sync_title\">Chat Sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_enable_chat_sync\">Enable Chat Sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.1);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_mixed_sync\">Mixed Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_me_bots\">ME+BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_mixed_sync_example\">You: line &#8594; Bots: line &#8594; You ...</div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_bots_only_sync\">Bots Only Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_bots\">BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_bots_only_example\">Bot1: line 1 &bull; Bot2: line 2 &bull; Bot3: line 3 ...</div>\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_unified_sync\">Unified Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_all\">ALL</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_unified_example\">You + every bot post the same line at the same moment</div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.07);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_auto_delay\">Auto Delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_sync_bot\">Sync Bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" style=\"background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.7em;font-weight:700;padding:5px 18px;letter-spacing:0.1em;font-family:Orbitron,monospace;transition:all 0.2s;border-radius:4px;\">OFF</button></div>\r\n    <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span style=\"font-size:0.8em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_delay\">Delay</span><label class=\"slider\"><span class=\"slider-value\"></span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\" style=\"width:110px;\"></label></div>\r\n    <div style=\"display:flex;gap:6px;margin-top:6px;\"><button id=\"bm-test-chat\" style=\"flex:1;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:5px 10px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_test_chat\">&#9654; Test Chat</button><span id=\"bm-test-chat-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.45);align-self:center;\"></span></div>\r\n    <div style=\"margin-top:6px;\"><button id=\"bm-send-all-lyrics\" style=\"width:100%;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:6px 10px;font-family:Rajdhani,sans-serif;letter-spacing:0.05em;transition:all 0.15s;\">&#9836; Send All Lyrics: OFF</button><div id=\"bm-send-lyrics-status\" style=\"font-size:0.66em;color:rgba(122,66,244,0.45);text-align:center;margin-top:3px;\"></div></div>\r\n    <div id=\"bm-dbg-wrap\" style=\"display:none;margin-top:5px;\"><pre id=\"bm-dbg-box\" style=\"background:#13101e;border:1px solid rgba(122,66,244,0.15);border-radius:4px;padding:5px 7px;font-size:0.63em;color:rgba(122,66,244,0.45);font-family:monospace;white-space:pre-wrap;max-height:110px;overflow-y:auto;margin:0;\"></pre></div>\r\n    <button id=\"bm-dbg-toggle\" style=\"width:100%;margin-top:4px;background:rgba(122,66,244,0.03);border:1px solid rgba(122,66,244,0.08);border-radius:4px;color:rgba(122,66,244,0.38);cursor:pointer;font-size:0.66em;padding:3px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_show_debug\">Show Debug Log</button>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_backup_restore\">Backup &amp; Restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:6px;\">\r\n      <span style=\"font-size:0.77em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_backup_desc\">Export your library to JSON — restore anytime.</span>\r\n      <div style=\"display:flex;gap:6px;margin-top:4px;\"><button id=\"music-export-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_export\">&#x2B07; Export</button><button id=\"music-import-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_import\">&#x2B06; Import</button><input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\"></div>\r\n      <div id=\"music-backup-status\" style=\"font-size:0.73em;color:rgba(122,66,244,0.6);text-align:center;min-height:16px;\"></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n</div></div>";
+  const styles_ref = "@import \"https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700&family=Poppins:wght@400;500;600;700;800&display=swap\";\r\n\r\n*{user-select:none;box-sizing:border-box;}\r\n\r\n:root{\r\n  --bg:#1A1A24;\r\n  --bg-glass:rgba(26,26,36,0.82);\r\n  --accent:#7A42F4;\r\n  --accent2:#3A86FF;\r\n  --border:rgba(255,255,255,0.07);\r\n  --border-active:rgba(122,66,244,0.5);\r\n  --text:#FFFFFF;\r\n  --text-muted:rgba(200,200,215,0.75);\r\n  --text-dim:rgba(200,200,215,0.4);\r\n  --red:#ff4d6d;\r\n  --green:#00d68f;\r\n  --yellow:#ffd60a;\r\n  --font-head:'Poppins','Inter',sans-serif;\r\n  --font-body:'Inter','Poppins',sans-serif;\r\n}\r\n\r\n@keyframes slide-in-top{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}\r\n@keyframes toclose{from{opacity:1;transform:scale(1) translateY(0);}to{opacity:0;transform:scale(0.98) translateY(-4px);}}\r\n@keyframes toopen{from{opacity:0;transform:scale(0.98) translateY(-4px);}to{opacity:1;transform:scale(1) translateY(0);}}\r\n@keyframes dot-blink{0%,100%{opacity:1;}50%{opacity:0.2;}}\r\n@keyframes shimmer{0%{background-position:-200% 0;}100%{background-position:200% 0;}}\r\n@keyframes ripple{from{opacity:.4;transform:scale(0);}to{opacity:0;transform:scale(1.4);}}\r\n\r\nhtml,body{margin:0;padding:0;overflow:hidden;background:transparent;}\r\n*{font-family:var(--font-body);color:var(--text);opacity:1;}\r\nh1,h2{margin:0;font-family:var(--font-head);}\r\np{margin:0;color:var(--text-muted);}\r\nbutton{border:none;outline:none;cursor:pointer;}\r\n\r\n#menu-container{\r\n  position:absolute;top:50%;left:50%;\r\n  transform:translate(-50%,-50%);\r\n  width:1280px;height:720px;\r\n  display:flex;justify-content:center;align-items:center;\r\n}\r\n\r\n#menu-wrapper{\r\n  position:relative;\r\n  width:92%;height:90%;\r\n  background:rgba(25,25,25,0.45);\r\n  border:1px solid rgba(255,255,255,0.2);\r\n  border-radius:20px;\r\n  overflow:hidden;\r\n  backdrop-filter:blur(25px);\r\n  -webkit-backdrop-filter:blur(25px);\r\n  box-shadow:0 8px 32px 0 rgba(0,0,0,0.2),inset 0 1px 1px rgba(255,255,255,0.1);\r\n  display:flex;flex-direction:column;\r\n}\r\n\r\n#menu-wrapper::before{\r\n  content:'';position:absolute;top:0;left:0;right:0;\r\n  height:1px;\r\n  background:transparent;\r\n  z-index:10;pointer-events:none;display:none;\r\n}\r\n\r\n#menu-wrapper.toclose{animation:150ms ease-in toclose forwards;}\r\n#menu-wrapper.toopen{animation:200ms cubic-bezier(.34,1.4,.64,1) toopen forwards;}\r\n\r\nheader{\r\n  position:relative;z-index:5;\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  height:46px;min-height:46px;\r\n  padding:0 18px;\r\n  background:transparent;\r\n  border-bottom:1px solid var(--border);\r\n  flex-shrink:0;\r\n}\r\n\r\nheader .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.75em;\r\n  font-weight:700;\r\n  letter-spacing:0.22em;\r\n  text-transform:uppercase;\r\n  background:linear-gradient(90deg,#7A42F4,#3A86FF,#a07af4,#7A42F4);\r\n  background-size:200% auto;\r\n  -webkit-background-clip:text;-webkit-text-fill-color:transparent;\r\n  animation:shimmer 5s linear infinite;\r\n}\r\n\r\nheader #credits{display:flex;align-items:center;gap:10px;height:46px;}\r\nheader #logo{display:block;height:28px;width:auto;filter:drop-shadow(0 0 6px rgba(122,66,244,0.6));}\r\n\r\nheader #close-button{\r\n  display:flex;align-items:center;justify-content:center;\r\n  width:26px;height:26px;\r\n  fill:none;stroke:var(--text-dim);stroke-width:1.6;\r\n  cursor:pointer;\r\n  border-radius:5px;\r\n  border:1px solid transparent;\r\n  background:transparent;\r\n  transition:all 160ms;\r\n  padding:5px;\r\n}\r\nheader #close-button:hover{\r\n  stroke:var(--text);background:rgba(255,77,109,0.1);\r\n  border-color:rgba(255,77,109,0.35);\r\n}\r\n\r\nmain{\r\n  display:flex;flex-direction:row;\r\n  flex:1;min-height:0;\r\n  position:relative;z-index:2;\r\n}\r\n\r\n#navbar-container{\r\n  display:flex;flex-direction:column;\r\n  width:172px;min-width:172px;\r\n  background:rgba(15,15,15,0.3);backdrop-filter:blur(25px);-webkit-backdrop-filter:blur(25px);\r\n  border-right:1px solid rgba(255,255,255,0.1);\r\n  padding:0;\r\n  gap:0;\r\n  position:relative;flex-shrink:0;overflow:hidden;\r\n  justify-content:space-evenly;\r\n  }\r\n\r\n.open-menu{\r\n  position:relative;\r\n  display:flex;flex-direction:row;\r\n  align-items:center;justify-content:flex-start;\r\n  gap:10px;\r\n  width:100%;height:66px;\r\n  background:transparent;\r\n  border:none;\r\n  border-left:3px solid transparent;\r\n  border-bottom:1px solid rgba(255,255,255,0.05);\r\n  color:var(--text-dim);opacity:0.7;\r\n  transition:color 140ms,border-color 140ms,background 140ms,transform 100ms,opacity 100ms;\r\n  cursor:pointer;\r\n  padding:0 18px;\r\n  overflow:hidden;box-sizing:border-box;\r\n}\r\n\r\n.open-menu:hover{\r\n  color:rgba(255,255,255,0.85);opacity:1;\r\n  background:rgba(255,255,255,0.04);\r\n  border-left-color:rgba(122,66,244,0.5);\r\n}\r\n\r\n.open-menu:active{\r\n  transform:scale(0.96);\r\n  opacity:0.75;\r\n}\r\n\r\n.open-menu.active{\r\n  color:var(--text);\r\n  background:rgba(122,66,244,0.12);\r\n  border-left:3px solid var(--accent);\r\n  pointer-events:none;\r\n}\r\n\r\n.open-menu.active .nav-icon{\r\n  filter:drop-shadow(0 0 5px rgba(122,66,244,0.9));\r\n}\r\n\r\n.nav-icon{width:24px;height:24px;transition:all 140ms;flex-shrink:0;}\r\n\r\n.nav-label{\r\n  font-family:var(--font-head);\r\n  font-size:0.93em;\r\n  letter-spacing:0.04em;\r\n  font-weight:700;\r\n  text-transform:uppercase;\r\n  line-height:1;\r\n  transition:all 140ms;\r\n}\r\n\r\n.open-menu .ripple{\r\n  position:absolute;z-index:5;\r\n  background:rgba(122,66,244,0.15);\r\n  border-radius:50%;opacity:0;\r\n  animation:ripple 550ms;\r\n  pointer-events:none;\r\n}\r\n\r\n#page-container{\r\n  flex:1;min-width:0;\r\n  overflow-y:auto;overflow-x:hidden;\r\n  scroll-behavior:smooth;\r\n  padding:0;\r\n}\r\n\r\n#page-container::-webkit-scrollbar{width:2px;}\r\n#page-container::-webkit-scrollbar-track{background:transparent;}\r\n#page-container::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.25);border-radius:2px;}\r\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(122,66,244,0.45);}\r\n\r\n.menu-page{display:none;}\r\n.menu-page.opened{\r\n  display:block;\r\n  padding:16px 20px;\r\n  animation:slide-in-top 140ms ease-out;\r\n}\r\n\r\n.menu-page .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:1.05em;font-weight:700;\r\n  letter-spacing:0.05em;\r\n  color:var(--text);\r\n  text-transform:uppercase;\r\n  margin-bottom:2px;\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page .page-title::before{\r\n  content:'';display:inline-block;\r\n  width:2px;height:0.9em;\r\n  background:linear-gradient(180deg,var(--accent),var(--accent2));\r\n  border-radius:2px;flex-shrink:0;\r\n}\r\n\r\n.page-description{\r\n  font-size:0.75em;color:var(--text-dim);\r\n  margin-bottom:14px;\r\n  letter-spacing:0.01em;\r\n  padding-left:10px;\r\n  font-weight:400;\r\n}\r\n\r\n.menu-page>.section{\r\n  margin-bottom:10px;\r\n  background:transparent;\r\n  border:1px solid var(--border);\r\n  border-radius:7px;\r\n  overflow:visible;\r\n  transition:border-color 200ms;\r\n  position:relative;\r\n}\r\n.menu-page>.section:hover{border-color:rgba(122,66,244,0.22);}\r\n\r\n.section-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.68em;\r\n  font-weight:600;\r\n  letter-spacing:0.12em;\r\n  text-transform:uppercase;\r\n  color:rgba(122,66,244,0.6);\r\n  padding:6px 12px;\r\n  background:rgba(122,66,244,0.03);\r\n  border-bottom:1px solid var(--border);\r\n  display:flex;align-items:center;gap:6px;\r\n}\r\n.section-title::before{\r\n  content:'';width:3px;height:3px;\r\n  background:var(--accent);border-radius:50%;\r\n  box-shadow:0 0 5px var(--accent);flex-shrink:0;\r\n  opacity:0.7;\r\n}\r\n\r\n.section-content{display:flex;flex-direction:column;gap:0;}\r\n.small-section{font-size:0.85rem;}\r\n\r\n.section-content.split{flex-direction:row;gap:0;}\r\n.content-split{flex:1;display:flex;flex-direction:column;}\r\n.content-split:first-child{border-right:1px solid rgba(255,255,255,0.05);}\r\n\r\n.content-option{\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  min-height:42px;padding:6px 12px;\r\n  border-bottom:1px solid rgba(255,255,255,0.03);\r\n  transition:background 150ms;\r\n  position:relative;\r\n  overflow:visible;\r\n}\r\n.content-option:last-child{border-bottom:none;}\r\n.content-option:hover{background:rgba(122,66,244,0.04);}\r\n\r\n.content-option.centered{justify-content:center;}\r\n.content-option.left-flex{justify-content:flex-start;gap:12px;}\r\n.content-option.text{justify-content:flex-start;}\r\n\r\n.option-title{\r\n  font-size:1.06em;\r\n  font-weight:500;\r\n  color:rgba(215,215,230,0.8);\r\n  letter-spacing:0.01em;\r\n  transition:color 150ms;\r\n}\r\n.content-option:hover .option-title{color:#FFFFFF;}\r\n\r\n.option-content{display:flex;align-items:center;gap:7px;}\r\n\r\n.text-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.8em;color:var(--accent);\r\n  font-weight:600;\r\n}\r\n.simplified{\r\n  font-family:var(--font-body)!important;\r\n  font-size:0.78em!important;\r\n  color:var(--text-dim)!important;\r\n  font-weight:400!important;\r\n  line-height:1.6;\r\n}\r\n.highlight{color:var(--accent)!important;}\r\n\r\n\r\n.hotkeyInput{\r\n  min-width:48px;height:24px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;font-weight:600;\r\n  color:rgba(200,175,255,0.8);\r\n  letter-spacing:0.04em;\r\n  padding:0 7px;\r\n  transition:all 140ms;\r\n  display:flex;align-items:center;justify-content:center;\r\n}\r\n.hotkeyInput:hover{\r\n  background:rgba(122,66,244,0.12);\r\n  border-color:rgba(122,66,244,0.5);\r\n}\r\n.hotkeyInput.active{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:var(--accent);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.2);\r\n  animation:dot-blink 0.8s ease infinite;\r\n}\r\n.hotkeyInput.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n.switch-checkbox{\r\n  position:relative;width:52px;height:30px;flex-shrink:0;\r\n}\r\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n\r\n.switch-checkbox span{\r\n  position:absolute;inset:0;\r\n  background:rgba(255,255,255,0.05);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:10px;\r\n  cursor:pointer;\r\n  transition:all 220ms;\r\n}\r\n.switch-checkbox span::before{\r\n  content:'';position:absolute;\r\n  left:3px;top:50%;transform:translateY(-50%);\r\n  width:20px;height:20px;\r\n  background:rgba(255,255,255,0.25);\r\n  border-radius:50%;\r\n  transition:all 220ms cubic-bezier(.34,1.4,.64,1);\r\n}\r\n.switch-checkbox input:checked + span{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:rgba(122,66,244,0.55);\r\n}\r\n.switch-checkbox input:checked + span::before{\r\n  left:calc(100% - 23px);\r\n  background:#7A42F4;\r\n  box-shadow:0 0 7px rgba(122,66,244,0.7);\r\n}\r\n\r\n.option-button{\r\n  padding:5px 16px;\r\n  background:rgba(122,66,244,0.1);\r\n  border:1px solid rgba(122,66,244,0.35);\r\n  border-radius:5px;\r\n  font-family:var(--font-head);\r\n  font-size:0.66em;font-weight:600;\r\n  letter-spacing:0.06em;\r\n  color:#FFFFFF;\r\n  text-transform:uppercase;\r\n  transition:all 140ms;\r\n}\r\n.option-button:hover{\r\n  background:rgba(122,66,244,0.22);\r\n  border-color:rgba(122,66,244,0.65);\r\n  box-shadow:0 0 12px rgba(122,66,244,0.2);\r\n}\r\n\r\n.ryn-social-btn:hover{\r\n  background:rgba(122,66,244,0.22)!important;\r\n  border-color:rgba(122,66,244,0.7)!important;\r\n  box-shadow:0 0 12px rgba(122,66,244,0.25);\r\n  transform:translateY(-1px);\r\n}\r\n.ryn-social-btn svg{width:19px;height:19px;}\r\n.ryn-social-big:hover{\r\n  background:rgba(122,66,244,0.13)!important;\r\n  border-color:rgba(122,66,244,0.8)!important;\r\n  box-shadow:0 0 22px rgba(122,66,244,0.3);\r\n  transform:translateY(-3px);\r\n}\r\n.ryn-social-big svg{width:44px;height:44px;}\r\n\r\n.option-button.red{\r\n  background:rgba(255,77,109,0.08)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n.option-button.red:hover{\r\n  background:rgba(255,77,109,0.15)!important;\r\n  border-color:rgba(255,77,109,0.6)!important;\r\n  box-shadow:0 0 10px rgba(255,77,109,0.2)!important;\r\n}\r\n\r\n.input{\r\n  height:24px;width:175px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-body);\r\n  font-size:0.72em;font-weight:400;\r\n  color:var(--text);\r\n  text-align:center;\r\n  transition:all 140ms;\r\n  padding:0 7px;\r\n}\r\n.input:focus{\r\n  outline:none;\r\n  border-color:rgba(122,66,244,0.5);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.1);\r\n  background:rgba(122,66,244,0.05);\r\n}\r\n\r\ninput[id][type=\"color\"]{\r\n  width:46px;height:22px;\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  padding:1px;\r\n  background:transparent;\r\n  cursor:pointer;\r\n  transition:border-color 140ms;\r\n}\r\ninput[id][type=\"color\"]:hover{border-color:rgba(122,66,244,0.5);}\r\n\r\n.reset-color{\r\n  width:16px;height:9px;\r\n  background:var(--data-color,var(--accent));\r\n  border-radius:5px;\r\n  border:none;cursor:pointer;\r\n  box-shadow:0 0 4px currentColor;\r\n  flex-shrink:0;\r\n}\r\n\r\n.slider{display:flex;align-items:center;gap:7px;}\r\n.slider input[type=\"range\"]{\r\n  -webkit-appearance:none;\r\n  width:100px;height:2px;\r\n  background:linear-gradient(90deg,var(--accent2) var(--val,50%),rgba(255,255,255,0.07) var(--val,50%));\r\n  border-radius:2px;\r\n  border:none;outline:none;cursor:pointer;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;\r\n  width:11px;height:11px;\r\n  border-radius:50%;\r\n  background:var(--accent2);\r\n  box-shadow:0 0 5px rgba(58,134,255,0.5);\r\n  border:2px solid var(--bg);\r\n  transition:transform 120ms;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb:hover{transform:scale(1.25);}\r\n.slider-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;color:var(--accent2);\r\n  min-width:28px;text-align:right;font-weight:600;\r\n}\r\n\r\n.disconnect-button{\r\n  width:16px;height:16px;\r\n  fill:rgba(255,255,255,0.12);\r\n  cursor:pointer;transition:fill 180ms;flex-shrink:0;\r\n}\r\n.content-option:hover .disconnect-button{fill:rgba(255,77,109,0.45);}\r\n.disconnect-button:hover{fill:#cc4444!important;}\r\n\r\n.key-badge{\r\n  display:inline-flex;align-items:center;justify-content:center;\r\n  min-width:24px;height:18px;padding:0 4px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:3px;\r\n  font-family:var(--font-head);\r\n  font-size:0.6em;font-weight:600;\r\n  color:rgba(180,155,255,0.75);\r\n}\r\n\r\n#bot-container{padding:2px 0;}\r\n\r\n.icon{width:48px;height:48px;}\r\n.small-icon{width:16px;height:16px;}\r\n\r\n.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.3)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n#ryn-search-wrap{position:relative;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:0 10px;height:30px;transition:border-color 160ms,box-shadow 160ms;min-width:185px;}\r\n#ryn-search-wrap:focus-within{border-color:rgba(122,66,244,0.55);box-shadow:0 0 0 2px rgba(122,66,244,0.12);background:rgba(122,66,244,0.05);}\r\n#ryn-search-input{flex:1;background:transparent;border:none;outline:none;font-family:var(--font-body);font-size:0.75em;color:var(--text);min-width:0;}\r\n#ryn-search-input::placeholder{color:rgba(200,200,215,0.3);}\r\n#ryn-search-clear{font-size:0.65em;color:rgba(200,200,215,0.3);cursor:pointer;flex-shrink:0;display:none;transition:color 120ms;line-height:1;}\r\n#ryn-search-clear:hover{color:rgba(255,77,109,0.8);}\r\n#ryn-search-dropdown{display:none;position:absolute;top:calc(100% + 6px);right:0;width:280px;max-height:320px;overflow-y:auto;background:rgba(18,15,30,0.98);border:1px solid rgba(122,66,244,0.3);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.7);z-index:9999;padding:4px;}\r\n#ryn-search-dropdown::-webkit-scrollbar{width:2px;}\r\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.3);border-radius:2px;}\r\n.ryn-si{display:flex;flex-direction:column;gap:2px;padding:7px 10px;border-radius:5px;cursor:pointer;transition:background 120ms;border:1px solid transparent;}\r\n.ryn-si:hover,.ryn-si.ryn-fx{background:rgba(122,66,244,0.12);border-color:rgba(122,66,244,0.22);}\r\n.ryn-st{font-size:0.8em;font-weight:600;color:#FFFFFF;line-height:1.3;}\r\n.ryn-st mark{background:rgba(122,66,244,0.4);color:#FFFFFF;border-radius:2px;padding:0 1px;}\r\n.ryn-sp{font-size:0.68em;color:rgba(122,66,244,0.55);font-family:var(--font-head);letter-spacing:0.06em;text-transform:uppercase;}\r\n.ryn-se{text-align:center;padding:18px 12px;font-size:0.77em;color:rgba(200,200,215,0.3);font-style:italic;}\r\n.ryn-sl{font-size:0.62em;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(122,66,244,0.4);padding:5px 10px 2px;margin-top:2px;}\r\n\r\n.menu-page[data-id=\"3\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\n\r\n.menu-page[data-id=\"3\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"3\"] .option-title{\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n  transition:color 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .option-content{gap:9px;}\r\n\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]{\r\n  width:21px;height:21px;padding:0;\r\n  border:none;border-radius:50%;\r\n  background:transparent;cursor:pointer;overflow:hidden;\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.16),0 2px 5px rgba(0,0,0,0.4);\r\n  transition:transform 160ms ease,box-shadow 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch-wrapper{padding:0;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch{border:none;border-radius:50%;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]:hover{\r\n  transform:scale(1.14);\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.34),0 3px 9px rgba(0,0,0,0.55);\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) input[type=\"color\"]{\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.3),0 0 9px rgba(122,66,244,0.4);\r\n}\r\n\r\n.menu-page[data-id=\"3\"] .reset-color{\r\n  width:11px;height:11px;border-radius:50%;\r\n  opacity:0;\r\n  transition:opacity 160ms ease,transform 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover .reset-color{opacity:0.85;}\r\n.menu-page[data-id=\"3\"] .reset-color:hover{opacity:1;transform:scale(1.28);}\r\n\r\n.menu-page[data-id=\"3\"] .section-title{\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page[data-id=\"3\"] .section-title::before{\r\n  content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::before{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\nlabel.option-title{\r\n  cursor:pointer;user-select:none;\r\n  flex:1;min-width:0;\r\n  transition:color 150ms ease;\r\n}\r\nlabel.option-title:hover{color:var(--text);}\r\nlabel.option-title:active{opacity:0.7;}\r\n\r\n.menu-page[data-id=\"2\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"2\"] .section-title{\r\n  display:flex;flex-direction:column;align-items:flex-start;gap:3px;\r\n}\r\n.sec-sub{\r\n  font-family:var(--font-body);\r\n  font-size:0.78em;font-weight:400;letter-spacing:0;\r\n  text-transform:none;color:var(--text-dim);\r\n  line-height:1.45;\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .section-title::after{\r\n  content:'';position:absolute;top:14px;right:14px;\r\n  width:5px;height:5px;border-radius:50%;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .section{position:relative;}\r\n.menu-page[data-id=\"2\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::after{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\n.menu-page[data-id=\"1\"] .key-grid{\n  display:grid;\n  grid-template-columns:repeat(auto-fill,minmax(228px,1fr));\n  gap:8px;\n  padding:10px 12px;\n}\n.menu-page[data-id=\"1\"] .key-tile{\n  display:flex;align-items:center;justify-content:space-between;gap:10px;\n  min-height:38px;padding:7px 10px;\n  background:rgba(255,255,255,0.02);\n  border:1px solid rgba(255,255,255,0.06);\n  border-radius:8px;\n  transition:background 150ms,border-color 150ms,transform 150ms;\n}\n.menu-page[data-id=\"1\"] .key-tile:hover{\n  background:rgba(122,66,244,0.07);\n  border-color:rgba(122,66,244,0.4);\n  transform:translateY(-1px);\n}\n.menu-page[data-id=\"1\"] .key-tile .option-title{\n  font-size:0.86em;font-weight:500;\n  color:rgba(215,215,230,0.85);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.menu-page[data-id=\"1\"] .key-tile .hotkeyInput{\n  min-width:58px;height:26px;flex-shrink:0;\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.active){\n  border-color:var(--accent);\n  background:rgba(122,66,244,0.1);\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.red){\n  border-color:rgba(255,77,109,0.4);\n  background:rgba(255,77,109,0.05);\n}\n\n.sub-options{\n  border-left:2px solid rgba(122,66,244,0.35);\n  margin:0 0 0 12px;\n  transition:opacity 200ms;\n}\n.sub-options .content-option{\n  padding-left:16px;\n  min-height:38px;\n}\n.sub-options .option-title{\n  font-size:0.95em;\n  color:rgba(200,200,215,0.7);\n}\n.sub-options .content-option:last-child{border-bottom:none;}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:0.3;\n  pointer-events:none;\n}\n";
+  const Game_ref = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton,\r\n#ageBarBody,\r\n#ageBar,\r\n#ageText,\r\n#upgradeCounter,\r\n#chatButton {\r\n    display: none!important;\r\n}\r\n\r\n#foodDisplay,\r\n#woodDisplay,\r\n#stoneDisplay,\r\n#scoreDisplay,\r\n.resourceDisplay,\r\n#mapDisplay,\r\n#leaderboard,\r\n.gameButton,\r\n#storeButton,\r\n#allianceButton,\r\n#leaderboardButton {\r\n    opacity: 0.45;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    border: 2px solid rgba(80,30,160,0.45) !important;\r\n    border-radius: 4px !important;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 62%;\r\n    left: 50%;\r\n    transform: translate(-50%, -50%);\r\n    font-size: 1.05em;\r\n    font-weight: 700;\r\n    color: #b98cff;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
+  const Store_ref = "#ryn-store-container {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 10px;\r\n    max-width: 400px;\r\n    width: 100%;\r\n\r\n    position: absolute;\r\n    top: 50%;\r\n    left: 50%;\r\n    transform: translate(-50%, -50%) scale(0.9);\r\n}\r\n\r\n#ryn-store-toggle {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    padding: 10px;\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    color: #fff;\r\n    border-radius: 4px;\r\n    cursor: pointer;\r\n    font-size: 20px;\r\n    pointer-events: all;\r\n}\r\n\r\n#ryn-store-items {\r\n    background-color: rgba(0, 0, 0, 0.15);\r\n    max-height: 200px;\r\n    height: 100%;\r\n    padding: 10px;\r\n    overflow-y: scroll;\r\n    border-radius: 4px;\r\n    pointer-events: all;\r\n    scrollbar-width: none;\r\n}\r\n\r\n#ryn-store-items::-webkit-scrollbar {\r\n    display: none;\r\n    width: 0;\r\n    height: 0;\r\n    background: transparent;\r\n}\r\n\r\n.storeItemContainer {\r\n    display: flex;\r\n    align-items: center;\r\n    gap: 10px;\r\n    padding: 5px;\r\n    height: 50px;\r\n    box-sizing: border-box;\r\n    overflow: hidden;\r\n}\r\n\r\n.storeHat {\r\n    display: flex;\r\n    justify-content: center;\r\n    align-items: center;\r\n    width: 45px;\r\n    height: 45px;\r\n    margin-top: -5px;\r\n    pointer-events: none;\r\n}\r\n\r\n.storeItemName {\r\n    color: #fff;\r\n    font-size: 20px;\r\n}\r\n\r\n.equipButton {\r\n    margin-left: auto;\r\n    color: #80eefc;\r\n    cursor: pointer;\r\n    font-size: 35px;\r\n}";
   const Hats = {
     [0]: {
       index: 0,
@@ -2390,7 +2390,7 @@ window.grbtp = 35;
       return "ignoreCollision" in Items[id];
     }
   };
-  const DataHandler_default = DataHandler;
+  const DataHandler_ref = DataHandler;
   class ObjectItem {
     id;
     pos;
@@ -2399,7 +2399,7 @@ window.grbtp = 35;
     constructor(id, x, y, angle, scale) {
       this.id = id;
       this.pos = {
-        current: new Vector_default(x, y)
+        current: new Vector_ref(x, y)
       };
       this.angle = angle;
       this.scale = scale;
@@ -2493,7 +2493,7 @@ window.grbtp = 35;
     getDamage() {
       if (this.isSpike) {
         const type = this.type;
-        return DataHandler_default.getItem(type).damage;
+        return DataHandler_ref.getItem(type).damage;
       }
       return 0;
     }
@@ -2504,9 +2504,9 @@ window.grbtp = 35;
   class Entity {
     id=-1;
     pos={
-      previous: new Vector_default,
-      current: new Vector_default,
-      future: new Vector_default
+      previous: new Vector_ref,
+      current: new Vector_ref,
+      future: new Vector_ref
     };
     angle=0;
     scale=0;
@@ -2532,7 +2532,7 @@ window.grbtp = 35;
     }
     getFuturePosition(speed) {
       const pos = this.pos.current.copy();
-      return pos.add(Vector_default.fromAngle(this.move_dir, speed));
+      return pos.add(Vector_ref.fromAngle(this.move_dir, speed));
     }
     colliding(object, radius) {
       const {previous: a0, current: a1, future: a2} = this.pos;
@@ -2571,7 +2571,7 @@ window.grbtp = 35;
       return true;
     }
   }
-  const Entity_default = Entity;
+  const Entity_ref = Entity;
   class EnemyManager {
     client;
     dangerousEnemies=[];
@@ -2744,7 +2744,7 @@ window.grbtp = 35;
           trappedNow = true;
         }
       }
-      const tick = this.client._ModuleHandler?.tickCount ?? 0;
+      const tick = this.client._Core?.tickCount ?? 0;
       if (trappedNow) {
         target._lockedByMeUntil = tick + 4;
         return true;
@@ -2791,7 +2791,7 @@ window.grbtp = 35;
       target.isTrapped = false;
       target.trappedInPrev = target.trappedIn;
       target.trappedIn = null;
-      const {ObjectManager: ObjectManager, PlayerManager: PlayerManager, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const {ObjectManager: ObjectManager, PlayerManager: PlayerManager, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       const pos1 = myPlayer.pos.current;
       const pos2 = target.pos.current;
       const distanceToTarget = pos1.distance(pos2);
@@ -2909,8 +2909,8 @@ window.grbtp = 35;
           const {primary: primary, secondary: secondary} = myPlayer.weapon;
           if (isPlayerObject && object.isDestroyable && secondary === 10 && primary !== null && primary !== 8) {
             const damage = myPlayer.getBuildingDamage(secondary, true);
-            const primaryRange = DataHandler_default.getWeapon(primary).range + target.hitScale;
-            const secondaryRange = DataHandler_default.getWeapon(secondary).range + object.hitScale;
+            const primaryRange = DataHandler_ref.getWeapon(primary).range + target.hitScale;
+            const secondaryRange = DataHandler_ref.getWeapon(secondary).range + object.hitScale;
             if (myPlayer.collidingSimple(target, primaryRange) && myPlayer.collidingSimple(object, secondaryRange) && object.health <= damage) {
               const itemType = 4;
               const spikeID = myPlayer.getItemByType(itemType);
@@ -3042,7 +3042,7 @@ window.grbtp = 35;
       this.handleNearestDangerAnimal(animal);
     }
     attemptSpikePlacement() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+      const {_Core: ModuleHandler} = this.client;
       const placementAngles = this.nearestSpikePlacerAngle;
       if (placementAngles === null) {
         return;
@@ -3118,7 +3118,7 @@ window.grbtp = 35;
         if (possibleAngles.length !== 0) {
           this.nearestSpikePlacerAngle = possibleAngles;
         }
-        if (Settings_default._autoSync) {
+        if (Settings_ref._autoSync) {
           for (let i = 0; i < PlayerManager.players.length; i++) {
             const player = PlayerManager.players[i];
             if (myPlayer.isMyPlayerByID(player.id)) {
@@ -3156,14 +3156,14 @@ window.grbtp = 35;
         }
       }
       if (this.client.isOwner) {
-        GameUI_default.updateSpikeDamage(actualSpikeDamage);
-        GameUI_default.updatePotentialDamage(`${this.potentialDamage}, ${this.primaryDamage}`);
-        GameUI_default.updateDangerState(`${this.detectedDangerEnemy}, ${this.detectedEnemy}, ${this.dangerWithoutSoldier}, ${this.rangedBowInsta}`);
-        GameUI_default.updateCollideSpike(this.collidingSpike);
+        GameUI_ref.updateSpikeDamage(actualSpikeDamage);
+        GameUI_ref.updatePotentialDamage(`${this.potentialDamage}, ${this.primaryDamage}`);
+        GameUI_ref.updateDangerState(`${this.detectedDangerEnemy}, ${this.detectedEnemy}, ${this.dangerWithoutSoldier}, ${this.rangedBowInsta}`);
+        GameUI_ref.updateCollideSpike(this.collidingSpike);
       }
     }
   }
-  const EnemyManager_default = EnemyManager;
+  const EnemyManager_ref = EnemyManager;
   class LeaderboardManager {
     client;
     list=new Set;
@@ -3187,7 +3187,7 @@ window.grbtp = 35;
       }
     }
   }
-  const LeaderboardManager_default = LeaderboardManager;
+  const LeaderboardManager_ref = LeaderboardManager;
   const HatPredictor = new class {
     transitions=new Map;
     train(history) {
@@ -3218,10 +3218,10 @@ window.grbtp = 35;
       return predictedHat;
     }
   };
-  const HatPredictor_default = HatPredictor;
+  const HatPredictor_ref = HatPredictor;
   const scale_value = window.grbtp;
   delete window.grbtp;
-  class Player extends Entity_default {
+  class Player extends Entity_ref {
     currentItem=-1;
     clanName=null;
     isLeader=false;
@@ -3364,7 +3364,7 @@ window.grbtp = 35;
       this.angle = angle;
       this.currentItem = currentItem;
       this.weapon.oldCurrent = this.weapon.current;
-      const weaponType = DataHandler_default.getWeapon(this.weapon.current).itemType;
+      const weaponType = DataHandler_ref.getWeapon(this.weapon.current).itemType;
       this.oldWeapon[weaponType] = this.weapon.current;
       this.weapon.current = currentWeapon;
       this.variant.current = weaponVariant;
@@ -3420,8 +3420,8 @@ window.grbtp = 35;
         this.poisonCount = Math.max(this.poisonCount - 1, 0);
       }
       if (this.futureHat === null) {
-        HatPredictor_default.train(this.hatHistory);
-        this.futureHat = HatPredictor_default.predict(hatID);
+        HatPredictor_ref.train(this.hatHistory);
+        this.futureHat = HatPredictor_ref.predict(hatID);
       }
       const reload = this.reload;
       reload[0].previous = reload[0].current;
@@ -3520,7 +3520,7 @@ window.grbtp = 35;
       if (this.currentItem !== -1) {
         return;
       }
-      const weapon = DataHandler_default.getWeapon(this.weapon.current);
+      const weapon = DataHandler_ref.getWeapon(this.weapon.current);
       const reload = this.reload[weapon.itemType];
       this.increaseReload(reload);
       if ("projectile" in weapon) {
@@ -3584,11 +3584,11 @@ window.grbtp = 35;
       const secondary = inventory[1];
       const spike = inventory[4];
       if (primary && secondary) {
-        if ("isUpgrade" in DataHandler_default.getWeapon(primary) && "isUpgrade" in DataHandler_default.getWeapon(secondary)) {
+        if ("isUpgrade" in DataHandler_ref.getWeapon(primary) && "isUpgrade" in DataHandler_ref.getWeapon(secondary)) {
           return true;
         }
       }
-      return primary && DataHandler_default.getWeapon(primary).age === 8 || secondary && DataHandler_default.getWeapon(secondary).age === 9 || spike && Items[spike].age === 9 || inventory[5] === 12 || inventory[9] === 20;
+      return primary && DataHandler_ref.getWeapon(primary).age === 8 || secondary && DataHandler_ref.getWeapon(secondary).age === 9 || spike && Items[spike].age === 9 || inventory[5] === 12 || inventory[9] === 20;
     }
     predictPrimary(id) {
       if (id === 11) {
@@ -3607,32 +3607,32 @@ window.grbtp = 35;
     }
     predictWeapons() {
       const {current: current, oldCurrent: oldCurrent} = this.weapon;
-      const weapon = DataHandler_default.getWeapon(current);
+      const weapon = DataHandler_ref.getWeapon(current);
       const type = WeaponTypeString[weapon.itemType];
       const reload = this.reload[weapon.itemType];
       const oldWeapon = this.oldWeapon[weapon.itemType];
-      const upgradedWeapon = oldWeapon === null || current !== oldWeapon && weapon.itemType === DataHandler_default.getWeapon(oldWeapon).itemType;
+      const upgradedWeapon = oldWeapon === null || current !== oldWeapon && weapon.itemType === DataHandler_ref.getWeapon(oldWeapon).itemType;
       if (reload.max === -1 || upgradedWeapon) {
         this.updateMaxReload(reload, weapon.id);
       }
       this.globalInventory[weapon.itemType] = current;
       this.variant[type] = this.variant.current;
       const currentType = this.weapon[type];
-      if (currentType === null || weapon.age > DataHandler_default.getWeapon(currentType).age) {
+      if (currentType === null || weapon.age > DataHandler_ref.getWeapon(currentType).age) {
         this.weapon[type] = current;
       }
       const primary = this.globalInventory[0];
       const secondary = this.globalInventory[1];
-      const notPrimaryUpgrade = primary === null || !("isUpgrade" in DataHandler_default.getWeapon(primary));
-      const notSecondaryUpgrade = secondary === null || !("isUpgrade" in DataHandler_default.getWeapon(secondary));
-      if (DataHandler_default.isSecondary(current) && notPrimaryUpgrade) {
+      const notPrimaryUpgrade = primary === null || !("isUpgrade" in DataHandler_ref.getWeapon(primary));
+      const notSecondaryUpgrade = secondary === null || !("isUpgrade" in DataHandler_ref.getWeapon(secondary));
+      if (DataHandler_ref.isSecondary(current) && notPrimaryUpgrade) {
         const predicted = this.predictPrimary(current);
-        if (primary === null || DataHandler_default.getWeapon(predicted).upgradeType === DataHandler_default.getWeapon(primary).upgradeType) {
+        if (primary === null || DataHandler_ref.getWeapon(predicted).upgradeType === DataHandler_ref.getWeapon(primary).upgradeType) {
           this.weapon.primary = predicted;
         }
-      } else if (DataHandler_default.isPrimary(current) && notSecondaryUpgrade) {
+      } else if (DataHandler_ref.isPrimary(current) && notSecondaryUpgrade) {
         const predicted = this.predictSecondary(current);
-        if (predicted === null || secondary === null || DataHandler_default.getWeapon(predicted).upgradeType === DataHandler_default.getWeapon(secondary).upgradeType) {
+        if (predicted === null || secondary === null || DataHandler_ref.getWeapon(predicted).upgradeType === DataHandler_ref.getWeapon(secondary).upgradeType) {
           this.weapon.secondary = predicted;
         }
       }
@@ -3653,7 +3653,7 @@ window.grbtp = 35;
       }
     }
     getWeaponVariant(id) {
-      const type = DataHandler_default.getWeapon(id || 0).itemType;
+      const type = DataHandler_ref.getWeapon(id || 0).itemType;
       const variant = this.variant[WeaponTypeString[type]];
       return {
         current: variant,
@@ -3661,7 +3661,7 @@ window.grbtp = 35;
       };
     }
     getBuildingDamage(id, isTank = false) {
-      const weapon = DataHandler_default.getWeapon(id);
+      const weapon = DataHandler_ref.getWeapon(id);
       const variant = WeaponVariants[this.getWeaponVariant(id).current];
       let damage = weapon.damage * variant.val;
       if ("sDmg" in weapon) {
@@ -3675,13 +3675,13 @@ window.grbtp = 35;
     }
     getMaxBuildingDamage(object, isTank = true) {
       const {primary: primary, secondary: secondary} = this.weapon;
-      if (DataHandler_default.isMelee(secondary) && secondary === 10 && this.isReloaded(1, 1)) {
-        if (this.collidingSimple(object, DataHandler_default.getWeapon(secondary).range + object.hitScale)) {
+      if (DataHandler_ref.isMelee(secondary) && secondary === 10 && this.isReloaded(1, 1)) {
+        if (this.collidingSimple(object, DataHandler_ref.getWeapon(secondary).range + object.hitScale)) {
           return this.getBuildingDamage(secondary, isTank);
         }
       }
-      if (DataHandler_default.isMelee(primary) && this.isReloaded(0, 1)) {
-        if (this.collidingSimple(object, DataHandler_default.getWeapon(primary).range + object.hitScale)) {
+      if (DataHandler_ref.isMelee(primary) && this.isReloaded(0, 1)) {
+        if (this.collidingSimple(object, DataHandler_ref.getWeapon(primary).range + object.hitScale)) {
           return this.getBuildingDamage(primary, isTank);
         }
       }
@@ -3701,7 +3701,7 @@ window.grbtp = 35;
         return -1;
       }
       const reloadSpeed = hat === 20 ? Hats[hat].atkSpd : 1;
-      const speed = DataHandler_default.getWeapon(id).speed * reloadSpeed;
+      const speed = DataHandler_ref.getWeapon(id).speed * reloadSpeed;
       return Math.ceil(speed / this.client.SocketManager.TICK);
     }
     getWeaponSpeedMult() {
@@ -3712,9 +3712,9 @@ window.grbtp = 35;
     }
     getMaxWeaponRange() {
       const {primary: primary, secondary: secondary} = this.weapon;
-      const primaryRange = DataHandler_default.getWeapon(primary).range;
-      if (DataHandler_default.isMelee(secondary)) {
-        const range = DataHandler_default.getWeapon(secondary).range;
+      const primaryRange = DataHandler_ref.getWeapon(primary).range;
+      if (DataHandler_ref.isMelee(secondary)) {
+        const range = DataHandler_ref.getWeapon(secondary).range;
         if (range > primaryRange) {
           return range;
         }
@@ -3725,27 +3725,27 @@ window.grbtp = 35;
       if (weaponID === null) {
         return 0;
       }
-      const range = DataHandler_default.getWeapon(weaponID).range;
-      if (DataHandler_default.isMelee(weaponID)) {
+      const range = DataHandler_ref.getWeapon(weaponID).range;
+      if (DataHandler_ref.isMelee(weaponID)) {
         return range + this.hitScale;
       }
       return range + this.collisionScale;
     }
     getMaxWeaponDamage(id, lookingShield, addBull = true) {
-      if (DataHandler_default.isMelee(id)) {
+      if (DataHandler_ref.isMelee(id)) {
         const bull = Hats[7];
         const variant = this.getWeaponVariant(id).current;
-        let damage = DataHandler_default.getWeapon(id).damage;
+        let damage = DataHandler_ref.getWeapon(id).damage;
         if (addBull) {
           damage *= bull.dmgMultO;
         }
         damage *= WeaponVariants[variant].val;
         if (lookingShield) {
-          damage *= DataHandler_default.getWeapon(11).shield;
+          damage *= DataHandler_ref.getWeapon(11).shield;
         }
         return damage;
-      } else if (DataHandler_default.isShootable(id) && !lookingShield) {
-        const projectile = DataHandler_default.getProjectile(id);
+      } else if (DataHandler_ref.isShootable(id) && !lookingShield) {
+        const projectile = DataHandler_ref.getProjectile(id);
         return projectile.damage;
       }
       return 0;
@@ -3754,17 +3754,17 @@ window.grbtp = 35;
       let knockback = 33.3;
       const {primary: primary, secondary: secondary} = this.weapon;
       if (primary != null) {
-        knockback += DataHandler_default.getWeapon(primary).knockback;
+        knockback += DataHandler_ref.getWeapon(primary).knockback;
       }
       if (secondary != null) {
-        knockback += DataHandler_default.getWeapon(secondary).knockback;
+        knockback += DataHandler_ref.getWeapon(secondary).knockback;
       }
       return knockback;
     }
     getPrimaryKnockback(target) {
       const {primary: primary} = this.weapon;
       if (primary !== null && this.isReloaded(0, 1)) {
-        const {range: range, knockback: knockback} = DataHandler_default.getWeapon(primary);
+        const {range: range, knockback: knockback} = DataHandler_ref.getWeapon(primary);
         if (this.collidingEntity(target, range)) {
           return knockback;
         }
@@ -3776,13 +3776,13 @@ window.grbtp = 35;
       const {primary: primary, secondary: secondary} = this.weapon;
       const hitScale = target.hitScale;
       if (primary !== null && this.isReloaded(0, 1)) {
-        const {range: range, knockback: knockback} = DataHandler_default.getWeapon(primary);
+        const {range: range, knockback: knockback} = DataHandler_ref.getWeapon(primary);
         if (this.collidingEntity(target, range + hitScale)) {
           output += knockback;
         }
       }
       if (secondary !== null && this.isReloaded(1, 1)) {
-        const {range: range, knockback: knockback} = DataHandler_default.getWeapon(secondary);
+        const {range: range, knockback: knockback} = DataHandler_ref.getWeapon(secondary);
         if (this.collidingEntity(target, range + hitScale)) {
           output += knockback;
         }
@@ -3858,7 +3858,7 @@ window.grbtp = 35;
       const primaryVariant = this.getWeaponVariant(primary).current;
       const isDiamondPolearm = primary === 5 && primaryVariant >= 2;
       const collidingPrimary = myPlayer.collidingEntity(this, primaryRange);
-      const collidingSecondary = myPlayer.collidingEntity(this, DataHandler_default.isShootable(secondary) ? primaryRange : secondaryRange);
+      const collidingSecondary = myPlayer.collidingEntity(this, DataHandler_ref.isShootable(secondary) ? primaryRange : secondaryRange);
       const collidingTurret = myPlayer.collidingEntity(this, turretRange);
       let spikeSyncDamage = 0;
       let includeTurret = false;
@@ -3874,7 +3874,7 @@ window.grbtp = 35;
         if (this.isReloaded(1, 1)) {
           this.potentialDamage += secondaryDamage;
         }
-        if (DataHandler_default.isMelee(secondary)) {
+        if (DataHandler_ref.isMelee(secondary)) {
           includeTurret = true;
         }
       }
@@ -3918,7 +3918,7 @@ window.grbtp = 35;
       return 0;
     }
   }
-  const Player_default = Player;
+  const Player_ref = Player;
   const resizeEvent = new Event("resize");
   const ZoomHandler = new class {
     _scale={
@@ -3931,8 +3931,8 @@ window.grbtp = 35;
         _h: 1080
       },
       _smooth: {
-        _w: Hooker_default.linker(1920),
-        _h: Hooker_default.linker(1080)
+        _w: Hooker_ref.linker(1920),
+        _h: Hooker_ref.linker(1080)
       }
     };
     getScale() {
@@ -3968,14 +3968,14 @@ window.grbtp = 35;
       window.dispatchEvent(resizeEvent);
     }
   };
-  const ZoomHandler_default = ZoomHandler;
+  const ZoomHandler_ref = ZoomHandler;
   const renderText = (ctx, text, size = 25, posx = 10, posy = 9) => {
     ctx.save();
     ctx.font = `700 ${size}px sans-serif`;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const scale = ZoomHandler_default.getScale();
+    const scale = ZoomHandler_ref.getScale();
     ctx.scale(scale, scale);
     ctx.fillStyle = "#eaeaea";
     ctx.strokeStyle = "#1f2029";
@@ -4157,7 +4157,7 @@ window.grbtp = 35;
         }
       }
     }
-    postTick(client2) {
+    runTick(client2) {
       if (!client2.isOwner) return;
       const player = client2.myPlayer;
       if (!player || !player.inGame) {
@@ -4204,9 +4204,9 @@ window.grbtp = 35;
       proto.fillText = function(text, x, y, maxWidth) {
         const myNick = client && client.myPlayer && client.myPlayer.nickname;
         let overrideColor = null;
-        if (Settings_default._myNameColor && self._matchesNickname(text, myNick)) {
-          overrideColor = Settings_default._myNameColorValue;
-        } else if (RYN_IS_OWNER_BUILD && Settings_default._markRynPlayers && RYNPresence.hasName(text)) {
+        if (Settings_ref._myNameColor && self._matchesNickname(text, myNick)) {
+          overrideColor = Settings_ref._myNameColorValue;
+        } else if (RYN_IS_OWNER_BUILD && Settings_ref._markRynPlayers && RYNPresence.hasName(text)) {
           overrideColor = RYN_RED_NAME;
         }
         if (overrideColor) {
@@ -4231,14 +4231,14 @@ window.grbtp = 35;
       this._staticCacheDirty = true;
     }
     _objectAlpha() {
-      if (!Settings_default._objectTint) {
+      if (!Settings_ref._objectTint) {
         return 1;
       }
-      const pct = clamp(Settings_default._objectTintOpacity, 0, 100);
+      const pct = clamp(Settings_ref._objectTintOpacity, 0, 100);
       return 1 - pct / 100;
     }
     _objectTint(sprite) {
-      if (!Settings_default._objectTint || !sprite) {
+      if (!Settings_ref._objectTint || !sprite) {
         return sprite;
       }
       if (sprite.isLoaded === false) {
@@ -4272,7 +4272,7 @@ window.grbtp = 35;
       ctx.globalAlpha = previous;
     }
     _preRender() {
-      ZoomHandler_default.smoothUpdate();
+      ZoomHandler_ref.smoothUpdate();
       this.patchMyNameColor();
     }
     _postRender() {
@@ -4282,7 +4282,7 @@ window.grbtp = 35;
       this._dtSamples.push(rawDt);
       if (this._dtSamples.length > 8) this._dtSamples.shift();
       this._dtSmoothed = this._dtSamples.reduce((a, b) => a + b, 0) / this._dtSamples.length;
-      if (Settings_default._lowQuality && this._dtSmoothed > 0) {
+      if (Settings_ref._lowQuality && this._dtSmoothed > 0) {
         const currentFps = 1000 / this._dtSmoothed;
         if (currentFps < 25) {
           this._frameSkipCounter++;
@@ -4297,12 +4297,12 @@ window.grbtp = 35;
       this.totalTimes.push(now);
       const fps = this.totalTimes.length;
       if (now - this.lastLogTime >= 1e3) {
-        GameUI_default.updateFPS(fps);
+        GameUI_ref.updateFPS(fps);
         this.lastLogTime = now;
       }
       const canvas = document.querySelector("#gameCanvas");
       const ctx = canvas.getContext("2d");
-      if (Settings_default._lowQuality) {
+      if (Settings_ref._lowQuality) {
         if (!ctx.__lqPatched) {
           const proto = Object.getPrototypeOf(ctx);
           const origDesc = Object.getOwnPropertyDescriptor(proto, "shadowBlur");
@@ -4329,7 +4329,7 @@ window.grbtp = 35;
       }
     }
     _mapPreRender(ctx) {
-      if (Settings_default._lowQuality) {
+      if (Settings_ref._lowQuality) {
         ctx.imageSmoothingEnabled = false;
         ctx.imageSmoothingQuality = "low";
       }
@@ -4338,24 +4338,24 @@ window.grbtp = 35;
       const width = ctx.canvas.width;
       const height = ctx.canvas.height;
       ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, width, Config_default.snowBiomeTop / Config_default.mapScale * height);
+      ctx.fillRect(0, 0, width, Config_ref.snowBiomeTop / Config_ref.mapScale * height);
       ctx.fillStyle = "#dbc666";
-      ctx.fillRect(0, 12e3 / Config_default.mapScale * height, width, height);
+      ctx.fillRect(0, 12e3 / Config_ref.mapScale * height, width, height);
       ctx.fillStyle = "#91b2db";
-      const startY = (Config_default.mapScale / 2 - Config_default.riverWidth / 2) / Config_default.mapScale * height;
-      ctx.fillRect(0, startY, width, Config_default.riverWidth / Config_default.mapScale * height);
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = client;
+      const startY = (Config_ref.mapScale / 2 - Config_ref.riverWidth / 2) / Config_ref.mapScale * height;
+      ctx.fillRect(0, startY, width, Config_ref.riverWidth / Config_ref.mapScale * height);
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = client;
       ctx.globalAlpha = 1;
       const markSize = 8;
       if (ModuleHandler.followPath) {
-        const pos = ModuleHandler.endTarget.copy().div(Config_default.mapScale).mult(width);
+        const pos = ModuleHandler.endTarget.copy().div(Config_ref.mapScale).mult(width);
         ctx.fillStyle = "#c2383d";
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, markSize, 0, 2 * Math.PI);
         ctx.fill();
       }
       if (myPlayer.teleported) {
-        const pos = myPlayer.teleportPos.copy().div(Config_default.mapScale).mult(width);
+        const pos = myPlayer.teleportPos.copy().div(Config_ref.mapScale).mult(width);
         ctx.fillStyle = "#d76edb";
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, markSize, 0, 2 * Math.PI);
@@ -4391,7 +4391,7 @@ window.grbtp = 35;
     arrowPart=2 * Math.PI / 3;
     drawTarget(ctx, entity) {
       const len = entity.scale + 30;
-      if (!Settings_default._lowQuality) this.rotation = (this.rotation + .01) % 6.28;
+      if (!Settings_ref._lowQuality) this.rotation = (this.rotation + .01) % 6.28;
       const offset = RYN._offset;
       ctx.save();
       ctx.translate(-offset.x, -offset.y);
@@ -4774,8 +4774,8 @@ window.grbtp = 35;
       ctx.restore();
     }
     renderDistance(ctx, entity, player) {
-      const pos1 = new Vector_default(player.x, player.y);
-      const pos2 = new Vector_default(entity.x, entity.y);
+      const pos1 = new Vector_ref(player.x, player.y);
+      const pos2 = new Vector_ref(entity.x, entity.y);
       const entityTarget = client.PlayerManager.getEntity(entity.sid, !!entity.isPlayer);
       if (entityTarget === null) {
         return;
@@ -4792,7 +4792,7 @@ window.grbtp = 35;
       ctx.fill();
     }
     barContent(ctx, x, y, w, h, fill, color) {
-      const barPad = Config_default.barPad;
+      const barPad = Config_ref.barPad;
       ctx.fillStyle = color;
       this.roundRect(ctx, x + barPad, y + barPad, (w - barPad * 2) * fill, h - barPad * 2, 7);
       ctx.fill();
@@ -4800,16 +4800,16 @@ window.grbtp = 35;
     getNameY(target) {
       let nameY = 34;
       const height = 5;
-      if (Settings_default._playerTurretReloadBar) {
+      if (Settings_ref._playerTurretReloadBar) {
         nameY += height;
       }
-      if (Settings_default._weaponReloadBar) {
+      if (Settings_ref._weaponReloadBar) {
         nameY += height;
       }
       return nameY;
     }
     getContainerHeight(entity) {
-      const {barHeight: barHeight, barPad: barPad} = Config_default;
+      const {barHeight: barHeight, barPad: barPad} = Config_ref;
       let height = barHeight;
       if (entity.isPlayer) {
         const smallBarHeight = barHeight - 4;
@@ -4817,17 +4817,17 @@ window.grbtp = 35;
         if (player === void 0) {
           return height;
         }
-        if (Settings_default._playerTurretReloadBar) {
+        if (Settings_ref._playerTurretReloadBar) {
           height += smallBarHeight - barPad;
         }
-        if (Settings_default._weaponReloadBar) {
+        if (Settings_ref._weaponReloadBar) {
           height += barHeight - barPad;
         }
       }
       return height;
     }
     renderBar(ctx, entity) {
-      const {barWidth: barWidth, barHeight: barHeight, barPad: barPad} = Config_default;
+      const {barWidth: barWidth, barHeight: barHeight, barPad: barPad} = Config_ref;
       const smallBarHeight = barHeight - 4;
       const totalWidth = barWidth + barPad;
       const scale = entity.scale + 34;
@@ -4839,14 +4839,14 @@ window.grbtp = 35;
       const player = entity.isPlayer && PlayerManager.playerData.get(entity.sid);
       const animal = entity.isAI && PlayerManager.animalData.get(entity.sid);
       let height = 0;
-      if (player instanceof Player_default) {
+      if (player instanceof Player_ref) {
         const [primary, secondary, turret] = player.reload;
-        if (Settings_default._playerTurretReloadBar) {
+        if (Settings_ref._playerTurretReloadBar) {
           this.barContainer(ctx, x, y + height, totalWidth * 2, smallBarHeight);
           this.barContent(ctx, x, y + height, totalWidth * 2, smallBarHeight, turret.current / turret.max, TURRET_RELOAD_BAR_COLOR);
           height += smallBarHeight - barPad;
         }
-        if (Settings_default._weaponReloadBar) {
+        if (Settings_ref._weaponReloadBar) {
           const extraPad = 2.25;
           this.barContainer(ctx, x, y + height, totalWidth * 2, barHeight);
           this.barContent(ctx, x, y + height, totalWidth + extraPad, barHeight, primary.current / primary.max, WEAPON_RELOAD_BAR_COLOR);
@@ -4868,10 +4868,10 @@ window.grbtp = 35;
       ctx.restore();
     }
     renderHP(ctx, entity) {
-      if (!Settings_default._renderHP) {
+      if (!Settings_ref._renderHP) {
         return;
       }
-      const {barPad: barPad, nameY: nameY} = Config_default;
+      const {barPad: barPad, nameY: nameY} = Config_ref;
       const containerHeight = this.getContainerHeight(entity);
       const text = `${Math.floor(entity.health)}`;
       const offset = entity.scale + nameY + barPad + containerHeight;
@@ -4890,7 +4890,7 @@ window.grbtp = 35;
       ctx.restore();
     }
     renderShame(ctx, entity) {
-      if (!Settings_default._renderHP || !entity.isPlayer) {
+      if (!Settings_ref._renderHP || !entity.isPlayer) {
         return;
       }
       const player = client.PlayerManager.playerData.get(entity.sid);
@@ -4899,7 +4899,7 @@ window.grbtp = 35;
       }
       const _offset = RYN._offset;
       const x = entity.x - _offset.x;
-      const y = entity.y - _offset.y - entity.scale - Config_default.nameY - 26;
+      const y = entity.y - _offset.y - entity.scale - Config_ref.nameY - 26;
       ctx.save();
       ctx.fillStyle = SHAME_COUNTER_COLOR;
       ctx.strokeStyle = "#22252b";
@@ -4916,7 +4916,7 @@ window.grbtp = 35;
       const _offset = RYN._offset;
       const x = object.x + object.xWiggle - _offset.x;
       const y = object.y + object.yWiggle - _offset.y;
-      const height = Config_default.barHeight * .5 * sizeMult;
+      const height = Config_ref.barHeight * .5 * sizeMult;
       const defaultScale = 10 + height / 2;
       const scale = defaultScale + 1 + offset;
       ctx.save();
@@ -4939,7 +4939,7 @@ window.grbtp = 35;
       return defaultScale - 3;
     }
   };
-  const Renderer_default = Renderer;
+  const Renderer_ref = Renderer;
   const Animals = [ {
     id: 0,
     src: "cow_1",
@@ -5151,27 +5151,27 @@ window.grbtp = 35;
     minSpawnRange: .85,
     maxSpawnRange: .9
   } ];
-  const Animals_default = Animals;
+  const Animals_ref = Animals;
   const colors = [ [ "orange", "red" ], [ "aqua", "blue" ] ];
   const EntityRenderer = new class {
     start=Date.now();
     step=0;
     drawWeaponHitbox(ctx, player) {
-      if (!Settings_default._weaponHitbox) {
+      if (!Settings_ref._weaponHitbox) {
         return;
       }
       const {myPlayer: myPlayer} = client;
       const current = myPlayer.weapon.current;
-      if (DataHandler_default.isMelee(current)) {
-        const weapon = DataHandler_default.getWeapon(current);
-        Renderer_default.hexagon(ctx, player.x, player.y, weapon.range, "#f5cb42", .5, 1);
+      if (DataHandler_ref.isMelee(current)) {
+        const weapon = DataHandler_ref.getWeapon(current);
+        Renderer_ref.hexagon(ctx, player.x, player.y, weapon.range, "#f5cb42", .5, 1);
       }
     }
     drawPlacement(ctx) {
-      if (!Settings_default._possiblePlacement) {
+      if (!Settings_ref._possiblePlacement) {
         return;
       }
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = client;
+      const {myPlayer: myPlayer, _Core: ModuleHandler} = client;
       const [type, angles] = ModuleHandler.placeAngles;
       if (type === null || angles === null) {
         return;
@@ -5184,50 +5184,50 @@ window.grbtp = 35;
       for (let i = 0; i < angles.length; i++) {
         const angle = angles[i];
         const pos = myPlayer.pos.current.addDirection(angle, dist);
-        Renderer_default.itemSprite(ctx, id, pos.x, pos.y, angle, Settings_default._placementPreviewOpacity ?? .35);
+        Renderer_ref.itemSprite(ctx, id, pos.x, pos.y, angle, Settings_ref._placementPreviewOpacity ?? .35);
       }
     }
     drawEntityHP(ctx, entity) {
-      Renderer_default.renderBar(ctx, entity);
-      Renderer_default.renderHP(ctx, entity);
-      Renderer_default.renderShame(ctx, entity);
+      Renderer_ref.renderBar(ctx, entity);
+      Renderer_ref.renderHP(ctx, entity);
+      Renderer_ref.renderShame(ctx, entity);
     }
     drawHitScale(ctx, entity) {
-      if (!Settings_default._weaponHitbox) {
+      if (!Settings_ref._weaponHitbox) {
         return;
       }
       const {PlayerManager: PlayerManager} = client;
       const type = entity.isPlayer ? PlayerManager.playerData : PlayerManager.animalData;
       const target = type.get(entity.sid);
       if (target !== void 0) {
-        Renderer_default.hexagon(ctx, entity.x, entity.y, target.hitScale, "#3f4ec4", .5, 1);
+        Renderer_ref.hexagon(ctx, entity.x, entity.y, target.hitScale, "#3f4ec4", .5, 1);
       }
       if (entity.isAI && entity.index === 6) {
-        const moostafa = Animals_default[6];
-        Renderer_default.hexagon(ctx, entity.x, entity.y, moostafa.hitRange, "#f5cb42", .5, 1);
+        const moostafa = Animals_ref[6];
+        Renderer_ref.hexagon(ctx, entity.x, entity.y, moostafa.hitRange, "#f5cb42", .5, 1);
       }
     }
     drawDanger(ctx, entity) {}
     _render(ctx, entity, player) {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager, InputHandler: InputHandler} = client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _Core: ModuleHandler, ObjectManager: ObjectManager, InputHandler: InputHandler} = client;
       const isMyPlayer = entity === player;
-      const pos = new Vector_default(entity.x, entity.y);
+      const pos = new Vector_ref(entity.x, entity.y);
       if (isMyPlayer) {
         const now = Date.now();
         this.step = now - this.start;
         this.start = now;
-        if (Settings_default._displayPlayerAngle) {
-          Renderer_default.line(ctx, pos, pos.addDirection(client.myPlayer.angle, 70), "#e9adf0");
+        if (Settings_ref._displayPlayerAngle) {
+          Renderer_ref.line(ctx, pos, pos.addDirection(client.myPlayer.angle, 70), "#e9adf0");
         }
         this.drawWeaponHitbox(ctx, player);
         this.drawPlacement(ctx);
         {
-          const autoPushModule = client._ModuleHandler.staticModules.autoPush;
+          const autoPushModule = client._Core.unitTable.autoPush;
           const pushPos = autoPushModule ? autoPushModule.pushPos : null;
           const nearestPushSpike = client.EnemyManager.nearestPushSpike;
           if (pushPos !== null && nearestPushSpike !== null) {
-            Renderer_default.line(ctx, pos, pushPos, "#a855f7", .85, 2);
-            Renderer_default.line(ctx, pushPos, nearestPushSpike.pos.current, "#a855f7", .85, 2);
+            Renderer_ref.line(ctx, pos, pushPos, "#a855f7", .85, 2);
+            Renderer_ref.line(ctx, pushPos, nearestPushSpike.pos.current, "#a855f7", .85, 2);
           }
         }
         if (client.InputHandler.instaToggle) {
@@ -5237,7 +5237,7 @@ window.grbtp = 35;
             const ep = enemy.pos.current;
             const dist = pos.distance(ep);
             const primary = myPlayer.getItemByType(0);
-            const baseRange = primary !== null ? (DataHandler_default.getWeapon(primary)?.range ?? 110) + (enemy.hitScale ?? 35) : 145;
+            const baseRange = primary !== null ? (DataHandler_ref.getWeapon(primary)?.range ?? 110) + (enemy.hitScale ?? 35) : 145;
             const secondary = myPlayer.getItemByType(1);
             const shield = client.PlayerManager.lookingShield(enemy, myPlayer);
             const pdmg = myPlayer.getMaxWeaponDamage(primary, shield);
@@ -5270,7 +5270,7 @@ window.grbtp = 35;
         }
       }
       this.drawEntityHP(ctx, entity);
-      if (Settings_default._showPlayerID && entity.isPlayer && entity.sid !== void 0) {
+      if (Settings_ref._showPlayerID && entity.isPlayer && entity.sid !== void 0) {
         try {
           const offset = RYN._offset;
           const label = "" + entity.sid;
@@ -5290,24 +5290,24 @@ window.grbtp = 35;
           ctx.restore();
         } catch (e) {}
       }
-      if (Settings_default._collisionHitbox) {
-        Renderer_default.square(ctx, entity.x, entity.y, entity.scale, "#c7fff2", .5, 1);
+      if (Settings_ref._collisionHitbox) {
+        Renderer_ref.square(ctx, entity.x, entity.y, entity.scale, "#c7fff2", .5, 1);
       }
       if (!isMyPlayer) {
         this.drawHitScale(ctx, entity);
       }
       const instakillTarget = InputHandler.instakillTarget;
       if (entity.isPlayer && instakillTarget !== null && entity.sid === instakillTarget.id) {
-        Renderer_default.drawTarget(ctx, entity);
-        const {bowInsta: bowInsta} = ModuleHandler.staticModules;
+        Renderer_ref.drawTarget(ctx, entity);
+        const {bowInsta: bowInsta} = ModuleHandler.unitTable;
         if (bowInsta.active) {
-          Renderer_default.circle(ctx, entity.x, entity.y, bowInsta.distMin, "#eda0ee", .4, 1);
-          Renderer_default.circle(ctx, entity.x, entity.y, bowInsta.distMax, "#eda0ee", .4, 1);
+          Renderer_ref.circle(ctx, entity.x, entity.y, bowInsta.distMin, "#eda0ee", .4, 1);
+          Renderer_ref.circle(ctx, entity.x, entity.y, bowInsta.distMax, "#eda0ee", .4, 1);
         }
       }
     }
   };
-  const EntityRenderer_default = EntityRenderer;
+  const EntityRenderer_ref = EntityRenderer;
   class SpatialHashGrid2D {
     cellSize=0;
     grid=new Map;
@@ -5408,7 +5408,7 @@ window.grbtp = 35;
       return b.danger - a.danger;
     }
   }
-  const Sorting_default = Sorting;
+  const Sorting_ref = Sorting;
   const PLACE_ATTEMPTS = 4;
   class ObjectManager {
     objects=new Map;
@@ -5498,7 +5498,7 @@ window.grbtp = 35;
       }
       return turret.reload > turret.maxReload - tick;
     }
-    postTick() {
+    runTick() {
       for (const [id, turret] of this.reloadingTurrets) {
         turret.reload += 1;
         if (turret.reload >= turret.maxReload) {
@@ -5533,8 +5533,8 @@ window.grbtp = 35;
     }
     getBestPlacementAngles(options) {
       const {position: position, id: id, targetAngle: targetAngle, ignoreID: ignoreID, reduce: reduce, preplace: preplace, fill: fill} = options;
-      const item = DataHandler_default.getItem(id);
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const item = DataHandler_ref.getItem(id);
+      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       const length = myPlayer.getItemPlaceScale(id);
       const angles = [];
       this.grid2D.query(position.x, position.y, 1, id2 => {
@@ -5570,9 +5570,9 @@ window.grbtp = 35;
           return finalAngles.slice(0, PLACE_ATTEMPTS);
         }
       }
-      let anglesSorted = finalAngles.sort(Sorting_default.byAngleDistance(targetAngle));
+      let anglesSorted = finalAngles.sort(Sorting_ref.byAngleDistance(targetAngle));
       if (reduce) {
-        if (!DataHandler_default.canMoveOnTop(id) && ModuleHandler.move_dir !== null && myPlayer.speed !== 0) {
+        if (!DataHandler_ref.canMoveOnTop(id) && ModuleHandler.move_dir !== null && myPlayer.speed !== 0) {
           const scale = item.scale;
           const offset = Math.asin(2 * scale / (2 * length));
           anglesSorted = anglesSorted.filter(angle => getAngleDist(angle, ModuleHandler.move_dir) > offset);
@@ -5582,7 +5582,7 @@ window.grbtp = 35;
       return anglesSorted;
     }
   }
-  const ObjectManager_default = ObjectManager;
+  const ObjectManager_ref = ObjectManager;
   const _RYNCrypto = function() {
     const _Do = new Uint32Array([ 1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298 ]);
     function _j(e, t) {
@@ -5724,7 +5724,7 @@ window.grbtp = 35;
       this.client = client2;
       setInterval(() => {
         if (this.client.isOwner) {
-          GameUI_default.updatePackets(this.packetCount);
+          GameUI_ref.updatePackets(this.packetCount);
         }
         this.packetCount = 0;
       }, 1e3);
@@ -5844,7 +5844,7 @@ window.grbtp = 35;
       this.send([ "0" ]);
     }
   }
-  class Animal extends Entity_default {
+  class Animal extends Entity_ref {
     type;
     prevHealth=0;
     currentHealth=0;
@@ -5857,7 +5857,7 @@ window.grbtp = 35;
       super(client2);
     }
     canBeTrapped() {
-      return !("noTrap" in Animals_default[this.type]);
+      return !("noTrap" in Animals_ref[this.type]);
     }
     update(id, type, x, y, angle, health, nameIndex) {
       this.id = id;
@@ -5865,7 +5865,7 @@ window.grbtp = 35;
       this.pos.previous.setVec(this.pos.current);
       this.pos.current._setXY(x, y);
       this.setFuturePosition();
-      const animal = Animals_default[type];
+      const animal = Animals_ref[type];
       this.angle = angle;
       this.prevHealth = this.currentHealth;
       this.currentHealth = health;
@@ -5882,13 +5882,13 @@ window.grbtp = 35;
     }
     get attackRange() {
       if (this.type === 6) {
-        return Animals_default[this.type].hitRange + Config_default.playerScale;
+        return Animals_ref[this.type].hitRange + Config_ref.playerScale;
       }
       return this.scale;
     }
     get collisionRange() {
       if (this.type === 6) {
-        return Animals_default[this.type].hitRange + Config_default.playerScale;
+        return Animals_ref[this.type].hitRange + Config_ref.playerScale;
       }
       return this.scale + 60;
     }
@@ -5896,9 +5896,9 @@ window.grbtp = 35;
       return this.isHostile;
     }
   }
-  const Animal_default = Animal;
+  const Animal_ref = Animal;
   class MovementSimulation {
-    speed=Config_default.playerSpeed;
+    speed=Config_ref.playerSpeed;
     scale=35;
     slowMult=1;
     xVel=0;
@@ -5913,7 +5913,7 @@ window.grbtp = 35;
       this.xVel = 0;
       this.yVel = 0;
       const speed = client2.myPlayer.speed / this.TICK;
-      const moveDir = dir ?? client2._ModuleHandler.move_dir;
+      const moveDir = dir ?? client2._Core.move_dir;
       if (moveDir !== null) {
         this.xVel = Math.cos(moveDir) * speed;
         this.yVel = Math.sin(moveDir) * speed;
@@ -5925,10 +5925,10 @@ window.grbtp = 35;
       this.spikeCollision = false;
     }
     getPos() {
-      return new Vector_default(this.x, this.y);
+      return new Vector_ref(this.x, this.y);
     }
     getSpeed() {
-      return new Vector_default(this.xVel, this.yVel).length * this.TICK;
+      return new Vector_ref(this.xVel, this.yVel).length * this.TICK;
     }
     checkCollision(player, target, delta, isEnemyObject) {
       delta = delta || 1;
@@ -5940,7 +5940,7 @@ window.grbtp = 35;
         return false;
       }
       const scale = player.collisionScale + target.collisionScale;
-      const isPlayer = target instanceof Player_default;
+      const isPlayer = target instanceof Player_ref;
       if (isPlayer || !target.canMoveOnTop()) {
         const tmpDir = getAngle(pos2.x, pos2.y, pos1.x, pos1.y);
         if (isPlayer) {
@@ -5971,7 +5971,7 @@ window.grbtp = 35;
     }
     collisionSimulation(client2) {
       this.reset(client2);
-      if (!Settings_default._safeWalk) {
+      if (!Settings_ref._safeWalk) {
         return false;
       }
       this.update(client2, false);
@@ -5986,36 +5986,36 @@ window.grbtp = 35;
       if (this.slowMult < 1) {
         this.slowMult = Math.min(1, this.slowMult + 8e-4 * delta);
       }
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = client2;
-      const {autoHat: autoHat} = ModuleHandler.staticModules;
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = client2;
+      const {autoHat: autoHat} = ModuleHandler.unitTable;
       const pos = this.getPos();
       const skin = Hats[autoHat.getNextHat()];
       const tail = Accessories[autoHat.getNextAcc()];
-      const weapon = DataHandler_default.getWeapon(autoHat.getNextWeaponID());
+      const weapon = DataHandler_ref.getWeapon(autoHat.getNextWeaponID());
       const weaponSpd = weapon.spdMult || 1;
       const skinSpd = "spdMult" in skin ? skin.spdMult : 1;
       const tailSpd = "spdMult" in tail ? tail.spdMult : 1;
-      const inSnow = pos.y <= Config_default.snowBiomeTop && !("coldM" in skin);
-      const snowMult = inSnow ? Config_default.snowSpeed : 1;
+      const inSnow = pos.y <= Config_ref.snowBiomeTop && !("coldM" in skin);
+      const snowMult = inSnow ? Config_ref.snowSpeed : 1;
       const buildMult = autoHat.getNextItemID() >= 0 ? .5 : 1;
       if (this.lockMove) {
         this.xVel = 0;
         this.yVel = 0;
       } else {
         let spdMult = buildMult * weaponSpd * skinSpd * tailSpd * snowMult * this.slowMult;
-        const riverMin = Config_default.mapScale / 2 - Config_default.riverWidth / 2;
-        const riverMax = Config_default.mapScale / 2 + Config_default.riverWidth / 2;
+        const riverMin = Config_ref.mapScale / 2 - Config_ref.riverWidth / 2;
+        const riverMax = Config_ref.mapScale / 2 + Config_ref.riverWidth / 2;
         const inRiver = !myPlayer.onPlatform && pos.y >= riverMin && pos.y <= riverMax;
         if (inRiver) {
           if ("watrImm" in skin) {
             spdMult *= .75;
-            this.xVel += Config_default.waterCurrent * .4 * delta;
+            this.xVel += Config_ref.waterCurrent * .4 * delta;
           } else {
             spdMult *= .33;
-            this.xVel += Config_default.waterCurrent * delta;
+            this.xVel += Config_ref.waterCurrent * delta;
           }
         }
-        const moveDir = client2._ModuleHandler.move_dir;
+        const moveDir = client2._Core.move_dir;
         let xDir = !notMoving && moveDir !== null ? Math.cos(moveDir) : 0;
         let yDir = !notMoving && moveDir !== null ? Math.sin(moveDir) : 0;
         const len = Math.sqrt(xDir * xDir + yDir * yDir);
@@ -6054,29 +6054,29 @@ window.grbtp = 35;
         this.checkCollision(myPlayer, nearestEnemy, 1, false);
       }
       if (this.xVel) {
-        this.xVel *= Math.pow(Config_default.playerDecel, delta);
+        this.xVel *= Math.pow(Config_ref.playerDecel, delta);
         if (this.xVel >= -.01 && this.xVel <= .01) {
           this.xVel = 0;
         }
       }
       if (this.yVel) {
-        this.yVel *= Math.pow(Config_default.playerDecel, delta);
+        this.yVel *= Math.pow(Config_ref.playerDecel, delta);
         if (this.yVel >= -.01 && this.yVel <= .01) {
           this.yVel = 0;
         }
       }
-      this.x = clamp(this.x, this.scale, Config_default.mapScale - this.scale);
-      this.y = clamp(this.y, this.scale, Config_default.mapScale - this.scale);
+      this.x = clamp(this.x, this.scale, Config_ref.mapScale - this.scale);
+      this.y = clamp(this.y, this.scale, Config_ref.mapScale - this.scale);
     }
   }
-  class ClientPlayer extends Player_default {
+  class ClientPlayer extends Player_ref {
     inventory={};
     weaponXP=[ {}, {} ];
     itemCount=new Map;
     resources={};
     tempGold=0;
-    deathPosition=new Vector_default;
-    teleportPos=new Vector_default;
+    deathPosition=new Vector_ref;
+    teleportPos=new Vector_ref;
     teleported=false;
     inGame=false;
     wasDead=true;
@@ -6153,18 +6153,18 @@ window.grbtp = 35;
     }
     getBestDestroyingWeapon(target = null) {
       const primaryID = this.getItemByType(0);
-      const primary = DataHandler_default.getWeapon(primaryID);
+      const primary = DataHandler_ref.getWeapon(primaryID);
       const secondaryID = this.getItemByType(1);
       const isHammer = secondaryID === 10;
       const notStick = primary.damage !== 1;
       const notPolearm = primaryID !== 5;
-      const {reloading: reloading} = this.client._ModuleHandler.staticModules;
+      const {reloading: reloading} = this.client._Core.unitTable;
       const primaryDamage = this.getBuildingDamage(primaryID, false);
       if (isHammer && notStick && notPolearm && (!reloading.isReloaded(1) || reloading.isFasterThan(0, 1)) && reloading.isReloaded(0) && target != null && primaryDamage >= target.health) {
         return 0;
       }
       if (target != null && isHammer && notStick && notPolearm && this.isTrapped) {
-        const hammerRange = DataHandler_default.getWeapon(secondaryID).range + target.hitScale + 1;
+        const hammerRange = DataHandler_ref.getWeapon(secondaryID).range + target.hitScale + 1;
         const primaryRange = primary.range + target.hitScale;
         const pos1 = this.pos.current;
         const pos2 = target.pos.current;
@@ -6183,18 +6183,18 @@ window.grbtp = 35;
     }
     getWeaponRangeByType(type) {
       const item = this.getItemByType(type);
-      if (DataHandler_default.isMelee(item)) {
-        return DataHandler_default.getWeapon(item).range;
+      if (DataHandler_ref.isMelee(item)) {
+        return DataHandler_ref.getWeapon(item).range;
       }
       return 0;
     }
     getFastestWeapon() {
-      const primary = DataHandler_default.getWeapon(this.getItemByType(0));
+      const primary = DataHandler_ref.getWeapon(this.getItemByType(0));
       const secondaryID = this.getItemByType(1);
       if (secondaryID === null) {
         return 0;
       }
-      const secondary = DataHandler_default.getWeapon(secondaryID);
+      const secondary = DataHandler_ref.getWeapon(secondaryID);
       if (primary.spdMult > secondary.spdMult) {
         return 0;
       }
@@ -6218,9 +6218,9 @@ window.grbtp = 35;
     getMaxWeaponRangeClient() {
       const primary = this.inventory[0];
       const secondary = this.inventory[1];
-      const primaryRange = DataHandler_default.getWeapon(primary).range;
-      if (DataHandler_default.isMelee(secondary)) {
-        const range = DataHandler_default.getWeapon(secondary).range;
+      const primaryRange = DataHandler_ref.getWeapon(primary).range;
+      if (DataHandler_ref.isMelee(secondary)) {
+        const range = DataHandler_ref.getWeapon(secondary).range;
         if (range > primaryRange) {
           return range;
         }
@@ -6230,9 +6230,9 @@ window.grbtp = 35;
     getMaxRangeTypeDestroy() {
       const primaryID = this.inventory[0];
       const secondaryID = this.inventory[1];
-      const primary = DataHandler_default.getWeapon(primaryID);
-      if (DataHandler_default.isMelee(secondaryID)) {
-        const secondary = DataHandler_default.getWeapon(secondaryID);
+      const primary = DataHandler_ref.getWeapon(primaryID);
+      if (DataHandler_ref.isMelee(secondaryID)) {
+        const secondary = DataHandler_ref.getWeapon(secondaryID);
         if (secondaryID === 10 && secondary.range > primary.range) {
           return {
             type: 1,
@@ -6257,7 +6257,7 @@ window.grbtp = 35;
         this.prevKills = 0;
         this.onFirstTickAfterSpawn();
       }
-      const {_ModuleHandler: ModuleHandler, PlayerManager: PlayerManager} = this.client;
+      const {_Core: ModuleHandler, PlayerManager: PlayerManager} = this.client;
       this.killedSomeone = false;
       this.actuallyKilledSomeone = false;
       if (this.totalKills > this.prevKills) {
@@ -6267,7 +6267,7 @@ window.grbtp = 35;
           this.actuallyKilledSomeone = true;
         }
       }
-      ModuleHandler.postTick();
+      ModuleHandler.runTick();
     }
     updateHealth(health) {
       if (!this.inGame) {
@@ -6278,8 +6278,8 @@ window.grbtp = 35;
         return;
       }
       if (health < 100) {
-        const {_ModuleHandler: ModuleHandler} = this.client;
-        ModuleHandler.staticModules.shameReset.healthUpdate();
+        const {_Core: ModuleHandler} = this.client;
+        ModuleHandler.unitTable.shameReset.healthUpdate();
       }
     }
     playerInit(id) {
@@ -6290,17 +6290,17 @@ window.grbtp = 35;
       }
     }
     onFirstTickAfterSpawn() {
-      const {_ModuleHandler: ModuleHandler, isOwner: isOwner} = this.client;
-      const {mouse: mouse, staticModules: staticModules} = ModuleHandler;
+      const {_Core: ModuleHandler, isOwner: isOwner} = this.client;
+      const {mouse: mouse, unitTable: unitTable} = ModuleHandler;
       ModuleHandler._equip(0, 0);
       ModuleHandler.updateAngle(mouse.sentAngle, true);
       if (!isOwner) {
         const owner = this.client.ownerClient;
-        UI_default.updateBotOption(this.client, "title");
+        UI_ref.updateBotOption(this.client, "title");
         owner.clientIDList.add(this.id);
-        staticModules.tempData.setAttacking(owner._ModuleHandler.attacking);
-        staticModules.tempData.setStore(0, owner._ModuleHandler.store[0].actual);
-        staticModules.tempData.setStore(1, owner._ModuleHandler.store[1].actual);
+        unitTable.tempData.setAttacking(owner._Core.attacking);
+        unitTable.tempData.setStore(0, owner._Core.store[0].actual);
+        unitTable.tempData.setStore(1, owner._Core.store[1].actual);
       }
     }
     playerSpawn() {
@@ -6313,7 +6313,7 @@ window.grbtp = 35;
       }
     }
     isUpgradeWeapon(id) {
-      const weapon = DataHandler_default.getWeapon(id);
+      const weapon = DataHandler_ref.getWeapon(id);
       if ("upgradeOf" in weapon) {
         return this.inventory[weapon.itemType] === weapon.upgradeOf;
       }
@@ -6339,7 +6339,7 @@ window.grbtp = 35;
         const id = this.client.ownerClient.myPlayer.upgradeOrder[this.upgradeIndex];
         if (id !== void 0 && ids.includes(id)) {
           this.upgradeIndex += 1;
-          this.client._ModuleHandler._upgradeItem(id);
+          this.client._Core._upgradeItem(id);
         }
       }
     }
@@ -6347,7 +6347,7 @@ window.grbtp = 35;
       this.age = age;
       // Bots share this path; only the player's own age belongs on the HUD.
       if (this.client.isOwner) {
-        GameUI_default.updateAge(age);
+        GameUI_ref.updateAge(age);
       }
     }
     upgradeItem(id) {
@@ -6362,7 +6362,7 @@ window.grbtp = 35;
         }
       }
       if (id < 16) {
-        const weapon = DataHandler_default.getWeapon(id);
+        const weapon = DataHandler_ref.getWeapon(id);
         this.inventory[weapon.itemType] = id;
         const XP = this.weaponXP[weapon.itemType];
         XP.current = 0;
@@ -6392,7 +6392,7 @@ window.grbtp = 35;
     updateItemCount(group, count) {
       this.itemCount.set(group, count);
       if (this.client.isOwner) {
-        GameUI_default.updateItemCount(group);
+        GameUI_ref.updateItemCount(group);
       }
     }
     updateResources(type, amount) {
@@ -6412,7 +6412,7 @@ window.grbtp = 35;
         this.client.StatsManager.totalKills = difference;
         this.client.ownerClient.StatsManager.globalKills = difference;
         if (this.client.isOwner) {
-          GameUI_default.updateTotalKills(this.totalKills);
+          GameUI_ref.updateTotalKills(this.totalKills);
         }
         return;
       }
@@ -6420,7 +6420,7 @@ window.grbtp = 35;
     }
     updateWeaponXP(amount) {
       const {next: next} = this.getWeaponVariant(this.weapon.current);
-      const XP = this.weaponXP[DataHandler_default.getWeapon(this.weapon.current).itemType];
+      const XP = this.weaponXP[DataHandler_ref.getWeapon(this.weapon.current).itemType];
       const maxXP = WeaponVariants[next].needXP;
       XP.current += amount;
       if (XP.max !== -1 && XP.current >= XP.max) {
@@ -6463,7 +6463,7 @@ window.grbtp = 35;
     }
     spawn(customName) {
       const name = customName || this.client._botCustomName || window.localStorage.getItem("moo_name") || "";
-      const skin = this.client.isOwner ? Number(window.localStorage.getItem("skin_color")) || 0 : Math.floor(Math.random() * Config_default.skinColors.length);
+      const skin = this.client.isOwner ? Number(window.localStorage.getItem("skin_color")) || 0 : Math.floor(Math.random() * Config_ref.skinColors.length);
       this.client.PacketManager.spawn(name, 1, skin === 10 ? "constructor" : skin);
     }
     handleJoinRequest(id, name) {
@@ -6473,7 +6473,7 @@ window.grbtp = 35;
       this.resetResources();
       this.resetInventory();
       this.resetWeaponXP();
-      const {_ModuleHandler: ModuleHandler, PlayerManager: PlayerManager} = this.client;
+      const {_Core: ModuleHandler, PlayerManager: PlayerManager} = this.client;
       ModuleHandler.reset();
       this.inGame = false;
       this.wasDead = true;
@@ -6493,8 +6493,8 @@ window.grbtp = 35;
       this.client.StatsManager.deaths = 1;
       this.deaths += 1;
       if (this.client.isOwner) {
-        GameUI_default.reset();
-        GameUI_default.updateTotalDeaths(this.deaths);
+        GameUI_ref.reset();
+        GameUI_ref.updateTotalDeaths(this.deaths);
       }
       if (window._gbot1v1BotID !== null && this.client === window._gbot1v1BotID) {
         setTimeout(() => {
@@ -6519,7 +6519,7 @@ window.grbtp = 35;
       }
     }
   }
-  const ClientPlayer_default = ClientPlayer;
+  const ClientPlayer_ref = ClientPlayer;
   class PlayerManager {
     playerData=new Map;
     players=[];
@@ -6552,7 +6552,7 @@ window.grbtp = 35;
       if (socketID === this.client.clientID && myPlayer.id === -1) {
         myPlayer.playerInit(id);
       }
-      const player = this.playerData.get(id) || new Player_default(this.client);
+      const player = this.playerData.get(id) || new Player_ref(this.client);
       if (!this.playerData.has(id)) {
         this.playerData.set(id, player);
       }
@@ -6580,8 +6580,8 @@ window.grbtp = 35;
       const pos = target.pos.current;
       const distance = player.pos.current.distance(pos);
       const angle = player.pos.current.angle(pos);
-      const range = DataHandler_default.getWeapon(weaponID).range + target.hitScale;
-      return distance <= range && getAngleDist(angle, player.angle) <= Config_default.gatherAngle;
+      const range = DataHandler_ref.getWeapon(weaponID).range + target.hitScale;
+      return distance <= range && getAngleDist(angle, player.angle) <= Config_ref.gatherAngle;
     }
     attackPlayer(id, gathering, weaponID) {
       const player = this.playerData.get(id);
@@ -6595,7 +6595,7 @@ window.grbtp = 35;
       if (isMyPlayer && !myPlayer.inGame) {
         return;
       }
-      const weapon = DataHandler_default.getWeapon(weaponID);
+      const weapon = DataHandler_ref.getWeapon(weaponID);
       const type = weapon.itemType;
       player.updateMaxReload(reload[type], weaponID);
       player.resetCurrentReload(reload[type]);
@@ -6653,15 +6653,15 @@ window.grbtp = 35;
       for (let i = 0; i < buffer.length; i += 7) {
         const id = buffer[i];
         if (!this.animalData.has(id)) {
-          this.animalData.set(id, new Animal_default(this.client));
+          this.animalData.set(id, new Animal_ref(this.client));
         }
         const animal = this.animalData.get(id);
         animal.update(id, buffer[i + 1], buffer[i + 2], buffer[i + 3], buffer[i + 4], buffer[i + 5], buffer[i + 6]);
         EnemyManager2.handleAnimal(animal);
       }
     }
-    postTick() {
-      const {EnemyManager: EnemyManager2, ProjectileManager: ProjectileManager, ObjectManager: ObjectManager2, myPlayer: myPlayer, isOwner: isOwner, _ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      const {EnemyManager: EnemyManager2, ProjectileManager: ProjectileManager, ObjectManager: ObjectManager2, myPlayer: myPlayer, isOwner: isOwner, _Core: ModuleHandler} = this.client;
       ModuleHandler.moduleStart = performance.now();
       if (myPlayer && myPlayer.inGame) {
         const fut = myPlayer.pos.future;
@@ -6678,14 +6678,14 @@ window.grbtp = 35;
           }
         });
       }
-      ProjectileManager.postTick();
+      ProjectileManager.runTick();
       EnemyManager2.handleEnemies(this.enemies);
-      ObjectManager2.postTick();
+      ObjectManager2.runTick();
       if (myPlayer.inGame) {
         myPlayer.tickUpdate();
       }
       ObjectManager2.deletedObjects.clear();
-      if ((Settings_default._autospawn || !isOwner) && !myPlayer.inGame) {
+      if ((Settings_ref._autospawn || !isOwner) && !myPlayer.inGame) {
         myPlayer.spawn();
       }
     }
@@ -6697,16 +6697,16 @@ window.grbtp = 35;
       if (player == null) {
         throw Error("isEnemyByID Error: Failed to find an owner!");
       }
-      if (player instanceof ClientPlayer_default) {
+      if (player instanceof ClientPlayer_ref) {
         return player.isEnemyByID(target.id);
       }
-      if (target instanceof ClientPlayer_default) {
+      if (target instanceof ClientPlayer_ref) {
         return target.isEnemyByID(player.id);
       }
       return this.isEnemy(player, target);
     }
     isEnemyTarget(owner, target) {
-      if (target instanceof Animal_default) {
+      if (target instanceof Animal_ref) {
         return true;
       }
       if (!this.client.isOwner) {
@@ -6716,13 +6716,13 @@ window.grbtp = 35;
       return this.isEnemyByID(owner.id, target);
     }
     canShoot(ownerID, target) {
-      return target instanceof Animal_default || this.isEnemyByID(ownerID, target);
+      return target instanceof Animal_ref || this.isEnemyByID(ownerID, target);
     }
     canMoveOnTop(object) {
       if (object instanceof Resource) {
         return false;
       }
-      const item = DataHandler_default.getItem(object.type);
+      const item = DataHandler_ref.getItem(object.type);
       const isEnemyObject = this.isEnemyByID(object.ownerID, this.client.myPlayer);
       if ("ignoreCollision" in item && (object.type !== 15 || !isEnemyObject)) {
         return true;
@@ -6730,22 +6730,22 @@ window.grbtp = 35;
       return false;
     }
     lookingShield(owner, target) {
-      if (owner instanceof Animal_default) {
+      if (owner instanceof Animal_ref) {
         return false;
       }
       const weapon = owner.weapon.current;
       if (weapon !== 11) {
         return false;
       }
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       const pos1 = owner.pos.current;
       const pos2 = target.pos.current;
       const angle = pos1.angle(pos2);
       const ownerAngle = myPlayer.isMyPlayerByID(owner.id) ? ModuleHandler.mouse.sentAngle : owner.angle;
-      return getAngleDist(angle, ownerAngle) <= Config_default.shieldAngle;
+      return getAngleDist(angle, ownerAngle) <= Config_ref.shieldAngle;
     }
   }
-  const PlayerManager_default = PlayerManager;
+  const PlayerManager_ref = PlayerManager;
   class ProjectileManager {
     client;
     projectiles=new Map;
@@ -6804,7 +6804,7 @@ window.grbtp = 35;
         }
       }
     }
-    postTick() {
+    runTick() {
       this.projectiles.clear();
       this.totalDamage = 0;
       for (const proj of this.dangerProjectiles) {
@@ -6818,7 +6818,7 @@ window.grbtp = 35;
       this.toRemove.clear();
     }
   }
-  const ProjectileManager_default = ProjectileManager;
+  const ProjectileManager_ref = ProjectileManager;
   class Projectile {
     pos={};
     angle;
@@ -6855,7 +6855,7 @@ window.grbtp = 35;
       return this.life <= 0;
     }
   }
-  const Projectile_default = Projectile;
+  const Projectile_ref = Projectile;
   const StoreHandler = new class {
     isOpened=false;
     store=[ {
@@ -6894,7 +6894,7 @@ window.grbtp = 35;
         const scale = Math.sign(event.deltaY) * 50;
         itemHolder.scroll(0, itemHolder.scrollTop + scale);
       });
-      const {gameUI: gameUI} = GameUI_default.getElements();
+      const {gameUI: gameUI} = GameUI_ref.getElements();
       gameUI.appendChild(storeContainer);
     }
     getTextEquip(type, id, price) {
@@ -6920,16 +6920,16 @@ window.grbtp = 35;
       img.src = `./img/${src.join("_")}.png`;
       const equipButton = div.querySelector(".equipButton");
       equipButton.onmousedown = () => {
-        client._ModuleHandler._equip(type, id, true, true);
+        client._Core._equip(type, id, true, true);
       };
       return div.firstElementChild;
     }
     fillStore(type) {
-      const {itemHolder: itemHolder} = GameUI_default.getElements();
+      const {itemHolder: itemHolder} = GameUI_ref.getElements();
       itemHolder.innerHTML = "";
-      const items = Settings_default._storeItems[type];
+      const items = Settings_ref._storeItems[type];
       for (const id of items) {
-        const item = DataHandler_default.getStoreItem(type, id);
+        const item = DataHandler_ref.getStoreItem(type, id);
         const element = this.generateStoreElement(type, id, item.name, item.price, "topSprite" in item);
         itemHolder.appendChild(element);
       }
@@ -6964,25 +6964,25 @@ window.grbtp = 35;
       }
     }
     closeStore() {
-      const {storeContainer: storeContainer, itemHolder: itemHolder} = GameUI_default.getElements();
+      const {storeContainer: storeContainer, itemHolder: itemHolder} = GameUI_ref.getElements();
       itemHolder.innerHTML = "";
       storeContainer.style.display = "none";
       this.isOpened = false;
     }
     openStore() {
-      GameUI_default.closePopups();
-      const {storeContainer: storeContainer} = GameUI_default.getElements();
+      GameUI_ref.closePopups();
+      const {storeContainer: storeContainer} = GameUI_ref.getElements();
       this.fillStore(this.currentType);
       storeContainer.style.display = "";
       storeContainer.classList.remove("closedItem");
       this.isOpened = true;
     }
     toggleStore() {
-      const {storeContainer: storeContainer, itemHolder: itemHolder} = GameUI_default.getElements();
+      const {storeContainer: storeContainer, itemHolder: itemHolder} = GameUI_ref.getElements();
       if (this.isOpened) {
         itemHolder.innerHTML = "";
       } else {
-        GameUI_default.closePopups();
+        GameUI_ref.closePopups();
         this.fillStore(this.currentType);
       }
       storeContainer.style.display = storeContainer.style.display === "none" ? "" : "none";
@@ -6992,7 +6992,7 @@ window.grbtp = 35;
       this.createStore(0);
     }
   };
-  const StoreHandler_default = StoreHandler;
+  const StoreHandler_ref = StoreHandler;
   class SocketManager {
     client;
     socket=null;
@@ -7030,7 +7030,7 @@ window.grbtp = 35;
       }
       if (!Number.isFinite(this.pong) || this.pong < 0) this.pong = 0;
       if (this.client.isOwner) {
-        GameUI_default.updatePing(this.pong);
+        GameUI_ref.updatePing(this.pong);
       }
       clearTimeout(this.pingTimeout);
       this.pingTimeout = setTimeout(() => {
@@ -7060,7 +7060,7 @@ window.grbtp = 35;
         msgType = translated;
       }
       const temp = [ msgType, ...decoded[1] ];
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler, PlayerManager: PlayerManager2, ObjectManager: ObjectManager2, ProjectileManager: ProjectileManager2, LeaderboardManager: LeaderboardManager2, PacketManager: PacketManager2} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _Core: ModuleHandler, PlayerManager: PlayerManager2, ObjectManager: ObjectManager2, ProjectileManager: ProjectileManager2, LeaderboardManager: LeaderboardManager2, PacketManager: PacketManager2} = this.client;
       switch (temp[0]) {
        case "0":
         this.handlePing();
@@ -7085,7 +7085,7 @@ window.grbtp = 35;
         } catch (e) {}
         PacketManager2.pingRequest();
         if (this.client.isOwner) {
-          GameUI_default.loadGame();
+          GameUI_ref.loadGame();
           Logger.test("Successfully connected to a server..");
         } else {
           this.client.myPlayer.spawn();
@@ -7142,7 +7142,7 @@ window.grbtp = 35;
         ObjectManager2.attackedObjects.clear();
         EnemyManager2.preReset();
         this.action = createAction(() => {
-          PlayerManager2.postTick();
+          PlayerManager2.runTick();
         }, 1);
         break;
 
@@ -7196,7 +7196,7 @@ window.grbtp = 35;
             const owner = PlayerManager2.playerData.get(turret.ownerID);
             if (owner !== void 0) {
               const projTurret = Projectiles[1];
-              const projectile = new Projectile_default(angle, projTurret.range, projTurret.speed, projTurret.index, projTurret.layer, -1);
+              const projectile = new Projectile_ref(angle, projTurret.range, projTurret.speed, projTurret.index, projTurret.layer, -1);
               projectile.pos.current = turret.pos.current.copy();
               projectile.ownerClient = owner;
               turret.projectile = projectile;
@@ -7225,8 +7225,8 @@ window.grbtp = 35;
             ProjectileManager2.ignoreCreation.delete(key);
             return;
           }
-          const projectile = new Projectile_default(angle, temp[4], temp[5], temp[6], temp[7], temp[8]);
-          projectile.pos.current = projectile.formatFromCurrent(new Vector_default(x, y), false);
+          const projectile = new Projectile_ref(angle, temp[4], temp[5], temp[6], temp[7], temp[8]);
+          projectile.pos.current = projectile.formatFromCurrent(new Vector_ref(x, y), false);
           ProjectileManager2.createProjectile(projectile);
           break;
         }
@@ -7290,7 +7290,7 @@ window.grbtp = 35;
        case "5":
         {
           const action = temp[1] === 0 ? 1 : 0;
-          StoreHandler_default.updateStoreState(temp[3], action, temp[2]);
+          StoreHandler_ref.updateStoreState(temp[3], action, temp[2]);
           if (temp[1] === 0) {
             const boughtStorage = ModuleHandler.bought[temp[3]];
             if (boughtStorage !== void 0) {
@@ -7322,7 +7322,7 @@ window.grbtp = 35;
       }
     }
   }
-  const SocketManager_default = SocketManager;
+  const SocketManager_ref = SocketManager;
   class StatsManager {
     client;
     kills=0;
@@ -7336,12 +7336,12 @@ window.grbtp = 35;
       this.client = client2;
     }
     init() {
-      this.totalKills = Settings_default._totalKills;
-      this.globalKills = Settings_default._globalKills;
-      this.deaths = Settings_default._deaths;
-      this.autoSyncTimes = Settings_default._autoSyncTimes;
-      this.spikeSyncHammerTimes = Settings_default._spikeSyncHammerTimes;
-      this.spikeSyncTimes = Settings_default._spikeSyncTimes;
+      this.totalKills = Settings_ref._totalKills;
+      this.globalKills = Settings_ref._globalKills;
+      this.deaths = Settings_ref._deaths;
+      this.autoSyncTimes = Settings_ref._autoSyncTimes;
+      this.spikeSyncHammerTimes = Settings_ref._spikeSyncHammerTimes;
+      this.spikeSyncTimes = Settings_ref._spikeSyncTimes;
     }
     get totalKills() {
       return this._totalKills;
@@ -7366,49 +7366,49 @@ window.grbtp = 35;
       if (!this.client.isOwner) {
         return;
       }
-      UI_default.updateStats("_totalKills", this._totalKills);
+      UI_ref.updateStats("_totalKills", this._totalKills);
     }
     set globalKills(value) {
       this._globalKills += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_default.updateStats("_globalKills", this._globalKills);
+      UI_ref.updateStats("_globalKills", this._globalKills);
     }
     set deaths(value) {
       this._deaths += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_default.updateStats("_deaths", this._deaths);
+      UI_ref.updateStats("_deaths", this._deaths);
     }
     set autoSyncTimes(value) {
       this._autoSyncTimes += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_default.updateStats("_autoSyncTimes", this._autoSyncTimes);
+      UI_ref.updateStats("_autoSyncTimes", this._autoSyncTimes);
     }
     set spikeSyncHammerTimes(value) {
       this._spikeSyncHammerTimes += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_default.updateStats("_spikeSyncHammerTimes", this._spikeSyncHammerTimes);
+      UI_ref.updateStats("_spikeSyncHammerTimes", this._spikeSyncHammerTimes);
     }
     set spikeSyncTimes(value) {
       this._spikeSyncTimes += value;
       if (!this.client.isOwner) {
         return;
       }
-      UI_default.updateStats("_spikeSyncTimes", this._spikeSyncTimes);
+      UI_ref.updateStats("_spikeSyncTimes", this._spikeSyncTimes);
     }
   }
   class InputHandler {
     client;
     hotkeys=new Map;
     move;
-    lastPosition=new Vector_default(0, 0);
+    lastPosition=new Vector_ref(0, 0);
     lockPosition=false;
     mouse={
       x: 0,
@@ -7438,18 +7438,18 @@ window.grbtp = 35;
       window.addEventListener("mouseup", event => this.handleMouseup(event), true);
       window.addEventListener("mousemove", event => this.handleMouseMove(event), true);
       window.addEventListener("mouseover", event => this.handleMouseMove(event), true);
-      window.addEventListener("wheel", event => ZoomHandler_default.handler(event), true);
+      window.addEventListener("wheel", event => ZoomHandler_ref.handler(event), true);
     }
     placementHandler(type, code) {
       const {isOwner: isOwner, clients: clients} = this.client;
       const item = this.client.myPlayer.getItemByType(type);
       if (item !== null) {
         this.hotkeys.set(code, type);
-        this.client._ModuleHandler.startPlacement(type);
+        this.client._Core.startPlacement(type);
       }
       if (isOwner) {
         for (const client2 of clients) {
-          client2._ModuleHandler.startPlacement(type);
+          client2._Core.startPlacement(type);
         }
       }
     }
@@ -7459,26 +7459,26 @@ window.grbtp = 35;
       }
       const {myPlayer: myPlayer} = this.client;
       const pos = myPlayer.pos.future;
-      const {_w: w, _h: h} = ZoomHandler_default._scale.current;
+      const {_w: w, _h: h} = ZoomHandler_ref._scale.current;
       const scale = Math.max(window.innerWidth / w, window.innerHeight / h);
       const cursorX = (this.mouse.x - window.innerWidth / 2) / scale;
       const cursorY = (this.mouse.y - window.innerHeight / 2) / scale;
-      return new Vector_default(pos.x + cursorX, pos.y + cursorY);
+      return new Vector_ref(pos.x + cursorX, pos.y + cursorY);
     }
     getMovePosition(force = false) {
       if (!force && this.lockPosition) {
         return this.lastPosition;
       }
-      if (Settings_default._followCursor) {
+      if (Settings_ref._followCursor) {
         return this.cursorPosition(true);
       }
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       if (ModuleHandler.move_dir !== null) {
-        return myPlayer.pos.current.addDirection(ModuleHandler.move_dir, Settings_default._movementRadius);
+        return myPlayer.pos.current.addDirection(ModuleHandler.move_dir, Settings_ref._movementRadius);
       }
       return myPlayer.pos.future;
     }
-    postTick() {}
+    runTick() {}
     toggleBotPosition() {
       const state = !this.lockPosition;
       if (state) {
@@ -7488,13 +7488,13 @@ window.grbtp = 35;
     }
     handleMovement() {
       const angle = getAngleFromBitmask(this.move, false);
-      this.client._ModuleHandler.startMovement(angle);
+      this.client._Core.startMovement(angle);
       const {isOwner: isOwner, clients: clients} = this.client;
     }
     toggleRotation() {
       this.rotation = !this.rotation;
       if (this.rotation) {
-        this.client._ModuleHandler._currentAngle = this.mouse.angle;
+        this.client._Core._currentAngle = this.mouse.angle;
       }
     }
     handleKeydown(event) {
@@ -7514,15 +7514,15 @@ window.grbtp = 35;
       if (event.repeat) {
         return;
       }
-      if (UI_default.isActiveButton()) {
+      if (UI_ref.isActiveButton()) {
         return;
       }
       const isInput = isActiveInput();
-      if (event.code === Settings_default._toggleMenu && !isInput) {
-        UI_default.toggleMenu();
+      if (event.code === Settings_ref._toggleMenu && !isInput) {
+        UI_ref.toggleMenu();
       }
-      if (event.code === Settings_default._toggleChat && !UI_default.isMenuOpened) {
-        GameUI_default.handleEnter(event);
+      if (event.code === Settings_ref._toggleChat && !UI_ref.isMenuOpened) {
+        GameUI_ref.handleEnter(event);
       }
       if (!this.client.myPlayer.inGame) {
         return;
@@ -7530,76 +7530,76 @@ window.grbtp = 35;
       if (isInput) {
         return;
       }
-      const {_ModuleHandler: ModuleHandler} = this.client;
-      if (event.code === Settings_default._food) {
+      const {_Core: ModuleHandler} = this.client;
+      if (event.code === Settings_ref._food) {
         this.placementHandler(2, event.code);
       }
-      if (event.code === Settings_default._wall) {
+      if (event.code === Settings_ref._wall) {
         this.placementHandler(3, event.code);
       }
-      if (event.code === Settings_default._spike) {
+      if (event.code === Settings_ref._spike) {
         this.placementHandler(4, event.code);
       }
-      if (event.code === Settings_default._windmill) {
+      if (event.code === Settings_ref._windmill) {
         this.placementHandler(5, event.code);
       }
-      if (event.code === Settings_default._farm) {
+      if (event.code === Settings_ref._farm) {
         this.placementHandler(6, event.code);
       }
-      if (event.code === Settings_default._trap) {
+      if (event.code === Settings_ref._trap) {
         this.placementHandler(7, event.code);
       }
-      if (event.code === Settings_default._turret) {
+      if (event.code === Settings_ref._turret) {
         this.placementHandler(8, event.code);
       }
-      if (event.code === Settings_default._spawn) {
+      if (event.code === Settings_ref._spawn) {
         this.placementHandler(9, event.code);
       }
       const copyMove = this.move;
-      if (event.code === Settings_default._up) {
+      if (event.code === Settings_ref._up) {
         this.move |= 1;
       }
-      if (event.code === Settings_default._left) {
+      if (event.code === Settings_ref._left) {
         this.move |= 4;
       }
-      if (event.code === Settings_default._down) {
+      if (event.code === Settings_ref._down) {
         this.move |= 2;
       }
-      if (event.code === Settings_default._right) {
+      if (event.code === Settings_ref._right) {
         this.move |= 8;
       }
       if (copyMove !== this.move) {
         this.handleMovement();
       }
-      if (event.code === Settings_default._autoattack) {
+      if (event.code === Settings_ref._autoattack) {
         ModuleHandler.toggleAutoattack();
       }
-      if (event.code === Settings_default._lockrotation) {
+      if (event.code === Settings_ref._lockrotation) {
         this.toggleRotation();
       }
-      if (event.code === Settings_default._lockBotPosition) {
+      if (event.code === Settings_ref._lockBotPosition) {
         this.toggleBotPosition();
       }
-      if (event.code === Settings_default._instakill) {
+      if (event.code === Settings_ref._instakill) {
         this.instaToggle = !this.instaToggle;
       }
-      if (event.code === Settings_default._botAutoFarm && Settings_default._botAutoFarm !== "") {
-        Settings_default._botAutoFarmEnabled = !Settings_default._botAutoFarmEnabled;
-        Settings_default._botAutoAttackEnabled = Settings_default._botAutoFarmEnabled;
+      if (event.code === Settings_ref._botAutoFarm && Settings_ref._botAutoFarm !== "") {
+        Settings_ref._botAutoFarmEnabled = !Settings_ref._botAutoFarmEnabled;
+        Settings_ref._botAutoAttackEnabled = Settings_ref._botAutoFarmEnabled;
         try {
           const {isOwner: _afIsOwner, clients: _afClients} = this.client;
           if (_afIsOwner) {
             let _afIndex = 0;
             for (const _afBot of _afClients) {
-              if (_afBot._ModuleHandler) {
-                _afBot._ModuleHandler._autoFarmActive = Settings_default._botAutoFarmEnabled;
-                _afBot._ModuleHandler._autoFarmTarget = null;
-                _afBot._ModuleHandler._autoFarmWander = null;
+              if (_afBot._Core) {
+                _afBot._Core._autoFarmActive = Settings_ref._botAutoFarmEnabled;
+                _afBot._Core._autoFarmTarget = null;
+                _afBot._Core._autoFarmWander = null;
                 try {
-                  _rynSetAttackingStaggered(_afBot._ModuleHandler, Settings_default._botAutoAttackEnabled ? 1 : 0, _afIndex);
+                  _rynSetAttackingStaggered(_afBot._Core, Settings_ref._botAutoAttackEnabled ? 1 : 0, _afIndex);
                 } catch (_) {}
-                if (!Settings_default._botAutoFarmEnabled) {
-                  _afBot._ModuleHandler.startMovement(null);
+                if (!Settings_ref._botAutoFarmEnabled) {
+                  _afBot._Core.startMovement(null);
                 }
               }
               _afIndex++;
@@ -7607,20 +7607,20 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
-      if (event.code === Settings_default._botAutoAttack) {
-        Settings_default._botAutoAttackEnabled = !Settings_default._botAutoAttackEnabled;
+      if (event.code === Settings_ref._botAutoAttack) {
+        Settings_ref._botAutoAttackEnabled = !Settings_ref._botAutoAttackEnabled;
         const {isOwner: isOwner2, clients: clients2} = this.client;
         if (isOwner2) {
           let _baIndex = 0;
           for (const bot2 of clients2) {
-            _rynSetAttackingStaggered(bot2._ModuleHandler, Settings_default._botAutoAttackEnabled ? 1 : 0, _baIndex);
+            _rynSetAttackingStaggered(bot2._Core, Settings_ref._botAutoAttackEnabled ? 1 : 0, _baIndex);
             _baIndex++;
           }
         }
       }
-      if (event.code === Settings_default._spawnBot) {
+      if (event.code === Settings_ref._spawnBot) {
         try {
-          const doc = UI_default.frame && UI_default.frame.document;
+          const doc = UI_ref.frame && UI_ref.frame.document;
           if (doc) {
             const addBtn = doc.querySelector("#add-bot-dynamic");
             if (addBtn) {
@@ -7638,22 +7638,22 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
-      if (event.code === Settings_default._killAllBots) {
+      if (event.code === Settings_ref._killAllBots) {
         try {
           this.client.removeBots();
         } catch (_) {}
       }
-      if (event.code === (Settings_default._clearTargets || "KeyT")) {
+      if (event.code === (Settings_ref._clearTargets || "KeyT")) {
         try {
           _clearAllTargets();
         } catch (_) {}
       }
-      if (event.code === Settings_default._repelAlts) {
+      if (event.code === Settings_ref._repelAlts) {
         try {
           const {isOwner: isOwner2, clients: clients2} = this.client;
           if (isOwner2) {
             for (const bot2 of clients2) {
-              const mh = bot2._ModuleHandler;
+              const mh = bot2._Core;
               if (mh) {
                 mh._repelActive = !mh._repelActive;
                 if (mh._repelActive) {
@@ -7671,20 +7671,20 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
-      if (event.code === Settings_default._freezeBots && Settings_default._freezeBots !== "") {
+      if (event.code === Settings_ref._freezeBots && Settings_ref._freezeBots !== "") {
         try {
           const {isOwner: _fbIsOwner, clients: _fbClients} = this.client;
           if (_fbIsOwner) {
-            Settings_default._botsFrozen = !Settings_default._botsFrozen;
+            Settings_ref._botsFrozen = !Settings_ref._botsFrozen;
             for (const _fbBot of _fbClients) {
-              const _fbMH = _fbBot._ModuleHandler;
+              const _fbMH = _fbBot._Core;
               if (!_fbMH) continue;
-              if (Settings_default._botsFrozen) {
+              if (Settings_ref._botsFrozen) {
                 _fbMH.move_dir = null;
                 _fbMH.startMovement(null, true);
                 _fbBot.PacketManager.move(null);
                 try {
-                  const _fbMov = _fbMH.modules && _fbMH.modules.find(m => m.moduleName === "movement");
+                  const _fbMov = _fbMH.modules && _fbMH.modules.find(m => m.unitID === "movement");
                   if (_fbMov) _fbMov.isStopped = true;
                 } catch (_) {}
               }
@@ -7692,15 +7692,15 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
-      if (event.code === Settings_default._scatterBots && Settings_default._scatterBots !== "...") {
+      if (event.code === Settings_ref._scatterBots && Settings_ref._scatterBots !== "...") {
         try {
           const {isOwner: _sbIsOwner, clients: _sbClients} = this.client;
           if (_sbIsOwner) {
             const _sbFirst = [ ..._sbClients ][0];
-            const _sbCurrentlyActive = _sbFirst && _sbFirst._ModuleHandler && _sbFirst._ModuleHandler._scatterActive;
+            const _sbCurrentlyActive = _sbFirst && _sbFirst._Core && _sbFirst._Core._scatterActive;
             if (_sbCurrentlyActive) {
               for (const _sbBot of _sbClients) {
-                const _sbMH = _sbBot._ModuleHandler;
+                const _sbMH = _sbBot._Core;
                 if (!_sbMH) continue;
                 _sbMH._scatterActive = false;
                 _sbMH._scatterDest = null;
@@ -7711,7 +7711,7 @@ window.grbtp = 35;
               }
             } else {
               for (const _sbBot of _sbClients) {
-                const _sbMH = _sbBot._ModuleHandler;
+                const _sbMH = _sbBot._Core;
                 if (!_sbMH) continue;
                 _sbMH._scatterActive = true;
                 _sbMH._scatterReturning = false;
@@ -7726,11 +7726,11 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
-      if (Settings_default._formationHotkeys) {
-        for (const fid in Settings_default._formationHotkeys) {
-          const fkey = Settings_default._formationHotkeys[fid];
+      if (Settings_ref._formationHotkeys) {
+        for (const fid in Settings_ref._formationHotkeys) {
+          const fkey = Settings_ref._formationHotkeys[fid];
           if (fkey && fkey !== "..." && event.code === fkey && FORMATION_IDS.has(fid)) {
-            Settings_default._formation = fid;
+            Settings_ref._formation = fid;
             SaveSettings();
             if (typeof window._updateFormationUI === "function") {
               window._updateFormationUI();
@@ -7739,9 +7739,9 @@ window.grbtp = 35;
           }
         }
       }
-      if (event.code === Settings_default._fourSpikes) {
+      if (event.code === Settings_ref._fourSpikes) {
         try {
-          const mh = this.client._ModuleHandler;
+          const mh = this.client._Core;
           const base = mh._currentAngle;
           mh.place(4, base);
           mh.place(4, base + toRadians(90));
@@ -7749,7 +7749,7 @@ window.grbtp = 35;
           mh.place(4, base + toRadians(270));
           if (this.client.isOwner) {
             for (const bot2 of this.client.clients) {
-              const bmh = bot2._ModuleHandler;
+              const bmh = bot2._Core;
               if (!bmh) continue;
               const ba = bmh._currentAngle;
               bmh.place(4, ba);
@@ -7760,9 +7760,9 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
-      if (event.code === Settings_default._fourTraps) {
+      if (event.code === Settings_ref._fourTraps) {
         try {
-          const mh = this.client._ModuleHandler;
+          const mh = this.client._Core;
           const base = mh._currentAngle;
           mh.place(7, base);
           mh.place(7, base + toRadians(90));
@@ -7770,7 +7770,7 @@ window.grbtp = 35;
           mh.place(7, base + toRadians(270));
           if (this.client.isOwner) {
             for (const bot2 of this.client.clients) {
-              const bmh = bot2._ModuleHandler;
+              const bmh = bot2._Core;
               if (!bmh) continue;
               const ba = bmh._currentAngle;
               bmh.place(7, ba);
@@ -7781,46 +7781,46 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
-      if (event.code === Settings_default._autoMillKey) {
+      if (event.code === Settings_ref._autoMillKey) {
         try {
-          Settings_default._automill = !Settings_default._automill;
-          const autoMillEl = UI_default.frame && UI_default.frame.document && UI_default.frame.document.getElementById("_automill");
-          if (autoMillEl) autoMillEl.checked = Settings_default._automill;
+          Settings_ref._automill = !Settings_ref._automill;
+          const autoMillEl = UI_ref.frame && UI_ref.frame.document && UI_ref.frame.document.getElementById("_automill");
+          if (autoMillEl) autoMillEl.checked = Settings_ref._automill;
         } catch (_) {}
       }
-      if (event.code === Settings_default._dashMovementKey) {
+      if (event.code === Settings_ref._dashMovementKey) {
         try {
-          Settings_default._dashMovement = !Settings_default._dashMovement;
-          const dashEl = UI_default.frame && UI_default.frame.document && UI_default.frame.document.getElementById("_dashMovement");
-          if (dashEl) dashEl.checked = Settings_default._dashMovement;
+          Settings_ref._dashMovement = !Settings_ref._dashMovement;
+          const dashEl = UI_ref.frame && UI_ref.frame.document && UI_ref.frame.document.getElementById("_dashMovement");
+          if (dashEl) dashEl.checked = Settings_ref._dashMovement;
         } catch (_) {}
       }
-      if (Settings_default._autoGrindKey && event.code === Settings_default._autoGrindKey) {
+      if (Settings_ref._autoGrindKey && event.code === Settings_ref._autoGrindKey) {
         try {
-          const grindMod = window.client?._ModuleHandler?.staticModules?.autoGrind;
-          if (Settings_default._autoGrind || !grindMod || !grindMod.isFullyUpgraded()) {
-            Settings_default._autoGrind = !Settings_default._autoGrind;
-            const grindEl = UI_default.frame && UI_default.frame.document && UI_default.frame.document.getElementById("_autoGrind");
-            if (grindEl) grindEl.checked = Settings_default._autoGrind;
+          const grindMod = window.client?._Core?.unitTable?.autoGrind;
+          if (Settings_ref._autoGrind || !grindMod || !grindMod.isFullyUpgraded()) {
+            Settings_ref._autoGrind = !Settings_ref._autoGrind;
+            const grindEl = UI_ref.frame && UI_ref.frame.document && UI_ref.frame.document.getElementById("_autoGrind");
+            if (grindEl) grindEl.checked = Settings_ref._autoGrind;
           }
         } catch (_) {}
       }
-      if (Settings_default._autoplacerKey && event.code === Settings_default._autoplacerKey) {
+      if (Settings_ref._autoplacerKey && event.code === Settings_ref._autoplacerKey) {
         try {
-          Settings_default._autoplacer = !Settings_default._autoplacer;
+          Settings_ref._autoplacer = !Settings_ref._autoplacer;
           syncPlacerSlaves();
         } catch (_) {}
       }
-      if (event.code === Settings_default._boostSpikes) {
+      if (event.code === Settings_ref._boostSpikes) {
         try {
-          const mh = this.client._ModuleHandler;
+          const mh = this.client._Core;
           const angle = mh._currentAngle;
           mh.place(7, angle);
           mh.place(4, angle + toRadians(90));
           mh.place(4, angle - toRadians(90));
           if (this.client.isOwner) {
             for (const bot2 of this.client.clients) {
-              const bmh = bot2._ModuleHandler;
+              const bmh = bot2._Core;
               if (!bmh) continue;
               const ba = bmh._currentAngle;
               bmh.place(7, ba);
@@ -7830,26 +7830,26 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
-      if (UI_default.isMenuOpened) {
+      if (UI_ref.isMenuOpened) {
         return;
       }
     }
     handleKeyup(event) {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, isOwner: isOwner, clients: clients} = this.client;
+      const {myPlayer: myPlayer, _Core: ModuleHandler, isOwner: isOwner, clients: clients} = this.client;
       if (!myPlayer.inGame) {
         return;
       }
       const copyMove = this.move;
-      if (event.code === Settings_default._up) {
+      if (event.code === Settings_ref._up) {
         this.move &= -2;
       }
-      if (event.code === Settings_default._left) {
+      if (event.code === Settings_ref._left) {
         this.move &= -5;
       }
-      if (event.code === Settings_default._down) {
+      if (event.code === Settings_ref._down) {
         this.move &= -3;
       }
-      if (event.code === Settings_default._right) {
+      if (event.code === Settings_ref._right) {
         this.move &= -9;
       }
       if (copyMove !== this.move) {
@@ -7861,7 +7861,7 @@ window.grbtp = 35;
         ModuleHandler.startPlacement(type);
         if (isOwner) {
           for (const client2 of clients) {
-            client2._ModuleHandler.startPlacement(type);
+            client2._Core.startPlacement(type);
           }
         }
       }
@@ -7875,7 +7875,7 @@ window.grbtp = 35;
         this.instaToggle = !this.instaToggle;
         return;
       }
-      const {isOwner: isOwner, clients: clients, _ModuleHandler: ModuleHandler} = this.client;
+      const {isOwner: isOwner, clients: clients, _Core: ModuleHandler} = this.client;
       const state = button === "LBTN" ? 1 : button === "RBTN" ? 2 : null;
       if (state !== null && ModuleHandler.attacking === 0) {
         ModuleHandler.attacking = state;
@@ -7883,7 +7883,7 @@ window.grbtp = 35;
         if (isOwner) {
           let _mdIndex = 0;
           for (const client2 of clients) {
-            _rynSetAttackingStaggered(client2._ModuleHandler, state, _mdIndex);
+            _rynSetAttackingStaggered(client2._Core, state, _mdIndex);
             _mdIndex++;
           }
         }
@@ -7891,7 +7891,7 @@ window.grbtp = 35;
     }
     handleMouseup(event) {
       const button = formatButton(event.button);
-      const {isOwner: isOwner, clients: clients, _ModuleHandler: ModuleHandler} = this.client;
+      const {isOwner: isOwner, clients: clients, _Core: ModuleHandler} = this.client;
       if ((button === "LBTN" || button === "RBTN") && ModuleHandler.attacking !== 0) {
         if (!ModuleHandler.autoattack) {
           ModuleHandler.attacking = 0;
@@ -7899,8 +7899,8 @@ window.grbtp = 35;
         if (isOwner) {
           for (const client2 of clients) {
             const _squadBlocked = typeof _isControlled === "function" && !_isControlled(client2);
-            if (!Settings_default._botAutoAttackEnabled || _squadBlocked) {
-              client2._ModuleHandler.staticModules.tempData.setAttacking(0);
+            if (!Settings_ref._botAutoAttackEnabled || _squadBlocked) {
+              client2._Core.unitTable.tempData.setAttacking(0);
             }
           }
         }
@@ -7914,26 +7914,26 @@ window.grbtp = 35;
       if (this.rotation) {
         this.mouse.x = x;
         this.mouse.y = y;
-        this.client._ModuleHandler._currentAngle = angle;
+        this.client._Core._currentAngle = angle;
       }
     }
   }
   function _rynSetAttackingStaggered(mh, state, index, stepMs = null) {
-    if (!mh || !mh.staticModules || !mh.staticModules.tempData) return;
+    if (!mh || !mh.unitTable || !mh.unitTable.tempData) return;
     if (state !== 0 && mh.attacking === state) return;
     try {
-      mh.staticModules.tempData.setAttacking(state);
+      mh.unitTable.tempData.setAttacking(state);
     } catch (_) {}
   }
   class TempData {
-    moduleName="tempData";
+    unitID="tempData";
     client;
     store=[ 0, 0 ];
     constructor(client2) {
       this.client = client2;
     }
     setAttacking(attacking) {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+      const {_Core: ModuleHandler} = this.client;
       ModuleHandler.attacking = attacking;
       if (attacking !== 0) {
         ModuleHandler.attackingState = attacking;
@@ -7944,7 +7944,7 @@ window.grbtp = 35;
       this.handleBuy(type);
     }
     handleBuy(type) {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+      const {_Core: ModuleHandler} = this.client;
       const id = this.store[type];
       const store2 = ModuleHandler.store[type];
       if (store2.actual === id) {
@@ -7956,17 +7956,17 @@ window.grbtp = 35;
       const temp = ModuleHandler.canBuy(type, id) ? id : 0;
       ModuleHandler._equip(type, temp, true);
     }
-    postTick() {
+    runTick() {
       this.handleBuy(0);
       this.handleBuy(1);
     }
   }
-  const TempData_default = TempData;
+  const TempData_ref = TempData;
   window._gbot1v1BotID = null;
   window._gbot1v1LastBuild = 0;
   window._gbot1v1WinCleanup = null;
   class Movement {
-    moduleName="movement";
+    unitID="movement";
     client;
     isStopped=true;
     constructor(client2) {
@@ -7978,7 +7978,7 @@ window.grbtp = 35;
         const ownerPlayer = ownerClient && ownerClient.myPlayer;
         const botPlayer = this.client.myPlayer;
         if (ownerPlayer && ownerPlayer.pos && ownerPlayer.pos.current && botPlayer.inGame) {
-          const mh = this.client._ModuleHandler;
+          const mh = this.client._Core;
           const myPos = botPlayer.pos.current;
           const ownerPos = ownerPlayer.pos.current;
           const dx = ownerPos.x - myPos.x;
@@ -8000,7 +8000,7 @@ window.grbtp = 35;
           }
           const S = window._1v1State;
           mh._currentAngle = toOwner;
-          mh.staticModules.tempData.setAttacking(1);
+          mh.unitTable.tempData.setAttacking(1);
           if (now >= S.phaseEnd) {
             const roll = Math.random();
             if (dist > 350) {
@@ -8114,7 +8114,7 @@ window.grbtp = 35;
       return this.client.ownerClient.InputHandler.getMovePosition();
     }
     getFormationOffset(botIndex, totalBots, circleOffset, radius, facingAngle) {
-      const f = Settings_default._formation || "none";
+      const f = Settings_ref._formation || "none";
       const t = botIndex / totalBots;
       const angle = 2 * Math.PI * t + circleOffset;
       const fAngle = facingAngle || 0;
@@ -8212,12 +8212,12 @@ window.grbtp = 35;
       const pos = this.getMovePosition();
       const ownerClient = this.client.ownerClient;
       const botIndex = ownerClient.getClientIndex(this.client);
-      const f = Settings_default._formation || "none";
+      const f = Settings_ref._formation || "none";
       if (f === "none") return pos;
       const totalBots = ownerClient.clients.size;
       if (totalBots === 0) return pos;
-      const {circleOffset: circleOffset} = ownerClient._ModuleHandler;
-      const radius = Settings_default._circleRadius;
+      const {circleOffset: circleOffset} = ownerClient._Core;
+      const radius = Settings_ref._circleRadius;
       const facingAngle = ownerClient.InputHandler && ownerClient.InputHandler.mouse ? ownerClient.InputHandler.mouse.angle : 0;
       const {dx: dx, dy: dy} = this.getFormationOffset(botIndex, totalBots, circleOffset, radius, facingAngle);
       return pos.addDirection(Math.atan2(dy, dx), Math.sqrt(dx * dx + dy * dy));
@@ -8226,16 +8226,16 @@ window.grbtp = 35;
       const {previous: previous, current: current} = this.client.myPlayer.pos;
       return previous.distance(pos) <= radius || current.distance(pos) <= radius;
     }
-    postTick() {
+    runTick() {
       const {InputHandler: InputHandler2} = this.client.ownerClient;
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       if (ModuleHandler._scatterActive || ModuleHandler._scatterReturning) return;
       if (ModuleHandler._autoFarmActive) return;
       {
         const _wc = window._gbot1v1WinCleanup;
         if (_wc && _wc.active && _wc.bot === this.client) return;
       }
-      if (Settings_default._botsFrozen) {
+      if (Settings_ref._botsFrozen) {
         if (!this.isStopped) {
           this.isStopped = true;
           ModuleHandler.startMovement(null, true);
@@ -8253,9 +8253,9 @@ window.grbtp = 35;
           return;
         }
       } catch (e) {}
-      if (Settings_default._shieldGuard) {
+      if (Settings_ref._shieldGuard) {
         const oc2 = this.client.ownerClient;
-        const gm = oc2._ModuleHandler && oc2._ModuleHandler.staticModules && oc2._ModuleHandler.staticModules.guardModule;
+        const gm = oc2._Core && oc2._Core.unitTable && oc2._Core.unitTable.guardModule;
         if (gm) {
           const {isGuard: isGuard} = gm._resolveGuard.call({
             client: this.client
@@ -8285,7 +8285,7 @@ window.grbtp = 35;
       const lookPos = InputHandler2.cursorPosition();
       const lookAt = pos1.angle(lookPos);
       ModuleHandler._currentAngle = lookAt;
-      if (!this.someColliding(walkPos, Settings_default._movementRadius)) {
+      if (!this.someColliding(walkPos, Settings_ref._movementRadius)) {
         const walkTo = pos1.angle(walkPos);
         this.isStopped = !ModuleHandler.startMovement(walkTo);
       } else if (!this.isStopped) {
@@ -8294,9 +8294,9 @@ window.grbtp = 35;
       }
     }
   }
-  const Movement_default = Movement;
+  const Movement_ref = Movement;
   class ClanJoiner {
-    moduleName="clanJoiner";
+    unitID="clanJoiner";
     client;
     joinCount=0;
     prevOwnerClan=null;
@@ -8304,8 +8304,8 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      if (Settings_default._botIndividualClans) {
+    runTick() {
+      if (Settings_ref._botIndividualClans) {
         this._individualClanTick();
         return;
       }
@@ -8355,10 +8355,10 @@ window.grbtp = 35;
       }
     }
   }
-  const ClanJoiner_default = ClanJoiner;
+  const ClanJoiner_ref = ClanJoiner;
 
   class Autobreak {
-    moduleName="autoBreak";
+    unitID="autoBreak";
     client;
     constructor(client2) {
       this.client = client2;
@@ -8436,8 +8436,8 @@ window.grbtp = 35;
       if (id === null) {
         return 0;
       }
-      if (DataHandler_default.isMelee(id)) {
-        return DataHandler_default.getWeapon(id).range + target.hitScale;
+      if (DataHandler_ref.isMelee(id)) {
+        return DataHandler_ref.getWeapon(id).range + target.hitScale;
       }
       return 0;
     }
@@ -8471,7 +8471,7 @@ window.grbtp = 35;
       return [ enemyFirst(), null ];
     }
     getDestroyingWeapon(target) {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       const pos0 = myPlayer.pos.current;
       const pos1 = target.pos.current;
       const distance = pos0.distance(pos1);
@@ -8487,7 +8487,7 @@ window.grbtp = 35;
       // finish: the swing landed at a third of the assumed damage and the
       // building survived. Only count it when we are already wearing it.
       const primaryDamage = myPlayer.getBuildingDamage(primary, myPlayer.hatID === 40);
-      const _pw = DataHandler_default?.getWeapon?.(primary);
+      const _pw = DataHandler_ref?.getWeapon?.(primary);
       const isFastPrimary = (_pw?.speed ?? 1e9) < 400;
       const canOneHitWithPrimary = primaryDamage >= target.health;
       if (isFastPrimary && canOneHitWithPrimary && inPrimaryRange) {
@@ -8517,7 +8517,7 @@ window.grbtp = 35;
       const myPos = myPlayer.pos.current;
       const enemyPos = enemy.pos.current;
       const hammerDmg = myPlayer.getBuildingDamage?.(secondary, myPlayer.hatID === 40) ?? 0;
-      const hammerWD = DataHandler_default.getWeapon(secondary);
+      const hammerWD = DataHandler_ref.getWeapon(secondary);
       const spikeItem = Items[spikeId];
       const spikeReach = spikeItem.scale + enemy.collisionScale;
       let best = null, bestScore = -Infinity;
@@ -8541,9 +8541,9 @@ window.grbtp = 35;
       });
       return best;
     }
-    postTick() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
-      if (!Settings_default._autobreak) {
+    runTick() {
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
+      if (!Settings_ref._autobreak) {
         return;
       }
       if (ModuleHandler.moduleActive && !myPlayer.isTrapped) {
@@ -8552,7 +8552,7 @@ window.grbtp = 35;
       const beneficial = this._beneficialBreakTarget(myPlayer, EnemyManager2.nearestEnemy, ObjectManager3, PlayerManager3);
       if (beneficial) {
         const secondary = myPlayer.getItemByType(1);
-        const {reloading: reloading} = ModuleHandler.staticModules;
+        const {reloading: reloading} = ModuleHandler.unitTable;
         if (reloading.isReloaded(1)) {
           const bPos = beneficial.pos.current;
           ModuleHandler.moduleActive = true;
@@ -8587,11 +8587,11 @@ window.grbtp = 35;
       if (distance > range) {
         return;
       }
-      this.client._ModuleHandler._autoBreakActive = true;
+      this.client._Core._autoBreakActive = true;
       const angle1 = pos1.angle(pos2);
-      this.client._ModuleHandler._lastBreakAngle = angle1;
+      this.client._Core._lastBreakAngle = angle1;
       if (myPlayer.isTrapped && myTrapOnEnemy === null) {
-        const {reloading: _rl} = ModuleHandler.staticModules;
+        const {reloading: _rl} = ModuleHandler.unitTable;
         if (_rl.isReloaded(type)) {
           ModuleHandler.forceWeapon = type;
           ModuleHandler.moduleActive = true;
@@ -8656,7 +8656,7 @@ window.grbtp = 35;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       const totalDamage = EnemyManager2.primaryDamage + EnemyManager2.potentialSpikeDamage;
       const shouldIgnore = EnemyManager2.instaThreat() || nearestEnemy !== null && nearestEnemy.reload[0].previous !== nearestEnemy.reload[0].current && myPlayer.currentHealth <= totalDamage && myPlayer.currentHealth > totalDamage * .75;
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       ModuleHandler.forceWeapon = type;
       const urgentRetrapRisk = myPlayer.isTrapped && target.type === 15 && this.enemyCanRetrapMe(myPlayer, nearestEnemy, this.client.ObjectManager);
       if (reloading.isReloaded(type) && !shouldIgnore) {
@@ -8670,7 +8670,7 @@ window.grbtp = 35;
     }
   }
   class AutoPush {
-    moduleName="autoPush";
+    unitID="autoPush";
     client;
     pushPos=null;
     constructor(client2) {
@@ -8679,14 +8679,14 @@ window.grbtp = 35;
     reset() {
       this.pushPos = null;
     }
-    postTick() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
+    runTick() {
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
       this.pushPos = null;
       const nearestEnemyPush = EnemyManager2.nearestEnemyPush;
       const nearestPushSpike = EnemyManager2.nearestPushSpike;
       EnemyManager2.nearestEnemyPush = null;
       EnemyManager2.nearestPushSpike = null;
-      if (ModuleHandler.moduleActive || !Settings_default._autoPush || ModuleHandler.moveTo !== "disable") {
+      if (ModuleHandler.moduleActive || !Settings_ref._autoPush || ModuleHandler.moveTo !== "disable") {
         return;
       }
       if (nearestEnemyPush === null || nearestPushSpike === null) {
@@ -8699,7 +8699,7 @@ window.grbtp = 35;
       const pos0 = myPlayer.pos.current;
       const pos1 = nearestEnemyPush.pos.current;
       const pos2 = nearestPushSpike.pos.current;
-      const pushRange = Settings_default._autoPushRange ?? 250;
+      const pushRange = Settings_ref._autoPushRange ?? 250;
       if (!myPlayer.collidingSimple(nearestEnemyPush, pushRange) || nearestEnemyPush.colliding(nearestPushSpike, nearestEnemyPush.collisionScale + nearestPushSpike.collisionScale + 1)) {
         return;
       }
@@ -8738,9 +8738,9 @@ window.grbtp = 35;
       ModuleHandler.moveTo = pos0.angle(this.pushPos);
     }
   }
-  const AutoPush_default = AutoPush;
+  const AutoPush_ref = AutoPush;
   class AutoPlay {
-    moduleName="autoPlay";
+    unitID="autoPlay";
     client;
     circleDirection=1;
     constructor(client2) {
@@ -8774,9 +8774,9 @@ window.grbtp = 35;
       });
       return blocked;
     }
-    postTick() {
-      if (!Settings_default._autoPlay) return;
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      if (!Settings_ref._autoPlay) return;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
       const enemy = EnemyManager2.nearestEnemy;
       if (!enemy) return;
@@ -8799,17 +8799,17 @@ window.grbtp = 35;
       ModuleHandler.startMovement(moveAngle);
     }
   }
-  const AutoPlay_default = AutoPlay;
+  const AutoPlay_ref = AutoPlay;
   class TrapTick {
-    moduleName="trapTick";
+    unitID="trapTick";
     client;
     constructor(client2) {
       this.client = client2;
     }
     reset() {}
-    postTick() {}
+    runTick() {}
   }
-  const TrapTick_default = TrapTick;
+  const TrapTick_ref = TrapTick;
   // ==========================================================================
   // Luna placer — autoplace, preplace and replace, ported from Luna Client 1.1
   // (`getPredictObjects`, `updateAngles`, `getPrePlaceAngles`,
@@ -8999,7 +8999,7 @@ window.grbtp = 35;
   // lands within `collisionScale + spikeScale` of the enemy, so a non-empty
   // one is exactly "a spike reaches them".
   function spikeTickKillWindow(client2) {
-    if (!Settings_default._spikeTick || !Settings_default._spikeTickBreak) return false;
+    if (!Settings_ref._spikeTick || !Settings_ref._spikeTickBreak) return false;
     const {myPlayer: myPlayer, EnemyManager: EnemyManager2} = client2;
     if (!myPlayer || !myPlayer.isTrapped) return false;
     const enemy = EnemyManager2.nearestEnemy;
@@ -9009,7 +9009,7 @@ window.grbtp = 35;
   }
 
   class AutoPlacer {
-    moduleName="autoPlacer";
+    unitID="autoPlacer";
     client;
     _predictObjects=[];
     _placedSpots=[];
@@ -9182,7 +9182,7 @@ window.grbtp = 35;
     _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
       if (id === null || id === undefined) return [];
       if (this._isItemLimit(id, myPlayer, excludeObj)) return [];
-      const tick = this.client._ModuleHandler.tickCount;
+      const tick = this.client._Core.tickCount;
       if (this._angleCacheTick !== tick) {
         this._angleCache.clear();
         this._angleCacheTick = tick;
@@ -9216,8 +9216,8 @@ window.grbtp = 35;
         // around a point; it stays a per-candidate test as Luna had it.
         const dry = cfg => {
           if (id === 18) return true;
-          const mid = Config_default.mapScale / 2;
-          const riverHalf = Config_default.riverWidth / 2;
+          const mid = Config_ref.mapScale / 2;
+          const riverHalf = Config_ref.riverWidth / 2;
           return !(cfg.y >= mid - riverHalf && cfg.y <= mid + riverHalf);
         };
         const push = (angle, perfect) => {
@@ -9275,7 +9275,7 @@ window.grbtp = 35;
     // about to break with a weapon that just came off reload. Whichever it is,
     // the closest to the enemy wins, and finding one arms the replace resend.
     _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped) {
-      const ModuleHandler = this.client._ModuleHandler;
+      const ModuleHandler = this.client._Core;
       let findObject = null;
       // A path break is excluded. This branch exists to claim the ground under
       // something I am about to knock down, and `findAngle` is sorted by
@@ -9293,11 +9293,11 @@ window.grbtp = 35;
         const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
         const predictReady = myWeapon !== null && myWeapon !== undefined && myPlayer.isReloaded(predictType, 0);
         if (predictReady) {
-          const wd = DataHandler_default?.getWeapon?.(myWeapon);
+          const wd = DataHandler_ref?.getWeapon?.(myWeapon);
           if (wd) {
             const myRange = wd.range ?? 0;
             const myDmg = myPlayer.getBuildingDamage?.(myWeapon, myPlayer.hatID === 40) ?? 0;
-            const gatherAngle = Config_default.gatherAngle;
+            const gatherAngle = Config_ref.gatherAngle;
             const myFut = myPlayer.pos.future ?? myPos;
             const attackAngle = ModuleHandler._autoBreakActive && ModuleHandler._lastBreakAngle !== null && ModuleHandler._lastBreakAngle !== undefined ? ModuleHandler._lastBreakAngle : ModuleHandler._currentAngle ?? myPos.angle(enemyPos);
             const candidates = [];
@@ -9360,7 +9360,7 @@ window.grbtp = 35;
         readyWeapons.sort((a, b) => (enemy.getBuildingDamage?.(b, true) ?? 0) - (enemy.getBuildingDamage?.(a, true) ?? 0));
         for (const candidateWeapon of readyWeapons) {
           if (findObject) break;
-          const wd = DataHandler_default?.getWeapon?.(candidateWeapon);
+          const wd = DataHandler_ref?.getWeapon?.(candidateWeapon);
           if (wd) {
             const weaponRange = wd.range ?? 0;
             const dmgToBuilding = enemy.getBuildingDamage?.(candidateWeapon, true) ?? 50;
@@ -9444,9 +9444,9 @@ window.grbtp = 35;
       return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
     }
 
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
-      if (!Settings_default._autoplacer) return;
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
+      if (!Settings_ref._autoplacer) return;
       if (!myPlayer || !myPlayer.inGame) return;
       // A spike tick owning the tick used to end this module outright, which
       // is what made the two collide. The collision is real but narrow: a
@@ -9615,7 +9615,7 @@ window.grbtp = 35;
       // worth more than the packets it costs, and it is the one case where the
       // preplacer is doing something for me rather than to them. So a trapped
       // enemy overrides the stand-down.
-      if (Settings_default._prePlace && myPos.distance(enemyPos) < 300 && (enemyTrapped !== null || !(imTrapped && myPlayer.spikeDamage > 0))) {
+      if (Settings_ref._prePlace && myPos.distance(enemyPos) < 300 && (enemyTrapped !== null || !(imTrapped && myPlayer.spikeDamage > 0))) {
         const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped);
         if (findObject) {
           // Luna drops the doomed object out of the collision set, so the
@@ -9707,7 +9707,7 @@ window.grbtp = 35;
       // Here the current→future step is extrapolated TRAP_LOOKAHEAD_TICKS out
       // and the trap is aimed at the far end of that path, so it is sitting on
       // the ground they are about to cross.
-      if (Settings_default._primaryTrap && trapId !== null && enemyFree && !this._isItemLimit(trapId, myPlayer) && myPos.distance(enemyPos) <= TRAP_PRIMARY_RANGE) {
+      if (Settings_ref._primaryTrap && trapId !== null && enemyFree && !this._isItemLimit(trapId, myPlayer) && myPos.distance(enemyPos) <= TRAP_PRIMARY_RANGE) {
         const stepX = enemyFut.x - enemyPos.x;
         const stepY = enemyFut.y - enemyPos.y;
         const predX = enemyPos.x + stepX * TRAP_LOOKAHEAD_TICKS;
@@ -9747,7 +9747,7 @@ window.grbtp = 35;
         const trapFits = cfg => !trapCapped && validTrap.some(t => Math.hypot(t.x - cfg.x, t.y - cfg.y) < SPIKE_FALLBACK_RADIUS);
 
         const isAutoPlaceAngle = config => {
-          if (myPos.distance(enemyPos) > (Settings_default._autoplacerRadius ?? 350)) return false;
+          if (myPos.distance(enemyPos) > (Settings_ref._autoplacerRadius ?? 350)) return false;
           const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
           const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
           const {blockFuture: blockFuture, blockEnemy: blockEnemy} = _los(config);
@@ -9778,7 +9778,7 @@ window.grbtp = 35;
           // 35, so gaps exist that take a spike and cannot take a trap. Those
           // angles were being left empty rather than filled with the thing
           // that fits.
-          if (isSpike && Settings_default._spikeFallback && neitherTrapped && !trapFits(config)) return true;
+          if (isSpike && Settings_ref._spikeFallback && neitherTrapped && !trapFits(config)) return true;
           return false;
         };
 
@@ -9885,7 +9885,7 @@ window.grbtp = 35;
       // Read at schedule time, not at fire time: the third send lands inside
       // the next tick, which has already cleared `_spamPrePlacer` for its own
       // use, so reading the field from the timer answered for the wrong tick.
-      const spamPrePlacer = !!Settings_default._replace && this._spamPrePlacer;
+      const spamPrePlacer = !!Settings_ref._replace && this._spamPrePlacer;
 
       // Luna keeps the aim pointed where it was attacking across all three
       // sends, so a build never drags the swing off target.
@@ -9918,7 +9918,7 @@ window.grbtp = 35;
   class TrapAnimal {
 
     static CLOSE_PADDING=25;
-    moduleName="trapAnimal";
+    unitID="trapAnimal";
     client;
     phase=0;
     targetAnimal=null;
@@ -9941,9 +9941,9 @@ window.grbtp = 35;
     _bestAngle(angles, targetAngle) {
       return angles.reduce((best, a) => this._angleDist(a, targetAngle) < this._angleDist(best, targetAngle) ? a : best, angles[0]);
     }
-    postTick() {
-      if (!Settings_default._trapAnimal) return;
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2} = this.client;
+    runTick() {
+      if (!Settings_ref._trapAnimal) return;
+      const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2} = this.client;
       if (ModuleHandler.moduleActive || ModuleHandler.placedOnce) return;
       const animal = EnemyManager2.nearestDangerAnimal;
       if (!animal || !this.ANIMAL_IDS.has(animal.type)) {
@@ -9955,7 +9955,7 @@ window.grbtp = 35;
       const distToAnimal = pos0.distance(animalPos);
       const angleToAnimal = pos0.angle(animalPos);
 
-      const activationRange = animal.collisionRange + Config_default.playerScale + TrapAnimal.CLOSE_PADDING;
+      const activationRange = animal.collisionRange + Config_ref.playerScale + TrapAnimal.CLOSE_PADDING;
       if (distToAnimal > activationRange) {
         this.reset();
         return;
@@ -9986,19 +9986,19 @@ window.grbtp = 35;
 
     }
   }
-  const AutoPlacer_default = AutoPlacer;
+  const AutoPlacer_ref = AutoPlacer;
   class AntiRetrap {
-      moduleName="antiRetrap";
+      unitID="antiRetrap";
       client;
       constructor(client2) {
           this.client = client2;
       }
-      postTick() {
-          const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-          if (ModuleHandler.moduleActive || !Settings_default._antiRetrap) {
+      runTick() {
+          const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+          if (ModuleHandler.moduleActive || !Settings_ref._antiRetrap) {
               return;
           }
-          const {reloading: reloading} = ModuleHandler.staticModules;
+          const {reloading: reloading} = ModuleHandler.unitTable;
           const nearestTrap = EnemyManager2.nearestTrap;
           const primary = myPlayer.getItemByType(0);
           const isReloadedPrimary = reloading.isReloaded(0);
@@ -10011,7 +10011,7 @@ window.grbtp = 35;
           if (nearestEnemy === null || nearestTrap === null || nearestTrap.health > damage || !isHammer || !isReloadedSecondary) {
               return;
           }
-          const range = DataHandler_default.getWeapon(primary).range + nearestEnemy.hitScale;
+          const range = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
           if (!myPlayer.collidingEntity(nearestEnemy, range)) {
               return;
           }
@@ -10030,7 +10030,7 @@ window.grbtp = 35;
       }
   }
   class AntiTrapProtect {
-    moduleName="antiTrapProtect";
+    unitID="antiTrapProtect";
     client;
     _protected=false;
     constructor(client2) {
@@ -10057,9 +10057,9 @@ window.grbtp = 35;
       if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
       return true;
     }
-    postTick() {
-      if (!Settings_default._antiTrapProtect) return;
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      if (!Settings_ref._antiTrapProtect) return;
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _Core: ModuleHandler} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
       if (ModuleHandler.moduleActive) return;
       const trap = myPlayer.trappedIn;
@@ -10104,7 +10104,7 @@ window.grbtp = 35;
     }
   }
   class AntiTrapStar {
-    moduleName="antiTrapStar";
+    unitID="antiTrapStar";
     client;
     _protected=false;
     constructor(client2) {
@@ -10178,12 +10178,12 @@ window.grbtp = 35;
       if (d > Math.PI) d = 2 * Math.PI - d;
       return d;
     }
-    postTick() {
-      if (!Settings_default._antiTrapStar) {
+    runTick() {
+      if (!Settings_ref._antiTrapStar) {
         this._protected = false;
         return;
       }
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler, PlayerManager: PlayerManager2} = this.client;
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2, _Core: ModuleHandler, PlayerManager: PlayerManager2} = this.client;
       if (!myPlayer || !myPlayer.inGame || ModuleHandler.moduleActive) return;
       if (myPlayer.trappedIn) {
         this._protected = false;
@@ -10228,15 +10228,15 @@ window.grbtp = 35;
     }
   }
   class AutoSync {
-    moduleName="autoSync";
+    unitID="autoSync";
     client;
     useTurret=false;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_default._autoSync) {
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ModuleHandler.moduleActive || !Settings_ref._autoSync) {
         this.useTurret = false;
         return;
       }
@@ -10245,7 +10245,7 @@ window.grbtp = 35;
       if (nearestEnemy === null || nearestEnemyToNearestEnemy === null) {
         return;
       }
-      const reloading = ModuleHandler.staticModules.reloading;
+      const reloading = ModuleHandler.unitTable.reloading;
       const turretReloaded = reloading.isReloaded(2);
       if (this.useTurret) {
         this.useTurret = false;
@@ -10257,11 +10257,11 @@ window.grbtp = 35;
       }
       const primary1 = myPlayer.getItemByType(0);
       const primaryDamage1 = myPlayer.getMaxWeaponDamage(primary1, false);
-      const range1 = DataHandler_default.getWeapon(primary1).range + nearestEnemy.hitScale;
+      const range1 = DataHandler_ref.getWeapon(primary1).range + nearestEnemy.hitScale;
       const isPrimaryReloaded1 = reloading.isReloaded(0);
       const primary2 = nearestEnemyToNearestEnemy.weapon.primary;
       const primaryDamage2 = nearestEnemyToNearestEnemy.getMaxWeaponDamage(primary2, false);
-      const range2 = DataHandler_default.getWeapon(primary2).range + nearestEnemy.hitScale;
+      const range2 = DataHandler_ref.getWeapon(primary2).range + nearestEnemy.hitScale;
       const isPrimaryReloaded2 = nearestEnemyToNearestEnemy.isReloaded(0, 0);
       const soldierDefense = Hats[6].dmgMult;
       const totalDamage = (primaryDamage1 + primaryDamage2) * soldierDefense;
@@ -10294,7 +10294,7 @@ window.grbtp = 35;
     }
   }
   class Instakill {
-    moduleName="instakill";
+    unitID="instakill";
     client;
     targetEnemy=null;
     phase=0;
@@ -10328,8 +10328,8 @@ window.grbtp = 35;
     _futureRange(enemy, basePrimaryRange, ticks) {
       return basePrimaryRange + enemy.speed * ticks;
     }
-    postTick() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _ModuleHandler: ModuleHandler, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
+    runTick() {
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _Core: ModuleHandler, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
       if (!InputHandler2.instaToggle) {
         this.reset();
         InputHandler2.instaReset();
@@ -10342,7 +10342,7 @@ window.grbtp = 35;
       }
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
-      if (secondary === null || !DataHandler_default.isShootable(secondary)) return;
+      if (secondary === null || !DataHandler_ref.isShootable(secondary)) return;
       const lookingShield = PlayerManager2.lookingShield(nearestEnemy, myPlayer);
       const primaryDamage = myPlayer.getMaxWeaponDamage(primary, lookingShield);
       const secondaryDamage = myPlayer.getMaxWeaponDamage(secondary, lookingShield);
@@ -10354,11 +10354,11 @@ window.grbtp = 35;
       const pos1 = myPlayer.pos.future;
       const pos2 = nearestEnemy.pos.future;
       const angle = pos1.angle(pos2);
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const primaryReloaded = reloading.isReloaded(0);
       const secondaryReloaded = reloading.isReloaded(1, 1);
       const turretReloaded = reloading.isReloaded(2, 1);
-      const baseRange = DataHandler_default.getWeapon(primary).range + nearestEnemy.hitScale;
+      const baseRange = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
       if (this.phase === 1) {
         ModuleHandler.moduleActive = true;
         ModuleHandler.useAngle = angle;
@@ -10410,7 +10410,7 @@ window.grbtp = 35;
     }
   }
   class SmartInsta {
-    moduleName="smartInsta";
+    unitID="smartInsta";
     client;
     _fightTicks=0;
     _lastEnemyHP=100;
@@ -10445,8 +10445,8 @@ window.grbtp = 35;
       const side = this.client.myPlayer.tickCount % 2 === 0 ? 1 : -1;
       return baseAngle + offsetRad * side;
     }
-    postTick() {
-      const {myPlayer: mp, EnemyManager: EM, _ModuleHandler: MH, ObjectManager: OM, PlayerManager: PM, InputHandler: IH} = this.client;
+    runTick() {
+      const {myPlayer: mp, EnemyManager: EM, _Core: MH, ObjectManager: OM, PlayerManager: PM, InputHandler: IH} = this.client;
       if (this._setupCool > 0) this._setupCool--;
       const enemy = EM.nearestEnemy;
       if (enemy !== null && mp.collidingSimple(enemy, 350)) {
@@ -10474,7 +10474,7 @@ window.grbtp = 35;
       const dist = pos0.distance(ep);
       const primary = mp.getItemByType(0);
       const secondary = mp.getItemByType(1);
-      if (secondary === null || !DataHandler_default.isShootable(secondary)) return;
+      if (secondary === null || !DataHandler_ref.isShootable(secondary)) return;
       const lookingShield = PM.lookingShield(enemy, mp);
       const primaryDmg = mp.getMaxWeaponDamage(primary, lookingShield);
       const secondaryDmg = mp.getMaxWeaponDamage(secondary, lookingShield);
@@ -10482,7 +10482,7 @@ window.grbtp = 35;
       const canInsta = primaryDmg + secondaryDmg + turretBonus >= enemy.currentHealth;
       const spikeID = mp.getItemByType(4);
       const trapID = mp.getItemByType(7);
-      const {reloading: reloading} = MH.staticModules;
+      const {reloading: reloading} = MH.unitTable;
       if (this._setupPhase === 0 && this._setupCool === 0 && dist <= 400) {
         if (spikeID !== -1 && mp.canPlace(4) && !MH.placedOnce) {
           const ang1 = this._deceptiveAngle(anglEnm, Math.PI * 0.25);
@@ -10533,7 +10533,7 @@ window.grbtp = 35;
         const primaryReloaded = reloading.isReloaded(0);
         const secondaryReloaded = reloading.isReloaded(1, 1);
         const turretReloaded = reloading.isReloaded(2, 1);
-        const baseRange = DataHandler_default.getWeapon(primary).range + enemy.hitScale;
+        const baseRange = DataHandler_ref.getWeapon(primary).range + enemy.hitScale;
         const inRange = mp.collidingEntity(enemy, baseRange);
         const canFireNow = primaryReloaded && secondaryReloaded && inRange;
         const dmgWithoutTurret = primaryDmg + secondaryDmg;
@@ -10593,10 +10593,10 @@ window.grbtp = 35;
     // Sakuna keeps this behind its own `antispiketick` checkbox, on by default.
     // It is the gate that decides how often a tick opens at all, so it is worth
     // being able to turn off and compare.
-    if (!Settings_default._antiSpikeTick) {
+    if (!Settings_ref._antiSpikeTick) {
       return false;
     }
-    const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, myPlayer: myPlayer} = client2;
+    const {_Core: ModuleHandler, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, myPlayer: myPlayer} = client2;
     // The enemy swings first and you fly into a spike. This is Sakuna's
     // emySpikeHit; RYN works it out with a proper knockback cone in
     // checkCollision, which is strictly better than Sakuna's projection.
@@ -10627,7 +10627,7 @@ window.grbtp = 35;
   // autobreak off does not quietly disable the spike ticks with nothing left
   // to break the spike.
   const spikeTickNearSpike = client2 => {
-    if (!Settings_default._autobreak) {
+    if (!Settings_ref._autobreak) {
       return false;
     }
     const {EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
@@ -10639,18 +10639,18 @@ window.grbtp = 35;
     if (primary === null) {
       return false;
     }
-    const reach = spike.scale + Math.min(DataHandler_default.getWeapon(primary).range, SPIKE_TICK_NEAR_SPIKE_REACH);
+    const reach = spike.scale + Math.min(DataHandler_ref.getWeapon(primary).range, SPIKE_TICK_NEAR_SPIKE_REACH);
     return myPlayer.collidingSimple(spike, reach);
   };
   const spikeTickTarget = (client2, enabled) => {
-    const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
+    const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     // Stamped before any exit: all three modules call this every tick, so the
     // stamp cannot be missed the way it would be behind one of the gates.
     const state = spikeTickState(client2);
     if (myPlayer.isTrapped) {
       state.trapTick = ModuleHandler.tickCount;
     }
-    if (!Settings_default._spikeTick || !enabled) {
+    if (!Settings_ref._spikeTick || !enabled) {
       return null;
     }
     if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
@@ -10729,7 +10729,7 @@ window.grbtp = 35;
     // next one, which is what alternating was supposed to mean.
     // Except in the kill window, where the placer has already stood all the way
     // down and there is nothing to take turns with.
-    const placer = ModuleHandler.staticModules.autoPlacer;
+    const placer = ModuleHandler.unitTable.autoPlacer;
     const contested = placer && ModuleHandler.tickCount - placer._preplaceSentTick <= 1 && !spikeTickKillWindow(client2);
     if (contested && state.yieldTick !== ModuleHandler.tickCount - 1) {
       state.yieldTick = ModuleHandler.tickCount;
@@ -10742,14 +10742,14 @@ window.grbtp = 35;
     if (primary === null || primary === 8) {
       return null;
     }
-    if (!ModuleHandler.staticModules.reloading.isReloaded(0)) {
+    if (!ModuleHandler.unitTable.reloading.isReloaded(0)) {
       return null;
     }
-    const range = Math.min(SPIKE_TICK_RANGE, DataHandler_default.getWeapon(primary).range + nearest.hitScale);
+    const range = Math.min(SPIKE_TICK_RANGE, DataHandler_ref.getWeapon(primary).range + nearest.hitScale);
     return myPlayer.collidingSimple(nearest, range) ? nearest : null;
   };
   const spikeTickHit = (client2, enemy) => {
-    const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
+    const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     EnemyManager2.attemptSpikePlacement();
     ModuleHandler.moduleActive = true;
     ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
@@ -10758,11 +10758,11 @@ window.grbtp = 35;
     ModuleHandler.shouldAttack = true;
   };
   const spikeTickTurret = (client2, enemy) => {
-    const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
+    const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
       return;
     }
-    if (!ModuleHandler.staticModules.reloading.isReloaded(2)) {
+    if (!ModuleHandler.unitTable.reloading.isReloaded(2)) {
       return;
     }
     ModuleHandler.moduleActive = true;
@@ -10775,14 +10775,14 @@ window.grbtp = 35;
     }
   };
   class SpikeTickBreak {
-    moduleName="spikeTickBreak";
+    unitID="spikeTickBreak";
     client;
     useTurret=false;
     turretTarget=null;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
+    runTick() {
       if (this.useTurret) {
         this.useTurret = false;
         spikeTickTurret(this.client, this.turretTarget);
@@ -10790,7 +10790,7 @@ window.grbtp = 35;
         return;
       }
       const {ObjectManager: ObjectManager2, myPlayer: myPlayer} = this.client;
-      const nearest = spikeTickTarget(this.client, Settings_default._spikeTickBreak);
+      const nearest = spikeTickTarget(this.client, Settings_ref._spikeTickBreak);
       if (nearest === null || ObjectManager2.deletedObjects.size === 0) {
         return;
       }
@@ -10801,7 +10801,7 @@ window.grbtp = 35;
       // long primary the flat 170 binds first, but a short one (a hammer or a
       // stick as primary) reaches nowhere near that far, and swinging at a
       // break you cannot cover is a wasted tick.
-      const primaryReach = DataHandler_default.getWeapon(myPlayer.getItemByType(0)).range + SPIKE_TICK_BREAK_REACH;
+      const primaryReach = DataHandler_ref.getWeapon(myPlayer.getItemByType(0)).range + SPIKE_TICK_BREAK_REACH;
       let broken = false;
       for (const object of ObjectManager2.deletedObjects) {
         const pos3 = object.pos.current;
@@ -10820,7 +10820,7 @@ window.grbtp = 35;
     }
   }
   class SpikeTickNear {
-    moduleName="spikeTickNear";
+    unitID="spikeTickNear";
     client;
     useTurret=false;
     turretTarget=null;
@@ -10853,7 +10853,7 @@ window.grbtp = 35;
       });
       return touching;
     }
-    postTick() {
+    runTick() {
       if (this.useTurret) {
         this.useTurret = false;
         spikeTickTurret(this.client, this.turretTarget);
@@ -10861,7 +10861,7 @@ window.grbtp = 35;
         return;
       }
       const {EnemyManager: EnemyManager2} = this.client;
-      const nearest = spikeTickTarget(this.client, Settings_default._spikeTickNear);
+      const nearest = spikeTickTarget(this.client, Settings_ref._spikeTickNear);
       if (nearest === null) {
         return;
       }
@@ -10881,7 +10881,7 @@ window.grbtp = 35;
     }
   }
   class SpikeTickTrap {
-    moduleName="spikeTickTrap";
+    unitID="spikeTickTrap";
     client;
     target=null;
     useTurret=false;
@@ -10897,8 +10897,8 @@ window.grbtp = 35;
       }
       return !enemy.isReloaded(slot, 0) && enemy.isReloaded(slot, 1);
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (this.useTurret) {
         this.useTurret = false;
         spikeTickTurret(this.client, this.turretTarget);
@@ -10915,7 +10915,7 @@ window.grbtp = 35;
         }
         return;
       }
-      const nearest = spikeTickTarget(this.client, Settings_default._spikeTickTrap);
+      const nearest = spikeTickTarget(this.client, Settings_ref._spikeTickTrap);
       if (nearest === null) {
         return;
       }
@@ -10923,7 +10923,7 @@ window.grbtp = 35;
       if (secondary !== 10) {
         return;
       }
-      const reloading = ModuleHandler.staticModules.reloading;
+      const reloading = ModuleHandler.unitTable.reloading;
       if (!reloading.isReloaded(1)) {
         return;
       }
@@ -10955,21 +10955,21 @@ window.grbtp = 35;
     }
   }
   class SpikeSync {
-    moduleName="spikeSync";
+    unitID="spikeSync";
     client;
     useTurret=false;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_default._spikeSync) {
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ModuleHandler.moduleActive || !Settings_ref._spikeSync) {
         this.useTurret = false;
         return;
       }
       const nearest = EnemyManager2.nearestEnemy;
       const placementAngles = EnemyManager2.nearestSpikePlacerAngle;
-      const reloading = ModuleHandler.staticModules.reloading;
+      const reloading = ModuleHandler.unitTable.reloading;
       const primary = myPlayer.getItemByType(0);
       const isPolearm = primary !== 8;
       const primaryReloaded = reloading.isReloaded(0);
@@ -10983,7 +10983,7 @@ window.grbtp = 35;
         return;
       }
       if (!EnemyManager2.shouldIgnoreModule() && nearest !== null && EnemyManager2.canSpikeSync && placementAngles !== null && isPolearm && primaryReloaded) {
-        const spear = DataHandler_default.getWeapon(primary);
+        const spear = DataHandler_ref.getWeapon(primary);
         const range = spear.range + nearest.hitScale;
         const canAttack = myPlayer.collidingSimple(nearest, range);
         if (!canAttack) {
@@ -11010,22 +11010,22 @@ window.grbtp = 35;
     }
   }
   class SpikeSyncHammer {
-    moduleName="spikeSyncHammer";
+    unitID="spikeSyncHammer";
     client;
     targetEnemy=null;
     useTurret=false;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_default._spikeSyncHammer || EnemyManager2.shouldIgnoreModule()) {
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      if (ModuleHandler.moduleActive || !Settings_ref._spikeSyncHammer || EnemyManager2.shouldIgnoreModule()) {
         this.targetEnemy = null;
         this.useTurret = false;
         return;
       }
       const nearestSyncEnemy = EnemyManager2.nearestSyncEnemy;
-      const reloading = ModuleHandler.staticModules.reloading;
+      const reloading = ModuleHandler.unitTable.reloading;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
       const isPolearm = primary !== 8;
@@ -11076,7 +11076,7 @@ window.grbtp = 35;
         if (nearestLowHPObject === null) {
           return;
         }
-        const hammer = DataHandler_default.getWeapon(secondary);
+        const hammer = DataHandler_ref.getWeapon(secondary);
         const playerRange = hammer.range + nearestSyncEnemy.hitScale;
         const trapRange = hammer.range + nearestLowHPObject.hitScale;
         const canAttackEnemy = myPlayer.collidingSimple(nearestSyncEnemy, playerRange);
@@ -11125,7 +11125,7 @@ window.grbtp = 35;
     }
   }
   class AdaptiveGearSwitching {
-    moduleName="adaptiveGearSwitching";
+    unitID="adaptiveGearSwitching";
     client;
     _lastGearSwitch=0;
     _gearSwitchCooldown=50;
@@ -11167,9 +11167,9 @@ window.grbtp = 35;
       }
       return 7;
     }
-    postTick() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler} = this.client;
-      if (!Settings_default._adaptiveGearSwitching) {
+    runTick() {
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2, _Core: ModuleHandler} = this.client;
+      if (!Settings_ref._adaptiveGearSwitching) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -11188,9 +11188,9 @@ window.grbtp = 35;
       }
     }
   }
-  const AdaptiveGearSwitching_default = AdaptiveGearSwitching;
+  const AdaptiveGearSwitching_ref = AdaptiveGearSwitching;
   class AntiSync {
-    moduleName="antiSync";
+    unitID="antiSync";
     client;
     _lastDamageTime=0;
     _incomingAttacks=[];
@@ -11206,11 +11206,11 @@ window.grbtp = 35;
     }
     _detectIncomingAttack(nearestEnemy) {
       if (!nearestEnemy) return false;
-      const primaryReloaded = this.client._ModuleHandler.staticModules.reloading.isReloaded(0);
-      const secondaryReloaded = this.client._ModuleHandler.staticModules.reloading.isReloaded(1);
+      const primaryReloaded = this.client._Core.unitTable.reloading.isReloaded(0);
+      const secondaryReloaded = this.client._Core.unitTable.reloading.isReloaded(1);
       if (primaryReloaded && secondaryReloaded) {
         const dist = this.client.myPlayer.pos.current.distance(nearestEnemy.pos.current);
-        const enemyRange = (DataHandler_default.getWeapon(nearestEnemy.getItemByType(0) ?? 0)?.range ?? 35) + this.client.myPlayer.hitScale;
+        const enemyRange = (DataHandler_ref.getWeapon(nearestEnemy.getItemByType(0) ?? 0)?.range ?? 35) + this.client.myPlayer.hitScale;
         if (dist < enemyRange * 1.2) {
           return true;
         }
@@ -11220,14 +11220,14 @@ window.grbtp = 35;
     _predictSyncMoment(myPlayer, nearestEnemy) {
       if (!nearestEnemy) return Infinity;
       const healthPercent = myPlayer.tempHealth / myPlayer.maxHealth;
-      const enemyReady = this.client._ModuleHandler.staticModules.reloading.isEnemyReloaded?.(nearestEnemy, 0);
+      const enemyReady = this.client._Core.unitTable.reloading.isEnemyReloaded?.(nearestEnemy, 0);
       if (healthPercent < 0.3 && enemyReady && this._detectIncomingAttack(nearestEnemy)) {
         return 0;
       }
       return Infinity;
     }
     _executeDodge(myPlayer, nearestEnemy) {
-      const ModuleHandler = this.client._ModuleHandler;
+      const ModuleHandler = this.client._Core;
       const angleToEnemy = myPlayer.pos.current.angle(nearestEnemy.pos.current);
       const dodgeAngles = [ angleToEnemy + Math.PI / 2, angleToEnemy - Math.PI / 2, angleToEnemy + Math.PI ];
       const randomDodge = dodgeAngles[Math.floor(Math.random() * dodgeAngles.length)];
@@ -11263,9 +11263,9 @@ window.grbtp = 35;
       const timeDiff = Math.abs(recentAttacks[1].timestamp - recentAttacks[0].timestamp);
       return timeDiff < this._syncKillThreshold;
     }
-    postTick() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler} = this.client;
-      if (!Settings_default._antiSync || myPlayer.shameActive) {
+    runTick() {
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _Core: ModuleHandler} = this.client;
+      if (!Settings_ref._antiSync || myPlayer.shameActive) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -11312,18 +11312,18 @@ window.grbtp = 35;
       this._incomingAttacks = this._incomingAttacks.filter(attack => now - attack.timestamp < 1000);
     }
   }
-  const AntiSync_default = AntiSync;
+  const AntiSync_ref = AntiSync;
   class ToolHammerSpearInsta {
-    moduleName="toolHammerSpearInsta";
+    unitID="toolHammerSpearInsta";
     client;
     nearestTarget=null;
     useTurret=false;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_default._toolSpearInsta) {
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      if (ModuleHandler.moduleActive || !Settings_ref._toolSpearInsta) {
         this.nearestTarget = null;
         return;
       }
@@ -11359,10 +11359,10 @@ window.grbtp = 35;
       }
       const pos2 = nearestEnemy.pos.future;
       const angle = pos1.angle(pos2);
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const primaryReloaded = reloading.isReloaded(0);
       const turretReloaded = reloading.isReloaded(2);
-      const range = DataHandler_default.getWeapon(0).range + nearestEnemy.hitScale;
+      const range = DataHandler_ref.getWeapon(0).range + nearestEnemy.hitScale;
       if (!primaryReloaded || !turretReloaded || !myPlayer.collidingEntity(nearestEnemy, range)) {
         return;
       }
@@ -11375,13 +11375,13 @@ window.grbtp = 35;
     }
   }
   class Placer {
-    moduleName="placer";
+    unitID="placer";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       const {currentType: currentType, placedOnce: placedOnce, healedOnce: healedOnce, _currentAngle: currentAngle} = ModuleHandler;
       if (!myPlayer.canPlace(currentType)) {
         return;
@@ -11404,20 +11404,20 @@ window.grbtp = 35;
       ModuleHandler.placedOnce = true;
     }
   }
-  const Placer_default = Placer;
+  const Placer_ref = Placer;
   class PreAttack {
-    moduleName="preAttack";
+    unitID="preAttack";
     client;
     constructor(client2) {
       this.client = client2;
     }
     isReloadedByType(type) {
-      const {weapon: weapon, staticModules: staticModules} = this.client._ModuleHandler;
+      const {weapon: weapon, unitTable: unitTable} = this.client._Core;
       const weaponType = type !== null ? type : weapon;
-      return staticModules.reloading.isReloaded(weaponType);
+      return unitTable.reloading.isReloaded(weaponType);
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler} = this.client;
       const {useWeapon: useWeapon, weapon: weapon, forceWeapon: forceWeapon} = ModuleHandler;
       const nextWeapon = forceWeapon !== null ? forceWeapon : useWeapon;
       const forceReloaded = this.isReloadedByType(nextWeapon);
@@ -11425,9 +11425,9 @@ window.grbtp = 35;
       ModuleHandler.shouldAttack = canAttack;
     }
   }
-  const PreAttack_default = PreAttack;
+  const PreAttack_ref = PreAttack;
   class Reloading {
-    moduleName="reloading";
+    unitID="reloading";
     client;
     clientReload=[ {}, {}, {} ];
     constructor(client2) {
@@ -11441,13 +11441,13 @@ window.grbtp = 35;
       turret.current = turret.max = 23;
     }
     get currentReload() {
-      return this.clientReload[this.client._ModuleHandler.weapon];
+      return this.clientReload[this.client._Core.weapon];
     }
     getReload(type) {
       return this.clientReload[type];
     }
     updateMaxReload(type) {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, SocketManager: SocketManager2} = this.client;
+      const {myPlayer: myPlayer, _Core: ModuleHandler, SocketManager: SocketManager2} = this.client;
       const reload = this.getReload(type);
       const id = myPlayer.getItemByType(type);
       const store2 = ModuleHandler.getHatStore();
@@ -11463,7 +11463,7 @@ window.grbtp = 35;
       this.resetReload(this.getReload(type));
     }
     isReloaded(type, ticks = 0) {
-      if (this.client._ModuleHandler.norecoil) {
+      if (this.client._Core.norecoil) {
         return true;
       }
       const reload = this.clientReload[type];
@@ -11480,7 +11480,7 @@ window.grbtp = 35;
       const reload = this.clientReload[type];
       return reload.current === 0;
     }
-    postTick() {
+    runTick() {
       const {myPlayer: myPlayer} = this.client;
       const primaryReload = myPlayer.reload[0].current;
       const secondaryReload = myPlayer.reload[1].current;
@@ -11493,15 +11493,15 @@ window.grbtp = 35;
       this.clientReload[2].current = myPlayer.reload[2].current;
     }
   }
-  const Reloading_default = Reloading;
+  const Reloading_ref = Reloading;
   class UpdateAngle {
-    moduleName="updateAngle";
+    unitID="updateAngle";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const mh = this.client._ModuleHandler;
+    runTick() {
+      const mh = this.client._Core;
       if (mh._scatterActive && mh._scatterAngle !== undefined) {
         mh._currentAngle = mh._scatterAngle;
         this.client.PacketManager.updateAngle(mh._scatterAngle);
@@ -11526,16 +11526,16 @@ window.grbtp = 35;
       }
     }
   }
-  const UpdateAngle_default = UpdateAngle;
+  const UpdateAngle_ref = UpdateAngle;
   class UpdateAttack {
-    moduleName="updateAttack";
+    unitID="updateAttack";
     client;
     didReset=false;
     constructor(client2) {
       this.client = client2;
     }
     getAttackAngle() {
-      const MH = this.client._ModuleHandler;
+      const MH = this.client._Core;
       const {useAngle: useAngle, _currentAngle: currentAngle} = MH;
       if (useAngle !== null) {
         return useAngle;
@@ -11545,10 +11545,10 @@ window.grbtp = 35;
       }
       return currentAngle;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      const {useWeapon: useWeapon, forceWeapon: forceWeapon, weapon: weapon, attacking: attacking, useItem: useItem, sentAngle: sentAngle, staticModules: staticModules} = ModuleHandler;
-      const {reloading: reloading} = staticModules;
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const {useWeapon: useWeapon, forceWeapon: forceWeapon, weapon: weapon, attacking: attacking, useItem: useItem, sentAngle: sentAngle, unitTable: unitTable} = ModuleHandler;
+      const {reloading: reloading} = unitTable;
       const nextWeapon = forceWeapon !== null ? forceWeapon : useWeapon;
       if (nextWeapon !== null && (nextWeapon !== weapon || ModuleHandler.currentHolding !== nextWeapon || myPlayer.currentItem !== -1)) {
         const isReloaded = reloading.isReloaded(weapon);
@@ -11577,22 +11577,22 @@ window.grbtp = 35;
       }
     }
   }
-  const UpdateAttack_default = UpdateAttack;
+  const UpdateAttack_ref = UpdateAttack;
   class UseAttacking {
-    moduleName="useAttacking";
+    unitID="useAttacking";
     client;
     constructor(client2) {
       this.client = client2;
     }
     getWeaponType() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       const pos1 = myPlayer.pos.future;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       const nearestAnimal = EnemyManager2.nearestAnimal;
       const nearestObject = EnemyManager2.nearestObject;
       const primaryID = myPlayer.getItemByType(0);
       const secondaryID = myPlayer.getItemByType(1);
-      const primary = DataHandler_default.getWeapon(primaryID);
+      const primary = DataHandler_ref.getWeapon(primaryID);
       const range = primary.range;
       if (nearestEnemy !== null) {
         const pos2 = nearestEnemy.pos.future;
@@ -11600,7 +11600,7 @@ window.grbtp = 35;
         if (myPlayer.collidingEntity(nearestEnemy, range + nearestEnemy.hitScale)) {
           return [ 0, angle ];
         }
-        if (DataHandler_default.isShootable(secondaryID) && !ModuleHandler.autoattack) {
+        if (DataHandler_ref.isShootable(secondaryID) && !ModuleHandler.autoattack) {
           return [ 1, angle ];
         }
       }
@@ -11610,7 +11610,7 @@ window.grbtp = 35;
         if (myPlayer.collidingEntity(nearestAnimal, range + nearestAnimal.hitScale)) {
           return [ 0, angle ];
         }
-        if (DataHandler_default.isShootable(secondaryID) && !ModuleHandler.autoattack) {
+        if (DataHandler_ref.isShootable(secondaryID) && !ModuleHandler.autoattack) {
           return [ 1, angle ];
         }
       }
@@ -11622,8 +11622,8 @@ window.grbtp = 35;
       }
       return null;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler} = this.client;
       if (ModuleHandler.moduleActive || ModuleHandler.attackingState !== 1 || ModuleHandler.forceWeapon !== null) {
         return;
       }
@@ -11643,13 +11643,13 @@ window.grbtp = 35;
     }
   }
   class UseDestroying {
-    moduleName="useDestroying";
+    unitID="useDestroying";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
+    runTick() {
+      const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
       if (ModuleHandler.moduleActive || ModuleHandler.attackingState !== 2 || ModuleHandler.forceWeapon !== null) {
         return;
       }
@@ -11663,20 +11663,20 @@ window.grbtp = 35;
     }
   }
   class UseFastest {
-    moduleName="useFastest";
+    unitID="useFastest";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       if (ModuleHandler.moduleActive) {
         return;
       }
       if (ModuleHandler._autoFarmActive) {
         return;
       }
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const type = myPlayer.getFastestWeapon();
       const reverse_type = type === 0 ? 1 : 0;
       if (!reloading.isReloaded(type)) {
@@ -11689,22 +11689,22 @@ window.grbtp = 35;
     }
   }
   class UtilityHat {
-    moduleName="utilityHat";
+    unitID="utilityHat";
     client;
     constructor(client2) {
       this.client = client2;
     }
     getBestUtilityHat(weaponType) {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const id = myPlayer.getItemByType(weaponType);
       if (id === 11) {
         return null;
       }
-      if (DataHandler_default.isShootable(id)) {
+      if (DataHandler_ref.isShootable(id)) {
         ModuleHandler.canHitEntity = true;
         return 20;
       }
-      const weapon = DataHandler_default.getWeapon(id);
+      const weapon = DataHandler_ref.getWeapon(id);
       const range = weapon.range;
       if (weapon.damage <= 1) {
         return null;
@@ -11727,15 +11727,15 @@ window.grbtp = 35;
       }
       return null;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (ModuleHandler.moduleActive) {
         return;
       }
       const {forceWeapon: forceWeapon, useWeapon: useWeapon, weapon: weapon} = ModuleHandler;
       const weaponType = forceWeapon !== null ? forceWeapon : useWeapon !== null ? useWeapon : weapon;
       let hat = this.getBestUtilityHat(weaponType);
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const isReloaded = reloading.isReloaded(weaponType);
       const isEmptyReload = reloading.isEmptyReload(weaponType);
       const turretReloaded = reloading.isReloaded(2);
@@ -11754,7 +11754,7 @@ window.grbtp = 35;
     }
   }
   class AntiInsta {
-    moduleName="antiInsta";
+    unitID="antiInsta";
     client;
     toggleAnti=false;
     healingCount=0;
@@ -11814,7 +11814,7 @@ window.grbtp = 35;
         const angle = i * (Math.PI * 2 / 36);
         const configX = enemyPos.x + placeLength * Math.cos(angle);
         const configY = enemyPos.y + placeLength * Math.sin(angle);
-        const configPos = new Vector_default(configX, configY);
+        const configPos = new Vector_ref(configX, configY);
         const canPlace = ObjectManager2.canPlaceItem(spikeId, configPos, 0.6 * spikeScale - spikeScale);
         if (canPlace) {
           const distToMe = Math.hypot(myPos.x - configX, myPos.y - configY);
@@ -11851,12 +11851,12 @@ window.grbtp = 35;
       }
       return false;
     }
-    postTick() {
+    runTick() {
       this.forceHeal = false;
-      if (!Settings_default._autoheal) {
+      if (!Settings_ref._autoheal) {
         return;
       }
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, ProjectileManager: ProjectileManager2} = this.client;
+      const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2, ProjectileManager: ProjectileManager2} = this.client;
       if (myPlayer.shameActive) {
         return;
       }
@@ -11901,7 +11901,7 @@ window.grbtp = 35;
         const hasMeleeCombo = primary === 5 || primary === 4 || primary === 3;
         const hasRangedCombo = secondary === 12 || secondary === 13 || secondary === 15;
         if (hasMeleeCombo && hasRangedCombo) {
-          const weaponData = DataHandler_default.getWeapon(primary);
+          const weaponData = DataHandler_ref.getWeapon(primary);
           const totalRange = weaponData.range + myPlayer.collisionScale + nearestEnemy.collisionScale;
           const distance = myPlayer.pos.current.distance(nearestEnemy.pos.current);
           if (distance <= totalRange + 35) {
@@ -11954,15 +11954,15 @@ window.grbtp = 35;
       }
     }
   }
-  const AntiInsta_default = AntiInsta;
+  const AntiInsta_ref = AntiInsta;
   class Autohat {
-    moduleName="autoHat";
+    unitID="autoHat";
     client;
     constructor(client2) {
       this.client = client2;
     }
     handleEquip(type, use) {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+      const {_Core: ModuleHandler} = this.client;
       if (type === 0 && ModuleHandler.forceHat !== null) {
         use = ModuleHandler.forceHat;
       }
@@ -11972,7 +11972,7 @@ window.grbtp = 35;
       return false;
     }
     getNextHat() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (ModuleHandler.forceHat !== null) {
         return ModuleHandler.forceHat;
       }
@@ -11982,14 +11982,14 @@ window.grbtp = 35;
       return myPlayer.hatID;
     }
     getNextAcc() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (ModuleHandler.useAcc !== null) {
         return ModuleHandler.useAcc;
       }
       return myPlayer.accessoryID;
     }
     getNextWeaponID() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (ModuleHandler.forceWeapon !== null) {
         return myPlayer.getItemByType(ModuleHandler.forceWeapon);
       }
@@ -11999,14 +11999,14 @@ window.grbtp = 35;
       return myPlayer.weapon.current;
     }
     getNextItemID() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (ModuleHandler.useItem !== null) {
         return myPlayer.getItemByType(ModuleHandler.useItem);
       }
       return myPlayer.currentItem;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler} = this.client;
       if (!ModuleHandler.sentHatEquip) {
         this.handleEquip(0, ModuleHandler.useHat);
       }
@@ -12015,24 +12015,24 @@ window.grbtp = 35;
       }
     }
   }
-  const Autohat_default = Autohat;
+  const Autohat_ref = Autohat;
   class DefaultAcc {
-    moduleName="defaultAcc";
+    unitID="defaultAcc";
     client;
     constructor(client2) {
       this.client = client2;
     }
     shouldUseTail() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
-      const isMelee1 = DataHandler_default.isMelee(primary);
-      const isMelee2 = DataHandler_default.isMelee(secondary);
+      const isMelee1 = DataHandler_ref.isMelee(primary);
+      const isMelee2 = DataHandler_ref.isMelee(secondary);
       return isMelee1 && primary === 8 || isMelee1 && !reloading.isReloaded(0, 3) || isMelee2 && !reloading.isReloaded(1, 3);
     }
     getBestCurrentAcc() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const {actual: actual} = ModuleHandler.getAccStore();
       const useCorrupt = ModuleHandler.canBuy(1, 21);
       const useShadow = ModuleHandler.canBuy(1, 19);
@@ -12048,7 +12048,7 @@ window.grbtp = 35;
         if (useBloodWings) return 18;
         if (useShadow) return 19;
       }
-      if (Settings_default._tailPriority && !Settings_default._cowboyWhenSafe && useTail && this.shouldUseTail()) {
+      if (Settings_ref._tailPriority && !Settings_ref._cowboyWhenSafe && useTail && this.shouldUseTail()) {
         return 11;
       }
       if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(300, EnemyManager2.nearestEntity)) {
@@ -12057,7 +12057,7 @@ window.grbtp = 35;
         if (useAngel) {
           return 13;
         }
-        if (isEnemy && useCorrupt && Settings_default._antienemy) {
+        if (isEnemy && useCorrupt && Settings_ref._antienemy) {
           return 21;
         }
         if (useActual && actual !== 11) {
@@ -12065,7 +12065,7 @@ window.grbtp = 35;
         }
         return 0;
       }
-      if (Settings_default._cowboyWhenSafe) {
+      if (Settings_ref._cowboyWhenSafe) {
         if (useBloodWings) return 18;
         return 0;
       }
@@ -12077,21 +12077,21 @@ window.grbtp = 35;
       }
       return 0;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler} = this.client;
       const acc = this.getBestCurrentAcc();
       ModuleHandler.useAcc = acc;
     }
   }
   class DefaultHat {
-    moduleName="defaultHat";
+    unitID="defaultHat";
     client;
     constructor(client2) {
       this.client = client2;
     }
     canWearCowboy() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
-      if (!Settings_default._cowboyWhenSafe || !ModuleHandler.canBuy(0, 5)) {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
+      if (!Settings_ref._cowboyWhenSafe || !ModuleHandler.canBuy(0, 5)) {
         return false;
       }
       if (EnemyManager2.detectedEnemy || EnemyManager2.detectedDangerEnemy) {
@@ -12100,7 +12100,7 @@ window.grbtp = 35;
       return !EnemyManager2.nearestEnemyInRangeOf(COWBOY_DROP_RANGE, EnemyManager2.nearestEnemy);
     }
     getBestCurrentHat() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const {current: current, future: future} = myPlayer.pos;
       const {actual: actual} = ModuleHandler.getHatStore();
       const useFlipper = ModuleHandler.canBuy(0, 31);
@@ -12111,7 +12111,7 @@ window.grbtp = 35;
       const useBull = ModuleHandler.canBuy(0, 7);
       const useEmp = ModuleHandler.canBuy(0, 22);
       let _empNearbyTurret = false;
-      if (useEmp && Settings_default._empDefense) {
+      if (useEmp && Settings_ref._empDefense) {
         const {ObjectManager: _empOM} = this.client;
         _empOM.grid2D.query(current.x, current.y, 8, _empId => {
           const _empObj = _empOM.objects.get(_empId);
@@ -12126,7 +12126,7 @@ window.grbtp = 35;
       if (!ModuleHandler.isMoving && myPlayer.speed <= 5 && !_empNearbyTurret) {
         const _nearestStill = EnemyManager2.nearestEnemy;
         const _primary = myPlayer.getItemByType(0);
-        const _weaponRange = _primary !== null ? DataHandler_default.getWeapon(_primary).range + (_nearestStill?.hitScale || 35) : 85;
+        const _weaponRange = _primary !== null ? DataHandler_ref.getWeapon(_primary).range + (_nearestStill?.hitScale || 35) : 85;
         const _isCloseStill = _nearestStill !== null && myPlayer.pos.current.distance(_nearestStill.pos.current) <= _weaponRange + 20;
         if (!_isCloseStill && !EnemyManager2.detectedEnemy && !EnemyManager2.detectedDangerEnemy) {
           if (this.canWearCowboy()) return 5;
@@ -12134,7 +12134,7 @@ window.grbtp = 35;
         }
       }
       if (useSoldier) {
-        if (Settings_default._antienemy) {
+        if (Settings_ref._antienemy) {
           if (EnemyManager2.detectedDangerEnemy || EnemyManager2.detectedEnemy || EnemyManager2.reverseInsta || EnemyManager2.toolHammerInsta || EnemyManager2.rangedBowInsta) {
             ModuleHandler.shouldEquipSoldier = true;
             ModuleHandler.forceHat = 6;
@@ -12144,28 +12144,28 @@ window.grbtp = 35;
             return 6;
           }
         }
-        if (Settings_default._antispike && EnemyManager2.willCollideSpike) {
+        if (Settings_ref._antispike && EnemyManager2.willCollideSpike) {
           return 6;
         }
       }
-      if (Settings_default._biomehats && useFlipper && !myPlayer.onPlatform) {
+      if (Settings_ref._biomehats && useFlipper && !myPlayer.onPlatform) {
         const inRiver = pointInRiver(current) || pointInRiver(future);
         if (inRiver) {
           return 31;
         }
       }
       if (useSoldier) {
-        if (Settings_default._antianimal && EnemyManager2.nearestDangerAnimal !== null) {
+        if (Settings_ref._antianimal && EnemyManager2.nearestDangerAnimal !== null) {
           return 6;
         }
       }
-      if (useEmp && Settings_default._empDefense && _empNearbyTurret) {
+      if (useEmp && Settings_ref._empDefense && _empNearbyTurret) {
         return 22;
       }
-      if (useEmp && Settings_default._empDefense && (!ModuleHandler.isMoving || myPlayer.speed <= 5)) {
+      if (useEmp && Settings_ref._empDefense && (!ModuleHandler.isMoving || myPlayer.speed <= 5)) {
         return 22;
       }
-      if (Settings_default._biomehats && useWinter) {
+      if (Settings_ref._biomehats && useWinter) {
         const inWinter = current.y <= 2400 || future.y <= 2400;
         if (inWinter) {
           return 15;
@@ -12174,7 +12174,7 @@ window.grbtp = 35;
       if (this.canWearCowboy()) {
         return 5;
       }
-      if (Settings_default._cowboyWhenSafe) {
+      if (Settings_ref._cowboyWhenSafe) {
         return 0;
       }
       if (useBooster) {
@@ -12182,14 +12182,14 @@ window.grbtp = 35;
       }
       return 0;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler} = this.client;
       const hat = this.getBestCurrentHat();
       ModuleHandler.useHat = hat;
     }
   }
   class SafeWalk {
-    moduleName="safeWalk";
+    unitID="safeWalk";
     client;
     movingState=false;
     constructor(client2) {
@@ -12198,8 +12198,8 @@ window.grbtp = 35;
     reset() {
       this.movingState = false;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2} = this.client;
       const {prevMoveTo: prevMoveTo, moveTo: moveTo} = ModuleHandler;
       if (prevMoveTo !== moveTo) {
         const angle = moveTo === "disable" ? ModuleHandler.move_dir : moveTo;
@@ -12220,7 +12220,7 @@ window.grbtp = 35;
     }
   }
   class ShameReset {
-    moduleName="shameReset";
+    unitID="shameReset";
     client;
     tickToggle=false;
     constructor(client2) {
@@ -12231,16 +12231,16 @@ window.grbtp = 35;
       return !myPlayer.shameActive && myPlayer.shameCount > 0 && myPlayer.poisonCount === 0 && myPlayer.isBullTickTime();
     }
     get shouldReset() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+      const {_Core: ModuleHandler} = this.client;
       return this.isBullTickTime() && ModuleHandler.canBuy(0, 7);
     }
     notSave() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       return ModuleHandler.forceHat === 40 || EnemyManager2.instaThreat() || EnemyManager2.collidingSpike || myPlayer.wasTrapped() || ModuleHandler.currentType === 2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
-      if (Settings_default._autoheal && !this.notSave() && (this.shouldReset || this.tickToggle)) {
+    runTick() {
+      const {_Core: ModuleHandler} = this.client;
+      if (Settings_ref._autoheal && !this.notSave() && (this.shouldReset || this.tickToggle)) {
         this.tickToggle = true;
         ModuleHandler.moduleActive = true;
         ModuleHandler.forceHat = 7;
@@ -12252,16 +12252,16 @@ window.grbtp = 35;
       }
     }
   }
-  const ShameReset_default = ShameReset;
+  const ShameReset_ref = ShameReset;
   class AutoAccept {
-    moduleName="autoAccept";
+    unitID="autoAccept";
     client;
     prevClan=null;
     acceptCount=0;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
+    runTick() {
       const {myPlayer: myPlayer, clientIDList: clientIDList, PacketManager: PacketManager2, isOwner: isOwner} = this.client;
       const currentClan = myPlayer.clanName;
       if (currentClan !== this.prevClan) {
@@ -12279,12 +12279,12 @@ window.grbtp = 35;
       }
       while (myPlayer.joinRequests.length > 0) {
         const id = myPlayer.joinRequests[0][0];
-        if (Settings_default._autoaccept || this.client.pendingJoins.size !== 0) {
-          PacketManager2.clanRequest(id, Settings_default._autoaccept || clientIDList.has(id));
+        if (Settings_ref._autoaccept || this.client.pendingJoins.size !== 0) {
+          PacketManager2.clanRequest(id, Settings_ref._autoaccept || clientIDList.has(id));
           myPlayer.joinRequests.shift();
           this.client.pendingJoins.delete(id);
           if (isOwner) {
-            GameUI_default.clearNotication();
+            GameUI_ref.clearNotication();
           }
         } else {
           break;
@@ -12292,13 +12292,13 @@ window.grbtp = 35;
       }
       const nextID = myPlayer.joinRequests[0];
       if (isOwner && nextID !== void 0) {
-        GameUI_default.createRequest(nextID);
+        GameUI_ref.createRequest(nextID);
       }
     }
   }
-  const AutoAccept_default = AutoAccept;
+  const AutoAccept_ref = AutoAccept;
   class AutoBuy {
-    moduleName="autoBuy";
+    unitID="autoBuy";
     client;
     buyIndex=0;
     buyList=[ [ 0, 40 ], [ 0, 6 ], [ 0, 53 ], [ 0, 7 ], [ 0, 12 ], [ 0, 22 ], [ 1, 11 ], [ 1, 19 ], [ 1, 21 ], [ 1, 18 ], [ 1, 13 ] ];
@@ -12308,8 +12308,8 @@ window.grbtp = 35;
     boughtEverything() {
       return this.buyIndex >= this.buyList.length;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (this.boughtEverything() || !myPlayer.isSandbox) {
         return;
       }
@@ -12323,7 +12323,7 @@ window.grbtp = 35;
     }
   }
   class AutoGrind {
-    moduleName="autoGrind";
+    unitID="autoGrind";
     client;
     grindAngle=null;
     constructor(client2) {
@@ -12338,7 +12338,7 @@ window.grbtp = 35;
       return upgradedSecondary && upgradedPrimary;
     }
     getGrindAction(nearestTurret) {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       if (!nearestTurret) return null;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
@@ -12385,7 +12385,7 @@ window.grbtp = 35;
       return null;
     }
     placeTurret(angle) {
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _Core: ModuleHandler} = this.client;
       const id = myPlayer.getItemByType(8);
       const position = myPlayer.getPlacePosition(myPlayer.pos.future, id, angle);
       if (!ObjectManager2.canPlaceItem(id, position)) {
@@ -12399,22 +12399,22 @@ window.grbtp = 35;
       ModuleHandler.placeAngles[1].push(angle);
       return true;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
       if (this.isFullyUpgraded()) {
-        if (Settings_default._autoGrind) {
-          Settings_default._autoGrind = false;
+        if (Settings_ref._autoGrind) {
+          Settings_ref._autoGrind = false;
           this.grindAngle = null;
-          const grindEl = UI_default?.frame?.document?.getElementById("_autoGrind");
+          const grindEl = UI_ref?.frame?.document?.getElementById("_autoGrind");
           if (grindEl) grindEl.checked = false;
         }
         return;
       }
-      if (!Settings_default._autoGrind || ModuleHandler.moduleActive || ModuleHandler.healedOnce || myPlayer.speed > 5) {
+      if (!Settings_ref._autoGrind || ModuleHandler.moduleActive || ModuleHandler.healedOnce || myPlayer.speed > 5) {
         this.grindAngle = null;
         return;
       }
-      const {autoMill: autoMill, reloading: reloading} = ModuleHandler.staticModules;
+      const {autoMill: autoMill, reloading: reloading} = ModuleHandler.unitTable;
       if (autoMill.isActive) return;
       const farmItem = myPlayer.getItemByType(8);
       if (farmItem !== 17 && farmItem !== 22) return;
@@ -12473,7 +12473,7 @@ window.grbtp = 35;
     }
   }
   class Automill {
-    moduleName="autoMill";
+    unitID="autoMill";
     toggle=false;
     active=true;
     client;
@@ -12489,22 +12489,22 @@ window.grbtp = 35;
     }
     get canAutomill() {
       const isOwner = this.client.isOwner;
-      const {attacking: attacking, placedOnce: placedOnce, staticModules: staticModules} = this.client._ModuleHandler;
-      return Settings_default._automill && this.client.myPlayer.isSandbox && !placedOnce && (!isOwner || !attacking) && this.active && !staticModules.autoBuy.boughtEverything() && this.client.myPlayer.age < 20;
+      const {attacking: attacking, placedOnce: placedOnce, unitTable: unitTable} = this.client._Core;
+      return Settings_ref._automill && this.client.myPlayer.isSandbox && !placedOnce && (!isOwner || !attacking) && this.active && !unitTable.autoBuy.boughtEverything() && this.client.myPlayer.age < 20;
     }
     canPlaceWindmill(angle) {
       return this.client.myPlayer.canPlaceObject(5, angle);
     }
     placeWindmill(angle) {
-      const {_ModuleHandler: ModuleHandler} = this.client;
+      const {_Core: ModuleHandler} = this.client;
       const type = 5;
       ModuleHandler.place(type, angle);
       ModuleHandler.placedOnce = true;
       ModuleHandler.placeAngles[0] = type;
       ModuleHandler.placeAngles[1].push(angle);
     }
-    postTick() {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+    runTick() {
+      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
       this.toggle = true;
       if (!this.canAutomill) {
         this.toggle = false;
@@ -12531,25 +12531,25 @@ window.grbtp = 35;
       }
     }
   }
-  const Automill_default = Automill;
+  const Automill_ref = Automill;
   class AutoSteal {
-    moduleName="autoSteal";
+    unitID="autoSteal";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_default._autoSteal) {
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ModuleHandler.moduleActive || !Settings_ref._autoSteal) {
         return;
       }
       const nearestLowEntity = EnemyManager2.nearestLowEntity;
       if (nearestLowEntity === null) {
         return;
       }
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const primary = myPlayer.getItemByType(0);
-      const range = DataHandler_default.getWeapon(primary).range + nearestLowEntity.hitScale;
+      const range = DataHandler_ref.getWeapon(primary).range + nearestLowEntity.hitScale;
       if (!myPlayer.collidingSimple(nearestLowEntity, range) || !reloading.isReloaded(0)) {
         return;
       }
@@ -12573,7 +12573,7 @@ window.grbtp = 35;
     }
   }
   class ReverseInstakill {
-    moduleName="reverseInstakill";
+    unitID="reverseInstakill";
     client;
     targetEnemy=null;
     constructor(client2) {
@@ -12582,8 +12582,8 @@ window.grbtp = 35;
     reset() {
       this.targetEnemy = null;
     }
-    postTick() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _ModuleHandler: ModuleHandler, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
+    runTick() {
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _Core: ModuleHandler, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
       if (!InputHandler2.instaToggle) {
         this.reset();
         InputHandler2.instaReset();
@@ -12606,11 +12606,11 @@ window.grbtp = 35;
       const pos2 = nearestEnemy.pos.future;
       const angle = pos1.angle(pos2);
       InputHandler2.instakillTarget = nearestEnemy;
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const primaryReloaded = reloading.isReloaded(0, 1);
       const secondaryReloaded = reloading.isReloaded(1);
       const turretReloaded = reloading.isReloaded(2);
-      const baseRange = DataHandler_default.getWeapon(primary).range + nearestEnemy.hitScale;
+      const baseRange = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
       const predictedRange = baseRange + nearestEnemy.speed;
       const inRange = myPlayer.collidingEntity(nearestEnemy, baseRange) || myPlayer.collidingEntity(nearestEnemy, predictedRange);
       const myPosCur = myPlayer.pos.current;
@@ -12649,7 +12649,7 @@ window.grbtp = 35;
     }
   }
   class MusketBowInsta {
-    moduleName="musketBowInsta";
+    unitID="musketBowInsta";
     client;
     targetEnemy=null;
     tickAction=0;
@@ -12664,9 +12664,9 @@ window.grbtp = 35;
       this.tickAction = 0;
       this.active = false;
     }
-    postTick() {
-      const {EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
-      if (!InputHandler2.instaToggle || !Settings_default._musketBowInsta) {
+    runTick() {
+      const {EnemyManager: EnemyManager2, _Core: ModuleHandler, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
+      if (!InputHandler2.instaToggle || !Settings_ref._musketBowInsta) {
         this.reset();
         InputHandler2.instaReset();
         return;
@@ -12707,7 +12707,7 @@ window.grbtp = 35;
       }
       if (myPlayer.upgradeAge !== 6 || myPlayer.age < 6) return;
       this.active = true;
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const useTurret = ModuleHandler.canBuy(0, 53);
       if (!useTurret || !reloading.isReloaded(2) || !inRange(distance, this.distMin, this.distMax)) {
         return;
@@ -12727,17 +12727,17 @@ window.grbtp = 35;
     }
   }
   class PlatformMusket {
-    moduleName="platformMusket";
+    unitID="platformMusket";
     client;
     _lastPlaceTick=-999;
     _tick=0;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
+    runTick() {
       this._tick += 1;
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      if (!Settings_default._platformMusket) return;
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
+      if (!Settings_ref._platformMusket) return;
       if (ModuleHandler.moduleActive) return;
       if (ModuleHandler.forceWeapon !== 1 || !ModuleHandler.shouldAttack) return;
       const secondaryID = myPlayer.getItemByType(1);
@@ -12750,9 +12750,9 @@ window.grbtp = 35;
       this._lastPlaceTick = this._tick;
     }
   }
-  const PlatformMusket_default = PlatformMusket;
+  const PlatformMusket_ref = PlatformMusket;
   class BowInsta {
-    moduleName="bowInsta";
+    unitID="bowInsta";
     client;
     targetEnemy=null;
     tickAction=0;
@@ -12767,8 +12767,8 @@ window.grbtp = 35;
       this.tickAction = 0;
       this.active = false;
     }
-    postTick() {
-      const {EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
+    runTick() {
+      const {EnemyManager: EnemyManager2, _Core: ModuleHandler, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
       if (!InputHandler2.instaToggle) {
         this.reset();
         InputHandler2.instaReset();
@@ -12814,7 +12814,7 @@ window.grbtp = 35;
         return;
       }
       this.active = true;
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const useTurret = ModuleHandler.canBuy(0, 53);
       if (!useTurret || !reloading.isReloaded(2) || !inRange(distance, this.distMin, this.distMax)) {
         return;
@@ -12842,15 +12842,15 @@ window.grbtp = 35;
     }
   }
   class PlacementDefense {
-    moduleName="placementDefense";
+    unitID="placementDefense";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ProjectileManager: ProjectileManager2, ObjectManager: ObjectManager2} = this.client;
+    runTick() {
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler, ProjectileManager: ProjectileManager2, ObjectManager: ObjectManager2} = this.client;
       const nearestEnemy = EnemyManager2.nearestEnemy;
-      if (nearestEnemy === null || !Settings_default._placementDefense) {
+      if (nearestEnemy === null || !Settings_ref._placementDefense) {
         return;
       }
       const shouldDefend = EnemyManager2.rangedBowInsta;
@@ -12877,7 +12877,7 @@ window.grbtp = 35;
           return;
         }
         const distance1 = pos1.distance(pos2);
-        const placementScale = DataHandler_default.getItem(id).scale;
+        const placementScale = DataHandler_ref.getItem(id).scale;
         for (const angle2 of angles) {
           const pos3 = pos1.addDirection(angle2, length);
           const rectStart = pos3.copy().sub(placementScale);
@@ -12894,14 +12894,14 @@ window.grbtp = 35;
     }
   }
   class TurretSteal {
-    moduleName="turretSteal";
+    unitID="turretSteal";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_default._turretSteal) {
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      if (ModuleHandler.moduleActive || !Settings_ref._turretSteal) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestTurretEntity;
@@ -12914,7 +12914,7 @@ window.grbtp = 35;
       if (distance > 700) {
         return;
       }
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       if (!reloading.isReloaded(2)) {
         return;
       }
@@ -12923,17 +12923,17 @@ window.grbtp = 35;
     }
   }
   class KillChat {
-    moduleName="killChat";
+    unitID="killChat";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
+    runTick() {
       const {myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
-      if (!Settings_default._killMessage || !myPlayer.killedSomeone || myPlayer.resources.kills === 0) {
+      if (!Settings_ref._killMessage || !myPlayer.killedSomeone || myPlayer.resources.kills === 0) {
         return;
       }
-      const message = (Settings_default._killMessageText || "").trim();
+      const message = (Settings_ref._killMessageText || "").trim();
       if (message.length === 0) {
         return;
       }
@@ -12941,7 +12941,7 @@ window.grbtp = 35;
     }
   }
   class DeathProvoke {
-    moduleName="deathProvoke";
+    unitID="deathProvoke";
     client;
     _lastKills=-1;
     _pendingBranding=false;
@@ -12968,9 +12968,9 @@ window.grbtp = 35;
       const template = pool[Math.floor(Math.random() * pool.length)];
       return this._clip(this._fillName(template));
     }
-    postTick() {
+    runTick() {
       const {myPlayer: myPlayer, PacketManager: PacketManager2, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = this.client;
-      if (!Settings_default._deathProvoke) {
+      if (!Settings_ref._deathProvoke) {
         this._lastKills = -1;
         this._pendingBranding = false;
         return;
@@ -13009,22 +13009,22 @@ window.grbtp = 35;
     }
   }
   class SwordKatanaInsta {
-    moduleName="swordKatanaInsta";
+    unitID="swordKatanaInsta";
     client;
     nearestTarget=null;
     useTurret=false;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
+    runTick() {
+      const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       if (ModuleHandler.moduleActive || !nearestEnemy) {
         this.nearestTarget = null;
         this.useTurret = false;
         return;
       }
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const primaryReloaded = reloading.isReloaded(0);
       const turretReloaded = reloading.isReloaded(2);
       if (this.useTurret) {
@@ -13073,7 +13073,7 @@ window.grbtp = 35;
       if (myPlayer.age < 8 || myPlayer.upgradeAge >= 9 || !isSword || !primaryReloaded || !ModuleHandler.canBuy(0, 7)) {
         return;
       }
-      const range = DataHandler_default.getWeapon(primary).range + nearestEnemy.hitScale;
+      const range = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
       if (!myPlayer.collidingEntity(nearestEnemy, range)) {
         return;
       }
@@ -13088,14 +13088,14 @@ window.grbtp = 35;
     }
   }
   class SpikeGearInsta {
-    moduleName="spikeGearInsta";
+    unitID="spikeGearInsta";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || EnemyManager2.instaThreat() || EnemyManager2.spikeSyncThreat || !Settings_default._spikeGearInsta) {
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ModuleHandler.moduleActive || EnemyManager2.instaThreat() || EnemyManager2.spikeSyncThreat || !Settings_ref._spikeGearInsta) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -13110,8 +13110,8 @@ window.grbtp = 35;
       if (primary2 === null) {
         return;
       }
-      const range1 = DataHandler_default.getWeapon(primary1).range + nearestEnemy.hitScale;
-      const range2 = DataHandler_default.getWeapon(primary2).range + myPlayer.hitScale;
+      const range1 = DataHandler_ref.getWeapon(primary1).range + nearestEnemy.hitScale;
+      const range2 = DataHandler_ref.getWeapon(primary2).range + myPlayer.hitScale;
       if (!myPlayer.collidingSimple(nearestEnemy, range1) || !nearestEnemy.collidingSimple(myPlayer, range2)) {
         return;
       }
@@ -13127,13 +13127,13 @@ window.grbtp = 35;
     }
   }
   class TeammateSpikeTrap {
-    moduleName="teammateSpikeTrap";
+    unitID="teammateSpikeTrap";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, InputHandler: InputHandler2, PlayerManager: PlayerManager2, myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, InputHandler: InputHandler2, PlayerManager: PlayerManager2, myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
       if (ModuleHandler.moduleActive) {
         return;
       }
@@ -13173,13 +13173,13 @@ window.grbtp = 35;
     }
   }
   class SpikeTrap {
-    moduleName="spikeTrap";
+    unitID="spikeTrap";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
       if (ModuleHandler.moduleActive) {
         return;
       }
@@ -13211,14 +13211,14 @@ window.grbtp = 35;
     }
   }
   class TurretSync {
-    moduleName="turretSync";
+    unitID="turretSync";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.moduleActive || !Settings_default._turretSync) {
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ModuleHandler.moduleActive || !Settings_ref._turretSync) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -13226,12 +13226,12 @@ window.grbtp = 35;
         return;
       }
       const primary = myPlayer.getItemByType(0);
-      const weapon = DataHandler_default.getWeapon(primary);
+      const weapon = DataHandler_ref.getWeapon(primary);
       if (weapon.damage < 20) {
         return;
       }
       const range = weapon.range + nearestEnemy.hitScale;
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       if (!myPlayer.collidingSimple(nearestEnemy, range) || !reloading.isReloaded(0) || nearestEnemy.nextDamageTick !== myPlayer.tickCount + 2) {
         return;
       }
@@ -13246,18 +13246,18 @@ window.grbtp = 35;
     }
   }
   class DashMovement {
-    moduleName="dashMovement";
+    unitID="dashMovement";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
       const {currentType: currentType, _currentAngle: currentAngle} = ModuleHandler;
-      if (!myPlayer.canPlace(currentType) || !Settings_default._dashMovement) {
+      if (!myPlayer.canPlace(currentType) || !Settings_ref._dashMovement) {
         return;
       }
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
       const boost = myPlayer.getItemByType(7);
@@ -13266,11 +13266,11 @@ window.grbtp = 35;
       }
       const hasHammer = secondary === 10;
       const primaryDamage = myPlayer.getBuildingDamage(primary, true);
-      const canOneHit = primaryDamage >= DataHandler_default.getItem(16).health;
+      const canOneHit = primaryDamage >= DataHandler_ref.getItem(16).health;
       let weaponType = null;
       if (canOneHit) {
-        const primaryData = DataHandler_default.getWeapon(primary);
-        const secondaryData = DataHandler_default.isMelee(secondary) && DataHandler_default.getWeapon(secondary) || null;
+        const primaryData = DataHandler_ref.getWeapon(primary);
+        const secondaryData = DataHandler_ref.isMelee(secondary) && DataHandler_ref.getWeapon(secondary) || null;
         if (secondaryData === null || primaryData.speed <= secondaryData.speed) {
           weaponType = 0;
         } else {
@@ -13302,7 +13302,7 @@ window.grbtp = 35;
     }
   }
   class GuardModule {
-    moduleName="guardModule";
+    unitID="guardModule";
     client;
     static PLUS_ANGLES=[ -Math.PI / 2, 0, Math.PI / 2, Math.PI ];
     constructor(client2) {
@@ -13311,7 +13311,7 @@ window.grbtp = 35;
     _resolveGuard() {
       const oc = this.client.ownerClient;
       const total = oc.clients.size;
-      if (!Settings_default._autoJoinGuard) {
+      if (!Settings_ref._autoJoinGuard) {
         const gc = Math.min(4, total);
         const bi = oc.getClientIndex(this.client);
         return {
@@ -13395,23 +13395,23 @@ window.grbtp = 35;
       MH.shouldAttack = attack;
       MH.moduleActive = true;
     }
-    postTick() {
-      if (!Settings_default._shieldGuard) return;
+    runTick() {
+      if (!Settings_ref._shieldGuard) return;
       const oc = this.client.ownerClient;
       const {guardCount: gc, isGuard: isGuard, botIndex: botIndex} = this._resolveGuard();
       if (!isGuard) return;
-      const {myPlayer: myPlayer, _ModuleHandler: MH} = this.client;
+      const {myPlayer: myPlayer, _Core: MH} = this.client;
       if (!myPlayer.inGame) return;
-      if (Settings_default._autoJoinGuard && myPlayer.age >= 6 && !myPlayer.__guardJoinedAge6) {
+      if (Settings_ref._autoJoinGuard && myPlayer.age >= 6 && !myPlayer.__guardJoinedAge6) {
         myPlayer.__guardJoinedAge6 = true;
       }
-      if (Settings_default._autoJoinGuard && myPlayer.age < 6) {
+      if (Settings_ref._autoJoinGuard && myPlayer.age < 6) {
         return;
       }
       const myPos = myPlayer.pos.current;
       const ownerPos = oc.myPlayer.pos.current;
       const enemies = this._getEnemies(ownerPos);
-      if (Settings_default._rangedShield) {
+      if (Settings_ref._rangedShield) {
         const RANGED_IDS = new Set([ 9, 12, 13, 15 ]);
         const pm = oc.PlayerManager;
         if (pm) {
@@ -13456,7 +13456,7 @@ window.grbtp = 35;
             const justFired = activeShooters.length > 0 ? activeShooters.reduce((a, b) => myPos.distance(a.pos.current) < myPos.distance(b.pos.current) ? a : b) : null;
             const target = justFired ?? bestEnemy ?? rangedEnemies[0];
             let bestAngle = myPos.angle(target.pos.current);
-            const shieldHalfAngle = typeof Config_default !== "undefined" && Config_default.shieldAngle ? Config_default.shieldAngle : Math.PI / 3;
+            const shieldHalfAngle = typeof Config_ref !== "undefined" && Config_ref.shieldAngle ? Config_ref.shieldAngle : Math.PI / 3;
             let maxCovered = 0;
             for (const candidate of rangedEnemies) {
               const ca = myPos.angle(candidate.pos.current);
@@ -13489,13 +13489,13 @@ window.grbtp = 35;
               bestAngle = myPos.angle(sorted[rs.idx % sorted.length].pos.current);
               try {
                 this.client.PacketManager.updateAngle(bestAngle);
-                this.client._ModuleHandler.mouse.sentAngle = bestAngle;
+                this.client._Core.mouse.sentAngle = bestAngle;
               } catch (_) {}
             } else {
               this._rsRotState = null;
               try {
                 this.client.PacketManager.updateAngle(bestAngle);
-                this.client._ModuleHandler.mouse.sentAngle = bestAngle;
+                this.client._Core.mouse.sentAngle = bestAngle;
               } catch (_) {}
             }
             const blockPos = ownerPos.addDirection(bestAngle, window._guardFrontDistance || 90);
@@ -13503,7 +13503,7 @@ window.grbtp = 35;
             if (dToBlock > 12) {
               MH.startMovement(myPos.angle(blockPos));
             } else {
-              const d = oc._ModuleHandler.move_dir;
+              const d = oc._Core.move_dir;
               d !== null ? MH.startMovement(d) : MH.stopMovement();
             }
             MH._currentAngle = bestAngle;
@@ -13517,7 +13517,7 @@ window.grbtp = 35;
       }
       const ENEMY_DETECT = 550;
       const nearEnemies = enemies.filter(e => e.dist < ENEMY_DETECT);
-      const ownerStopped = oc._ModuleHandler.move_dir === null;
+      const ownerStopped = oc._Core.move_dir === null;
       const hasEnemies = nearEnemies.length > 0;
       const forceShield = ownerStopped || hasEnemies || this._underThreat(oc);
       const GUARD_FRONT_DIST = window._guardFrontDistance || 90;
@@ -13535,7 +13535,7 @@ window.grbtp = 35;
           if (rotDist > 12) {
             MH.startMovement(myPos.angle(rotTarget));
           } else {
-            const d = oc._ModuleHandler.move_dir;
+            const d = oc._Core.move_dir;
             d !== null ? MH.startMovement(d) : MH.stopMovement();
           }
           MH._currentAngle = baseAngle;
@@ -13581,7 +13581,7 @@ window.grbtp = 35;
           return;
         }
       }
-      const ownerFacing = oc._ModuleHandler._currentAngle ?? 0;
+      const ownerFacing = oc._Core._currentAngle ?? 0;
       if (nearEnemies.length > 0) {
         const nearest = nearEnemies[0];
         const enemyAngle = nearest.angle;
@@ -13593,7 +13593,7 @@ window.grbtp = 35;
           if (dToBlock > 10) {
             MH.startMovement(myPos.angle(blockPos));
           } else {
-            const ownerDir = oc._ModuleHandler.move_dir;
+            const ownerDir = oc._Core.move_dir;
             ownerDir !== null ? MH.startMovement(ownerDir) : MH.stopMovement();
           }
           MH._currentAngle = enemyAngle;
@@ -13616,7 +13616,7 @@ window.grbtp = 35;
           if (dToFront > 12) {
             MH.startMovement(myPos.angle(frontPos));
           } else {
-            const ownerDir = oc._ModuleHandler.move_dir;
+            const ownerDir = oc._Core.move_dir;
             ownerDir !== null ? MH.startMovement(ownerDir) : MH.stopMovement();
           }
           MH._currentAngle = enemyAngle;
@@ -13643,7 +13643,7 @@ window.grbtp = 35;
         if (dToFront > 14) {
           MH.startMovement(myPos.angle(frontPos));
         } else {
-          const ownerDir = oc._ModuleHandler.move_dir;
+          const ownerDir = oc._Core.move_dir;
           ownerDir !== null ? MH.startMovement(ownerDir) : MH.stopMovement();
         }
         MH._currentAngle = ownerFacing;
@@ -13653,7 +13653,7 @@ window.grbtp = 35;
     }
   }
   class AutoShield {
-    moduleName="autoShield";
+    unitID="autoShield";
     client;
     constructor(client2) {
       this.client = client2;
@@ -13671,22 +13671,22 @@ window.grbtp = 35;
       const pos3 = secondNearestEnemy.pos.current;
       const distance = pos1.distance(pos3);
       const primary = secondNearestEnemy.weapon.primary;
-      const weaponRange = DataHandler_default.getWeapon(primary).range;
+      const weaponRange = DataHandler_ref.getWeapon(primary).range;
       const range = weaponRange + myPlayer.hitScale;
       const angle2 = pos1.angle(pos3);
       const middleAngle = findMiddleAngle(angle, angle2);
-      if (distance <= range && getAngleDist(angle, middleAngle) <= Config_default.gatherAngle && getAngleDist(angle2, middleAngle) <= Config_default.gatherAngle) {
+      if (distance <= range && getAngleDist(angle, middleAngle) <= Config_ref.gatherAngle && getAngleDist(angle2, middleAngle) <= Config_ref.gatherAngle) {
         return middleAngle;
       }
       return angle;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = this.client;
       if (ModuleHandler.moduleActive) return;
       const secondary = myPlayer.getItemByType(1);
       const hasShield = secondary === 11;
       if (!hasShield) return;
-      if (Settings_default._autoShield || Settings_default._rangedShield) {
+      if (Settings_ref._autoShield || Settings_ref._rangedShield) {
         const RANGED_IDS = new Set([ 9, 12, 13, 15 ]);
         const REP_BOW_ID = 13;
         const HOLD_MS = 180;
@@ -13777,7 +13777,7 @@ window.grbtp = 35;
               S.attackAllowed = false;
               try {
                 this.client.PacketManager.updateAngle(shieldAngle);
-                this.client._ModuleHandler.mouse.sentAngle = shieldAngle;
+                this.client._Core.mouse.sentAngle = shieldAngle;
               } catch (_) {}
               ModuleHandler.moduleActive = true;
               ModuleHandler.forceWeapon = 0;
@@ -13787,7 +13787,7 @@ window.grbtp = 35;
             }
             try {
               this.client.PacketManager.updateAngle(shieldAngle);
-              this.client._ModuleHandler.mouse.sentAngle = shieldAngle;
+              this.client._Core.mouse.sentAngle = shieldAngle;
             } catch (_) {}
             ModuleHandler.moduleActive = true;
             ModuleHandler.forceWeapon = 1;
@@ -13801,7 +13801,7 @@ window.grbtp = 35;
               const preAngle = myPos.angle(bestTarget.pos.current);
               try {
                 this.client.PacketManager.updateAngle(preAngle);
-                this.client._ModuleHandler.mouse.sentAngle = preAngle;
+                this.client._Core.mouse.sentAngle = preAngle;
               } catch (_) {}
               ModuleHandler.moduleActive = true;
               ModuleHandler.forceWeapon = 1;
@@ -13812,7 +13812,7 @@ window.grbtp = 35;
           }
         }
       }
-      if (!Settings_default._autoShield) return;
+      if (!Settings_ref._autoShield) return;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       if (nearestEnemy === null) return;
       const shouldActivate = EnemyManager2.weaponDamageThreat();
@@ -13825,27 +13825,27 @@ window.grbtp = 35;
     }
   }
   class TrapKB {
-    moduleName="trapKB";
+    unitID="trapKB";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+    runTick() {
+      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const nearestEnemy = EnemyManager2.nearestKBTrapEnemy;
-      if (nearestEnemy === null || nearestEnemy.isTrapped || ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule() || !Settings_default._trapKB) {
+      if (nearestEnemy === null || nearestEnemy.isTrapped || ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule() || !Settings_ref._trapKB) {
         return;
       }
       const pos1 = myPlayer.pos.current;
       const pos2 = nearestEnemy.pos.current;
       const angle = pos1.angle(pos2);
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const primaryReloaded = reloading.isReloaded(0);
       const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
       if (!primaryReloaded) {
         return;
       }
-      const range = DataHandler_default.getWeapon(myPlayer.getItemByType(0)).range + nearestEnemy.hitScale;
+      const range = DataHandler_ref.getWeapon(myPlayer.getItemByType(0)).range + nearestEnemy.hitScale;
       if (!myPlayer.collidingSimple(nearestEnemy, range)) {
         return;
       }
@@ -13859,14 +13859,14 @@ window.grbtp = 35;
     }
   }
   class AntiSpikePush {
-    moduleName="antiSpikePush";
+    unitID="antiSpikePush";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (!Settings_default._antiSpikePush || ModuleHandler.moduleActive) {
+    runTick() {
+      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      if (!Settings_ref._antiSpikePush || ModuleHandler.moduleActive) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -13878,14 +13878,14 @@ window.grbtp = 35;
       if (!isDaggers) {
         return;
       }
-      const primaryRange = DataHandler_default.getWeapon(primary).range + nearestEnemy.hitScale;
+      const primaryRange = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
       if (!myPlayer.collidingSimple(nearestEnemy, primaryRange)) {
         return;
       }
       const pos1 = myPlayer.pos.current;
       const pos2 = nearestEnemy.pos.current;
       const angle = pos1.angle(pos2);
-      const {reloading: reloading} = ModuleHandler.staticModules;
+      const {reloading: reloading} = ModuleHandler.unitTable;
       const primaryReloaded = reloading.isReloaded(0);
       const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
       ModuleHandler.forceWeapon = 0;
@@ -13900,18 +13900,18 @@ window.grbtp = 35;
     }
   }
   class RYNLinkModule {
-    moduleName="rynLink";
+    unitID="rynLink";
     client;
     constructor(client2) {
       this.client = client2;
     }
-    postTick() {
-      RYNLink.postTick(this.client);
+    runTick() {
+      RYNLink.runTick(this.client);
     }
   }
   class ModuleHandler {
     client;
-    staticModules={};
+    unitTable={};
     botModules;
     modules;
     store=[ {
@@ -13930,9 +13930,9 @@ window.grbtp = 35;
       last: 0
     } ];
     bought=[ new Set, new Set ];
-    followTarget=new Vector_default(0, 0);
-    lookTarget=new Vector_default(0, 0);
-    endTarget=new Vector_default(0, 0);
+    followTarget=new Vector_ref(0, 0);
+    lookTarget=new Vector_ref(0, 0);
+    endTarget=new Vector_ref(0, 0);
     followPath=false;
     tickCount=0;
     currentHolding=0;
@@ -13976,18 +13976,18 @@ window.grbtp = 35;
     maxExecutionTime=0;
     constructor(client2) {
       this.client = client2;
-      this.staticModules = {
-        tempData: new TempData_default(client2),
-        movement: new Movement_default(client2),
-        clanJoiner: new ClanJoiner_default(client2),
-        autoAccept: new AutoAccept_default(client2),
+      this.unitTable = {
+        tempData: new TempData_ref(client2),
+        movement: new Movement_ref(client2),
+        clanJoiner: new ClanJoiner_ref(client2),
+        autoAccept: new AutoAccept_ref(client2),
         autoBuy: new AutoBuy(client2),
         defaultHat: new DefaultHat(client2),
-        reloading: new Reloading_default(client2),
+        reloading: new Reloading_ref(client2),
         defaultAcc: new DefaultAcc(client2),
         autoSync: new AutoSync(client2),
-        adaptiveGearSwitching: new AdaptiveGearSwitching_default(client2),
-        antiSync: new AntiSync_default(client2),
+        adaptiveGearSwitching: new AdaptiveGearSwitching_ref(client2),
+        antiSync: new AntiSync_ref(client2),
         spikeSyncHammer: new SpikeSyncHammer(client2),
         spikeSync: new SpikeSync(client2),
         spikeTickBreak: new SpikeTickBreak(client2),
@@ -14013,8 +14013,8 @@ window.grbtp = 35;
         useDestroying: new UseDestroying(client2),
         useAttacking: new UseAttacking(client2),
         utilityHat: new UtilityHat(client2),
-        antiInsta: new AntiInsta_default(client2),
-        shameReset: new ShameReset_default(client2),
+        antiInsta: new AntiInsta_ref(client2),
+        shameReset: new ShameReset_ref(client2),
         trapKB: new TrapKB(client2),
         autoShield: new AutoShield(client2),
         guardModule: new GuardModule(client2),
@@ -14024,24 +14024,24 @@ window.grbtp = 35;
         antiTrapProtect: new AntiTrapProtect(client2),
         antiTrapStar: new AntiTrapStar(client2),
         antiRetrap: new AntiRetrap(client2),
-        autoPush: new AutoPush_default(client2),
-        autoPlay: new AutoPlay_default(client2),
-        trapTick: new TrapTick_default(client2),
-        autoPlacer: new AutoPlacer_default(client2),
-        placer: new Placer_default(client2),
-        autoMill: new Automill_default(client2),
+        autoPush: new AutoPush_ref(client2),
+        autoPlay: new AutoPlay_ref(client2),
+        trapTick: new TrapTick_ref(client2),
+        autoPlacer: new AutoPlacer_ref(client2),
+        placer: new Placer_ref(client2),
+        autoMill: new Automill_ref(client2),
         autoGrind: new AutoGrind(client2),
-        preAttack: new PreAttack_default(client2),
-        autoHat: new Autohat_default(client2),
-        updateAttack: new UpdateAttack_default(client2),
-        updateAngle: new UpdateAngle_default(client2),
+        preAttack: new PreAttack_ref(client2),
+        autoHat: new Autohat_ref(client2),
+        updateAttack: new UpdateAttack_ref(client2),
+        updateAngle: new UpdateAngle_ref(client2),
         killChat: new KillChat(client2),
         deathProvoke: new DeathProvoke(client2),
         safeWalk: new SafeWalk(client2),
         rynLink: new RYNLinkModule(client2)
       };
-      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.movement ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
+      this.botModules = [ this.unitTable.tempData, this.unitTable.clanJoiner, this.unitTable.movement ];
+      this.modules = [ this.unitTable.autoAccept, this.unitTable.autoBuy, this.unitTable.defaultHat, this.unitTable.reloading, this.unitTable.autoSync, this.unitTable.spikeSyncHammer, this.unitTable.antiSync, this.unitTable.adaptiveGearSwitching, this.unitTable.spikeTickBreak, this.unitTable.spikeTickNear, this.unitTable.spikeTickTrap, this.unitTable.spikeSync, this.unitTable.spikeTrap, this.unitTable.teammateSpikeTrap, this.unitTable.turretSync, this.unitTable.toolHammerSpearInsta, this.unitTable.swordKatanaInsta, this.unitTable.bowInsta, this.unitTable.musketBowInsta, this.unitTable.instakill, this.unitTable.smartInsta, this.unitTable.reverseInstakill, this.unitTable.antiSpikePush, this.unitTable.autoBreak, this.unitTable.autoSteal, this.unitTable.turretSteal, this.unitTable.spikeGearInsta, this.unitTable.useFastest, this.unitTable.useDestroying, this.unitTable.useAttacking, this.unitTable.platformMusket, this.unitTable.utilityHat, this.unitTable.antiInsta, this.unitTable.shameReset, this.unitTable.trapKB, this.unitTable.autoShield, this.unitTable.placementDefense, this.unitTable.trapAnimal, this.unitTable.antiTrapProtect, this.unitTable.antiTrapStar, this.unitTable.antiRetrap, this.unitTable.autoPush, this.unitTable.autoPlay, this.unitTable.autoPlacer, this.unitTable.trapTick, this.unitTable.dashMovement, this.unitTable.placer, this.unitTable.autoMill, this.unitTable.autoGrind, this.unitTable.preAttack, this.unitTable.defaultAcc, this.unitTable.autoHat, this.unitTable.updateAttack, this.unitTable.updateAngle, this.unitTable.killChat, this.unitTable.deathProvoke, this.unitTable.safeWalk, this.unitTable.guardModule, this.unitTable.rynLink ];
       this.reset();
     }
     movementReset() {
@@ -14076,8 +14076,8 @@ window.grbtp = 35;
       }
       if (isOwner) {
         for (const client2 of clients) {
-          client2._ModuleHandler.movementReset();
-          client2._ModuleHandler.toggleAutoattack(false);
+          client2._Core.movementReset();
+          client2._Core.toggleAutoattack(false);
         }
       }
     }
@@ -14117,9 +14117,9 @@ window.grbtp = 35;
       }
       this.client.PacketManager.upgradeItem(id);
       this.client.myPlayer.upgradeItem(id);
-      if (DataHandler_default.isWeapon(id)) {
-        const type = DataHandler_default.getWeapon(id).type;
-        const {reloading: reloading} = this.staticModules;
+      if (DataHandler_ref.isWeapon(id)) {
+        const type = DataHandler_ref.getWeapon(id).type;
+        const {reloading: reloading} = this.unitTable;
         reloading.updateMaxReload(type);
       }
     }
@@ -14148,13 +14148,13 @@ window.grbtp = 35;
       if (id === -1) {
         return false;
       }
-      const store2 = DataHandler_default.getStore(type);
+      const store2 = DataHandler_ref.getStore(type);
       const price = store2[id].price;
       const bought = this.bought[type];
       return bought.has(id) || this.client.myPlayer.tempGold >= price && this.client.myPlayer.isSandbox;
     }
     _buy(type, id, force = false) {
-      const store2 = DataHandler_default.getStore(type);
+      const store2 = DataHandler_ref.getStore(type);
       const {isOwner: isOwner, clients: clients, myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
       if (!myPlayer.inGame) {
         return false;
@@ -14162,7 +14162,7 @@ window.grbtp = 35;
       if (force) {
         if (isOwner) {
           for (const client2 of clients) {
-            client2._ModuleHandler._buy(type, id, force);
+            client2._Core._buy(type, id, force);
           }
         }
       }
@@ -14206,12 +14206,12 @@ window.grbtp = 35;
         store2.actual = id;
         if (isOwner) {
           for (const client2 of clients) {
-            client2._ModuleHandler.staticModules.tempData.setStore(type, id);
+            client2._Core.unitTable.tempData.setStore(type, id);
           }
         }
       }
       const nearest = EnemyManager2.nearestTurretEntity;
-      const reloading = this.staticModules.reloading;
+      const reloading = this.unitTable.reloading;
       if (nearest !== null && reloading.isReloaded(2) && type === 0 && id === 53) {
         reloading.resetByType(2);
       }
@@ -14279,8 +14279,8 @@ window.grbtp = 35;
       if (hasPrim && reloading(0)) return 0;
       if (this.attacking === 2 && hasSec) return 1;
       if (this.attacking === 1 && hasPrim) return 0;
-      const pW = hasPrim ? DataHandler_default?.getWeapon?.(prim) : null;
-      const sW = hasSec ? DataHandler_default?.getWeapon?.(sec) : null;
+      const pW = hasPrim ? DataHandler_ref?.getWeapon?.(prim) : null;
+      const sW = hasSec ? DataHandler_ref?.getWeapon?.(sec) : null;
       if (pW?.name?.toLowerCase().includes("dagger")) return 0;
       if (sW?.name?.toLowerCase().includes("hammer")) return 1;
       return hasPrim ? 0 : hasSec ? 1 : this.weapon;
@@ -14351,10 +14351,10 @@ window.grbtp = 35;
     // split the placer here is free to spend the allowance down to the last
     // packet, and a heavy building second can leave the essentials short.
     packetLimit=115;
-    postTick() {
+    runTick() {
       this._flushShameHealQueue();
-      if (Settings_default._circleRotation && this.move_dir === null) {
-        const rotationSpeed = this.targetSpeed / Settings_default._circleRadius;
+      if (Settings_ref._circleRotation && this.move_dir === null) {
+        const rotationSpeed = this.targetSpeed / Settings_ref._circleRadius;
         this.circleOffset = (this.circleOffset + rotationSpeed) % (Math.PI * 2);
       }
       const {isOwner: isOwner} = this.client;
@@ -14388,24 +14388,24 @@ window.grbtp = 35;
       this.moveTo = "disable";
       if (!isOwner) {
         for (const botModule of this.botModules) {
-          botModule.postTick();
+          botModule.runTick();
         }
       }
       for (const module of this.modules) {
         const prevg = this.moduleActive;
-        module.postTick();
+        module.runTick();
         if (!prevg && this.moduleActive) {
-          this.activeModule = module.moduleName;
+          this.activeModule = module.unitID;
         }
       }
       const _em = this.client.EnemyManager;
       const _mp = this.client.myPlayer;
       const _canSoldier = this.canBuy(0, 6);
-      if (_canSoldier && Settings_default._antienemy) {
+      if (_canSoldier && Settings_ref._antienemy) {
         const _nearest = _em.nearestEnemy;
         const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
         const _primary2 = _mp.getItemByType(0);
-        const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
+        const _atkRange = _primary2 !== null ? DataHandler_ref.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
         const _isClose = _nearest !== null && _mp.pos.current.distance(_nearest.pos.current) <= _atkRange + 20;
         if (_isDanger || _isClose) {
           this.forceHat = 6;
@@ -14417,18 +14417,18 @@ window.grbtp = 35;
       }
       this.attackingState = this.attacking;
       if (isOwner) {
-        this.client.InputHandler.postTick();
-        GameUI_default.updateFastQ(this.didAntiInsta);
-        GameUI_default.updatePlaces(this.totalPlaces);
-        GameUI_default.updateActiveModule(this.activeModule + ", " + this.tickCount);
-        GameUI_default.updateEquipHat(`${this.store[0].last},  ${this.shouldEquipSoldier}`);
+        this.client.InputHandler.runTick();
+        GameUI_ref.updateFastQ(this.didAntiInsta);
+        GameUI_ref.updatePlaces(this.totalPlaces);
+        GameUI_ref.updateActiveModule(this.activeModule + ", " + this.tickCount);
+        GameUI_ref.updateEquipHat(`${this.store[0].last},  ${this.shouldEquipSoldier}`);
         const executionTime = Math.round(performance.now() - this.moduleStart);
         this.maxExecutionTime = Math.max(this.maxExecutionTime, executionTime);
-        GameUI_default.updateModulePerformance(`${executionTime}/${this.maxExecutionTime}`);
+        GameUI_ref.updateModulePerformance(`${executionTime}/${this.maxExecutionTime}`);
       }
     }
   }
-  const ModuleHandler_default = ModuleHandler;
+  const ModuleHandler_ref = ModuleHandler;
   class PlayerClient {
     id=-1;
     connectSuccess=false;
@@ -14440,7 +14440,7 @@ window.grbtp = 35;
     ProjectileManager;
     LeaderboardManager;
     EnemyManager;
-    _ModuleHandler;
+    _Core;
     myPlayer;
     PacketManager;
     InputHandler;
@@ -14450,14 +14450,14 @@ window.grbtp = 35;
     clients=new Set;
     constructor(owner) {
       this.ownerClient = owner || this;
-      this.SocketManager = new SocketManager_default(this);
-      this.ObjectManager = new ObjectManager_default(this);
-      this.PlayerManager = new PlayerManager_default(this);
-      this.ProjectileManager = new ProjectileManager_default(this);
-      this.LeaderboardManager = new LeaderboardManager_default(this);
-      this.EnemyManager = new EnemyManager_default(this);
-      this._ModuleHandler = new ModuleHandler_default(this);
-      this.myPlayer = new ClientPlayer_default(this);
+      this.SocketManager = new SocketManager_ref(this);
+      this.ObjectManager = new ObjectManager_ref(this);
+      this.PlayerManager = new PlayerManager_ref(this);
+      this.ProjectileManager = new ProjectileManager_ref(this);
+      this.LeaderboardManager = new LeaderboardManager_ref(this);
+      this.EnemyManager = new EnemyManager_ref(this);
+      this._Core = new ModuleHandler_ref(this);
+      this.myPlayer = new ClientPlayer_ref(this);
       this.PacketManager = new PacketManager(this);
       this.InputHandler = new InputHandler(this);
       this.StatsManager = new StatsManager(this);
@@ -14486,7 +14486,7 @@ window.grbtp = 35;
       this.myPlayer.spawn();
     }
   }
-  const PlayerClient_default = PlayerClient;
+  const PlayerClient_ref = PlayerClient;
   const UI = new class {
     frame;
     activeHotkeyInput=null;
@@ -14502,11 +14502,11 @@ window.grbtp = 35;
       return this.activeHotkeyInput || this.activeInput;
     }
     getFrameContent() {
-      return `\n            <!DOCTYPE html>\n            <style>${styles_default}</style>\n            <div id="menu-container" class="transparent">\n                <div id="menu-wrapper">\n                    ${Header_default}\n\n                    <main>\n                        ${Navbar_default}\n                        \n                        <div id="page-container">\n                            ${Keybinds_default}\n                            ${Combat_default}\n                            ${Visuals_default}\n                            ${Misc_default}\n                            ${Bots_default}\n                            ${Devtool_default}\n                            ${Music_default}\n                                  </div>\n                    </main>\n                </div>\n            </div>\n        `;
+      return `\n            <!DOCTYPE html>\n            <style>${styles_ref}</style>\n            <div id="menu-container" class="transparent">\n                <div id="menu-wrapper">\n                    ${Header_ref}\n\n                    <main>\n                        ${Navbar_ref}\n                        \n                        <div id="page-container">\n                            ${Keybinds_ref}\n                            ${Combat_ref}\n                            ${Visuals_ref}\n                            ${Misc_ref}\n                            ${Bots_ref}\n                            ${Devtool_ref}\n                            ${Music_ref}\n                                  </div>\n                    </main>\n                </div>\n            </div>\n        `;
     }
     injectStyles() {
       const style = document.createElement("style");
-      style.innerHTML = Game_default + Store_default;
+      style.innerHTML = Game_ref + Store_ref;
       document.head.appendChild(style);
       (function rynDesignInjector() {
         const rynCSS = document.createElement("style");
@@ -14776,8 +14776,8 @@ window.grbtp = 35;
           avatar.addEventListener("click", function() {
             if (window._rynUI && typeof window._rynUI.toggleMenu === "function") {
               window._rynUI.toggleMenu();
-            } else if (window.UI_default && typeof window.UI_default.toggleMenu === "function") {
-              window.UI_default.toggleMenu();
+            } else if (window.UI_ref && typeof window.UI_ref.toggleMenu === "function") {
+              window.UI_ref.toggleMenu();
             }
           });
           const badge = document.createElement("div");
@@ -14800,11 +14800,11 @@ window.grbtp = 35;
       logo.addEventListener("click", () => {
         if (window._rynUI && typeof window._rynUI.toggleMenu === "function") {
           window._rynUI.toggleMenu();
-        } else if (window.UI_default && typeof window.UI_default.toggleMenu === "function") {
-          window.UI_default.toggleMenu();
+        } else if (window.UI_ref && typeof window.UI_ref.toggleMenu === "function") {
+          window.UI_ref.toggleMenu();
         } else {
           try {
-            const key = window.Settings_default && window.Settings_default._toggleMenu || "Escape";
+            const key = window.Settings_ref && window.Settings_ref._toggleMenu || "Escape";
             document.dispatchEvent(new KeyboardEvent("keydown", {
               code: key,
               bubbles: true
@@ -14891,8 +14891,8 @@ window.grbtp = 35;
         throw Error(`updateStats Error: can't find an element with ID: '${id}'`);
       }
       stats.textContent = value;
-      if (id in Settings_default) {
-        Settings_default[id] = value;
+      if (id in Settings_ref) {
+        Settings_ref[id] = value;
         SaveSettings();
       }
     }
@@ -14930,8 +14930,8 @@ window.grbtp = 35;
       const {hotkeyInputs: hotkeyInputs} = this.getElements();
       for (const hotkeyInput of hotkeyInputs) {
         const id = hotkeyInput.id;
-        const value = Settings_default[id];
-        if (id in Settings_default && typeof value === "string") {
+        const value = Settings_ref[id];
+        if (id in Settings_ref && typeof value === "string") {
           hotkeyInput.textContent = formatCode(value);
         } else {
           Logger.error(`attachHotkeyInputs Error: Property "${id}" does not exist in settings`);
@@ -14943,8 +14943,8 @@ window.grbtp = 35;
       const list = new Map;
       for (const hotkeyInput of hotkeyInputs) {
         const id = hotkeyInput.id;
-        if (id in Settings_default) {
-          const value = Settings_default[id];
+        if (id in Settings_ref) {
+          const value = Settings_ref[id];
           const [count, inputs] = list.get(value) || [ 0, [] ];
           list.set(value, [ (count || 0) + 1, [ ...inputs, hotkeyInput ] ]);
           hotkeyInput.classList.remove("red");
@@ -14971,8 +14971,8 @@ window.grbtp = 35;
       const keyText = isCode ? formatCode(code) : formatButton(code);
       const keySetting = isCode ? code : keyText;
       const id = this.activeHotkeyInput.id;
-      if (id in Settings_default) {
-        Settings_default[id] = deleting ? "..." : keySetting;
+      if (id in Settings_ref) {
+        Settings_ref[id] = deleting ? "..." : keySetting;
         SaveSettings();
       } else {
         Logger.error(`applyCode Error: Property "${id}" does not exist in settings`);
@@ -14997,7 +14997,7 @@ window.grbtp = 35;
 
        case "_hideHUD":
         {
-          const {gameUI: gameUI} = GameUI_default.getElements();
+          const {gameUI: gameUI} = GameUI_ref.getElements();
           if (checked) {
             gameUI.classList.add("hidden");
           } else {
@@ -15021,15 +15021,15 @@ window.grbtp = 35;
       const {checkboxes: checkboxes} = this.getElements();
       for (const checkbox of checkboxes) {
         const id = checkbox.id;
-        if (!(id in Settings_default)) {
+        if (!(id in Settings_ref)) {
           Logger.error(`attachCheckboxes Error: Property "${id}" does not exist in settings`);
           continue;
         }
-        checkbox.checked = Settings_default[id];
+        checkbox.checked = Settings_ref[id];
         this.handleCheckboxToggle(id, checkbox.checked);
         checkbox.onchange = () => {
-          if (id in Settings_default) {
-            Settings_default[id] = checkbox.checked;
+          if (id in Settings_ref) {
+            Settings_ref[id] = checkbox.checked;
             SaveSettings();
             this.handleCheckboxToggle(id, checkbox.checked);
           } else {
@@ -15042,14 +15042,14 @@ window.grbtp = 35;
       const {colorPickers: colorPickers} = this.getElements();
       for (const picker of colorPickers) {
         const id = picker.id;
-        if (!(id in Settings_default)) {
+        if (!(id in Settings_ref)) {
           Logger.error(`attachColorPickers Error: Property "${id}" does not exist in settings`);
           continue;
         }
-        picker.value = Settings_default[id];
+        picker.value = Settings_ref[id];
         picker.onchange = () => {
-          if (id in Settings_default) {
-            Settings_default[id] = picker.value;
+          if (id in Settings_ref) {
+            Settings_ref[id] = picker.value;
             SaveSettings();
             picker.blur();
           } else {
@@ -15060,9 +15060,9 @@ window.grbtp = 35;
         if (resetColor instanceof this.frame.window.HTMLButtonElement) {
           resetColor.style.setProperty("--data-color", defaultSettings[id]);
           resetColor.onclick = () => {
-            if (id in Settings_default) {
+            if (id in Settings_ref) {
               picker.value = defaultSettings[id];
-              Settings_default[id] = defaultSettings[id];
+              Settings_ref[id] = defaultSettings[id];
               SaveSettings();
             } else {
               Logger.error(`resetColor Error: Property "${id}" was deleted from settings`);
@@ -15075,7 +15075,7 @@ window.grbtp = 35;
       const {sliders: sliders} = this.getElements();
       for (const slider of sliders) {
         const id = slider.id;
-        if (!(id in Settings_default)) {
+        if (!(id in Settings_ref)) {
           Logger.error(`attachSliders Error: Property "${id}" does not exist in settings`);
           continue;
         }
@@ -15085,11 +15085,11 @@ window.grbtp = 35;
             sliderValue.textContent = slider.value + (slider.dataset.suffix || "");
           }
         };
-        slider.value = Settings_default[id].toString();
+        slider.value = Settings_ref[id].toString();
         updateSliderValue();
         slider.oninput = () => {
-          if (id in Settings_default) {
-            Settings_default[id] = Number(slider.value);
+          if (id in Settings_ref) {
+            Settings_ref[id] = Number(slider.value);
             SaveSettings();
             updateSliderValue();
             if (id === "_autoChatInterval") {
@@ -15109,11 +15109,11 @@ window.grbtp = 35;
       const {textInputs: textInputs} = this.getElements();
       for (const input of textInputs) {
         const id = input.id;
-        if (!(id in Settings_default)) {
+        if (!(id in Settings_ref)) {
           Logger.error(`attachTextInputs Error: Property "${id}" does not exist in settings`);
           continue;
         }
-        input.value = Settings_default[id];
+        input.value = Settings_ref[id];
         input.oninput = () => {
           input.value = input.value.replace(/[^\x20-\x7E]/g, "");
         };
@@ -15124,9 +15124,9 @@ window.grbtp = 35;
           this.activeInput = null;
         };
         input.onchange = () => {
-          if (id in Settings_default) {
+          if (id in Settings_ref) {
             const value = input.value;
-            Settings_default[id] = value;
+            Settings_ref[id] = value;
             input.value = value;
             SaveSettings();
           } else {
@@ -15208,7 +15208,7 @@ window.grbtp = 35;
           }
         }
         this.addBotConnecting();
-        const socket = await createSocket_default(ws.url);
+        const socket = await createSocket_ref(ws.url);
         socket.addEventListener("close", () => {
           this.removeBotConnecting();
           if (rowId) {
@@ -15217,7 +15217,7 @@ window.grbtp = 35;
           }
         });
         socket.onopen = () => {
-          const player = new PlayerClient_default(client);
+          const player = new PlayerClient_ref(client);
           player.PacketManager.Encoder = client.PacketManager.Encoder;
           player.PacketManager.Decoder = client.PacketManager.Decoder;
           player._botCustomName = botName;
@@ -15343,8 +15343,8 @@ window.grbtp = 35;
       };
     }
     attachAutoChatUI() {
-      if (!Settings_default._autoChatMsgs) Settings_default._autoChatMsgs = [];
-      if (!Settings_default._autoBotChatMsgs) Settings_default._autoBotChatMsgs = [];
+      if (!Settings_ref._autoChatMsgs) Settings_ref._autoChatMsgs = [];
+      if (!Settings_ref._autoBotChatMsgs) Settings_ref._autoBotChatMsgs = [];
       const doc = this.frame.document;
       const listEl = doc.querySelector("#autoChatMsgList");
       const addBtn = doc.querySelector("#addAutoChatMsg");
@@ -15352,9 +15352,9 @@ window.grbtp = 35;
       const addBotBtn = doc.querySelector("#addAutoBotChatMsg");
       const autoBotChatToggle = doc.querySelector("#_autoBotChat");
       if (autoBotChatToggle) {
-        autoBotChatToggle.checked = Settings_default._autoBotChat || false;
+        autoBotChatToggle.checked = Settings_ref._autoBotChat || false;
         autoBotChatToggle.onchange = () => {
-          Settings_default._autoBotChat = autoBotChatToggle.checked;
+          Settings_ref._autoBotChat = autoBotChatToggle.checked;
           SaveSettings();
         };
       }
@@ -15381,7 +15381,7 @@ window.grbtp = 35;
         };
         inp.onchange = () => {
           const i = Array.from(botListEl.children).indexOf(row);
-          if (i >= 0) Settings_default._autoBotChatMsgs[i] = inp.value;
+          if (i >= 0) Settings_ref._autoBotChatMsgs[i] = inp.value;
           SaveSettings();
         };
         const del = doc.createElement("button");
@@ -15390,7 +15390,7 @@ window.grbtp = 35;
         del.textContent = "X";
         del.onclick = () => {
           const i = Array.from(botListEl.children).indexOf(row);
-          if (i >= 0) Settings_default._autoBotChatMsgs.splice(i, 1);
+          if (i >= 0) Settings_ref._autoBotChatMsgs.splice(i, 1);
           SaveSettings();
           row.remove();
         };
@@ -15399,14 +15399,14 @@ window.grbtp = 35;
         botListEl.appendChild(row);
       };
       if (botListEl) {
-        Settings_default._autoBotChatMsgs.forEach((m, i) => renderBotMsg(m, i));
+        Settings_ref._autoBotChatMsgs.forEach((m, i) => renderBotMsg(m, i));
       }
       if (addBotBtn) {
         addBotBtn.onclick = () => {
-          if (!Settings_default._autoBotChatMsgs) Settings_default._autoBotChatMsgs = [];
-          Settings_default._autoBotChatMsgs.push("");
+          if (!Settings_ref._autoBotChatMsgs) Settings_ref._autoBotChatMsgs = [];
+          Settings_ref._autoBotChatMsgs.push("");
           SaveSettings();
-          renderBotMsg("", Settings_default._autoBotChatMsgs.length - 1);
+          renderBotMsg("", Settings_ref._autoBotChatMsgs.length - 1);
         };
       }
       if (!listEl || !addBtn) return;
@@ -15438,7 +15438,7 @@ window.grbtp = 35;
         };
         inp.onchange = () => {
           const i = Array.from(listEl.children).indexOf(row);
-          if (i >= 0) Settings_default._autoChatMsgs[i] = inp.value;
+          if (i >= 0) Settings_ref._autoChatMsgs[i] = inp.value;
           SaveSettings();
         };
         const del = doc.createElement("button");
@@ -15447,7 +15447,7 @@ window.grbtp = 35;
         del.textContent = "✕";
         del.onclick = () => {
           const i = Array.from(listEl.children).indexOf(row);
-          if (i >= 0) Settings_default._autoChatMsgs.splice(i, 1);
+          if (i >= 0) Settings_ref._autoChatMsgs.splice(i, 1);
           SaveSettings();
           row.remove();
           reindex();
@@ -15456,12 +15456,12 @@ window.grbtp = 35;
         row.appendChild(del);
         listEl.appendChild(row);
       };
-      Settings_default._autoChatMsgs.forEach((m, i) => renderMsg(m, i));
+      Settings_ref._autoChatMsgs.forEach((m, i) => renderMsg(m, i));
       addBtn.onclick = () => {
-        if (!Settings_default._autoChatMsgs) Settings_default._autoChatMsgs = [];
-        Settings_default._autoChatMsgs.push("");
+        if (!Settings_ref._autoChatMsgs) Settings_ref._autoChatMsgs = [];
+        Settings_ref._autoChatMsgs.push("");
         SaveSettings();
-        renderMsg("", Settings_default._autoChatMsgs.length - 1);
+        renderMsg("", Settings_ref._autoChatMsgs.length - 1);
       };
     }
     _generateRandomBotName() {
@@ -15511,7 +15511,7 @@ window.grbtp = 35;
         inp.onblur = () => {
           this.activeInput = null;
         };
-        if (Settings_default._autoRandomBotNames) {
+        if (Settings_ref._autoRandomBotNames) {
           inp.value = this._generateRandomBotName();
         }
         const diceBtn = doc.createElement("button");
@@ -15597,7 +15597,7 @@ window.grbtp = 35;
         icon: "━",
         label: "Line Side"
       } ];
-      const current = () => Settings_default._formation || "none";
+      const current = () => Settings_ref._formation || "none";
       const btns = {};
       if (!doc.getElementById("_formationStyles")) {
         const st = doc.createElement("style");
@@ -15645,8 +15645,8 @@ window.grbtp = 35;
       popup.appendChild(popupFooter);
       doc.body.appendChild(popup);
       grid.appendChild(trigger);
-      if (!Settings_default._formationHotkeys) {
-        Settings_default._formationHotkeys = {};
+      if (!Settings_ref._formationHotkeys) {
+        Settings_ref._formationHotkeys = {};
       }
       const updateStyles = () => {
         const cur = current();
@@ -15721,7 +15721,7 @@ window.grbtp = 35;
       });
       let recordingFid = null;
       const renderKeyBadge = (badge, fid) => {
-        const code = (Settings_default._formationHotkeys || {})[fid];
+        const code = (Settings_ref._formationHotkeys || {})[fid];
         const reset = resetBtns[fid];
         if (code && code !== "...") {
           badge.textContent = formatCode(code);
@@ -15740,15 +15740,15 @@ window.grbtp = 35;
         const fid = recordingFid;
         const badge = keyBadges[fid];
         if (e.code === "Escape" || e.code === "Backspace" || e.code === "Delete") {
-          delete Settings_default._formationHotkeys[fid];
+          delete Settings_ref._formationHotkeys[fid];
         } else {
-          for (const otherId in Settings_default._formationHotkeys) {
-            if (Settings_default._formationHotkeys[otherId] === e.code) {
-              delete Settings_default._formationHotkeys[otherId];
+          for (const otherId in Settings_ref._formationHotkeys) {
+            if (Settings_ref._formationHotkeys[otherId] === e.code) {
+              delete Settings_ref._formationHotkeys[otherId];
               if (keyBadges[otherId]) renderKeyBadge(keyBadges[otherId], otherId);
             }
           }
-          Settings_default._formationHotkeys[fid] = e.code;
+          Settings_ref._formationHotkeys[fid] = e.code;
         }
         SaveSettings();
         badge.classList.remove("recording");
@@ -15789,7 +15789,7 @@ window.grbtp = 35;
             keyBadge.classList.remove("recording");
             recordingFid = null;
           }
-          delete Settings_default._formationHotkeys[f.id];
+          delete Settings_ref._formationHotkeys[f.id];
           SaveSettings();
           renderKeyBadge(keyBadge, f.id);
         };
@@ -15809,7 +15809,7 @@ window.grbtp = 35;
         };
         b.onclick = e => {
           e.stopPropagation();
-          Settings_default._formation = f.id;
+          Settings_ref._formation = f.id;
           SaveSettings();
           updateStyles();
           closePopup();
@@ -15821,7 +15821,7 @@ window.grbtp = 35;
           keyBadges[recordingFid].classList.remove("recording");
         }
         recordingFid = null;
-        Settings_default._formationHotkeys = {};
+        Settings_ref._formationHotkeys = {};
         SaveSettings();
         Object.keys(keyBadges).forEach(fid => renderKeyBadge(keyBadges[fid], fid));
       };
@@ -16009,7 +16009,7 @@ window.grbtp = 35;
         this.createRipple(".open-menu");
         client.StatsManager.init();
         const {menuContainer: menuContainer} = this.getElements();
-        if (Settings_default._menuTransparency) {
+        if (Settings_ref._menuTransparency) {
           menuContainer.classList.add("transparent");
         }
         this.menuLoaded = true;
@@ -16023,8 +16023,8 @@ window.grbtp = 35;
       }
     }
   };
-  const UI_default = UI;
-  window._rynUI = UI_default;
+  const UI_ref = UI;
+  window._rynUI = UI_ref;
 
   const FORMATION_IDS = new Set([ "none", "circle", "heart", "triangle", "square", "column", "hline" ]);
   const defaultSettings = {
@@ -16211,17 +16211,17 @@ window.grbtp = 35;
       settings[key] = defaultSettings[key];
     }
     SaveSettings();
-    UI_default.resetFrame();
+    UI_ref.resetFrame();
   };
-  const Settings_default = settings;
+  const Settings_ref = settings;
   // Preplace and Replace are slaved to Autoplacer: they no longer have their own
   // hotkeys, and turning Autoplacer off drops both of them with it.
   function syncPlacerSlaves() {
-    const on = !!Settings_default._autoplacer;
-    Settings_default._prePlace = on;
-    Settings_default._replace = on;
+    const on = !!Settings_ref._autoplacer;
+    Settings_ref._prePlace = on;
+    Settings_ref._replace = on;
     try {
-      const doc = UI_default.frame && UI_default.frame.document;
+      const doc = UI_ref.frame && UI_ref.frame.document;
       if (!doc) return;
       for (const id of [ "_autoplacer", "_prePlace", "_replace" ]) {
         const el = doc.getElementById(id);
@@ -16273,13 +16273,13 @@ window.grbtp = 35;
     }
     createSkinColors() {
       const skin_color = CustomStorage.get("skin_color") || 0;
-      const index = typeof skin_color === "number" && skin_color >= 0 && skin_color < Config_default.skinColors.length ? skin_color : 0;
+      const index = typeof skin_color === "number" && skin_color >= 0 && skin_color < Config_ref.skinColors.length ? skin_color : 0;
       const {setupCard: setupCard} = this.getElements();
       const skinHolder = document.createElement("div");
       skinHolder.id = "ryn-skin-holder";
       let prevIndex = index;
-      for (let i = 0; i < Config_default.skinColors.length; i++) {
-        const color = Config_default.skinColors[i];
+      for (let i = 0; i < Config_ref.skinColors.length; i++) {
+        const color = Config_ref.skinColors[i];
         const div = document.createElement("div");
         div.classList.add("skinColorItem");
         if (i === index) {
@@ -16401,7 +16401,7 @@ window.grbtp = 35;
     }
     handleChatMessage(client2, text) {
       if (text === "/norecoil") {
-        client2._ModuleHandler.norecoil = !client2._ModuleHandler.norecoil;
+        client2._Core.norecoil = !client2._Core.norecoil;
       }
       client2.PacketManager.chat(text);
     }
@@ -16412,7 +16412,7 @@ window.grbtp = 35;
         const value = chatBox.value;
         if (value.length > 0) {
           this.handleChatMessage(client, value);
-          if (GameUI_default._chatSync) {
+          if (GameUI_ref._chatSync) {
             for (const bot of client.clients) {
               this.handleChatMessage(bot, value);
             }
@@ -16577,8 +16577,8 @@ window.grbtp = 35;
         const scale = 14400 / bounds.width;
         const posX = (event.clientX - bounds.left) * scale;
         const posY = (event.clientY - bounds.top) * scale;
-        client._ModuleHandler.endTarget._setXY(posX, posY);
-        client._ModuleHandler.followPath = true;
+        client._Core.endTarget._setXY(posX, posY);
+        client._Core.followPath = true;
         _mapClick.call(this, event);
       };
     }
@@ -16670,7 +16670,7 @@ window.grbtp = 35;
       }
     }
     reset() {
-      StoreHandler_default.closeStore();
+      StoreHandler_ref.closeStore();
     }
     openClanMenu() {
       const {clanButton: clanButton} = this.getElements();
@@ -16678,7 +16678,7 @@ window.grbtp = 35;
       clanButton.click();
     }
   };
-  const GameUI_default = GameUI;
+  const GameUI_ref = GameUI;
   class Logger {
     static staticLog=console?.log || function() {};
     static staticError=console?.error || function() {};
@@ -16795,9 +16795,9 @@ window.grbtp = 35;
       this.code = left + this.code + right;
     }
   }
-  const Regexer_default = Regexer;
+  const Regexer_ref = Regexer;
   const formatCode2 = code => {
-    const Hook = new Regexer_default(code);
+    const Hook = new Regexer_ref(code);
     if (!isProd) {
       Hook.code = 'console?.log("Loaded bundle..");' + Hook.code;
     }
@@ -16805,7 +16805,7 @@ window.grbtp = 35;
     Hook.append("postRenderLoop", /\w+,\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._postRender();");
     Hook.append("mapPreRender", /(\w+)\.lineWidth=NUM{4};/, "RYN._Renderer._mapPreRender($1);");
     Hook.prepend("gameInit", /function (\w+)\(\w+\)\{\w+\.\w+\(\w+,f/, "RYN._gameInit=function(a){$1(a);};");
-    Hook.prepend("LockRotationClient", /return \w+\?\(\!/, "return RYN._myClient._ModuleHandler._currentAngle;");
+    Hook.prepend("LockRotationClient", /return \w+\?\(\!/, "return RYN._myClient._Core._currentAngle;");
     Hook.replace("DisableResetMoveDir", /\w+=\{\},\w+\.send\("\w+"\)/, "");
     Hook.append("offset", /\W170\W.+?(\w+)=\w+\-\w+\/2.+?(\w+)=\w+\-\w+\/2;/, "RYN._offset._setXY($1,$2);");
     Hook.prepend("renderEntity", /\w+\.health>NUM{0}.+?(\w+)\.fillStyle=(\w+)==(\w+)/, ";RYN._hooks._EntityRenderer._render($1,$2,$3);false&&");
@@ -16816,17 +16816,17 @@ window.grbtp = 35;
     Hook.replace("animalTint", /(animals\/".+?)(\w+)\.drawImage\((\w+),-(\w+),-\4,\4\*2,\4\*2\)/, "$1RYN._Renderer._drawAnimal($2,$3,$4)");
     Hook.append("renderItem", /70, 0.35\)",(\w+).+?\w+\)/, ",RYN._hooks._ObjectRenderer._render($1)");
     Hook.append("RemoveSendAngle", /clientSendRate\)/, "&&false");
-    Hook.replace("handleEquip", /\w+\.send\("\w+",0,(\w+),(\w+)\)/, "RYN._myClient._ModuleHandler._equip($2,$1,true,true)");
+    Hook.replace("handleEquip", /\w+\.send\("\w+",0,(\w+),(\w+)\)/, "RYN._myClient._Core._equip($2,$1,true,true)");
     Hook.replace("exposeGameNet", /const (\w+)=\{socket:null,connected:!1,socketId:-1/, "const $1=RYN._myClient._gameNet={socket:null,connected:!1,socketId:-1");
     Hook.replace("exposeGameCrypto", /(\w+)=\{mode:(\w+),key:/, "$1=RYN._myClient._gameCrypto={mode:$2,key:");
     Hook.replace("captureTurnstile", /onGotTurnstileToken=function\((\w+)\)\{(\w+)=\1,/, "onGotTurnstileToken=function($1){$2=$1,RYN._myClient._turnstileToken=$1,");
     Hook.replace("exposeCryptoFns", /const (\w+)=new (\w+),(\w+)=new (\w+);let (\w+)=null/, "const $1=new $2,$3=new $4;RYN._enc={Eo:Eo,Hi:$1,jt:jt,Po:Po,Ro:Ro};let $5=null");
-    Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._myClient._ModuleHandler._buy($2,$1,true)");
+    Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._myClient._Core._buy($2,$1,true)");
     Hook.prepend("RemovePingCall", /\w+&&clearTimeout/, "return;");
     Hook.append("RemovePingState", /let \w+=-1;function \w+\(\)\{/, "return;");
     Hook.prepend("preRender", /(\w+)\.lineWidth=NUM{4},/, "RYN._hooks._ObjectRenderer._preRender($1);");
     Hook.replace("RenderGrid", /("#91b2db".+?)(for.+?)(\w+\.stroke)/, "$1$3");
-    Hook.replace("upgradeItem", /(upgradeItem.+?onclick.+?)\w+\.send\("\w+",(\w+)\)\}/, "$1RYN._myClient._ModuleHandler._upgradeItem($2)}");
+    Hook.replace("upgradeItem", /(upgradeItem.+?onclick.+?)\w+\.send\("\w+",(\w+)\)\}/, "$1RYN._myClient._Core._upgradeItem($2)}");
     const data = Hook.match("DeathMarker", /99999.+?(\w+)=\{x:(\w+)/);
     Hook.append("playerDied", /NUM{99999};function \w+\(\)\{/, `if(RYN._settings._autospawn){${data[1]}={x:${data[2]}.x,y:${data[2]}.y};return};`);
     Hook.append("updateNotificationRemove", /\w+=\[\],\w+=\[\];function \w+\(\w+,\w+\)\{/, "return;");
@@ -16848,7 +16848,7 @@ window.grbtp = 35;
     Logger.test(`Modified bundle, total amount of hooks: ${Hook.hookCount}/${Hook.hookAttempts}`);
     return Hook.code;
   };
-  const formatCode_default = formatCode2;
+  const formatCode_ref = formatCode2;
   const Injector = new class {
     init(node) {
       this.loadScript(node.src);
@@ -16857,7 +16857,7 @@ window.grbtp = 35;
       const xhr = new XMLHttpRequest;
       xhr.open("GET", src, false);
       xhr.send();
-      let code = formatCode_default(xhr.responseText);
+      let code = formatCode_ref(xhr.responseText);
       let baseUrl;
       try {
         baseUrl = new URL(".", src).href;
@@ -16925,7 +16925,7 @@ window.grbtp = 35;
       });
     }
   };
-  const Injector_default = Injector;
+  const Injector_ref = Injector;
   const resetGame = loadedFast => {
     const scriptExecuteHandler = node => {
       node.addEventListener("beforescriptexecute", event => {
@@ -16948,7 +16948,7 @@ window.grbtp = 35;
         Logger.test("Found script element, resolving..");
         scriptExecuteHandler(node);
         if (loadedFast) {
-          Injector_default.init(node);
+          Injector_ref.init(node);
         }
       }
     };
@@ -17003,7 +17003,7 @@ window.grbtp = 35;
       win.requestAnimFrame = function() {
         delete win.requestAnimFrame;
         if (scriptBundle !== null) {
-          Injector_default.init(scriptBundle);
+          Injector_ref.init(scriptBundle);
         }
       };
       blockProperty(win, "requestAnimFrame");
@@ -17061,7 +17061,7 @@ window.grbtp = 35;
     const deleteProp = (target, name) => {
       delete target[name];
     };
-    Hooker_default.createRecursiveHook(window, "config", (that, config) => {
+    Hooker_ref.createRecursiveHook(window, "config", (that, config) => {
       deleteProp(that, "openLink");
       deleteProp(that, "aJoinReq");
       deleteProp(that, "follmoo");
@@ -17085,11 +17085,11 @@ window.grbtp = 35;
       Logger.log("Intercepted config..");
       return loadedFast;
     });
-    Hooker_default.createRecursiveHook(Object.prototype, "initialBufferSize", _this => {
+    Hooker_ref.createRecursiveHook(Object.prototype, "initialBufferSize", _this => {
       client.PacketManager.Encoder = _this;
       return true;
     });
-    Hooker_default.createRecursiveHook(Object.prototype, "maxExtLength", _this => {
+    Hooker_ref.createRecursiveHook(Object.prototype, "maxExtLength", _this => {
       client.PacketManager.Decoder = _this;
       Logger.log("Hooked decoder..");
       return true;
@@ -17150,7 +17150,7 @@ window.grbtp = 35;
         configurable: true
       });
     })();
-    if (Settings_default._texturepack) {
+    if (Settings_ref._texturepack) {
       Logger.log("Injected texture pack..");
       const imageDesc = Object.getOwnPropertyDescriptor(Image.prototype, "src");
       Object.defineProperty(Image.prototype, "src", {
@@ -17185,7 +17185,7 @@ window.grbtp = 35;
       configurable: true
     });
   };
-  const resetGame_default = resetGame;
+  const resetGame_ref = resetGame;
   class DeadPlayer {
     moveAngle;
     skinColor;
@@ -17197,8 +17197,8 @@ window.grbtp = 35;
     rotation;
     baseTime=2e3;
     elapsedTime=0;
-    pos=new Vector_default;
-    lerpPos=new Vector_default;
+    pos=new Vector_ref;
+    lerpPos=new Vector_ref;
     acc=7;
     velocity=0;
     opacity=1;
@@ -17226,9 +17226,9 @@ window.grbtp = 35;
       const blend = 1 - Math.exp(-10 * dt);
       const PI3 = Math.PI;
       const rotationSpeed = (1 - easedProgress) / PI3 * blend;
-      if (!Settings_default._lowQuality) this.rotation += rotationSpeed * this.shortSign;
+      if (!Settings_ref._lowQuality) this.rotation += rotationSpeed * this.shortSign;
       this.velocity = this.acc * (1 - easedProgress);
-      this.pos.add(Vector_default.fromAngle(this.moveAngle, this.velocity * dt));
+      this.pos.add(Vector_ref.fromAngle(this.moveAngle, this.velocity * dt));
       this.lerpPos.x = lerp(this.lerpPos.x, this.pos.x, blend);
       this.lerpPos.y = lerp(this.lerpPos.y, this.pos.y, blend);
     }
@@ -17253,7 +17253,7 @@ window.grbtp = 35;
       ctx.rotate(player.angle);
       ctx.globalAlpha = .6;
       ctx.strokeStyle = "#525252";
-      const {autoHat: autoHat} = client._ModuleHandler.staticModules;
+      const {autoHat: autoHat} = client._Core.unitTable;
       const weaponID = autoHat.getNextWeaponID();
       const variant = player.getWeaponVariant(weaponID).current;
       RYN._hooks._renderPlayer({
@@ -17308,54 +17308,54 @@ window.grbtp = 35;
       if (_mp && _owner != null && !_mp.isMyPlayerByID(_owner) && !_mp.isTeammateByID(_owner)) {
         isEnemyObj = true;
       }
-      const enabled = isEnemyObj ? Settings_default._itemHealthBarEnemy : Settings_default._itemHealthBar;
+      const enabled = isEnemyObj ? Settings_ref._itemHealthBarEnemy : Settings_ref._itemHealthBar;
       if (!enabled) {
         return 0;
       }
       const {health: health, maxHealth: maxHealth, angle: angle} = object;
       const perc = health / maxHealth;
-      const color = isEnemyObj ? Settings_default._itemHealthBarEnemyColor : Settings_default._itemHealthBarColor;
-      return Renderer_default.circularBar(ctx, entity, perc, angle, color, 0, 1.4);
+      const color = isEnemyObj ? Settings_ref._itemHealthBarEnemyColor : Settings_ref._itemHealthBarColor;
+      return Renderer_ref.circularBar(ctx, entity, perc, angle, color, 0, 1.4);
     }
     renderWindmill(entity) {
       const item = Items[entity.id];
       if (item.itemType === 5) {
         entity.turnSpeed = 0;
       }
-      if (Settings_default._lowQuality && item && item.turnSpeed !== undefined) {
+      if (Settings_ref._lowQuality && item && item.turnSpeed !== undefined) {
         entity.turnSpeed = 0;
       }
     }
     renderCollisions(ctx, entity, object) {
       const x = entity.x + entity.xWiggle;
       const y = entity.y + entity.yWiggle;
-      if (Settings_default._collisionHitbox) {
-        Renderer_default.square(ctx, x, y, object.collisionScale, "#c7fff2", .5, 1);
+      if (Settings_ref._collisionHitbox) {
+        Renderer_ref.square(ctx, x, y, object.collisionScale, "#c7fff2", .5, 1);
       }
-      if (Settings_default._weaponHitbox) {
-        Renderer_default.hexagon(ctx, x, y, object.hitScale, "#3f4ec4", .5, 1);
+      if (Settings_ref._weaponHitbox) {
+        Renderer_ref.hexagon(ctx, x, y, object.hitScale, "#3f4ec4", .5, 1);
       }
-      if (Settings_default._placementHitbox) {
-        Renderer_default.diamond(ctx, x, y, object.placementScale, "#73b9ba", .5, 1);
+      if (Settings_ref._placementHitbox) {
+        Renderer_ref.diamond(ctx, x, y, object.placementScale, "#73b9ba", .5, 1);
       }
     }
     _render(ctx) {
-      if (Renderer_default._renderObjects.length === 0) {
+      if (Renderer_ref._renderObjects.length === 0) {
         return;
       }
-      const {ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler2, myPlayer: myPlayer} = client;
+      const {ObjectManager: ObjectManager2, _Core: ModuleHandler2, myPlayer: myPlayer} = client;
       const _cx = myPlayer && myPlayer.inGame ? myPlayer.pos.current.x : 0;
       const _cy = myPlayer && myPlayer.inGame ? myPlayer.pos.current.y : 0;
-      const _vw = ZoomHandler_default._scale.current._w * 0.55;
-      const _vh = ZoomHandler_default._scale.current._h * 0.55;
-      const _maxObj = Settings_default._lowQuality ? 80 : Infinity;
+      const _vw = ZoomHandler_ref._scale.current._w * 0.55;
+      const _vh = ZoomHandler_ref._scale.current._h * 0.55;
+      const _maxObj = Settings_ref._lowQuality ? 80 : Infinity;
       let _objCount = 0;
-      if (Settings_default._lowQuality && myPlayer && myPlayer.inGame) {
-        Renderer_default._renderObjects.sort((a, b) => (a.x - _cx) * (a.x - _cx) + (a.y - _cy) * (a.y - _cy) - ((b.x - _cx) * (b.x - _cx) + (b.y - _cy) * (b.y - _cy)));
+      if (Settings_ref._lowQuality && myPlayer && myPlayer.inGame) {
+        Renderer_ref._renderObjects.sort((a, b) => (a.x - _cx) * (a.x - _cx) + (a.y - _cy) * (a.y - _cy) - ((b.x - _cx) * (b.x - _cx) + (b.y - _cy) * (b.y - _cy)));
       }
-      for (const entity of Renderer_default._renderObjects) {
+      for (const entity of Renderer_ref._renderObjects) {
         if (_objCount++ >= _maxObj) break;
-        if (Settings_default._lowQuality && (Math.abs(entity.x - _cx) > _vw || Math.abs(entity.y - _cy) > _vh)) continue;
+        if (Settings_ref._lowQuality && (Math.abs(entity.x - _cx) > _vw || Math.abs(entity.y - _cy) > _vh)) continue;
         const object = ObjectManager2.objects.get(entity.sid);
         if (object === void 0) {
           continue;
@@ -17366,22 +17366,22 @@ window.grbtp = 35;
         }
         this.renderCollisions(ctx, entity, object);
       }
-      Renderer_default._renderObjects.length = 0;
+      Renderer_ref._renderObjects.length = 0;
     }
     volcanoBoxSize=940;
     volcanoAggressionRadius=1440;
-    volcanoBoxPos=new Vector_default(14400, 14400).sub(this.volcanoBoxSize);
-    volcanoPos=new Vector_default(13960, 13960);
+    volcanoBoxPos=new Vector_ref(14400, 14400).sub(this.volcanoBoxSize);
+    volcanoPos=new Vector_ref(13960, 13960);
     _preRender(ctx) {
-      if (Settings_default._lowQuality) {
+      if (Settings_ref._lowQuality) {
         ctx.imageSmoothingEnabled = false;
         ctx.shadowColor = "transparent";
         const ox = RYN._offset.x, oy = RYN._offset.y;
-        const cdx = Math.abs(ox - Renderer_default._staticCacheOffset.x);
-        const cdy = Math.abs(oy - Renderer_default._staticCacheOffset.y);
-        if (Renderer_default._staticCacheDirty || cdx > 150 || cdy > 150) {
-          Renderer_default._staticCacheDirty = false;
-          Renderer_default._staticCacheOffset = {
+        const cdx = Math.abs(ox - Renderer_ref._staticCacheOffset.x);
+        const cdy = Math.abs(oy - Renderer_ref._staticCacheOffset.y);
+        if (Renderer_ref._staticCacheDirty || cdx > 150 || cdy > 150) {
+          Renderer_ref._staticCacheDirty = false;
+          Renderer_ref._staticCacheOffset = {
             x: ox,
             y: oy
           };
@@ -17406,14 +17406,14 @@ window.grbtp = 35;
       ctx.restore();
       if (client.myPlayer.diedOnce) {
         const {x: x2, y: y2} = client.myPlayer.deathPosition;
-        Renderer_default.cross(ctx, x2, y2, 50, 15, "#cc5151");
+        Renderer_ref.cross(ctx, x2, y2, 50, 15, "#cc5151");
       }
-      if (Settings_default._positionPrediction && client.myPlayer.inGame) {
+      if (Settings_ref._positionPrediction && client.myPlayer.inGame) {
         DeadPlayerHandler.render(ctx, client.myPlayer.simulation.getPos(), client.myPlayer.simulation.spikeCollision ? "red" : "yellow");
       }
     }
   };
-  const ObjectRenderer_default = ObjectRenderer;
+  const ObjectRenderer_ref = ObjectRenderer;
   const isProd = true;
   const version = isProd ? "5.9.4" : "Dev";
   const loadedFast = document.head === null;
@@ -17422,7 +17422,7 @@ window.grbtp = 35;
   }
   Logger.test("RYN Client initialization..");
   const gameToken = altcha.generate();
-  const client = new PlayerClient_default;
+  const client = new PlayerClient_ref;
   window.WebSocket = new window.Proxy(window.WebSocket, {
     construct(target, args) {
       const socket = new target(...args);
@@ -17531,7 +17531,7 @@ window.grbtp = 35;
     }
 
     frame(now) {
-      if (!Settings_default._weather) {
+      if (!Settings_ref._weather) {
         this._destroy();
         return;
       }
@@ -17565,8 +17565,8 @@ window.grbtp = 35;
         dt = 1 / 60;
       }
 
-      const amount = Settings_default._weatherAmount ?? 45;
-      const quality = Settings_default._lowQuality ? .45 : 1;
+      const amount = Settings_ref._weatherAmount ?? 45;
+      const quality = Settings_ref._lowQuality ? .45 : 1;
       const want = Math.round(WEATHER_MAX_PARTICLES * (amount / 100) * quality);
       if (want <= 0) {
         this.ctx.clearRect(0, 0, this.w, this.h);
@@ -17578,7 +17578,7 @@ window.grbtp = 35;
       this.count = want;
 
       // Ease across the biome line so it morphs instead of snapping.
-      const target = myPlayer.pos.current.y <= Config_default.snowBiomeTop ? 1 : 0;
+      const target = myPlayer.pos.current.y <= Config_ref.snowBiomeTop ? 1 : 0;
       this.snow += (target - this.snow) * Math.min(1, dt * 1.6);
       const snow = this.snow;
 
@@ -17642,17 +17642,17 @@ window.grbtp = 35;
   const win = window;
   const RYN = {
     _myClient: client,
-    _settings: Settings_default,
-    _Renderer: Renderer_default,
-    _ZoomHandler: ZoomHandler_default,
+    _settings: Settings_ref,
+    _Renderer: Renderer_ref,
+    _ZoomHandler: ZoomHandler_ref,
     _hooks: {
-      _EntityRenderer: EntityRenderer_default,
-      _ObjectRenderer: ObjectRenderer_default,
+      _EntityRenderer: EntityRenderer_ref,
+      _ObjectRenderer: ObjectRenderer_ref,
       _renderPlayer: function() {}
     },
     _config: {},
     version: version,
-    _offset: new Vector_default,
+    _offset: new Vector_ref,
     _gameInit(token) {},
     async startGame() {
       const token = await gameToken;
@@ -17687,13 +17687,13 @@ window.grbtp = 35;
       } catch (e) {}
     }, 500);
   } catch (e) {}
-  resetGame_default(loadedFast);
+  resetGame_ref(loadedFast);
   const contentLoaded = () => {
     Logger.test("Menu initialization..");
     client.InputHandler.init();
-    GameUI_default.init();
-    UI_default.init();
-    StoreHandler_default.init();
+    GameUI_ref.init();
+    UI_ref.init();
+    StoreHandler_ref.init();
   };
   window.addEventListener("DOMContentLoaded", contentLoaded);
   if (document.readyState !== "loading") {
@@ -17701,7 +17701,7 @@ window.grbtp = 35;
   }
   const onload = () => {
     Logger.test("Page loaded..");
-    const {enterGame: enterGame} = GameUI_default.getElements();
+    const {enterGame: enterGame} = GameUI_ref.getElements();
     enterGame.classList.remove("disabled");
   };
   let _autoChatIndex = 0;
@@ -17710,12 +17710,12 @@ window.grbtp = 35;
   let _botAutoChatTimer = null;
   const _startBotAutoChat = () => {
     if (_botAutoChatTimer) { clearInterval(_botAutoChatTimer); _botAutoChatTimer = null; }
-    if (!Settings_default._autoBotChat) return;
-    const intervalSec = Math.max(1, Math.min(60, parseInt(Settings_default._autoChatInterval) || 15));
+    if (!Settings_ref._autoBotChat) return;
+    const intervalSec = Math.max(1, Math.min(60, parseInt(Settings_ref._autoChatInterval) || 15));
     _botAutoChatTimer = setInterval(() => {
-      if (!Settings_default._autoBotChat) return;
+      if (!Settings_ref._autoBotChat) return;
       try {
-        const msgs = (Settings_default._autoBotChatMsgs || []).filter(m => m && m.trim().length > 0);
+        const msgs = (Settings_ref._autoBotChatMsgs || []).filter(m => m && m.trim().length > 0);
         if (msgs.length === 0) return;
         const msg = msgs[_botAutoChatIndex % msgs.length];
         _botAutoChatIndex++;
@@ -17734,13 +17734,13 @@ window.grbtp = 35;
   window._startBotAutoChat = _startBotAutoChat;
   const _startAutoChat = () => {
     if (_autoChatTimer) { clearInterval(_autoChatTimer); _autoChatTimer = null; }
-    if (!Settings_default._autoChat) return;
-    const intervalSec = Math.max(1, Math.min(60, parseInt(Settings_default._autoChatInterval) || 15));
+    if (!Settings_ref._autoChat) return;
+    const intervalSec = Math.max(1, Math.min(60, parseInt(Settings_ref._autoChatInterval) || 15));
     _autoChatTimer = setInterval(() => {
-      if (!Settings_default._autoChat) return;
+      if (!Settings_ref._autoChat) return;
       if (!client || !client.myPlayer || !client.myPlayer.inGame) return;
       try {
-        const msgs = (Settings_default._autoChatMsgs || []).filter(m => m && m.trim().length > 0);
+        const msgs = (Settings_ref._autoChatMsgs || []).filter(m => m && m.trim().length > 0);
         if (msgs.length === 0) return;
         const msg = msgs[_autoChatIndex % msgs.length];
         _autoChatIndex++;
@@ -17775,13 +17775,13 @@ window.grbtp = 35;
     const _orig = mp.newUpgrade.bind(mp);
     mp.newUpgrade = function(points, age) {
       let chosen, chosenSec;
-      if (Settings_default._shieldGuard) {
+      if (Settings_ref._shieldGuard) {
         const ownerClient = botClient.ownerClient;
         if (ownerClient) {
           const guardIndex = ownerClient.getClientIndex(botClient);
           const botAge = botClient.myPlayer ? botClient.myPlayer.age : 0;
-          const isAutoGuard = Settings_default._autoJoinGuard && botAge >= 6;
-          const isNormalGuard = !Settings_default._autoJoinGuard && guardIndex >= 0 && guardIndex < 3;
+          const isAutoGuard = Settings_ref._autoJoinGuard && botAge >= 6;
+          const isNormalGuard = !Settings_ref._autoJoinGuard && guardIndex >= 0 && guardIndex < 3;
           if (isAutoGuard || isNormalGuard) {
             chosen = 7;
             chosenSec = 11;
@@ -17817,14 +17817,14 @@ window.grbtp = 35;
       };
       const slotHasPrimary = ids.some(id => id < 16 && (() => {
         try {
-          return DataHandler_default.getWeapon(id).type === 0;
+          return DataHandler_ref.getWeapon(id).type === 0;
         } catch (e) {
           return false;
         }
       })());
       const slotHasSecondary = ids.some(id => id < 16 && (() => {
         try {
-          return DataHandler_default.getWeapon(id).type === 1;
+          return DataHandler_ref.getWeapon(id).type === 1;
         } catch (e) {
           return false;
         }
@@ -17836,7 +17836,7 @@ window.grbtp = 35;
           const ownerId = ownerOrder[this.upgradeIndex];
           if (ownerId !== undefined && ids.includes(ownerId)) {
             this.upgradeIndex += 1;
-            botClient._ModuleHandler._upgradeItem(ownerId);
+            botClient._Core._upgradeItem(ownerId);
           }
           return;
         }
@@ -17856,7 +17856,7 @@ window.grbtp = 35;
           for (const id of ids) {
             if (id < 16) {
               try {
-                if (DataHandler_default.getWeapon(id).type === 0) {
+                if (DataHandler_ref.getWeapon(id).type === 0) {
                   target = id;
                   break;
                 }
@@ -17866,7 +17866,7 @@ window.grbtp = 35;
         }
         if (target !== null && ids.includes(target)) {
           this.upgradeIndex += 1;
-          botClient._ModuleHandler._upgradeItem(target);
+          botClient._Core._upgradeItem(target);
         }
         return;
       }
@@ -17876,7 +17876,7 @@ window.grbtp = 35;
           const ownerId = ownerOrder[this.upgradeIndex];
           if (ownerId !== undefined && ids.includes(ownerId)) {
             this.upgradeIndex += 1;
-            botClient._ModuleHandler._upgradeItem(ownerId);
+            botClient._Core._upgradeItem(ownerId);
             return;
           }
           chosenSec = 9;
@@ -17927,23 +17927,23 @@ window.grbtp = 35;
         }
         if (target !== null && ids.includes(target)) {
           this.upgradeIndex += 1;
-          botClient._ModuleHandler._upgradeItem(target);
+          botClient._Core._upgradeItem(target);
         }
         return;
       }
       if (slotHasItemOnly) {
         let target = null;
-        if (age === 3) target = 1 + 16; else if (age === 4) target = (Settings_default._botAge4BoostPad ? 16 : 15) + 16; else if (age === 5) target = 7 + 16; else if (age === 7) target = 18 + 16; else if (age === 8) target = 12 + 16; else if (age === 9) target = 9 + 16;
+        if (age === 3) target = 1 + 16; else if (age === 4) target = (Settings_ref._botAge4BoostPad ? 16 : 15) + 16; else if (age === 5) target = 7 + 16; else if (age === 7) target = 18 + 16; else if (age === 8) target = 12 + 16; else if (age === 9) target = 9 + 16;
         if (target !== null && ids.includes(target)) {
           this.upgradeIndex += 1;
-          botClient._ModuleHandler._upgradeItem(target);
+          botClient._Core._upgradeItem(target);
           return;
         }
         const ownerOrder = botClient.ownerClient?.myPlayer?.upgradeOrder || [];
         const ownerId = ownerOrder[this.upgradeIndex];
         if (ownerId !== undefined && ids.includes(ownerId)) {
           this.upgradeIndex += 1;
-          botClient._ModuleHandler._upgradeItem(ownerId);
+          botClient._Core._upgradeItem(ownerId);
         }
       }
     };
@@ -19084,7 +19084,7 @@ window.grbtp = 35;
   let fKeyHeld = false, fKeyInterval = null;
   const _place = itemType => {
     const myPlayer = client.myPlayer;
-    const modH = client._ModuleHandler;
+    const modH = client._Core;
     if (!myPlayer || !myPlayer.inGame) return;
     if (myPlayer.getItemByType(itemType) === null) return;
     modH.startPlacement(itemType);
@@ -19103,7 +19103,7 @@ window.grbtp = 35;
       _place(8);
     }
     if (e.code === "KeyN") {
-      Settings_default._automill = !Settings_default._automill;
+      Settings_ref._automill = !Settings_ref._automill;
     }
   }, true);
   window.addEventListener("keyup", e => {
@@ -19556,10 +19556,10 @@ window.grbtp = 35;
         } else {
           moveAng = ang + Math.PI + zz * 0.5;
         }
-        bot._ModuleHandler.startMovement(moveAng);
-        bot._ModuleHandler._currentAngle = ang;
+        bot._Core.startMovement(moveAng);
+        bot._Core._currentAngle = ang;
         const attacking = dist < 175;
-        _rynSetAttackingStaggered(bot._ModuleHandler, attacking ? 1 : 0, botIndex1v1);
+        _rynSetAttackingStaggered(bot._Core, attacking ? 1 : 0, botIndex1v1);
         if (attacking && dist < 120) {
           st.hitCount++;
           st.commentTimer--;
@@ -19661,7 +19661,7 @@ window.grbtp = 35;
     }
   };
   try {
-    if (Settings_default._targetCooldownSec) _targetCooldown = Settings_default._targetCooldownSec * 1000;
+    if (Settings_ref._targetCooldownSec) _targetCooldown = Settings_ref._targetCooldownSec * 1000;
   } catch (e) {}
   const _targets = new Map;
   let _targetCooldown = 3000;
@@ -19749,9 +19749,9 @@ window.grbtp = 35;
         const dy = t.player.pos.y - myPos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         const ang = Math.atan2(dy, dx);
-        bot._ModuleHandler.startMovement(ang);
-        bot._ModuleHandler._currentAngle = ang;
-        _rynSetAttackingStaggered(bot._ModuleHandler, dist < 160 ? 1 : 0, i);
+        bot._Core.startMovement(ang);
+        bot._Core._currentAngle = ang;
+        _rynSetAttackingStaggered(bot._Core, dist < 160 ? 1 : 0, i);
       } catch (e) {}
     });
   }, 80);
@@ -19993,7 +19993,7 @@ window.grbtp = 35;
       if (_sc_client && _sc_client.isOwner) {
         const _sc_now = Date.now();
         for (const _sc_bot of _sc_client.clients) {
-          const _sc_mh = _sc_bot._ModuleHandler;
+          const _sc_mh = _sc_bot._Core;
           if (!_sc_mh || (!_sc_mh._scatterActive && !_sc_mh._scatterReturning)) continue;
           const _sc_player = _sc_bot.myPlayer;
           if (!_sc_player || !_sc_player.pos) continue;
@@ -20071,7 +20071,7 @@ window.grbtp = 35;
               const _sc_ba = Math.atan2(_sc_bp.y - _sc_pos.y, _sc_bp.x - _sc_pos.x);
               const _sc_sec = _sc_player.getItemByType(1);
               const _sc_pri = _sc_player.getItemByType(0);
-              const _sc_rel = _sc_mh.staticModules && _sc_mh.staticModules.reloading;
+              const _sc_rel = _sc_mh.unitTable && _sc_mh.unitTable.reloading;
               if (_sc_rel) {
                 if (_sc_sec === 10 && _sc_rel.isReloaded(1)) {
                   try {
@@ -20102,7 +20102,7 @@ window.grbtp = 35;
         _targetCooldown = parseFloat(slider.value) * 1000;
         if (valEl) valEl.textContent = slider.value + "s";
         try {
-          Settings_default._targetCooldownSec = parseFloat(slider.value);
+          Settings_ref._targetCooldownSec = parseFloat(slider.value);
           SaveSettings();
         } catch (e) {}
       };
@@ -20112,7 +20112,7 @@ window.grbtp = 35;
   };
   setInterval(() => {
     try {
-      const frame = UI_default.frame && UI_default.frame.target;
+      const frame = UI_ref.frame && UI_ref.frame.target;
       if (!frame || !frame.contentDocument) return;
       const page = frame.contentDocument.querySelector('.menu-page[data-id="1"]');
       if (page && !page._targetAttached) {
@@ -20145,20 +20145,20 @@ window.grbtp = 35;
               const ni = doc.getElementById(num);
               const lv = doc.getElementById(lbl);
               if (!sl || !ni || !lv) return;
-              const saved = Settings_default[key] || 0;
+              const saved = Settings_ref[key] || 0;
               sl.value = ni.value = saved;
               lv.textContent = saved;
               sl.addEventListener("input", () => {
                 const v = parseInt(sl.value) || 0;
                 ni.value = v;
                 lv.textContent = v;
-                Settings_default[key] = v;
+                Settings_ref[key] = v;
               });
               ni.addEventListener("input", () => {
                 const v = Math.max(0, Math.min(9999, parseInt(ni.value) || 0));
                 sl.value = Math.min(v, 2000);
                 lv.textContent = v;
-                Settings_default[key] = v;
+                Settings_ref[key] = v;
               });
             });
           } catch (e) {}
@@ -20171,7 +20171,7 @@ window.grbtp = 35;
             const btnNearest = doc.getElementById("_farmModeNearest");
             const typeRow = doc.getElementById("_farmTypeRow");
             function _applyMode(mode) {
-              Settings_default._botFarmMode = mode;
+              Settings_ref._botFarmMode = mode;
               const isSingle = mode === "single";
               if (typeRow) typeRow.style.display = isSingle ? "" : "none";
               if (btnSingle) {
@@ -20185,7 +20185,7 @@ window.grbtp = 35;
                 btnNearest.style.color = !isSingle ? "#fff" : "#aaa";
               }
             }
-            _applyMode(Settings_default._botFarmMode || "single");
+            _applyMode(Settings_ref._botFarmMode || "single");
             if (btnSingle) btnSingle.addEventListener("click", () => _applyMode("single"));
             if (btnNearest) btnNearest.addEventListener("click", () => _applyMode("nearest"));
             const farmTypeBtns = doc.querySelectorAll(".farm-type-btn");
@@ -20195,7 +20195,7 @@ window.grbtp = 35;
               color: "#fff"
             };
             function _applyFarmType(idx) {
-              Settings_default._botFarmType = idx;
+              Settings_ref._botFarmType = idx;
               if (ftSel) ftSel.value = idx;
               farmTypeBtns.forEach((btn, i) => {
                 if (i === idx) {
@@ -20214,11 +20214,11 @@ window.grbtp = 35;
                 _applyFarmType(parseInt(btn.dataset.farmType) || 0);
               });
             });
-            _applyFarmType(Settings_default._botFarmType || 0);
+            _applyFarmType(Settings_ref._botFarmType || 0);
             if (flInp) {
-              flInp.value = Settings_default._botFarmLimit || 0;
+              flInp.value = Settings_ref._botFarmLimit || 0;
               flInp.addEventListener("input", () => {
-                Settings_default._botFarmLimit = Math.max(0, parseInt(flInp.value) || 0);
+                Settings_ref._botFarmLimit = Math.max(0, parseInt(flInp.value) || 0);
               });
             }
           } catch (e) {}
@@ -20235,7 +20235,7 @@ window.grbtp = 35;
             };
             function _applyAge4Choice(id) {
               const useBoost = String(id) === "1";
-              Settings_default._botAge4BoostPad = useBoost;
+              Settings_ref._botAge4BoostPad = useBoost;
               if (label) label.textContent = names[String(id)] || id;
               btns.forEach(b => {
                 const active = b.getAttribute("data-age4id") === String(id);
@@ -20247,7 +20247,7 @@ window.grbtp = 35;
             btns.forEach(btn => {
               btn.addEventListener("click", () => _applyAge4Choice(btn.getAttribute("data-age4id")));
             });
-            _applyAge4Choice(Settings_default._botAge4BoostPad ? "1" : "0");
+            _applyAge4Choice(Settings_ref._botAge4BoostPad ? "1" : "0");
           } catch (e) {}
         })(frame.contentDocument);
         const gSlider = frame.contentDocument.getElementById("_guardFrontDist");
@@ -20417,7 +20417,7 @@ window.grbtp = 35;
   }
   setInterval(function() {
     try {
-      var frame = UI_default.frame && UI_default.frame.target;
+      var frame = UI_ref.frame && UI_ref.frame.target;
       if (!frame || !frame.contentDocument) return;
       var si = frame.contentDocument.getElementById("ryn-search-input");
       if (si && !si._rynSI) _initRynSearch(frame.contentDocument);
@@ -20425,8 +20425,8 @@ window.grbtp = 35;
   }, 800);
   function _ryn_buyAndEquipAssassin(c) {
     try {
-      if (!c || !c._ModuleHandler || !c.myPlayer || !c.myPlayer.inGame) return;
-      const mh = c._ModuleHandler;
+      if (!c || !c._Core || !c.myPlayer || !c.myPlayer.inGame) return;
+      const mh = c._Core;
       const HAT_ID = 56;
       const PRICE = 20000;
       const bought = mh.bought && mh.bought[0];
@@ -20454,7 +20454,7 @@ window.grbtp = 35;
   }
   setInterval(function() {
     try {
-      const s = Settings_default;
+      const s = Settings_ref;
       if (s._autoAssassin) {
         _ryn_buyAndEquipAssassin(client);
       }
@@ -20479,7 +20479,7 @@ window.grbtp = 35;
       }
     }
     _neededTypes() {
-      const s = Settings_default;
+      const s = Settings_ref;
       const limit = Number(s._botFarmLimit) || 0;
       const mode = s._botFarmMode || "single";
       if (mode === "single") {
@@ -20502,7 +20502,7 @@ window.grbtp = 35;
     }
     isActivelyFarming() {
       if (this.client.isOwner) return false;
-      if (!Settings_default._botAutoFarmEnabled) return false;
+      if (!Settings_ref._botAutoFarmEnabled) return false;
       return this._neededTypes() !== null;
     }
     getNearestResource(typeSet) {
@@ -20535,34 +20535,34 @@ window.grbtp = 35;
       }
       return chosen;
     }
-    postTick() {
-      const {myPlayer: myPlayer, _ModuleHandler: _ModuleHandler} = this.client;
+    runTick() {
+      const {myPlayer: myPlayer, _Core: _Core} = this.client;
       if (!myPlayer || !myPlayer.inGame || !myPlayer.pos) return;
-      if (!Settings_default._botAutoFarmEnabled) return;
-      _ModuleHandler.moduleActive = false;
-      _ModuleHandler.attackingState = 0;
+      if (!Settings_ref._botAutoFarmEnabled) return;
+      _Core.moduleActive = false;
+      _Core.attackingState = 0;
       const needed = this._neededTypes();
       if (needed === null) {
-        _ModuleHandler._autoFarmActive = true;
-        _ModuleHandler.shouldAttack = false;
-        _ModuleHandler.forceWeapon = null;
+        _Core._autoFarmActive = true;
+        _Core.shouldAttack = false;
+        _Core.forceWeapon = null;
         try {
           const ownerPos = this.client.ownerClient && this.client.ownerClient.myPlayer && this.client.ownerClient.myPlayer.pos && this.client.ownerClient.myPlayer.pos.current;
           if (ownerPos) {
             const myPos = myPlayer.pos.current;
             const dist = Math.hypot(ownerPos.x - myPos.x, ownerPos.y - myPos.y);
-            const followRadius = Number(Settings_default._followRadius) || 125;
+            const followRadius = Number(Settings_ref._followRadius) || 125;
             if (dist > followRadius) {
               const angle = Math.atan2(ownerPos.y - myPos.y, ownerPos.x - myPos.x);
-              _ModuleHandler.startMovement(angle);
+              _Core.startMovement(angle);
             } else {
-              _ModuleHandler.startMovement(null);
+              _Core.startMovement(null);
             }
           } else {
-            _ModuleHandler.startMovement(null);
+            _Core.startMovement(null);
           }
         } catch (_) {
-          _ModuleHandler.startMovement(null);
+          _Core.startMovement(null);
         }
         return;
       }
@@ -20575,20 +20575,20 @@ window.grbtp = 35;
         try {
           const priID = myPlayer.getItemByType(0);
           if (priID !== null && priID !== undefined) {
-            range = DataHandler_default.getWeapon(priID).range + (target.hitScale || target.collisionScale || 0);
+            range = DataHandler_ref.getWeapon(priID).range + (target.hitScale || target.collisionScale || 0);
           }
         } catch (_) {}
         const dist = Math.hypot(tPos.x - myPos.x, tPos.y - myPos.y);
-        _ModuleHandler._currentAngle = angle;
-        if (_ModuleHandler.mouse) _ModuleHandler.mouse.sentAngle = angle;
+        _Core._currentAngle = angle;
+        if (_Core.mouse) _Core.mouse.sentAngle = angle;
         if (dist > range - 5) {
-          _ModuleHandler.startMovement(angle, true);
-          _ModuleHandler.shouldAttack = false;
+          _Core.startMovement(angle, true);
+          _Core.shouldAttack = false;
         } else {
-          _ModuleHandler.startMovement(null);
-          _ModuleHandler.useAngle = angle;
-          _ModuleHandler.forceWeapon = 0;
-          _ModuleHandler.shouldAttack = true;
+          _Core.startMovement(null);
+          _Core.useAngle = angle;
+          _Core.forceWeapon = 0;
+          _Core.shouldAttack = true;
         }
       } else {
         try {
@@ -20608,16 +20608,16 @@ window.grbtp = 35;
           while (diff > Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
           this._wanderAngle += diff * 0.06 + (Math.random() - 0.5) * 0.05;
-          _ModuleHandler.startMovement(this._wanderAngle, true);
+          _Core.startMovement(this._wanderAngle, true);
         } catch (_) {
-          _ModuleHandler.startMovement(null);
+          _Core.startMovement(null);
         }
-        _ModuleHandler.shouldAttack = false;
+        _Core.shouldAttack = false;
       }
     }
   }
   class PostKillCleanupModule {
-    moduleName="postKillCleanup";
+    unitID="postKillCleanup";
     client;
     _cleanupActive=false;
     _cleanupQueue=[];
@@ -20642,14 +20642,14 @@ window.grbtp = 35;
       targets.sort((a, b) => myPos.distance(a.pos.current) - myPos.distance(b.pos.current));
       return targets;
     }
-    postTick() {
+    runTick() {
       if (window._gbot1v1BotID === null || this.client !== window._gbot1v1BotID) return;
       const myPlayer = this.client.myPlayer;
       if (!myPlayer.inGame) {
         this._cleanupActive = false;
         return;
       }
-      const MH = this.client._ModuleHandler;
+      const MH = this.client._Core;
       if (this._prevKills === -1) this._prevKills = myPlayer.totalKills;
       if (myPlayer.totalKills > this._prevKills) {
         this._prevKills = myPlayer.totalKills;
@@ -20694,7 +20694,7 @@ window.grbtp = 35;
       try {
         const bot = window._gbot1v1BotID;
         if (bot && bot !== _prevBot) {
-          const MH = bot._ModuleHandler;
+          const MH = bot._Core;
           if (MH && !MH._postKillCleanupModule) {
             const mod = new PostKillCleanupModule(bot);
             MH._postKillCleanupModule = mod;
@@ -20704,8 +20704,8 @@ window.grbtp = 35;
         } else if (!bot) {
           _prevBot = null;
         }
-        if (bot && bot._ModuleHandler && bot._ModuleHandler._postKillCleanupModule) {
-          bot._ModuleHandler._postKillCleanupModule.postTick();
+        if (bot && bot._Core && bot._Core._postKillCleanupModule) {
+          bot._Core._postKillCleanupModule.runTick();
         }
       } catch (_) {}
       requestAnimationFrame(_cleanupTick);
@@ -20713,7 +20713,7 @@ window.grbtp = 35;
   })();
   const WIN_CLEANUP_RADIUS = 1300;
   class WinCleanupModule {
-    moduleName="winCleanup";
+    unitID="winCleanup";
     client;
     _cleanupQueue=[];
     _processedTaskId=null;
@@ -20733,7 +20733,7 @@ window.grbtp = 35;
       }
       return targets;
     }
-    postTick() {
+    runTick() {
       const task = window._gbot1v1WinCleanup;
       if (!task || !task.active || task.bot !== this.client) return;
       if (window._gbot1v1BotID === this.client) {
@@ -20742,7 +20742,7 @@ window.grbtp = 35;
       }
       const myPlayer = this.client.myPlayer;
       if (!myPlayer.inGame) return;
-      const MH = this.client._ModuleHandler;
+      const MH = this.client._Core;
       if (this._processedTaskId !== task.id) {
         this._processedTaskId = task.id;
         this._cleanupQueue = this._buildQueue(task.center, task.ownerID, task.botID);
@@ -20781,7 +20781,7 @@ window.grbtp = 35;
         const task = window._gbot1v1WinCleanup;
         const bot = task && task.active ? task.bot : null;
         if (bot && bot !== _prevBot) {
-          const MH = bot._ModuleHandler;
+          const MH = bot._Core;
           if (MH && !MH._winCleanupModule) {
             MH._winCleanupModule = new WinCleanupModule(bot);
           }
@@ -20789,8 +20789,8 @@ window.grbtp = 35;
         } else if (!bot) {
           _prevBot = null;
         }
-        if (bot && bot._ModuleHandler && bot._ModuleHandler._winCleanupModule) {
-          bot._ModuleHandler._winCleanupModule.postTick();
+        if (bot && bot._Core && bot._Core._winCleanupModule) {
+          bot._Core._winCleanupModule.runTick();
         }
       } catch (_) {}
       requestAnimationFrame(_winCleanupTick);
@@ -20798,23 +20798,23 @@ window.grbtp = 35;
   })();
   (function _autoFarmLoop() {
     try {
-      if (Settings_default._botAutoFarmEnabled && !Settings_default._botsFrozen && client && client.isOwner) {
+      if (Settings_ref._botAutoFarmEnabled && !Settings_ref._botsFrozen && client && client.isOwner) {
         _farmResourceClaims.clear();
         for (const _afBot of client.clients) {
           try {
-            const _afMH = _afBot._ModuleHandler;
+            const _afMH = _afBot._Core;
             if (!_afMH) continue;
             if (!_afMH._daemonFarmModule) {
               _afMH._daemonFarmModule = new BotAutoFarmModule(_afBot);
             }
             _afMH._autoFarmActive = true;
-            _afMH._daemonFarmModule.postTick();
+            _afMH._daemonFarmModule.runTick();
           } catch (_) {}
         }
       } else if (client && client.isOwner) {
         for (const _afBot of client.clients) {
           try {
-            const _afMH = _afBot._ModuleHandler;
+            const _afMH = _afBot._Core;
             if (_afMH && _afMH._autoFarmActive) {
               _afMH._autoFarmActive = false;
               _afMH.startMovement(null);
