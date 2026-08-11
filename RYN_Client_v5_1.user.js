@@ -9296,19 +9296,6 @@ window.grbtp = 35;
   // ==========================================================================
   const ITEM_SPIKE = 4;
   const ITEM_TRAP = 7;
-  // The grid the interior of a free arc is sampled on. 72 steps is 5 degrees,
-  // which on the trap ring (80 units out) is 7 units of ground per step.
-  //
-  // NEEDS VALIDATION: 7 units is finer than anything that consumes it. The
-  // placer's own definition of one piece of ground is PLACE_SAME_SPOT_RADIUS
-  // at 30 units, so four consecutive samples describe a single spot, and a
-  // build is 100 units across. The only consumer that wants sub-spot
-  // resolution is the nearest-to-target picker, and the angle it actually
-  // wants -- the bearing straight at the enemy -- is pushed exactly rather
-  // than sampled. So the grid is doing work at four times the resolution any
-  // caller has been shown to need, and a coarser step has not been tried.
-  const ANGLE_SAMPLES = 72;
-  const ANGLE_STEP = Math.PI * 2 / ANGLE_SAMPLES;
 
   // ── Angular arcs ──────────────────────────────────────────────────────────
   // Where a build fits is not something to search for. Every obstacle blocks
@@ -9490,11 +9477,6 @@ window.grbtp = 35;
   // committed to a path, and RYN does not measure that.
   const TRAP_PRIMARY_RANGE = 200;
 
-  // How near a trap has to be for a piece of ground to count as already
-  // covered by one. A pit trap is scale 50, so this is its own radius plus
-  // five: any further out and the spike would be filling ground the trap does
-  // not actually reach.
-  const SPIKE_FALLBACK_RADIUS = 55;
 
   // The features that finish a fight by putting a spike on someone: the spike
   // ticks, the syncs, and the two trap-spike combos. All of them outrank the
@@ -9536,921 +9518,783 @@ window.grbtp = 35;
     return Array.isArray(angles) ? angles.length > 0 : !!angles;
   }
 
-  class AutoPlacer {
-    unitID="autoPlacer";
-    client;
-    _queuedBuilds=[];
-    _placedSpots=[];
-    _bannedSpots=[];
-    _angleCache=new Map;
-    _angleCacheTick=-1;
-    _tick=0;
-    _lastPrePlaceObj=null;
-    _spamPrePlacer=false;
-    // The tick a preplace was queued on. Its timers land on the wire during
-    // the tick after, so the spike ticks read this and stand down while it is
-    // current rather than compete for the same packets and the same aim.
-    _preplaceSentTick=-99;
-    // Bearing to the enemy this tick, offered to the solver as an exact
-    // candidate. Null outside a fight.
-    _preferAngle=null;
-    constructor(client2) {
-      this.client = client2;
+  // ==========================================================================
+  // RYN Placement Engine
+  //
+  // What this replaces: three decision paths that each generated their own
+  // angles, applied their own rules and spent from the same allowance without
+  // knowing about each other. Autoplace filled the ring, the preplacer aimed at
+  // an opening slot, and replace re-sent what the preplacer had queued -- three
+  // answers to one question, resolved by running order.
+  //
+  // They are one question. Every build RYN wants is the same record: a legal
+  // angle, a reason it is wanted, and what has to be true before it can go out.
+  // The difference between "place it now" and "place it when that trap dies" is
+  // a field on the record, not a different subsystem.
+  //
+  //   RynGeometrySolver     the ring, the arcs, the packing. Pure functions.
+  //   RynAngleSolver        free arcs for one item, given the world
+  //   RynCandidateGenerator free arcs -> placements, four ways of choosing
+  //   RynThreatAnalyzer     which objects are about to die, and where the
+  //                         enemy is going
+  //   RynPlacementScorer    one number per placement
+  //   RynPlacementPlanner   the best *set* under the allowance, not the first
+  //                         angle that passes
+  //   RynConflictResolver   what the rest of the client is already doing
+  //   RynPlacementScheduler when each send goes out
+  //   RynPlacementExecutor  the sends themselves
+  //   RynPlacementMemory    what was refused, and what is already in flight
+  //
+  // Geometry lives in one place and every consumer reads it. Adding a building
+  // type is a row in RYN_BUILD_ROLE, not a fourth placement system.
+  // ==========================================================================
+
+  // Boundary slack on the obstacle radius. A candidate sitting exactly on the
+  // line between fits and does not would otherwise appear and vanish between
+  // ticks as float noise moves it, and the placer would spend a send on it
+  // every other tick.
+  const ARC_TOUCH_EPS = .01;
+
+  // Does the segment a->b pass through the square of half-width `pad` centred
+  // on (cx, cy)? Segment-versus-box, used everywhere the engine asks "will they
+  // walk into this" or "does this stand between us".
+  function lineHitsBox(cx, cy, pad, a, b) {
+    const x1 = cx - pad, y1 = cy - pad, x2 = cx + pad, y2 = cy + pad;
+    let minX = a.x, maxX = b.x;
+    if (a.x > b.x) { minX = b.x; maxX = a.x; }
+    if (maxX > x2) maxX = x2;
+    if (minX < x1) minX = x1;
+    if (minX > maxX) return false;
+    let minY = a.y, maxY = b.y;
+    const dx = b.x - a.x;
+    if (Math.abs(dx) > 1e-7) {
+      const slope = (b.y - a.y) / dx;
+      const intercept = a.y - slope * a.x;
+      minY = slope * minX + intercept;
+      maxY = slope * maxX + intercept;
     }
-    reset() {
-      this._queuedBuilds = [];
-      this._placedSpots = [];
-      this._bannedSpots.length = 0;
-      this._angleCache.clear();
-      this._angleCacheTick = -1;
-      this._lastPrePlaceObj = null;
-      this._spamPrePlacer = false;
-      this._preplaceSentTick = -99;
-      this._preferAngle = null;
+    if (minY > maxY) { const t = maxY; maxY = minY; minY = t; }
+    if (maxY > y2) maxY = y2;
+    if (minY < y1) minY = y1;
+    return minY <= maxY;
+  }
+
+  // Why a build is wanted. The reason decides how it is scheduled, not how it
+  // is generated -- generation is identical for all three.
+  const RYN_PLACE_REASON = Object.freeze({
+    IMMEDIATE: "immediate",   // nothing in the way; goes out this tick
+    OPENING: "opening",       // blocked only by objects that are about to die
+    RESEND: "resend"          // an opening whose blocker has actually gone
+  });
+
+  // How a candidate angle was arrived at. Kept on the record because the scorer
+  // treats a flush angle differently from one that merely fits.
+  const RYN_PLACE_ORIGIN = Object.freeze({
+    FLUSH: "flush",           // packed against an obstacle -- an arc endpoint
+    AIMED: "aimed",           // the bearing straight at what we care about
+    GAP: "gap",               // the centre of a run between two obstacles
+    PACKED: "packed",         // tangent subdivision of an open run
+    ANCHORED: "anchored"      // derived from a world point, not from a bearing
+  });
+
+  // What each buildable is for. This is the extension point: a new building
+  // type is a row here, and every stage below reads it rather than testing ids.
+  const RYN_BUILD_ROLE = Object.freeze({
+    spike: { itemType: ITEM_SPIKE, pins: false, damages: true, blocks: true },
+    trap: { itemType: ITEM_TRAP, pins: true, damages: false, blocks: false }
+  });
+
+  // ── Geometry ──────────────────────────────────────────────────────────────
+  // Every measurement the engine makes, in one place, as pure functions of the
+  // game's own numbers. Nothing here reads client state, so all of it is
+  // checkable against the item table by hand.
+  class RynGeometrySolver {
+    // Where a build of this item lands, measured from its owner. The game
+    // computes exactly this in buildItem, so it is not an approximation.
+    static ring(item) {
+      return Config.playerScale + item.scale + (item.placeOffset || 0);
     }
 
-    // UTILS.lineInRect, unchanged.
-    _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
-      let minX = ax, maxX = bx;
-      if (ax > bx) {
-        minX = bx;
-        maxX = ax;
-      }
-      if (maxX > x2) maxX = x2;
-      if (minX < x1) minX = x1;
-      if (minX > maxX) return false;
-      let minY = ay, maxY = by;
-      const dx = bx - ax;
-      if (Math.abs(dx) > 1e-7) {
-        const slope = (by - ay) / dx;
-        const intercept = ay - slope * ax;
-        minY = slope * minX + intercept;
-        maxY = slope * maxX + intercept;
-      }
-      if (minY > maxY) {
-        const tmp = maxY;
-        maxY = minY;
-        minY = tmp;
-      }
-      if (maxY > y2) maxY = y2;
-      if (minY < y1) minY = y1;
-      if (minY > maxY) return false;
-      return true;
+    // How far apart two builds of this item must be, in angle, to sit tangent
+    // on the ring rather than overlapping. This is the density that matters:
+    // any finer and the extra candidates describe builds that cannot coexist.
+    static tangentStep(item, ring) {
+      const ratio = item.scale / ring;
+      return ratio >= 1 ? Math.PI : 2 * Math.asin(ratio);
     }
 
-    // Where a build of `id` at `angle` would land. The game puts it on a circle
-    // of radius playerScale + itemScale + placeOffset, so a candidate angle and
-    // a world position are the same fact in two forms.
-    _buildAt(id, myPos) {
-      const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      return angle => ({
-        id: id,
-        angle: angle,
-        x: myPos.x + dist * Math.cos(angle),
-        y: myPos.y + dist * Math.sin(angle),
-        scale: item.scale
-      });
+    static pointAt(origin, ring, angle) {
+      return {
+        x: origin.x + ring * Math.cos(angle),
+        y: origin.y + ring * Math.sin(angle)
+      };
     }
 
-    // Am I at the cap for this item's group? The limit is whatever
-    // ClientPlayer.getItemCount resolves -- it already distinguishes the
-    // sandbox cap from the live one, so there is no second copy of that rule
-    // here.
-    //
-    // `excludeObj` is the object a preplace is betting on losing. The whole
-    // point of a preplace is that by the time the build lands that object is
-    // gone, which frees its slot in the group as surely as it frees the ground
-    // it stood on — the collision set already drops it, and the count has to
-    // drop with it. Without this, a retrap at a full trap cap reads as capped
-    // and every angle comes back empty: the trap dying is exactly the trap
-    // being replaced, and the placer refuses on the strength of a trap that is
-    // already dead. Only my own builds count against my cap, so the object has
-    // to be one of mine.
-    // What the server refused is a place on the ground, not a direction from
-    // me. Banning the angle confuses the two: walk a step and the same angle
-    // points at open ground, while the spot that was actually refused now sits
-    // at a different angle — so a legitimate build is blocked and the refused
-    // one is offered straight back.
-    //
-    // Storing the position rather than the angle also makes the ban expire on
-    // its own terms: it stays put over the ground it belongs to, and walking
-    // away from that ground puts it out of range of every candidate without
-    // the timer having to run out.
-    _banSpot(x, y, tick) {
-      this._bannedSpots.push({
-        x: x,
-        y: y,
-        expiry: tick + PLACE_BAN_TICKS
-      });
-    }
-
-    _isBannedSpot(x, y) {
-      for (const spot of this._bannedSpots) {
-        if (Math.hypot(spot.x - x, spot.y - y) < PLACE_SAME_SPOT_RADIUS) return true;
-      }
-      return false;
-    }
-
-    _atItemCap(id, myPlayer, excludeObj) {
-      const group = Items[id].itemGroup;
-      const {count: count, limit: limit} = myPlayer.getItemCount(group);
-      const freed = excludeObj && excludeObj.itemGroup === group && myPlayer.objects?.has(excludeObj) ? 1 : 0;
-      return !!limit && count - freed >= limit;
-    }
-
-    // The exact arc of build angles a single object blocks, or null if it
-    // blocks none. A circle-circle intersection, not a search:
-    //
-    //   D  the ring builds land on   = playerScale + itemScale + placeOffset
-    //   E  how close a build centre may come = objScale + itemScale
-    //
-    // The two circles meet in exactly two points, and those are the two angles
-    // at which a build sits precisely flush against this object. Everything
-    // between them, on the object's side, is blocked.
-    _blockedArc(obj, D, E, myPos) {
-      const dx = obj.pos.current.x - myPos.x;
-      const dy = obj.pos.current.y - myPos.y;
+    // The run of angles one obstacle denies, or null if it denies none.
+    // Circle-circle intersection: the ring of radius R around me, against the
+    // circle of radius E around the obstacle inside which a build centre may
+    // not fall. The epsilon keeps a candidate sitting exactly on the boundary
+    // from flickering in and out between ticks.
+    static blockedArc(objPos, E, R, origin) {
+      const dx = objPos.x - origin.x;
+      const dy = objPos.y - origin.y;
       const dist = Math.hypot(dx, dy);
-      if (dist < 1e-6) return E >= D ? ARC_FULL : null;
-      // Reaches the ring at all?
-      if (dist - D > E || D - dist > E) return null;
-      // Swallows it whole?
-      if (E >= dist + D) return ARC_FULL;
-      const a = (dist * dist - E * E + D * D) / (2 * dist);
-      const h = Math.sqrt(Math.max(0, D * D - a * a));
-      const px = myPos.x + a / dist * dx;
-      const py = myPos.y + a / dist * dy;
-      const a1 = Math.atan2(py - h / dist * dx - myPos.y, px + h / dist * dy - myPos.x);
-      const a2 = Math.atan2(py + h / dist * dx - myPos.y, px - h / dist * dy - myPos.x);
-      // Two points cut the ring into two arcs. The blocked one is whichever
-      // contains the bearing to the object — a thing blocks its own side.
+      const reach = E + ARC_TOUCH_EPS;
+      if (dist < 1e-6) return reach >= R ? ARC_FULL : null;
+      if (dist - R > reach || R - dist > reach) return null;
+      if (reach >= dist + R) return ARC_FULL;
+      const a = (dist * dist - reach * reach + R * R) / (2 * dist);
+      const h = Math.sqrt(Math.max(0, R * R - a * a));
+      const px = origin.x + a / dist * dx;
+      const py = origin.y + a / dist * dy;
+      const a1 = Math.atan2(py - h / dist * dx - origin.y, px + h / dist * dy - origin.x);
+      const a2 = Math.atan2(py + h / dist * dx - origin.y, px - h / dist * dy - origin.x);
       const toObj = normalizeArcAngle(Math.atan2(dy, dx));
       const s = normalizeArcAngle(a1), e = normalizeArcAngle(a2);
       return arcContains(s, e, toObj) ? [ s, e ] : [ e, s ];
     }
 
-    // Every angle a build of `id` could legally take, with the flush ones
-    // marked.
-    //
-    // The blocked arcs are solved exactly and inverted, so the free runs come
-    // out as continuous intervals. Their endpoints are the angles at which a
-    // build sits packed against whatever bounds the run -- that is where a
-    // build is worth the most, and they are returned as `perfect`.
-    //
-    // The interiors are sampled on a fixed grid so the "closest to the enemy"
-    // pickers have a spread to choose from rather than only the two ends. The
-    // grid is finer than PLACE_SAME_SPOT_RADIUS, so consecutive samples are
-    // ground the placer would call the same spot; that is deliberate, because
-    // the pickers score by distance to a moving target and want resolution the
-    // ban logic does not. A free run thinner than one step still yields both
-    // endpoints, so a narrow gap is never invisible.
-    //
-    // `excludeObj` is the object a preplace is betting on losing. The result
-    // depends only on (id, excludeObj) within a tick and callers compare
-    // entries by identity, so it stays memoised per tick.
-    _placeableAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
-      if (id === null || id === undefined) return [];
-      if (this._atItemCap(id, myPlayer, excludeObj)) return [];
-      const tick = this.client.services.clock.tick;
-      if (this._angleCacheTick !== tick) {
-        this._angleCache.clear();
-        this._angleCacheTick = tick;
-      }
-      const key = id + "_" + (excludeObj ? excludeObj.id : "n");
-      const cached = this._angleCache.get(key);
-      if (cached) return cached;
+    static span(s, e) {
+      return (e - s + Math.PI * 2) % (Math.PI * 2) || Math.PI * 2;
+    }
 
-      const item = Items[id];
-      const D = 35 + item.scale + (item.placeOffset || 0);
+    // The river is a band, not a disc, so it has no bounded arc around me to
+    // merge with the rest and stays a per-point test. Platforms ignore it,
+    // which is the game's own exemption.
+    static inRiver(y, id) {
+      if (id === 18) return false;
+      const mid = Config.mapScale / 2;
+      const half = Config.riverWidth / 2;
+      return y >= mid - half && y <= mid + half;
+    }
+  }
+
+  // ── Free arcs ─────────────────────────────────────────────────────────────
+  // One item, one origin, one set of obstacles, one answer: the runs of angle
+  // where that item fits. `spared` is the set of objects treated as already
+  // gone -- the generalisation that lets a build be planned into ground that is
+  // still occupied by things about to die.
+  class RynAngleSolver {
+    solve(origin, item, objects, spared) {
+      const R = RynGeometrySolver.ring(item);
       const blocked = [];
-      let allBlocked = false;
-      ObjectManager2.grid2D.query(myPos.x, myPos.y, 3, objId => {
-        if (allBlocked) return true;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return false;
-        if (excludeObj && obj === excludeObj) return false;
-        const arc = this._blockedArc(obj, D, item.scale + obj.placementScale, myPos);
-        if (arc === ARC_FULL) {
-          allBlocked = true;
-          return true;
-        }
-        if (arc) blocked.push(arc);
-        return false;
-      });
-
-      const angles = [];
-      if (!allBlocked) {
-        const getConfig = this._buildAt(id, myPos);
-        // The river is a band, not a disc, so it has no bounded arc around me
-        // to merge with the rest -- it stays a per-candidate test.
-        const dry = cfg => {
-          if (id === 18) return true;
-          const mid = Config.mapScale / 2;
-          const riverHalf = Config.riverWidth / 2;
-          return !(cfg.y >= mid - riverHalf && cfg.y <= mid + riverHalf);
-        };
-        const push = (angle, perfect) => {
-          const cfg = getConfig(normalizeArcAngle(angle));
-          if (!dry(cfg)) return;
-          angles.push({
-            ...cfg,
-            placeable: true,
-            perfect: perfect
-          });
-        };
-        for (const [s, e] of invertArcs(mergeArcs(blocked))) {
-          push(s, true);
-          const span = (e - s + Math.PI * 2) % (Math.PI * 2) || Math.PI * 2;
-          for (let t = ANGLE_STEP; t < span; t += ANGLE_STEP) push(s + t, false);
-          if (span > 1e-6) push(e, true);
-          // The arc ends are exact, but its interior is on the grid, and the
-          // one interior angle that matters is the bearing straight at the
-          // enemy: that is where a trap lands on them rather than beside them,
-          // and it is what closestTrapToEnemy is looking for. Rounded to the
-          // nearest grid sample it is up to seven units off, which on a trap of
-          // scale 50 decides whether they are caught. When it falls inside this
-          // run it is offered exactly rather than approximately.
-          if (this._preferAngle !== null && arcContains(s, e, normalizeArcAngle(this._preferAngle))) {
-            push(this._preferAngle, false);
-          }
-        }
+      for (const obj of objects) {
+        if (spared !== null && spared.has(obj)) continue;
+        const arc = RynGeometrySolver.blockedArc(obj.pos.current, item.scale + obj.placementScale, R, origin);
+        if (arc === ARC_FULL) return { ring: R, free: [], blockers: objects };
+        if (arc !== null) blocked.push(arc);
       }
-      this._angleCache.set(key, angles);
-      return angles;
-    }
-
-    // Queue a build, unless it would land on one this tick has already queued.
-    // Two builds on the same ground is one wasted send, and the send is the
-    // scarce thing.
-    _queueBuild(id, angle, preplace, myPos) {
-      const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const x = myPos.x + dist * Math.cos(angle);
-      const y = myPos.y + dist * Math.sin(angle);
-      for (const obj of this._queuedBuilds) {
-        if (obj.id !== 17 && Math.hypot(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
-      }
-      this._queuedBuilds.push({
-        id: id,
-        angle: angle,
-        x: x,
-        y: y,
-        scale: item.scale,
-        preplace: preplace
-      });
-    }
-
-    // The object whose slot is about to open. Either one I am about to break
-    // myself while gathering, or one the enemy is about to break with a weapon
-    // that just came off reload. Whichever it is, the closest to the enemy
-    // wins, and finding one arms the replace resend.
-    _findOpeningSlot(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped) {
-      const ryn = this.client.services;
-      let findObject = null;
-      // A path break is excluded. This branch exists to claim the ground under
-      // something I am about to knock down, and `findAngle` is sorted by
-      // distance to it, so the build lands where the old one stood. Against an
-      // enemy structure that is the point — break it, take the spot. Against
-      // one of mine broken specifically to free the group cap it is a loop
-      // that eats itself: path break takes the trap down, the preplacer puts
-      // an identical one back in the same place, the cap never frees, and both
-      // halves are paid for in packets and resources. _atItemCap even credits
-      // the dying trap back, so the cap check passes and makes the rebuild
-      // likelier rather than less.
-      const autoGathering = ryn.ledger.breakActive || ryn.actions.autoattack || ryn.intent.forceWeapon !== null;
-      if (autoGathering) {
-        const predictType = ryn.loadout.predictWeapon();
-        const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
-        const predictReady = myWeapon !== null && myWeapon !== undefined && myPlayer.isReloaded(predictType, 0);
-        if (predictReady) {
-          const wd = DataHandler?.getWeapon?.(myWeapon);
-          if (wd) {
-            const myRange = wd.range ?? 0;
-            const myDmg = myPlayer.getBuildingDamage?.(myWeapon, myPlayer.hatID === 40) ?? 0;
-            const gatherAngle = Config.gatherAngle;
-            const myFut = myPlayer.pos.future ?? myPos;
-            const attackAngle = ryn.ledger.breakActive && ryn.ledger.breakAngle !== null && ryn.ledger.breakAngle !== undefined ? ryn.ledger.breakAngle : ryn.actions.currentAngle ?? myPos.angle(enemyPos);
-            const candidates = [];
-            ObjectManager2.grid2D.query(myPos.x, myPos.y, 3, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return false;
-              if (myFut.distance(obj.pos.current) - obj.scale > myRange) return false;
-              let diff = Math.abs(myFut.angle(obj.pos.current) - attackAngle);
-              if (diff > Math.PI) diff = Math.PI * 2 - diff;
-              if (diff > gatherAngle) return false;
-              if (obj.health <= myDmg) candidates.push(obj);
-              return false;
-            });
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = candidates[0];
-            }
-          }
-        }
-      }
-      if (!findObject) {
-        const secReload = enemy.reload?.[1];
-        const primReload = enemy.reload?.[0];
-        const secJustReady = secReload && secReload.previous < secReload.max && secReload.current >= secReload.max;
-        const primJustReady = primReload && primReload.previous < primReload.max && primReload.current >= primReload.max;
-        const secID = enemy.weapon?.secondary ?? null;
-        const primID = enemy.weapon?.primary ?? null;
-        // Deliberately not narrowed by weapon type. A rule that only predicts
-        // fast weapons misses the swing that matters most: the one that frees a
-        // trapped enemy, whatever they are holding. A slow primary breaking out
-        // was the commonest way a retrap was missed, so every weapon counts.
-        //
-        // What is kept is the edge that actually carries the signal: the
-        // weapon came off reload this tick, so the swing is imminent. That,
-        // plus the health test below (the building dies to this one hit), is
-        // what keeps this from firing on every tick an enemy stands near a
-        // wall. Both ready weapons are tried, hardest-hitting first, so a
-        // ready secondary that cannot reach does not shadow a primary that
-        // can.
-        // The just-came-off-reload edge is true for exactly one tick, which is
-        // right for a wall somewhere: predict the swing that is happening now,
-        // not every tick an armed enemy stands near masonry.
-        //
-        // It is wrong for the trap holding them. Someone pinned does not swing
-        // the instant the bar fills — they line the shot up first — and the
-        // moment the edge passes the prediction stops, so the break that
-        // actually frees them is the one never seen. While they are in a trap
-        // of mine the threat is standing, not momentary, so the test drops to
-        // simply "the weapon is ready". The health check still requires the
-        // trap to die to this one hit, and only that trap is in reach of this
-        // relaxation, so it does not turn into a general-purpose spam.
-        const holdingThem = enemyTrapped !== null && enemyTrapped !== undefined;
-        const secUsable = holdingThem ? !!secReload && secReload.current >= secReload.max : secJustReady;
-        const primUsable = holdingThem ? !!primReload && primReload.current >= primReload.max : primJustReady;
-        const readyWeapons = [];
-        if (secID !== null && secID !== undefined && secUsable) readyWeapons.push(secID);
-        if (primID !== null && primID !== undefined && primUsable) readyWeapons.push(primID);
-        readyWeapons.sort((a, b) => (enemy.getBuildingDamage?.(b, true) ?? 0) - (enemy.getBuildingDamage?.(a, true) ?? 0));
-        for (const candidateWeapon of readyWeapons) {
-          if (findObject) break;
-          const wd = DataHandler?.getWeapon?.(candidateWeapon);
-          if (wd) {
-            const weaponRange = wd.range ?? 0;
-            const dmgToBuilding = enemy.getBuildingDamage?.(candidateWeapon, true) ?? 50;
-            const candidates = [];
-            ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return false;
-              // Anything the enemy cannot see yet is not a slot about to open
-              // -- a pit trap they have not walked into is not about to be
-              // broken by someone unaware of it.
-              //
-              // The trap they are standing in is the exception, and it has to
-              // be stated explicitly, because a pit trap is `hideFromEnemy`.
-              // Filtered out here it could never come back as the opening slot,
-              // and the retrap rule further down -- which fires only when the
-              // thing about to break IS that trap -- would be unreachable. An
-              // enemy inside a trap plainly knows it is there; breaking out is
-              // exactly what they are doing.
-              if (Items[obj.type] && Items[obj.type].hideFromEnemy && obj !== enemyTrapped) return false;
-              if (enemyPos.distance(obj.pos.current) - obj.scale > weaponRange) return false;
-              if (obj.health <= dmgToBuilding) candidates.push(obj);
-              return false;
-            });
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = candidates[0];
-            }
-          }
-        }
-      }
-      if (findObject) {
-        this._spamPrePlacer = true;
-      }
-      return findObject;
-    }
-
-    // Shared by the autoplace and preplace ladders: of the angles whose spike
-    // would catch the enemy, keep the ones whose knockback throws them onto a
-    // spike already on the ground, and take the one whose push lines up best
-    // with one -- ties broken by distance. A spike that hits is chip damage; a
-    // spike that hits them into another spike is the exchange.
-    _closestSpikeToKb(spikeAngles, spikesOur, enemyPos, enemyFut, enemyScale, pad) {
-      const hitsEnemy = a => this._lineInRect(a.x - (enemyScale + a.scale - pad), a.y - (enemyScale + a.scale - pad), a.x + (enemyScale + a.scale - pad), a.y + (enemyScale + a.scale - pad), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-      const kbLine = a => {
-        const kbAngle = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-        return [ enemyFut.x + 200 * Math.cos(kbAngle), enemyFut.y + 200 * Math.sin(kbAngle) ];
+      return {
+        ring: R,
+        free: invertArcs(mergeArcs(blocked)),
+        blockers: objects
       };
-      const scored = spikeAngles.filter(a => {
-        if (!hitsEnemy(a)) return false;
-        const [pX, pY] = kbLine(a);
-        for (const sp of spikesOur) {
-          const s = sp.pos.current, sc = sp.collisionScale;
-          if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-        }
-        return false;
-      }).map(a => {
-        const [pX, pY] = kbLine(a);
-        let best = Infinity;
-        for (const sp of spikesOur) {
-          const s = sp.pos.current, sc = sp.collisionScale;
-          if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-            const angleToEnemy = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-            const enemyToSpike = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-            let diff = Math.abs(angleToEnemy - enemyToSpike);
-            if (diff > Math.PI) diff = Math.PI * 2 - diff;
-            best = Math.min(best, diff);
-          }
-        }
-        return {
+    }
+  }
+
+  // ── Candidates ────────────────────────────────────────────────────────────
+  // Four ways of picking an angle out of a free run, each answering a question
+  // the others cannot:
+  //
+  //   flush   the two ends -- packed against whatever bounds the run, which is
+  //           where a build leaves no gap to walk through
+  //   aimed   a bearing we specifically want, offered exactly rather than
+  //           rounded to whatever sample happens to be nearest
+  //   gap     the middle of a run, which flush angles never reach and which is
+  //           where a trap catches someone walking through
+  //   packed  tangent subdivision, so a wide open run yields the builds that
+  //           can actually coexist on it and not one per five degrees
+  //
+  // The old grid produced about seventy angles per item where the ring
+  // physically holds four or five builds. These produce a handful, and every
+  // one of them means something.
+  class RynCandidateGenerator {
+    build(origin, item, itemId, role, arcs, aims, reason, spared) {
+      const out = [];
+      const R = arcs.ring;
+      const step = RynGeometrySolver.tangentStep(item, R);
+      const seen = new Set;
+      const emit = (angle, origin2) => {
+        const a = normalizeArcAngle(angle);
+        // Four generators asking different questions can arrive at one answer.
+        // Rounded to a thousandth of a radian, which on the ring is a tenth of
+        // a unit, that is the same build and the second one is a wasted send.
+        const key = Math.round(a * 1e3);
+        if (seen.has(key)) return;
+        seen.add(key);
+        const p = RynGeometrySolver.pointAt(origin, R, a);
+        if (RynGeometrySolver.inRiver(p.y, itemId)) return;
+        out.push({
+          itemId: itemId,
+          role: role,
           angle: a,
-          alignment: best
-        };
-      });
-      if (scored.length === 0) return null;
-      const bestScore = Math.min(...scored.map(v => v.alignment));
-      return scored.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle ?? null;
-    }
-
-    // The closest angle that catches the enemy on their way: the build box has
-    // to cross the segment from where they are to where they will be, so a
-    // build that only touches where they have been does not qualify.
-    _closestToEnemy(angles, enemyPos, enemyFut, pad) {
-      return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
-    }
-
-    runTick(bid) {
-      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
-      if (!Settings_ref._autoplacer) return;
-      if (!myPlayer || !myPlayer.inGame) return;
-      // A spike tick owning the tick used to end this module outright, which
-      // is what made the two collide. The collision is real but narrow: a
-      // spike tick is a swing sent *this* tick, and `place` reselects the item
-      // and swings, so a build emitted alongside it drags the swing off target
-      // and wastes it. That is the immediate half of the placer.
-      //
-      // The preplace half is not sent this tick at all — it goes out from a
-      // timer inside the next one, after the swing has already left. Killing
-      // it here bought the spike tick nothing and cost the retrap everything:
-      // an enemy sitting in a trap while any of the three spike ticks opened
-      // simply never got a replacement, which is one of the ways they were
-      // still walking out.
-      //
-      // So the tick is shared rather than surrendered. Nothing is emitted now,
-      // and the preplace is still computed and scheduled. spikeTickTarget
-      // stands down on the tick those timers fire, so the two alternate
-      // cleanly instead of one starving the other.
-      const spikeFinisherOwnsTick = spikeFinisherHoldsTick(ryn.arbiter);
-
-      // Both of us pinned with a spike able to reach them: the breaker finishes
-      // it this tick and this module gets out of the way entirely — no builds,
-      // no preplace queued, no timers scheduled into the next tick. Sharing was
-      // still contention; here there is none.
-      if (spikeTickKillWindow(this.client)) {
-        this._queuedBuilds = [];
-        this._lastPrePlaceObj = null;
-        this._spamPrePlacer = false;
-        return;
-      }
-
-      // Every budget test in this module reads this, never packetLimit.
-      const placerLimit = Math.min(ryn.network.packetLimit, PLACER_PACKET_GATE);
-
-      this._tick = ryn.clock.tick;
-      for (let i = this._bannedSpots.length - 1; i >= 0; i--) {
-        if (this._tick > this._bannedSpots[i].expiry) this._bannedSpots.splice(i, 1);
-      }
-
-      const enemy = EnemyManager2.nearestEnemy;
-      if (!enemy) return;
-
-      const spikeId = myPlayer.getItemByType(ITEM_SPIKE);
-      const trapId = myPlayer.getItemByType(ITEM_TRAP);
-      if (spikeId === null && trapId === null) return;
-
-      const myPos = myPlayer.pos.current;
-      const myFut = myPlayer.pos.future ?? myPos;
-      const enemyPos = enemy.pos.current;
-      const enemyFut = enemy.pos.future ?? enemyPos;
-      const enemyScale = enemy.collisionScale;
-      this._preferAngle = myPos.angle(enemyPos);
-
-      // Everything standing around the enemy that is not theirs -- my builds
-      // and my team's. Spikes are what a knockback can throw them into; traps
-      // are what pins them. Both are read from the same grid query because both
-      // questions are about the same patch of ground.
-      const spikesOur = [];
-      const trapsOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject)) return false;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return false;
-        if (obj.itemGroup === 2) spikesOur.push(obj);
-        if (obj.type === 15) trapsOur.push(obj);
-        return false;
-      });
-      const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < t.scale) ?? null;
-      const imTrapped = !!myPlayer.isTrapped;
-      const neitherTrapped = !enemyTrapped && !imTrapped;
-      // Two different questions, and they were once the same one.
-      //
-      // Gating every trap rule on "neither of us is trapped" forbids a build at
-      // the exact instant it is worth the most: the enemy breaks out while I am
-      // still pinned, and a trap in their path is the one thing that would stop
-      // them. Being pinned makes me unable to chase. It does not make the ground
-      // in front of them any less trappable, and a trap is thrown at a position
-      // rather than walked to, so my own footing is not part of the question.
-      //
-      // The aimed rules -- the primary trap, and the rule that retraps a runner
-      // -- therefore ask only whether the enemy is free. The indiscriminate rule
-      // further down passes every free angle, and that one keeps the stricter
-      // test: relaxing it would empty the trap cap into the ground the moment I
-      // got pinned.
-      const enemyFree = !enemyTrapped;
-      const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
-
-      // Two ways a candidate can be in its own side's way, tested per angle.
-      //
-      // A build is a wall to me as much as to them. `blockFuture` asks whether
-      // it would stand in the corridor I am about to walk down -- the direction
-      // the keys are held, projected far enough ahead to matter. `blockEnemy`
-      // asks whether it would sit between us, because a build that breaks the
-      // line to the enemy costs me the exchange it was meant to win.
-      //
-      // Both are measured from where we will be rather than where we are: the
-      // build lands a round trip from now, and by then both of us have moved.
-      //
-      // START_OFFSET is playerScale: the corridor starts at my own edge, not
-      // my centre, because a build cannot be standing inside me.
-      //
-      // NEEDS VALIDATION: LOOKAHEAD is a distance in world units, and 222 is
-      // 2 * TICK, which is a duration in milliseconds. The two are not the
-      // same quantity and the coincidence is the only thing that explains the
-      // number. Measured properly, I cover 33 units in a tick at full speed,
-      // so 222 units is about seven ticks of walking -- far longer than the
-      // one or two ticks the rest of this function reasons over. The corridor
-      // may well want to be that long, but as written the figure derives from
-      // a units mismatch rather than from a decision.
-      const LOOKAHEAD = 222, START_OFFSET = 35;
-      const futX = myPos.x + Math.cos(predictMoveAngle) * LOOKAHEAD;
-      const futY = myPos.y + Math.sin(predictMoveAngle) * LOOKAHEAD;
-      const stX = myPos.x + Math.cos(predictMoveAngle) * START_OFFSET;
-      const stY = myPos.y + Math.sin(predictMoveAngle) * START_OFFSET;
-      const _los = cfg => {
-        const box = [ cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5 ];
-        return {
-          blockFuture: this._lineInRect(box[0], box[1], box[2], box[3], stX, stY, futX, futY),
-          blockEnemy: this._lineInRect(box[0], box[1], box[2], box[3], myFut.x, myFut.y, enemyFut.x, enemyFut.y)
-        };
-      };
-
-      // The object last tick's preplace was aimed at has actually gone, so the
-      // slot it held is open and the build queued for it is worth resending.
-      // ObjectManager deletes by id the moment the server says the object died,
-      // so its absence is the confirmation -- no separate feed to track.
-      //
-      // This is what arms the third send. It used to be armed by `_replace`
-      // alone, which fired it every tick the toggle was on whether or not any
-      // slot had opened — a resend with nothing to resend into.
-      const replaceConfirmed = this._lastPrePlaceObj !== null && !ObjectManager2.objects.has(this._lastPrePlaceObj.id);
-
-      this._queuedBuilds = [];
-      this._lastPrePlaceObj = null;
-      this._spamPrePlacer = false;
-      if (ryn.network.packetCount >= placerLimit) return;
-
-      // Armed by a slot having actually opened, here or in _findOpeningSlot.
-      // The `_replace` toggle is enforced once, at the send, so arming and
-      // permission stay separate questions.
-      if (replaceConfirmed) this._spamPrePlacer = true;
-
-      // An angle built at last tick that is still free this tick is an angle
-      // the server refused. Sit it out rather than spend the allowance on it
-      // again.
-      //
-      // Only the angles sent inside this tick are judged here. The preplace
-      // sends run from timers that land mid-next-tick, so their angles were
-      // being read against a tick they were never sent in and banned for a
-      // refusal that never happened; they carry their own tick stamp now and
-      // are skipped until the tick after the one they were sent in.
-      if (this._placedSpots.length > 0) {
-        const checked = [ ...this._placeableAngles(spikeId, myPos, myPlayer, ObjectManager2, null), ...this._placeableAngles(trapId, myPos, myPlayer, ObjectManager2, null) ];
-        const stillPending = [];
-        for (const placed of this._placedSpots) {
-          if (placed.tick >= this._tick) {
-            stillPending.push(placed);
-            continue;
-          }
-          const match = checked.find(a => Math.hypot(a.x - placed.x, a.y - placed.y) < PLACE_SAME_SPOT_RADIUS);
-          if (match && match.placeable) this._banSpot(placed.x, placed.y, this._tick);
-        }
-        this._placedSpots = stillPending;
-      }
-
-      // ────────────────────────────────────────────────────────────────────
-      // PRE PLACER
-      // ────────────────────────────────────────────────────────────────────
-      // Queueing builds while I am pinned and bleeding is usually the wrong
-      // call: I have worse problems, and the packets are better spent getting
-      // out. That holds right up until the enemy is in a trap of mine. Keeping
-      // them there is worth more than the packets it costs, and it is the one
-      // case where the preplacer is working for me rather than at them, so a
-      // trapped enemy overrides the stand-down.
-      if (Settings_ref._prePlace && myPos.distance(enemyPos) < 300 && (enemyTrapped !== null || !(imTrapped && myPlayer.spikeDamage > 0))) {
-        const findObject = this._findOpeningSlot(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped);
-        if (findObject) {
-          // The doomed object is dropped out of the collision set, so the
-          // angles it is standing on come back placeable -- the whole point of
-          // a preplace is that by the time the build lands, it is gone.
-          const spikeAngles = this._placeableAngles(spikeId, myPos, myPlayer, ObjectManager2, findObject);
-          const trapAngles = this._placeableAngles(trapId, myPos, myPlayer, ObjectManager2, findObject);
-          const placeableSpikes = spikeAngles.filter(a => a.placeable);
-          const placeableTraps = trapAngles.filter(a => a.placeable);
-          const closestSpikeToEnemy = this._closestToEnemy(placeableSpikes, enemyPos, enemyFut, a => enemyScale + a.scale - 1);
-          const closestTrapToEnemy = this._closestToEnemy(placeableTraps, enemyPos, enemyFut, a => a.scale);
-          const closestSpikeToKb = this._closestSpikeToKb(placeableSpikes, spikesOur, enemyPos, enemyFut, enemyScale, 2);
-
-          const isPrePlaceAngle = config => {
-            if (myPos.distance(enemyPos) > 350) return false;
-            const isSpike = config.id === spikeId && !this._atItemCap(spikeId, myPlayer, findObject);
-            const isTrap = config.id === trapId && !this._atItemCap(trapId, myPlayer, findObject);
-            const {blockFuture: blockFuture, blockEnemy: blockEnemy} = _los(config);
-            // 1: the spike that catches a trapped enemy
-            if (isSpike && enemyTrapped && findObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            // 2: retrap — the trap holding them is the thing about to break,
-            //    so a fresh one goes down in the same breath it dies in.
-            //    Deliberately not conditioned on them taking spike damage:
-            //    that would make this a way to hold someone on spikes rather
-            //    than a way to keep them trapped at all, and a trapped enemy
-            //    with no spike on them yet is precisely the one worth keeping.
-            if (isTrap && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
-            // 3: the spike whose knockback throws them onto another spike
-            if (isSpike && closestSpikeToKb && config === closestSpikeToKb) return true;
-            // 4: any spike that does not wall off my own path or my view of them
-            if (isSpike && enemyTrapped && !blockFuture && !blockEnemy && findObject !== enemyTrapped) return true;
-            // 5: any trap
-            if (isTrap) return true;
-            return false;
-          };
-
-          // Spikes first, then traps; within each, the angle nearest the slot
-          // that is opening.
-          //
-          // Except when the slot opening is the trap holding them. Only one
-          // preplace goes out per tick, and the knockback-spike rule will
-          // happily take it — so the retrap would lose its own tick to a spike
-          // and the enemy would walk. When the doomed object is that trap, the
-          // trap is asked first.
-          const retrapping = enemyTrapped !== null && findObject === enemyTrapped;
-
-          // Committing to exactly one angle is one point of failure: the
-          // server refuses it — someone else built there first, the timing
-          // missed the window, the resources were not there when the timer
-          // fired — and nothing lands, so the enemy walks out of a trap that
-          // was supposed to be replaced.
-          //
-          // So candidates are scored, sorted, and taken down the list while the
-          // allowance holds -- kept narrow at PREPLACE_CANDIDATES rather than
-          // taking all of them. _queueBuild already drops anything overlapping
-          // a build this tick has queued, so the survivors are spread rather
-          // than stacked, and on a retrap that spread is the point: they step
-          // out of one and into the next.
-          const doomedPos = findObject.pos.current;
-          const byDistanceToSlot = (a, b) => Math.hypot(doomedPos.x - a.x, doomedPos.y - a.y) - Math.hypot(doomedPos.x - b.x, doomedPos.y - b.y);
-          const ordered = [];
-          for (const angles of retrapping ? [ trapAngles, spikeAngles ] : [ spikeAngles, trapAngles ]) {
-            for (const a of angles.filter(a => a.placeable && isPrePlaceAngle(a)).sort(byDistanceToSlot)) ordered.push(a);
-          }
-          let queued = 0;
-          for (const a of ordered) {
-            if (queued >= PREPLACE_CANDIDATES) break;
-            const before = this._queuedBuilds.length;
-            this._queueBuild(a.id, a.angle, true, myPos);
-            if (this._queuedBuilds.length > before) queued += 1;
-          }
-          if (queued > 0) {
-            this._lastPrePlaceObj = findObject;
-          }
-        }
-      }
-
-      // ────────────────────────────────────────────────────────────────────
-      // PRIMARY TRAP
-      // ────────────────────────────────────────────────────────────────────
-      // The trap that opens the combo, decided and queued before the spike
-      // ladder gets a look at the allowance.
-      //
-      // Scoring trap angles against pos.future alone aims one tick out, which
-      // is where the enemy already is by the time the build lands -- against
-      // anyone moving, that puts the trap behind them. The current->future step
-      // is extrapolated TRAP_LOOKAHEAD_TICKS instead and the trap is aimed at
-      // the far end of that path, so it is sitting on ground they are about to
-      // cross rather than ground they have left.
-      if (Settings_ref._primaryTrap && trapId !== null && enemyFree && !this._atItemCap(trapId, myPlayer) && myPos.distance(enemyPos) <= TRAP_PRIMARY_RANGE) {
-        const stepX = enemyFut.x - enemyPos.x;
-        const stepY = enemyFut.y - enemyPos.y;
-        const predX = enemyPos.x + stepX * TRAP_LOOKAHEAD_TICKS;
-        const predY = enemyPos.y + stepY * TRAP_LOOKAHEAD_TICKS;
-
-        // Candidates are the placeable, unbanned trap angles whose box crosses
-        // the enemy's projected path -- the same crossing test the other trap
-        // pickers use, run against the extrapolated path rather than the
-        // single-tick one.
-        const candidates = this._placeableAngles(trapId, myPos, myPlayer, ObjectManager2, null).filter(a => a.placeable && !this._isBannedSpot(a.x, a.y) && this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, predX, predY));
-
-        // Nearest to where they are heading, not to where they stand: of two
-        // traps on the path, the one further along it is the one they cannot
-        // turn out of.
-        candidates.sort((a, b) => Math.hypot(predX - a.x, predY - a.y) - Math.hypot(predX - b.x, predY - b.y));
-        for (const a of candidates) this._queueBuild(a.id, a.angle, false, myPos);
-      }
-
-      // ────────────────────────────────────────────────────────────────────
-      // AUTO PLACER
-      // ────────────────────────────────────────────────────────────────────
-      {
-        const spikeAngles = this._placeableAngles(spikeId, myPos, myPlayer, ObjectManager2, null);
-        const trapAngles = this._placeableAngles(trapId, myPos, myPlayer, ObjectManager2, null);
-        const notBanned = a => !this._isBannedSpot(a.x, a.y);
-        const validSpike = spikeAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
-        const validTrap = trapAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
-        const validAngles = [ ...validSpike, ...validTrap ];
-        const closestSpikeToEnemy = this._closestToEnemy(validSpike, enemyPos, enemyFut, a => enemyScale + a.scale - 1);
-        const closestTrapToEnemy = this._closestToEnemy(validTrap, enemyPos, enemyFut, a => a.scale);
-        const closestSpikeToKb = this._closestSpikeToKb(validSpike, spikesOur, enemyPos, enemyFut, enemyScale, 1);
-
-        // Can a trap actually go at this angle? Two ways it cannot: the group
-        // is capped or I have none, or no trap candidate reaches this piece of
-        // ground because the gap here is too narrow for one.
-        const trapCapped = trapId === null || trapId === undefined || this._atItemCap(trapId, myPlayer);
-        const trapFits = cfg => !trapCapped && validTrap.some(t => Math.hypot(t.x - cfg.x, t.y - cfg.y) < SPIKE_FALLBACK_RADIUS);
-
-        const isAutoPlaceAngle = config => {
-          if (myPos.distance(enemyPos) > (Settings_ref._autoplacerRadius ?? 350)) return false;
-          const isSpike = config.id === spikeId && !this._atItemCap(spikeId, myPlayer);
-          const isTrap = config.id === trapId && !this._atItemCap(trapId, myPlayer);
-          const {blockFuture: blockFuture, blockEnemy: blockEnemy} = _los(config);
-          if (isSpike) {
-            // 1: the spike that catches a trapped enemy
-            if (enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            // 2: the spike whose knockback throws them onto another spike
-            if (closestSpikeToKb && config === closestSpikeToKb) return true;
-            // 3: spikes that do not wall off my own path or my view of them
-            if (enemyTrapped && !blockFuture && !blockEnemy) return true;
-          }
-          if (isTrap) {
-            // 1: the trap that retraps them as they move
-            if (closestTrapToEnemy && config === closestTrapToEnemy && enemyFree) return true;
-            // 2: any trap, while neither of us is pinned
-            if (neitherTrapped) return true;
-          }
-          // 4: a spike standing in where a trap cannot go.
-          //
-          // Every spike rule above needs the enemy already trapped, or a
-          // knockback line onto a spike I own. Against a free enemy that
-          // leaves traps as the only thing this places — and traps cap at six
-          // for the group. Reach the cap and _atItemCap turns the trap rules
-          // off too, so the placer goes completely silent and stands there
-          // while the enemy builds over the ring.
-          //
-          // The other half is per-angle: a trap is scale 50 against a spike's
-          // 35, so gaps exist that take a spike and cannot take a trap. Those
-          // angles were being left empty rather than filled with the thing
-          // that fits.
-          if (isSpike && Settings_ref._spikeFallback && neitherTrapped && !trapFits(config)) return true;
-          return false;
-        };
-
-        // Flush angles first, then the rest. A build packed against something
-        // is worth more than one standing in open ground, and the allowance may
-        // run out before the second pass -- so the second pass is what gets cut.
-        for (const obj of validAngles.filter(a => a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._queueBuild(obj.id, obj.angle, false, myPos);
-        }
-        for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._queueBuild(obj.id, obj.angle, false, myPos);
-        }
-      }
-
-      // ────────────────────────────────────────────────────────────────────
-      // SEND — autoplace now, preplace next tick, replace at min ping
-      // ────────────────────────────────────────────────────────────────────
-      const typeOf = obj => obj.id === trapId ? ITEM_TRAP : ITEM_SPIKE;
-      const outOfBudget = () => ryn.network.packetCount + PLACE_PACKET_COST > placerLimit;
-      const placesLeft = () => Math.max(0, Math.floor((placerLimit - ryn.network.packetCount) / PLACE_PACKET_COST));
-      // The tick this send belongs to. Timer sends land inside the next tick,
-      // so they stamp the tick they were scheduled from and the refusal check
-      // leaves them alone until the tick after that.
-      const sendTick = this._tick;
-      const emit = obj => {
-        const type = typeOf(obj);
-        // The cap is not the only reason a build can fail. myPlayer.canPlace
-        // also knows whether the resources are there, and a build the server
-        // would refuse should never cost a send.
-        if (!myPlayer.canPlace(type)) return;
-        ryn.actions.place(type, obj.angle);
-        ryn.ledger.placedOnce = true;
-        ryn.ledger.placeAngles[0] = type;
-        ryn.ledger.placeAngles[1].push(obj.angle);
-        bid.claim = true;
-        this._placedSpots.push({
-          x: obj.x,
-          y: obj.y,
-          tick: sendTick
+          x: p.x,
+          y: p.y,
+          scale: item.scale,
+          ring: R,
+          origin: origin2,
+          reason: reason,
+          blockedBy: spared === null ? [] : arcs.blockers.filter(o => spared.has(o) && Math.hypot(p.x - o.pos.current.x, p.y - o.pos.current.y) < item.scale + o.placementScale),
+          score: 0,
+          terms: null
         });
       };
 
-      // Spikes are held to a ceiling that keeps room for the traps still in
-      // the queue behind them. Without it the spike ladder — whose third rule
-      // passes any angle that does not wall off my own path — takes the whole
-      // second's allowance and no trap ever reaches the wire.
-      let trapsQueued = 0;
-      let preplacesQueued = 0;
-      for (const obj of this._queuedBuilds) {
-        if (obj.preplace) preplacesQueued += 1; else if (obj.id === trapId) trapsQueued += 1;
-      }
+      for (const [s, e] of arcs.free) {
+        const span = RynGeometrySolver.span(s, e);
+        // A run that closes the circle has no ends: nothing bounds it, so
+        // neither edge is flush against anything and the two would be the same
+        // angle anyway. It is covered by packing alone.
+        const whole = span >= Math.PI * 2 - 1e-6;
 
-      // A preplace is queued now and sent from a timer that fires inside the
-      // next tick, so it spends after everything below has already spent. That
-      // ordering was starving it: the autoplace spike ladder passes any angle
-      // that does not wall off my own path, it runs first, and by the time the
-      // timer fired `outOfBudget` was true — the enemy sat in a trap and the
-      // replacement never went out at all. The one build that matters most was
-      // living on whatever the spray happened to leave.
-      //
-      // So the preplaces are paid for before anything discretionary: their
-      // share is held out of the allowance here and released to them when
-      // their timer runs.
-      const preplaceHold = () => preplacesQueued * PLACE_PACKET_COST;
-      for (const obj of this._queuedBuilds) {
-        if (spikeFinisherOwnsTick) break;
-        if (obj.preplace) continue;
-        if (outOfBudget()) break;
-        if (ryn.network.packetCount + PLACE_PACKET_COST + preplaceHold() > placerLimit) break;
-        const isTrapObj = obj.id === trapId;
-        if (isTrapObj) {
-          trapsQueued -= 1;
-        } else if (placesLeft() <= Math.min(trapsQueued, TRAP_RESERVED_PLACES)) {
-          continue;
+        if (!whole) {
+          emit(s, RYN_PLACE_ORIGIN.FLUSH);
+          if (span > 1e-6) emit(e, RYN_PLACE_ORIGIN.FLUSH);
         }
-        emit(obj);
+
+        // A bearing we asked for, if this run contains it.
+        for (const aim of aims) {
+          if (aim !== null && arcContains(s, e, normalizeArcAngle(aim))) emit(aim, RYN_PLACE_ORIGIN.AIMED);
+        }
+
+        // The centre of the run, once it is wide enough to hold a build clear
+        // of both ends. Below that width the two flush angles already describe
+        // everything the run can take, and on a whole ring there is no centre.
+        if (!whole && span > step * 1.5) emit(s + span / 2, RYN_PLACE_ORIGIN.GAP);
+
+        // Tangent packing. On a bounded run it starts one step in so the first
+        // packed angle does not sit on top of the flush end; on a whole ring it
+        // starts at the anchor, because there is no flush end to avoid.
+        if (whole || span > step * 2) {
+          for (let t = whole ? 0 : step; t < span - step * .5; t += step) emit(s + t, RYN_PLACE_ORIGIN.PACKED);
+        }
+      }
+      return out;
+    }
+
+    // A build aimed at a world point rather than at a bearing. The server
+    // projects onto my ring whatever I ask for, so the point is only reachable
+    // if the ring passes near it -- which is checked here rather than assumed.
+    anchored(origin, item, itemId, role, arcs, point, tolerance, reason, spared) {
+      const R = arcs.ring;
+      const angle = normalizeArcAngle(Math.atan2(point.y - origin.y, point.x - origin.x));
+      const p = RynGeometrySolver.pointAt(origin, R, angle);
+      if (Math.hypot(p.x - point.x, p.y - point.y) > tolerance) return null;
+      if (RynGeometrySolver.inRiver(p.y, itemId)) return null;
+      let inFree = false;
+      for (const [s, e] of arcs.free) {
+        if (arcContains(s, e, angle)) { inFree = true; break; }
+      }
+      if (!inFree) return null;
+      return {
+        itemId: itemId, role: role, angle: angle, x: p.x, y: p.y,
+        scale: item.scale, ring: R, origin: RYN_PLACE_ORIGIN.ANCHORED,
+        reason: reason, blockedBy: [], score: 0, terms: null
+      };
+    }
+  }
+
+  // ── Threat ────────────────────────────────────────────────────────────────
+  // What is about to change, computed once per tick so every later stage reads
+  // one answer instead of recomputing its own.
+  //
+  // `doomed` is the set of objects a ready enemy weapon can kill on its next
+  // swing, within that weapon's real reach. It is deliberately conservative:
+  // one swing, weapon already reloaded, reach measured against the object's own
+  // scale. Over-predicting here means the planner queues builds into ground
+  // that never frees and spends the allowance on nothing.
+  class RynThreatAnalyzer {
+    doomed = new Set;
+    enemy = null;
+    enemyPath = null;
+    trappedIn = null;
+    imTrapped = false;
+
+    sample(client2, enemy, ObjectManager2, PlayerManager2, myPlayer) {
+      this.doomed.clear();
+      this.enemy = enemy;
+      this.trappedIn = null;
+      this.imTrapped = !!myPlayer.isTrapped;
+      if (enemy === null) return this;
+
+      const enemyPos = enemy.pos.current;
+      const enemyFut = enemy.pos.future ?? enemyPos;
+      this.enemyPath = {
+        from: enemyPos,
+        to: enemyFut,
+        stepX: enemyFut.x - enemyPos.x,
+        stepY: enemyFut.y - enemyPos.y
+      };
+
+      // What the enemy can break next swing. Both weapons are asked because
+      // either may be the one that is ready.
+      const swings = [];
+      for (const type of [ 0, 1 ]) {
+        const id = type === 0 ? enemy.weapon?.primary : enemy.weapon?.secondary;
+        if (id === null || id === undefined) continue;
+        if (!enemy.isReloaded?.(type, 1)) continue;
+        const w = DataHandler.getWeapon(id);
+        if (!w) continue;
+        swings.push({ range: w.range ?? 0, dmg: enemy.getBuildingDamage?.(id, true) ?? 0 });
       }
 
-      const preObjects = this._queuedBuilds.filter(o => o.preplace);
-      if (preObjects.length === 0) return;
-      // Claim the next tick before scheduling: the spike ticks run ahead of
-      // this module, so they read the stamp on the tick the timers fire.
-      this._preplaceSentTick = this._tick;
+      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
+        const obj = ObjectManager2.objects.get(id);
+        if (!obj || !(obj instanceof PlayerObject)) return false;
+        const d = enemyPos.distance(obj.pos.current);
+        if (obj.type === 15 && !PlayerManager2.isEnemyByID(obj.ownerID, myPlayer) && d < obj.scale) {
+          this.trappedIn = obj;
+        }
+        for (const s of swings) {
+          if (d - obj.scale <= s.range && s.dmg >= obj.health) { this.doomed.add(obj); break; }
+        }
+        return false;
+      });
+      return this;
+    }
 
-      const socket = this.client.SocketManager;
-      const tickMs = socket?.TICK ?? 111;
-      const pingTime = socket?.pong ?? 0;
-      const minPingTime = Number.isFinite(socket?.minPingTime) ? socket.minPingTime : 0;
-      // Send the whole round trip ahead of the tick, not half of it.
-      //
-      // Half was tried, on the reasoning that `pong` is a round trip and a
-      // packet only needs half of it to arrive, so TICK - pong/2 should land
-      // exactly as the next tick opens. In play it was worse: slower and less
-      // consistent. The derivation is the weaker evidence, because it assumes
-      // RYN's tick and the server's are in phase, and they are not -- the local
-      // tick is driven by arriving packets, so it already sits most of a trip
-      // behind. Subtracting only half leaves the send landing early against a
-      // clock that was never aligned to begin with.
-      //
-      // ReverseInstakill and Instakill._packetDelay do use half, but they are
-      // aiming a swing inside the current tick rather than a build into a slot
-      // that opens on the next one, so they are not the same measurement.
-      const sendDelay = ping => Math.max(1, tickMs - ping);
-      const aimAngle = () => ryn.ledger.breakActive && ryn.ledger.breakAngle !== null && ryn.ledger.breakAngle !== undefined ? ryn.ledger.breakAngle : ryn.actions.currentAngle ?? 0;
-      // Read at schedule time, not at fire time: the third send lands inside
-      // the next tick, which has already cleared `_spamPrePlacer` for its own
-      // use, so reading the field from the timer answered for the wrong tick.
-      const spamPrePlacer = !!Settings_ref._replace && this._spamPrePlacer;
+    // Where the enemy will be `ticks` steps from now, holding their current
+    // step. Past a few ticks this is a guess and the scorer discounts it.
+    project(ticks) {
+      const p = this.enemyPath;
+      if (p === null) return null;
+      return { x: p.from.x + p.stepX * ticks, y: p.from.y + p.stepY * ticks };
+    }
+  }
 
-      // The aim is held where it was attacking across all three sends. A build
-      // is a swing as far as the server is concerned, so without this the
-      // second and third sends would drag the aim off whatever the combat
-      // features were pointed at.
-      setTimeout(() => {
-        try {
-          for (const _ of preObjects) this.client.network.emit("aim", aimAngle());
-        } catch (_) {}
-      }, 1);
-      setTimeout(() => {
-        try {
-          for (const obj of preObjects) {
-            if (outOfBudget()) break;
-            emit(obj);
-            this.client.network.emit("aim", aimAngle());
+  // ── Scoring ───────────────────────────────────────────────────────────────
+  // One number per placement, from five terms that are all readings of RYN's
+  // own state. Nothing here is a tie-breaker bolted on after the fact: a
+  // placement that scores zero is one there is no reason to make.
+  class RynPlacementScorer {
+    score(cand, ctx) {
+      const t = {
+        intercept: 0,
+        flush: 0,
+        knockback: 0,
+        selfBlock: 0,
+        stale: 0
+      };
+
+      // Does the build stand where the enemy is going? A build they never
+      // touch is a wasted send, so this is the term that dominates.
+      if (ctx.path !== null) {
+        const pad = cand.role.pins ? cand.scale : ctx.enemyScale + cand.scale - 1;
+        if (lineHitsBox(cand.x, cand.y, pad, ctx.path.from, ctx.path.to)) t.intercept = 100;
+        else if (ctx.far !== null && lineHitsBox(cand.x, cand.y, pad, ctx.path.from, ctx.far)) t.intercept = 60;
+      }
+
+      // Packed against something beats standing in the open: there is no gap
+      // beside it to walk through.
+      if (cand.origin === RYN_PLACE_ORIGIN.FLUSH) t.flush = 18;
+      else if (cand.origin === RYN_PLACE_ORIGIN.ANCHORED) t.flush = 12;
+      else if (cand.origin === RYN_PLACE_ORIGIN.AIMED) t.flush = 10;
+
+      // A spike that pushes them onto another spike is the exchange; one that
+      // pushes them away is chip damage.
+      if (cand.role.damages && ctx.ourSpikes.length > 0 && ctx.path !== null) {
+        const kb = Math.atan2(ctx.path.to.y - cand.y, ctx.path.to.x - cand.x);
+        const tipX = ctx.path.to.x + 200 * Math.cos(kb);
+        const tipY = ctx.path.to.y + 200 * Math.sin(kb);
+        for (const s of ctx.ourSpikes) {
+          if (lineHitsBox(s.pos.current.x, s.pos.current.y, s.scale, ctx.path.to, { x: tipX, y: tipY })) {
+            t.knockback = 35;
+            break;
           }
-        } catch (_) {}
-      }, sendDelay(pingTime));
-      setTimeout(() => {
-        if (!spamPrePlacer) return;
-        try {
-          for (const obj of preObjects) {
-            if (outOfBudget()) break;
-            emit(obj);
-            this.client.network.emit("aim", aimAngle());
+        }
+      }
+
+      // Would it wall me in? The exact angular half-width the build subtends at
+      // ring radius -- not a rectangle drawn down the corridor, which is what
+      // this replaces.
+      if (ctx.moveDir !== null && !DataHandler.canMoveOnTop?.(cand.itemId)) {
+        const half = Math.asin(Math.min(1, cand.scale / cand.ring));
+        let d = Math.abs(normalizeArcAngle(cand.angle) - normalizeArcAngle(ctx.moveDir));
+        if (d > Math.PI) d = Math.PI * 2 - d;
+        if (d < half) t.selfBlock = -70;
+        else if (d < half * 2) t.selfBlock = -25;
+      }
+
+      // The further ahead a prediction reaches, the likelier it is wrong by the
+      // time the build lands.
+      if (cand.reason === RYN_PLACE_REASON.OPENING) t.stale = -8 * Math.max(1, cand.blockedBy.length);
+
+      cand.terms = t;
+      cand.score = t.intercept + t.flush + t.knockback + t.selfBlock + t.stale;
+      return cand.score;
+    }
+  }
+
+  // ── Memory ────────────────────────────────────────────────────────────────
+  // Two kinds of "do not build here", one structure. A refusal is ground the
+  // server turned down; a pending is ground a send is already flying towards.
+  // Both are stored as world positions with a lifetime, because ground does not
+  // move when I do and an angle does.
+  class RynPlacementMemory {
+    _marks = [];
+    mark(x, y, radius, until, kind) {
+      this._marks.push({ x: x, y: y, radius: radius, until: until, kind: kind });
+    }
+    refuse(x, y, tick) {
+      this.mark(x, y, PLACE_SAME_SPOT_RADIUS, tick + PLACE_BAN_TICKS, "refused");
+    }
+    pending(x, y, scale, tick) {
+      this.mark(x, y, scale, tick + 1, "pending");
+    }
+    blocked(x, y) {
+      for (const m of this._marks) {
+        if (Math.hypot(m.x - x, m.y - y) < m.radius) return true;
+      }
+      return false;
+    }
+    expire(tick) {
+      for (let i = this._marks.length - 1; i >= 0; i--) {
+        if (tick > this._marks[i].until) this._marks.splice(i, 1);
+      }
+    }
+    clear() {
+      this._marks.length = 0;
+    }
+  }
+
+  // ── Conflict ──────────────────────────────────────────────────────────────
+  // What the rest of the client is already doing about this tick. The engine
+  // does not arbitrate -- the arbiter does -- but it must not plan against a
+  // decision that has already been made.
+  class RynConflictResolver {
+    check(ryn, client2) {
+      if (spikeTickKillWindow(client2)) return { stand: true, why: "spike-breaker" };
+      if (spikeFinisherHoldsTick(ryn.arbiter)) return { stand: true, why: "spike-finisher" };
+      if (ryn.ledger.placedOnce) return { stand: true, why: "already-placed" };
+      return { stand: false, why: null };
+    }
+    // Two builds cannot occupy overlapping ground, whoever wanted them.
+    collides(cand, taken) {
+      for (const t of taken) {
+        if (Math.hypot(cand.x - t.x, cand.y - t.y) < cand.scale + t.scale) return true;
+      }
+      return false;
+    }
+  }
+
+  // ── Planner ───────────────────────────────────────────────────────────────
+  // The part that stops this being a ladder. Given every legal placement and
+  // what the tick can afford, choose the best *set* -- not the first angle that
+  // passes a rule.
+  //
+  // Ordering by score and taking greedily while rejecting overlaps is the right
+  // shape here: the true optimum is a packing problem, the candidate count is
+  // small, and a build that overlaps a better one was never compatible with it.
+  // The reserve is what keeps a trap from losing its slot to three spikes that
+  // each scored slightly higher.
+  class RynPlacementPlanner {
+    plan(candidates, ctx) {
+      const conflict = ctx.conflict;
+      const ranked = candidates.filter(c => c.score > 0).sort((a, b) => b.score - a.score);
+      const taken = [];
+      const chosen = [];
+      let spent = 0;
+      let pinsTaken = 0;
+
+      // Pinning builds get first refusal on a slice of the allowance: a trap is
+      // what opens the exchange, and a ladder that spends on damage first will
+      // never reach it.
+      const reserve = Math.min(ctx.budget, Math.floor(TRAP_RESERVED_PLACES / PLACE_PACKET_COST) + 1);
+      let openings = 0;
+
+      for (const pass of [ "pins", "all" ]) {
+        for (const cand of ranked) {
+          if (spent >= ctx.budget) break;
+          if (pass === "pins" && !cand.role.pins) continue;
+          if (pass === "pins" && pinsTaken >= reserve) break;
+          if (chosen.includes(cand)) continue;
+          // A build waiting on ground to clear costs two sends, not one, and
+          // three of them against one opening slot was measured in play as the
+          // whole placer going sluggish. Two keeps the second chance.
+          if (cand.reason !== RYN_PLACE_REASON.IMMEDIATE && openings >= PREPLACE_CANDIDATES) continue;
+          if (ctx.capped(cand.itemId, cand.blockedBy)) continue;
+          if (ctx.memory.blocked(cand.x, cand.y)) continue;
+          if (conflict.collides(cand, taken)) continue;
+          chosen.push(cand);
+          taken.push(cand);
+          spent += 1;
+          if (cand.role.pins) pinsTaken += 1;
+          if (cand.reason !== RYN_PLACE_REASON.IMMEDIATE) openings += 1;
+        }
+      }
+      return chosen;
+    }
+  }
+
+  // ── Scheduler ─────────────────────────────────────────────────────────────
+  // When each chosen build goes out. An immediate build is one send now. A
+  // build waiting on ground to clear is two: one timed for when the blocker
+  // should be gone, and one a little later for the case where the first lost
+  // its race to the server.
+  class RynPlacementScheduler {
+    schedule(chosen, ctx) {
+      const sends = [];
+      for (const cand of chosen) {
+        if (cand.reason === RYN_PLACE_REASON.IMMEDIATE) {
+          sends.push({ cand: cand, delay: 0, tick: ctx.tick });
+        } else {
+          sends.push({ cand: cand, delay: Math.max(1, ctx.tickMs - ctx.ping), tick: ctx.tick });
+          if (ctx.resend) sends.push({ cand: cand, delay: Math.max(1, ctx.tickMs - ctx.minPing), tick: ctx.tick });
+        }
+      }
+      return sends;
+    }
+  }
+
+  // ── Executor ──────────────────────────────────────────────────────────────
+  // The only stage that touches the wire. Every send is checked against the
+  // game's own placeability one last time, because the world moved between the
+  // plan and the send and the cheapest refused build is the one never sent.
+  class RynPlacementExecutor {
+    client;
+    memory;
+    constructor(client2, memory) {
+      this.client = client2;
+      this.memory = memory;
+    }
+    fire(cand, tick) {
+      const ryn = this.client.services;
+      const myPlayer = this.client.myPlayer;
+      if (!myPlayer || !myPlayer.inGame) return false;
+      if (!myPlayer.canPlace(cand.role.itemType)) return false;
+      ryn.actions.place(cand.role.itemType, cand.angle);
+      ryn.ledger.placedOnce = true;
+      ryn.ledger.placeAngles[0] = cand.role.itemType;
+      ryn.ledger.placeAngles[1].push(cand.angle);
+      this.memory.pending(cand.x, cand.y, cand.scale, tick);
+      return true;
+    }
+    run(sends, ctx) {
+      let sent = 0;
+      for (const s of sends) {
+        if (s.delay === 0) {
+          if (this.fire(s.cand, ctx.tick)) sent += 1;
+        } else {
+          const aim = ctx.aim;
+          setTimeout(() => {
+            try {
+              this.client.network.emit("aim", aim());
+              this.fire(s.cand, s.tick);
+            } catch (_) {}
+          }, s.delay);
+          sent += 1;
+        }
+      }
+      return sent;
+    }
+  }
+
+  // ── Engine ────────────────────────────────────────────────────────────────
+  // Holds the stages and runs them in order. One entry point, one pass, one
+  // plan. Everything above is replaceable on its own; this is the only thing
+  // that knows the order they go in.
+  class RynPlacementEngine {
+    client;
+    angles = new RynAngleSolver;
+    candidates = new RynCandidateGenerator;
+    threat = new RynThreatAnalyzer;
+    scorer = new RynPlacementScorer;
+    planner = new RynPlacementPlanner;
+    conflict = new RynConflictResolver;
+    scheduler = new RynPlacementScheduler;
+    memory = new RynPlacementMemory;
+    executor;
+    lastPlan = [];
+    constructor(client2) {
+      this.client = client2;
+      this.executor = new RynPlacementExecutor(client2, this.memory);
+    }
+
+    reset() {
+      this.memory.clear();
+      this.threat.doomed.clear();
+      this.lastPlan = [];
+    }
+
+    // One tick. Returns how many sends were issued, so the caller can bid.
+    run(ctx) {
+      const ryn = this.client.services;
+      const client2 = this.client;
+      const myPlayer = client2.myPlayer;
+      const tick = ryn.clock.tick;
+      this.memory.expire(tick);
+
+      const stand = this.conflict.check(ryn, client2);
+      if (stand.stand) { this.lastPlan = []; return 0; }
+
+      const enemy = client2.EnemyManager.nearestEnemy;
+      if (!enemy) { this.lastPlan = []; return 0; }
+
+      this.threat.sample(client2, enemy, client2.ObjectManager, client2.PlayerManager, myPlayer);
+
+      const myPos = myPlayer.pos.current;
+      const enemyPos = enemy.pos.current;
+      if (myPos.distance(enemyPos) > ctx.radius) { this.lastPlan = []; return 0; }
+
+      // One read of the ground, shared by every item.
+      const nearby = [];
+      const ourSpikes = [];
+      client2.ObjectManager.grid2D.query(myPos.x, myPos.y, 3, id => {
+        const obj = client2.ObjectManager.objects.get(id);
+        if (obj) nearby.push(obj);
+        return false;
+      });
+      client2.ObjectManager.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
+        const obj = client2.ObjectManager.objects.get(id);
+        if (obj && obj instanceof PlayerObject && obj.itemGroup === 2 &&
+            !client2.PlayerManager.isEnemyByID(obj.ownerID, myPlayer)) ourSpikes.push(obj);
+        return false;
+      });
+
+      const aimAtEnemy = myPos.angle(enemyPos);
+      const far = this.threat.project(TRAP_LOOKAHEAD_TICKS);
+      const all = [];
+
+      for (const roleName of Object.keys(RYN_BUILD_ROLE)) {
+        const role = RYN_BUILD_ROLE[roleName];
+        const itemId = myPlayer.getItemByType(role.itemType);
+        if (itemId === null || itemId === undefined) continue;
+        const item = Items[itemId];
+        if (!item) continue;
+
+        // Two solves per item: what fits now, and what would fit if everything
+        // the enemy is about to break were already gone. The second is where
+        // preplace comes from, and it is the same code path.
+        const now = this.angles.solve(myPos, item, nearby, null);
+        for (const c of this.candidates.build(myPos, item, itemId, role, now,
+              [ aimAtEnemy, far === null ? null : Math.atan2(far.y - myPos.y, far.x - myPos.x) ],
+              RYN_PLACE_REASON.IMMEDIATE, null)) all.push(c);
+
+        if (ctx.gates.preplace && this.threat.doomed.size > 0) {
+          const after = this.angles.solve(myPos, item, nearby, this.threat.doomed);
+          for (const c of this.candidates.build(myPos, item, itemId, role, after,
+                [ aimAtEnemy ], RYN_PLACE_REASON.OPENING, this.threat.doomed)) {
+            if (c.blockedBy.length > 0) all.push(c);
           }
-        } catch (_) {}
-      }, sendDelay(minPingTime));
+        }
+
+        // A pinning build wants the ground the enemy is walking onto; a
+        // damaging one wants the ground beside the trap that already holds
+        // them. Both are world points, and both are only usable if my ring
+        // reaches them.
+        if (ctx.gates.primaryTrap && role.pins && far !== null && this.threat.trappedIn === null &&
+            myPos.distance(enemyPos) <= TRAP_PRIMARY_RANGE) {
+          const a = this.candidates.anchored(myPos, item, itemId, role, now, far, item.scale, RYN_PLACE_REASON.IMMEDIATE, null);
+          if (a !== null) all.push(a);
+        }
+        if (role.damages && this.threat.trappedIn !== null) {
+          const t = this.threat.trappedIn.pos.current;
+          const away = Math.atan2(enemyPos.y - t.y, enemyPos.x - t.x);
+          const want = {
+            x: t.x + Math.cos(away) * (this.threat.trappedIn.scale + item.scale),
+            y: t.y + Math.sin(away) * (this.threat.trappedIn.scale + item.scale)
+          };
+          const a = this.candidates.anchored(myPos, item, itemId, role, now, want, item.scale, RYN_PLACE_REASON.IMMEDIATE, null);
+          if (a !== null) all.push(a);
+        }
+      }
+
+      const sctx = {
+        path: this.threat.enemyPath,
+        far: far,
+        enemyScale: enemy.collisionScale,
+        ourSpikes: ourSpikes,
+        moveDir: ryn.motion.move_dir
+      };
+      for (const c of all) this.scorer.score(c, sctx);
+
+      // Spike fallback off means damaging builds stop competing for ground
+      // whose only merit is that it was empty. A spike that intercepts, or that
+      // packs flush against something, is still wanted -- the toggle governs
+      // filling, not placing.
+      const pool = ctx.gates.spikeFallback ? all : all.filter(c => c.role.pins || c.terms.intercept > 0 || c.origin === RYN_PLACE_ORIGIN.FLUSH);
+
+      const chosen = this.planner.plan(pool, {
+        budget: ctx.budget,
+        memory: this.memory,
+        conflict: this.conflict,
+        capped: (itemId, freed) => {
+          const group = Items[itemId].itemGroup;
+          const { count: count, limit: limit } = myPlayer.getItemCount(group);
+          let credit = 0;
+          for (const o of freed) if (o.itemGroup === group && myPlayer.objects?.has(o)) credit += 1;
+          return !!limit && count - credit >= limit;
+        }
+      });
+      this.lastPlan = chosen;
+      if (chosen.length === 0) return 0;
+
+      const socket = client2.SocketManager;
+      const sends = this.scheduler.schedule(chosen, {
+        tick: tick,
+        tickMs: socket?.TICK ?? 111,
+        ping: socket?.pong ?? 0,
+        minPing: Number.isFinite(socket?.minPingTime) ? socket.minPingTime : 0,
+        resend: ctx.gates.replace
+      });
+      return this.executor.run(sends, {
+        tick: tick,
+        aim: () => ryn.ledger.breakActive && ryn.ledger.breakAngle !== null && ryn.ledger.breakAngle !== undefined ? ryn.ledger.breakAngle : ryn.actions.currentAngle ?? 0
+      });
+    }
+  }
+
+  // The placer, as a feature. Everything it used to decide -- angles, rules,
+  // ordering, timing -- moved into RynPlacementEngine, which answers all three
+  // placement questions from one candidate model. What is left here is the
+  // feature contract: read the toggles, price the tick, hand the engine a
+  // budget, and claim if anything went out.
+  class AutoPlacer {
+    unitID="autoPlacer";
+    client;
+    engine;
+    // Read by the spike ticks, which stand down for a tick after a build was
+    // queued: the timers carrying it land inside the next tick, so the stamp is
+    // how they know not to spend the same allowance twice.
+    _preplaceSentTick=-99;
+    constructor(client2) {
+      this.client = client2;
+      this.engine = new RynPlacementEngine(client2);
+    }
+    reset() {
+      this.engine.reset();
+      this._preplaceSentTick = -99;
+    }
+    runTick(bid) {
+      if (!Settings_ref._autoplacer) return;
+      const ryn = this.client.services;
+      const myPlayer = this.client.myPlayer;
+      if (!myPlayer || !myPlayer.inGame) return;
+
+      // The placer never spends to the client-wide limit -- PLACER_PACKET_GATE
+      // is its own ceiling, and what is left above it is what a heal draws on.
+      const placerLimit = Math.min(ryn.network.packetLimit, PLACER_PACKET_GATE);
+      const budget = Math.floor((placerLimit - ryn.network.packetCount) / PLACE_PACKET_COST);
+      if (budget < 1) return;
+
+      const sent = this.engine.run({
+        budget: budget,
+        radius: Settings_ref._autoplacerRadius ?? 350,
+        gates: {
+          preplace: !!Settings_ref._prePlace,
+          replace: !!Settings_ref._replace,
+          primaryTrap: !!Settings_ref._primaryTrap,
+          spikeFallback: !!Settings_ref._spikeFallback
+        }
+      });
+      if (sent === 0) return;
+
+      // A build that waits on ground to clear owns the next tick as well as
+      // this one, because that is when its send actually lands.
+      if (this.engine.lastPlan.some(c => c.reason !== RYN_PLACE_REASON.IMMEDIATE)) {
+        this._preplaceSentTick = ryn.clock.tick;
+      }
+      bid.claim = true;
     }
   }
   class TrapAnimal {
