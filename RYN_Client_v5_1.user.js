@@ -8984,6 +8984,30 @@ window.grbtp = 35;
     return LUNA_SPIKE_TICK_MODULES.has(ModuleHandler.activeModule);
   }
 
+  // The one state where the spike ticks outrank the placer outright rather
+  // than taking turns with it: both of us pinned, and a spike can be put where
+  // it touches them.
+  //
+  // Nothing can be pushed anywhere — neither of us moves — so the exchange is
+  // pure contact damage and it is available right now. A preplace is the
+  // opposite kind of bet: it is aimed at a slot that opens later, and holding
+  // one back costs nothing here because the kill does not need the slot. When
+  // this is true the placer stands all the way down instead of alternating,
+  // so the two never contend for the tick's packets or its aim.
+  //
+  // `nearestSpikePlacerAngle` is EnemyManager's own set of angles whose spike
+  // lands within `collisionScale + spikeScale` of the enemy, so a non-empty
+  // one is exactly "a spike reaches them".
+  function spikeTickKillWindow(client2) {
+    if (!Settings_default._spikeTick || !Settings_default._spikeTickBreak) return false;
+    const {myPlayer: myPlayer, EnemyManager: EnemyManager2} = client2;
+    if (!myPlayer || !myPlayer.isTrapped) return false;
+    const enemy = EnemyManager2.nearestEnemy;
+    if (!enemy || !enemy.isTrapped) return false;
+    const angles = EnemyManager2.nearestSpikePlacerAngle;
+    return Array.isArray(angles) ? angles.length > 0 : !!angles;
+  }
+
   class AutoPlacer {
     moduleName="autoPlacer";
     client;
@@ -9442,6 +9466,17 @@ window.grbtp = 35;
       // stands down on the tick those timers fire, so the two alternate
       // cleanly instead of one starving the other.
       const spikeTickOwnsTick = lunaSpikeTickBusy(ModuleHandler);
+
+      // Both of us pinned with a spike able to reach them: the breaker finishes
+      // it this tick and this module gets out of the way entirely — no builds,
+      // no preplace queued, no timers scheduled into the next tick. Sharing was
+      // still contention; here there is none.
+      if (spikeTickKillWindow(this.client)) {
+        this._predictObjects = [];
+        this._lastPrePlaceObj = null;
+        this._spamPrePlacer = false;
+        return;
+      }
 
       // Every budget test in this module reads this, never packetLimit.
       const placerLimit = Math.min(ModuleHandler.packetLimit, PLACER_PACKET_GATE);
@@ -10692,8 +10727,10 @@ window.grbtp = 35;
     // contested tick — its build is the more perishable of the two, being
     // aimed at a slot that is about to open — and the spike tick takes the
     // next one, which is what alternating was supposed to mean.
+    // Except in the kill window, where the placer has already stood all the way
+    // down and there is nothing to take turns with.
     const placer = ModuleHandler.staticModules.autoPlacer;
-    const contested = placer && ModuleHandler.tickCount - placer._preplaceSentTick <= 1;
+    const contested = placer && ModuleHandler.tickCount - placer._preplaceSentTick <= 1 && !spikeTickKillWindow(client2);
     if (contested && state.yieldTick !== ModuleHandler.tickCount - 1) {
       state.yieldTick = ModuleHandler.tickCount;
       return null;
