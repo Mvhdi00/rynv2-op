@@ -6535,16 +6535,16 @@ window.grbtp = 35;
     onFirstTickAfterSpawn() {
       const {services: ryn, isOwner: isOwner} = this.client;
       const mouse = ryn.actions.mouse;
-      const unitTable = ryn.features.units;
+      const units = ryn.features.units;
       ryn.loadout.equip(0, 0);
       ryn.actions.updateAngle(mouse.sentAngle, true);
       if (!isOwner) {
         const owner = this.client.ownerClient;
         UI_ref.updateBotOption(this.client, "title");
         owner.clientIDList.add(this.id);
-        unitTable.tempData.setAttacking(owner.services.actions.attacking);
-        unitTable.tempData.setStore(0, owner.services.loadout.store[0].actual);
-        unitTable.tempData.setStore(1, owner.services.loadout.store[1].actual);
+        units.tempData.setAttacking(owner.services.actions.attacking);
+        units.tempData.setStore(0, owner.services.loadout.store[0].actual);
+        units.tempData.setStore(1, owner.services.loadout.store[1].actual);
       }
     }
     playerSpawn() {
@@ -8851,7 +8851,7 @@ window.grbtp = 35;
         const {reloading: reloading} = ryn.features.units;
         if (reloading.isReloaded(1)) {
           const bPos = beneficial.pos.current;
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.forceWeapon = 1;
           bid.useAngle = myPlayer.pos.current.angle(bPos);
           bid.forceHat = 40;
@@ -8890,7 +8890,7 @@ window.grbtp = 35;
         const {reloading: _rl} = ryn.features.units;
         if (_rl.isReloaded(type)) {
           bid.forceWeapon = type;
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.useAngle = angle1;
           bid.forceHat = 40;
           bid.shouldAttack = true;
@@ -8956,7 +8956,7 @@ window.grbtp = 35;
       bid.forceWeapon = type;
       const urgentRetrapRisk = myPlayer.isTrapped && target.type === 15 && this.enemyCanRetrapMe(myPlayer, nearestEnemy, this.client.ObjectManager);
       if (reloading.isReloaded(type) && !shouldIgnore) {
-        bid.moduleActive = true;
+        bid.claim = true;
         bid.useAngle = angle;
         if (!isEnoughDamage || urgentRetrapRisk) {
           bid.forceHat = 40;
@@ -9277,7 +9277,7 @@ window.grbtp = 35;
   // no module ordering to collide with.
   const LUNA_SPIKE_TICK_MODULES = new Set([ "spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap" ]);
   function lunaSpikeTickBusy(intent) {
-    return LUNA_SPIKE_TICK_MODULES.has(intent.activeModule);
+    return LUNA_SPIKE_TICK_MODULES.has(intent.activeFeature);
   }
 
   // The one state where the spike ticks outrank the placer outright rather
@@ -10430,7 +10430,7 @@ window.grbtp = 35;
         ryn.ledger.placedOnce = true;
         ryn.ledger.placeAngles[0] = type;
         ryn.ledger.placeAngles[1].push(obj.angle);
-        bid.moduleActive = true;
+        bid.claim = true;
         this._placedSpots.push({
           x: obj.x,
           y: obj.y,
@@ -10639,7 +10639,7 @@ window.grbtp = 35;
           const pos2 = nearestEnemy.pos.current;
           const angle = pos1.angle(pos2);
           if (isReloadedPrimary) {
-              bid.moduleActive = true;
+              bid.claim = true;
               bid.forceWeapon = 0;
               bid.useAngle = angle;
               bid.shouldAttack = true;
@@ -10715,7 +10715,7 @@ window.grbtp = 35;
       }
       if (placedAny) {
         ryn.ledger.placedOnce = true;
-        bid.moduleActive = true;
+        bid.claim = true;
       }
       this._protected = true;
     }
@@ -10839,7 +10839,7 @@ window.grbtp = 35;
       const placed = this._protect(trapAim + Math.PI, agnes, myPos, ObjectManager2, ryn.actions, spikeID);
       if (placed) {
         ryn.ledger.placedOnce = true;
-        bid.moduleActive = true;
+        bid.claim = true;
         this._protected = true;
       }
     }
@@ -10870,7 +10870,7 @@ window.grbtp = 35;
       if (this.useTurret) {
         this.useTurret = false;
         if (turretReloaded) {
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.forceHat = 53;
         }
         return;
@@ -10899,11 +10899,11 @@ window.grbtp = 35;
       if (!isPrimaryReloaded1) {
         bid.forceWeapon = 0;
         if (isPrimaryReloaded2) {
-          bid.moduleActive = true;
+          bid.claim = true;
         }
       }
       if (isPrimaryReloaded1 && isPrimaryReloaded2) {
-        bid.moduleActive = true;
+        bid.claim = true;
         bid.useAngle = angleToEnemy;
         bid.forceHat = 7;
         bid.forceWeapon = 0;
@@ -11186,7 +11186,7 @@ window.grbtp = 35;
       if (decision.weapon !== undefined) bid.forceWeapon = decision.weapon;
       if (decision.hat !== undefined) bid.forceHat = decision.hat;
       if (decision.attack === true) bid.shouldAttack = true;
-      if (decision.claim !== false) bid.moduleActive = true;
+      if (decision.claim !== false) bid.claim = true;
       this.client.runtime.events.emit("combat:decision", decision);
       return true;
     }
@@ -11259,7 +11259,7 @@ window.grbtp = 35;
       const turretReloaded = reloading.isReloaded(2, 1);
       const baseRange = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
       if (this.phase === 1) {
-        bid.moduleActive = true;
+        bid.claim = true;
         bid.useAngle = angle;
         bid.forceHat = shieldBypass ? 7 : 53;
         bid.forceWeapon = shieldBypass ? 0 : 1;
@@ -11299,7 +11299,7 @@ window.grbtp = 35;
           ryn.ledger.placedOnce = true;
         }
       }
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       bid.forceHat = shieldBypass ? 53 : 7;
       bid.forceWeapon = shieldBypass ? 1 : 0;
@@ -11440,7 +11440,7 @@ window.grbtp = 35;
         if (canFireNow && (turretReloaded || killsWithout)) {
           const shieldBypass = lookingShield && secondaryDmg > primaryDmg;
           IH.instakillTarget = enemy;
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.useAngle = anglEnm;
           bid.forceHat = turretReloaded ? shieldBypass ? 53 : 7 : shieldBypass ? 53 : 6;
           bid.forceWeapon = shieldBypass ? 1 : 0;
@@ -11650,7 +11650,7 @@ window.grbtp = 35;
   const spikeTickHit = (client2, enemy, bid) => {
     const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     EnemyManager2.attemptSpikePlacement();
-    bid.moduleActive = true;
+    bid.claim = true;
     bid.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
     bid.forceHat = 7;
     bid.forceWeapon = 0;
@@ -11664,7 +11664,7 @@ window.grbtp = 35;
     if (!ryn.features.units.reloading.isReloaded(2)) {
       return;
     }
-    bid.moduleActive = true;
+    bid.claim = true;
     bid.forceHat = 53;
     // Sakuna holds my.autoAim across both halves of insta(5) so the aim stays
     // on the target through the turret half instead of snapping back to the
@@ -11845,7 +11845,7 @@ window.grbtp = 35;
       if (!this.aboutToReload(trapped)) {
         return;
       }
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = myPlayer.pos.current.angle(trapped.pos.current);
       bid.forceHat = 40;
       bid.forceWeapon = 1;
@@ -11876,7 +11876,7 @@ window.grbtp = 35;
       if (this.useTurret) {
         this.useTurret = false;
         if (turretReloaded && !EnemyManager2.shouldIgnoreModule()) {
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.forceHat = 53;
         }
         return;
@@ -11898,7 +11898,7 @@ window.grbtp = 35;
         ryn.ledger.placedOnce = true;
         ryn.ledger.placeAngles[0] = itemType;
         ryn.ledger.placeAngles[1] = placementAngles;
-        bid.moduleActive = true;
+        bid.claim = true;
         bid.useAngle = angleTo;
         bid.forceHat = 7;
         bid.forceWeapon = 0;
@@ -11934,7 +11934,7 @@ window.grbtp = 35;
       const turretReloaded = reloading.isReloaded(2);
       if (this.useTurret) {
         if (turretReloaded) {
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.forceHat = 53;
         }
         this.useTurret = false;
@@ -11960,7 +11960,7 @@ window.grbtp = 35;
           ryn.ledger.placedOnce = true;
           ryn.ledger.placeAngles[0] = itemType;
           ryn.ledger.placeAngles[1] = placementAngles;
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.useAngle = futureAngle;
           bid.forceHat = 7;
           bid.forceWeapon = 0;
@@ -12012,7 +12012,7 @@ window.grbtp = 35;
         if (possibleAngles.length !== 0) {
           ryn.ledger.placeAngles[0] = itemType;
           ryn.ledger.placeAngles[1] = possibleAngles;
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.useAngle = middleAngle;
           bid.forceHat = 40;
           bid.forceWeapon = 1;
@@ -12179,7 +12179,7 @@ window.grbtp = 35;
           this._pendingHealsNeeded = 0;
         }
         bid.shouldAttack = false;
-        bid.moduleActive = false;
+        bid.claim = false;
         return;
       }
       if (this._isSyncKillDetected()) {
@@ -12197,7 +12197,7 @@ window.grbtp = 35;
         }
         this._executeDodge(myPlayer, nearestEnemy, bid);
         bid.shouldAttack = false;
-        bid.moduleActive = false;
+        bid.claim = false;
         return;
       }
       const syncDanger = this._predictSyncMoment(myPlayer, nearestEnemy);
@@ -12232,7 +12232,7 @@ window.grbtp = 35;
       }
       if (this.useTurret) {
         if (ryn.loadout.canBuy(0, 53)) {
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.forceHat = 53;
         }
         this.useTurret = false;
@@ -12245,7 +12245,7 @@ window.grbtp = 35;
       if (this.nearestTarget !== null) {
         const pos22 = this.nearestTarget.pos.current;
         const angle2 = pos1.angle(pos22);
-        bid.moduleActive = true;
+        bid.claim = true;
         bid.useAngle = angle2;
         bid.forceHat = 7;
         bid.forceWeapon = 0;
@@ -12265,7 +12265,7 @@ window.grbtp = 35;
       if (!primaryReloaded || !turretReloaded || !myPlayer.collidingEntity(nearestEnemy, range)) {
         return;
       }
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       bid.forceHat = 7;
       bid.forceWeapon = 0;
@@ -12455,8 +12455,8 @@ window.grbtp = 35;
       const weapon = ryn.loadout.weapon;
       const attacking = ryn.actions.attacking;
       const sentAngle = ryn.ledger.sentAngle;
-      const unitTable = ryn.features.units;
-      const {reloading: reloading} = unitTable;
+      const units = ryn.features.units;
+      const {reloading: reloading} = units;
       const nextWeapon = forceWeapon !== null ? forceWeapon : useWeapon;
       if (nextWeapon !== null && (nextWeapon !== weapon || ryn.loadout.currentHolding !== nextWeapon || myPlayer.currentItem !== -1)) {
         const isReloaded = reloading.isReloaded(weapon);
@@ -13151,7 +13151,7 @@ window.grbtp = 35;
       const {services: ryn} = this.client;
       if (Settings_ref._autoheal && !this.notSave() && (this.shouldReset || this.tickToggle)) {
         this.tickToggle = true;
-        bid.moduleActive = true;
+        bid.claim = true;
         bid.forceHat = 7;
       }
     }
@@ -13363,7 +13363,7 @@ window.grbtp = 35;
         }
         if (placed) {
           ryn.ledger.placedOnce = true;
-          bid.moduleActive = true;
+          bid.claim = true;
         }
         return;
       }
@@ -13373,7 +13373,7 @@ window.grbtp = 35;
       const action = this.getGrindAction(nearestTurret);
       if (action === null) return;
       if (reloading.isReloaded(action.weapon)) {
-        bid.moduleActive = true;
+        bid.claim = true;
         bid.useAngle = middleAngle;
         bid.forceHat = action.hat;
         bid.forceWeapon = action.weapon;
@@ -13472,7 +13472,7 @@ window.grbtp = 35;
       if (!canKill) {
         return;
       }
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       if (maxDamage < nearestLowEntity.currentHealth) {
         bid.forceHat = 7;
@@ -13528,7 +13528,7 @@ window.grbtp = 35;
         bid.useAngle = angle;
       }
       if (this.targetEnemy !== null) {
-        bid.moduleActive = true;
+        bid.claim = true;
         bid.useAngle = angle;
         bid.forceHat = 7;
         bid.forceWeapon = 0;
@@ -13549,7 +13549,7 @@ window.grbtp = 35;
         bid.moveTo = myPosCur.angle(nearestEnemy.pos.current);
       }
       if (!primaryReloaded || !secondaryReloaded || !turretReloaded || !inRange && ticks > 1) return;
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       bid.forceHat = 53;
       bid.forceWeapon = 1;
@@ -13593,7 +13593,7 @@ window.grbtp = 35;
       InputHandler2.instakillTarget = nearest;
       if (this.targetEnemy !== null) {
         if (this.tickAction === 2) {
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.useAngle = angle;
           bid.forceWeapon = 1;
           bid.shouldAttack = true;
@@ -13603,7 +13603,7 @@ window.grbtp = 35;
           return;
         }
         if (this.tickAction === 1) {
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.useAngle = angle;
           bid.forceWeapon = 1;
           bid.shouldAttack = true;
@@ -13622,7 +13622,7 @@ window.grbtp = 35;
         return;
       }
       bid.moveTo = null;
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       bid.forceHat = 53;
       bid.forceWeapon = 0;
@@ -13696,7 +13696,7 @@ window.grbtp = 35;
       InputHandler2.instakillTarget = nearest;
       if (this.targetEnemy !== null) {
         if (this.tickAction === 2) {
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.useAngle = angle;
           bid.forceWeapon = 1;
           bid.shouldAttack = true;
@@ -13707,7 +13707,7 @@ window.grbtp = 35;
           return;
         }
         if (this.tickAction === 1) {
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.useAngle = angle;
           bid.forceWeapon = 1;
           bid.shouldAttack = true;
@@ -13729,7 +13729,7 @@ window.grbtp = 35;
         return;
       }
       bid.moveTo = null;
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       bid.forceHat = 53;
       bid.forceWeapon = 1;
@@ -13827,7 +13827,7 @@ window.grbtp = 35;
       if (!reloading.isReloaded(2)) {
         return;
       }
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.forceHat = 53;
     }
   }
@@ -13939,7 +13939,7 @@ window.grbtp = 35;
       if (this.useTurret) {
         this.useTurret = false;
         if (turretReloaded && ryn.loadout.canBuy(0, 53)) {
-          bid.moduleActive = true;
+          bid.claim = true;
           bid.forceHat = 53;
         }
         return;
@@ -13988,7 +13988,7 @@ window.grbtp = 35;
       }
       const pos2 = nearestEnemy.pos.future;
       const angle = pos1.angle(pos2);
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       bid.forceHat = 7;
       bid.forceWeapon = 0;
@@ -14028,7 +14028,7 @@ window.grbtp = 35;
       if (nearestEnemy.hatID !== 7 || !nearestEnemy.isEmptyReload(0) || myPlayer.hatID !== 11) {
         return;
       }
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       bid.forceHat = 7;
       bid.forceWeapon = 0;
@@ -14147,7 +14147,7 @@ window.grbtp = 35;
       const pos1 = myPlayer.pos.current;
       const pos2 = nearestEnemy.pos.current;
       const angle = pos1.angle(pos2);
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       bid.forceHat = 7;
       bid.forceWeapon = 0;
@@ -14303,7 +14303,7 @@ window.grbtp = 35;
       bid.forceWeapon = null;
       bid.useWeapon = null;
       bid.shouldAttack = attack;
-      bid.moduleActive = true;
+      bid.claim = true;
     }
     runTick(bid) {
       if (!Settings_ref._shieldGuard) return;
@@ -14512,11 +14512,11 @@ window.grbtp = 35;
           const canMill = myPlayer.canPlace(6) || myPlayer.canPlace(7);
           if (canWall) {
             ryn.actions.place(3, enemyAngle);
-            bid.moduleActive = true;
+            bid.claim = true;
           } else if (canMill) {
             const millType = myPlayer.canPlace(6) ? 6 : 7;
             ryn.actions.place(millType, enemyAngle);
-            bid.moduleActive = true;
+            bid.claim = true;
           } else {
             this._forceWeapon(ryn, 1, false, bid);
           }
@@ -14541,7 +14541,7 @@ window.grbtp = 35;
               bid.forceWeapon = null;
               bid.useWeapon = null;
               bid.shouldAttack = true;
-              bid.moduleActive = true;
+              bid.claim = true;
             }
           } else {
             this._forceWeapon(ryn, 1, false, bid);
@@ -14689,7 +14689,7 @@ window.grbtp = 35;
                 this.client.PacketManager.updateAngle(shieldAngle);
                 this.client.services.actions.mouse.sentAngle = shieldAngle;
               } catch (_) {}
-              bid.moduleActive = true;
+              bid.claim = true;
               bid.forceWeapon = 0;
               bid.useAngle = shieldAngle;
               bid.shouldAttack = true;
@@ -14699,7 +14699,7 @@ window.grbtp = 35;
               this.client.PacketManager.updateAngle(shieldAngle);
               this.client.services.actions.mouse.sentAngle = shieldAngle;
             } catch (_) {}
-            bid.moduleActive = true;
+            bid.claim = true;
             bid.forceWeapon = 1;
             bid.useAngle = shieldAngle;
             bid.shouldAttack = true;
@@ -14713,7 +14713,7 @@ window.grbtp = 35;
                 this.client.PacketManager.updateAngle(preAngle);
                 this.client.services.actions.mouse.sentAngle = preAngle;
               } catch (_) {}
-              bid.moduleActive = true;
+              bid.claim = true;
               bid.forceWeapon = 1;
               bid.useAngle = preAngle;
               bid.shouldAttack = true;
@@ -14728,7 +14728,7 @@ window.grbtp = 35;
       const shouldActivate = EnemyManager2.weaponDamageThreat();
       if (!shouldActivate) return;
       const angle = this.getProtectAngle();
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.forceWeapon = 1;
       bid.useAngle = angle;
       bid.shouldAttack = true;
@@ -14759,7 +14759,7 @@ window.grbtp = 35;
       if (!myPlayer.collidingSimple(nearestEnemy, range)) {
         return;
       }
-      bid.moduleActive = true;
+      bid.claim = true;
       bid.useAngle = angle;
       if (turretReloaded) {
         bid.forceHat = 53;
@@ -14800,7 +14800,7 @@ window.grbtp = 35;
       const turretReloaded = ryn.loadout.hasStoreItem(0, 53) && reloading.isReloaded(2);
       bid.forceWeapon = 0;
       if (primaryReloaded) {
-        bid.moduleActive = true;
+        bid.claim = true;
         bid.useAngle = angle;
         if (turretReloaded) {
           bid.forceHat = 53;
@@ -14847,7 +14847,7 @@ window.grbtp = 35;
     priority;
     cost = 0;
     // Exclusive: at most one claiming bid is committed per tick.
-    moduleActive = false;
+    claim = false;
     // Advisory: merged from the winner downwards, highest priority first.
     useWeapon = null;
     useItem = null;
@@ -14864,7 +14864,7 @@ window.grbtp = 35;
       this.priority = priority;
     }
     get claimed() {
-      return this.moduleActive;
+      return this.claim;
     }
   }
 
@@ -14917,8 +14917,8 @@ window.grbtp = 35;
       const winner = ordered.find(b => b.claimed) ?? null;
       const out = {
         winner: winner,
-        moduleActive: winner !== null,
-        activeModule: winner ? winner.unitID : null,
+        claim: winner !== null,
+        activeFeature: winner ? winner.unitID : null,
         shouldAttack: false,
         shouldEquipSoldier: false,
         moveTo: undefined
@@ -14937,8 +14937,8 @@ window.grbtp = 35;
     // Write the resolved intent where the send phase reads it.
     commit(resolved) {
       const board = this.board;
-      board.moduleActive = resolved.moduleActive;
-      board.activeModule = resolved.activeModule;
+      board.claim = resolved.claim;
+      board.activeFeature = resolved.activeFeature;
       board.shouldAttack = resolved.shouldAttack;
       board.shouldEquipSoldier = resolved.shouldEquipSoldier;
       for (const field of ARBITER_ADVISORY) board[field] = resolved[field];
@@ -15722,12 +15722,12 @@ window.grbtp = 35;
   // The fields are accessors over a backing record so `seal` is a real guard:
   // once the tick is resolved and committed, a late write is reported and
   // dropped instead of silently overriding a resolution that already happened.
-  const RYN_INTENT_FIELDS = Object.freeze([ "moduleActive", "activeModule", "useWeapon", "useItem", "forceWeapon", "useHat", "forceHat", "useAcc", "useAngle", "shouldAttack", "shouldEquipSoldier", "moveTo" ]);
+  const RYN_INTENT_FIELDS = Object.freeze([ "claim", "activeFeature", "useWeapon", "useItem", "forceWeapon", "useHat", "forceHat", "useAcc", "useAngle", "shouldAttack", "shouldEquipSoldier", "moveTo" ]);
 
   class RynIntentBoard {
     _v = {
-      moduleActive: false,
-      activeModule: null,
+      claim: false,
+      activeFeature: null,
       useWeapon: null,
       useItem: null,
       forceWeapon: null,
@@ -15745,8 +15745,8 @@ window.grbtp = 35;
       const v = this._v;
       this._sealed = false;
       this.prevMoveTo = v.moveTo;
-      v.moduleActive = false;
-      v.activeModule = null;
+      v.claim = false;
+      v.activeFeature = null;
       v.useWeapon = null;
       v.useItem = null;
       v.forceWeapon = null;
@@ -16550,7 +16550,7 @@ window.grbtp = 35;
         const sched = runtime.scheduler;
         GameUI_ref.updateFastQ(svc.ledger.didAntiInsta);
         GameUI_ref.updatePlaces(svc.ledger.totalPlaces);
-        GameUI_ref.updateActiveModule(svc.intent.activeModule + ", " + runtime.clock.tick);
+        GameUI_ref.updateActiveModule(svc.intent.activeFeature + ", " + runtime.clock.tick);
         GameUI_ref.updateEquipHat(`${svc.loadout.store[0].last},  ${svc.intent.shouldEquipSoldier}`);
         GameUI_ref.updateModulePerformance(`${sched.lastDuration}/${sched.maxDuration}`);
       }
@@ -22727,7 +22727,7 @@ window.grbtp = 35;
       const {myPlayer: myPlayer, services: ryn} = this.client;
       if (!myPlayer || !myPlayer.inGame || !myPlayer.pos) return;
       if (!Settings_ref._botAutoFarmEnabled) return;
-      bid.moduleActive = false;
+      bid.claim = false;
       ryn.actions.attackingState = 0;
       const needed = this._neededTypes();
       if (needed === null) {
