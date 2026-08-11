@@ -7244,7 +7244,6 @@ window.grbtp = 35;
     startPing=performance.now();
     pong=0;
     TICK=1e3 / 9;
-    packetCount=0;
     action=null;
     constructor(client2) {
       this.client = client2;
