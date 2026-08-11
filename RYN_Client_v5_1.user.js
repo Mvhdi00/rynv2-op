@@ -6651,9 +6651,9 @@ window.grbtp = 35;
       const difference = amount - previousAmount;
       if (type === "kills") {
         this.totalKills += difference;
-        this.client.StatsManager.kills = difference;
-        this.client.StatsManager.totalKills = difference;
-        this.client.ownerClient.StatsManager.globalKills = difference;
+        this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "kills", by: difference });
+        this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "totalKills", by: difference });
+        this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "globalKills", by: difference, global: true });
         if (this.client.isOwner) {
           GameUI_ref.updateTotalKills(this.totalKills);
         }
@@ -6734,7 +6734,7 @@ window.grbtp = 35;
       this.shameTimer = 0;
       this.deathPosition.setVec(this.pos.current);
       this.diedOnce = true;
-      this.client.StatsManager.deaths = 1;
+      this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "deaths", by: 1 });
       this.deaths += 1;
       if (this.client.isOwner) {
         GameUI_ref.reset();
@@ -7561,6 +7561,63 @@ window.grbtp = 35;
     }
   }
   const SocketManager_ref = SocketManager;
+  // Telemetry, recorded by subscription rather than by reaching into a manager.
+  //
+  // Nine sites used to assign onto StatsManager from inside gameplay -- a unit
+  // that had just dodged a sync wrote the counter itself, which meant every
+  // one of them held a reference to a system that has nothing to do with what
+  // they were for. They announce what happened now, and this listens.
+  //
+  // Counters that persist are still written through Settings on assignment, so
+  // the stored values and the UI behave exactly as before.
+  const RYN_STAT_SIGNAL = "stat:record";
+
+  class RynTelemetry {
+    client;
+    _off = null;
+    constructor(client2) {
+      this.client = client2;
+    }
+    // One subscription for every counter. A new stat is a new name, not a new
+    // reference from gameplay into this.
+    listen(events) {
+      if (this._off !== null) return;
+      this._off = events.on(RYN_STAT_SIGNAL, entry => {
+        const store = entry.global === true ? this.client.ownerClient.StatsManager : this.client.StatsManager;
+        if (store === undefined || store === null) return;
+        const key = entry.stat;
+        if (entry.absolute === true) {
+          store[key] = entry.by;
+          return;
+        }
+        // Two shapes live on the store and they need opposite handling. The
+        // persisted counters are accessors whose setter already adds the value
+        // and writes it through to Settings, so they are given the delta. A
+        // plain field has no such setter and must be added to here. Asking
+        // whether the key merely exists cannot tell them apart -- a plain field
+        // that has been written once exists too -- so the accessor is looked
+        // for along the prototype chain.
+        let hasSetter = false;
+        for (let o = store; o !== null && o !== undefined; o = Object.getPrototypeOf(o)) {
+          const desc = Object.getOwnPropertyDescriptor(o, key);
+          if (desc !== undefined) {
+            hasSetter = typeof desc.set === "function";
+            break;
+          }
+        }
+        if (hasSetter) {
+          store[key] = entry.by;
+        } else {
+          store[key] = (store[key] ?? 0) + entry.by;
+        }
+      });
+    }
+    stop() {
+      if (this._off !== null) this._off();
+      this._off = null;
+    }
+  }
+
   class StatsManager {
     client;
     kills=0;
@@ -10851,7 +10908,7 @@ window.grbtp = 35;
         bid.forceWeapon = 0;
         bid.shouldAttack = true;
         this.useTurret = true;
-        this.client.StatsManager.autoSyncTimes = 1;
+        this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "autoSyncTimes", by: 1 });
       }
     }
   }
@@ -11845,7 +11902,7 @@ window.grbtp = 35;
         bid.forceHat = 7;
         bid.forceWeapon = 0;
         bid.shouldAttack = true;
-        this.client.StatsManager.spikeSyncTimes = 1;
+        this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "spikeSyncTimes", by: 1 });
         this.useTurret = true;
       }
     }
@@ -11960,7 +12017,7 @@ window.grbtp = 35;
           bid.forceWeapon = 1;
           bid.shouldAttack = true;
           this.targetEnemy = nearestSyncEnemy;
-          this.client.StatsManager.spikeSyncHammerTimes = 1;
+          this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "spikeSyncHammerTimes", by: 1 });
         }
       }
     }
@@ -12025,7 +12082,7 @@ window.grbtp = 35;
       if (currentHat !== optimalGear && ModuleHandler.canBuy?.(0, optimalGear)) {
         bid.forceHat = optimalGear;
         this._lastGearSwitch = currentTime;
-        this.client.StatsManager.gearSwitches = (this.client.StatsManager.gearSwitches ?? 0) + 1;
+        this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "gearSwitches", by: 1, absolute: false });
       }
     }
   }
@@ -12146,7 +12203,7 @@ window.grbtp = 35;
       if (syncDanger === 0) {
         if (Date.now() - this._lastDodgeTime > this._dodgeCooldown) {
           this._executeDodge(myPlayer, nearestEnemy, bid);
-          this.client.StatsManager.antiSyncDodges = (this.client.StatsManager.antiSyncDodges ?? 0) + 1;
+          this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "antiSyncDodges", by: 1, absolute: false });
         }
       }
       const now = Date.now();
@@ -15895,6 +15952,7 @@ window.grbtp = 35;
     InputHandler;
     StatsManager;
     runtime;
+    telemetry;
     transport;
     codec;
     netBudget;
@@ -15911,6 +15969,7 @@ window.grbtp = 35;
       this.netBudget = new RynPacketBudget;
       this.netQueue = new RynPacketQueue;
       this.net = new RynNetEvents(this.runtime.events);
+      this.telemetry = new RynTelemetry(this);
       this.SocketManager = new SocketManager_ref(this);
       this.ObjectManager = new ObjectManager_ref(this);
       this.PlayerManager = new PlayerManager_ref(this);
@@ -17469,6 +17528,7 @@ window.grbtp = 35;
         this.attachOpenMenu();
         this.createRipple(".open-menu");
         client.StatsManager.init();
+        client.telemetry.listen(client.runtime.events);
         const {menuContainer: menuContainer} = this.getElements();
         if (Settings_ref._menuTransparency) {
           menuContainer.classList.add("transparent");
