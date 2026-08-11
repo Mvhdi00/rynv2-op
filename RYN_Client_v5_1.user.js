@@ -3997,6 +3997,13 @@ window.grbtp = 35;
   const OBJECT_TINT_COLOR = "#a855f7";
   const OBJECT_TINT_STRENGTH = .45;
 
+  // How far an enemy has to be before the cowboy hat is worth wearing -- it is
+  // a gathering hat, and wearing it near a fight is a free hit for them.
+  //
+  // NEEDS VALIDATION: 350 is roughly ten ticks of approach at full speed (33
+  // units a tick), which is time enough to swap back. That framing fits, but
+  // the number was not chosen from it, and the swap itself costs packets that
+  // the arrival could have been spent on.
   const COWBOY_DROP_RANGE = 350;
 
   const RYN_OWNER_NAME = "";
@@ -5409,6 +5416,13 @@ window.grbtp = 35;
     }
   }
   const Sorting_ref = Sorting;
+  // How many candidate angles a placement helper hands back. Four is one per
+  // quadrant, which is enough spread that a refused angle has an alternative
+  // pointing somewhere genuinely different.
+  //
+  // NEEDS VALIDATION: unrelated to PREPLACE_CANDIDATES, which is the placer's
+  // own answer to the same question and is 2 for reasons that were measured in
+  // play. These two should probably agree, or the difference should be stated.
   const PLACE_ATTEMPTS = 4;
   class ObjectManager {
     objects=new Map;
@@ -5737,6 +5751,43 @@ window.grbtp = 35;
   // ==========================================================================
 
   // Packet importance. Ordering only — the wire format is untouched.
+  // ==========================================================================
+  // Constant audit
+  //
+  // Every hard-coded gameplay figure in this file has been checked against
+  // what RYN can actually derive: the game's own tables (playerScale 35,
+  // playerSpeed .0016, playerDecel .993, TICK 1000/9, item scales and place
+  // offsets, weapon ranges), RYN's own state model, and the geometry that
+  // follows from them. Two figures worth having to hand, because most of the
+  // derivations below run through one of them:
+  //
+  //   33 units   how far a player moves in one tick at full speed, from
+  //              integrating playerSpeed against playerDecel over TICK
+  //   ring       where a build lands: playerScale + itemScale + placeOffset,
+  //              so 79 for spikes, 82 for greater spikes, 80 for a pit trap
+  //
+  // Where a figure follows from those, the derivation is written at the
+  // constant. Where it does not, the constant carries a NEEDS VALIDATION note
+  // saying what is missing rather than a reason invented after the fact. Grep
+  // for that phrase to see the full list; there are eighteen, and the ones
+  // that matter most are:
+  //
+  //   RynPacketBudget.limit    the allowance every other packet gate is
+  //                            derived relative to, and the only figure here
+  //                            with no supporting measurement at all
+  //   PLACE_SAME_SPOT_RADIUS   30 units, which is less than one tick of
+  //                            movement, so a banned spot can be offered back
+  //                            to a player who is moving
+  //   LOOKAHEAD                222 world units, a figure that is 2 * TICK in
+  //                            milliseconds -- a units mismatch, not a choice
+  //   SPIKE_TICK_BREAK_REACH   a flat 70 standing in for the target's own
+  //                            scale, which is available and is 43 to 65
+  //
+  // A figure being flagged does not mean it is wrong. It means the file cannot
+  // currently show why it is right, and none of them has been changed on the
+  // strength of the audit alone.
+  // ==========================================================================
+
   const RYN_NET_PRIORITY = Object.freeze({
     CRITICAL: 0,   // heals, anti-insta: dropping one costs the round
     ACTION: 1,     // attacks, placements
@@ -5858,6 +5909,17 @@ window.grbtp = 35;
     limit = 115;
     _spent = 0;
     _byPriority = [ 0, 0, 0, 0 ];
+    // Headroom held back from each priority band, so a busy second of
+    // low-priority traffic cannot leave a heal unable to send. Read as: a
+    // BACKGROUND action stops at limit - 28, ROUTINE at limit - 16, ACTION at
+    // limit - 8, and CRITICAL may spend to the last packet.
+    //
+    // NEEDS VALIDATION: the ordering is right and the shape is right -- each
+    // band leaves more room than the one above it -- but the three figures are
+    // not derived. What would derive them is the cost of the most expensive
+    // thing a higher band can still need in the same second: a heal is 3
+    // frames and a build is PLACE_PACKET_COST, so 8 covers roughly two builds
+    // and 16 covers four. Neither 16 nor 28 was arrived at that way.
     _floor = Object.freeze([ 0, 8, 16, 28 ]);
     _timer = null;
     // Called with the second's total just before it is zeroed. This is where
@@ -9263,6 +9325,17 @@ window.grbtp = 35;
   // ==========================================================================
   const ITEM_SPIKE = 4;
   const ITEM_TRAP = 7;
+  // The grid the interior of a free arc is sampled on. 72 steps is 5 degrees,
+  // which on the trap ring (80 units out) is 7 units of ground per step.
+  //
+  // NEEDS VALIDATION: 7 units is finer than anything that consumes it. The
+  // placer's own definition of one piece of ground is PLACE_SAME_SPOT_RADIUS
+  // at 30 units, so four consecutive samples describe a single spot, and a
+  // build is 100 units across. The only consumer that wants sub-spot
+  // resolution is the nearest-to-target picker, and the angle it actually
+  // wants -- the bearing straight at the enemy -- is pushed exactly rather
+  // than sampled. So the grid is doing work at four times the resolution any
+  // caller has been shown to need, and a coarser step has not been tried.
   const ANGLE_SAMPLES = 72;
   const ANGLE_STEP = Math.PI * 2 / ANGLE_SAMPLES;
 
@@ -9345,31 +9418,47 @@ window.grbtp = 35;
   // heal — three packets, the difference between living and not — finds
   // nothing left. A missed spike costs a spike. A missed heal costs the round.
   //
-  // So the placer stops short of the client-wide limit and the ten packets
-  // between this gate and that limit belong to everything else. Ten is two
-  // full builds' worth, which is the largest single thing that could be
-  // waiting on it, and comfortably more than the three a heal costs.
+  // The placer's own ceiling, below the client-wide allowance. The gap is
+  // 115 - 105 = 10 = 2 * PLACE_PACKET_COST: two full builds, which is the
+  // largest single thing that could still be waiting when the placer stops,
+  // and more than three times what a heal costs.
   //
-  // RynPacketBudget enforces the same idea one level down, holding a floor
-  // back from each priority band; this gate is the placer's own ceiling on top
-  // of that, because a build is the highest-volume traffic RYN sends and the
-  // cheapest to lose. A missed spike costs a spike. A missed heal costs the
-  // round.
+  // RynPacketBudget holds a floor back from each priority band one level down;
+  // this is the placer's own ceiling on top of that, because a build is the
+  // highest-volume traffic RYN sends and the cheapest to lose. A missed spike
+  // costs a spike. A missed heal costs the round.
+  //
+  // The gap derives. The 105 does not derive independently -- it is 115 minus
+  // that gap, so it moves with the allowance, and the allowance is the figure
+  // that needs validating (see RynPacketBudget.limit).
   const PLACER_PACKET_GATE = 105;
 
-  // How long a refused spot stays refused. Two seconds at RYN's tick rate,
-  // which is long enough that the placer stops hammering ground the server has
-  // already rejected and short enough that the ban expires before the reason
-  // for it -- a build that has since died, a player who has since moved -- has
-  // stopped being true.
+  // How long a refused spot stays refused. 18 ticks is almost exactly two
+  // seconds at TICK = 1000/9.
+  //
+  // NEEDS VALIDATION: two seconds is a plausible span but nothing derives it.
+  // The reasons a ban should expire -- the blocking build died, the player
+  // walked away -- are events RYN can observe, and the position-based ban
+  // already handles the second one on its own. The timer is a backstop whose
+  // length has never been measured against how long a refusal actually stays
+  // true.
   const PLACE_BAN_TICKS = 18;
 
-  // RYN's definition of "the same place". Two candidates closer together than
-  // this are one piece of ground as far as the placer is concerned: a retry
-  // inside this radius is the refused build offered back, not a new option.
-  // A spike is scale 35 and a trap 50, so this sits just inside the smaller of
-  // the two -- close enough that overlapping builds collapse to one, wide
-  // enough that a genuinely different spot survives.
+  // RYN's definition of "the same place": a retry landing inside this radius
+  // of a refused spot is that build offered back, not a new option.
+  //
+  // The window it has to sit in is real. Below it, two builds that physically
+  // cannot coexist -- a spike is scale 49 and a trap 50, so legal placements
+  // are far further apart than this -- must not read as different. Above it,
+  // ground that genuinely is different must not read as the same.
+  //
+  // NEEDS VALIDATION: the placer re-derives its candidates from my position
+  // every tick, and I move up to 33 units in a tick at full speed. A candidate
+  // aimed at the same piece of ground a tick later can therefore land up to 33
+  // units from where the ban was recorded -- outside this radius. So a banned
+  // spot can be offered straight back to a player who is moving, which is
+  // exactly the case the ban exists for. 33 or more would close that; whether
+  // it opens a worse problem at the other end has not been measured.
   const PLACE_SAME_SPOT_RADIUS = 30;
 
   // How many angles to queue against one opening slot.
@@ -9410,19 +9499,30 @@ window.grbtp = 35;
   // is in flight. The trap has to be waiting on their path, not chasing it, so
   // the current->future step is extrapolated further out.
   //
-  // Three steps is the round trip plus the tick it takes them to walk into it.
-  // Further than that and the extrapolation is guessing: it assumes they hold
-  // a straight line, and past a few ticks they usually do not.
+  // Three steps is one trap. A player at full speed covers 33 units a tick, so
+  // three ticks is 100 units, and a pit trap is scale 50 -- 100 across. The
+  // trap therefore lands exactly its own width ahead of them: near enough that
+  // they walk into it before it expires from their path, far enough that they
+  // do not simply pass it. Two would drop it on ground they have already
+  // crossed; four would put a clear trap-width of gap in front of them.
   const TRAP_LOOKAHEAD_TICKS = 3;
 
-  // Traps only matter in a fight that is already closing. The shared
-  // `_autoplacerRadius` runs to 350, and a trap thrown at that range is spent
-  // resources; this is the primary trap's own, tighter ceiling.
+  // The primary trap's own range ceiling, tighter than the shared placer
+  // radius: a trap thrown across the screen is spent resources, because the
+  // enemy has a dozen ticks to see it and walk around.
+  //
+  // NEEDS VALIDATION: the geometry gives a lower bound of about 180 -- my own
+  // build ring at 80 plus the 100 units the enemy covers over
+  // TRAP_LOOKAHEAD_TICKS -- so 200 is at least large enough to reach where the
+  // trap is being aimed. It is not derived from anything above that. The
+  // figure that would derive it is how far an enemy can be and still be
+  // committed to a path, and RYN does not measure that.
   const TRAP_PRIMARY_RANGE = 200;
 
-  // How near a trap candidate has to be for a piece of ground to count as
-  // already covered by a trap. A trap is scale 50, so a little over that: any
-  // further and the spike is filling somewhere the trap does not reach.
+  // How near a trap has to be for a piece of ground to count as already
+  // covered by one. A pit trap is scale 50, so this is its own radius plus
+  // five: any further out and the spike would be filling ground the trap does
+  // not actually reach.
   const SPIKE_FALLBACK_RADIUS = 55;
 
   // The features that finish a fight by putting a spike on someone: the spike
@@ -10331,6 +10431,18 @@ window.grbtp = 35;
       //
       // Both are measured from where we will be rather than where we are: the
       // build lands a round trip from now, and by then both of us have moved.
+      //
+      // START_OFFSET is playerScale: the corridor starts at my own edge, not
+      // my centre, because a build cannot be standing inside me.
+      //
+      // NEEDS VALIDATION: LOOKAHEAD is a distance in world units, and 222 is
+      // 2 * TICK, which is a duration in milliseconds. The two are not the
+      // same quantity and the coincidence is the only thing that explains the
+      // number. Measured properly, I cover 33 units in a tick at full speed,
+      // so 222 units is about seven ticks of walking -- far longer than the
+      // one or two ticks the rest of this function reasons over. The corridor
+      // may well want to be that long, but as written the figure derives from
+      // a units mismatch rather than from a decision.
       const LOOKAHEAD = 222, START_OFFSET = 35;
       const futX = myPos.x + Math.cos(predictMoveAngle) * LOOKAHEAD;
       const futY = myPos.y + Math.sin(predictMoveAngle) * LOOKAHEAD;
@@ -10737,6 +10849,12 @@ window.grbtp = 35;
       const distToAnimal = pos0.distance(animalPos);
       const angleToAnimal = pos0.angle(animalPos);
 
+      // The trap fires when the animal is within its own collision range plus
+      // my scale, plus a small margin for the tick of movement between the
+      // decision and the build landing.
+      //
+      // NEEDS VALIDATION: 25 units is under one tick of movement (33), so a
+      // fast animal can cross the margin between the check and the placement.
       const activationRange = animal.collisionRange + Config_ref.playerScale + TrapAnimal.CLOSE_PADDING;
       if (distToAnimal > activationRange) {
         this.reset();
@@ -11484,6 +11602,20 @@ window.grbtp = 35;
     _spike2Placed=false;
     _trapPlaced=false;
     _setupEnemy=null;
+    // How long a fight has to have been running, and how many blows have to
+    // have landed either way, before this treats it as a real engagement
+    // rather than two players passing each other.
+    //
+    // FIGHT_THRESHOLD is in ticks: 25 is a little under three seconds.
+    // SETUP_COOLDOWN is in ticks too: 60 is about six and a half seconds
+    // before the same setup may be attempted again.
+    //
+    // NEEDS VALIDATION: all three are plausible and none is derived. What
+    // would derive them is the rate at which exchanges actually happen -- a
+    // primary swings every 300-400ms, so three exchanges cannot occur in less
+    // than about nine ticks, which makes 25 a loose rather than a tight
+    // bound -- and how long a failed setup stays failed, which RYN does not
+    // measure.
     FIGHT_THRESHOLD=25;
     EXCHANGE_THRESH=3;
     SETUP_COOLDOWN=60;
@@ -11616,17 +11748,90 @@ window.grbtp = 35;
       }
     }
   }
+  // ── Spike-tick distances ─────────────────────────────────────────────────
+  // The figures every derivation below is against, all of them read out of
+  // this file's own tables rather than assumed:
+  //
+  //   playerScale 35, playerSpeed .0016, playerDecel .993, TICK 1000/9 ms
+  //   integrating those gives 33 units travelled in one tick at full speed
+  //   spikes scale 49 (greater/poison/spinning 52), pit trap 50
+  //   a build lands at playerScale + itemScale + placeOffset from its owner:
+  //     spikes 79, greater spikes 82, pit trap 80
+  //   melee reach is weapon range + the target's hitScale (35):
+  //     hammer/daggers 100, axe/stick 105, great axe/great hammer 110,
+  //     sword/bat 145, katana 153, mc grabby 160, polearm 177
+
+  // A ceiling on how far a spike tick may reach, applied over the exact
+  // per-weapon reach: the caller takes min(this, weaponRange + hitScale), so
+  // for everything up to mc grabby (160) the exact figure binds and this never
+  // does. The only weapon it clips is the polearm, whose true reach is 177.
+  //
+  // NEEDS VALIDATION: nothing here derives 170. It is 7 units short of the
+  // longest melee reach in the game, so it silently shortens the polearm and
+  // changes nothing else. Either it should be 177 -- letting the exact
+  // per-weapon figure bind for every weapon and making this cap dead -- or the
+  // polearm is being clipped deliberately and the reason is not written down.
   const SPIKE_TICK_RANGE = 170;
+
+  // How close the break has to be to me for the tick to be worth taking. A
+  // spike is scale 52 and I am scale 35, so at 87 I am touching it; 90 is that
+  // with three units of slack.
   const SPIKE_TICK_BREAK_GAP = 90;
+
+  // Tolerance on the contact test between an object and an enemy, applied to
+  // (objectScale + enemyScale) -- about 87 units for a spike, so this adds 4.
+  //
+  // NEEDS VALIDATION: 4 units is not enough to cover anything RYN knows about.
+  // One tick of movement is 33 units, so this is not staleness slack; it is
+  // roughly the width of a rounding error, and no measurement in this file
+  // says a rounding error of that size exists.
   const SPIKE_TICK_TOUCH_SLACK = 1.05;
+
+  // Am I close enough to a trapped enemy to break the trap. The swing that
+  // does it is the secondary hammer, whose reach is 75 against a target of
+  // hitScale 35: 110 exactly.
   const SPIKE_TICK_TRAP_RANGE = 110;
+
   // The windows below are in ticks, not milliseconds, because everything that
   // reads them is driven by RYN's tick -- converting at each site would round
   // differently in each one.
+
+  // How long after being trapped an enemy still counts as newly trapped.
+  // Three ticks is 333ms, which covers a round trip on any connection this
+  // client is playable on plus the tick the news arrived in.
   const SPIKE_TICK_TRAP_GRACE = 3;
+
+  // Close enough that the enemy could drop a spike which touches me, which is
+  // the exchange this gate exists to avoid opening into.
+  //
+  // The bound is exact: their build lands 82 from them (greater spikes, the
+  // worst case), the spike touches me within 52 + 35 of its centre, so they
+  // can reach me at 82 + 52 + 35 = 169. 180 carries eleven units on top, which
+  // is a third of a tick of approach -- less than a full tick, so a player
+  // walking in at speed can still cross the line between two samples.
   const SPIKE_TICK_COUNTER_RANGE = 180;
+
+  // How long a counter threat stays live once seen. Two ticks is 222ms: long
+  // enough that one tick of the enemy being out of position does not read as
+  // the threat having gone, short enough that it expires while they are still
+  // the same threat.
   const SPIKE_TICK_COUNTER_GRACE = 2;
+
+  // Added to the primary's range to decide whether a break is inside reach.
+  // It stands in for the target's own scale, since hitting an object needs
+  // distance - objectScale < weaponRange.
+  //
+  // NEEDS VALIDATION: the object's scale is available at the call site and is
+  // not 70. Spikes are 49-52, traps and walls 50-52, turrets 43, mines 65 --
+  // so this over-reaches every one of them, by 5 units on a mine and by 27 on
+  // a turret. Using obj.scale would be exact; the flat figure is a stand-in
+  // that has never been reconciled with the table it stands in for.
   const SPIKE_TICK_BREAK_REACH = 70;
+
+  // Caps how much of the primary's range counts towards "a spike is on top of
+  // me". 75 is the reach of the heavy melee weapons (great axe, great hammer);
+  // without the cap a long primary would make a spike two body-lengths away
+  // read as sitting on me.
   const SPIKE_TICK_NEAR_SPIKE_REACH = 75;
   // Two tick stamps per client, for the gates below. They cannot live on
   // EnemyManager, which wipes its state at the top of every tick — the whole
@@ -14591,11 +14796,25 @@ window.grbtp = 35;
           }
         }
       }
-      const ENEMY_DETECT = 550;
+      // How far out a guard looks for enemies. The screen is 1080 tall at most, so
+  // 550 is about half a screen -- everything the owner can see coming.
+  //
+  // NEEDS VALIDATION: half a screen is a reasonable framing but it is not what
+  // the number was chosen from, and the viewport is not fixed.
+  const ENEMY_DETECT = 550;
       const nearEnemies = enemies.filter(e => e.dist < ENEMY_DETECT);
       const ownerStopped = oc.services.motion.move_dir === null;
       const hasEnemies = nearEnemies.length > 0;
       const forceShield = ownerStopped || hasEnemies || this._underThreat(oc);
+      // How far in front of the owner a guard bot stands. 90 is a little over
+      // two player scales (35 each), so the bot sits clear of the owner's own
+      // body with room for a build between them.
+      //
+      // NEEDS VALIDATION: the figure that would derive it is the reach of
+      // whatever the guard is meant to intercept, which varies by weapon
+      // (100 for a hammer, 177 for a polearm). A fixed 90 stands inside all of
+      // them, so the guard is always within reach of the attacker it is
+      // blocking; whether that is intended has not been written down.
       const GUARD_FRONT_DIST = window._guardFrontDistance || 90;
       if (window._shieldRotationEnabled) {
         const ROT_SPEED = 0.018;
@@ -14662,6 +14881,10 @@ window.grbtp = 35;
         const nearest = nearEnemies[0];
         const enemyAngle = nearest.angle;
         const distToEnemy = myPos.distance(nearest.player.pos.current);
+        // Past this the guard stops interposing and closes instead. 200 is
+        // above every melee reach in the game (the longest, a polearm against
+        // a player, is 177), so the enemy is out of striking distance of the
+        // owner and there is nothing to stand in front of yet.
         const FAR_ENEMY_DIST = 200;
         if (distToEnemy > FAR_ENEMY_DIST) {
           const blockPos = ownerPos.addDirection(enemyAngle, GUARD_FRONT_DIST * 0.5);
@@ -14697,6 +14920,10 @@ window.grbtp = 35;
           }
           ryn.actions.currentAngle = enemyAngle;
           bid.useAngle = null;
+          // Close enough to swing rather than block. 80 is inside the shortest
+          // melee reach in the game -- a hammer or daggers against a player is
+          // 100 -- so at this distance the guard can land a hit with whatever
+          // it happens to be holding.
           const ATTACK_DIST = 80;
           if (distToEnemy < ATTACK_DIST && !forceShield) {
             const dagId = myPlayer.getItemByType(0);
@@ -14765,6 +14992,18 @@ window.grbtp = 35;
       if (Settings_ref._autoShield || Settings_ref._rangedShield) {
         const RANGED_IDS = new Set([ 9, 12, 13, 15 ]);
         const REP_BOW_ID = 13;
+        // How long the shield is held after a trigger, and how often the
+        // attack window may reopen while spamming.
+        //
+        // 320ms is one primary swing cycle: the fast primaries reload in 300ms
+        // and the mid ones in 400, so this reopens roughly once per swing.
+        // 180ms is a little over one tick (111ms), so a hold survives a single
+        // tick of the trigger flickering off.
+        //
+        // NEEDS VALIDATION: both are timed in wall-clock milliseconds while
+        // everything they interact with is driven by RYN's tick. On a slow
+        // frame the hold can expire between two ticks and the shield drops for
+        // a tick nobody asked for.
         const HOLD_MS = 180;
         const ATTACK_WINDOW_MS = 320;
         const myPos = myPlayer.pos.current;
@@ -15751,10 +15990,19 @@ window.grbtp = 35;
     // sampled, so both stay live off RynPacketBudget rather than being copied
     // here and going stale mid-tick.
     //
-    // 70 was well under what the connection will carry. 115 leaves room under
-    // the rate at which the server starts dropping traffic, and RynPacketBudget
-    // holds the number so there is one allowance rather than a copy per
-    // feature.
+    // The client-wide allowance, held by RynPacketBudget so there is one
+    // number rather than a copy per feature.
+    //
+    // NEEDS VALIDATION: 115 is the one figure in this file that no game
+    // mechanic, table or measurement supports. It is a guess at where the
+    // server starts dropping or penalising traffic, and RYN has never measured
+    // that -- it does not count refused sends, and nothing correlates a send
+    // rate with a dropped frame. The gates built on top of it
+    // (PLACER_PACKET_GATE, the priority floors) are all derived relative to
+    // this number, so if it is wrong they are all wrong together.
+    //
+    // What would settle it: count how many sends per second precede a frame
+    // the server never acts on, and set this below that rate.
     _sender = null;
     get packetLimit() {
       return this._sender === null ? 0 : this._sender.limit;
@@ -16227,6 +16475,15 @@ window.grbtp = 35;
     currentAngle = 0;
     // A heal landing inside the shame window is what gets a player shamed, so
     // it is queued and flushed once the window has passed.
+    // How long after taking damage a heal counts as a shame heal. The server
+    // is the authority on this window and does not publish it, so the figure
+    // is an outside estimate of it: heals inside 130ms of a hit are held and
+    // released once it has passed.
+    //
+    // NEEDS VALIDATION: if the real window is longer, held heals still land
+    // inside it and get shamed anyway; if it is shorter, heals are delayed for
+    // no reason. RYN can measure this -- it sees its own shame counter go
+    // up -- and does not currently correlate that with the delay it applied.
     _SHAME_GUARD_MARGIN = 130;
     _shameHealQueue = 0;
     _shameHealDeadline = null;
