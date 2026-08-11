@@ -9596,28 +9596,30 @@ window.grbtp = 35;
     return null;
   }
 
-  // Does the segment a->b pass through the square of half-width `pad` centred
-  // on (cx, cy)? Segment-versus-box, used everywhere the engine asks "will they
-  // walk into this" or "does this stand between us".
-  function lineHitsBox(cx, cy, pad, a, b) {
-    const x1 = cx - pad, y1 = cy - pad, x2 = cx + pad, y2 = cy + pad;
-    let minX = a.x, maxX = b.x;
-    if (a.x > b.x) { minX = b.x; maxX = a.x; }
-    if (maxX > x2) maxX = x2;
-    if (minX < x1) minX = x1;
-    if (minX > maxX) return false;
-    let minY = a.y, maxY = b.y;
-    const dx = b.x - a.x;
-    if (Math.abs(dx) > 1e-7) {
-      const slope = (b.y - a.y) / dx;
-      const intercept = a.y - slope * a.x;
-      minY = slope * minX + intercept;
-      maxY = slope * maxX + intercept;
+  // Does the segment a->b come within `r` of the point (cx, cy)? This is the
+  // engine's one answer to "will they walk into this" and "does this stand
+  // between us".
+  //
+  // It is a radius, not a box. The square this replaced reached its corners at
+  // r * sqrt(2), so a build up to forty per cent further away than it could
+  // possibly touch still read as standing on their path -- and since movement
+  // is the heaviest term in the score, that mis-read was worth a hundred
+  // points to builds that could never catch anybody. Collision in this game is
+  // circle against circle everywhere else; it is circle against circle here.
+  function segHitsDisc(cx, cy, r, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = dx * dx + dy * dy;
+    let px = a.x, py = a.y;
+    if (len > 1e-9) {
+      // Where along the segment the point projects, clamped to its ends so
+      // this measures the segment and not the infinite line through it.
+      let u = ((cx - a.x) * dx + (cy - a.y) * dy) / len;
+      if (u < 0) u = 0;
+      else if (u > 1) u = 1;
+      px = a.x + u * dx;
+      py = a.y + u * dy;
     }
-    if (minY > maxY) { const t = maxY; maxY = minY; minY = t; }
-    if (maxY > y2) maxY = y2;
-    if (minY < y1) minY = y1;
-    return minY <= maxY;
+    return Math.hypot(cx - px, cy - py) <= r;
   }
 
   // The three planning modes. They are not three subsystems -- they are one
@@ -10194,11 +10196,14 @@ window.grbtp = 35;
 
     // Review every open bet against the world as it is now. An entry survives
     // only while what it was betting on is still true.
-    review(tick, target, motion) {
+    // `standing` is what is still on the ground this tick, so a bet can be
+    // checked against the one thing it actually depends on: whether the
+    // blocker it was waiting for came down.
+    review(tick, target, motion, standing = null) {
       const dropped = [];
       for (let i = this._open.length - 1; i >= 0; i--) {
         const h = this._open[i];
-        const why = this._stale(h, tick, target, motion);
+        const why = this._stale(h, tick, target, motion, standing);
         if (why === null) continue;
         h.why = why;
         dropped.push(h);
@@ -10207,9 +10212,18 @@ window.grbtp = 35;
       return dropped;
     }
 
-    _stale(h, tick, target, motion) {
+    _stale(h, tick, target, motion, standing) {
       // The bet ran out.
       if (tick > h.expires) return "expired";
+      // The ground never opened. A preplace is a bet that something comes
+      // down, and its send was timed for the tick after it was planned. If the
+      // blocker is still standing once that send has been and gone, the bet
+      // lost -- and holding the ground for the full ban afterwards means the
+      // one spot worth building on stays reserved for a build that already
+      // failed. Releasing it here lets the next tick either re-bet, if the
+      // thing is still about to break, or build somewhere that works.
+      if (standing !== null && tick > h.placed + 1 && h.cand.blockedBy.length > 0 &&
+          h.cand.blockedBy.some(o => standing.has(o))) return "not-broken";
       // Nobody left to bet on, or a different somebody.
       if (target === null) return "no-target";
       if (h.targetID !== null && target.id !== h.targetID) return "target-changed";
@@ -10409,8 +10423,8 @@ window.grbtp = 35;
     _movement(c, ctx) {
       if (ctx.path === null) return 0;
       const pad = c.role.pins ? c.scale : ctx.enemyScale + c.scale - 1;
-      if (lineHitsBox(c.x, c.y, pad, ctx.path.from, ctx.path.to)) return 1;
-      if (ctx.far !== null && lineHitsBox(c.x, c.y, pad, ctx.path.from, ctx.far)) return .6;
+      if (segHitsDisc(c.x, c.y, pad, ctx.path.from, ctx.path.to)) return 1;
+      if (ctx.far !== null && segHitsDisc(c.x, c.y, pad, ctx.path.from, ctx.far)) return .6;
       return 0;
     }
 
@@ -10441,7 +10455,15 @@ window.grbtp = 35;
       const e = ctx.path.from;
       const d = Math.hypot(c.x - e.x, c.y - e.y);
       const reach = ctx.enemyScale + c.scale;
-      if (d <= 1e-6 || d > reach * 3) return 0;
+      // A door is only a door if they can get to it. How far that is comes
+      // from the measured step and the horizon the rest of the engine already
+      // predicts over -- so a target standing still has no escape circle to
+      // close, and a running one has a wide one. The flat "three times the
+      // build's own reach" this replaced was tied to nothing: it paid for
+      // builds a hundred and fifty units behind a stationary enemy, on every
+      // tick, in every fight.
+      const step = Math.hypot(ctx.path.to.x - e.x, ctx.path.to.y - e.y);
+      if (d <= 1e-6 || d > reach + step * TRAP_LOOKAHEAD_TICKS) return 0;
       // Half-angle the build hides behind itself, from where they stand.
       const half = Math.asin(Math.min(1, reach / Math.max(d, reach)));
       const bearing = Math.atan2(c.y - e.y, c.x - e.x);
@@ -10467,7 +10489,7 @@ window.grbtp = 35;
           const tipX = ctx.path.to.x + 200 * Math.cos(kb);
           const tipY = ctx.path.to.y + 200 * Math.sin(kb);
           for (const s of ctx.ourSpikes) {
-            if (lineHitsBox(s.pos.current.x, s.pos.current.y, s.scale, ctx.path.to, { x: tipX, y: tipY })) return 1;
+            if (segHitsDisc(s.pos.current.x, s.pos.current.y, s.scale, ctx.path.to, { x: tipX, y: tipY })) return 1;
           }
         }
         // Or the spike that lands against the trap already holding them.
@@ -10541,9 +10563,29 @@ window.grbtp = 35;
         timing: this._timing(c)
       };
       c.terms = t;
-      c.score = t.movement * w.movement + t.tactical * w.tactical + t.enclosure * w.enclosure +
-                t.followUp * w.followUp + t.distance * w.distance + t.safety * w.safety +
-                t.packet * w.packet + t.timing * w.timing;
+
+      // Reach and fit are not the same question, and adding them together was
+      // wrong. Reach is whether this build touches the fight at all: standing
+      // where they will be, closing a door they could leave by, or simply
+      // being near enough to matter. Fit is how good a build it is -- the
+      // right kind for the moment, setting up the next action, packed against
+      // something rather than loose.
+      //
+      // Fit therefore multiplies reach instead of adding to it. A perfectly
+      // shaped trap on ground nobody will cross is not worth a packet, and
+      // while the two were summed, tactical fit alone (a trap on a free enemy
+      // scores .7 of 45) carried an off-target build over the minimum on every
+      // tick of every fight -- measured at roughly two thirds of everything
+      // sent.
+      const reach = Math.max(t.movement, t.enclosure, t.distance);
+      const fit = t.tactical * w.tactical + t.followUp * w.followUp + Math.max(0, t.safety) * w.safety;
+      // The one part of fit that is not conditional: a build standing in my own
+      // corridor costs me the fight whatever else it does, so that penalty is
+      // never scaled down by a weak reading.
+      const hazard = Math.min(0, t.safety) * w.safety;
+
+      c.score = t.movement * w.movement + t.enclosure * w.enclosure + t.distance * w.distance +
+                reach * fit + hazard + t.packet * w.packet + t.timing * w.timing;
       return c.score;
     }
 
@@ -10780,7 +10822,14 @@ window.grbtp = 35;
     // the cap may have filled, the resources may have gone, and somebody may
     // have built on the ground while the timer ran. The cheapest refused build
     // is the one that was never sent.
-    valid(cand) {
+    // `spare` is what this build is deliberately waiting on. A preplace is
+    // aimed at ground that is still occupied by something about to fall -- it
+    // is supposed to be blocked right now, and that is the whole point of it.
+    // Checking it against the world without that exemption rejects every
+    // preplace ever planned, which is exactly what happened until this was
+    // written: the mechanism produced candidates, the planner chose them, and
+    // not one of them ever reached the wire.
+    valid(cand, spare = null) {
       const myPlayer = this.client.myPlayer;
       if (!myPlayer || !myPlayer.inGame) return false;
       if (!myPlayer.canPlace(cand.role.itemType)) return false;
@@ -10790,6 +10839,7 @@ window.grbtp = 35;
       OM.grid2D.query(cand.x, cand.y, 1, id => {
         const obj = OM.objects.get(id);
         if (!obj) return false;
+        if (spare !== null && spare.includes(obj)) return false;
         if (Math.hypot(cand.x - obj.pos.current.x, cand.y - obj.pos.current.y) < cand.scale + obj.placementScale) {
           clear = false;
           return true;
@@ -10967,7 +11017,7 @@ window.grbtp = 35;
       // Review the standing bets before planning anything new. A preplace aimed
       // along a heading they have since abandoned is not a plan, it is a
       // reservation on ground nobody is walking to.
-      this.book.review(c.tick, c.enemy, this.threat.motion);
+      this.book.review(c.tick, c.enemy, this.threat.motion, new Set(c.nearby));
 
       c.motion = this.threat.motion;
       c.far = this.threat.project(TRAP_LOOKAHEAD_TICKS);
@@ -11062,7 +11112,7 @@ window.grbtp = 35;
     resolve(cycle) {
       const c = cycle;
       const pool = c.ctx.gates.spikeFallback ? c.all
-        : c.all.filter(x => x.role.pins || x.terms.intercept > 0 || x.origin === RYN_PLACE_ORIGIN.FLUSH || x.mode === RYN_PLACE_MODE.REPLACE);
+        : c.all.filter(x => x.role.pins || x.terms.movement > 0 || x.origin === RYN_PLACE_ORIGIN.FLUSH || x.mode === RYN_PLACE_MODE.REPLACE);
       c.capped = (itemId, freed) => {
         const group = Items[itemId].itemGroup;
         const { count: count, limit: limit } = c.myPlayer.getItemCount(group);
@@ -11104,7 +11154,7 @@ window.grbtp = 35;
         .sort((a, b) => b.score - a.score);
 
       for (const cand of c.chosen) {
-        if (this.executor.valid(cand) && !this.conflict.collides(cand, kept)) {
+        if (this.executor.valid(cand, cand.blockedBy) && !this.conflict.collides(cand, kept)) {
           kept.push(cand);
           continue;
         }
@@ -11117,7 +11167,7 @@ window.grbtp = 35;
           if (c.capped(alt.itemId, alt.blockedBy)) continue;
           if (this.memory.blocked(alt.x, alt.y)) continue;
           if (this.book.holds(alt)) continue;
-          if (!this.executor.valid(alt)) continue;
+          if (!this.executor.valid(alt, alt.blockedBy)) continue;
           taken = alt;
           spare.splice(i, 1);
           break;
