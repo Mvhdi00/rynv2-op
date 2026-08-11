@@ -2744,7 +2744,7 @@ window.grbtp = 35;
           trappedNow = true;
         }
       }
-      const tick = this.client._Core?.tickCount ?? 0;
+      const tick = this.client.services.clock?.tick ?? 0;
       if (trappedNow) {
         target._lockedByMeUntil = tick + 4;
         return true;
@@ -2791,7 +2791,7 @@ window.grbtp = 35;
       target.isTrapped = false;
       target.trappedInPrev = target.trappedIn;
       target.trappedIn = null;
-      const {ObjectManager: ObjectManager, PlayerManager: PlayerManager, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
+      const {ObjectManager: ObjectManager, PlayerManager: PlayerManager, myPlayer: myPlayer, services: ryn} = this.client;
       const pos1 = myPlayer.pos.current;
       const pos2 = target.pos.current;
       const distanceToTarget = pos1.distance(pos2);
@@ -2839,14 +2839,14 @@ window.grbtp = 35;
           myPlayer.teleported = true;
         }
         if (isPlayerObject && object.isDestroyable) {
-          if (object.destroyingTick !== ModuleHandler.tickCount) {
+          if (object.destroyingTick !== ryn.clock.tick) {
             object.canBeDestroyed = false;
             object.tempHealth = object.health;
           }
           const damage = target.getMaxBuildingDamage(object, true);
           const canSee = !isEnemyObject || object.type !== 15 || isEnemyObject && object.type === 15 && object.trapActivated;
           if (damage !== null && canSee) {
-            object.destroyingTick = ModuleHandler.tickCount;
+            object.destroyingTick = ryn.clock.tick;
             object.tempHealth -= damage;
             if (object.tempHealth <= 0) {
               object.canBeDestroyed = true;
@@ -3042,18 +3042,18 @@ window.grbtp = 35;
       this.handleNearestDangerAnimal(animal);
     }
     attemptSpikePlacement() {
-      const {_Core: ModuleHandler} = this.client;
+      const {services: ryn} = this.client;
       const placementAngles = this.nearestSpikePlacerAngle;
       if (placementAngles === null) {
         return;
       }
       const itemType = 4;
       for (const angle of placementAngles) {
-        ModuleHandler.place(itemType, angle);
+        ryn.actions.place(itemType, angle);
       }
-      ModuleHandler.placedOnce = true;
-      ModuleHandler.placeAngles[0] = itemType;
-      ModuleHandler.placeAngles[1] = placementAngles;
+      ryn.ledger.placedOnce = true;
+      ryn.ledger.placeAngles[0] = itemType;
+      ryn.ledger.placeAngles[1] = placementAngles;
     }
     handleEnemies(enemies) {
       this.reset();
@@ -4344,11 +4344,11 @@ window.grbtp = 35;
       ctx.fillStyle = "#91b2db";
       const startY = (Config_ref.mapScale / 2 - Config_ref.riverWidth / 2) / Config_ref.mapScale * height;
       ctx.fillRect(0, startY, width, Config_ref.riverWidth / Config_ref.mapScale * height);
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = client;
+      const {services: ryn, myPlayer: myPlayer} = client;
       ctx.globalAlpha = 1;
       const markSize = 8;
-      if (ModuleHandler.followPath) {
-        const pos = ModuleHandler.endTarget.copy().div(Config_ref.mapScale).mult(width);
+      if (ryn.motion.followPath) {
+        const pos = ryn.motion.endTarget.copy().div(Config_ref.mapScale).mult(width);
         ctx.fillStyle = "#c2383d";
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, markSize, 0, 2 * Math.PI);
@@ -5171,8 +5171,8 @@ window.grbtp = 35;
       if (!Settings_ref._possiblePlacement) {
         return;
       }
-      const {myPlayer: myPlayer, _Core: ModuleHandler} = client;
-      const [type, angles] = ModuleHandler.placeAngles;
+      const {myPlayer: myPlayer, services: ryn} = client;
+      const [type, angles] = ryn.ledger.placeAngles;
       if (type === null || angles === null) {
         return;
       }
@@ -5209,7 +5209,7 @@ window.grbtp = 35;
     }
     drawDanger(ctx, entity) {}
     _render(ctx, entity, player) {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _Core: ModuleHandler, ObjectManager: ObjectManager, InputHandler: InputHandler} = client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, services: ryn, ObjectManager: ObjectManager, InputHandler: InputHandler} = client;
       const isMyPlayer = entity === player;
       const pos = new Vector_ref(entity.x, entity.y);
       if (isMyPlayer) {
@@ -5222,7 +5222,7 @@ window.grbtp = 35;
         this.drawWeaponHitbox(ctx, player);
         this.drawPlacement(ctx);
         {
-          const autoPushModule = client._Core.unitTable.autoPush;
+          const autoPushModule = client.services.features.units.autoPush;
           const pushPos = autoPushModule ? autoPushModule.pushPos : null;
           const nearestPushSpike = client.EnemyManager.nearestPushSpike;
           if (pushPos !== null && nearestPushSpike !== null) {
@@ -5242,7 +5242,7 @@ window.grbtp = 35;
             const shield = client.PlayerManager.lookingShield(enemy, myPlayer);
             const pdmg = myPlayer.getMaxWeaponDamage(primary, shield);
             const sdmg = secondary !== null ? myPlayer.getMaxWeaponDamage(secondary, shield) : 0;
-            const tbonus = ModuleHandler.canBuy(0, 53) ? 25 : 0;
+            const tbonus = ryn.loadout.canBuy(0, 53) ? 25 : 0;
             const canKill = pdmg + sdmg + tbonus >= enemy.currentHealth;
             const canReach = dist - 300 <= baseRange && dist <= 480;
             const ready = canReach && canKill;
@@ -5299,7 +5299,7 @@ window.grbtp = 35;
       const instakillTarget = InputHandler.instakillTarget;
       if (entity.isPlayer && instakillTarget !== null && entity.sid === instakillTarget.id) {
         Renderer_ref.drawTarget(ctx, entity);
-        const {bowInsta: bowInsta} = ModuleHandler.unitTable;
+        const {bowInsta: bowInsta} = ryn.features.units;
         if (bowInsta.active) {
           Renderer_ref.circle(ctx, entity.x, entity.y, bowInsta.distMin, "#eda0ee", .4, 1);
           Renderer_ref.circle(ctx, entity.x, entity.y, bowInsta.distMax, "#eda0ee", .4, 1);
@@ -5534,7 +5534,7 @@ window.grbtp = 35;
     getBestPlacementAngles(options) {
       const {position: position, id: id, targetAngle: targetAngle, ignoreID: ignoreID, reduce: reduce, preplace: preplace, fill: fill} = options;
       const item = DataHandler_ref.getItem(id);
-      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, services: ryn} = this.client;
       const length = myPlayer.getItemPlaceScale(id);
       const angles = [];
       this.grid2D.query(position.x, position.y, 1, id2 => {
@@ -5572,10 +5572,10 @@ window.grbtp = 35;
       }
       let anglesSorted = finalAngles.sort(Sorting_ref.byAngleDistance(targetAngle));
       if (reduce) {
-        if (!DataHandler_ref.canMoveOnTop(id) && ModuleHandler.move_dir !== null && myPlayer.speed !== 0) {
+        if (!DataHandler_ref.canMoveOnTop(id) && ryn.motion.move_dir !== null && myPlayer.speed !== 0) {
           const scale = item.scale;
           const offset = Math.asin(2 * scale / (2 * length));
-          anglesSorted = anglesSorted.filter(angle => getAngleDist(angle, ModuleHandler.move_dir) > offset);
+          anglesSorted = anglesSorted.filter(angle => getAngleDist(angle, ryn.motion.move_dir) > offset);
         }
         return anglesSorted.slice(0, PLACE_ATTEMPTS);
       }
@@ -6155,7 +6155,7 @@ window.grbtp = 35;
       this.xVel = 0;
       this.yVel = 0;
       const speed = client2.myPlayer.speed / this.TICK;
-      const moveDir = dir ?? client2._Core.move_dir;
+      const moveDir = dir ?? client2.services.motion.move_dir;
       if (moveDir !== null) {
         this.xVel = Math.cos(moveDir) * speed;
         this.yVel = Math.sin(moveDir) * speed;
@@ -6228,8 +6228,8 @@ window.grbtp = 35;
       if (this.slowMult < 1) {
         this.slowMult = Math.min(1, this.slowMult + 8e-4 * delta);
       }
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = client2;
-      const {autoHat: autoHat} = ModuleHandler.unitTable;
+      const {services: ryn, myPlayer: myPlayer} = client2;
+      const {autoHat: autoHat} = ryn.features.units;
       const pos = this.getPos();
       const skin = Hats[autoHat.getNextHat()];
       const tail = Accessories[autoHat.getNextAcc()];
@@ -6257,7 +6257,7 @@ window.grbtp = 35;
             this.xVel += Config_ref.waterCurrent * delta;
           }
         }
-        const moveDir = client2._Core.move_dir;
+        const moveDir = client2.services.motion.move_dir;
         let xDir = !notMoving && moveDir !== null ? Math.cos(moveDir) : 0;
         let yDir = !notMoving && moveDir !== null ? Math.sin(moveDir) : 0;
         const len = Math.sqrt(xDir * xDir + yDir * yDir);
@@ -6400,7 +6400,7 @@ window.grbtp = 35;
       const isHammer = secondaryID === 10;
       const notStick = primary.damage !== 1;
       const notPolearm = primaryID !== 5;
-      const {reloading: reloading} = this.client._Core.unitTable;
+      const {reloading: reloading} = this.client.services.features.units;
       const primaryDamage = this.getBuildingDamage(primaryID, false);
       if (isHammer && notStick && notPolearm && (!reloading.isReloaded(1) || reloading.isFasterThan(0, 1)) && reloading.isReloaded(0) && target != null && primaryDamage >= target.health) {
         return 0;
@@ -6500,7 +6500,7 @@ window.grbtp = 35;
         this.onFirstTickAfterSpawn();
         this.client.runtime.spawned();
       }
-      const {_Core: ModuleHandler, PlayerManager: PlayerManager} = this.client;
+      const {PlayerManager: PlayerManager} = this.client;
       this.killedSomeone = false;
       this.actuallyKilledSomeone = false;
       if (this.totalKills > this.prevKills) {
@@ -6510,7 +6510,7 @@ window.grbtp = 35;
           this.actuallyKilledSomeone = true;
         }
       }
-      ModuleHandler.runTick();
+      this.client.runtime.scheduler.tick(this.client);
     }
     updateHealth(health) {
       if (!this.inGame) {
@@ -6521,8 +6521,8 @@ window.grbtp = 35;
         return;
       }
       if (health < 100) {
-        const {_Core: ModuleHandler} = this.client;
-        ModuleHandler.unitTable.shameReset.healthUpdate();
+        const {services: ryn} = this.client;
+        ryn.features.units.shameReset.healthUpdate();
       }
     }
     playerInit(id) {
@@ -6533,17 +6533,18 @@ window.grbtp = 35;
       }
     }
     onFirstTickAfterSpawn() {
-      const {_Core: ModuleHandler, isOwner: isOwner} = this.client;
-      const {mouse: mouse, unitTable: unitTable} = ModuleHandler;
-      ModuleHandler._equip(0, 0);
-      ModuleHandler.updateAngle(mouse.sentAngle, true);
+      const {services: ryn, isOwner: isOwner} = this.client;
+      const mouse = ryn.actions.mouse;
+      const unitTable = ryn.features.units;
+      ryn.loadout.equip(0, 0);
+      ryn.actions.updateAngle(mouse.sentAngle, true);
       if (!isOwner) {
         const owner = this.client.ownerClient;
         UI_ref.updateBotOption(this.client, "title");
         owner.clientIDList.add(this.id);
-        unitTable.tempData.setAttacking(owner._Core.attacking);
-        unitTable.tempData.setStore(0, owner._Core.store[0].actual);
-        unitTable.tempData.setStore(1, owner._Core.store[1].actual);
+        unitTable.tempData.setAttacking(owner.services.actions.attacking);
+        unitTable.tempData.setStore(0, owner.services.loadout.store[0].actual);
+        unitTable.tempData.setStore(1, owner.services.loadout.store[1].actual);
       }
     }
     playerSpawn() {
@@ -6582,7 +6583,7 @@ window.grbtp = 35;
         const id = this.client.ownerClient.myPlayer.upgradeOrder[this.upgradeIndex];
         if (id !== void 0 && ids.includes(id)) {
           this.upgradeIndex += 1;
-          this.client._Core._upgradeItem(id);
+          this.client.services.loadout.upgradeItem(id);
         }
       }
     }
@@ -6716,8 +6717,7 @@ window.grbtp = 35;
       this.resetResources();
       this.resetInventory();
       this.resetWeaponXP();
-      const {_Core: ModuleHandler, PlayerManager: PlayerManager} = this.client;
-      ModuleHandler.reset();
+      const {PlayerManager: PlayerManager} = this.client;
       this.client.runtime.died();
       this.inGame = false;
       this.wasDead = true;
@@ -6905,8 +6905,7 @@ window.grbtp = 35;
       }
     }
     runTick(bid) {
-      const {EnemyManager: EnemyManager2, ProjectileManager: ProjectileManager, ObjectManager: ObjectManager2, myPlayer: myPlayer, isOwner: isOwner, _Core: ModuleHandler} = this.client;
-      ModuleHandler.moduleStart = performance.now();
+      const {EnemyManager: EnemyManager2, ProjectileManager: ProjectileManager, ObjectManager: ObjectManager2, myPlayer: myPlayer, isOwner: isOwner, services: ryn} = this.client;
       if (myPlayer && myPlayer.inGame) {
         const fut = myPlayer.pos.future;
         ObjectManager2.grid2D.query(fut.x, fut.y, 3, objId => {
@@ -6981,11 +6980,11 @@ window.grbtp = 35;
       if (weapon !== 11) {
         return false;
       }
-      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, services: ryn} = this.client;
       const pos1 = owner.pos.current;
       const pos2 = target.pos.current;
       const angle = pos1.angle(pos2);
-      const ownerAngle = myPlayer.isMyPlayerByID(owner.id) ? ModuleHandler.mouse.sentAngle : owner.angle;
+      const ownerAngle = myPlayer.isMyPlayerByID(owner.id) ? ryn.actions.mouse.sentAngle : owner.angle;
       return getAngleDist(angle, ownerAngle) <= Config_ref.shieldAngle;
     }
   }
@@ -7164,7 +7163,7 @@ window.grbtp = 35;
       img.src = `./img/${src.join("_")}.png`;
       const equipButton = div.querySelector(".equipButton");
       equipButton.onmousedown = () => {
-        client._Core._equip(type, id, true, true);
+        client.services.loadout.equip(type, id, true, true);
       };
       return div.firstElementChild;
     }
@@ -7254,7 +7253,7 @@ window.grbtp = 35;
     init(socket) {
       this.socket = socket;
       this.client.transport.attach(socket);
-      this.client.netBudget.limit = this.client._Core.packetLimit;
+      this.client.netBudget.limit = this.client.services.network.packetLimit;
       this.client.netBudget.start();
       this.client.runtime.boot();
       this.client.runtime.attach();
@@ -7298,7 +7297,7 @@ window.grbtp = 35;
       this.client.net.incoming(packet);
       const decoded = packet.raw;
       const temp = [ packet.type, ...packet.args ];
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _Core: ModuleHandler, PlayerManager: PlayerManager2, ObjectManager: ObjectManager2, ProjectileManager: ProjectileManager2, LeaderboardManager: LeaderboardManager2, PacketManager: PacketManager2} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, services: ryn, PlayerManager: PlayerManager2, ObjectManager: ObjectManager2, ProjectileManager: ProjectileManager2, LeaderboardManager: LeaderboardManager2, PacketManager: PacketManager2} = this.client;
       switch (temp[0]) {
        case "0":
         this.handlePing();
@@ -7530,7 +7529,7 @@ window.grbtp = 35;
           const action = temp[1] === 0 ? 1 : 0;
           StoreHandler_ref.updateStoreState(temp[3], action, temp[2]);
           if (temp[1] === 0) {
-            const boughtStorage = ModuleHandler.bought[temp[3]];
+            const boughtStorage = ryn.loadout.bought[temp[3]];
             if (boughtStorage !== void 0) {
               boughtStorage.add(temp[2]);
             }
@@ -7740,11 +7739,11 @@ window.grbtp = 35;
       const item = this.client.myPlayer.getItemByType(type);
       if (item !== null) {
         this.hotkeys.set(code, type);
-        this.client._Core.startPlacement(type);
+        this.client.services.loadout.startPlacement(type);
       }
       if (isOwner) {
         for (const client2 of clients) {
-          client2._Core.startPlacement(type);
+          client2.services.loadout.startPlacement(type);
         }
       }
     }
@@ -7767,9 +7766,9 @@ window.grbtp = 35;
       if (Settings_ref._followCursor) {
         return this.cursorPosition(true);
       }
-      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
-      if (ModuleHandler.move_dir !== null) {
-        return myPlayer.pos.current.addDirection(ModuleHandler.move_dir, Settings_ref._movementRadius);
+      const {myPlayer: myPlayer, services: ryn} = this.client;
+      if (ryn.motion.move_dir !== null) {
+        return myPlayer.pos.current.addDirection(ryn.motion.move_dir, Settings_ref._movementRadius);
       }
       return myPlayer.pos.future;
     }
@@ -7783,13 +7782,13 @@ window.grbtp = 35;
     }
     handleMovement() {
       const angle = getAngleFromBitmask(this.move, false);
-      this.client._Core.startMovement(angle);
+      this.client.services.motion.start(angle);
       const {isOwner: isOwner, clients: clients} = this.client;
     }
     toggleRotation() {
       this.rotation = !this.rotation;
       if (this.rotation) {
-        this.client._Core._currentAngle = this.mouse.angle;
+        this.client.services.actions.currentAngle = this.mouse.angle;
       }
     }
     handleKeydown(event) {
@@ -7825,7 +7824,7 @@ window.grbtp = 35;
       if (isInput) {
         return;
       }
-      const {_Core: ModuleHandler} = this.client;
+      const {services: ryn} = this.client;
       if (event.code === Settings_ref._food) {
         this.placementHandler(2, event.code);
       }
@@ -7867,7 +7866,7 @@ window.grbtp = 35;
         this.handleMovement();
       }
       if (event.code === Settings_ref._autoattack) {
-        ModuleHandler.toggleAutoattack();
+        ryn.actions.toggleAutoattack();
       }
       if (event.code === Settings_ref._lockrotation) {
         this.toggleRotation();
@@ -7886,15 +7885,15 @@ window.grbtp = 35;
           if (_afIsOwner) {
             let _afIndex = 0;
             for (const _afBot of _afClients) {
-              if (_afBot._Core) {
-                _afBot._Core._autoFarmActive = Settings_ref._botAutoFarmEnabled;
-                _afBot._Core._autoFarmTarget = null;
-                _afBot._Core._autoFarmWander = null;
+              if (_afBot.services) {
+                _afBot.services.bot.farmActive = Settings_ref._botAutoFarmEnabled;
+                _afBot.services.bot.farmTarget = null;
+                _afBot.services.bot.farmWander = null;
                 try {
-                  _rynSetAttackingStaggered(_afBot._Core, Settings_ref._botAutoAttackEnabled ? 1 : 0, _afIndex);
+                  _rynSetAttackingStaggered(_afBot.services, Settings_ref._botAutoAttackEnabled ? 1 : 0, _afIndex);
                 } catch (_) {}
                 if (!Settings_ref._botAutoFarmEnabled) {
-                  _afBot._Core.startMovement(null);
+                  _afBot.services.motion.start(null);
                 }
               }
               _afIndex++;
@@ -7908,7 +7907,7 @@ window.grbtp = 35;
         if (isOwner2) {
           let _baIndex = 0;
           for (const bot2 of clients2) {
-            _rynSetAttackingStaggered(bot2._Core, Settings_ref._botAutoAttackEnabled ? 1 : 0, _baIndex);
+            _rynSetAttackingStaggered(bot2.services, Settings_ref._botAutoAttackEnabled ? 1 : 0, _baIndex);
             _baIndex++;
           }
         }
@@ -7948,18 +7947,18 @@ window.grbtp = 35;
           const {isOwner: isOwner2, clients: clients2} = this.client;
           if (isOwner2) {
             for (const bot2 of clients2) {
-              const mh = bot2._Core;
+              const mh = bot2.services;
               if (mh) {
-                mh._repelActive = !mh._repelActive;
-                if (mh._repelActive) {
+                mh.bot.repelActive = !mh.bot.repelActive;
+                if (mh.bot.repelActive) {
                   const ownerPos = this.client.myPlayer.pos.current;
                   const botPos = bot2.myPlayer.pos.current;
                   const dx = botPos.x - ownerPos.x;
                   const dy = botPos.y - ownerPos.y;
                   const awayAngle = Math.atan2(dy, dx);
-                  mh.startMovement(awayAngle);
+                  mh.motion.start(awayAngle);
                 } else {
-                  mh.startMovement(null);
+                  mh.motion.start(null);
                 }
               }
             }
@@ -7972,14 +7971,14 @@ window.grbtp = 35;
           if (_fbIsOwner) {
             Settings_ref._botsFrozen = !Settings_ref._botsFrozen;
             for (const _fbBot of _fbClients) {
-              const _fbMH = _fbBot._Core;
+              const _fbMH = _fbBot.services;
               if (!_fbMH) continue;
               if (Settings_ref._botsFrozen) {
-                _fbMH.move_dir = null;
-                _fbMH.startMovement(null, true);
+                _fbMH.motion.move_dir = null;
+                _fbMH.motion.start(null, true);
                 _fbBot.PacketManager.move(null);
                 try {
-                  const _fbMov = _fbMH.modules && _fbMH.modules.find(m => m.unitID === "movement");
+                  const _fbMov = _fbBot.services.features.units.movement;
                   if (_fbMov) _fbMov.isStopped = true;
                 } catch (_) {}
               }
@@ -7992,30 +7991,30 @@ window.grbtp = 35;
           const {isOwner: _sbIsOwner, clients: _sbClients} = this.client;
           if (_sbIsOwner) {
             const _sbFirst = [ ..._sbClients ][0];
-            const _sbCurrentlyActive = _sbFirst && _sbFirst._Core && _sbFirst._Core._scatterActive;
+            const _sbCurrentlyActive = _sbFirst && _sbFirst.services && _sbFirst.services.bot.scatterActive;
             if (_sbCurrentlyActive) {
               for (const _sbBot of _sbClients) {
-                const _sbMH = _sbBot._Core;
+                const _sbMH = _sbBot.services;
                 if (!_sbMH) continue;
-                _sbMH._scatterActive = false;
-                _sbMH._scatterDest = null;
-                _sbMH._scatterReturning = true;
-                _sbMH._scatterBreaking = false;
-                _sbMH._scatterBreakTarget = null;
-                _sbMH._scatterNextDecisionTime = 0;
+                _sbMH.bot.scatterActive = false;
+                _sbMH.bot.scatterDest = null;
+                _sbMH.bot.scatterReturning = true;
+                _sbMH.bot.scatterBreaking = false;
+                _sbMH.bot.scatterBreakTarget = null;
+                _sbMH.bot.scatterNextDecisionTime = 0;
               }
             } else {
               for (const _sbBot of _sbClients) {
-                const _sbMH = _sbBot._Core;
+                const _sbMH = _sbBot.services;
                 if (!_sbMH) continue;
-                _sbMH._scatterActive = true;
-                _sbMH._scatterReturning = false;
-                _sbMH._scatterBreaking = false;
-                _sbMH._scatterBreakTarget = null;
-                _sbMH._scatterLastMoveAngle = null;
-                _sbMH._scatterNextDecisionTime = 0;
-                _sbMH._scatterLastPos = null;
-                _sbMH._scatterStuckStrikes = 0;
+                _sbMH.bot.scatterActive = true;
+                _sbMH.bot.scatterReturning = false;
+                _sbMH.bot.scatterBreaking = false;
+                _sbMH.bot.scatterBreakTarget = null;
+                _sbMH.bot.scatterLastMoveAngle = null;
+                _sbMH.bot.scatterNextDecisionTime = 0;
+                _sbMH.bot.scatterLastPos = null;
+                _sbMH.bot.scatterStuckStrikes = 0;
               }
             }
           }
@@ -8036,42 +8035,42 @@ window.grbtp = 35;
       }
       if (event.code === Settings_ref._fourSpikes) {
         try {
-          const mh = this.client._Core;
-          const base = mh._currentAngle;
-          mh.place(4, base);
-          mh.place(4, base + toRadians(90));
-          mh.place(4, base + toRadians(180));
-          mh.place(4, base + toRadians(270));
+          const mh = this.client.services;
+          const base = mh.actions.currentAngle;
+          mh.actions.place(4, base);
+          mh.actions.place(4, base + toRadians(90));
+          mh.actions.place(4, base + toRadians(180));
+          mh.actions.place(4, base + toRadians(270));
           if (this.client.isOwner) {
             for (const bot2 of this.client.clients) {
-              const bmh = bot2._Core;
+              const bmh = bot2.services;
               if (!bmh) continue;
-              const ba = bmh._currentAngle;
-              bmh.place(4, ba);
-              bmh.place(4, ba + toRadians(90));
-              bmh.place(4, ba + toRadians(180));
-              bmh.place(4, ba + toRadians(270));
+              const ba = bmh.actions.currentAngle;
+              bmh.actions.place(4, ba);
+              bmh.actions.place(4, ba + toRadians(90));
+              bmh.actions.place(4, ba + toRadians(180));
+              bmh.actions.place(4, ba + toRadians(270));
             }
           }
         } catch (_) {}
       }
       if (event.code === Settings_ref._fourTraps) {
         try {
-          const mh = this.client._Core;
-          const base = mh._currentAngle;
-          mh.place(7, base);
-          mh.place(7, base + toRadians(90));
-          mh.place(7, base + toRadians(180));
-          mh.place(7, base + toRadians(270));
+          const mh = this.client.services;
+          const base = mh.actions.currentAngle;
+          mh.actions.place(7, base);
+          mh.actions.place(7, base + toRadians(90));
+          mh.actions.place(7, base + toRadians(180));
+          mh.actions.place(7, base + toRadians(270));
           if (this.client.isOwner) {
             for (const bot2 of this.client.clients) {
-              const bmh = bot2._Core;
+              const bmh = bot2.services;
               if (!bmh) continue;
-              const ba = bmh._currentAngle;
-              bmh.place(7, ba);
-              bmh.place(7, ba + toRadians(90));
-              bmh.place(7, ba + toRadians(180));
-              bmh.place(7, ba + toRadians(270));
+              const ba = bmh.actions.currentAngle;
+              bmh.actions.place(7, ba);
+              bmh.actions.place(7, ba + toRadians(90));
+              bmh.actions.place(7, ba + toRadians(180));
+              bmh.actions.place(7, ba + toRadians(270));
             }
           }
         } catch (_) {}
@@ -8092,7 +8091,7 @@ window.grbtp = 35;
       }
       if (Settings_ref._autoGrindKey && event.code === Settings_ref._autoGrindKey) {
         try {
-          const grindMod = window.client?._Core?.unitTable?.autoGrind;
+          const grindMod = window.client.services.features?.units?.autoGrind;
           if (Settings_ref._autoGrind || !grindMod || !grindMod.isFullyUpgraded()) {
             Settings_ref._autoGrind = !Settings_ref._autoGrind;
             const grindEl = UI_ref.frame && UI_ref.frame.document && UI_ref.frame.document.getElementById("_autoGrind");
@@ -8108,19 +8107,19 @@ window.grbtp = 35;
       }
       if (event.code === Settings_ref._boostSpikes) {
         try {
-          const mh = this.client._Core;
-          const angle = mh._currentAngle;
-          mh.place(7, angle);
-          mh.place(4, angle + toRadians(90));
-          mh.place(4, angle - toRadians(90));
+          const mh = this.client.services;
+          const angle = mh.actions.currentAngle;
+          mh.actions.place(7, angle);
+          mh.actions.place(4, angle + toRadians(90));
+          mh.actions.place(4, angle - toRadians(90));
           if (this.client.isOwner) {
             for (const bot2 of this.client.clients) {
-              const bmh = bot2._Core;
+              const bmh = bot2.services;
               if (!bmh) continue;
-              const ba = bmh._currentAngle;
-              bmh.place(7, ba);
-              bmh.place(4, ba + toRadians(90));
-              bmh.place(4, ba - toRadians(90));
+              const ba = bmh.actions.currentAngle;
+              bmh.actions.place(7, ba);
+              bmh.actions.place(4, ba + toRadians(90));
+              bmh.actions.place(4, ba - toRadians(90));
             }
           }
         } catch (_) {}
@@ -8130,7 +8129,7 @@ window.grbtp = 35;
       }
     }
     handleKeyup(event) {
-      const {myPlayer: myPlayer, _Core: ModuleHandler, isOwner: isOwner, clients: clients} = this.client;
+      const {myPlayer: myPlayer, services: ryn, isOwner: isOwner, clients: clients} = this.client;
       if (!myPlayer.inGame) {
         return;
       }
@@ -8150,13 +8149,13 @@ window.grbtp = 35;
       if (copyMove !== this.move) {
         this.handleMovement();
       }
-      if (ModuleHandler.currentType !== null && this.hotkeys.delete(event.code)) {
+      if (ryn.loadout.currentType !== null && this.hotkeys.delete(event.code)) {
         const entry = [ ...this.hotkeys ].pop();
         const type = entry !== void 0 ? entry[1] : null;
-        ModuleHandler.startPlacement(type);
+        ryn.loadout.startPlacement(type);
         if (isOwner) {
           for (const client2 of clients) {
-            client2._Core.startPlacement(type);
+            client2.services.loadout.startPlacement(type);
           }
         }
       }
@@ -8170,15 +8169,15 @@ window.grbtp = 35;
         this.instaToggle = !this.instaToggle;
         return;
       }
-      const {isOwner: isOwner, clients: clients, _Core: ModuleHandler} = this.client;
+      const {isOwner: isOwner, clients: clients, services: ryn} = this.client;
       const state = button === "LBTN" ? 1 : button === "RBTN" ? 2 : null;
-      if (state !== null && ModuleHandler.attacking === 0) {
-        ModuleHandler.attacking = state;
-        ModuleHandler.attackingState = state;
+      if (state !== null && ryn.actions.attacking === 0) {
+        ryn.actions.attacking = state;
+        ryn.actions.attackingState = state;
         if (isOwner) {
           let _mdIndex = 0;
           for (const client2 of clients) {
-            _rynSetAttackingStaggered(client2._Core, state, _mdIndex);
+            _rynSetAttackingStaggered(client2.services, state, _mdIndex);
             _mdIndex++;
           }
         }
@@ -8186,16 +8185,16 @@ window.grbtp = 35;
     }
     handleMouseup(event) {
       const button = formatButton(event.button);
-      const {isOwner: isOwner, clients: clients, _Core: ModuleHandler} = this.client;
-      if ((button === "LBTN" || button === "RBTN") && ModuleHandler.attacking !== 0) {
-        if (!ModuleHandler.autoattack) {
-          ModuleHandler.attacking = 0;
+      const {isOwner: isOwner, clients: clients, services: ryn} = this.client;
+      if ((button === "LBTN" || button === "RBTN") && ryn.actions.attacking !== 0) {
+        if (!ryn.actions.autoattack) {
+          ryn.actions.attacking = 0;
         }
         if (isOwner) {
           for (const client2 of clients) {
             const _squadBlocked = typeof _isControlled === "function" && !_isControlled(client2);
             if (!Settings_ref._botAutoAttackEnabled || _squadBlocked) {
-              client2._Core.unitTable.tempData.setAttacking(0);
+              client2.services.features.units.tempData.setAttacking(0);
             }
           }
         }
@@ -8209,15 +8208,17 @@ window.grbtp = 35;
       if (this.rotation) {
         this.mouse.x = x;
         this.mouse.y = y;
-        this.client._Core._currentAngle = angle;
+        this.client.services.actions.currentAngle = angle;
       }
     }
   }
-  function _rynSetAttackingStaggered(mh, state, index, stepMs = null) {
-    if (!mh || !mh.unitTable || !mh.unitTable.tempData) return;
-    if (state !== 0 && mh.attacking === state) return;
+  // Takes the target client's services rather than its handler: the only thing
+  // it needs is that client's tempData unit and its current attack state.
+  function _rynSetAttackingStaggered(svc, state, index, stepMs = null) {
+    if (!svc || !svc.features || !svc.features.units.tempData) return;
+    if (state !== 0 && svc.actions.attacking === state) return;
     try {
-      mh.unitTable.tempData.setAttacking(state);
+      svc.features.units.tempData.setAttacking(state);
     } catch (_) {}
   }
   class TempData {
@@ -8228,10 +8229,10 @@ window.grbtp = 35;
       this.client = client2;
     }
     setAttacking(attacking) {
-      const {_Core: ModuleHandler} = this.client;
-      ModuleHandler.attacking = attacking;
+      const {services: ryn} = this.client;
+      ryn.actions.attacking = attacking;
       if (attacking !== 0) {
-        ModuleHandler.attackingState = attacking;
+        ryn.actions.attackingState = attacking;
       }
     }
     setStore(type, id) {
@@ -8239,17 +8240,17 @@ window.grbtp = 35;
       this.handleBuy(type);
     }
     handleBuy(type) {
-      const {_Core: ModuleHandler} = this.client;
+      const {services: ryn} = this.client;
       const id = this.store[type];
-      const store2 = ModuleHandler.store[type];
+      const store2 = ryn.loadout.store[type];
       if (store2.actual === id) {
         return;
       }
-      if (ModuleHandler.sentHatEquip) {
+      if (ryn.ledger.sentHatEquip) {
         return;
       }
-      const temp = ModuleHandler.canBuy(type, id) ? id : 0;
-      ModuleHandler._equip(type, temp, true);
+      const temp = ryn.loadout.canBuy(type, id) ? id : 0;
+      ryn.loadout.equip(type, temp, true);
     }
     runTick(bid) {
       this.handleBuy(0);
@@ -8273,7 +8274,7 @@ window.grbtp = 35;
         const ownerPlayer = ownerClient && ownerClient.myPlayer;
         const botPlayer = this.client.myPlayer;
         if (ownerPlayer && ownerPlayer.pos && ownerPlayer.pos.current && botPlayer.inGame) {
-          const mh = this.client._Core;
+          const ryn = this.client.services;
           const myPos = botPlayer.pos.current;
           const ownerPos = ownerPlayer.pos.current;
           const dx = ownerPos.x - myPos.x;
@@ -8294,8 +8295,8 @@ window.grbtp = 35;
             };
           }
           const S = window._1v1State;
-          mh._currentAngle = toOwner;
-          mh.unitTable.tempData.setAttacking(1);
+          ryn.actions.currentAngle = toOwner;
+          ryn.features.units.tempData.setAttacking(1);
           if (now >= S.phaseEnd) {
             const roll = Math.random();
             if (dist > 350) {
@@ -8366,27 +8367,27 @@ window.grbtp = 35;
             const tactic = Math.floor(Math.random() * 7);
             if (dist < 300) {
               if (tactic === 0) {
-                mh.place(4, toOwner);
+                ryn.actions.place(4, toOwner);
               } else if (tactic === 1) {
-                mh.place(7, toOwner);
+                ryn.actions.place(7, toOwner);
               } else if (tactic === 2) {
-                mh.place(4, toOwner + 0.5);
-                mh.place(4, toOwner - 0.5);
+                ryn.actions.place(4, toOwner + 0.5);
+                ryn.actions.place(4, toOwner - 0.5);
               } else if (tactic === 3) {
-                mh.place(3, toOwner);
-                mh.place(4, toOwner);
+                ryn.actions.place(3, toOwner);
+                ryn.actions.place(4, toOwner);
               } else if (tactic === 4) {
-                mh.place(7, toOwner);
-                mh.place(4, toOwner);
+                ryn.actions.place(7, toOwner);
+                ryn.actions.place(4, toOwner);
               } else if (tactic === 5) {
-                mh.place(3, away);
-                mh.place(4, toOwner);
+                ryn.actions.place(3, away);
+                ryn.actions.place(4, toOwner);
               } else {
-                mh.place(7, toOwner + 0.3);
-                mh.place(7, toOwner - 0.3);
+                ryn.actions.place(7, toOwner + 0.3);
+                ryn.actions.place(7, toOwner - 0.3);
               }
             } else {
-              mh.place(4, toOwner);
+              ryn.actions.place(4, toOwner);
             }
           }
           if (!botPlayer.inGame && botPlayer.diedOnce) {
@@ -8511,7 +8512,7 @@ window.grbtp = 35;
       if (f === "none") return pos;
       const totalBots = ownerClient.clients.size;
       if (totalBots === 0) return pos;
-      const {circleOffset: circleOffset} = ownerClient._Core;
+      const {circleOffset: circleOffset} = ownerClient.services.motion;
       const radius = Settings_ref._circleRadius;
       const facingAngle = ownerClient.InputHandler && ownerClient.InputHandler.mouse ? ownerClient.InputHandler.mouse.angle : 0;
       const {dx: dx, dy: dy} = this.getFormationOffset(botIndex, totalBots, circleOffset, radius, facingAngle);
@@ -8523,9 +8524,9 @@ window.grbtp = 35;
     }
     runTick(bid) {
       const {InputHandler: InputHandler2} = this.client.ownerClient;
-      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
-      if (ModuleHandler._scatterActive || ModuleHandler._scatterReturning) return;
-      if (ModuleHandler._autoFarmActive) return;
+      const {myPlayer: myPlayer, services: ryn} = this.client;
+      if (ryn.bot.scatterActive || ryn.bot.scatterReturning) return;
+      if (ryn.bot.farmActive) return;
       {
         const _wc = window._gbot1v1WinCleanup;
         if (_wc && _wc.active && _wc.bot === this.client) return;
@@ -8533,8 +8534,8 @@ window.grbtp = 35;
       if (Settings_ref._botsFrozen) {
         if (!this.isStopped) {
           this.isStopped = true;
-          ModuleHandler.startMovement(null, true);
-          ModuleHandler.move_dir = null;
+          ryn.motion.start(null, true);
+          ryn.motion.move_dir = null;
           this.client.PacketManager.move(null);
         }
         return;
@@ -8543,14 +8544,14 @@ window.grbtp = 35;
         if (typeof _isControlled === "function" && !_isControlled(this.client)) {
           if (!this.isStopped) {
             this.isStopped = true;
-            ModuleHandler.stopMovement();
+            ryn.motion.stop();
           }
           return;
         }
       } catch (e) {}
       if (Settings_ref._shieldGuard) {
         const oc2 = this.client.ownerClient;
-        const gm = oc2._Core && oc2._Core.unitTable && oc2._Core.unitTable.guardModule;
+        const gm = oc2.services && oc2.services.features.units.guardModule;
         if (gm) {
           const {isGuard: isGuard} = gm._resolveGuard.call({
             client: this.client
@@ -8563,14 +8564,14 @@ window.grbtp = 35;
         const walkPos = this.getMovePosition();
         if (walkPos && walkPos.x !== undefined) {
           const walkTo = pos1.angle(walkPos);
-          ModuleHandler._currentAngle = walkTo;
+          ryn.actions.currentAngle = walkTo;
           const dist = Math.hypot(walkPos.x - pos1.x, walkPos.y - pos1.y);
           if (dist > 40) {
-            this.isStopped = !ModuleHandler.startMovement(walkTo);
+            this.isStopped = !ryn.motion.start(walkTo);
           } else {
             if (!this.isStopped) {
               this.isStopped = true;
-              ModuleHandler.stopMovement();
+              ryn.motion.stop();
             }
           }
         }
@@ -8579,13 +8580,13 @@ window.grbtp = 35;
       const walkPos = this.getActualPosition();
       const lookPos = InputHandler2.cursorPosition();
       const lookAt = pos1.angle(lookPos);
-      ModuleHandler._currentAngle = lookAt;
+      ryn.actions.currentAngle = lookAt;
       if (!this.someColliding(walkPos, Settings_ref._movementRadius)) {
         const walkTo = pos1.angle(walkPos);
-        this.isStopped = !ModuleHandler.startMovement(walkTo);
+        this.isStopped = !ryn.motion.start(walkTo);
       } else if (!this.isStopped) {
         this.isStopped = true;
-        ModuleHandler.stopMovement();
+        ryn.motion.stop();
       }
     }
   }
@@ -8766,7 +8767,7 @@ window.grbtp = 35;
       return [ enemyFirst(), null ];
     }
     getDestroyingWeapon(target) {
-      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, services: ryn} = this.client;
       const pos0 = myPlayer.pos.current;
       const pos1 = target.pos.current;
       const distance = pos0.distance(pos1);
@@ -8837,17 +8838,17 @@ window.grbtp = 35;
       return best;
     }
     runTick(bid) {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, services: ryn, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
       if (!Settings_ref._autobreak) {
         return;
       }
-      if (ModuleHandler._arbiter.claimedAbove && !myPlayer.isTrapped) {
+      if (ryn.arbiter.claimedAbove && !myPlayer.isTrapped) {
         return;
       }
       const beneficial = this._beneficialBreakTarget(myPlayer, EnemyManager2.nearestEnemy, ObjectManager3, PlayerManager3);
       if (beneficial) {
         const secondary = myPlayer.getItemByType(1);
-        const {reloading: reloading} = ModuleHandler.unitTable;
+        const {reloading: reloading} = ryn.features.units;
         if (reloading.isReloaded(1)) {
           const bPos = beneficial.pos.current;
           bid.moduleActive = true;
@@ -8882,11 +8883,11 @@ window.grbtp = 35;
       if (distance > range) {
         return;
       }
-      this.client._Core._autoBreakActive = true;
+      this.client.services.ledger.breakActive = true;
       const angle1 = pos1.angle(pos2);
-      this.client._Core._lastBreakAngle = angle1;
+      this.client.services.ledger.breakAngle = angle1;
       if (myPlayer.isTrapped && myTrapOnEnemy === null) {
-        const {reloading: _rl} = ModuleHandler.unitTable;
+        const {reloading: _rl} = ryn.features.units;
         if (_rl.isReloaded(type)) {
           bid.forceWeapon = type;
           bid.moduleActive = true;
@@ -8951,7 +8952,7 @@ window.grbtp = 35;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       const totalDamage = EnemyManager2.primaryDamage + EnemyManager2.potentialSpikeDamage;
       const shouldIgnore = EnemyManager2.instaThreat() || nearestEnemy !== null && nearestEnemy.reload[0].previous !== nearestEnemy.reload[0].current && myPlayer.currentHealth <= totalDamage && myPlayer.currentHealth > totalDamage * .75;
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       bid.forceWeapon = type;
       const urgentRetrapRisk = myPlayer.isTrapped && target.type === 15 && this.enemyCanRetrapMe(myPlayer, nearestEnemy, this.client.ObjectManager);
       if (reloading.isReloaded(type) && !shouldIgnore) {
@@ -8975,13 +8976,13 @@ window.grbtp = 35;
       this.pushPos = null;
     }
     runTick(bid) {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, services: ryn, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
       this.pushPos = null;
       const nearestEnemyPush = EnemyManager2.nearestEnemyPush;
       const nearestPushSpike = EnemyManager2.nearestPushSpike;
       EnemyManager2.nearestEnemyPush = null;
       EnemyManager2.nearestPushSpike = null;
-      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._autoPush || ModuleHandler.moveTo !== "disable") {
+      if (ryn.arbiter.claimedAbove || !Settings_ref._autoPush || ryn.intent.moveTo !== "disable") {
         return;
       }
       if (nearestEnemyPush === null || nearestPushSpike === null) {
@@ -9071,11 +9072,11 @@ window.grbtp = 35;
     }
     runTick(bid) {
       if (!Settings_ref._autoPlay) return;
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, services: ryn} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
       const enemy = EnemyManager2.nearestEnemy;
       if (!enemy) return;
-      if (ModuleHandler.moveTo !== "disable") return;
+      if (ryn.intent.moveTo !== "disable") return;
       const CIRCLE_RADIUS = 80, ROTATION_SPEED = .2;
       const myFut = myPlayer.pos.future ?? myPlayer.pos.current;
       const enemyFut = enemy.pos.future ?? enemy.pos.current;
@@ -9091,7 +9092,7 @@ window.grbtp = 35;
       }
       const cur = myPlayer.pos.current;
       let moveAngle = Math.atan2(ty - cur.y, tx - cur.x);
-      ModuleHandler.startMovement(moveAngle);
+      ryn.motion.start(moveAngle);
     }
   }
   const AutoPlay_ref = AutoPlay;
@@ -9196,7 +9197,7 @@ window.grbtp = 35;
 
   // Luna's own budget check was `packets + 5 > 119` against a counter it owned
   // outright. RYN shares one allowance across every module, so the same guard
-  // is written against ModuleHandler's counter and limit.
+  // is written against the per-second packet counter and its limit.
   const LUNA_PLACE_COST = 5;
 
   // The placer's own ceiling, under the client-wide `packetLimit`.
@@ -9270,13 +9271,13 @@ window.grbtp = 35;
   const SPIKE_FALLBACK_RADIUS = 55;
 
   // Modules that own a spike tick or a sync. They all run before the placer,
-  // and whichever claims the tick puts its name in ModuleHandler.activeModule.
+  // and whichever claims the tick puts its name on the intent board.
   // If one of them owns the tick the placer stays out of its way rather than
   // spending the packets it needs. This guard is RYN's, not Luna's — Luna has
   // no module ordering to collide with.
   const LUNA_SPIKE_TICK_MODULES = new Set([ "spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap" ]);
-  function lunaSpikeTickBusy(ModuleHandler) {
-    return LUNA_SPIKE_TICK_MODULES.has(ModuleHandler.activeModule);
+  function lunaSpikeTickBusy(intent) {
+    return LUNA_SPIKE_TICK_MODULES.has(intent.activeModule);
   }
 
   // The one state where the spike ticks outrank the placer outright rather
@@ -9607,7 +9608,7 @@ window.grbtp = 35;
     // Returns the candidates that actually went out, so the caller records
     // history from what happened rather than what was intended.
     execute(candidates, opts = {}) {
-      const core = this.client._Core;
+      const ryn = this.client.services;
       const myPlayer = this.client.myPlayer;
       const budget = this.client.netBudget;
       const tick = opts.tick ?? this.state.tick;
@@ -9616,10 +9617,10 @@ window.grbtp = 35;
         const profile = candidate.profile;
         if (!budget.affords(profile.cost, profile.priority)) break;
         if (!myPlayer.canPlace(profile.itemType)) continue;
-        core.place(profile.itemType, candidate.angle);
-        core.placedOnce = true;
-        core.placeAngles[0] = profile.itemType;
-        core.placeAngles[1].push(candidate.angle);
+        ryn.actions.place(profile.itemType, candidate.angle);
+        ryn.ledger.placedOnce = true;
+        ryn.ledger.placeAngles[0] = profile.itemType;
+        ryn.ledger.placeAngles[1].push(candidate.angle);
         this.state.recordSent(candidate, tick);
         sent.push(candidate);
       }
@@ -9801,7 +9802,7 @@ window.grbtp = 35;
     _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
       if (id === null || id === undefined) return [];
       if (this._isItemLimit(id, myPlayer, excludeObj)) return [];
-      const tick = this.client._Core.tickCount;
+      const tick = this.client.services.clock.tick;
       if (this._angleCacheTick !== tick) {
         this._angleCache.clear();
         this._angleCacheTick = tick;
@@ -9894,7 +9895,7 @@ window.grbtp = 35;
     // about to break with a weapon that just came off reload. Whichever it is,
     // the closest to the enemy wins, and finding one arms the replace resend.
     _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped) {
-      const ModuleHandler = this.client._Core;
+      const ryn = this.client.services;
       let findObject = null;
       // A path break is excluded. This branch exists to claim the ground under
       // something I am about to knock down, and `findAngle` is sorted by
@@ -9906,9 +9907,9 @@ window.grbtp = 35;
       // halves are paid for in packets and resources. _isItemLimit even credits
       // the dying trap back, so the cap check passes and makes the rebuild
       // likelier rather than less.
-      const autoGathering = ModuleHandler._autoBreakActive || ModuleHandler.autoattack || ModuleHandler.forceWeapon !== null;
+      const autoGathering = ryn.ledger.breakActive || ryn.actions.autoattack || ryn.intent.forceWeapon !== null;
       if (autoGathering) {
-        const predictType = ModuleHandler._getPredictWeapon();
+        const predictType = ryn.loadout.predictWeapon();
         const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
         const predictReady = myWeapon !== null && myWeapon !== undefined && myPlayer.isReloaded(predictType, 0);
         if (predictReady) {
@@ -9918,7 +9919,7 @@ window.grbtp = 35;
             const myDmg = myPlayer.getBuildingDamage?.(myWeapon, myPlayer.hatID === 40) ?? 0;
             const gatherAngle = Config_ref.gatherAngle;
             const myFut = myPlayer.pos.future ?? myPos;
-            const attackAngle = ModuleHandler._autoBreakActive && ModuleHandler._lastBreakAngle !== null && ModuleHandler._lastBreakAngle !== undefined ? ModuleHandler._lastBreakAngle : ModuleHandler._currentAngle ?? myPos.angle(enemyPos);
+            const attackAngle = ryn.ledger.breakActive && ryn.ledger.breakAngle !== null && ryn.ledger.breakAngle !== undefined ? ryn.ledger.breakAngle : ryn.actions.currentAngle ?? myPos.angle(enemyPos);
             const candidates = [];
             ObjectManager2.grid2D.query(myPos.x, myPos.y, 3, id => {
               const obj = ObjectManager2.objects.get(id);
@@ -10064,7 +10065,7 @@ window.grbtp = 35;
     }
 
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
       if (!Settings_ref._autoplacer) return;
       if (!myPlayer || !myPlayer.inGame) return;
       // A spike tick owning the tick used to end this module outright, which
@@ -10084,7 +10085,7 @@ window.grbtp = 35;
       // and the preplace is still computed and scheduled. spikeTickTarget
       // stands down on the tick those timers fire, so the two alternate
       // cleanly instead of one starving the other.
-      const spikeTickOwnsTick = lunaSpikeTickBusy(ModuleHandler);
+      const spikeTickOwnsTick = lunaSpikeTickBusy(ryn.intent);
 
       // Both of us pinned with a spike able to reach them: the breaker finishes
       // it this tick and this module gets out of the way entirely — no builds,
@@ -10098,9 +10099,9 @@ window.grbtp = 35;
       }
 
       // Every budget test in this module reads this, never packetLimit.
-      const placerLimit = Math.min(ModuleHandler.packetLimit, PLACER_PACKET_GATE);
+      const placerLimit = Math.min(ryn.network.packetLimit, PLACER_PACKET_GATE);
 
-      this._tick = ModuleHandler.tickCount;
+      this._tick = ryn.clock.tick;
       for (let i = this._bannedSpots.length - 1; i >= 0; i--) {
         if (this._tick > this._bannedSpots[i].expiry) this._bannedSpots.splice(i, 1);
       }
@@ -10195,7 +10196,7 @@ window.grbtp = 35;
       this._predictObjects = [];
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
-      if (ModuleHandler.packetCount >= placerLimit) return;
+      if (ryn.network.packetCount >= placerLimit) return;
 
       // Luna's `spampreplace`, armed by a slot having actually opened. The
       // other arming site is _getPrePlaceObject, exactly as in Luna; the
@@ -10414,8 +10415,8 @@ window.grbtp = 35;
       // SEND — autoplace now, preplace next tick, replace at min ping
       // ────────────────────────────────────────────────────────────────────
       const typeOf = obj => obj.id === trapId ? LUNA_TRAP_TYPE : LUNA_SPIKE_TYPE;
-      const outOfBudget = () => ModuleHandler.packetCount + LUNA_PLACE_COST > placerLimit;
-      const placesLeft = () => Math.max(0, Math.floor((placerLimit - ModuleHandler.packetCount) / LUNA_PLACE_COST));
+      const outOfBudget = () => ryn.network.packetCount + LUNA_PLACE_COST > placerLimit;
+      const placesLeft = () => Math.max(0, Math.floor((placerLimit - ryn.network.packetCount) / LUNA_PLACE_COST));
       // The tick this send belongs to. Timer sends land inside the next tick,
       // so they stamp the tick they were scheduled from and the refusal check
       // leaves them alone until the tick after that.
@@ -10425,10 +10426,10 @@ window.grbtp = 35;
         // Luna only checks the item cap; RYN also knows whether the resources
         // are there, so a build it would refuse never reaches the wire.
         if (!myPlayer.canPlace(type)) return;
-        ModuleHandler.place(type, obj.angle);
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.placeAngles[0] = type;
-        ModuleHandler.placeAngles[1].push(obj.angle);
+        ryn.actions.place(type, obj.angle);
+        ryn.ledger.placedOnce = true;
+        ryn.ledger.placeAngles[0] = type;
+        ryn.ledger.placeAngles[1].push(obj.angle);
         bid.moduleActive = true;
         this._placedSpots.push({
           x: obj.x,
@@ -10463,7 +10464,7 @@ window.grbtp = 35;
         if (spikeTickOwnsTick) break;
         if (obj.preplace) continue;
         if (outOfBudget()) break;
-        if (ModuleHandler.packetCount + LUNA_PLACE_COST + preplaceHold() > placerLimit) break;
+        if (ryn.network.packetCount + LUNA_PLACE_COST + preplaceHold() > placerLimit) break;
         const isTrapObj = obj.id === trapId;
         if (isTrapObj) {
           trapsQueued -= 1;
@@ -10500,7 +10501,7 @@ window.grbtp = 35;
       // aiming a swing inside the current tick rather than a build into a slot
       // that opens on the next one, so they are not the same measurement.
       const sendDelay = ping => Math.max(1, tickMs - ping);
-      const aimAngle = () => ModuleHandler._autoBreakActive && ModuleHandler._lastBreakAngle !== null && ModuleHandler._lastBreakAngle !== undefined ? ModuleHandler._lastBreakAngle : ModuleHandler._currentAngle ?? 0;
+      const aimAngle = () => ryn.ledger.breakActive && ryn.ledger.breakAngle !== null && ryn.ledger.breakAngle !== undefined ? ryn.ledger.breakAngle : ryn.actions.currentAngle ?? 0;
       // Read at schedule time, not at fire time: the third send lands inside
       // the next tick, which has already cleared `_spamPrePlacer` for its own
       // use, so reading the field from the timer answered for the wrong tick.
@@ -10562,8 +10563,8 @@ window.grbtp = 35;
     }
     runTick(bid) {
       if (!Settings_ref._trapAnimal) return;
-      const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || ModuleHandler.placedOnce) return;
+      const {myPlayer: myPlayer, services: ryn, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2} = this.client;
+      if (ryn.arbiter.claimedAbove || ryn.ledger.placedOnce) return;
       const animal = EnemyManager2.nearestDangerAnimal;
       if (!animal || !this.ANIMAL_IDS.has(animal.type)) {
         this.reset();
@@ -10594,9 +10595,9 @@ window.grbtp = 35;
         });
         if (!trapAngles || trapAngles.length === 0) return;
         const bestTrapAngle = this._bestAngle(trapAngles, angleToAnimal);
-        ModuleHandler.place(7, bestTrapAngle);
+        ryn.actions.place(7, bestTrapAngle);
 
-        ModuleHandler.placedOnce = true;
+        ryn.ledger.placedOnce = true;
         this.trapPlacedAngle = bestTrapAngle;
         this.phaseTimer = 0;
         this.phase = 1;
@@ -10613,11 +10614,11 @@ window.grbtp = 35;
           this.client = client2;
       }
       runTick(bid) {
-          const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-          if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._antiRetrap) {
+          const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+          if (ryn.arbiter.claimedAbove || !Settings_ref._antiRetrap) {
               return;
           }
-          const {reloading: reloading} = ModuleHandler.unitTable;
+          const {reloading: reloading} = ryn.features.units;
           const nearestTrap = EnemyManager2.nearestTrap;
           const primary = myPlayer.getItemByType(0);
           const isReloadedPrimary = reloading.isReloaded(0);
@@ -10625,7 +10626,7 @@ window.grbtp = 35;
           const isHammer = secondary === 10;
           const isReloadedSecondary = reloading.isReloaded(1);
           const damage = myPlayer.getBuildingDamage(10, true);
-          const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
+          const turretReloaded = ryn.loadout.hasStoreItem(0, 53) && reloading.isReloaded(2);
           const nearestEnemy = EnemyManager2.nearestEnemy;
           if (nearestEnemy === null || nearestTrap === null || nearestTrap.health > damage || !isHammer || !isReloadedSecondary) {
               return;
@@ -10678,9 +10679,9 @@ window.grbtp = 35;
     }
     runTick(bid) {
       if (!Settings_ref._antiTrapProtect) return;
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _Core: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, services: ryn} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
-      if (ModuleHandler._arbiter.claimedAbove) return;
+      if (ryn.arbiter.claimedAbove) return;
       const trap = myPlayer.trappedIn;
       if (trap === null) {
         this._protected = false;
@@ -10697,7 +10698,7 @@ window.grbtp = 35;
         for (let off = -Math.PI / 2; off <= Math.PI / 2 + 1e-6; off += Math.PI / 6) {
           const angle = protectDir + off;
           if (this._canPlace(spikeID, angle, myPos, ObjectManager2)) {
-            ModuleHandler.place(4, angle);
+            ryn.actions.place(4, angle);
             placedAny = true;
           }
         }
@@ -10707,13 +10708,13 @@ window.grbtp = 35;
         for (let off = -Math.PI / 3; off <= Math.PI / 3 + 1e-6; off += Math.PI / 6) {
           const angle = protectDir + off;
           if (this._canPlace(wallID, angle, myPos, ObjectManager2)) {
-            ModuleHandler.place(3, angle);
+            ryn.actions.place(3, angle);
             placedAny = true;
           }
         }
       }
       if (placedAny) {
-        ModuleHandler.placedOnce = true;
+        ryn.ledger.placedOnce = true;
         bid.moduleActive = true;
       }
       this._protected = true;
@@ -10759,13 +10760,13 @@ window.grbtp = 35;
       if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
       return true;
     }
-    _protect(aim, agnes, myPos, ObjectManager2, ModuleHandler, spikeID) {
+    _protect(aim, agnes, myPos, ObjectManager2, actions, spikeID) {
       if (!agnes.possible) return false;
       let count = 0, currPlaced = null;
       const fail = agnes.tachyon - 0.0676;
       const tryPlace = a => {
         if ((currPlaced === null || Math.abs(this._angDiff(currPlaced, a)) > 1.36) && this._canPlace(spikeID, a, myPos, ObjectManager2)) {
-          ModuleHandler.place(4, a);
+          actions.place(4, a);
           currPlaced = a;
           count++;
           return true;
@@ -10773,12 +10774,12 @@ window.grbtp = 35;
         return false;
       };
       if (this._canPlace(spikeID, aim + fail, myPos, ObjectManager2)) {
-        ModuleHandler.place(4, aim + fail);
+        actions.place(4, aim + fail);
         currPlaced = aim + fail;
         count++;
       }
       if (this._canPlace(spikeID, aim - fail, myPos, ObjectManager2)) {
-        ModuleHandler.place(4, aim - fail);
+        actions.place(4, aim - fail);
         currPlaced = aim - fail;
         count++;
         if (count >= 2) return true;
@@ -10789,7 +10790,7 @@ window.grbtp = 35;
       if (tryPlace(aim - fail * 0.25) && count >= 2) return true;
       tryPlace(aim);
       if (count !== 1) return count > 0;
-      if (this._canPlace(spikeID, currPlaced + 1.36, myPos, ObjectManager2)) ModuleHandler.place(4, currPlaced + 1.36); else if (this._canPlace(spikeID, currPlaced - 1.36, myPos, ObjectManager2)) ModuleHandler.place(4, currPlaced - 1.36);
+      if (this._canPlace(spikeID, currPlaced + 1.36, myPos, ObjectManager2)) actions.place(4, currPlaced + 1.36); else if (this._canPlace(spikeID, currPlaced - 1.36, myPos, ObjectManager2)) actions.place(4, currPlaced - 1.36);
       return true;
     }
     _angDiff(a, b) {
@@ -10802,8 +10803,8 @@ window.grbtp = 35;
         this._protected = false;
         return;
       }
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2, _Core: ModuleHandler, PlayerManager: PlayerManager2} = this.client;
-      if (!myPlayer || !myPlayer.inGame || ModuleHandler._arbiter.claimedAbove) return;
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2, services: ryn, PlayerManager: PlayerManager2} = this.client;
+      if (!myPlayer || !myPlayer.inGame || ryn.arbiter.claimedAbove) return;
       if (myPlayer.trappedIn) {
         this._protected = false;
         return;
@@ -10835,9 +10836,9 @@ window.grbtp = 35;
       const trapAim = myPos.angle(trapPos);
       const agnes = this._getSpikeAngleWidth(nearTrapDist);
       const spikeID = myPlayer.getItemByType(4);
-      const placed = this._protect(trapAim + Math.PI, agnes, myPos, ObjectManager2, ModuleHandler, spikeID);
+      const placed = this._protect(trapAim + Math.PI, agnes, myPos, ObjectManager2, ryn.actions, spikeID);
       if (placed) {
-        ModuleHandler.placedOnce = true;
+        ryn.ledger.placedOnce = true;
         bid.moduleActive = true;
         this._protected = true;
       }
@@ -10854,8 +10855,8 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._autoSync) {
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ryn.arbiter.claimedAbove || !Settings_ref._autoSync) {
         this.useTurret = false;
         return;
       }
@@ -10864,7 +10865,7 @@ window.grbtp = 35;
       if (nearestEnemy === null || nearestEnemyToNearestEnemy === null) {
         return;
       }
-      const reloading = ModuleHandler.unitTable.reloading;
+      const reloading = ryn.features.units.reloading;
       const turretReloaded = reloading.isReloaded(2);
       if (this.useTurret) {
         this.useTurret = false;
@@ -11227,7 +11228,7 @@ window.grbtp = 35;
       return basePrimaryRange + enemy.speed * ticks;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _Core: ModuleHandler, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, services: ryn, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
       if (!InputHandler2.instaToggle) {
         this.reset();
         InputHandler2.instaReset();
@@ -11244,7 +11245,7 @@ window.grbtp = 35;
       const lookingShield = PlayerManager2.lookingShield(nearestEnemy, myPlayer);
       const primaryDamage = myPlayer.getMaxWeaponDamage(primary, lookingShield);
       const secondaryDamage = myPlayer.getMaxWeaponDamage(secondary, lookingShield);
-      const turretBonus = ModuleHandler.canBuy(0, 53) ? 25 : 0;
+      const turretBonus = ryn.loadout.canBuy(0, 53) ? 25 : 0;
       const totalDamage = primaryDamage + secondaryDamage + turretBonus;
       if (totalDamage < nearestEnemy.currentHealth) return;
       const shieldBypass = lookingShield && secondaryDamage > primaryDamage;
@@ -11252,7 +11253,7 @@ window.grbtp = 35;
       const pos1 = myPlayer.pos.future;
       const pos2 = nearestEnemy.pos.future;
       const angle = pos1.angle(pos2);
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const primaryReloaded = reloading.isReloaded(0);
       const secondaryReloaded = reloading.isReloaded(1, 1);
       const turretReloaded = reloading.isReloaded(2, 1);
@@ -11278,7 +11279,7 @@ window.grbtp = 35;
       if (ticks > 0 && ticks <= 2) {
         bid.forceHat = shieldBypass ? 53 : 7;
       }
-      if (ticks <= 3 && ModuleHandler.canBuy(0, 53)) {
+      if (ticks <= 3 && ryn.loadout.canBuy(0, 53)) {
         bid.useAngle = angle;
       }
       const predictedRange = this._futureRange(nearestEnemy, baseRange, 1);
@@ -11286,16 +11287,16 @@ window.grbtp = 35;
       if (!inRange && ticks <= 1 && primaryReloaded && secondaryReloaded && turretReloaded) {
         bid.moveTo = myPosCur.angle(nearestEnemy.pos.current);
       }
-      const baiting = ModuleHandler.moveTo !== "disable" && ticks <= 1;
+      const baiting = ryn.intent.moveTo !== "disable" && ticks <= 1;
       if (!primaryReloaded || !secondaryReloaded || !turretReloaded || !inRange && !baiting) {
         return;
       }
-      if (!ModuleHandler.placedOnce) {
+      if (!ryn.ledger.placedOnce) {
         const spikeID = myPlayer.getItemByType(4);
         if (spikeID !== -1 && myPlayer.canPlace(4)) {
-          ModuleHandler.place(4, angle + Math.PI * 0.25);
-          ModuleHandler.place(4, angle - Math.PI * 0.25);
-          ModuleHandler.placedOnce = true;
+          ryn.actions.place(4, angle + Math.PI * 0.25);
+          ryn.actions.place(4, angle - Math.PI * 0.25);
+          ryn.ledger.placedOnce = true;
         }
       }
       bid.moduleActive = true;
@@ -11344,7 +11345,7 @@ window.grbtp = 35;
       return baseAngle + offsetRad * side;
     }
     runTick(bid) {
-      const {myPlayer: mp, EnemyManager: EM, _Core: MH, ObjectManager: OM, PlayerManager: PM, InputHandler: IH} = this.client;
+      const {myPlayer: mp, EnemyManager: EM, services: ryn, ObjectManager: OM, PlayerManager: PM, InputHandler: IH} = this.client;
       if (this._setupCool > 0) this._setupCool--;
       const enemy = EM.nearestEnemy;
       if (enemy !== null && mp.collidingSimple(enemy, 350)) {
@@ -11364,8 +11365,8 @@ window.grbtp = 35;
         if (this._setupPhase > 0 && enemy === null) this.reset();
       }
       if (enemy === null) return;
-      if (!this._shouldArm(mp, enemy, MH)) return;
-      if (ModuleHandler._arbiter.claimedAbove) return;
+      if (!this._shouldArm(mp, enemy, ryn)) return;
+      if (ryn.arbiter.claimedAbove) return;
       const pos0 = mp.pos.current;
       const ep = enemy.pos.current;
       const anglEnm = pos0.angle(ep);
@@ -11376,33 +11377,33 @@ window.grbtp = 35;
       const lookingShield = PM.lookingShield(enemy, mp);
       const primaryDmg = mp.getMaxWeaponDamage(primary, lookingShield);
       const secondaryDmg = mp.getMaxWeaponDamage(secondary, lookingShield);
-      const turretBonus = MH.canBuy(0, 53) ? 25 : 0;
+      const turretBonus = ryn.loadout.canBuy(0, 53) ? 25 : 0;
       const canInsta = primaryDmg + secondaryDmg + turretBonus >= enemy.currentHealth;
       const spikeID = mp.getItemByType(4);
       const trapID = mp.getItemByType(7);
-      const {reloading: reloading} = MH.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       if (this._setupPhase === 0 && this._setupCool === 0 && dist <= 400) {
-        if (spikeID !== -1 && mp.canPlace(4) && !MH.placedOnce) {
+        if (spikeID !== -1 && mp.canPlace(4) && !ryn.ledger.placedOnce) {
           const ang1 = this._deceptiveAngle(anglEnm, Math.PI * 0.25);
-          MH.place(4, ang1);
-          MH.placedOnce = true;
+          ryn.actions.place(4, ang1);
+          ryn.ledger.placedOnce = true;
           this._spike1Placed = true;
           this._setupPhase = 1;
           this._setupEnemy = enemy;
         }
         return;
       }
-      if (this._setupPhase === 1 && !MH.placedOnce) {
+      if (this._setupPhase === 1 && !ryn.ledger.placedOnce) {
         if (spikeID !== -1 && mp.canPlace(4)) {
           const ang2 = this._deceptiveAngle(anglEnm, -Math.PI * 0.25);
-          MH.place(4, ang2);
-          MH.placedOnce = true;
+          ryn.actions.place(4, ang2);
+          ryn.ledger.placedOnce = true;
           this._spike2Placed = true;
           this._setupPhase = 2;
         }
         return;
       }
-      if (this._setupPhase === 2 && !MH.placedOnce) {
+      if (this._setupPhase === 2 && !ryn.ledger.placedOnce) {
         if (trapID !== -1 && trapID !== 16 && mp.canPlace(7)) {
           const trapAngle = anglEnm;
           const trapAngles = OM.getBestPlacementAngles({
@@ -11415,8 +11416,8 @@ window.grbtp = 35;
             fill: true
           });
           if (trapAngles.length > 0) {
-            MH.place(7, trapAngles[0]);
-            MH.placedOnce = true;
+            ryn.actions.place(7, trapAngles[0]);
+            ryn.ledger.placedOnce = true;
             this._trapPlaced = true;
             this._setupPhase = 3;
           } else {
@@ -11494,7 +11495,7 @@ window.grbtp = 35;
     if (!Settings_ref._antiSpikeTick) {
       return false;
     }
-    const {_Core: ModuleHandler, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, myPlayer: myPlayer} = client2;
+    const {services: ryn, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, myPlayer: myPlayer} = client2;
     // The enemy swings first and you fly into a spike. This is Sakuna's
     // emySpikeHit; RYN works it out with a proper knockback cone in
     // checkCollision, which is strictly better than Sakuna's projection.
@@ -11510,14 +11511,14 @@ window.grbtp = 35;
       const enemy = enemies[i];
       if (enemy.canPlaceSpike && !enemy.isTrapped && enemy.isReloaded(0, 1) && myPlayer.collidingSimple(enemy, SPIKE_TICK_COUNTER_RANGE)) {
         EnemyManager2.enemyCanPlaceSpike = true;
-        state.counterTick = ModuleHandler.tickCount;
+        state.counterTick = ryn.clock.tick;
         break;
       }
     }
     // Sakuna latches this for 200ms rather than reading it live: one frame of
     // the enemy being out of position is not a window, they are still standing
     // right there.
-    return ModuleHandler.tickCount - state.counterTick <= SPIKE_TICK_COUNTER_GRACE;
+    return ryn.clock.tick - state.counterTick <= SPIKE_TICK_COUNTER_GRACE;
   };
   // Sakuna's nearBreakType == "NearSpikes" branch: a spike already sitting on
   // top of you takes the tick, because ticking the enemy does not stop it from
@@ -11541,17 +11542,17 @@ window.grbtp = 35;
     return myPlayer.collidingSimple(spike, reach);
   };
   const spikeTickTarget = (client2, enabled) => {
-    const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
+    const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     // Stamped before any exit: all three modules call this every tick, so the
     // stamp cannot be missed the way it would be behind one of the gates.
     const state = spikeTickState(client2);
     if (myPlayer.isTrapped) {
-      state.trapTick = ModuleHandler.tickCount;
+      state.trapTick = ryn.clock.tick;
     }
     if (!Settings_ref._spikeTick || !enabled) {
       return null;
     }
-    if (ModuleHandler._arbiter.claimedAbove || EnemyManager2.shouldIgnoreModule()) {
+    if (ryn.arbiter.claimedAbove || EnemyManager2.shouldIgnoreModule()) {
       return null;
     }
     const nearest = EnemyManager2.nearestEnemy;
@@ -11607,7 +11608,7 @@ window.grbtp = 35;
     // that will not behave yet, and a spike already touching them does not use
     // one. The stamp is refreshed on every tick spent trapped, so without this
     // the window never opens while I am held.
-    if (!bothTrapped && !canTouchThem && ModuleHandler.tickCount - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
+    if (!bothTrapped && !canTouchThem && ryn.clock.tick - state.trapTick <= SPIKE_TICK_TRAP_GRACE) {
       return null;
     }
 
@@ -11627,10 +11628,10 @@ window.grbtp = 35;
     // next one, which is what alternating was supposed to mean.
     // Except in the kill window, where the placer has already stood all the way
     // down and there is nothing to take turns with.
-    const placer = ModuleHandler.unitTable.autoPlacer;
-    const contested = placer && ModuleHandler.tickCount - placer._preplaceSentTick <= 1 && !spikeTickKillWindow(client2);
-    if (contested && state.yieldTick !== ModuleHandler.tickCount - 1) {
-      state.yieldTick = ModuleHandler.tickCount;
+    const placer = ryn.features.units.autoPlacer;
+    const contested = placer && ryn.clock.tick - placer._preplaceSentTick <= 1 && !spikeTickKillWindow(client2);
+    if (contested && state.yieldTick !== ryn.clock.tick - 1) {
+      state.yieldTick = ryn.clock.tick;
       return null;
     }
     if (spikeTickCounterThreat(client2, state) || spikeTickNearSpike(client2)) {
@@ -11640,14 +11641,14 @@ window.grbtp = 35;
     if (primary === null || primary === 8) {
       return null;
     }
-    if (!ModuleHandler.unitTable.reloading.isReloaded(0)) {
+    if (!ryn.features.units.reloading.isReloaded(0)) {
       return null;
     }
     const range = Math.min(SPIKE_TICK_RANGE, DataHandler_ref.getWeapon(primary).range + nearest.hitScale);
     return myPlayer.collidingSimple(nearest, range) ? nearest : null;
   };
   const spikeTickHit = (client2, enemy, bid) => {
-    const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
+    const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     EnemyManager2.attemptSpikePlacement();
     bid.moduleActive = true;
     bid.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
@@ -11656,11 +11657,11 @@ window.grbtp = 35;
     bid.shouldAttack = true;
   };
   const spikeTickTurret = (client2, enemy, bid) => {
-    const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
-    if (ModuleHandler._arbiter.claimedAbove || EnemyManager2.shouldIgnoreModule()) {
+    const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
+    if (ryn.arbiter.claimedAbove || EnemyManager2.shouldIgnoreModule()) {
       return;
     }
-    if (!ModuleHandler.unitTable.reloading.isReloaded(2)) {
+    if (!ryn.features.units.reloading.isReloaded(2)) {
       return;
     }
     bid.moduleActive = true;
@@ -11796,7 +11797,7 @@ window.grbtp = 35;
       return !enemy.isReloaded(slot, 0) && enemy.isReloaded(slot, 1);
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       if (this.useTurret) {
         this.useTurret = false;
         spikeTickTurret(this.client, this.turretTarget, bid);
@@ -11806,7 +11807,7 @@ window.grbtp = 35;
       if (this.target !== null) {
         const enemy = this.target;
         this.target = null;
-        if (!ModuleHandler._arbiter.claimedAbove) {
+        if (!ryn.arbiter.claimedAbove) {
           spikeTickHit(this.client, enemy, bid);
           this.useTurret = true;
           this.turretTarget = enemy;
@@ -11821,7 +11822,7 @@ window.grbtp = 35;
       if (secondary !== 10) {
         return;
       }
-      const reloading = ModuleHandler.unitTable.reloading;
+      const reloading = ryn.features.units.reloading;
       if (!reloading.isReloaded(1)) {
         return;
       }
@@ -11860,14 +11861,14 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._spikeSync) {
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ryn.arbiter.claimedAbove || !Settings_ref._spikeSync) {
         this.useTurret = false;
         return;
       }
       const nearest = EnemyManager2.nearestEnemy;
       const placementAngles = EnemyManager2.nearestSpikePlacerAngle;
-      const reloading = ModuleHandler.unitTable.reloading;
+      const reloading = ryn.features.units.reloading;
       const primary = myPlayer.getItemByType(0);
       const isPolearm = primary !== 8;
       const primaryReloaded = reloading.isReloaded(0);
@@ -11892,11 +11893,11 @@ window.grbtp = 35;
         const angleTo = pos1.angle(pos2);
         const itemType = 4;
         for (const angle of placementAngles) {
-          ModuleHandler.place(itemType, angle);
+          ryn.actions.place(itemType, angle);
         }
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.placeAngles[0] = itemType;
-        ModuleHandler.placeAngles[1] = placementAngles;
+        ryn.ledger.placedOnce = true;
+        ryn.ledger.placeAngles[0] = itemType;
+        ryn.ledger.placeAngles[1] = placementAngles;
         bid.moduleActive = true;
         bid.useAngle = angleTo;
         bid.forceHat = 7;
@@ -11916,14 +11917,14 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._spikeSyncHammer || EnemyManager2.shouldIgnoreModule()) {
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      if (ryn.arbiter.claimedAbove || !Settings_ref._spikeSyncHammer || EnemyManager2.shouldIgnoreModule()) {
         this.targetEnemy = null;
         this.useTurret = false;
         return;
       }
       const nearestSyncEnemy = EnemyManager2.nearestSyncEnemy;
-      const reloading = ModuleHandler.unitTable.reloading;
+      const reloading = ryn.features.units.reloading;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
       const isPolearm = primary !== 8;
@@ -11954,11 +11955,11 @@ window.grbtp = 35;
         const placementAngles = EnemyManager2.nearestSpikePlacerAngle;
         if (placementAngles !== null) {
           for (const angle of placementAngles) {
-            ModuleHandler.place(itemType, angle);
+            ryn.actions.place(itemType, angle);
           }
-          ModuleHandler.placedOnce = true;
-          ModuleHandler.placeAngles[0] = itemType;
-          ModuleHandler.placeAngles[1] = placementAngles;
+          ryn.ledger.placedOnce = true;
+          ryn.ledger.placeAngles[0] = itemType;
+          ryn.ledger.placeAngles[1] = placementAngles;
           bid.moduleActive = true;
           bid.useAngle = futureAngle;
           bid.forceHat = 7;
@@ -12009,8 +12010,8 @@ window.grbtp = 35;
           return distance <= range;
         });
         if (possibleAngles.length !== 0) {
-          ModuleHandler.placeAngles[0] = itemType;
-          ModuleHandler.placeAngles[1] = possibleAngles;
+          ryn.ledger.placeAngles[0] = itemType;
+          ryn.ledger.placeAngles[1] = possibleAngles;
           bid.moduleActive = true;
           bid.useAngle = middleAngle;
           bid.forceHat = 40;
@@ -12066,7 +12067,7 @@ window.grbtp = 35;
       return 7;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2, _Core: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2, services: ryn} = this.client;
       if (!Settings_ref._adaptiveGearSwitching) {
         return;
       }
@@ -12079,7 +12080,7 @@ window.grbtp = 35;
       }
       const optimalGear = this._selectOptimalGear(myPlayer, nearestEnemy, ObjectManager2);
       const currentHat = myPlayer.hatID ?? -1;
-      if (currentHat !== optimalGear && ModuleHandler.canBuy?.(0, optimalGear)) {
+      if (currentHat !== optimalGear && ryn.loadout.canBuy?.(0, optimalGear)) {
         bid.forceHat = optimalGear;
         this._lastGearSwitch = currentTime;
         this.client.runtime.events.emit(RYN_STAT_SIGNAL, { stat: "gearSwitches", by: 1, absolute: false });
@@ -12104,8 +12105,8 @@ window.grbtp = 35;
     }
     _detectIncomingAttack(nearestEnemy) {
       if (!nearestEnemy) return false;
-      const primaryReloaded = this.client._Core.unitTable.reloading.isReloaded(0);
-      const secondaryReloaded = this.client._Core.unitTable.reloading.isReloaded(1);
+      const primaryReloaded = this.client.services.features.units.reloading.isReloaded(0);
+      const secondaryReloaded = this.client.services.features.units.reloading.isReloaded(1);
       if (primaryReloaded && secondaryReloaded) {
         const dist = this.client.myPlayer.pos.current.distance(nearestEnemy.pos.current);
         const enemyRange = (DataHandler_ref.getWeapon(nearestEnemy.getItemByType(0) ?? 0)?.range ?? 35) + this.client.myPlayer.hitScale;
@@ -12118,18 +12119,18 @@ window.grbtp = 35;
     _predictSyncMoment(myPlayer, nearestEnemy) {
       if (!nearestEnemy) return Infinity;
       const healthPercent = myPlayer.tempHealth / myPlayer.maxHealth;
-      const enemyReady = this.client._Core.unitTable.reloading.isEnemyReloaded?.(nearestEnemy, 0);
+      const enemyReady = this.client.services.features.units.reloading.isEnemyReloaded?.(nearestEnemy, 0);
       if (healthPercent < 0.3 && enemyReady && this._detectIncomingAttack(nearestEnemy)) {
         return 0;
       }
       return Infinity;
     }
     _executeDodge(myPlayer, nearestEnemy, bid) {
-      const ModuleHandler = this.client._Core;
+      const ryn = this.client.services;
       const angleToEnemy = myPlayer.pos.current.angle(nearestEnemy.pos.current);
       const dodgeAngles = [ angleToEnemy + Math.PI / 2, angleToEnemy - Math.PI / 2, angleToEnemy + Math.PI ];
       const randomDodge = dodgeAngles[Math.floor(Math.random() * dodgeAngles.length)];
-      ModuleHandler.startMovement({
+      ryn.motion.start({
         x: Math.cos(randomDodge),
         y: Math.sin(randomDodge)
       });
@@ -12162,7 +12163,7 @@ window.grbtp = 35;
       return timeDiff < this._syncKillThreshold;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _Core: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, services: ryn} = this.client;
       if (!Settings_ref._antiSync || myPlayer.shameActive) {
         return;
       }
@@ -12172,7 +12173,7 @@ window.grbtp = 35;
       if (this._pendingHealDeadline !== null) {
         if (Date.now() >= this._pendingHealDeadline) {
           for (let i = 0; i < this._pendingHealsNeeded; i++) {
-            ModuleHandler.heal();
+            ryn.actions.heal();
           }
           this._pendingHealDeadline = null;
           this._pendingHealsNeeded = 0;
@@ -12188,7 +12189,7 @@ window.grbtp = 35;
         const safeToEatInstantly = myPlayer.isSandbox || myPlayer.shameCount < 7;
         if (safeToEatInstantly) {
           for (let i = 0; i < healsNeeded; i++) {
-            ModuleHandler.heal();
+            ryn.actions.heal();
           }
         } else {
           this._pendingHealDeadline = Date.now() + this._SHAME_SAFE_DELAY;
@@ -12220,17 +12221,17 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._toolSpearInsta) {
+      const {services: ryn, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      if (ryn.arbiter.claimedAbove || !Settings_ref._toolSpearInsta) {
         this.nearestTarget = null;
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
-      if (nearestEnemy === null || !ModuleHandler.canBuy(0, 7)) {
+      if (nearestEnemy === null || !ryn.loadout.canBuy(0, 7)) {
         return;
       }
       if (this.useTurret) {
-        if (ModuleHandler.canBuy(0, 53)) {
+        if (ryn.loadout.canBuy(0, 53)) {
           bid.moduleActive = true;
           bid.forceHat = 53;
         }
@@ -12249,7 +12250,7 @@ window.grbtp = 35;
         bid.forceHat = 7;
         bid.forceWeapon = 0;
         bid.shouldAttack = true;
-        ModuleHandler._upgradeItem(5);
+        ryn.loadout.upgradeItem(5);
         this.nearestTarget = null;
         this.useTurret = true;
         EnemyManager2.attemptSpikePlacement();
@@ -12257,7 +12258,7 @@ window.grbtp = 35;
       }
       const pos2 = nearestEnemy.pos.future;
       const angle = pos1.angle(pos2);
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const primaryReloaded = reloading.isReloaded(0);
       const turretReloaded = reloading.isReloaded(2);
       const range = DataHandler_ref.getWeapon(0).range + nearestEnemy.hitScale;
@@ -12279,8 +12280,10 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
-      const {currentType: currentType, placedOnce: placedOnce, healedOnce: healedOnce, _currentAngle: currentAngle} = ModuleHandler;
+      const {services: ryn, myPlayer: myPlayer} = this.client;
+      const currentType = ryn.loadout.currentType;
+      const {placedOnce: placedOnce, healedOnce: healedOnce} = ryn.ledger;
+      const currentAngle = ryn.actions.currentAngle;
       if (!myPlayer.canPlace(currentType)) {
         return;
       }
@@ -12289,17 +12292,17 @@ window.grbtp = 35;
           return;
         }
         if (myPlayer.shameCount < 7) {
-          ModuleHandler.heal();
-          ModuleHandler.healedOnce = true;
-          ModuleHandler.didAntiInsta = true;
+          ryn.actions.heal();
+          ryn.ledger.healedOnce = true;
+          ryn.ledger.didAntiInsta = true;
         }
         return;
       }
       if (placedOnce) {
         return;
       }
-      ModuleHandler.place(currentType, currentAngle);
-      ModuleHandler.placedOnce = true;
+      ryn.actions.place(currentType, currentAngle);
+      ryn.ledger.placedOnce = true;
     }
   }
   const Placer_ref = Placer;
@@ -12310,16 +12313,17 @@ window.grbtp = 35;
       this.client = client2;
     }
     isReloadedByType(type) {
-      const {weapon: weapon, unitTable: unitTable} = this.client._Core;
-      const weaponType = type !== null ? type : weapon;
-      return unitTable.reloading.isReloaded(weaponType);
+      const {loadout: loadout, features: features} = this.client.services;
+      const weaponType = type !== null ? type : loadout.weapon;
+      return features.units.reloading.isReloaded(weaponType);
     }
     runTick(bid) {
-      const {_Core: ModuleHandler} = this.client;
-      const {useWeapon: useWeapon, weapon: weapon, forceWeapon: forceWeapon} = ModuleHandler;
+      const {services: ryn} = this.client;
+      const {useWeapon: useWeapon, forceWeapon: forceWeapon} = ryn.intent;
+      const weapon = ryn.loadout.weapon;
       const nextWeapon = forceWeapon !== null ? forceWeapon : useWeapon;
       const forceReloaded = this.isReloadedByType(nextWeapon);
-      const canAttack = ModuleHandler.shouldAttack && (forceReloaded && this.isReloadedByType(weapon) || forceWeapon !== null && forceReloaded);
+      const canAttack = ryn.intent.shouldAttack && (forceReloaded && this.isReloadedByType(weapon) || forceWeapon !== null && forceReloaded);
       bid.shouldAttack = canAttack;
     }
   }
@@ -12339,16 +12343,16 @@ window.grbtp = 35;
       turret.current = turret.max = 23;
     }
     get currentReload() {
-      return this.clientReload[this.client._Core.weapon];
+      return this.clientReload[this.client.services.loadout.weapon];
     }
     getReload(type) {
       return this.clientReload[type];
     }
     updateMaxReload(type) {
-      const {myPlayer: myPlayer, _Core: ModuleHandler, SocketManager: SocketManager2} = this.client;
+      const {myPlayer: myPlayer, services: ryn, SocketManager: SocketManager2} = this.client;
       const reload = this.getReload(type);
       const id = myPlayer.getItemByType(type);
-      const store2 = ModuleHandler.getHatStore();
+      const store2 = ryn.loadout.getHatStore();
       const pingAccount = Math.floor(SocketManager2.pong / SocketManager2.TICK);
       const speed = myPlayer.getWeaponSpeed(id, store2.last) - pingAccount;
       reload.current = speed;
@@ -12361,7 +12365,7 @@ window.grbtp = 35;
       this.resetReload(this.getReload(type));
     }
     isReloaded(type, ticks = 0) {
-      if (this.client._Core.norecoil) {
+      if (this.client.services.actions.norecoil) {
         return true;
       }
       const reload = this.clientReload[type];
@@ -12399,28 +12403,29 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const mh = this.client._Core;
-      if (mh._scatterActive && mh._scatterAngle !== undefined) {
-        mh._currentAngle = mh._scatterAngle;
-        this.client.PacketManager.updateAngle(mh._scatterAngle);
-        mh.mouse.sentAngle = mh._scatterAngle;
+      const ryn = this.client.services;
+      if (ryn.bot.scatterActive && ryn.bot.scatterAngle !== undefined) {
+        ryn.actions.currentAngle = ryn.bot.scatterAngle;
+        this.client.PacketManager.updateAngle(ryn.bot.scatterAngle);
+        ryn.actions.mouse.sentAngle = ryn.bot.scatterAngle;
         return;
       }
-      const {sentAngle: sentAngle, _currentAngle: currentAngle} = mh;
+      const sentAngle = ryn.ledger.sentAngle;
+      const currentAngle = ryn.actions.currentAngle;
       if (sentAngle > 1) {
         return;
       }
       const myPlayer = this.client.myPlayer;
-      const sendDir = mh._autoBreakActive && mh._lastBreakAngle != null ? mh._lastBreakAngle : currentAngle;
-      const placedThisTick = mh.placedOnce || mh.healedOnce;
+      const sendDir = ryn.ledger.breakActive && ryn.ledger.breakAngle != null ? ryn.ledger.breakAngle : currentAngle;
+      const placedThisTick = ryn.ledger.placedOnce || ryn.ledger.healedOnce;
       if (placedThisTick) {
-        mh.updateAngle(sendDir, true);
-        mh._currentAngle = sendDir;
+        ryn.actions.updateAngle(sendDir, true);
+        ryn.actions.currentAngle = sendDir;
         return;
       }
       if (myPlayer && getAngleDist(myPlayer.angle, sendDir) > .3) {
-        mh.updateAngle(sendDir);
-        mh._currentAngle = sendDir;
+        ryn.actions.updateAngle(sendDir);
+        ryn.actions.currentAngle = sendDir;
       }
     }
   }
@@ -12433,45 +12438,50 @@ window.grbtp = 35;
       this.client = client2;
     }
     getAttackAngle() {
-      const MH = this.client._Core;
-      const {useAngle: useAngle, _currentAngle: currentAngle} = MH;
+      const ryn = this.client.services;
+      const useAngle = ryn.intent.useAngle;
+      const currentAngle = ryn.actions.currentAngle;
       if (useAngle !== null) {
         return useAngle;
       }
-      if (MH._autoBreakActive && MH._lastBreakAngle != null) {
-        return MH._lastBreakAngle;
+      if (ryn.ledger.breakActive && ryn.ledger.breakAngle != null) {
+        return ryn.ledger.breakAngle;
       }
       return currentAngle;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
-      const {useWeapon: useWeapon, forceWeapon: forceWeapon, weapon: weapon, attacking: attacking, useItem: useItem, sentAngle: sentAngle, unitTable: unitTable} = ModuleHandler;
+      const {services: ryn, myPlayer: myPlayer} = this.client;
+      const {useWeapon: useWeapon, forceWeapon: forceWeapon, useItem: useItem} = ryn.intent;
+      const weapon = ryn.loadout.weapon;
+      const attacking = ryn.actions.attacking;
+      const sentAngle = ryn.ledger.sentAngle;
+      const unitTable = ryn.features.units;
       const {reloading: reloading} = unitTable;
       const nextWeapon = forceWeapon !== null ? forceWeapon : useWeapon;
-      if (nextWeapon !== null && (nextWeapon !== weapon || ModuleHandler.currentHolding !== nextWeapon || myPlayer.currentItem !== -1)) {
+      if (nextWeapon !== null && (nextWeapon !== weapon || ryn.loadout.currentHolding !== nextWeapon || myPlayer.currentItem !== -1)) {
         const isReloaded = reloading.isReloaded(weapon);
         if (isReloaded || forceWeapon !== null) {
-          ModuleHandler.whichWeapon(nextWeapon);
+          ryn.loadout.whichWeapon(nextWeapon);
         }
       }
       if (useItem !== null) {
-        ModuleHandler.selectItem(useItem);
+        ryn.loadout.selectItem(useItem);
       }
-      if (ModuleHandler.shouldAttack) {
+      if (ryn.intent.shouldAttack) {
         const angle = this.getAttackAngle();
-        ModuleHandler.attack(angle);
-        ModuleHandler.stopAttack();
-        const weaponType = ModuleHandler.weapon;
-        if (ModuleHandler.attacked) {
+        ryn.actions.attack(angle);
+        ryn.actions.stopAttack();
+        const weaponType = ryn.loadout.weapon;
+        if (ryn.ledger.attacked) {
           reloading.updateMaxReload(weaponType);
         }
         reloading.resetByType(weaponType);
       } else if (!attacking && sentAngle !== 0) {
-        ModuleHandler.stopAttack();
+        ryn.actions.stopAttack();
         this.didReset = true;
       } else if (this.didReset) {
         this.didReset = false;
-        ModuleHandler.stopAttack();
+        ryn.actions.stopAttack();
       }
     }
   }
@@ -12483,7 +12493,7 @@ window.grbtp = 35;
       this.client = client2;
     }
     getWeaponType() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, services: ryn} = this.client;
       const pos1 = myPlayer.pos.future;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       const nearestAnimal = EnemyManager2.nearestAnimal;
@@ -12498,7 +12508,7 @@ window.grbtp = 35;
         if (myPlayer.collidingEntity(nearestEnemy, range + nearestEnemy.hitScale)) {
           return [ 0, angle ];
         }
-        if (DataHandler_ref.isShootable(secondaryID) && !ModuleHandler.autoattack) {
+        if (DataHandler_ref.isShootable(secondaryID) && !ryn.actions.autoattack) {
           return [ 1, angle ];
         }
       }
@@ -12508,7 +12518,7 @@ window.grbtp = 35;
         if (myPlayer.collidingEntity(nearestAnimal, range + nearestAnimal.hitScale)) {
           return [ 0, angle ];
         }
-        if (DataHandler_ref.isShootable(secondaryID) && !ModuleHandler.autoattack) {
+        if (DataHandler_ref.isShootable(secondaryID) && !ryn.actions.autoattack) {
           return [ 1, angle ];
         }
       }
@@ -12521,11 +12531,11 @@ window.grbtp = 35;
       return null;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || ModuleHandler.attackingState !== 1 || ModuleHandler.forceWeapon !== null) {
+      const {services: ryn} = this.client;
+      if (ryn.arbiter.claimedAbove || ryn.actions.attackingState !== 1 || ryn.intent.forceWeapon !== null) {
         return;
       }
-      if (ModuleHandler._autoFarmActive) {
+      if (ryn.bot.farmActive) {
         return;
       }
       const weaponType = this.getWeaponType();
@@ -12547,11 +12557,11 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || ModuleHandler.attackingState !== 2 || ModuleHandler.forceWeapon !== null) {
+      const {myPlayer: myPlayer, services: ryn, EnemyManager: EnemyManager2} = this.client;
+      if (ryn.arbiter.claimedAbove || ryn.actions.attackingState !== 2 || ryn.intent.forceWeapon !== null) {
         return;
       }
-      if (ModuleHandler._autoFarmActive) {
+      if (ryn.bot.farmActive) {
         return;
       }
       const nearestObject = EnemyManager2.nearestPlayerObject;
@@ -12567,14 +12577,14 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove) {
+      const {myPlayer: myPlayer, services: ryn} = this.client;
+      if (ryn.arbiter.claimedAbove) {
         return;
       }
-      if (ModuleHandler._autoFarmActive) {
+      if (ryn.bot.farmActive) {
         return;
       }
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const type = myPlayer.getFastestWeapon();
       const reverse_type = type === 0 ? 1 : 0;
       if (!reloading.isReloaded(type)) {
@@ -12593,13 +12603,13 @@ window.grbtp = 35;
       this.client = client2;
     }
     getBestUtilityHat(weaponType) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const id = myPlayer.getItemByType(weaponType);
       if (id === 11) {
         return null;
       }
       if (DataHandler_ref.isShootable(id)) {
-        ModuleHandler.canHitEntity = true;
+        ryn.ledger.canHitEntity = true;
         return 20;
       }
       const weapon = DataHandler_ref.getWeapon(id);
@@ -12607,14 +12617,14 @@ window.grbtp = 35;
       if (weapon.damage <= 1) {
         return null;
       }
-      if (ModuleHandler.attackingState === 1) {
+      if (ryn.actions.attackingState === 1) {
         const nearest = EnemyManager2.nearestEntity;
         if (nearest !== null && myPlayer.collidingEntity(nearest, range + nearest.hitScale)) {
-          ModuleHandler.canHitEntity = true;
+          ryn.ledger.canHitEntity = true;
           return 7;
         }
       }
-      if (ModuleHandler.attackingState !== 0) {
+      if (ryn.actions.attackingState !== 0) {
         const nearestObject = EnemyManager2.nearestPlayerObject;
         if (nearestObject === null) {
           return null;
@@ -12626,21 +12636,22 @@ window.grbtp = 35;
       return null;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove) {
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ryn.arbiter.claimedAbove) {
         return;
       }
-      const {forceWeapon: forceWeapon, useWeapon: useWeapon, weapon: weapon} = ModuleHandler;
+      const {forceWeapon: forceWeapon, useWeapon: useWeapon} = ryn.intent;
+      const weapon = ryn.loadout.weapon;
       const weaponType = forceWeapon !== null ? forceWeapon : useWeapon !== null ? useWeapon : weapon;
       let hat = this.getBestUtilityHat(weaponType);
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const isReloaded = reloading.isReloaded(weaponType);
       const isEmptyReload = reloading.isEmptyReload(weaponType);
       const turretReloaded = reloading.isReloaded(2);
       if (!isReloaded) {
         hat = null;
       }
-      if (ModuleHandler.canHitEntity && isEmptyReload && turretReloaded) {
+      if (ryn.ledger.canHitEntity && isEmptyReload && turretReloaded) {
         const nearest = EnemyManager2.nearestEntity;
         if (nearest !== null && myPlayer.collidingEntity(nearest, 700)) {
           hat = 53;
@@ -12673,7 +12684,7 @@ window.grbtp = 35;
     isSaveHeal() {
       return this.isSaveHealTime() && this.isSaveHealTick();
     }
-    antiSmartTick(myPlayer, nearestEnemy, ModuleHandler, ObjectManager2, PlayerManager2) {
+    antiSmartTick(myPlayer, nearestEnemy, ryn, ObjectManager2, PlayerManager2) {
       if (!nearestEnemy) return false;
       const mySecondary = myPlayer.getItemByType(1);
       if (mySecondary !== 10) return false;
@@ -12754,7 +12765,7 @@ window.grbtp = 35;
       if (!Settings_ref._autoheal) {
         return;
       }
-      const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2, ProjectileManager: ProjectileManager2} = this.client;
+      const {myPlayer: myPlayer, services: ryn, EnemyManager: EnemyManager2, ProjectileManager: ProjectileManager2} = this.client;
       if (myPlayer.shameActive) {
         return;
       }
@@ -12766,12 +12777,12 @@ window.grbtp = 35;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       if (myPlayer.isTrapped && nearestEnemy) {
         const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
-        if (this.antiSmartTick(myPlayer, nearestEnemy, ModuleHandler, ObjectManager2, PlayerManager2)) {
-          ModuleHandler.healedOnce = true;
-          ModuleHandler.didAntiInsta = true;
+        if (this.antiSmartTick(myPlayer, nearestEnemy, ryn, ObjectManager2, PlayerManager2)) {
+          ryn.ledger.healedOnce = true;
+          ryn.ledger.didAntiInsta = true;
           bid.shouldAttack = false;
           const hits = Math.max(needTimes + 1, 3);
-          for (let i = 0; i < hits; i++) ModuleHandler.heal();
+          for (let i = 0; i < hits; i++) ryn.actions.heal();
           return;
         }
       }
@@ -12785,10 +12796,10 @@ window.grbtp = 35;
           const trapAboutToBreak = trappedIn.health <= breakDmg * 2;
           const enemyReady = nearestEnemy.atExact(0, 1) || nearestEnemy.isReloaded(0, 1);
           if (trapAboutToBreak && enemyReady) {
-            ModuleHandler.healedOnce = true;
-            ModuleHandler.didAntiInsta = true;
+            ryn.ledger.healedOnce = true;
+            ryn.ledger.didAntiInsta = true;
             const hits = Math.max(needTimes, 2);
-            for (let i = 0; i < hits; i++) ModuleHandler.heal();
+            for (let i = 0; i < hits; i++) ryn.actions.heal();
             return;
           }
         }
@@ -12808,26 +12819,26 @@ window.grbtp = 35;
             const primaryReloaded0 = nearestEnemy.isReloaded(0, 0);
             const secondaryReloaded0 = nearestEnemy.isReloaded(1, 0);
             if (primaryReloaded1 && secondaryReloaded1) {
-              ModuleHandler.healedOnce = true;
-              ModuleHandler.didAntiInsta = true;
+              ryn.ledger.healedOnce = true;
+              ryn.ledger.didAntiInsta = true;
               if (shameCount < 3) {
                 const bothReady = primaryReloaded0 && secondaryReloaded0;
                 const hits = bothReady ? Math.max(needTimes + 2, 4) : needTimes + 1;
-                for (let i = 0; i < hits; i++) ModuleHandler.heal();
+                for (let i = 0; i < hits; i++) ryn.actions.heal();
               } else if (shameCount < 6 && tempHealth < 80) {
                 const hits = Math.max(needTimes, 2);
-                for (let i = 0; i < hits; i++) ModuleHandler.heal();
+                for (let i = 0; i < hits; i++) ryn.actions.heal();
               } else if (tempHealth < 50 && this.isSaveHeal()) {
-                for (let i = 0; i < needTimes; i++) ModuleHandler.heal();
+                for (let i = 0; i < needTimes; i++) ryn.actions.heal();
               }
               return;
             }
             if (EnemyManager2.reverseInsta || EnemyManager2.toolHammerInsta || EnemyManager2.rangedBowInsta) {
               if (tempHealth < 100 && shameCount < 7) {
-                ModuleHandler.healedOnce = true;
-                ModuleHandler.didAntiInsta = true;
+                ryn.ledger.healedOnce = true;
+                ryn.ledger.didAntiInsta = true;
                 const hits = Math.max(needTimes, 2);
-                for (let i = 0; i < hits; i++) ModuleHandler.heal();
+                for (let i = 0; i < hits; i++) ryn.actions.heal();
                 return;
               }
             }
@@ -12835,19 +12846,19 @@ window.grbtp = 35;
         }
       }
       let healingTimes = null;
-      if (EnemyManager2.reverseInsta || EnemyManager2.toolHammerInsta || EnemyManager2.rangedBowInsta || EnemyManager2.detectedDangerEnemy || EnemyManager2.detectedEnemy || tempHealth <= 20 || ModuleHandler.shouldEquipSoldier && ModuleHandler.forceHat !== 6 || EnemyManager2.dangerWithoutSoldier) {
+      if (EnemyManager2.reverseInsta || EnemyManager2.toolHammerInsta || EnemyManager2.rangedBowInsta || EnemyManager2.detectedDangerEnemy || EnemyManager2.detectedEnemy || tempHealth <= 20 || ryn.intent.shouldEquipSoldier && ryn.intent.forceHat !== 6 || EnemyManager2.dangerWithoutSoldier) {
         this.forceHeal = true;
       }
       if (shameCount < 7 && this.forceHeal && tempHealth < 95) {
-        ModuleHandler.didAntiInsta = true;
+        ryn.ledger.didAntiInsta = true;
         healingTimes = needTimes;
       } else if (this.isSaveHeal() && tempHealth < 100) {
         healingTimes = needTimes;
       }
       if (healingTimes !== null) {
-        ModuleHandler.healedOnce = true;
+        ryn.ledger.healedOnce = true;
         for (let i = 0; i < healingTimes; i++) {
-          ModuleHandler.heal();
+          ryn.actions.heal();
         }
       }
     }
@@ -12860,56 +12871,56 @@ window.grbtp = 35;
       this.client = client2;
     }
     handleEquip(type, use) {
-      const {_Core: ModuleHandler} = this.client;
-      if (type === 0 && ModuleHandler.forceHat !== null) {
-        use = ModuleHandler.forceHat;
+      const {services: ryn} = this.client;
+      if (type === 0 && ryn.intent.forceHat !== null) {
+        use = ryn.intent.forceHat;
       }
-      if (use !== null && ModuleHandler._equip(type, use)) {
+      if (use !== null && ryn.loadout.equip(type, use)) {
         return true;
       }
       return false;
     }
     getNextHat() {
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.forceHat !== null) {
-        return ModuleHandler.forceHat;
+      const {services: ryn, myPlayer: myPlayer} = this.client;
+      if (ryn.intent.forceHat !== null) {
+        return ryn.intent.forceHat;
       }
-      if (ModuleHandler.useHat !== null) {
-        return ModuleHandler.useHat;
+      if (ryn.intent.useHat !== null) {
+        return ryn.intent.useHat;
       }
       return myPlayer.hatID;
     }
     getNextAcc() {
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.useAcc !== null) {
-        return ModuleHandler.useAcc;
+      const {services: ryn, myPlayer: myPlayer} = this.client;
+      if (ryn.intent.useAcc !== null) {
+        return ryn.intent.useAcc;
       }
       return myPlayer.accessoryID;
     }
     getNextWeaponID() {
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.forceWeapon !== null) {
-        return myPlayer.getItemByType(ModuleHandler.forceWeapon);
+      const {services: ryn, myPlayer: myPlayer} = this.client;
+      if (ryn.intent.forceWeapon !== null) {
+        return myPlayer.getItemByType(ryn.intent.forceWeapon);
       }
-      if (ModuleHandler.useWeapon !== null) {
-        return myPlayer.getItemByType(ModuleHandler.useWeapon);
+      if (ryn.intent.useWeapon !== null) {
+        return myPlayer.getItemByType(ryn.intent.useWeapon);
       }
       return myPlayer.weapon.current;
     }
     getNextItemID() {
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler.useItem !== null) {
-        return myPlayer.getItemByType(ModuleHandler.useItem);
+      const {services: ryn, myPlayer: myPlayer} = this.client;
+      if (ryn.intent.useItem !== null) {
+        return myPlayer.getItemByType(ryn.intent.useItem);
       }
       return myPlayer.currentItem;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler} = this.client;
-      if (!ModuleHandler.sentHatEquip) {
-        this.handleEquip(0, ModuleHandler.useHat);
+      const {services: ryn} = this.client;
+      if (!ryn.ledger.sentHatEquip) {
+        this.handleEquip(0, ryn.intent.useHat);
       }
-      if (!ModuleHandler.sentAccEquip && !ModuleHandler.sentHatEquip) {
-        this.handleEquip(1, ModuleHandler.useAcc);
+      if (!ryn.ledger.sentAccEquip && !ryn.ledger.sentHatEquip) {
+        this.handleEquip(1, ryn.intent.useAcc);
       }
     }
   }
@@ -12921,8 +12932,8 @@ window.grbtp = 35;
       this.client = client2;
     }
     shouldUseTail() {
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {services: ryn, myPlayer: myPlayer} = this.client;
+      const {reloading: reloading} = ryn.features.units;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
       const isMelee1 = DataHandler_ref.isMelee(primary);
@@ -12930,18 +12941,18 @@ window.grbtp = 35;
       return isMelee1 && primary === 8 || isMelee1 && !reloading.isReloaded(0, 3) || isMelee2 && !reloading.isReloaded(1, 3);
     }
     getBestCurrentAcc() {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      const {actual: actual} = ModuleHandler.getAccStore();
-      const useCorrupt = ModuleHandler.canBuy(1, 21);
-      const useShadow = ModuleHandler.canBuy(1, 19);
-      const useTail = ModuleHandler.canBuy(1, 11);
-      const useActual = ModuleHandler.canBuy(1, actual);
-      const useBloodWings = ModuleHandler.canBuy(1, 18);
-      const turretActive = ModuleHandler.forceHat === 53 || myPlayer.hatID === 53;
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      const {actual: actual} = ryn.loadout.getAccStore();
+      const useCorrupt = ryn.loadout.canBuy(1, 21);
+      const useShadow = ryn.loadout.canBuy(1, 19);
+      const useTail = ryn.loadout.canBuy(1, 11);
+      const useActual = ryn.loadout.canBuy(1, actual);
+      const useBloodWings = ryn.loadout.canBuy(1, 18);
+      const turretActive = ryn.intent.forceHat === 53 || myPlayer.hatID === 53;
       if (turretActive && useShadow) {
         return 19;
       }
-      const bullActive = ModuleHandler.forceHat === 7 || myPlayer.hatID === 7;
+      const bullActive = ryn.intent.forceHat === 7 || myPlayer.hatID === 7;
       if (bullActive) {
         if (useBloodWings) return 18;
         if (useShadow) return 19;
@@ -12951,7 +12962,7 @@ window.grbtp = 35;
       }
       if (EnemyManager2.detectedEnemy || EnemyManager2.nearestEnemyInRangeOf(300, EnemyManager2.nearestEntity)) {
         const isEnemy = EnemyManager2.nearestEntity === EnemyManager2.nearestEnemy;
-        const useAngel = ModuleHandler.canBuy(1, 13);
+        const useAngel = ryn.loadout.canBuy(1, 13);
         if (useAngel) {
           return 13;
         }
@@ -12967,7 +12978,7 @@ window.grbtp = 35;
         if (useBloodWings) return 18;
         return 0;
       }
-      if (!ModuleHandler.isMoving && myPlayer.speed <= 5) {
+      if (!ryn.motion.isMoving && myPlayer.speed <= 5) {
         if (useBloodWings) return 18;
       }
       if (useTail) {
@@ -12976,7 +12987,7 @@ window.grbtp = 35;
       return 0;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler} = this.client;
+      const {services: ryn} = this.client;
       const acc = this.getBestCurrentAcc();
       bid.useAcc = acc;
     }
@@ -12988,8 +12999,8 @@ window.grbtp = 35;
       this.client = client2;
     }
     canWearCowboy() {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
-      if (!Settings_ref._cowboyWhenSafe || !ModuleHandler.canBuy(0, 5)) {
+      const {services: ryn, EnemyManager: EnemyManager2} = this.client;
+      if (!Settings_ref._cowboyWhenSafe || !ryn.loadout.canBuy(0, 5)) {
         return false;
       }
       if (EnemyManager2.detectedEnemy || EnemyManager2.detectedDangerEnemy) {
@@ -12998,16 +13009,16 @@ window.grbtp = 35;
       return !EnemyManager2.nearestEnemyInRangeOf(COWBOY_DROP_RANGE, EnemyManager2.nearestEnemy);
     }
     getBestCurrentHat(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const {current: current, future: future} = myPlayer.pos;
-      const {actual: actual} = ModuleHandler.getHatStore();
-      const useFlipper = ModuleHandler.canBuy(0, 31);
-      const useSoldier = ModuleHandler.canBuy(0, 6);
-      const useWinter = ModuleHandler.canBuy(0, 15);
-      const useActual = ModuleHandler.canBuy(0, actual);
-      const useBooster = ModuleHandler.canBuy(0, 12);
-      const useBull = ModuleHandler.canBuy(0, 7);
-      const useEmp = ModuleHandler.canBuy(0, 22);
+      const {actual: actual} = ryn.loadout.getHatStore();
+      const useFlipper = ryn.loadout.canBuy(0, 31);
+      const useSoldier = ryn.loadout.canBuy(0, 6);
+      const useWinter = ryn.loadout.canBuy(0, 15);
+      const useActual = ryn.loadout.canBuy(0, actual);
+      const useBooster = ryn.loadout.canBuy(0, 12);
+      const useBull = ryn.loadout.canBuy(0, 7);
+      const useEmp = ryn.loadout.canBuy(0, 22);
       let _empNearbyTurret = false;
       if (useEmp && Settings_ref._empDefense) {
         const {ObjectManager: _empOM} = this.client;
@@ -13021,7 +13032,7 @@ window.grbtp = 35;
           }
         });
       }
-      if (!ModuleHandler.isMoving && myPlayer.speed <= 5 && !_empNearbyTurret) {
+      if (!ryn.motion.isMoving && myPlayer.speed <= 5 && !_empNearbyTurret) {
         const _nearestStill = EnemyManager2.nearestEnemy;
         const _primary = myPlayer.getItemByType(0);
         const _weaponRange = _primary !== null ? DataHandler_ref.getWeapon(_primary).range + (_nearestStill?.hitScale || 35) : 85;
@@ -13060,7 +13071,7 @@ window.grbtp = 35;
       if (useEmp && Settings_ref._empDefense && _empNearbyTurret) {
         return 22;
       }
-      if (useEmp && Settings_ref._empDefense && (!ModuleHandler.isMoving || myPlayer.speed <= 5)) {
+      if (useEmp && Settings_ref._empDefense && (!ryn.motion.isMoving || myPlayer.speed <= 5)) {
         return 22;
       }
       if (Settings_ref._biomehats && useWinter) {
@@ -13081,7 +13092,7 @@ window.grbtp = 35;
       return 0;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler} = this.client;
+      const {services: ryn} = this.client;
       const hat = this.getBestCurrentHat(bid);
       bid.useHat = hat;
     }
@@ -13097,23 +13108,23 @@ window.grbtp = 35;
       this.movingState = false;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2} = this.client;
-      const {prevMoveTo: prevMoveTo, moveTo: moveTo} = ModuleHandler;
+      const {services: ryn, myPlayer: myPlayer, ObjectManager: ObjectManager2, EnemyManager: EnemyManager2} = this.client;
+      const {prevMoveTo: prevMoveTo, moveTo: moveTo} = ryn.intent;
       if (prevMoveTo !== moveTo) {
-        const angle = moveTo === "disable" ? ModuleHandler.move_dir : moveTo;
-        ModuleHandler.startMovement(angle, true);
+        const angle = moveTo === "disable" ? ryn.motion.move_dir : moveTo;
+        ryn.motion.start(angle, true);
         return;
       }
       if (myPlayer.simulation.collisionSimulation(this.client)) {
         if (!this.movingState) {
           this.movingState = true;
-          ModuleHandler.stopMovement();
+          ryn.motion.stop();
         }
         return;
       }
       if (this.movingState) {
         this.movingState = false;
-        ModuleHandler.startMovement();
+        ryn.motion.start();
       }
     }
   }
@@ -13129,15 +13140,15 @@ window.grbtp = 35;
       return !myPlayer.shameActive && myPlayer.shameCount > 0 && myPlayer.poisonCount === 0 && myPlayer.isBullTickTime();
     }
     get shouldReset() {
-      const {_Core: ModuleHandler} = this.client;
-      return this.isBullTickTime() && ModuleHandler.canBuy(0, 7);
+      const {services: ryn} = this.client;
+      return this.isBullTickTime() && ryn.loadout.canBuy(0, 7);
     }
     notSave() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
-      return ModuleHandler.forceHat === 40 || EnemyManager2.instaThreat() || EnemyManager2.collidingSpike || myPlayer.wasTrapped() || ModuleHandler.currentType === 2;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, services: ryn} = this.client;
+      return ryn.intent.forceHat === 40 || EnemyManager2.instaThreat() || EnemyManager2.collidingSpike || myPlayer.wasTrapped() || ryn.loadout.currentType === 2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler} = this.client;
+      const {services: ryn} = this.client;
       if (Settings_ref._autoheal && !this.notSave() && (this.shouldReset || this.tickToggle)) {
         this.tickToggle = true;
         bid.moduleActive = true;
@@ -13207,15 +13218,15 @@ window.grbtp = 35;
       return this.buyIndex >= this.buyList.length;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const {services: ryn, myPlayer: myPlayer} = this.client;
       if (this.boughtEverything() || !myPlayer.isSandbox) {
         return;
       }
       const [type, id] = this.buyList[this.buyIndex];
-      if (ModuleHandler.canBuy(type, id)) {
-        ModuleHandler._buy(type, id);
+      if (ryn.loadout.canBuy(type, id)) {
+        ryn.loadout.buy(type, id);
       }
-      if (ModuleHandler.bought[type].has(id)) {
+      if (ryn.loadout.bought[type].has(id)) {
         this.buyIndex += 1;
       }
     }
@@ -13236,11 +13247,11 @@ window.grbtp = 35;
       return upgradedSecondary && upgradedPrimary;
     }
     getGrindAction(nearestTurret) {
-      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, services: ryn} = this.client;
       if (!nearestTurret) return null;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
-      const useTank = ModuleHandler.canBuy(0, 40);
+      const useTank = ryn.loadout.canBuy(0, 40);
       let weaponType = null;
       if (secondary === 10 && myPlayer.getWeaponVariant(secondary).current < 3) {
         weaponType = 1;
@@ -13283,22 +13294,22 @@ window.grbtp = 35;
       return null;
     }
     placeTurret(angle) {
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _Core: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, services: ryn} = this.client;
       const id = myPlayer.getItemByType(8);
       const position = myPlayer.getPlacePosition(myPlayer.pos.future, id, angle);
       if (!ObjectManager2.canPlaceItem(id, position)) {
         return false;
       }
-      ModuleHandler.place(8, angle);
-      if (!Array.isArray(ModuleHandler.placeAngles[1])) {
-        ModuleHandler.placeAngles[1] = [];
+      ryn.actions.place(8, angle);
+      if (!Array.isArray(ryn.ledger.placeAngles[1])) {
+        ryn.ledger.placeAngles[1] = [];
       }
-      ModuleHandler.placeAngles[0] = 8;
-      ModuleHandler.placeAngles[1].push(angle);
+      ryn.ledger.placeAngles[0] = 8;
+      ryn.ledger.placeAngles[1].push(angle);
       return true;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
       if (this.isFullyUpgraded()) {
         if (Settings_ref._autoGrind) {
           Settings_ref._autoGrind = false;
@@ -13308,11 +13319,11 @@ window.grbtp = 35;
         }
         return;
       }
-      if (!Settings_ref._autoGrind || ModuleHandler._arbiter.claimedAbove || ModuleHandler.healedOnce || myPlayer.speed > 5) {
+      if (!Settings_ref._autoGrind || ryn.arbiter.claimedAbove || ryn.ledger.healedOnce || myPlayer.speed > 5) {
         this.grindAngle = null;
         return;
       }
-      const {autoMill: autoMill, reloading: reloading} = ModuleHandler.unitTable;
+      const {autoMill: autoMill, reloading: reloading} = ryn.features.units;
       if (autoMill.isActive) return;
       const farmItem = myPlayer.getItemByType(8);
       if (farmItem !== 17 && farmItem !== 22) return;
@@ -13337,7 +13348,7 @@ window.grbtp = 35;
       });
       if (count === 0) {
         if (!myPlayer.canPlace(8)) return;
-        this.grindAngle = ModuleHandler._currentAngle;
+        this.grindAngle = ryn.actions.currentAngle;
         let placed = false;
         const isSandbox = myPlayer.isSandbox;
         if (!isSandbox || farmItem === 22) {
@@ -13351,7 +13362,7 @@ window.grbtp = 35;
           if (this.placeTurret(this.grindAngle + spread)) placed = true;
         }
         if (placed) {
-          ModuleHandler.placedOnce = true;
+          ryn.ledger.placedOnce = true;
           bid.moduleActive = true;
         }
         return;
@@ -13387,22 +13398,22 @@ window.grbtp = 35;
     }
     get canAutomill() {
       const isOwner = this.client.isOwner;
-      const {attacking: attacking, placedOnce: placedOnce, unitTable: unitTable} = this.client._Core;
-      return Settings_ref._automill && this.client.myPlayer.isSandbox && !placedOnce && (!isOwner || !attacking) && this.active && !unitTable.autoBuy.boughtEverything() && this.client.myPlayer.age < 20;
+      const {actions: actions, ledger: ledger, features: features} = this.client.services;
+      return Settings_ref._automill && this.client.myPlayer.isSandbox && !ledger.placedOnce && (!isOwner || !actions.attacking) && this.active && !features.units.autoBuy.boughtEverything() && this.client.myPlayer.age < 20;
     }
     canPlaceWindmill(angle) {
       return this.client.myPlayer.canPlaceObject(5, angle);
     }
     placeWindmill(angle) {
-      const {_Core: ModuleHandler} = this.client;
+      const {services: ryn} = this.client;
       const type = 5;
-      ModuleHandler.place(type, angle);
-      ModuleHandler.placedOnce = true;
-      ModuleHandler.placeAngles[0] = type;
-      ModuleHandler.placeAngles[1].push(angle);
+      ryn.actions.place(type, angle);
+      ryn.ledger.placedOnce = true;
+      ryn.ledger.placeAngles[0] = type;
+      ryn.ledger.placeAngles[1].push(angle);
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, _Core: ModuleHandler} = this.client;
+      const {myPlayer: myPlayer, services: ryn} = this.client;
       this.toggle = true;
       if (!this.canAutomill) {
         this.toggle = false;
@@ -13413,7 +13424,7 @@ window.grbtp = 35;
         this.active = false;
         return;
       }
-      const angle = ModuleHandler.reverse_move_dir;
+      const angle = ryn.motion.reverse_move_dir;
       if (angle === null) {
         return;
       }
@@ -13437,21 +13448,21 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._autoSteal) {
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ryn.arbiter.claimedAbove || !Settings_ref._autoSteal) {
         return;
       }
       const nearestLowEntity = EnemyManager2.nearestLowEntity;
       if (nearestLowEntity === null) {
         return;
       }
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const primary = myPlayer.getItemByType(0);
       const range = DataHandler_ref.getWeapon(primary).range + nearestLowEntity.hitScale;
       if (!myPlayer.collidingSimple(nearestLowEntity, range) || !reloading.isReloaded(0)) {
         return;
       }
-      const canUseBull = ModuleHandler.canBuy(0, 7);
+      const canUseBull = ryn.loadout.canBuy(0, 7);
       const pos1 = myPlayer.pos.current;
       const pos2 = nearestLowEntity.pos.current;
       const angle = pos1.angle(pos2);
@@ -13481,7 +13492,7 @@ window.grbtp = 35;
       this.targetEnemy = null;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, _Core: ModuleHandler, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2, services: ryn, InputHandler: InputHandler2, SocketManager: SocketManager2} = this.client;
       if (!InputHandler2.instaToggle) {
         this.reset();
         InputHandler2.instaReset();
@@ -13498,13 +13509,13 @@ window.grbtp = 35;
       const lookingShield = PlayerManager2.lookingShield(nearestEnemy, myPlayer);
       const primaryDamage = myPlayer.getMaxWeaponDamage(primary, lookingShield);
       const secondaryDamage = myPlayer.getMaxWeaponDamage(secondary, lookingShield);
-      const turretBonus = ModuleHandler.canBuy(0, 53) ? 25 : 0;
+      const turretBonus = ryn.loadout.canBuy(0, 53) ? 25 : 0;
       if (primaryDamage + secondaryDamage + turretBonus < nearestEnemy.currentHealth) return;
       const pos1 = myPlayer.pos.future;
       const pos2 = nearestEnemy.pos.future;
       const angle = pos1.angle(pos2);
       InputHandler2.instakillTarget = nearestEnemy;
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const primaryReloaded = reloading.isReloaded(0, 1);
       const secondaryReloaded = reloading.isReloaded(1);
       const turretReloaded = reloading.isReloaded(2);
@@ -13513,7 +13524,7 @@ window.grbtp = 35;
       const inRange = myPlayer.collidingEntity(nearestEnemy, baseRange) || myPlayer.collidingEntity(nearestEnemy, predictedRange);
       const myPosCur = myPlayer.pos.current;
       const dist = myPosCur.distance(nearestEnemy.pos.current);
-      if (dist < baseRange * 2.5 && ModuleHandler.canBuy(0, 53)) {
+      if (dist < baseRange * 2.5 && ryn.loadout.canBuy(0, 53)) {
         bid.useAngle = angle;
       }
       if (this.targetEnemy !== null) {
@@ -13563,7 +13574,7 @@ window.grbtp = 35;
       this.active = false;
     }
     runTick(bid) {
-      const {EnemyManager: EnemyManager2, _Core: ModuleHandler, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
+      const {EnemyManager: EnemyManager2, services: ryn, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
       if (!InputHandler2.instaToggle || !Settings_ref._musketBowInsta) {
         this.reset();
         InputHandler2.instaReset();
@@ -13597,7 +13608,7 @@ window.grbtp = 35;
           bid.forceWeapon = 1;
           bid.shouldAttack = true;
           bid.moveTo = null;
-          ModuleHandler._upgradeItem(15);
+          ryn.loadout.upgradeItem(15);
           this.tickAction = 2;
           return;
         }
@@ -13605,8 +13616,8 @@ window.grbtp = 35;
       }
       if (myPlayer.upgradeAge !== 6 || myPlayer.age < 6) return;
       this.active = true;
-      const {reloading: reloading} = ModuleHandler.unitTable;
-      const useTurret = ModuleHandler.canBuy(0, 53);
+      const {reloading: reloading} = ryn.features.units;
+      const useTurret = ryn.loadout.canBuy(0, 53);
       if (!useTurret || !reloading.isReloaded(2) || !inRange(distance, this.distMin, this.distMax)) {
         return;
       }
@@ -13616,8 +13627,8 @@ window.grbtp = 35;
       bid.forceHat = 53;
       bid.forceWeapon = 0;
       bid.shouldAttack = true;
-      ModuleHandler._upgradeItem(9);
-      ModuleHandler._upgradeItem(18, true);
+      ryn.loadout.upgradeItem(9);
+      ryn.loadout.upgradeItem(18, true);
       bid.forceWeapon = 1;
       bid.shouldAttack = true;
       this.tickAction = 1;
@@ -13634,17 +13645,17 @@ window.grbtp = 35;
     }
     runTick(bid) {
       this._tick += 1;
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const {services: ryn, myPlayer: myPlayer} = this.client;
       if (!Settings_ref._platformMusket) return;
-      if (ModuleHandler._arbiter.claimedAbove) return;
-      if (ModuleHandler.forceWeapon !== 1 || !ModuleHandler.shouldAttack) return;
+      if (ryn.arbiter.claimedAbove) return;
+      if (ryn.intent.forceWeapon !== 1 || !ryn.intent.shouldAttack) return;
       const secondaryID = myPlayer.getItemByType(1);
       if (secondaryID !== 15) return;
       if (myPlayer.onPlatform) return;
       if (this._tick - this._lastPlaceTick < 10) return;
       if (!myPlayer.canPlace(8)) return;
-      const angle = ModuleHandler.useAngle ?? myPlayer.angle;
-      ModuleHandler.place(8, angle);
+      const angle = ryn.intent.useAngle ?? myPlayer.angle;
+      ryn.actions.place(8, angle);
       this._lastPlaceTick = this._tick;
     }
   }
@@ -13666,7 +13677,7 @@ window.grbtp = 35;
       this.active = false;
     }
     runTick(bid) {
-      const {EnemyManager: EnemyManager2, _Core: ModuleHandler, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
+      const {EnemyManager: EnemyManager2, services: ryn, myPlayer: myPlayer, InputHandler: InputHandler2} = this.client;
       if (!InputHandler2.instaToggle) {
         this.reset();
         InputHandler2.instaReset();
@@ -13690,7 +13701,7 @@ window.grbtp = 35;
           bid.forceWeapon = 1;
           bid.shouldAttack = true;
           bid.moveTo = null;
-          ModuleHandler._upgradeItem(15);
+          ryn.loadout.upgradeItem(15);
           this.reset();
           InputHandler2.instaReset();
           return;
@@ -13701,7 +13712,7 @@ window.grbtp = 35;
           bid.forceWeapon = 1;
           bid.shouldAttack = true;
           bid.moveTo = null;
-          ModuleHandler._upgradeItem(12);
+          ryn.loadout.upgradeItem(12);
           this.tickAction = 2;
           return;
         }
@@ -13712,8 +13723,8 @@ window.grbtp = 35;
         return;
       }
       this.active = true;
-      const {reloading: reloading} = ModuleHandler.unitTable;
-      const useTurret = ModuleHandler.canBuy(0, 53);
+      const {reloading: reloading} = ryn.features.units;
+      const useTurret = ryn.loadout.canBuy(0, 53);
       if (!useTurret || !reloading.isReloaded(2) || !inRange(distance, this.distMin, this.distMax)) {
         return;
       }
@@ -13724,16 +13735,16 @@ window.grbtp = 35;
       bid.forceWeapon = 1;
       bid.shouldAttack = true;
       if (myPlayer.upgradeAge === 6) {
-        ModuleHandler._upgradeItem(9);
+        ryn.loadout.upgradeItem(9);
       }
       if (myPlayer.upgradeAge === 7) {
-        ModuleHandler._upgradeItem(18, true);
+        ryn.loadout.upgradeItem(18, true);
       }
       if (myPlayer.upgradeAge === 8 && myPlayer.getItemByType(8) === 18) {
-        ModuleHandler.place(8, angle);
-        ModuleHandler.place(8, angle - toRadians(90));
-        ModuleHandler.place(8, angle + toRadians(90));
-        ModuleHandler.place(8, reverseAngle(angle));
+        ryn.actions.place(8, angle);
+        ryn.actions.place(8, angle - toRadians(90));
+        ryn.actions.place(8, angle + toRadians(90));
+        ryn.actions.place(8, reverseAngle(angle));
       }
       this.tickAction = 1;
       this.targetEnemy = nearestEnemy;
@@ -13746,7 +13757,7 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _Core: ModuleHandler, ProjectileManager: ProjectileManager2, ObjectManager: ObjectManager2} = this.client;
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, services: ryn, ProjectileManager: ProjectileManager2, ObjectManager: ObjectManager2} = this.client;
       const nearestEnemy = EnemyManager2.nearestEnemy;
       if (nearestEnemy === null || !Settings_ref._placementDefense) {
         return;
@@ -13782,12 +13793,12 @@ window.grbtp = 35;
           const rectEnd = pos3.copy().add(placementScale);
           const distance2 = pos3.distance(pos2);
           if (distance2 < distance1 && lineIntersectsRect(pos2, pos1, rectStart, rectEnd)) {
-            ModuleHandler.place(type, angle2);
+            ryn.actions.place(type, angle2);
           }
         }
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.placeAngles[0] = type;
-        ModuleHandler.placeAngles[1] = [ angle ];
+        ryn.ledger.placedOnce = true;
+        ryn.ledger.placeAngles[0] = type;
+        ryn.ledger.placeAngles[1] = [ angle ];
       }
     }
   }
@@ -13798,12 +13809,12 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._turretSteal) {
+      const {services: ryn, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      if (ryn.arbiter.claimedAbove || !Settings_ref._turretSteal) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestTurretEntity;
-      if (nearestEnemy === null || nearestEnemy.currentHealth > 25 || !ModuleHandler.canBuy(0, 53)) {
+      if (nearestEnemy === null || nearestEnemy.currentHealth > 25 || !ryn.loadout.canBuy(0, 53)) {
         return;
       }
       const pos0 = myPlayer.pos.current;
@@ -13812,7 +13823,7 @@ window.grbtp = 35;
       if (distance > 700) {
         return;
       }
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       if (!reloading.isReloaded(2)) {
         return;
       }
@@ -13915,19 +13926,19 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, _Core: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
+      const {myPlayer: myPlayer, services: ryn, EnemyManager: EnemyManager2} = this.client;
       const nearestEnemy = EnemyManager2.nearestEnemy;
-      if (ModuleHandler._arbiter.claimedAbove || !nearestEnemy) {
+      if (ryn.arbiter.claimedAbove || !nearestEnemy) {
         this.nearestTarget = null;
         this.useTurret = false;
         return;
       }
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const primaryReloaded = reloading.isReloaded(0);
       const turretReloaded = reloading.isReloaded(2);
       if (this.useTurret) {
         this.useTurret = false;
-        if (turretReloaded && ModuleHandler.canBuy(0, 53)) {
+        if (turretReloaded && ryn.loadout.canBuy(0, 53)) {
           bid.moduleActive = true;
           bid.forceHat = 53;
         }
@@ -13945,30 +13956,30 @@ window.grbtp = 35;
         bid.forceWeapon = 0;
         bid.shouldAttack = true;
         if (myPlayer.upgradeAge === 3) {
-          ModuleHandler._upgradeItem(1, true);
+          ryn.loadout.upgradeItem(1, true);
         }
         if (myPlayer.upgradeAge === 4) {
-          ModuleHandler._upgradeItem(15, true);
+          ryn.loadout.upgradeItem(15, true);
         }
         if (myPlayer.upgradeAge === 5) {
-          ModuleHandler._upgradeItem(7, true);
+          ryn.loadout.upgradeItem(7, true);
         }
         if (myPlayer.upgradeAge === 6) {
-          ModuleHandler._upgradeItem(10);
+          ryn.loadout.upgradeItem(10);
         }
         if (myPlayer.upgradeAge === 7) {
-          ModuleHandler._upgradeItem(22, true);
+          ryn.loadout.upgradeItem(22, true);
         }
         if (myPlayer.upgradeAge === 8) {
-          ModuleHandler._upgradeItem(4);
+          ryn.loadout.upgradeItem(4);
         }
         this.nearestTarget = null;
-        if (ModuleHandler.canBuy(0, 53)) {
+        if (ryn.loadout.canBuy(0, 53)) {
           this.useTurret = true;
         }
         EnemyManager2.attemptSpikePlacement();
       }
-      if (myPlayer.age < 8 || myPlayer.upgradeAge >= 9 || !isSword || !primaryReloaded || !ModuleHandler.canBuy(0, 7)) {
+      if (myPlayer.age < 8 || myPlayer.upgradeAge >= 9 || !isSword || !primaryReloaded || !ryn.loadout.canBuy(0, 7)) {
         return;
       }
       const range = DataHandler_ref.getWeapon(primary).range + nearestEnemy.hitScale;
@@ -13992,12 +14003,12 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || EnemyManager2.instaThreat() || EnemyManager2.spikeSyncThreat || !Settings_ref._spikeGearInsta) {
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ryn.arbiter.claimedAbove || EnemyManager2.instaThreat() || EnemyManager2.spikeSyncThreat || !Settings_ref._spikeGearInsta) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
-      if (nearestEnemy === null || !ModuleHandler.canBuy(0, 11) || !ModuleHandler.canBuy(1, 21) || myPlayer.accessoryID !== 21 || nearestEnemy.variant.primary !== 0) {
+      if (nearestEnemy === null || !ryn.loadout.canBuy(0, 11) || !ryn.loadout.canBuy(1, 21) || myPlayer.accessoryID !== 21 || nearestEnemy.variant.primary !== 0) {
         return;
       }
       const pos1 = myPlayer.pos.current;
@@ -14031,8 +14042,8 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, InputHandler: InputHandler2, PlayerManager: PlayerManager2, myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove) {
+      const {services: ryn, InputHandler: InputHandler2, PlayerManager: PlayerManager2, myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
+      if (ryn.arbiter.claimedAbove) {
         return;
       }
       if (!InputHandler2.instaToggle) {
@@ -14058,15 +14069,15 @@ window.grbtp = 35;
       const id = myPlayer.getItemByType(4);
       const current = myPlayer.getPlacePosition(pos1, id, angle);
       const distance2 = current.distance(pos1);
-      ModuleHandler.placeAngles[0] = 4;
-      ModuleHandler.placeAngles[1] = angles;
+      ryn.ledger.placeAngles[0] = 4;
+      ryn.ledger.placeAngles[1] = angles;
       if (distance > distance2 || !angles.every(angle2 => myPlayer.canPlaceObject(4, angle2))) {
         return;
       }
       InputHandler2.instaReset();
       PacketManager2.leaveClan();
       for (const angle2 of angles) {
-        ModuleHandler.place(4, angle2);
+        ryn.actions.place(4, angle2);
       }
     }
   }
@@ -14077,8 +14088,8 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove) {
+      const {services: ryn, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      if (ryn.arbiter.claimedAbove) {
         return;
       }
       const trapId = myPlayer.getItemByType(7);
@@ -14095,16 +14106,16 @@ window.grbtp = 35;
       }
       const angles = [ angle, angle - toRadians(90), angle + toRadians(90), angle + toRadians(180) ];
       const id = myPlayer.getItemByType(4);
-      const len = ModuleHandler.currentType === 7 ? 30 : 0;
+      const len = ryn.loadout.currentType === 7 ? 30 : 0;
       const current = myPlayer.getPlacePosition(pos1, id, angle);
       const distance2 = current.distance(pos1) + len;
-      ModuleHandler.placeAngles[0] = 4;
-      ModuleHandler.placeAngles[1] = angles;
+      ryn.ledger.placeAngles[0] = 4;
+      ryn.ledger.placeAngles[1] = angles;
       if (distance > distance2) {
         return;
       }
       for (const angle2 of angles) {
-        ModuleHandler.place(4, angle2);
+        ryn.actions.place(4, angle2);
       }
     }
   }
@@ -14115,8 +14126,8 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove || !Settings_ref._turretSync) {
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (ryn.arbiter.claimedAbove || !Settings_ref._turretSync) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -14129,7 +14140,7 @@ window.grbtp = 35;
         return;
       }
       const range = weapon.range + nearestEnemy.hitScale;
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       if (!myPlayer.collidingSimple(nearestEnemy, range) || !reloading.isReloaded(0) || nearestEnemy.nextDamageTick !== myPlayer.tickCount + 2) {
         return;
       }
@@ -14150,16 +14161,17 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer} = this.client;
-      const {currentType: currentType, _currentAngle: currentAngle} = ModuleHandler;
+      const {services: ryn, myPlayer: myPlayer} = this.client;
+      const currentType = ryn.loadout.currentType;
+      const currentAngle = ryn.actions.currentAngle;
       if (!myPlayer.canPlace(currentType) || !Settings_ref._dashMovement) {
         return;
       }
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const primary = myPlayer.getItemByType(0);
       const secondary = myPlayer.getItemByType(1);
       const boost = myPlayer.getItemByType(7);
-      if (boost !== 16 || !ModuleHandler.hasStoreItem(0, 40) || currentType !== 7 || ModuleHandler.placedOnce) {
+      if (boost !== 16 || !ryn.loadout.hasStoreItem(0, 40) || currentType !== 7 || ryn.ledger.placedOnce) {
         return;
       }
       const hasHammer = secondary === 10;
@@ -14181,17 +14193,17 @@ window.grbtp = 35;
       if (weaponType === null) {
         return;
       }
-      ModuleHandler.placedOnce = true;
+      ryn.ledger.placedOnce = true;
       const reloaded = reloading.isReloaded(weaponType);
       if (!reloaded) {
         return;
       }
-      const prevWeapon = ModuleHandler.currentHolding;
-      const dashAngle = ModuleHandler.move_dir !== null ? ModuleHandler.move_dir : currentAngle;
-      ModuleHandler.place(currentType, dashAngle);
+      const prevWeapon = ryn.loadout.currentHolding;
+      const dashAngle = ryn.motion.move_dir !== null ? ryn.motion.move_dir : currentAngle;
+      ryn.actions.place(currentType, dashAngle);
       bid.useAngle = dashAngle;
       bid.useHat = 40;
-      if (ModuleHandler.canBuy(1, 11)) {
+      if (ryn.loadout.canBuy(1, 11)) {
         bid.useAcc = 11;
       }
       bid.forceWeapon = weaponType;
@@ -14282,12 +14294,12 @@ window.grbtp = 35;
       } catch (e) {}
       return false;
     }
-    _forceWeapon(MH, type, attack, bid) {
+    _forceWeapon(ryn, type, attack, bid) {
       const id = this.client.myPlayer.getItemByType(type);
       if (id === null || id === undefined) return;
       this.client.PacketManager.selectItemByID(id, type === 1);
-      MH.currentHolding = type;
-      MH.weapon = type;
+      ryn.loadout.currentHolding = type;
+      ryn.loadout.weapon = type;
       bid.forceWeapon = null;
       bid.useWeapon = null;
       bid.shouldAttack = attack;
@@ -14298,7 +14310,7 @@ window.grbtp = 35;
       const oc = this.client.ownerClient;
       const {guardCount: gc, isGuard: isGuard, botIndex: botIndex} = this._resolveGuard();
       if (!isGuard) return;
-      const {myPlayer: myPlayer, _Core: MH} = this.client;
+      const {myPlayer: myPlayer, services: ryn} = this.client;
       if (!myPlayer.inGame) return;
       if (Settings_ref._autoJoinGuard && myPlayer.age >= 6 && !myPlayer.__guardJoinedAge6) {
         myPlayer.__guardJoinedAge6 = true;
@@ -14387,26 +14399,26 @@ window.grbtp = 35;
               bestAngle = myPos.angle(sorted[rs.idx % sorted.length].pos.current);
               try {
                 this.client.PacketManager.updateAngle(bestAngle);
-                this.client._Core.mouse.sentAngle = bestAngle;
+                this.client.services.actions.mouse.sentAngle = bestAngle;
               } catch (_) {}
             } else {
               this._rsRotState = null;
               try {
                 this.client.PacketManager.updateAngle(bestAngle);
-                this.client._Core.mouse.sentAngle = bestAngle;
+                this.client.services.actions.mouse.sentAngle = bestAngle;
               } catch (_) {}
             }
             const blockPos = ownerPos.addDirection(bestAngle, window._guardFrontDistance || 90);
             const dToBlock = myPos.distance(blockPos);
             if (dToBlock > 12) {
-              MH.startMovement(myPos.angle(blockPos));
+              ryn.motion.start(myPos.angle(blockPos));
             } else {
-              const d = oc._Core.move_dir;
-              d !== null ? MH.startMovement(d) : MH.stopMovement();
+              const d = oc.services.motion.move_dir;
+              d !== null ? ryn.motion.start(d) : ryn.motion.stop();
             }
-            MH._currentAngle = bestAngle;
+            ryn.actions.currentAngle = bestAngle;
             bid.useAngle = null;
-            this._forceWeapon(MH, 1, false, bid);
+            this._forceWeapon(ryn, 1, false, bid);
             return;
           } else {
             this._rsRotState = null;
@@ -14415,7 +14427,7 @@ window.grbtp = 35;
       }
       const ENEMY_DETECT = 550;
       const nearEnemies = enemies.filter(e => e.dist < ENEMY_DETECT);
-      const ownerStopped = oc._Core.move_dir === null;
+      const ownerStopped = oc.services.motion.move_dir === null;
       const hasEnemies = nearEnemies.length > 0;
       const forceShield = ownerStopped || hasEnemies || this._underThreat(oc);
       const GUARD_FRONT_DIST = window._guardFrontDistance || 90;
@@ -14431,14 +14443,14 @@ window.grbtp = 35;
           const rotTarget = ownerPos.addDirection(baseAngle, GUARD_FRONT_DIST);
           const rotDist = myPos.distance(rotTarget);
           if (rotDist > 12) {
-            MH.startMovement(myPos.angle(rotTarget));
+            ryn.motion.start(myPos.angle(rotTarget));
           } else {
-            const d = oc._Core.move_dir;
-            d !== null ? MH.startMovement(d) : MH.stopMovement();
+            const d = oc.services.motion.move_dir;
+            d !== null ? ryn.motion.start(d) : ryn.motion.stop();
           }
-          MH._currentAngle = baseAngle;
+          ryn.actions.currentAngle = baseAngle;
           bid.useAngle = null;
-          this._forceWeapon(MH, 1, false, bid);
+          this._forceWeapon(ryn, 1, false, bid);
           return;
         }
       }
@@ -14451,15 +14463,15 @@ window.grbtp = 35;
             lockTarget.y = locked.y;
             const ld = myPos.distance(lockTarget);
             if (ld > 18) {
-              MH.startMovement(myPos.angle(lockTarget));
+              ryn.motion.start(myPos.angle(lockTarget));
             } else {
-              MH.stopMovement();
+              ryn.motion.stop();
             }
           } catch (e) {}
           const en = enemies[0];
-          MH._currentAngle = en ? en.angle : MH._currentAngle ?? 0;
+          ryn.actions.currentAngle = en ? en.angle : ryn.actions.currentAngle ?? 0;
           bid.useAngle = null;
-          this._forceWeapon(MH, 1, false, bid);
+          this._forceWeapon(ryn, 1, false, bid);
           return;
         }
       }
@@ -14469,17 +14481,17 @@ window.grbtp = 35;
           const baitPos = baitTarget.player.pos.current;
           const dToEnemy = myPos.distance(baitPos);
           if (dToEnemy > 60) {
-            MH.startMovement(myPos.angle(baitPos));
+            ryn.motion.start(myPos.angle(baitPos));
           } else {
-            MH.stopMovement();
+            ryn.motion.stop();
           }
-          MH._currentAngle = myPos.angle(baitPos);
+          ryn.actions.currentAngle = myPos.angle(baitPos);
           bid.useAngle = null;
-          this._forceWeapon(MH, 1, false, bid);
+          this._forceWeapon(ryn, 1, false, bid);
           return;
         }
       }
-      const ownerFacing = oc._Core._currentAngle ?? 0;
+      const ownerFacing = oc.services.actions.currentAngle ?? 0;
       if (nearEnemies.length > 0) {
         const nearest = nearEnemies[0];
         const enemyAngle = nearest.angle;
@@ -14489,64 +14501,64 @@ window.grbtp = 35;
           const blockPos = ownerPos.addDirection(enemyAngle, GUARD_FRONT_DIST * 0.5);
           const dToBlock = myPos.distance(blockPos);
           if (dToBlock > 10) {
-            MH.startMovement(myPos.angle(blockPos));
+            ryn.motion.start(myPos.angle(blockPos));
           } else {
-            const ownerDir = oc._Core.move_dir;
-            ownerDir !== null ? MH.startMovement(ownerDir) : MH.stopMovement();
+            const ownerDir = oc.services.motion.move_dir;
+            ownerDir !== null ? ryn.motion.start(ownerDir) : ryn.motion.stop();
           }
-          MH._currentAngle = enemyAngle;
+          ryn.actions.currentAngle = enemyAngle;
           bid.useAngle = null;
           const canWall = myPlayer.canPlace(3);
           const canMill = myPlayer.canPlace(6) || myPlayer.canPlace(7);
           if (canWall) {
-            MH.place(3, enemyAngle);
+            ryn.actions.place(3, enemyAngle);
             bid.moduleActive = true;
           } else if (canMill) {
             const millType = myPlayer.canPlace(6) ? 6 : 7;
-            MH.place(millType, enemyAngle);
+            ryn.actions.place(millType, enemyAngle);
             bid.moduleActive = true;
           } else {
-            this._forceWeapon(MH, 1, false, bid);
+            this._forceWeapon(ryn, 1, false, bid);
           }
         } else {
           const frontPos = ownerPos.addDirection(enemyAngle, GUARD_FRONT_DIST);
           const dToFront = myPos.distance(frontPos);
           if (dToFront > 12) {
-            MH.startMovement(myPos.angle(frontPos));
+            ryn.motion.start(myPos.angle(frontPos));
           } else {
-            const ownerDir = oc._Core.move_dir;
-            ownerDir !== null ? MH.startMovement(ownerDir) : MH.stopMovement();
+            const ownerDir = oc.services.motion.move_dir;
+            ownerDir !== null ? ryn.motion.start(ownerDir) : ryn.motion.stop();
           }
-          MH._currentAngle = enemyAngle;
+          ryn.actions.currentAngle = enemyAngle;
           bid.useAngle = null;
           const ATTACK_DIST = 80;
           if (distToEnemy < ATTACK_DIST && !forceShield) {
             const dagId = myPlayer.getItemByType(0);
             if (dagId !== null) {
               this.client.PacketManager.selectItemByID(dagId, false);
-              MH.currentHolding = 0;
-              MH.weapon = 0;
+              ryn.loadout.currentHolding = 0;
+              ryn.loadout.weapon = 0;
               bid.forceWeapon = null;
               bid.useWeapon = null;
               bid.shouldAttack = true;
               bid.moduleActive = true;
             }
           } else {
-            this._forceWeapon(MH, 1, false, bid);
+            this._forceWeapon(ryn, 1, false, bid);
           }
         }
       } else {
         const frontPos = ownerPos.addDirection(ownerFacing, GUARD_FRONT_DIST);
         const dToFront = myPos.distance(frontPos);
         if (dToFront > 14) {
-          MH.startMovement(myPos.angle(frontPos));
+          ryn.motion.start(myPos.angle(frontPos));
         } else {
-          const ownerDir = oc._Core.move_dir;
-          ownerDir !== null ? MH.startMovement(ownerDir) : MH.stopMovement();
+          const ownerDir = oc.services.motion.move_dir;
+          ownerDir !== null ? ryn.motion.start(ownerDir) : ryn.motion.stop();
         }
-        MH._currentAngle = ownerFacing;
+        ryn.actions.currentAngle = ownerFacing;
         bid.useAngle = null;
-        this._forceWeapon(MH, 1, false, bid);
+        this._forceWeapon(ryn, 1, false, bid);
       }
     }
   }
@@ -14579,8 +14591,8 @@ window.grbtp = 35;
       return angle;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = this.client;
-      if (ModuleHandler._arbiter.claimedAbove) return;
+      const {services: ryn, myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = this.client;
+      if (ryn.arbiter.claimedAbove) return;
       const secondary = myPlayer.getItemByType(1);
       const hasShield = secondary === 11;
       if (!hasShield) return;
@@ -14675,7 +14687,7 @@ window.grbtp = 35;
               S.attackAllowed = false;
               try {
                 this.client.PacketManager.updateAngle(shieldAngle);
-                this.client._Core.mouse.sentAngle = shieldAngle;
+                this.client.services.actions.mouse.sentAngle = shieldAngle;
               } catch (_) {}
               bid.moduleActive = true;
               bid.forceWeapon = 0;
@@ -14685,7 +14697,7 @@ window.grbtp = 35;
             }
             try {
               this.client.PacketManager.updateAngle(shieldAngle);
-              this.client._Core.mouse.sentAngle = shieldAngle;
+              this.client.services.actions.mouse.sentAngle = shieldAngle;
             } catch (_) {}
             bid.moduleActive = true;
             bid.forceWeapon = 1;
@@ -14699,7 +14711,7 @@ window.grbtp = 35;
               const preAngle = myPos.angle(bestTarget.pos.current);
               try {
                 this.client.PacketManager.updateAngle(preAngle);
-                this.client._Core.mouse.sentAngle = preAngle;
+                this.client.services.actions.mouse.sentAngle = preAngle;
               } catch (_) {}
               bid.moduleActive = true;
               bid.forceWeapon = 1;
@@ -14729,17 +14741,17 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
       const nearestEnemy = EnemyManager2.nearestKBTrapEnemy;
-      if (nearestEnemy === null || nearestEnemy.isTrapped || ModuleHandler._arbiter.claimedAbove || EnemyManager2.shouldIgnoreModule() || !Settings_ref._trapKB) {
+      if (nearestEnemy === null || nearestEnemy.isTrapped || ryn.arbiter.claimedAbove || EnemyManager2.shouldIgnoreModule() || !Settings_ref._trapKB) {
         return;
       }
       const pos1 = myPlayer.pos.current;
       const pos2 = nearestEnemy.pos.current;
       const angle = pos1.angle(pos2);
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const primaryReloaded = reloading.isReloaded(0);
-      const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
+      const turretReloaded = ryn.loadout.hasStoreItem(0, 53) && reloading.isReloaded(2);
       if (!primaryReloaded) {
         return;
       }
@@ -14763,8 +14775,8 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {_Core: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
-      if (!Settings_ref._antiSpikePush || ModuleHandler._arbiter.claimedAbove) {
+      const {services: ryn, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      if (!Settings_ref._antiSpikePush || ryn.arbiter.claimedAbove) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
@@ -14783,9 +14795,9 @@ window.grbtp = 35;
       const pos1 = myPlayer.pos.current;
       const pos2 = nearestEnemy.pos.current;
       const angle = pos1.angle(pos2);
-      const {reloading: reloading} = ModuleHandler.unitTable;
+      const {reloading: reloading} = ryn.features.units;
       const primaryReloaded = reloading.isReloaded(0);
-      const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
+      const turretReloaded = ryn.loadout.hasStoreItem(0, 53) && reloading.isReloaded(2);
       bid.forceWeapon = 0;
       if (primaryReloaded) {
         bid.moduleActive = true;
@@ -15346,6 +15358,14 @@ window.grbtp = 35;
       this.state = "attached";
       this.resetOwnedState();
       this.registry.resetAll();
+      // A dying owner stops its bots too -- they were following a player who is
+      // no longer on the map.
+      if (this.client.isOwner) {
+        for (const peer of this.client.clients) {
+          peer.services.motion.reset();
+          peer.services.actions.toggleAutoattack(false);
+        }
+      }
       this.events.emit("player:death", this);
     }
     // Every service that owns state clears its own. The runtime does not know
@@ -15383,9 +15403,13 @@ window.grbtp = 35;
       if (ordered.length === 0) return 0;
       this.clock.enter(phase);
       const tick = this.clock.tick;
+      const actions = this.services.actions;
       let ran = 0;
       for (let i = 0; i < ordered.length; i++) {
         const feature = ordered[i];
+        // Name the feature on RynActions for the length of its run, so an
+        // emission can be checked against what that feature declared.
+        actions.actor = feature;
         try {
           if (feature.when !== null && feature.when(ctx, feature) === false) continue;
           if (feature.cost > 0 && !this.budget.affords(feature.cost)) continue;
@@ -15395,6 +15419,8 @@ window.grbtp = 35;
           ran += 1;
         } catch (err) {
           Logger.error(`RynRuntime: feature "${feature.id}" threw in ${phase} -- ${err && err.message}`);
+        } finally {
+          actions.actor = null;
         }
       }
       this.clock.leave();
@@ -15621,6 +15647,28 @@ window.grbtp = 35;
   class RynBotState {
     owner = true;
     botCount = 0;
+    // Bot-control state. The owner client writes these onto each bot it drives.
+    // They used to be stamped onto that bot's ModuleHandler as undeclared
+    // expandos -- seventeen fields that existed only because somewhere assigned
+    // them, so nothing could tell you what a bot's control state consisted of
+    // without reading every assignment. Declared here, they are answerable.
+    farmActive = false;
+    farmTarget = null;
+    farmWander = null;
+    farmModule = null;
+    repelActive = false;
+    scatterActive = false;
+    scatterReturning = false;
+    scatterAngle = 0;
+    scatterDest = null;
+    scatterBreaking = false;
+    scatterBreakTarget = null;
+    scatterLastPos = null;
+    scatterLastMoveAngle = null;
+    scatterNextDecisionTime = 0;
+    scatterStuckStrikes = 0;
+    postKillCleanup = null;
+    winCleanup = null;
     sample(client2) {
       this.owner = client2.isOwner === true;
       this.botCount = client2.clients?.size ?? 0;
@@ -16009,13 +16057,17 @@ window.grbtp = 35;
       this._deps = deps;
       return this;
     }
-    // Declared-capability check. A feature that never declared an action does
-    // not get to perform it; unregistered callers (boot, UI, the owner's bot
-    // control) are outside the feature contract and pass through.
+    // Declared-capability check. A feature gets exactly the actions it
+    // declared, and an empty declaration means it emits nothing -- twenty-nine
+    // of the sixty-two units are in that group, because they express themselves
+    // through their bid and let the arbiter's winner do the sending.
+    //
+    // Callers outside a feature's run -- the spawn path, the owner's keyboard,
+    // bot control -- have no actor and are not covered by the contract.
     _allowed(action) {
       const actor = this.actor;
       if (actor === null) return true;
-      if (actor.may.length === 0 || actor.may.includes(action)) return true;
+      if (actor.may.includes(action)) return true;
       Logger.error(`RynActions: "${actor.id}" requested "${action}" without declaring it`);
       return false;
     }
@@ -16237,75 +16289,11 @@ window.grbtp = 35;
 
   const ARBITER_BOT_BAND = 1000;
 
-  class ModuleHandler {
-    client;
-    unitTable={};
-    _arbiter=new Arbiter(this);
-    botModules;
-    modules;
-    store=[ {
-      utility: new Map,
-      lastUtility: null,
-      current: 0,
-      best: 0,
-      actual: -1,
-      last: 0
-    }, {
-      utility: new Map,
-      lastUtility: null,
-      current: 0,
-      best: 0,
-      actual: -1,
-      last: 0
-    } ];
-    bought=[ new Set, new Set ];
-    followTarget=new Vector_ref(0, 0);
-    lookTarget=new Vector_ref(0, 0);
-    endTarget=new Vector_ref(0, 0);
-    followPath=false;
-    tickCount=0;
-    currentHolding=0;
-    weapon;
-    currentType;
-    attacking;
-    attackingState;
-    sentAngle;
-    sentHatEquip;
-    sentAccEquip;
-    needToHeal;
-    didAntiInsta;
-    placedOnce;
-    healedOnce;
-    totalPlaces;
-    attacked;
-    canHitEntity=false;
-    moduleActive=false;
-    useAngle=null;
-    useWeapon=null;
-    useItem=null;
-    forceWeapon=null;
-    useHat=null;
-    forceHat=null;
-    shouldEquipSoldier=false;
-    useAcc=null;
-    previousWeapon=null;
-    _currentAngle=0;
-    move_dir=null;
-    reverse_move_dir=null;
-    moveTo="disable";
-    prevMoveTo="disable";
-    autoattack=false;
-    shouldAttack=false;
-    mouse={
-      sentAngle: 0
-    };
-    placeAngles=[ null, [] ];
-    norecoil=false;
-    moduleStart=performance.now();
-    maxExecutionTime=0;
-    constructor(client2) {
-      this.client = client2;
-      this.unitTable = {
+  // Every unit, built once. This is the table ModuleHandler assembled in its
+  // constructor; it lives with the registry now because the registry is what
+  // owns "what exists", and nothing else needs to know how the list is made.
+  function buildRynUnits(client2) {
+    return {
         tempData: new TempData_ref(client2),
         movement: new Movement_ref(client2),
         clanJoiner: new ClanJoiner_ref(client2),
@@ -16368,463 +16356,241 @@ window.grbtp = 35;
         deathProvoke: new DeathProvoke(client2),
         safeWalk: new SafeWalk(client2),
         rynLink: new RYNLinkModule(client2)
-      };
-      this.botModules = [ this.unitTable.tempData, this.unitTable.clanJoiner, this.unitTable.movement ];
-      this.modules = [ this.unitTable.autoAccept, this.unitTable.autoBuy, this.unitTable.defaultHat, this.unitTable.reloading, this.unitTable.autoSync, this.unitTable.spikeSyncHammer, this.unitTable.antiSync, this.unitTable.adaptiveGearSwitching, this.unitTable.spikeTickBreak, this.unitTable.spikeTickNear, this.unitTable.spikeTickTrap, this.unitTable.spikeSync, this.unitTable.spikeTrap, this.unitTable.teammateSpikeTrap, this.unitTable.turretSync, this.unitTable.toolHammerSpearInsta, this.unitTable.swordKatanaInsta, this.unitTable.bowInsta, this.unitTable.musketBowInsta, this.unitTable.instakill, this.unitTable.smartInsta, this.unitTable.reverseInstakill, this.unitTable.antiSpikePush, this.unitTable.autoBreak, this.unitTable.autoSteal, this.unitTable.turretSteal, this.unitTable.spikeGearInsta, this.unitTable.useFastest, this.unitTable.useDestroying, this.unitTable.useAttacking, this.unitTable.platformMusket, this.unitTable.utilityHat, this.unitTable.antiInsta, this.unitTable.shameReset, this.unitTable.trapKB, this.unitTable.autoShield, this.unitTable.placementDefense, this.unitTable.trapAnimal, this.unitTable.antiTrapProtect, this.unitTable.antiTrapStar, this.unitTable.antiRetrap, this.unitTable.autoPush, this.unitTable.autoPlay, this.unitTable.autoPlacer, this.unitTable.trapTick, this.unitTable.dashMovement, this.unitTable.placer, this.unitTable.autoMill, this.unitTable.autoGrind, this.unitTable.preAttack, this.unitTable.defaultAcc, this.unitTable.autoHat, this.unitTable.updateAttack, this.unitTable.updateAngle, this.unitTable.killChat, this.unitTable.deathProvoke, this.unitTable.safeWalk, this.unitTable.guardModule, this.unitTable.rynLink ];
-      this.reset();
-    }
-    movementReset() {
-      this.currentHolding = 0;
-      this.weapon = 0;
-      this.currentType = null;
-      this.attacking = 0;
-      this.attackingState = 0;
-      this.move_dir = null;
-      this.reverse_move_dir = null;
-    }
-    reset() {
-      const {isOwner: isOwner, clients: clients} = this.client;
-      this.movementReset();
-      this.getHatStore().utility.clear();
-      this.getAccStore().utility.clear();
-      this.sentAngle = 0;
-      this.sentHatEquip = false;
-      this.sentAccEquip = false;
-      this.needToHeal = false;
-      this.didAntiInsta = false;
-      this.placedOnce = false;
-      this.healedOnce = false;
-      this.totalPlaces = 0;
-      this.attacked = false;
-      this.canHitEntity = false;
-      this.autoattack = false;
-      // Feature cleanup belongs to the runtime, which knows every registered
-      // feature and its onReset. Before units are enrolled there is nothing to
-      // walk, so the array is the fallback for that window only.
-      if (this._unitsRegistered) {
-        this.client.runtime.registry.resetAll();
-      } else {
-        for (const module of this.modules) {
-          if ("reset" in module) module.reset();
-        }
-      }
-      if (isOwner) {
-        for (const client2 of clients) {
-          client2._Core.movementReset();
-          client2._Core.toggleAutoattack(false);
-        }
-      }
-    }
-    get holdingWeapon() {
-      return this.currentHolding <= 1;
-    }
-    get isMoving() {
-      return this.move_dir !== null;
-    }
-    setForceHat(hat) {
-      if (this.forceHat !== null && hat !== null) {
-        return;
-      }
-      this.forceHat = hat;
-    }
-    getHatStore() {
-      return this.store[0];
-    }
-    getAccStore() {
-      return this.store[1];
-    }
-    setFollowTarget(x, y) {
-      this.followTarget._setXY(x, y);
-    }
-    setLookTarget(x, y) {
-      this.lookTarget._setXY(x, y);
-    }
-    updateSentAngle(priority) {
-      if (this.sentAngle >= priority) {
-        return;
-      }
-      this.sentAngle = priority;
-    }
-    _upgradeItem(id, isItem = false) {
-      if (isItem) {
-        id += 16;
-      }
-      this.client.PacketManager.upgradeItem(id);
-      this.client.myPlayer.upgradeItem(id);
-      if (DataHandler_ref.isWeapon(id)) {
-        const type = DataHandler_ref.getWeapon(id).type;
-        const {reloading: reloading} = this.unitTable;
-        reloading.updateMaxReload(type);
-      }
-    }
-    startMovement(angle = this.move_dir, ignore = false) {
-      if (!ignore) {
-        this.move_dir = angle;
-        this.reverse_move_dir = angle === null ? null : reverseAngle(angle);
-        if (this.moveTo !== "disable") {
-          return;
-        }
-      }
-      const {myPlayer: myPlayer} = this.client;
-      if (myPlayer.simulation.collisionSimulation(this.client)) {
-        return false;
-      }
-      this.client.PacketManager.move(angle);
-      return true;
-    }
-    stopMovement() {
-      this.client.PacketManager.resetMoveDir();
-    }
-    startPlacement(type) {
-      this.currentType = type;
-    }
-    canBuy(type, id) {
-      if (id === -1) {
-        return false;
-      }
-      const store2 = DataHandler_ref.getStore(type);
-      const price = store2[id].price;
-      const bought = this.bought[type];
-      return bought.has(id) || this.client.myPlayer.tempGold >= price && this.client.myPlayer.isSandbox;
-    }
-    _buy(type, id, force = false) {
-      const store2 = DataHandler_ref.getStore(type);
-      const {isOwner: isOwner, clients: clients, myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
-      if (!myPlayer.inGame) {
-        return false;
-      }
-      if (force) {
-        if (isOwner) {
-          for (const client2 of clients) {
-            client2._Core._buy(type, id, force);
-          }
-        }
-      }
-      const price = store2[id].price;
-      const bought = this.bought[type];
-      if (price === 0) {
-        bought.add(id);
-        return true;
-      }
-      if (!bought.has(id) && myPlayer.tempGold >= price && (myPlayer.isSandbox || force)) {
-        PacketManager2.buy(type, id);
-        myPlayer.tempGold -= price;
-        return false;
-      }
-      return bought.has(id);
-    }
-    hasStoreItem(type, id) {
-      const store2 = this.bought[type];
-      return store2.has(id);
-    }
-    _equip(type, id, force = false, toggle = false) {
-      const store2 = this.store[type];
-      const {myPlayer: myPlayer, PacketManager: PacketManager2, EnemyManager: EnemyManager2, isOwner: isOwner, clients: clients} = this.client;
-      if (toggle && store2.last === id && id !== 0) {
-        id = 0;
-      }
-      if (!myPlayer.inGame || !this._buy(type, id, force)) {
-        return false;
-      }
-      if (store2.last === id && myPlayer.storeData[type] === id) {
-        return false;
-      }
-      store2.last = id;
-      PacketManager2.equip(type, id);
-      if (type === 0) {
-        this.sentHatEquip = true;
-      } else {
-        this.sentAccEquip = true;
-      }
-      if (force) {
-        store2.actual = id;
-        if (isOwner) {
-          for (const client2 of clients) {
-            client2._Core.unitTable.tempData.setStore(type, id);
-          }
-        }
-      }
-      const nearest = EnemyManager2.nearestTurretEntity;
-      const reloading = this.unitTable.reloading;
-      if (nearest !== null && reloading.isReloaded(2) && type === 0 && id === 53) {
-        reloading.resetByType(2);
-      }
-      return true;
-    }
-    updateAngle(angle, force = false) {
-      if (!force && angle === this.mouse.sentAngle) {
-        return;
-      }
-      this.mouse.sentAngle = angle;
-      this.updateSentAngle(3);
-      this.client.PacketManager.updateAngle(angle);
-    }
-    selectItem(type) {
-      const {myPlayer: myPlayer} = this.client;
-      const item = myPlayer.getItemByType(type);
-      if (myPlayer.currentItem !== -1) {
-        myPlayer.currentItem = -1;
-      }
-      this.client.PacketManager.selectItemByID(item, false);
-      this.currentHolding = type;
-    }
-    attack(angle, priority = 2) {
-      if (angle !== null) {
-        this.mouse.sentAngle = angle;
-      }
-      this.updateSentAngle(priority);
-      this.client.PacketManager.attack(angle);
-      if (this.holdingWeapon) {
-        this.attacked = true;
-      }
-    }
-    stopAttack(angle = null) {
-      this.client.PacketManager.stopAttack(angle);
-    }
-    toggleAutoattack(state = !this.autoattack) {
-      this.autoattack = state;
-      this.attacking = state ? 1 : 0;
-    }
-    whichWeapon(type = this.weapon) {
-      const weapon = this.client.myPlayer.getItemByType(type);
-      if (weapon === null) {
-        return;
-      }
-      this.currentHolding = type;
-      this.weapon = type;
-      this.client.PacketManager.selectItemByID(weapon, true);
-    }
-    _getPredictWeapon() {
-      const myPlayer = this.client.myPlayer;
-      if (!myPlayer) return this.weapon;
-      const prim = myPlayer.getItemByType(0);
-      const sec = myPlayer.getItemByType(1);
-      const hasPrim = prim !== null && prim !== undefined;
-      const hasSec = sec !== null && sec !== undefined;
-      const reloading = type => {
-        const r = myPlayer.reload && myPlayer.reload[type];
-        if (!r || typeof r.current !== "number" || typeof r.max !== "number") return false;
-        return r.current < r.max;
-      };
-      if (this.forceWeapon !== null && this.forceWeapon !== undefined) {
-        return this.forceWeapon;
-      }
-      if (hasSec && reloading(1)) return 1;
-      if (hasPrim && reloading(0)) return 0;
-      if (this.attacking === 2 && hasSec) return 1;
-      if (this.attacking === 1 && hasPrim) return 0;
-      const pW = hasPrim ? DataHandler_ref?.getWeapon?.(prim) : null;
-      const sW = hasSec ? DataHandler_ref?.getWeapon?.(sec) : null;
-      if (pW?.name?.toLowerCase().includes("dagger")) return 0;
-      if (sW?.name?.toLowerCase().includes("hammer")) return 1;
-      return hasPrim ? 0 : hasSec ? 1 : this.weapon;
-    }
-    place(type, angle = this._currentAngle, reset = false) {
-      this.totalPlaces += 1;
-      this.selectItem(type);
-      this.attack(angle, 1);
-      this.stopAttack(angle);
-      this.whichWeapon(this._getPredictWeapon());
-    }
-    _SHAME_GUARD_MARGIN=130;
-    _shameHealQueue=0;
-    _shameHealDeadline=null;
-    _rawHeal() {
-      this.selectItem(2);
-      this.attack(null, 1);
-      this.whichWeapon(this._getPredictWeapon());
-    }
-    _healBudgetLeft() {
-      return this.packetLimit - this.packetCount;
-    }
-    heal() {
-      if (this._healBudgetLeft() < 3) return;
-      const myPlayer = this.client.myPlayer;
-      if (myPlayer && !myPlayer.isSandbox && myPlayer.receivedDamage) {
-        const sinceHit = Date.now() - myPlayer.receivedDamage;
-        if (sinceHit <= this._SHAME_GUARD_MARGIN) {
-          this._shameHealQueue = Math.min(this._shameHealQueue + 1, 12);
-          this._shameHealDeadline = myPlayer.receivedDamage + this._SHAME_GUARD_MARGIN;
-          return;
-        }
-      }
-      this._rawHeal();
-    }
-    _flushShameHealQueue() {
-      if (this._shameHealQueue <= 0 || this._shameHealDeadline === null) return;
-      if (Date.now() < this._shameHealDeadline) return;
-      const affordable = Math.max(0, Math.floor(this._healBudgetLeft() / 3));
-      const count = Math.min(this._shameHealQueue, affordable);
-      this._shameHealQueue -= count;
-      if (this._shameHealQueue <= 0) {
-        this._shameHealQueue = 0;
-        this._shameHealDeadline = null;
-      }
-      for (let i = 0; i < count; i++) {
-        this._rawHeal();
-      }
-    }
-    circleOffset=0;
-    targetSpeed=65;
-    activeModule=null;
-    get packetCount() {
-      return this.client.PacketManager.packetCount;
-    }
-    set packetCount(_v) {}
-    // Packets per second, not per tick — PacketManager zeroes the counter on a
-    // 1s interval. Shared by every module.
-    //
-    // 70 was well under what the field runs: Luna gates builds at 119/s,
-    // Sakuna refuses to send anything at all above 120/s (its "Anti Kick"
-    // stop), and Sakuna and auraro both carry `secMax = 110`. 115 sits below
-    // that 120 stop with 5 packets of room.
-    //
-    // Note this is one number for the whole client, where Sakuna keeps a
-    // second, lower gate for building specifically (`secPacket < 97`) so
-    // placement cannot crowd out movement, attacks and heals. Without that
-    // split the placer here is free to spend the allowance down to the last
-    // packet, and a heavy building second can leave the essentials short.
-    packetLimit=115;
-    // Units are enrolled as features. Each carries its own domain, priority,
-    // execution condition and reset, so the handler no longer holds the list,
-    // the order, or the cleanup — it only knows how to enrol what it was
-    // constructed with.
-    //
-    // Priority is seeded from the array position each unit used to be walked
-    // in, so the scheduled order reproduces the old loop. The difference is
-    // that the number is now written down and a unit can be moved without
-    // moving code, and `needs` can override it where an ordering is a real
-    // dependency rather than a habit.
-    // One read of the world per tick, in dependency order: the local player
-    // first because combat measures distance from it, then the rest.
-    _sampleServices(runtime) {
-      const c = this.client;
-      const svc = runtime.services;
-      const tickMs = c.SocketManager.TICK ?? 1e3 / 9;
-      svc.world.sample(runtime.clock.tick, tickMs, c.SocketManager.isSandbox);
-      svc.local.sample(c.myPlayer, tickMs);
-      svc.entities.sample(c.ObjectManager);
-      svc.input.sample(c.InputHandler);
-      svc.network.sample(c.transport, c.SocketManager, c.netBudget, runtime.clock);
-      svc.combat.sample(c.EnemyManager, svc.local);
-      svc.bot.sample(c);
-      svc.ui.sample(svc.network);
-      runtime.events.emit("services:sampled", svc);
-    }
-    _unitsRegistered=false;
-    _registerUnits(runtime) {
-      if (this._unitsRegistered) return;
-      this._unitsRegistered = true;
-      const arbiter = this._arbiter;
-      const enrol = (unit, priority, botOnly) => {
-        const domain = RYN_UNIT_DOMAIN[unit.unitID];
-        if (domain === undefined) {
-          Logger.error(`RYN: "${unit.unitID}" has no domain -- filed under utility`);
-        }
-        runtime.registry.add({
-          id: unit.unitID,
-          domain: domain ?? RYN_DOMAIN.UTILITY,
-          phase: RYN_PHASE.DECIDE,
-          priority: priority,
-          owner: unit,
-          when: botOnly ? () => this.client.isOwner === false : null,
-          onReset: typeof unit.reset === "function" ? () => unit.reset() : null,
-          run: () => arbiter.offer(unit, priority)
-        });
-      };
-      for (let i = 0; i < this.botModules.length; i++) enrol(this.botModules[i], i, true);
-      for (let i = 0; i < this.modules.length; i++) enrol(this.modules[i], ARBITER_BOT_BAND + i, false);
-      runtime.events.emit("units:registered", runtime.registry.size);
-    }
-
-    runTick() {
-      this._flushShameHealQueue();
-      if (Settings_ref._circleRotation && this.move_dir === null) {
-        const rotationSpeed = this.targetSpeed / Settings_ref._circleRadius;
-        this.circleOffset = (this.circleOffset + rotationSpeed) % (Math.PI * 2);
-      }
-      const {isOwner: isOwner} = this.client;
-      this.placeAngles[0] = null;
-      this.placeAngles[1].length = 0;
-      this.activeModule = null;
-      if (!this._autoBreakActive) this._lastBreakAngle = null;
-      this._autoBreakActive = false;
-      this._comboAttack = false;
-      this.tickCount += 1;
-      this.sentAngle = 0;
-      this.sentHatEquip = false;
-      this.sentAccEquip = false;
-      this.didAntiInsta = false;
-      this.placedOnce = false;
-      this.healedOnce = false;
-      this.totalPlaces = 0;
-      this.attacked = false;
-      this.canHitEntity = false;
-      this.moduleActive = false;
-      this.useWeapon = null;
-      this.useItem = null;
-      this.forceWeapon = null;
-      this.useHat = null;
-      this.forceHat = null;
-      this.shouldEquipSoldier = false;
-      this.useAcc = null;
-      this.useAngle = null;
-      this.shouldAttack = false;
-      this.prevMoveTo = this.moveTo;
-      this.moveTo = "disable";
-      // Collect, resolve, commit. Units are offered the tick in priority
-      // order and answer with a bid; nothing they do reaches the send phase
-      // until the Arbiter has ruled on all of them.
-      //
-      // The order of `this.modules` seeds the priority table, so the ruling
-      // matches what running in that order used to produce — the difference
-      // is that the order is now a number a unit can be moved within, not an
-      // accident of where it sits in an array.
-      // DECIDE, then COMMIT. The runtime walks the phase; this method no
-      // longer holds the unit list or the order.
-      const runtime = this.client.runtime;
-      runtime.clock.advance();
-      runtime.budget.open(this.packetLimit - this.packetCount);
-      this._registerUnits(runtime);
-      // SAMPLE: the world is read once, into services a system can be handed.
-      // Everything after this reads a snapshot rather than reaching back
-      // through a container, so what a system saw is fixed for its tick.
-      this._sampleServices(runtime);
-      runtime.runPhase(RYN_PHASE.SAMPLE, this);
-      this._arbiter.begin();
-      runtime.runPhase(RYN_PHASE.DECIDE, this);
-      this._arbiter.commit(this._arbiter.resolve());
-      const _em = this.client.EnemyManager;
-      const _mp = this.client.myPlayer;
-      const _canSoldier = this.canBuy(0, 6);
-      if (_canSoldier && Settings_ref._antienemy) {
-        const _nearest = _em.nearestEnemy;
-        const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
-        const _primary2 = _mp.getItemByType(0);
-        const _atkRange = _primary2 !== null ? DataHandler_ref.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
-        const _isClose = _nearest !== null && _mp.pos.current.distance(_nearest.pos.current) <= _atkRange + 20;
-        if (_isDanger || _isClose) {
-          this.forceHat = 6;
-          this.shouldEquipSoldier = true;
-        } else if (this.shouldEquipSoldier) {
-          this.shouldEquipSoldier = false;
-          this.forceHat = null;
-        }
-      }
-      this.attackingState = this.attacking;
-      if (isOwner) {
-        this.client.InputHandler.runTick();
-        GameUI_ref.updateFastQ(this.didAntiInsta);
-        GameUI_ref.updatePlaces(this.totalPlaces);
-        GameUI_ref.updateActiveModule(this.activeModule + ", " + this.tickCount);
-        GameUI_ref.updateEquipHat(`${this.store[0].last},  ${this.shouldEquipSoldier}`);
-        const executionTime = Math.round(performance.now() - this.moduleStart);
-        this.maxExecutionTime = Math.max(this.maxExecutionTime, executionTime);
-        GameUI_ref.updateModulePerformance(`${executionTime}/${this.maxExecutionTime}`);
-      }
-    }
+      
+    };
   }
-  const ModuleHandler_ref = ModuleHandler;
+
+  // The order units are offered the tick in. Position used to be the only
+  // record of precedence -- moving a unit in an array silently changed what
+  // beat what. It is a declared priority now, and `needs` can override it where
+  // an ordering is a real dependency rather than a habit.
+  const RYN_UNIT_ORDER = Object.freeze({
+    bot: Object.freeze([
+    "tempData", "clanJoiner", "movement"
+    ]),
+    main: Object.freeze([
+    "autoAccept", "autoBuy", "defaultHat", "reloading", "autoSync", "spikeSyncHammer",
+    "antiSync", "adaptiveGearSwitching", "spikeTickBreak", "spikeTickNear", "spikeTickTrap",
+    "spikeSync", "spikeTrap", "teammateSpikeTrap", "turretSync", "toolHammerSpearInsta",
+    "swordKatanaInsta", "bowInsta", "musketBowInsta", "instakill", "smartInsta",
+    "reverseInstakill", "antiSpikePush", "autoBreak", "autoSteal", "turretSteal",
+    "spikeGearInsta", "useFastest", "useDestroying", "useAttacking", "platformMusket",
+    "utilityHat", "antiInsta", "shameReset", "trapKB", "autoShield", "placementDefense",
+    "trapAnimal", "antiTrapProtect", "antiTrapStar", "antiRetrap", "autoPush", "autoPlay",
+    "autoPlacer", "trapTick", "dashMovement", "placer", "autoMill", "autoGrind", "preAttack",
+    "defaultAcc", "autoHat", "updateAttack", "updateAngle", "killChat", "deathProvoke",
+    "safeWalk", "guardModule", "rynLink"
+    ])
+  });
+
+  // What each unit is allowed to emit. Derived from what each one actually
+  // calls -- including through the units it calls into -- so a declaration is a
+  // statement about the code rather than an aspiration. A unit with an empty
+  // list expresses itself through its bid and emits nothing itself; those are
+  // the majority, which is the point of the bid.
+  const RYN_UNIT_MAY = Object.freeze({
+    tempData: [ "equip" ],
+    clanJoiner: [],
+    movement: [ "equip", "move", "place" ],
+    autoAccept: [],
+    autoBuy: [ "buy" ],
+    defaultHat: [],
+    reloading: [ "attack" ],
+    autoSync: [],
+    spikeSyncHammer: [ "place" ],
+    antiSync: [ "heal", "move" ],
+    adaptiveGearSwitching: [],
+    spikeTickBreak: [],
+    spikeTickNear: [],
+    spikeTickTrap: [],
+    spikeSync: [ "place" ],
+    spikeTrap: [ "place" ],
+    teammateSpikeTrap: [ "place" ],
+    turretSync: [],
+    toolHammerSpearInsta: [ "place", "upgrade" ],
+    swordKatanaInsta: [ "place", "upgrade" ],
+    bowInsta: [ "attack", "place", "upgrade" ],
+    musketBowInsta: [ "attack", "upgrade" ],
+    instakill: [ "attack", "place" ],
+    smartInsta: [ "attack", "place" ],
+    reverseInstakill: [ "attack", "place" ],
+    antiSpikePush: [],
+    autoBreak: [],
+    autoSteal: [],
+    turretSteal: [],
+    spikeGearInsta: [],
+    useFastest: [],
+    useDestroying: [],
+    useAttacking: [],
+    platformMusket: [ "place" ],
+    utilityHat: [],
+    antiInsta: [ "heal" ],
+    shameReset: [],
+    trapKB: [],
+    autoShield: [],
+    placementDefense: [ "place" ],
+    trapAnimal: [ "attack", "place" ],
+    antiTrapProtect: [ "place" ],
+    antiTrapStar: [],
+    antiRetrap: [],
+    autoPush: [],
+    autoPlay: [ "move" ],
+    autoPlacer: [ "place" ],
+    trapTick: [],
+    dashMovement: [ "place" ],
+    placer: [ "heal", "place" ],
+    autoMill: [ "buy", "place" ],
+    autoGrind: [ "place" ],
+    preAttack: [],
+    defaultAcc: [],
+    autoHat: [ "equip" ],
+    updateAttack: [ "attack", "select" ],
+    updateAngle: [ "angle" ],
+    killChat: [],
+    deathProvoke: [],
+    safeWalk: [ "angle", "attack", "buy", "equip", "heal", "move", "place", "select", "upgrade" ],
+    guardModule: [ "move", "place" ],
+    rynLink: [ "angle", "attack", "buy", "equip", "heal", "move", "place", "select", "upgrade" ]
+  });
+
+  // Everything ModuleHandler.runTick did that was not a unit, expressed as
+  // features. Each one names the phase it belongs to and what it writes, so the
+  // tick is a table you can read instead of a method you have to trace.
+  function enrolRynBuiltins(runtime, client2) {
+    const svc = runtime.services;
+    const reg = runtime.registry;
+
+    // SAMPLE: read the world once, in dependency order -- the local player
+    // first, because combat measures distance from it.
+    reg.add({
+      id: "core:sample", domain: RYN_DOMAIN.UTILITY, phase: RYN_PHASE.SAMPLE,
+      priority: -100,
+      owns: [ "local", "entities", "world", "input", "network", "combat", "bot", "ui" ],
+      run: () => {
+        const tickMs = client2.SocketManager.TICK ?? 1e3 / 9;
+        svc.world.sample(runtime.clock.tick, tickMs, client2.SocketManager.isSandbox);
+        svc.local.sample(client2.myPlayer, tickMs);
+        svc.entities.sample(client2.ObjectManager);
+        svc.input.sample(client2.InputHandler);
+        svc.network.sample(client2.transport, client2.SocketManager, client2.netBudget, runtime.clock);
+        svc.combat.sample(client2.EnemyManager, svc.local);
+        svc.bot.sample(client2);
+        svc.ui.sample(svc.network);
+        runtime.events.emit("services:sampled", svc);
+      }
+    });
+
+    // Heals held back out of the shame window are released once it passes.
+    reg.add({
+      id: "core:shameHealFlush", domain: RYN_DOMAIN.DEFENSE, phase: RYN_PHASE.SAMPLE,
+      priority: -50, owns: [ "actions" ], may: [ "heal", "attack", "select" ],
+      run: () => svc.actions.flushShameHealQueue()
+    });
+
+    // The formation ring turns while no direction is held.
+    reg.add({
+      id: "core:circleRotation", domain: RYN_DOMAIN.MOVEMENT, phase: RYN_PHASE.SAMPLE,
+      priority: -40, owns: [ "motion.circleOffset" ],
+      when: () => Settings_ref._circleRotation && svc.motion.move_dir === null,
+      run: () => {
+        const rotationSpeed = svc.motion.targetSpeed / Settings_ref._circleRadius;
+        svc.motion.circleOffset = (svc.motion.circleOffset + rotationSpeed) % (Math.PI * 2);
+      }
+    });
+
+    // COMMIT: the resolution is in, and these adjust it before it is sealed.
+    //
+    // Soldier hat is pinned whenever an enemy is dangerous or already inside
+    // reach. It runs after arbitration because it overrides what the units
+    // asked for rather than competing with them.
+    reg.add({
+      id: "core:soldierGuard", domain: RYN_DOMAIN.DEFENSE, phase: RYN_PHASE.COMMIT,
+      priority: 10, owns: [ "intent.forceHat", "intent.shouldEquipSoldier" ],
+      when: () => Settings_ref._antienemy && svc.loadout.canBuy(0, 6),
+      run: () => {
+        const em = client2.EnemyManager;
+        const mp = client2.myPlayer;
+        const nearest = em.nearestEnemy;
+        const isDanger = em.detectedDangerEnemy || em.detectedEnemy || em.dangerWithoutSoldier;
+        const primary = mp.getItemByType(0);
+        const atkRange = primary !== null ? DataHandler_ref.getWeapon(primary).range + (nearest?.hitScale || 35) : 85;
+        const isClose = nearest !== null && mp.pos.current.distance(nearest.pos.current) <= atkRange + 20;
+        if (isDanger || isClose) {
+          svc.intent.forceHat = 6;
+          svc.intent.shouldEquipSoldier = true;
+        } else if (svc.intent.shouldEquipSoldier) {
+          svc.intent.shouldEquipSoldier = false;
+          svc.intent.forceHat = null;
+        }
+      }
+    });
+
+    // The attack state the next tick compares against.
+    reg.add({
+      id: "core:attackLatch", domain: RYN_DOMAIN.COMBAT, phase: RYN_PHASE.COMMIT,
+      priority: 90, owns: [ "actions.attackingState" ],
+      run: () => {
+        svc.actions.attackingState = svc.actions.attacking;
+      }
+    });
+
+    // EMIT: only the owner has a keyboard and a display.
+    reg.add({
+      id: "core:input", domain: RYN_DOMAIN.UTILITY, phase: RYN_PHASE.EMIT,
+      // The keyboard can ask for anything a key is bound to, so this one is
+      // declared open. It is the only feature that is.
+      priority: 10, owns: [], may: RYN_ACTION_NAMES.slice(), when: () => client2.isOwner,
+      run: () => client2.InputHandler.runTick()
+    });
+
+    reg.add({
+      id: "core:hud", domain: RYN_DOMAIN.UTILITY, phase: RYN_PHASE.EMIT,
+      priority: 90, owns: [], when: () => client2.isOwner,
+      run: () => {
+        const sched = runtime.scheduler;
+        GameUI_ref.updateFastQ(svc.ledger.didAntiInsta);
+        GameUI_ref.updatePlaces(svc.ledger.totalPlaces);
+        GameUI_ref.updateActiveModule(svc.intent.activeModule + ", " + runtime.clock.tick);
+        GameUI_ref.updateEquipHat(`${svc.loadout.store[0].last},  ${svc.intent.shouldEquipSoldier}`);
+        GameUI_ref.updateModulePerformance(`${sched.lastDuration}/${sched.maxDuration}`);
+      }
+    });
+  }
+
+  // Enrol the units. Priority is seeded from the position each one used to hold
+  // in the array it was walked in, so the scheduled order reproduces the old
+  // loop exactly -- the difference is that the number is written down.
+  function enrolRynUnits(runtime, client2) {
+    const units = runtime.registry.units;
+    const arbiter = runtime.services.arbiter;
+    const enrol = (id, priority, botOnly) => {
+      const unit = units[id];
+      if (unit === undefined) {
+        Logger.error(`RYN: no unit named "${id}" to enrol`);
+        return;
+      }
+      const domain = RYN_UNIT_DOMAIN[id];
+      if (domain === undefined) {
+        Logger.error(`RYN: "${id}" has no domain -- filed under utility`);
+      }
+      runtime.registry.add({
+        id: id,
+        domain: domain ?? RYN_DOMAIN.UTILITY,
+        phase: RYN_PHASE.DECIDE,
+        priority: priority,
+        may: RYN_UNIT_MAY[id] ?? [],
+        owns: [ `bid:${id}` ],
+        owner: unit,
+        when: botOnly ? () => client2.isOwner === false : null,
+        onReset: typeof unit.reset === "function" ? () => unit.reset() : null,
+        run: (ctx, feature) => arbiter.offer(unit, priority, feature)
+      });
+    };
+    for (let i = 0; i < RYN_UNIT_ORDER.bot.length; i++) enrol(RYN_UNIT_ORDER.bot[i], i, true);
+    for (let i = 0; i < RYN_UNIT_ORDER.main.length; i++) enrol(RYN_UNIT_ORDER.main[i], ARBITER_BOT_BAND + i, false);
+    enrolRynBuiltins(runtime, client2);
+    runtime.events.emit("units:registered", runtime.registry.size);
+  }
   class PlayerClient {
     id=-1;
     connectSuccess=false;
@@ -16836,7 +16602,6 @@ window.grbtp = 35;
     ProjectileManager;
     LeaderboardManager;
     EnemyManager;
-    _Core;
     myPlayer;
     PacketManager;
     InputHandler;
@@ -16866,11 +16631,23 @@ window.grbtp = 35;
       this.ProjectileManager = new ProjectileManager_ref(this);
       this.LeaderboardManager = new LeaderboardManager_ref(this);
       this.EnemyManager = new EnemyManager_ref(this);
-      this._Core = new ModuleHandler_ref(this);
+      // Units are built here, where ModuleHandler used to be constructed, so
+      // anything they touch at construction sees the same client as before.
+      // The registry owns the table; the runtime owns when they run.
+      this.runtime.registry.install(buildRynUnits(this));
       this.myPlayer = new ClientPlayer_ref(this);
       this.PacketManager = new PacketManager(this);
+      this.runtime.services.network.bindSender(this.PacketManager);
+      enrolRynUnits(this.runtime, this);
       this.InputHandler = new InputHandler(this);
       this.StatsManager = new StatsManager(this);
+    }
+    // The services this client owns. Everything that used to reach through
+    // `_Core` reaches a named service here instead, including across clients:
+    // the owner drives a bot through `bot.services.motion`, not by writing into
+    // the bot's handler.
+    get services() {
+      return this.runtime.services;
     }
     getClientIndex(client2) {
       return [ ...this.clients ].indexOf(client2);
@@ -18812,7 +18589,7 @@ window.grbtp = 35;
     }
     handleChatMessage(client2, text) {
       if (text === "/norecoil") {
-        client2._Core.norecoil = !client2._Core.norecoil;
+        client2.services.actions.norecoil = !client2.services.actions.norecoil;
       }
       client2.PacketManager.chat(text);
     }
@@ -18988,8 +18765,8 @@ window.grbtp = 35;
         const scale = 14400 / bounds.width;
         const posX = (event.clientX - bounds.left) * scale;
         const posY = (event.clientY - bounds.top) * scale;
-        client._Core.endTarget._setXY(posX, posY);
-        client._Core.followPath = true;
+        client.services.motion.endTarget._setXY(posX, posY);
+        client.services.motion.followPath = true;
         _mapClick.call(this, event);
       };
     }
@@ -19216,7 +18993,7 @@ window.grbtp = 35;
     Hook.append("postRenderLoop", /\w+,\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._postRender();");
     Hook.append("mapPreRender", /(\w+)\.lineWidth=NUM{4};/, "RYN._Renderer._mapPreRender($1);");
     Hook.prepend("gameInit", /function (\w+)\(\w+\)\{\w+\.\w+\(\w+,f/, "RYN._gameInit=function(a){$1(a);};");
-    Hook.prepend("LockRotationClient", /return \w+\?\(\!/, "return RYN._myClient._Core._currentAngle;");
+    Hook.prepend("LockRotationClient", /return \w+\?\(\!/, "return RYN._myClient.services.actions.currentAngle;");
     Hook.replace("DisableResetMoveDir", /\w+=\{\},\w+\.send\("\w+"\)/, "");
     Hook.append("offset", /\W170\W.+?(\w+)=\w+\-\w+\/2.+?(\w+)=\w+\-\w+\/2;/, "RYN._offset._setXY($1,$2);");
     Hook.prepend("renderEntity", /\w+\.health>NUM{0}.+?(\w+)\.fillStyle=(\w+)==(\w+)/, ";RYN._hooks._EntityRenderer._render($1,$2,$3);false&&");
@@ -19227,17 +19004,17 @@ window.grbtp = 35;
     Hook.replace("animalTint", /(animals\/".+?)(\w+)\.drawImage\((\w+),-(\w+),-\4,\4\*2,\4\*2\)/, "$1RYN._Renderer._drawAnimal($2,$3,$4)");
     Hook.append("renderItem", /70, 0.35\)",(\w+).+?\w+\)/, ",RYN._hooks._ObjectRenderer._render($1)");
     Hook.append("RemoveSendAngle", /clientSendRate\)/, "&&false");
-    Hook.replace("handleEquip", /\w+\.send\("\w+",0,(\w+),(\w+)\)/, "RYN._myClient._Core._equip($2,$1,true,true)");
+    Hook.replace("handleEquip", /\w+\.send\("\w+",0,(\w+),(\w+)\)/, "RYN._myClient.services.loadout.equip($2,$1,true,true)");
     Hook.replace("exposeGameNet", /const (\w+)=\{socket:null,connected:!1,socketId:-1/, "const $1=RYN._myClient._gameNet={socket:null,connected:!1,socketId:-1");
     Hook.replace("exposeGameCrypto", /(\w+)=\{mode:(\w+),key:/, "$1=RYN._myClient._gameCrypto={mode:$2,key:");
     Hook.replace("captureTurnstile", /onGotTurnstileToken=function\((\w+)\)\{(\w+)=\1,/, "onGotTurnstileToken=function($1){$2=$1,RYN._myClient._turnstileToken=$1,");
     Hook.replace("exposeCryptoFns", /const (\w+)=new (\w+),(\w+)=new (\w+);let (\w+)=null/, "const $1=new $2,$3=new $4;RYN._enc={Eo:Eo,Hi:$1,jt:jt,Po:Po,Ro:Ro};let $5=null");
-    Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._myClient._Core._buy($2,$1,true)");
+    Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._myClient.services.loadout.buy($2,$1,true)");
     Hook.prepend("RemovePingCall", /\w+&&clearTimeout/, "return;");
     Hook.append("RemovePingState", /let \w+=-1;function \w+\(\)\{/, "return;");
     Hook.prepend("preRender", /(\w+)\.lineWidth=NUM{4},/, "RYN._hooks._ObjectRenderer._preRender($1);");
     Hook.replace("RenderGrid", /("#91b2db".+?)(for.+?)(\w+\.stroke)/, "$1$3");
-    Hook.replace("upgradeItem", /(upgradeItem.+?onclick.+?)\w+\.send\("\w+",(\w+)\)\}/, "$1RYN._myClient._Core._upgradeItem($2)}");
+    Hook.replace("upgradeItem", /(upgradeItem.+?onclick.+?)\w+\.send\("\w+",(\w+)\)\}/, "$1RYN._myClient.services.loadout.upgradeItem($2)}");
     const data = Hook.match("DeathMarker", /99999.+?(\w+)=\{x:(\w+)/);
     Hook.append("playerDied", /NUM{99999};function \w+\(\)\{/, `if(RYN._settings._autospawn){${data[1]}={x:${data[2]}.x,y:${data[2]}.y};return};`);
     Hook.append("updateNotificationRemove", /\w+=\[\],\w+=\[\];function \w+\(\w+,\w+\)\{/, "return;");
@@ -19664,7 +19441,7 @@ window.grbtp = 35;
       ctx.rotate(player.angle);
       ctx.globalAlpha = .6;
       ctx.strokeStyle = "#525252";
-      const {autoHat: autoHat} = client._Core.unitTable;
+      const {autoHat: autoHat} = client.services.features.units;
       const weaponID = autoHat.getNextWeaponID();
       const variant = player.getWeaponVariant(weaponID).current;
       RYN._hooks._renderPlayer({
@@ -19754,7 +19531,7 @@ window.grbtp = 35;
       if (Renderer_ref._renderObjects.length === 0) {
         return;
       }
-      const {ObjectManager: ObjectManager2, _Core: ModuleHandler2, myPlayer: myPlayer} = client;
+      const {ObjectManager: ObjectManager2, services: ryn, myPlayer: myPlayer} = client;
       const _cx = myPlayer && myPlayer.inGame ? myPlayer.pos.current.x : 0;
       const _cy = myPlayer && myPlayer.inGame ? myPlayer.pos.current.y : 0;
       const _vw = ZoomHandler_ref._scale.current._w * 0.55;
@@ -20247,7 +20024,7 @@ window.grbtp = 35;
           const ownerId = ownerOrder[this.upgradeIndex];
           if (ownerId !== undefined && ids.includes(ownerId)) {
             this.upgradeIndex += 1;
-            botClient._Core._upgradeItem(ownerId);
+            botClient.services.loadout.upgradeItem(ownerId);
           }
           return;
         }
@@ -20277,7 +20054,7 @@ window.grbtp = 35;
         }
         if (target !== null && ids.includes(target)) {
           this.upgradeIndex += 1;
-          botClient._Core._upgradeItem(target);
+          botClient.services.loadout.upgradeItem(target);
         }
         return;
       }
@@ -20287,7 +20064,7 @@ window.grbtp = 35;
           const ownerId = ownerOrder[this.upgradeIndex];
           if (ownerId !== undefined && ids.includes(ownerId)) {
             this.upgradeIndex += 1;
-            botClient._Core._upgradeItem(ownerId);
+            botClient.services.loadout.upgradeItem(ownerId);
             return;
           }
           chosenSec = 9;
@@ -20338,7 +20115,7 @@ window.grbtp = 35;
         }
         if (target !== null && ids.includes(target)) {
           this.upgradeIndex += 1;
-          botClient._Core._upgradeItem(target);
+          botClient.services.loadout.upgradeItem(target);
         }
         return;
       }
@@ -20347,14 +20124,14 @@ window.grbtp = 35;
         if (age === 3) target = 1 + 16; else if (age === 4) target = (Settings_ref._botAge4BoostPad ? 16 : 15) + 16; else if (age === 5) target = 7 + 16; else if (age === 7) target = 18 + 16; else if (age === 8) target = 12 + 16; else if (age === 9) target = 9 + 16;
         if (target !== null && ids.includes(target)) {
           this.upgradeIndex += 1;
-          botClient._Core._upgradeItem(target);
+          botClient.services.loadout.upgradeItem(target);
           return;
         }
         const ownerOrder = botClient.ownerClient?.myPlayer?.upgradeOrder || [];
         const ownerId = ownerOrder[this.upgradeIndex];
         if (ownerId !== undefined && ids.includes(ownerId)) {
           this.upgradeIndex += 1;
-          botClient._Core._upgradeItem(ownerId);
+          botClient.services.loadout.upgradeItem(ownerId);
         }
       }
     };
@@ -21495,10 +21272,10 @@ window.grbtp = 35;
   let fKeyHeld = false, fKeyInterval = null;
   const _place = itemType => {
     const myPlayer = client.myPlayer;
-    const modH = client._Core;
+    const ryn = client.services;
     if (!myPlayer || !myPlayer.inGame) return;
     if (myPlayer.getItemByType(itemType) === null) return;
-    modH.startPlacement(itemType);
+    ryn.loadout.startPlacement(itemType);
   };
   window.addEventListener("keydown", e => {
     if (e.target && e.target.tagName === "INPUT") return;
@@ -21967,10 +21744,10 @@ window.grbtp = 35;
         } else {
           moveAng = ang + Math.PI + zz * 0.5;
         }
-        bot._Core.startMovement(moveAng);
-        bot._Core._currentAngle = ang;
+        bot.services.motion.start(moveAng);
+        bot.services.actions.currentAngle = ang;
         const attacking = dist < 175;
-        _rynSetAttackingStaggered(bot._Core, attacking ? 1 : 0, botIndex1v1);
+        _rynSetAttackingStaggered(bot.services, attacking ? 1 : 0, botIndex1v1);
         if (attacking && dist < 120) {
           st.hitCount++;
           st.commentTimer--;
@@ -22160,9 +21937,9 @@ window.grbtp = 35;
         const dy = t.player.pos.y - myPos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         const ang = Math.atan2(dy, dx);
-        bot._Core.startMovement(ang);
-        bot._Core._currentAngle = ang;
-        _rynSetAttackingStaggered(bot._Core, dist < 160 ? 1 : 0, i);
+        bot.services.motion.start(ang);
+        bot.services.actions.currentAngle = ang;
+        _rynSetAttackingStaggered(bot.services, dist < 160 ? 1 : 0, i);
       } catch (e) {}
     });
   }, 80);
@@ -22360,10 +22137,10 @@ window.grbtp = 35;
     return nearestAngle === null ? null : nearestAngle + Math.PI;
   }
 
-  function _scDecide(sc_client, sc_bot, sc_mh, sc_pos, now) {
+  function _scDecide(sc_client, sc_bot, sc_svc, sc_pos, now) {
     const om = sc_bot.ObjectManager;
     let baseAngle;
-    if (sc_mh._scatterReturning) {
+    if (sc_svc.bot.scatterReturning) {
       const owner = sc_client.myPlayer;
       const op = owner && owner.pos && owner.pos.current;
       baseAngle = op ? Math.atan2(op.y - sc_pos.y, op.x - sc_pos.x) : Math.random() * Math.PI * 2 - Math.PI;
@@ -22372,7 +22149,7 @@ window.grbtp = 35;
       do {
         candidate = Math.random() * Math.PI * 2 - Math.PI;
         attempt++;
-      } while (sc_mh._scatterLastMoveAngle !== null && attempt < 10 && Math.abs(Math.atan2(Math.sin(candidate - (sc_mh._scatterLastMoveAngle + Math.PI)), Math.cos(candidate - (sc_mh._scatterLastMoveAngle + Math.PI)))) < _SC_NO_BACKTRACK_ARC / 2);
+      } while (sc_svc.bot.scatterLastMoveAngle !== null && attempt < 10 && Math.abs(Math.atan2(Math.sin(candidate - (sc_svc.bot.scatterLastMoveAngle + Math.PI)), Math.cos(candidate - (sc_svc.bot.scatterLastMoveAngle + Math.PI)))) < _SC_NO_BACKTRACK_ARC / 2);
       baseAngle = candidate;
       const repel = _scRepelAngle(sc_client, sc_bot, sc_pos);
       if (repel !== null) {
@@ -22383,18 +22160,18 @@ window.grbtp = 35;
     }
     const clearAngle = _scFindClearAngle(om, sc_bot.myPlayer, sc_pos, baseAngle, _SC_LOOKAHEAD);
     if (clearAngle !== null) {
-      sc_mh._scatterBreaking = false;
-      sc_mh._scatterBreakTarget = null;
+      sc_svc.bot.scatterBreaking = false;
+      sc_svc.bot.scatterBreakTarget = null;
       return clearAngle;
     }
     const blocker = _scNearestBlocker(om, sc_pos, baseAngle, _SC_LOOKAHEAD + 60);
     if (blocker) {
-      sc_mh._scatterBreaking = true;
-      sc_mh._scatterBreakTarget = blocker.id;
+      sc_svc.bot.scatterBreaking = true;
+      sc_svc.bot.scatterBreakTarget = blocker.id;
       return Math.atan2(blocker.pos.current.y - sc_pos.y, blocker.pos.current.x - sc_pos.x);
     }
-    sc_mh._scatterBreaking = false;
-    sc_mh._scatterBreakTarget = null;
+    sc_svc.bot.scatterBreaking = false;
+    sc_svc.bot.scatterBreakTarget = null;
     return baseAngle;
   }
 
@@ -22404,48 +22181,48 @@ window.grbtp = 35;
       if (_sc_client && _sc_client.isOwner) {
         const _sc_now = Date.now();
         for (const _sc_bot of _sc_client.clients) {
-          const _sc_mh = _sc_bot._Core;
-          if (!_sc_mh || (!_sc_mh._scatterActive && !_sc_mh._scatterReturning)) continue;
+          const ryn = _sc_bot.services;
+          if (!ryn || (!ryn.bot.scatterActive && !ryn.bot.scatterReturning)) continue;
           const _sc_player = _sc_bot.myPlayer;
           if (!_sc_player || !_sc_player.pos) continue;
           const _sc_pos = _sc_player.pos.current;
 
-          if (_sc_mh._scatterReturning) {
+          if (ryn.bot.scatterReturning) {
             const owner = _sc_client.myPlayer;
             const op = owner && owner.pos && owner.pos.current;
             if (op) {
               const dHome = Math.sqrt((op.x - _sc_pos.x) ** 2 + (op.y - _sc_pos.y) ** 2);
               if (dHome < 120) {
-                _sc_mh._scatterReturning = false;
-                _sc_mh._scatterBreaking = false;
-                _sc_mh._scatterBreakTarget = null;
-                _sc_mh.startMovement(null);
+                ryn.bot.scatterReturning = false;
+                ryn.bot.scatterBreaking = false;
+                ryn.bot.scatterBreakTarget = null;
+                ryn.motion.start(null);
                 continue;
               }
             }
           }
 
-          const _sc_dueDecision = _sc_now >= (_sc_mh._scatterNextDecisionTime || 0);
+          const _sc_dueDecision = _sc_now >= (ryn.bot.scatterNextDecisionTime || 0);
           if (_sc_dueDecision) {
             let stuck = false;
-            if (_sc_mh._scatterLastPos) {
-              const moved = Math.sqrt((_sc_pos.x - _sc_mh._scatterLastPos.x) ** 2 + (_sc_pos.y - _sc_mh._scatterLastPos.y) ** 2);
+            if (ryn.bot.scatterLastPos) {
+              const moved = Math.sqrt((_sc_pos.x - ryn.bot.scatterLastPos.x) ** 2 + (_sc_pos.y - ryn.bot.scatterLastPos.y) ** 2);
               stuck = moved < _SC_STUCK_DIST;
             }
-            _sc_mh._scatterStuckStrikes = stuck ? (_sc_mh._scatterStuckStrikes || 0) + 1 : 0;
-            const _sc_angle = _scDecide(_sc_client, _sc_bot, _sc_mh, _sc_pos, _sc_now);
-            _sc_mh._scatterAngle = _sc_angle;
-            _sc_mh._scatterLastMoveAngle = _sc_angle;
-            _sc_mh._scatterLastPos = {
+            ryn.bot.scatterStuckStrikes = stuck ? (ryn.bot.scatterStuckStrikes || 0) + 1 : 0;
+            const _sc_angle = _scDecide(_sc_client, _sc_bot, ryn, _sc_pos, _sc_now);
+            ryn.bot.scatterAngle = _sc_angle;
+            ryn.bot.scatterLastMoveAngle = _sc_angle;
+            ryn.bot.scatterLastPos = {
               x: _sc_pos.x,
               y: _sc_pos.y
             };
-            _sc_mh._scatterNextDecisionTime = _sc_now + ((_sc_mh._scatterStuckStrikes || 0) > 0 ? _SC_DECISION_MS_STUCK : _SC_DECISION_MS);
+            ryn.bot.scatterNextDecisionTime = _sc_now + ((ryn.bot.scatterStuckStrikes || 0) > 0 ? _SC_DECISION_MS_STUCK : _SC_DECISION_MS);
           }
 
-          const _sc_angle = _sc_mh._scatterAngle;
+          const _sc_angle = ryn.bot.scatterAngle;
           if (_sc_angle === undefined || _sc_angle === null) continue;
-          _sc_mh.move_dir = _sc_angle;
+          ryn.motion.move_dir = _sc_angle;
           try {
             _sc_bot.PacketManager.move(_sc_angle);
           } catch (_) {}
@@ -22454,8 +22231,8 @@ window.grbtp = 35;
             const _sc_om = _sc_bot.ObjectManager;
             if (!_sc_om) continue;
             let _sc_closest = null, _sc_closestDist = 181;
-            if (_sc_mh._scatterBreaking && _sc_mh._scatterBreakTarget !== null) {
-              const tgt = _sc_om.objects.get(_sc_mh._scatterBreakTarget);
+            if (ryn.bot.scatterBreaking && ryn.bot.scatterBreakTarget !== null) {
+              const tgt = _sc_om.objects.get(ryn.bot.scatterBreakTarget);
               if (tgt && tgt.pos) {
                 const tp = tgt.pos.current;
                 const td = Math.sqrt((tp.x - _sc_pos.x) ** 2 + (tp.y - _sc_pos.y) ** 2);
@@ -22482,18 +22259,18 @@ window.grbtp = 35;
               const _sc_ba = Math.atan2(_sc_bp.y - _sc_pos.y, _sc_bp.x - _sc_pos.x);
               const _sc_sec = _sc_player.getItemByType(1);
               const _sc_pri = _sc_player.getItemByType(0);
-              const _sc_rel = _sc_mh.unitTable && _sc_mh.unitTable.reloading;
+              const _sc_rel = ryn.features.units && ryn.features.units.reloading;
               if (_sc_rel) {
                 if (_sc_sec === 10 && _sc_rel.isReloaded(1)) {
                   try {
                     _sc_bot.PacketManager.attack(_sc_ba);
                   } catch (_) {}
-                  _sc_mh.forceWeapon = 1;
+                  ryn.intent.forceWeapon = 1;
                 } else if (_sc_pri !== 8 && _sc_pri !== 5 && _sc_rel.isReloaded(0)) {
                   try {
                     _sc_bot.PacketManager.attack(_sc_ba);
                   } catch (_) {}
-                  _sc_mh.forceWeapon = 0;
+                  ryn.intent.forceWeapon = 0;
                 }
               }
             }
@@ -22836,11 +22613,11 @@ window.grbtp = 35;
   }, 800);
   function _ryn_buyAndEquipAssassin(c) {
     try {
-      if (!c || !c._Core || !c.myPlayer || !c.myPlayer.inGame) return;
-      const mh = c._Core;
+      if (!c || !c.services || !c.myPlayer || !c.myPlayer.inGame) return;
+      const ryn = c.services;
       const HAT_ID = 56;
       const PRICE = 20000;
-      const bought = mh.bought && mh.bought[0];
+      const bought = ryn.loadout.bought && ryn.loadout.bought[0];
       const hasCap = bought && bought.has(HAT_ID);
       if (!hasCap && c.myPlayer.tempGold >= PRICE) {
         try {
@@ -22850,9 +22627,9 @@ window.grbtp = 35;
         } catch (e) {}
       }
       if (hasCap || bought && bought.has(HAT_ID)) {
-        mh.forceHat = HAT_ID;
-        mh.useHat = HAT_ID;
-        const store2 = mh.store && mh.store[0];
+        ryn.intent.forceHat = HAT_ID;
+        ryn.intent.useHat = HAT_ID;
+        const store2 = ryn.loadout.store && ryn.loadout.store[0];
         if (store2 && (store2.actual !== HAT_ID || store2.last !== HAT_ID)) {
           store2.last = HAT_ID;
           store2.actual = HAT_ID;
@@ -22947,14 +22724,14 @@ window.grbtp = 35;
       return chosen;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, _Core: _Core} = this.client;
+      const {myPlayer: myPlayer, services: ryn} = this.client;
       if (!myPlayer || !myPlayer.inGame || !myPlayer.pos) return;
       if (!Settings_ref._botAutoFarmEnabled) return;
       bid.moduleActive = false;
-      _Core.attackingState = 0;
+      ryn.actions.attackingState = 0;
       const needed = this._neededTypes();
       if (needed === null) {
-        _Core._autoFarmActive = true;
+        ryn.bot.farmActive = true;
         bid.shouldAttack = false;
         bid.forceWeapon = null;
         try {
@@ -22965,15 +22742,15 @@ window.grbtp = 35;
             const followRadius = Number(Settings_ref._followRadius) || 125;
             if (dist > followRadius) {
               const angle = Math.atan2(ownerPos.y - myPos.y, ownerPos.x - myPos.x);
-              _Core.startMovement(angle);
+              ryn.motion.start(angle);
             } else {
-              _Core.startMovement(null);
+              ryn.motion.start(null);
             }
           } else {
-            _Core.startMovement(null);
+            ryn.motion.start(null);
           }
         } catch (_) {
-          _Core.startMovement(null);
+          ryn.motion.start(null);
         }
         return;
       }
@@ -22990,13 +22767,13 @@ window.grbtp = 35;
           }
         } catch (_) {}
         const dist = Math.hypot(tPos.x - myPos.x, tPos.y - myPos.y);
-        _Core._currentAngle = angle;
-        if (_Core.mouse) _Core.mouse.sentAngle = angle;
+        ryn.actions.currentAngle = angle;
+        if (ryn.actions.mouse) ryn.actions.mouse.sentAngle = angle;
         if (dist > range - 5) {
-          _Core.startMovement(angle, true);
+          ryn.motion.start(angle, true);
           bid.shouldAttack = false;
         } else {
-          _Core.startMovement(null);
+          ryn.motion.start(null);
           bid.useAngle = angle;
           bid.forceWeapon = 0;
           bid.shouldAttack = true;
@@ -23019,9 +22796,9 @@ window.grbtp = 35;
           while (diff > Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
           this._wanderAngle += diff * 0.06 + (Math.random() - 0.5) * 0.05;
-          _Core.startMovement(this._wanderAngle, true);
+          ryn.motion.start(this._wanderAngle, true);
         } catch (_) {
-          _Core.startMovement(null);
+          ryn.motion.start(null);
         }
         bid.shouldAttack = false;
       }
@@ -23060,7 +22837,7 @@ window.grbtp = 35;
         this._cleanupActive = false;
         return;
       }
-      const MH = this.client._Core;
+      const ryn = this.client.services;
       if (this._prevKills === -1) this._prevKills = myPlayer.totalKills;
       if (myPlayer.totalKills > this._prevKills) {
         this._prevKills = myPlayer.totalKills;
@@ -23073,7 +22850,7 @@ window.grbtp = 35;
       if (this._cleanupQueue.length === 0) {
         this._cleanupActive = false;
         this._currentTarget = null;
-        MH.startMovement(null);
+        ryn.motion.start(null);
         bid.shouldAttack = false;
         bid.forceWeapon = null;
         return;
@@ -23088,11 +22865,11 @@ window.grbtp = 35;
       const breakRange = (target.hitScale || 20) + 70;
       const angle = myPos.angle(targetPos);
       if (dist > breakRange) {
-        MH.startMovement(angle, true);
+        ryn.motion.start(angle, true);
         bid.shouldAttack = false;
         bid.forceWeapon = null;
       } else {
-        MH.startMovement(null, true);
+        ryn.motion.start(null, true);
         bid.useAngle = angle;
         bid.forceWeapon = 0;
         bid.shouldAttack = true;
@@ -23105,18 +22882,18 @@ window.grbtp = 35;
       try {
         const bot = window._gbot1v1BotID;
         if (bot && bot !== _prevBot) {
-          const MH = bot._Core;
-          if (MH && !MH._postKillCleanupModule) {
+          const ryn = bot.services;
+          if (ryn && !ryn.bot.postKillCleanup) {
             const mod = new PostKillCleanupModule(bot);
-            MH._postKillCleanupModule = mod;
+            ryn.bot.postKillCleanup = mod;
             mod._prevKills = bot.myPlayer ? bot.myPlayer.totalKills : 0;
           }
           _prevBot = bot;
         } else if (!bot) {
           _prevBot = null;
         }
-        if (bot && bot._Core && bot._Core._postKillCleanupModule) {
-          bot._Core._postKillCleanupModule.runTick();
+        if (bot && bot.services && bot.services.bot.postKillCleanup) {
+          bot.services.bot.postKillCleanup.runTick();
         }
       } catch (_) {}
       requestAnimationFrame(_cleanupTick);
@@ -23153,7 +22930,7 @@ window.grbtp = 35;
       }
       const myPlayer = this.client.myPlayer;
       if (!myPlayer.inGame) return;
-      const MH = this.client._Core;
+      const ryn = this.client.services;
       if (this._processedTaskId !== task.id) {
         this._processedTaskId = task.id;
         this._cleanupQueue = this._buildQueue(task.center, task.ownerID, task.botID);
@@ -23161,7 +22938,7 @@ window.grbtp = 35;
       this._cleanupQueue = this._cleanupQueue.filter(obj => this.client.ObjectManager.objects.has(obj.id));
       if (this._cleanupQueue.length === 0) {
         task.active = false;
-        MH.startMovement(null);
+        ryn.motion.start(null);
         bid.shouldAttack = false;
         bid.forceWeapon = null;
         return;
@@ -23174,11 +22951,11 @@ window.grbtp = 35;
       const breakRange = (target.hitScale || 20) + 70;
       const angle = myPos.angle(targetPos);
       if (dist > breakRange) {
-        MH.startMovement(angle, true);
+        ryn.motion.start(angle, true);
         bid.shouldAttack = false;
         bid.forceWeapon = null;
       } else {
-        MH.startMovement(null, true);
+        ryn.motion.start(null, true);
         bid.useAngle = angle;
         bid.forceWeapon = 0;
         bid.shouldAttack = true;
@@ -23192,16 +22969,16 @@ window.grbtp = 35;
         const task = window._gbot1v1WinCleanup;
         const bot = task && task.active ? task.bot : null;
         if (bot && bot !== _prevBot) {
-          const MH = bot._Core;
-          if (MH && !MH._winCleanupModule) {
-            MH._winCleanupModule = new WinCleanupModule(bot);
+          const ryn = bot.services;
+          if (ryn && !ryn.bot.winCleanup) {
+            ryn.bot.winCleanup = new WinCleanupModule(bot);
           }
           _prevBot = bot;
         } else if (!bot) {
           _prevBot = null;
         }
-        if (bot && bot._Core && bot._Core._winCleanupModule) {
-          bot._Core._winCleanupModule.runTick();
+        if (bot && bot.services && bot.services.bot.winCleanup) {
+          bot.services.bot.winCleanup.runTick();
         }
       } catch (_) {}
       requestAnimationFrame(_winCleanupTick);
@@ -23213,24 +22990,24 @@ window.grbtp = 35;
         _farmResourceClaims.clear();
         for (const _afBot of client.clients) {
           try {
-            const _afMH = _afBot._Core;
-            if (!_afMH) continue;
-            if (!_afMH._daemonFarmModule) {
-              _afMH._daemonFarmModule = new BotAutoFarmModule(_afBot);
+            const ryn = _afBot.services;
+            if (!ryn) continue;
+            if (!ryn.bot.farmModule) {
+              ryn.bot.farmModule = new BotAutoFarmModule(_afBot);
             }
-            _afMH._autoFarmActive = true;
-            _afMH._daemonFarmModule.runTick();
+            ryn.bot.farmActive = true;
+            ryn.bot.farmModule.runTick();
           } catch (_) {}
         }
       } else if (client && client.isOwner) {
         for (const _afBot of client.clients) {
           try {
-            const _afMH = _afBot._Core;
-            if (_afMH && _afMH._autoFarmActive) {
-              _afMH._autoFarmActive = false;
-              _afMH.startMovement(null);
-              _afMH.shouldAttack = false;
-              _afMH.forceWeapon = null;
+            const ryn = _afBot.services;
+            if (ryn && ryn.bot.farmActive) {
+              ryn.bot.farmActive = false;
+              ryn.motion.start(null);
+              ryn.intent.shouldAttack = false;
+              ryn.intent.forceWeapon = null;
             }
           } catch (_) {}
         }
