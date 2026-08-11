@@ -4094,7 +4094,7 @@ window.grbtp = 35;
       try {
         const player = client2.myPlayer;
         if (!player || !player.inGame) return false;
-        client2.PacketManager.chat(text);
+        client2.network.request("chat", text);
         return true;
       } catch (e) {
         return false;
@@ -5860,15 +5860,19 @@ window.grbtp = 35;
     _byPriority = [ 0, 0, 0, 0 ];
     _floor = Object.freeze([ 0, 8, 16, 28 ]);
     _timer = null;
+    // Called with the second's total just before it is zeroed. This is where
+    // the packet readout comes from; the budget counts, the display reads.
+    onRoll = null;
     start() {
       if (this._timer !== null) return;
       this._timer = setInterval(() => this.roll(), 1e3);
     }
     stop() {
-      if (this._timer !== null) clearTimeout(this._timer);
+      if (this._timer !== null) clearInterval(this._timer);
       this._timer = null;
     }
     roll() {
+      if (this.onRoll !== null) this.onRoll(this._spent, this._byPriority);
       this._spent = 0;
       this._byPriority = [ 0, 0, 0, 0 ];
     }
@@ -5944,6 +5948,11 @@ window.grbtp = 35;
     constructor(bus) {
       this._bus = bus;
     }
+    // The dispatcher itself, for signals named per opcode rather than per
+    // direction. Everything else here is a typed shortcut over it.
+    get bus() {
+      return this._bus;
+    }
     onIncoming(fn) {
       return this._bus.on("net:in", fn);
     }
@@ -5971,121 +5980,237 @@ window.grbtp = 35;
     }
   }
 
-  class PacketManager {
+  // ==========================================================================
+  // Packet construction
+  //
+  // What this replaces: twenty hand-written methods on PacketManager, each one
+  // a small function that knew an opcode, an argument order, and nothing else.
+  // The opcode and the shape of a frame were spread across twenty bodies, and
+  // because every one of them called the same `send` with the same defaults,
+  // no action had a priority or a cost -- the allowance went to whoever asked
+  // first.
+  //
+  // One table instead. An action names its opcode, how its arguments become
+  // wire arguments, what it costs, and how urgent it is. Adding an action is a
+  // row; changing a priority is a number, not a call-site edit.
+  //
+  // `dedupe` names a field on the network that holds the last value sent, so a
+  // repeat is dropped before it reaches the codec. `before` runs local
+  // bookkeeping the protocol expects to accompany the frame.
+  const RYN_WIRE = Object.freeze({
+    // Combat and building: the frames that decide a fight.
+    attack:       { type: "F", cost: 1, priority: RYN_NET_PRIORITY.ACTION,
+                    build: angle => [ 1, wireAngle(angle) ] },
+    stopAttack:   { type: "F", cost: 1, priority: RYN_NET_PRIORITY.ACTION,
+                    build: (angle = null) => [ 0, wireAngle(angle) ] },
+    selectItem:   { type: "z", cost: 1, priority: RYN_NET_PRIORITY.ACTION,
+                    build: (id, type) => [ id, type ] },
+    upgradeItem:  { type: "H", cost: 1, priority: RYN_NET_PRIORITY.ACTION,
+                    build: id => [ id ] },
+    equip:        { type: "c", cost: 1, priority: RYN_NET_PRIORITY.ACTION,
+                    build: (type, id) => [ 0, id, type ] },
+    buy:          { type: "c", cost: 1, priority: RYN_NET_PRIORITY.ACTION,
+                    build: (type, id) => [ 1, id, type ] },
+
+    // Aim and movement: constant traffic, and the server only cares about the
+    // latest value, so the aim frame drops a repeat rather than spending on it.
+    aim:          { type: "D", cost: 1, priority: RYN_NET_PRIORITY.ROUTINE,
+                    dedupe: "lastAim", build: radians => [ wireAngle(radians) ] },
+    move:         { type: "9", cost: 1, priority: RYN_NET_PRIORITY.ROUTINE,
+                    build: angle => [ angle ] },
+    resetMoveDir: { type: "e", cost: 1, priority: RYN_NET_PRIORITY.ROUTINE,
+                    build: () => [] },
+    autoAttack:   { type: "K", cost: 1, priority: RYN_NET_PRIORITY.ROUTINE,
+                    build: () => [ 1 ] },
+    lockRotation: { type: "K", cost: 1, priority: RYN_NET_PRIORITY.ROUTINE,
+                    build: () => [ 0 ] },
+
+    // Everything that can wait behind a fight.
+    chat:         { type: "6", cost: 1, priority: RYN_NET_PRIORITY.BACKGROUND,
+                    build: message => [ message ] },
+    pingMap:      { type: "S", cost: 1, priority: RYN_NET_PRIORITY.BACKGROUND,
+                    build: () => [] },
+    clanRequest:  { type: "P", cost: 1, priority: RYN_NET_PRIORITY.BACKGROUND,
+                    build: (id, accept) => [ id, Number(accept) ] },
+    kick:         { type: "Q", cost: 1, priority: RYN_NET_PRIORITY.BACKGROUND,
+                    build: id => [ id ] },
+    joinClan:     { type: "b", cost: 1, priority: RYN_NET_PRIORITY.BACKGROUND,
+                    build: name => [ name ] },
+    createClan:   { type: "L", cost: 1, priority: RYN_NET_PRIORITY.BACKGROUND,
+                    build: name => [ name ] },
+    leaveClan:    { type: "N", cost: 1, priority: RYN_NET_PRIORITY.BACKGROUND,
+                    build: () => [],
+                    before: net => { net.client.myPlayer.joinRequests.length = 0; } },
+    spawn:        { type: "M", cost: 1, priority: RYN_NET_PRIORITY.BACKGROUND,
+                    build: (name, moofoll, skin) => [ { name: name, moofoll: moofoll, skin: skin } ] },
+    // The round-trip measurement starts when the frame is built, not when the
+    // reply lands, so the stamp belongs with the send.
+    ping:         { type: "0", cost: 1, priority: RYN_NET_PRIORITY.BACKGROUND,
+                    build: () => [],
+                    before: net => { net.client.SocketManager.startPing = performance.now(); } }
+  });
+
+  // ==========================================================================
+  // RynNetwork
+  //
+  // The one way anything in RYN reaches the wire. It owns no bytes, no socket
+  // and no frame format -- it holds the pieces that do and decides which of
+  // them runs:
+  //
+  //   transport   the socket, and the only bound send in the client
+  //   codec       bytes <-> frames, and the three encoding paths
+  //   RYN_WIRE    what an action looks like on the wire
+  //   queue       ordering for traffic that can wait
+  //   budget      the per-second allowance and its per-priority floors
+  //   events      who hears about what went out and what came in
+  //
+  // Four verbs, and the difference between them is about *when*, not *what*:
+  //
+  //   emit      send now. Refused if the allowance at this priority is spent.
+  //   request   send now if there is room, otherwise queue it for a later
+  //             flush. Nothing is lost to a busy second.
+  //   schedule  always queue; the caller does not need it this tick.
+  //   on        subscribe to traffic, by direction or by inbound opcode.
+  // ==========================================================================
+  class RynNetwork {
     client;
-    packetCount=0;
-    // The codec owns the msgpack pair. These stay as the name the hooks and the
-    // bot spawner already assign through, so a single owner is reached from
-    // every existing site rather than two copies drifting apart.
-    get Encoder() {
-      return this.client.codec.Encoder;
-    }
-    set Encoder(v) {
-      this.client.codec.Encoder = v;
-    }
-    get Decoder() {
-      return this.client.codec.Decoder;
-    }
-    set Decoder(v) {
-      this.client.codec.Decoder = v;
-    }
-    sentWireAngle=null;
-    constructor(client2) {
+    transport;
+    codec;
+    budget;
+    queue;
+    events;
+    // Backing store for the `dedupe` fields declared in RYN_WIRE.
+    lastAim = null;
+    constructor(client2, parts) {
       this.client = client2;
-      setInterval(() => {
-        if (this.client.isOwner) {
-          GameUI_ref.updatePackets(this.packetCount);
-        }
-        this.packetCount = 0;
-      }, 1e3);
+      this.transport = parts.transport;
+      this.codec = parts.codec;
+      this.budget = parts.budget;
+      this.queue = parts.queue;
+      this.events = parts.events;
     }
-    // Framing, socket access and accounting all moved out. This is the entry
-    // point gameplay still calls; what it does now is ask the codec to send and
-    // record the result, so the three encoding paths and their order live in
-    // one place instead of being inlined here.
-    send(data, priority = RYN_NET_PRIORITY.ROUTINE, cost = 1) {
-      const [type, ...args] = data;
-      const {transport: transport, codec: codec, netBudget: netBudget, net: net} = this.client;
-      const via = codec.encodeAndSend(transport, type, args);
-      if (via === null) return false;
-      this.packetCount += 1;
-      netBudget.spend(cost, priority);
-      net.outgoing(type, via, cost);
+
+    spec(action) {
+      const found = Object.prototype.hasOwnProperty.call(RYN_WIRE, action) ? RYN_WIRE[action] : undefined;
+      if (found === undefined) {
+        Logger.error(`RynNetwork: no wire action named "${action}"`);
+        return null;
+      }
+      return found;
+    }
+
+    // Send now. Returns true only if bytes actually left.
+    emit(action, ...args) {
+      const spec = this.spec(action);
+      if (spec === null) return false;
+      if (!this.budget.affords(spec.cost, spec.priority)) return false;
+      return this._send(action, spec, args);
+    }
+
+    // Send now if the allowance covers it; queue it if not. A background
+    // action in a busy second arrives late rather than not at all.
+    request(action, ...args) {
+      const spec = this.spec(action);
+      if (spec === null) return "unknown";
+      if (this.budget.affords(spec.cost, spec.priority) && this._send(action, spec, args)) return "sent";
+      this.queue.push(action, args, spec.priority, spec.cost);
+      return "queued";
+    }
+
+    // Always defer. The caller is saying it does not need this tick.
+    schedule(action, ...args) {
+      const spec = this.spec(action);
+      if (spec === null) return false;
+      this.queue.push(action, args, spec.priority, spec.cost);
       return true;
     }
 
-    clanRequest(id, accept) {
-      this.send([ "P", id, Number(accept) ]);
+    // Drain what was deferred, highest priority first, arrival order within a
+    // priority. Runs once per tick from the EMIT phase.
+    flush() {
+      return this.queue.flush((action, args) => {
+        const spec = this.spec(action);
+        return spec === null ? true : this._send(action, spec, args);
+      }, this.budget);
     }
-    kick(id) {
-      this.send([ "Q", id ]);
-    }
-    joinClan(name) {
-      this.send([ "b", name ]);
-    }
-    createClan(name) {
-      this.send([ "L", name ]);
-    }
-    leaveClan() {
-      this.client.myPlayer.joinRequests.length = 0;
-      this.send([ "N" ]);
-    }
-    equip(type, id) {
-      this.send([ "c", 0, id, type ]);
-    }
-    buy(type, id) {
-      this.send([ "c", 1, id, type ]);
-    }
-    chat(message) {
-      this.send([ "6", message ]);
-    }
-    attack(angle) {
-      this.send([ "F", 1, wireAngle(angle) ]);
-    }
-    stopAttack(angle = null) {
-      this.send([ "F", 0, wireAngle(angle) ]);
-    }
-    resetMoveDir() {
-      this.send([ "e" ]);
-    }
-    move(angle) {
-      this.send([ "9", angle ]);
-    }
-    autoAttack() {
-      this.send([ "K", 1 ]);
-    }
-    lockRotation() {
-      this.send([ "K", 0 ]);
-    }
-    pingMap() {
-      this.send([ "S" ]);
-    }
-    selectItemByID(id, type) {
-      this.send([ "z", id, type ]);
-    }
-    spawn(name, moofoll, skin) {
-      this.send([ "M", {
-        name: name,
-        moofoll: moofoll,
-        skin: skin
-      } ]);
-    }
-    upgradeItem(id) {
-      this.send([ "H", id ]);
-    }
-    updateAngle(radians) {
-      const angle = wireAngle(radians);
-      if (angle === this.sentWireAngle) {
-        return;
+
+    // Build, price, and hand to the codec. This is the only place in RYN that
+    // reaches the codec to send, and the codec is the only place that reaches
+    // the transport.
+    _send(action, spec, args) {
+      if (spec.dedupe !== undefined) {
+        const value = spec.build(...args)[0];
+        if (this[spec.dedupe] === value) return true;
+        if (spec.before !== undefined) spec.before(this, args);
+        const via = this.codec.encodeAndSend(this.transport, spec.type, [ value ]);
+        if (via === null) return false;
+        this[spec.dedupe] = value;
+        this._account(spec, via);
+        return true;
       }
-      this.sentWireAngle = angle;
-      this.send([ "D", angle ]);
+      if (spec.before !== undefined) spec.before(this, args);
+      const via = this.codec.encodeAndSend(this.transport, spec.type, spec.build(...args));
+      if (via === null) return false;
+      this._account(spec, via);
+      return true;
     }
-    pingRequest() {
-      this.client.SocketManager.startPing = performance.now();
-      this.send([ "0" ]);
+
+    _account(spec, via) {
+      this.budget.spend(spec.cost, spec.priority);
+      this.events.outgoing(spec.type, via, spec.cost);
+    }
+
+    // ---- incoming ---------------------------------------------------------
+    // Decode one inbound frame, publish it, and hand it back. A frame that does
+    // not parse never reaches a subscriber.
+    dispatch(raw) {
+      const packet = this.codec.decode(raw);
+      if (packet === null) return null;
+      this.events.incoming(packet);
+      this.events.bus.emit(`net:packet:${packet.type}`, packet);
+      return packet;
+    }
+
+    // "in" / "out" / "conn" for direction, or "packet:<type>" for one opcode.
+    on(name, fn) {
+      if (name === "in") return this.events.onIncoming(fn);
+      if (name === "out") return this.events.onOutgoing(fn);
+      if (name === "conn") return this.events.onConnection(fn);
+      if (name.startsWith("packet:")) return this.events.bus.on(`net:${name}`, fn);
+      Logger.error(`RynNetwork: no such signal "${name}"`);
+      return () => {};
+    }
+
+    connection(kind, detail) {
+      this.events.connection(kind, detail);
+    }
+
+    // ---- accounting, read-only --------------------------------------------
+    get spent() {
+      return this.budget.spent;
+    }
+    get limit() {
+      return this.budget.limit;
+    }
+    get free() {
+      return this.budget.free;
+    }
+    get open() {
+      return this.transport.open;
+    }
+    get queued() {
+      return this.queue.depth;
+    }
+    affords(action) {
+      const spec = this.spec(action);
+      return spec !== null && this.budget.affords(spec.cost, spec.priority);
+    }
+    reset() {
+      this.lastAim = null;
+      this.queue.clear();
     }
   }
+
   class Animal extends Entity_ref {
     type;
     prevHealth=0;
@@ -6708,7 +6833,7 @@ window.grbtp = 35;
     spawn(customName) {
       const name = customName || this.client._botCustomName || window.localStorage.getItem("moo_name") || "";
       const skin = this.client.isOwner ? Number(window.localStorage.getItem("skin_color")) || 0 : Math.floor(Math.random() * Config_ref.skinColors.length);
-      this.client.PacketManager.spawn(name, 1, skin === 10 ? "constructor" : skin);
+      this.client.network.emit("spawn", name, 1, skin === 10 ? "constructor" : skin);
     }
     handleJoinRequest(id, name) {
       this.joinRequests.push([ id, name ]);
@@ -6745,7 +6870,7 @@ window.grbtp = 35;
           try {
             const ggMsgs = [ "gg", "gg wp", "nice one", "gg you got me", "well played", "gg man" ];
             const msg = ggMsgs[Math.floor(Math.random() * ggMsgs.length)];
-            this.client.PacketManager.chat(msg);
+            this.client.network.request("chat", msg);
           } catch (e) {}
         }, 600 + Math.random() * 800);
         {
@@ -7253,25 +7378,27 @@ window.grbtp = 35;
     init(socket) {
       this.socket = socket;
       this.client.transport.attach(socket);
-      this.client.netBudget.limit = this.client.services.network.packetLimit;
       this.client.netBudget.start();
+      if (this._offPing !== null) this._offPing();
+      this._offPing = this.client.network.on("packet:0", () => this.handlePing());
       this.client.runtime.boot();
       this.client.runtime.attach();
-      this.client.net.connection("open", socket.url);
+      this.client.network.connection("open", socket.url);
       socket.addEventListener("message", event => this.handleMessage(event));
       socket.addEventListener("close", event => {
         const {code: code, reason: reason, wasClean: wasClean} = event;
         Logger.warn(`WebSocket Closed: ${code}, '${reason}', ${wasClean}`);
         this.client.netBudget.stop();
         this.client.transport.detach();
-        this.client.net.connection("close", code);
+        this.client.network.connection("close", code);
       });
       socket.addEventListener("error", () => {
         Logger.error("WebSocket Error");
-        this.client.net.connection("error", null);
+        this.client.network.connection("error", null);
       });
     }
     pingTimeout;
+    _offPing = null;
     minPingTime=Infinity;
     handlePing() {
       this.pong = Math.round(performance.now() - this.startPing);
@@ -7285,24 +7412,19 @@ window.grbtp = 35;
       }
       clearTimeout(this.pingTimeout);
       this.pingTimeout = setTimeout(() => {
-        this.client.PacketManager.pingRequest();
+        this.client.network.emit("ping");
       }, 3e3);
     }
     handlePlayerInit(player) {}
     handleMessage(event) {
-      const packet = this.client.codec.decode(event.data);
+      const packet = this.client.network.dispatch(event.data);
       if (packet === null) {
         return;
       }
-      this.client.net.incoming(packet);
       const decoded = packet.raw;
       const temp = [ packet.type, ...packet.args ];
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, services: ryn, PlayerManager: PlayerManager2, ObjectManager: ObjectManager2, ProjectileManager: ProjectileManager2, LeaderboardManager: LeaderboardManager2, PacketManager: PacketManager2} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, services: ryn, PlayerManager: PlayerManager2, ObjectManager: ObjectManager2, ProjectileManager: ProjectileManager2, LeaderboardManager: LeaderboardManager2} = this.client;
       switch (temp[0]) {
-       case "0":
-        this.handlePing();
-        break;
-
        case "io-init":
         this.client.connectSuccess = true;
         this.client.clientID = temp[1];
@@ -7320,7 +7442,7 @@ window.grbtp = 35;
             };
           }
         } catch (e) {}
-        PacketManager2.pingRequest();
+        this.client.network.emit("ping");
         if (this.client.isOwner) {
           GameUI_ref.loadGame();
           Logger.test("Successfully connected to a server..");
@@ -7976,7 +8098,7 @@ window.grbtp = 35;
               if (Settings_ref._botsFrozen) {
                 _fbMH.motion.move_dir = null;
                 _fbMH.motion.start(null, true);
-                _fbBot.PacketManager.move(null);
+                _fbBot.network.emit("move", null);
                 try {
                   const _fbMov = _fbBot.services.features.units.movement;
                   if (_fbMov) _fbMov.isStopped = true;
@@ -8397,7 +8519,7 @@ window.grbtp = 35;
               const ggMsgs = [ "gg", "gg wp", "nice one", "gg you got me", "gg, well played" ];
               const msg = ggMsgs[Math.floor(Math.random() * ggMsgs.length)];
               try {
-                this.client.PacketManager.chat(msg);
+                this.client.network.request("chat", msg);
               } catch (e) {}
               return ownerPos;
             }
@@ -8536,7 +8658,7 @@ window.grbtp = 35;
           this.isStopped = true;
           ryn.motion.start(null, true);
           ryn.motion.move_dir = null;
-          this.client.PacketManager.move(null);
+          this.client.network.emit("move", null);
         }
         return;
       }
@@ -8605,7 +8727,7 @@ window.grbtp = 35;
         this._individualClanTick();
         return;
       }
-      const {myPlayer: myPlayer, PacketManager: PacketManager2, ownerClient: owner, PlayerManager: PlayerManager2} = this.client;
+      const {myPlayer: myPlayer, ownerClient: owner, PlayerManager: PlayerManager2} = this.client;
       const ownerClan = owner.myPlayer.clanName;
       const myClan = myPlayer.clanName;
       if (ownerClan !== this.prevOwnerClan) {
@@ -8619,17 +8741,17 @@ window.grbtp = 35;
       if (this.joinCount === 2) {
         this.joinCount = 0;
         if (myClan !== null) {
-          PacketManager2.leaveClan();
+          this.client.network.emit("leaveClan");
         } else {
           owner.pendingJoins.add(myPlayer.id);
-          PacketManager2.joinClan(ownerClan);
+          this.client.network.emit("joinClan", ownerClan);
         }
         return;
       }
       this.joinCount += 1;
     }
     _individualClanTick() {
-      const {myPlayer: myPlayer, PacketManager: PacketManager2, PlayerManager: PlayerManager2} = this.client;
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager2} = this.client;
       if (!myPlayer.inGame) return;
       const desiredName = this.client._botCustomName;
       if (!desiredName) return;
@@ -8641,13 +8763,13 @@ window.grbtp = 35;
       if (this._ownClanAttempts < 3) return;
       this._ownClanAttempts = 0;
       if (myPlayer.clanName !== null) {
-        PacketManager2.leaveClan();
+        this.client.network.emit("leaveClan");
         return;
       }
       if (PlayerManager2.clanExist(desiredName)) {
-        PacketManager2.joinClan(desiredName);
+        this.client.network.emit("joinClan", desiredName);
       } else {
-        PacketManager2.createClan(desiredName);
+        this.client.network.emit("createClan", desiredName);
       }
     }
   }
@@ -9241,8 +9363,8 @@ window.grbtp = 35;
   // Luna has no notion of a "first" trap: its autoplace ladder walks spikes
   // before traps and its trap rules bottom out in `if (neitherTrapped) return
   // true`, so every free angle qualifies equally. That is fine at Luna's
-  // budget. Here the whole client shares 70 packets a second — PacketManager
-  // zeroes the counter on a 1s interval, not per tick — and a build costs 5.
+  // budget. Here the whole client shares 70 packets a second — the allowance
+  // rolls on a 1s interval, not per tick — and a build costs 5.
   // That is 14 builds a second across every module, roughly one and a half per
   // tick, and the spike ladder alone will claim all of them, so traps reach
   // the wire only when the spikes happen to run out of angles.
@@ -9610,12 +9732,15 @@ window.grbtp = 35;
     execute(candidates, opts = {}) {
       const ryn = this.client.services;
       const myPlayer = this.client.myPlayer;
-      const budget = this.client.netBudget;
+      // Affordability is asked of the network, not read off the allowance. A
+      // placement is a sequence of wire actions, so what it can afford is the
+      // network's answer to give.
+      const network = this.client.network;
       const tick = opts.tick ?? this.state.tick;
       const sent = [];
       for (const candidate of candidates) {
         const profile = candidate.profile;
-        if (!budget.affords(profile.cost, profile.priority)) break;
+        if (!network.budget.affords(profile.cost, profile.priority)) break;
         if (!myPlayer.canPlace(profile.itemType)) continue;
         ryn.actions.place(profile.itemType, candidate.angle);
         ryn.ledger.placedOnce = true;
@@ -10065,7 +10190,7 @@ window.grbtp = 35;
     }
 
     runTick(bid) {
-      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
+      const {services: ryn, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
       if (!Settings_ref._autoplacer) return;
       if (!myPlayer || !myPlayer.inGame) return;
       // A spike tick owning the tick used to end this module outright, which
@@ -10511,7 +10636,7 @@ window.grbtp = 35;
       // sends, so a build never drags the swing off target.
       setTimeout(() => {
         try {
-          for (const _ of preObjects) PacketManager2.updateAngle(aimAngle());
+          for (const _ of preObjects) this.client.network.emit("aim", aimAngle());
         } catch (_) {}
       }, 1);
       setTimeout(() => {
@@ -10519,7 +10644,7 @@ window.grbtp = 35;
           for (const obj of preObjects) {
             if (outOfBudget()) break;
             emit(obj);
-            PacketManager2.updateAngle(aimAngle());
+            this.client.network.emit("aim", aimAngle());
           }
         } catch (_) {}
       }, sendDelay(pingTime));
@@ -10529,7 +10654,7 @@ window.grbtp = 35;
           for (const obj of preObjects) {
             if (outOfBudget()) break;
             emit(obj);
-            PacketManager2.updateAngle(aimAngle());
+            this.client.network.emit("aim", aimAngle());
           }
         } catch (_) {}
       }, sendDelay(minPingTime));
@@ -11267,7 +11392,7 @@ window.grbtp = 35;
         const delay = this._packetDelay(SocketManager2);
         setTimeout(() => {
           try {
-            this.client.PacketManager.attack(angle, shieldBypass ? 0 : 1);
+            this.client.network.emit("attack", angle);
           } catch (_) {}
         }, delay);
         this.reset();
@@ -12406,7 +12531,7 @@ window.grbtp = 35;
       const ryn = this.client.services;
       if (ryn.bot.scatterActive && ryn.bot.scatterAngle !== undefined) {
         ryn.actions.currentAngle = ryn.bot.scatterAngle;
-        this.client.PacketManager.updateAngle(ryn.bot.scatterAngle);
+        this.client.network.emit("aim", ryn.bot.scatterAngle);
         ryn.actions.mouse.sentAngle = ryn.bot.scatterAngle;
         return;
       }
@@ -13171,7 +13296,7 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, clientIDList: clientIDList, PacketManager: PacketManager2, isOwner: isOwner} = this.client;
+      const {myPlayer: myPlayer, clientIDList: clientIDList, isOwner: isOwner} = this.client;
       const currentClan = myPlayer.clanName;
       if (currentClan !== this.prevClan) {
         this.prevClan = currentClan;
@@ -13189,7 +13314,7 @@ window.grbtp = 35;
       while (myPlayer.joinRequests.length > 0) {
         const id = myPlayer.joinRequests[0][0];
         if (Settings_ref._autoaccept || this.client.pendingJoins.size !== 0) {
-          PacketManager2.clanRequest(id, Settings_ref._autoaccept || clientIDList.has(id));
+          this.client.network.schedule("clanRequest", id, Settings_ref._autoaccept || clientIDList.has(id));
           myPlayer.joinRequests.shift();
           this.client.pendingJoins.delete(id);
           if (isOwner) {
@@ -13536,7 +13661,7 @@ window.grbtp = 35;
         const delay = SocketManager2.TICK - SocketManager2.pong / 2;
         setTimeout(() => {
           try {
-            this.client.PacketManager.attack(angle, 0);
+            this.client.network.emit("attack", angle);
           } catch (_) {}
         }, Math.max(10, delay));
         this.targetEnemy = null;
@@ -13838,7 +13963,7 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
+      const {myPlayer: myPlayer} = this.client;
       if (!Settings_ref._killMessage || !myPlayer.killedSomeone || myPlayer.resources.kills === 0) {
         return;
       }
@@ -13846,7 +13971,7 @@ window.grbtp = 35;
       if (message.length === 0) {
         return;
       }
-      PacketManager2.chat(message);
+      this.client.network.request("chat", message);
     }
   }
   class DeathProvoke {
@@ -13878,7 +14003,7 @@ window.grbtp = 35;
       return this._clip(this._fillName(template));
     }
     runTick(bid) {
-      const {myPlayer: myPlayer, PacketManager: PacketManager2, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = this.client;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = this.client;
       if (!Settings_ref._deathProvoke) {
         this._lastKills = -1;
         this._pendingBranding = false;
@@ -13906,14 +14031,14 @@ window.grbtp = 35;
           }
         }
         if (!this._pendingBranding) {
-          PacketManager2.chat(this._randomKillMessage());
+          this.client.network.request("chat", this._randomKillMessage());
           this._pendingBranding = true;
           this._brandingTimer = Date.now() + 2000;
         }
       }
       if (this._pendingBranding && Date.now() >= this._brandingTimer) {
         this._pendingBranding = false;
-        PacketManager2.chat("#Ryn Client");
+        this.client.network.request("chat", "#Ryn Client");
       }
     }
   }
@@ -14042,7 +14167,7 @@ window.grbtp = 35;
       this.client = client2;
     }
     runTick(bid) {
-      const {services: ryn, InputHandler: InputHandler2, PlayerManager: PlayerManager2, myPlayer: myPlayer, PacketManager: PacketManager2} = this.client;
+      const {services: ryn, InputHandler: InputHandler2, PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
       if (ryn.arbiter.claimedAbove) {
         return;
       }
@@ -14075,7 +14200,7 @@ window.grbtp = 35;
         return;
       }
       InputHandler2.instaReset();
-      PacketManager2.leaveClan();
+      this.client.network.emit("leaveClan");
       for (const angle2 of angles) {
         ryn.actions.place(4, angle2);
       }
@@ -14297,7 +14422,7 @@ window.grbtp = 35;
     _forceWeapon(ryn, type, attack, bid) {
       const id = this.client.myPlayer.getItemByType(type);
       if (id === null || id === undefined) return;
-      this.client.PacketManager.selectItemByID(id, type === 1);
+      this.client.network.emit("selectItem", id, type === 1);
       ryn.loadout.currentHolding = type;
       ryn.loadout.weapon = type;
       bid.forceWeapon = null;
@@ -14398,13 +14523,13 @@ window.grbtp = 35;
               });
               bestAngle = myPos.angle(sorted[rs.idx % sorted.length].pos.current);
               try {
-                this.client.PacketManager.updateAngle(bestAngle);
+                this.client.network.emit("aim", bestAngle);
                 this.client.services.actions.mouse.sentAngle = bestAngle;
               } catch (_) {}
             } else {
               this._rsRotState = null;
               try {
-                this.client.PacketManager.updateAngle(bestAngle);
+                this.client.network.emit("aim", bestAngle);
                 this.client.services.actions.mouse.sentAngle = bestAngle;
               } catch (_) {}
             }
@@ -14535,7 +14660,7 @@ window.grbtp = 35;
           if (distToEnemy < ATTACK_DIST && !forceShield) {
             const dagId = myPlayer.getItemByType(0);
             if (dagId !== null) {
-              this.client.PacketManager.selectItemByID(dagId, false);
+              this.client.network.emit("selectItem", dagId, false);
               ryn.loadout.currentHolding = 0;
               ryn.loadout.weapon = 0;
               bid.forceWeapon = null;
@@ -14686,7 +14811,7 @@ window.grbtp = 35;
             if (inAttackWindow && S.spamActive) {
               S.attackAllowed = false;
               try {
-                this.client.PacketManager.updateAngle(shieldAngle);
+                this.client.network.emit("aim", shieldAngle);
                 this.client.services.actions.mouse.sentAngle = shieldAngle;
               } catch (_) {}
               bid.claim = true;
@@ -14696,7 +14821,7 @@ window.grbtp = 35;
               return;
             }
             try {
-              this.client.PacketManager.updateAngle(shieldAngle);
+              this.client.network.emit("aim", shieldAngle);
               this.client.services.actions.mouse.sentAngle = shieldAngle;
             } catch (_) {}
             bid.claim = true;
@@ -14710,7 +14835,7 @@ window.grbtp = 35;
             if (ratio > 0.85) {
               const preAngle = myPos.angle(bestTarget.pos.current);
               try {
-                this.client.PacketManager.updateAngle(preAngle);
+                this.client.network.emit("aim", preAngle);
                 this.client.services.actions.mouse.sentAngle = preAngle;
               } catch (_) {}
               bid.claim = true;
@@ -15312,11 +15437,11 @@ window.grbtp = 35;
       // Explicit collaborators, named one at a time. None of these services
       // holds the client: each was given the four or five things it actually
       // reads, which is what the reference counts said the real need was.
-      const packets = () => client2.PacketManager;
+      const net = () => client2.network;
       const player = () => client2.myPlayer;
       const peers = () => client2.isOwner ? client2.clients : [];
       svc.loadout.bind({
-        packets: packets,
+        net: net,
         player: player,
         peers: peers,
         ledger: svc.ledger,
@@ -15326,12 +15451,12 @@ window.grbtp = 35;
         nearestTurret: () => client2.EnemyManager.nearestTurretEntity
       });
       svc.motion.bind({
-        packets: packets,
+        net: net,
         intent: svc.intent,
         collides: () => client2.myPlayer.simulation.collisionSimulation(client2)
       });
       svc.actions.bind({
-        packets: packets,
+        net: net,
         player: player,
         loadout: svc.loadout,
         ledger: svc.ledger,
@@ -15570,18 +15695,21 @@ window.grbtp = 35;
     drift = 0;
     spent = 0;
     limit = 0;
-    // Packets per second, not per tick -- PacketManager zeroes the counter on a
-    // 1s interval. This is the client-wide allowance the scheduler opens the
-    // per-tick budget from, so it has to be readable before the tick is
-    // sampled; `packetCount` stays live off the sender for the same reason.
+    // Packets per second, not per tick -- the allowance rolls on a 1s interval.
+    // The scheduler opens the per-tick budget from this before the tick is
+    // sampled, so both stay live off RynPacketBudget rather than being copied
+    // here and going stale mid-tick.
     //
     // 70 was well under what the field runs: Luna gates builds at 119/s, Sakuna
     // refuses to send anything above 120/s, and Sakuna and auraro both carry
-    // secMax = 110. 115 sits below that stop with five packets of room.
-    packetLimit = 115;
+    // secMax = 110. 115 sits below that stop with five packets of room, and it
+    // is RynPacketBudget that holds the number.
     _sender = null;
+    get packetLimit() {
+      return this._sender === null ? 0 : this._sender.limit;
+    }
     get packetCount() {
-      return this._sender === null ? 0 : this._sender.packetCount;
+      return this._sender === null ? 0 : this._sender.spent;
     }
     bindSender(sender) {
       this._sender = sender;
@@ -15898,7 +16026,7 @@ window.grbtp = 35;
         return true;
       }
       if (!bought.has(id) && player.tempGold >= price && (player.isSandbox || force)) {
-        this._deps.packets().buy(type, id);
+        this._deps.net().emit("buy", type, id);
         player.tempGold -= price;
         return false;
       }
@@ -15911,7 +16039,7 @@ window.grbtp = 35;
       if (!player.inGame || !this.buy(type, id, force)) return false;
       if (store2.last === id && player.storeData[type] === id) return false;
       store2.last = id;
-      this._deps.packets().equip(type, id);
+      this._deps.net().emit("equip", type, id);
       const ledger = this._deps.ledger;
       if (type === 0) ledger.sentHatEquip = true; else ledger.sentAccEquip = true;
       if (force) {
@@ -15927,7 +16055,7 @@ window.grbtp = 35;
     }
     upgradeItem(id, isItem = false) {
       if (isItem) id += 16;
-      this._deps.packets().upgradeItem(id);
+      this._deps.net().emit("upgradeItem", id);
       this._deps.player().upgradeItem(id);
       if (DataHandler_ref.isWeapon(id)) {
         this._deps.features.units.reloading.updateMaxReload(DataHandler_ref.getWeapon(id).type);
@@ -15937,7 +16065,7 @@ window.grbtp = 35;
       const player = this._deps.player();
       const item = player.getItemByType(type);
       if (player.currentItem !== -1) player.currentItem = -1;
-      this._deps.packets().selectItemByID(item, false);
+      this._deps.net().emit("selectItem", item, false);
       this.currentHolding = type;
     }
     whichWeapon(type = this.weapon) {
@@ -15945,7 +16073,7 @@ window.grbtp = 35;
       if (weapon === null) return;
       this.currentHolding = type;
       this.weapon = type;
-      this._deps.packets().selectItemByID(weapon, true);
+      this._deps.net().emit("selectItem", weapon, true);
     }
     startPlacement(type) {
       this.currentType = type;
@@ -16020,11 +16148,11 @@ window.grbtp = 35;
         if (this._deps.intent.moveTo !== "disable") return;
       }
       if (this._deps.collides()) return false;
-      this._deps.packets().move(angle);
+      this._deps.net().emit("move", angle);
       return true;
     }
     stop() {
-      this._deps.packets().resetMoveDir();
+      this._deps.net().emit("resetMoveDir");
     }
     reset() {
       this.move_dir = null;
@@ -16075,19 +16203,19 @@ window.grbtp = 35;
       if (!this._allowed("attack")) return;
       if (angle !== null) this.mouse.sentAngle = angle;
       this._deps.ledger.updateSentAngle(priority);
-      this._deps.packets().attack(angle);
+      this._deps.net().emit("attack", angle);
       if (this._deps.loadout.holdingWeapon) this._deps.ledger.attacked = true;
     }
     stopAttack(angle = null) {
       if (!this._allowed("attack")) return;
-      this._deps.packets().stopAttack(angle);
+      this._deps.net().emit("stopAttack", angle);
     }
     updateAngle(angle, force = false) {
       if (!this._allowed("angle")) return;
       if (!force && angle === this.mouse.sentAngle) return;
       this.mouse.sentAngle = angle;
       this._deps.ledger.updateSentAngle(3);
-      this._deps.packets().updateAngle(angle);
+      this._deps.net().emit("aim", angle);
     }
     toggleAutoattack(state = !this.autoattack) {
       this.autoattack = state;
@@ -16543,6 +16671,16 @@ window.grbtp = 35;
       run: () => client2.InputHandler.runTick()
     });
 
+    // Anything deferred by RynNetwork.request goes out at the end of the tick,
+    // in priority order, against whatever allowance the second has left. This
+    // is why a busy second delays background traffic instead of losing it.
+    reg.add({
+      id: "core:netFlush", domain: RYN_DOMAIN.UTILITY, phase: RYN_PHASE.EMIT,
+      priority: 50, owns: [ "network.queue" ],
+      when: () => client2.network.queued > 0,
+      run: () => client2.network.flush()
+    });
+
     reg.add({
       id: "core:hud", domain: RYN_DOMAIN.UTILITY, phase: RYN_PHASE.EMIT,
       priority: 90, owns: [], when: () => client2.isOwner,
@@ -16603,7 +16741,7 @@ window.grbtp = 35;
     LeaderboardManager;
     EnemyManager;
     myPlayer;
-    PacketManager;
+    network;
     InputHandler;
     StatsManager;
     runtime;
@@ -16624,6 +16762,21 @@ window.grbtp = 35;
       this.netBudget = new RynPacketBudget;
       this.netQueue = new RynPacketQueue;
       this.net = new RynNetEvents(this.runtime.events);
+      // The one networking abstraction gameplay is allowed to reach. It holds
+      // the transport, the codec, the wire table, the queue and the allowance;
+      // nothing else in RYN touches any of them.
+      this.network = new RynNetwork(this, {
+        transport: this.transport,
+        codec: this.codec,
+        budget: this.netBudget,
+        queue: this.netQueue,
+        events: this.net
+      });
+      // Rate accounting is the budget's, and the readout is a subscriber to it.
+      this.runtime.services.network.bindSender(this.netBudget);
+      this.netBudget.onRoll = spent => {
+        if (this.isOwner) GameUI_ref.updatePackets(spent);
+      };
       this.telemetry = new RynTelemetry(this);
       this.SocketManager = new SocketManager_ref(this);
       this.ObjectManager = new ObjectManager_ref(this);
@@ -16636,8 +16789,6 @@ window.grbtp = 35;
       // The registry owns the table; the runtime owns when they run.
       this.runtime.registry.install(buildRynUnits(this));
       this.myPlayer = new ClientPlayer_ref(this);
-      this.PacketManager = new PacketManager(this);
-      this.runtime.services.network.bindSender(this.PacketManager);
       enrolRynUnits(this.runtime, this);
       this.InputHandler = new InputHandler(this);
       this.StatsManager = new StatsManager(this);
@@ -17405,8 +17556,8 @@ window.grbtp = 35;
         });
         socket.onopen = () => {
           const player = new PlayerClient_ref(client);
-          player.PacketManager.Encoder = client.PacketManager.Encoder;
-          player.PacketManager.Decoder = client.PacketManager.Decoder;
+          player.codec.Encoder = client.codec.Encoder;
+          player.codec.Decoder = client.codec.Decoder;
           player._botCustomName = botName;
           player.SocketManager.init(socket);
           const onconnect = () => {
@@ -18591,7 +18742,7 @@ window.grbtp = 35;
       if (text === "/norecoil") {
         client2.services.actions.norecoil = !client2.services.actions.norecoil;
       }
-      client2.PacketManager.chat(text);
+      client2.network.request("chat", text);
     }
     modifyInputs() {
       const {chatHolder: chatHolder, chatBox: chatBox, nameInput: nameInput} = this.getElements();
@@ -18821,7 +18972,7 @@ window.grbtp = 35;
         const button = this.createAcceptButton(type);
         button.onclick = () => {
           this.resetNotication(noticationDisplay);
-          client.PacketManager.clanRequest(id, !!type);
+          client.network.emit("clanRequest", id, !!type);
           client.myPlayer.joinRequests.shift();
           client.pendingJoins.delete(id);
         };
@@ -19274,11 +19425,11 @@ window.grbtp = 35;
       return loadedFast;
     });
     Hooker_ref.createRecursiveHook(Object.prototype, "initialBufferSize", _this => {
-      client.PacketManager.Encoder = _this;
+      client.codec.Encoder = _this;
       return true;
     });
     Hooker_ref.createRecursiveHook(Object.prototype, "maxExtLength", _this => {
-      client.PacketManager.Decoder = _this;
+      client.codec.Decoder = _this;
       Logger.log("Hooked decoder..");
       return true;
     });
@@ -19910,8 +20061,8 @@ window.grbtp = 35;
         if (client && client.clients) {
           client.clients.forEach(botPlayer => {
             try {
-              if (botPlayer && botPlayer.PacketManager && botPlayer.myPlayer && botPlayer.myPlayer.inGame) {
-                botPlayer.PacketManager.chat(msg.trim());
+              if (botPlayer && botPlayer.network && botPlayer.myPlayer && botPlayer.myPlayer.inGame) {
+                botPlayer.network.request("chat", msg.trim());
               }
             } catch (e2) {}
           });
@@ -19932,7 +20083,7 @@ window.grbtp = 35;
         if (msgs.length === 0) return;
         const msg = msgs[_autoChatIndex % msgs.length];
         _autoChatIndex++;
-        client.PacketManager.chat(msg.trim());
+        client.network.request("chat", msg.trim());
       } catch (e) {}
     }, intervalSec * 1000);
   };
@@ -20371,7 +20522,7 @@ window.grbtp = 35;
         if (this._mixedTurn === 0) {
           const sock = client && client.SocketManager && client.SocketManager.socket;
           const sockOk = sock && sock.readyState === sock.OPEN;
-          const encOk = client && client.PacketManager && client.PacketManager.Encoder !== null;
+          const encOk = client && client.codec && client.codec.Encoder !== null;
           const inGame = client && client.myPlayer && client.myPlayer.inGame;
           if (sockOk && encOk && inGame) {
             const MAX_CHAT = 30;
@@ -20380,7 +20531,7 @@ window.grbtp = 35;
             chunks.forEach((c, i) => setTimeout(() => {
               if (this._songSessionId !== sid) return;
               try {
-                client.PacketManager.chat(c);
+                client.network.request("chat", c);
               } catch (_) {}
             }, i * 2200));
           }
@@ -20453,7 +20604,7 @@ window.grbtp = 35;
         try {
           client.clients.forEach(bot => {
             try {
-              if (bot && bot.PacketManager && bot.myPlayer && bot.myPlayer.inGame) bot.PacketManager.chat(c);
+              if (bot && bot.network && bot.myPlayer && bot.myPlayer.inGame) bot.network.request("chat", c);
             } catch (_) {}
           });
         } catch (_) {}
@@ -20468,15 +20619,15 @@ window.grbtp = 35;
         try {
           const sock = client && client.SocketManager && client.SocketManager.socket;
           const sockOk = sock && sock.readyState === sock.OPEN;
-          const encOk = client && client.PacketManager && client.PacketManager.Encoder !== null;
+          const encOk = client && client.codec && client.codec.Encoder !== null;
           const inGame = client && client.myPlayer && client.myPlayer.inGame;
-          if (sockOk && encOk && inGame) client.PacketManager.chat(c);
+          if (sockOk && encOk && inGame) client.network.request("chat", c);
         } catch (_) {}
         try {
           if (client && client.clients) {
             client.clients.forEach(bot => {
               try {
-                if (bot && bot.PacketManager && bot.myPlayer && bot.myPlayer.inGame) bot.PacketManager.chat(c);
+                if (bot && bot.network && bot.myPlayer && bot.myPlayer.inGame) bot.network.request("chat", c);
               } catch (_) {}
             });
           }
@@ -20485,7 +20636,7 @@ window.grbtp = 35;
     }
     _sendLyricToBotsDistributed(text) {
       if (!client || !client.clients) return;
-      const bots = [ ...client.clients ].filter(b => b && b.PacketManager && b.myPlayer && b.myPlayer.inGame);
+      const bots = [ ...client.clients ].filter(b => b && b.network && b.myPlayer && b.myPlayer.inGame);
       if (!bots.length) return;
       if (this._botsDistribIdx === undefined) this._botsDistribIdx = 0;
       const bot = bots[this._botsDistribIdx % bots.length];
@@ -20495,7 +20646,7 @@ window.grbtp = 35;
       chunks.forEach((c, i) => setTimeout(() => {
         if (this._songSessionId !== sid) return;
         try {
-          if (bot && bot.PacketManager && bot.myPlayer && bot.myPlayer.inGame) bot.PacketManager.chat(c);
+          if (bot && bot.network && bot.myPlayer && bot.myPlayer.inGame) bot.network.request("chat", c);
         } catch (_) {}
       }, i * 2200));
     }
@@ -20505,16 +20656,16 @@ window.grbtp = 35;
           if (client && client.clients) {
             client.clients.forEach(bot => {
               try {
-                if (bot && bot.PacketManager && bot.myPlayer && bot.myPlayer.inGame) bot.PacketManager.chat(chunk);
+                if (bot && bot.network && bot.myPlayer && bot.myPlayer.inGame) bot.network.request("chat", chunk);
               } catch (_) {}
             });
           }
         } else {
           const sock = client && client.SocketManager && client.SocketManager.socket;
           const sockOk = sock && sock.readyState === sock.OPEN;
-          const encOk = client && client.PacketManager && client.PacketManager.Encoder !== null;
+          const encOk = client && client.codec && client.codec.Encoder !== null;
           const inGame = client && client.myPlayer && client.myPlayer.inGame;
-          if (sockOk && encOk && inGame) client.PacketManager.chat(chunk);
+          if (sockOk && encOk && inGame) client.network.request("chat", chunk);
         }
       } catch (e) {
         console.error("[BeeMusic] _doSendPacket error:", e);
@@ -20943,7 +21094,7 @@ window.grbtp = 35;
       if (testBtn) testBtn.onclick = () => {
         const sock = client && client.SocketManager && client.SocketManager.socket;
         const st = sock ? [ "CONNECTING", "OPEN", "CLOSING", "CLOSED" ][sock.readyState] : "NO_SOCKET";
-        const enc = !!(client && client.PacketManager && client.PacketManager.Encoder);
+        const enc = !!(client && client.codec && client.codec.Encoder);
         const ing = !!(client && client.myPlayer && client.myPlayer.inGame);
         if (testSt) {
           testSt.textContent = `sock:${st} enc:${enc} inGame:${ing}`;
@@ -20954,7 +21105,7 @@ window.grbtp = 35;
         }
         if (st === "OPEN" && enc && ing) {
           try {
-            client.PacketManager.chat("🎵 BeeMusic sync test");
+            client.network.request("chat", "🎵 BeeMusic sync test");
           } catch (e) {}
         }
       };
@@ -21009,16 +21160,16 @@ window.grbtp = 35;
               if (client && client.clients) {
                 client.clients.forEach(bot => {
                   try {
-                    if (bot && bot.PacketManager && bot.myPlayer && bot.myPlayer.inGame) bot.PacketManager.chat(chunk);
+                    if (bot && bot.network && bot.myPlayer && bot.myPlayer.inGame) bot.network.request("chat", chunk);
                   } catch (_) {}
                 });
               }
             } else {
               const sock = client && client.SocketManager && client.SocketManager.socket;
               const sockOk = sock && sock.readyState === sock.OPEN;
-              const encOk = client && client.PacketManager && client.PacketManager.Encoder !== null;
+              const encOk = client && client.codec && client.codec.Encoder !== null;
               const inGame = client && client.myPlayer && client.myPlayer.inGame;
-              if (sockOk && encOk && inGame) client.PacketManager.chat(chunk);
+              if (sockOk && encOk && inGame) client.network.request("chat", chunk);
             }
           } catch (e) {}
           if (sendLyricsStatusEl) sendLyricsStatusEl.textContent = idx + " / " + allChunks.length;
@@ -22224,7 +22375,7 @@ window.grbtp = 35;
           if (_sc_angle === undefined || _sc_angle === null) continue;
           ryn.motion.move_dir = _sc_angle;
           try {
-            _sc_bot.PacketManager.move(_sc_angle);
+            _sc_bot.network.emit("move", _sc_angle);
           } catch (_) {}
 
           try {
@@ -22263,12 +22414,12 @@ window.grbtp = 35;
               if (_sc_rel) {
                 if (_sc_sec === 10 && _sc_rel.isReloaded(1)) {
                   try {
-                    _sc_bot.PacketManager.attack(_sc_ba);
+                    _sc_bot.network.emit("attack", _sc_ba);
                   } catch (_) {}
                   ryn.intent.forceWeapon = 1;
                 } else if (_sc_pri !== 8 && _sc_pri !== 5 && _sc_rel.isReloaded(0)) {
                   try {
-                    _sc_bot.PacketManager.attack(_sc_ba);
+                    _sc_bot.network.emit("attack", _sc_ba);
                   } catch (_) {}
                   ryn.intent.forceWeapon = 0;
                 }
@@ -22621,7 +22772,7 @@ window.grbtp = 35;
       const hasCap = bought && bought.has(HAT_ID);
       if (!hasCap && c.myPlayer.tempGold >= PRICE) {
         try {
-          c.PacketManager.buy(0, HAT_ID);
+          c.network.emit("buy", 0, HAT_ID);
           c.myPlayer.tempGold -= PRICE;
           if (bought) bought.add(HAT_ID);
         } catch (e) {}
@@ -22634,7 +22785,7 @@ window.grbtp = 35;
           store2.last = HAT_ID;
           store2.actual = HAT_ID;
           try {
-            c.PacketManager.equip(0, HAT_ID);
+            c.network.emit("equip", 0, HAT_ID);
           } catch (e) {}
         }
       }
