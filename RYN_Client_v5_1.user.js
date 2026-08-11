@@ -9873,6 +9873,310 @@ window.grbtp = 35;
     }
   }
 
+  // ── Motion ────────────────────────────────────────────────────────────────
+  // What RYN is given per entity is one sample: pos.previous, pos.current, and
+  // a `future` that is current plus the same step again. That is a velocity and
+  // nothing else -- no acceleration, no history, and no way to tell someone
+  // holding a direction from someone who just changed it.
+  //
+  // So the history is kept here. Velocity is the step between samples,
+  // acceleration is the change in that step, and confidence is how much the
+  // recent samples agree with each other. Prediction then reaches as far as the
+  // confidence earns and no further, instead of a fixed number of ticks.
+  //
+  // Nothing here assumes how a player moves. The one game constant it uses is a
+  // ceiling on speed, and even that is only a sanity bound on a measurement.
+  const MOTION_WINDOW = 6;
+
+  // The fastest a player travels in one tick, integrated from the game's own
+  // playerSpeed and playerDecel over one TICK. Boosts and biomes move the real
+  // figure around, so this is a bound on nonsense rather than a model: anything
+  // faster than half again this is a teleport or a bad sample.
+  const MOTION_TICK_CEILING = 33.3 * 1.5;
+
+  // Below this a target counts as standing still, and predicting where a
+  // stationary player will be is just where they are.
+  const MOTION_IDLE_SPEED = 1.5;
+
+  class RynMotionEstimator {
+    _tracks = new Map;
+
+    // One sample per tick per entity. Called with whatever RYN knows now; the
+    // estimator turns a sequence of positions into a motion state.
+    observe(id, pos, tick) {
+      let t = this._tracks.get(id);
+      if (t === undefined) {
+        t = { samples: [], vx: 0, vy: 0, ax: 0, ay: 0, speed: 0, dir: null, confidence: 0, lastTick: -1 };
+        this._tracks.set(id, t);
+      }
+      if (t.lastTick === tick) return t;
+
+      // A gap in the samples means the target left view and came back. The old
+      // history describes a different journey and is dropped rather than
+      // averaged into this one.
+      if (t.lastTick >= 0 && tick - t.lastTick > 2) t.samples.length = 0;
+      t.lastTick = tick;
+      t.samples.push({ x: pos.x, y: pos.y, tick: tick });
+      if (t.samples.length > MOTION_WINDOW) t.samples.shift();
+      this._solve(t);
+      return this._read(t);
+    }
+
+    // A reading is a snapshot, never the live track. Everything downstream --
+    // the scorer, the preplace book -- holds a reading across ticks and asks
+    // what was true when it was taken; handing out the mutable track would let
+    // the answer change underneath them.
+    _read(t) {
+      return Object.freeze({
+        vx: t.vx, vy: t.vy, ax: t.ax, ay: t.ay,
+        speed: t.speed, dir: t.dir, confidence: t.confidence,
+        samples: t.samples.length
+      });
+    }
+
+    _solve(t) {
+      const s = t.samples;
+      if (s.length < 2) {
+        t.vx = t.vy = t.ax = t.ay = t.speed = 0;
+        t.dir = null;
+        t.confidence = 0;
+        return;
+      }
+
+      // Per-tick steps between consecutive samples. A sample pair spanning more
+      // than one tick is divided down so every step means the same thing.
+      const steps = [];
+      for (let i = 1; i < s.length; i++) {
+        const dt = Math.max(1, s[i].tick - s[i - 1].tick);
+        const vx = (s[i].x - s[i - 1].x) / dt;
+        const vy = (s[i].y - s[i - 1].y) / dt;
+        const sp = Math.hypot(vx, vy);
+        if (sp > MOTION_TICK_CEILING) continue;   // a jump, not a walk
+        steps.push({ vx: vx, vy: vy, sp: sp });
+      }
+      if (steps.length === 0) {
+        t.vx = t.vy = t.ax = t.ay = t.speed = 0;
+        t.dir = null;
+        t.confidence = 0;
+        return;
+      }
+
+      const last = steps[steps.length - 1];
+      t.vx = last.vx;
+      t.vy = last.vy;
+      t.speed = last.sp;
+      t.dir = t.speed > MOTION_IDLE_SPEED ? Math.atan2(last.vy, last.vx) : null;
+
+      // Acceleration, where there is enough history to see one. This is the
+      // term that tells a player who has released the keys from one who is
+      // still holding them, and it is measured rather than assumed.
+      if (steps.length >= 2) {
+        const prev = steps[steps.length - 2];
+        t.ax = last.vx - prev.vx;
+        t.ay = last.vy - prev.vy;
+      } else {
+        t.ax = t.ay = 0;
+      }
+
+      // Confidence: how much do the recent steps agree? Three readings, each
+      // 0..1, multiplied -- a prediction is only as good as its weakest term.
+      //
+      //   depth      how much history there is to go on
+      //   heading    how tightly the recent directions cluster
+      //   pace       how steady the speed has been
+      const depth = Math.min(1, steps.length / (MOTION_WINDOW - 1));
+      let heading = 0, pace = 0;
+      if (t.speed > MOTION_IDLE_SPEED) {
+        let sx = 0, sy = 0, sum = 0, sum2 = 0, moving = 0;
+        for (const st of steps) {
+          if (st.sp <= MOTION_IDLE_SPEED) continue;
+          sx += st.vx / st.sp;
+          sy += st.vy / st.sp;
+          sum += st.sp;
+          sum2 += st.sp * st.sp;
+          moving += 1;
+        }
+        if (moving > 0) {
+          // Length of the mean unit vector: 1 when every step points the same
+          // way, 0 when they cancel out.
+          heading = Math.hypot(sx, sy) / moving;
+          const mean = sum / moving;
+          const varr = Math.max(0, sum2 / moving - mean * mean);
+          pace = mean <= 1e-6 ? 0 : Math.max(0, 1 - Math.sqrt(varr) / mean);
+        }
+      } else {
+        // A stationary target is perfectly predictable: they are where they are.
+        heading = 1;
+        pace = 1;
+      }
+      t.confidence = depth * heading * pace;
+    }
+
+    state(id) {
+      const t = this._tracks.get(id);
+      return t === undefined ? null : this._read(t);
+    }
+
+    // Where they will be in `ticks`, carrying the measured acceleration forward
+    // and letting it decide the speed rather than assuming they hold a key. A
+    // target already slowing keeps slowing; one already turning keeps turning
+    // for as long as the measurement supports it.
+    predict(t, from, ticks) {
+      if (t === null || t.samples < 2) return { x: from.x, y: from.y };
+      let x = from.x, y = from.y, vx = t.vx, vy = t.vy;
+      for (let i = 0; i < ticks; i++) {
+        vx += t.ax;
+        vy += t.ay;
+        const sp = Math.hypot(vx, vy);
+        if (sp > MOTION_TICK_CEILING) {
+          vx = vx / sp * MOTION_TICK_CEILING;
+          vy = vy / sp * MOTION_TICK_CEILING;
+        }
+        // Acceleration that has reversed the motion means they stopped, not
+        // that they are now walking backwards at increasing speed.
+        if (sp <= MOTION_IDLE_SPEED) break;
+        x += vx;
+        y += vy;
+      }
+      return { x: x, y: y };
+    }
+
+    // How far ahead it is worth predicting at all. Full confidence earns the
+    // whole horizon; none of it earns a single tick, which is where they
+    // already are. This is what replaces a fixed lookahead.
+    horizon(t, max) {
+      if (t === null) return 1;
+      return Math.max(1, Math.min(max, Math.round(1 + t.confidence * (max - 1))));
+    }
+
+    // Where their path crosses the ring a build of this item would land on --
+    // the point a build placed now would actually meet them at, rather than the
+    // point they are at when it is planned. Null when the path never reaches
+    // the ring inside the horizon.
+    intercept(t, from, origin, ring, ticks, tolerance) {
+      if (t === null || t.samples < 2) return null;
+      let best = null, bestGap = Infinity;
+      for (let i = 1; i <= ticks; i++) {
+        const p = this.predict(t, from, i);
+        const gap = Math.abs(Math.hypot(p.x - origin.x, p.y - origin.y) - ring);
+        if (gap < bestGap) { bestGap = gap; best = { x: p.x, y: p.y, tick: i }; }
+      }
+      return best !== null && bestGap <= tolerance ? best : null;
+    }
+
+    forget(id) {
+      this._tracks.delete(id);
+    }
+    reset() {
+      this._tracks.clear();
+    }
+  }
+
+  // ── Preplace book ─────────────────────────────────────────────────────────
+  // Candidates that have been planned but not yet sent, kept apart from what
+  // has actually gone out. An executed placement is a fact and lives in
+  // PlacementMemory; a preplace is a bet, and a bet has to be reviewed.
+  //
+  // Every entry carries what it was betting on -- which target, where they
+  // stood, which way they were going, and what the prediction was worth -- so
+  // the bet can be checked against the world rather than simply timing out.
+  class RynPreplaceBook {
+    _open = [];
+
+    // Remember a planned build, with the reading it was planned against.
+    hold(cand, tick, motion, target) {
+      this._open.push({
+        cand: cand,
+        placed: tick,
+        expires: tick + PLACE_BAN_TICKS,
+        targetID: target === null ? null : target.id,
+        at: target === null ? null : { x: target.pos.current.x, y: target.pos.current.y },
+        dir: motion === null ? null : motion.dir,
+        confidence: motion === null ? 0 : motion.confidence,
+        score: cand.score
+      });
+    }
+
+    get open() {
+      return this._open;
+    }
+
+    // Review every open bet against the world as it is now. An entry survives
+    // only while what it was betting on is still true.
+    review(tick, target, motion) {
+      const dropped = [];
+      for (let i = this._open.length - 1; i >= 0; i--) {
+        const h = this._open[i];
+        const why = this._stale(h, tick, target, motion);
+        if (why === null) continue;
+        h.why = why;
+        dropped.push(h);
+        this._open.splice(i, 1);
+      }
+      return dropped;
+    }
+
+    _stale(h, tick, target, motion) {
+      // The bet ran out.
+      if (tick > h.expires) return "expired";
+      // Nobody left to bet on, or a different somebody.
+      if (target === null) return "no-target";
+      if (h.targetID !== null && target.id !== h.targetID) return "target-changed";
+      // They left the ground this was aimed at. Past the build's own radius it
+      // catches nothing.
+      if (h.at !== null) {
+        const drift = Math.hypot(target.pos.current.x - h.at.x, target.pos.current.y - h.at.y);
+        if (drift > h.cand.scale) return "target-moved";
+      }
+      // They turned. A prediction made along one heading says nothing about
+      // where they are going along another, and a quarter turn is enough to
+      // make the difference matter at this range.
+      if (h.dir !== null && motion !== null && motion.dir !== null) {
+        let turn = Math.abs(h.dir - motion.dir);
+        if (turn > Math.PI) turn = Math.PI * 2 - turn;
+        if (turn > Math.PI / 4) return "target-turned";
+      }
+      return null;
+    }
+
+    // Is this ground spoken for by an open bet, and is the bet worth more than
+    // what wants it now? A preplace holds its ground against weaker work and
+    // gives it up to stronger -- it must never block a better build simply by
+    // having been planned first.
+    holds(cand) {
+      for (const h of this._open) {
+        if (Math.hypot(h.cand.x - cand.x, h.cand.y - cand.y) >= h.cand.scale + cand.scale) continue;
+        if (cand.score > h.score) return false;
+        return true;
+      }
+      return false;
+    }
+
+    // Release the ground an open bet is holding, because something better took
+    // it. Returns what was given up so the caller can say so.
+    yield(cand) {
+      const out = [];
+      for (let i = this._open.length - 1; i >= 0; i--) {
+        const h = this._open[i];
+        if (Math.hypot(h.cand.x - cand.x, h.cand.y - cand.y) < h.cand.scale + cand.scale && cand.score > h.score) {
+          h.why = "outbid";
+          out.push(h);
+          this._open.splice(i, 1);
+        }
+      }
+      return out;
+    }
+
+    settle(cand) {
+      for (let i = this._open.length - 1; i >= 0; i--) {
+        if (this._open[i].cand === cand) this._open.splice(i, 1);
+      }
+    }
+    clear() {
+      this._open.length = 0;
+    }
+  }
+
   // ── Threat ────────────────────────────────────────────────────────────────
   // What is about to change, computed once per tick so every later stage reads
   // one answer instead of recomputing its own.
@@ -9889,20 +10193,28 @@ window.grbtp = 35;
     trappedIn = null;
     imTrapped = false;
 
-    sample(client2, enemy, ObjectManager2, PlayerManager2, myPlayer) {
+    motion = null;
+
+    sample(client2, enemy, ObjectManager2, PlayerManager2, myPlayer, estimator, tick) {
       this.doomed.clear();
       this.enemy = enemy;
       this.trappedIn = null;
+      this.motion = null;
       this.imTrapped = !!myPlayer.isTrapped;
       if (enemy === null) return this;
 
       const enemyPos = enemy.pos.current;
-      const enemyFut = enemy.pos.future ?? enemyPos;
+      // The measured motion, not the one-sample `future` the entity carries.
+      // Where there is no history yet the two agree; where there is, this one
+      // knows whether they are speeding up, slowing down or turning.
+      this.motion = estimator.observe(enemy.id, enemyPos, tick);
+      this.estimator = estimator;
+      const step = estimator.predict(this.motion, enemyPos, 1);
       this.enemyPath = {
         from: enemyPos,
-        to: enemyFut,
-        stepX: enemyFut.x - enemyPos.x,
-        stepY: enemyFut.y - enemyPos.y
+        to: step,
+        stepX: step.x - enemyPos.x,
+        stepY: step.y - enemyPos.y
       };
 
       // What the enemy can break next swing. Both weapons are asked because
@@ -9932,12 +10244,23 @@ window.grbtp = 35;
       return this;
     }
 
-    // Where the enemy will be `ticks` steps from now, holding their current
-    // step. Past a few ticks this is a guess and the scorer discounts it.
-    project(ticks) {
-      const p = this.enemyPath;
-      if (p === null) return null;
-      return { x: p.from.x + p.stepX * ticks, y: p.from.y + p.stepY * ticks };
+    // Where the enemy will be, reaching as far ahead as the measurement earns
+    // rather than a fixed number of ticks. `max` is a ceiling, not a target: a
+    // reading nobody can trust returns the next tick, which is barely a
+    // prediction at all, and that is the right answer for a target that just
+    // changed direction.
+    project(max) {
+      if (this.enemyPath === null || this.estimator === undefined) return null;
+      const ticks = this.estimator.horizon(this.motion, max);
+      return this.estimator.predict(this.motion, this.enemyPath.from, ticks);
+    }
+
+    // The point on my build ring their path actually crosses. A build aimed
+    // here meets them; one aimed at where they stand meets where they stood.
+    interceptOn(origin, ring, max, tolerance) {
+      if (this.enemyPath === null || this.estimator === undefined) return null;
+      const ticks = this.estimator.horizon(this.motion, max);
+      return this.estimator.intercept(this.motion, this.enemyPath.from, origin, ring, ticks, tolerance);
     }
   }
 
@@ -10243,6 +10566,10 @@ window.grbtp = 35;
         // This is also what keeps an immediate build off the spot a delayed one
         // is holding: the delayed send marked it when it was planned.
         if (ctx.memory.blocked(cand.x, cand.y)) return false;
+        // Ground an open preplace is holding -- but only while that preplace is
+        // worth more. A bet placed first must never block a better build simply
+        // for having been placed first.
+        if (ctx.book !== undefined && ctx.book.holds(cand)) return false;
         if (conflict.collides(cand, taken)) return false;
         return true;
       };
@@ -10373,6 +10700,8 @@ window.grbtp = 35;
     angles = new RynAngleSolver;
     candidates = new RynCandidateGenerator;
     threat = new RynThreatAnalyzer;
+    estimator = new RynMotionEstimator;
+    book = new RynPreplaceBook;
     scorer = new RynPlacementScorer(RYN_PLACE_UTILITY);
     planner;
     conflict = new RynConflictResolver;
@@ -10389,6 +10718,8 @@ window.grbtp = 35;
     reset() {
       this.memory.clear();
       this.threat.doomed.clear();
+      this.estimator.reset();
+      this.book.clear();
       this.lastPlan = [];
     }
 
@@ -10406,7 +10737,13 @@ window.grbtp = 35;
       const enemy = client2.EnemyManager.nearestEnemy;
       if (!enemy) { this.lastPlan = []; return 0; }
 
-      this.threat.sample(client2, enemy, client2.ObjectManager, client2.PlayerManager, myPlayer);
+      this.threat.sample(client2, enemy, client2.ObjectManager, client2.PlayerManager, myPlayer, this.estimator, tick);
+
+      // Review the open bets before planning anything new. A preplace that was
+      // aimed at a heading they have since abandoned is not a plan, it is a
+      // reservation on ground nobody is walking to -- and holding it would keep
+      // this tick's work off that ground for no reason.
+      this.book.review(tick, enemy, this.threat.motion);
 
       const myPos = myPlayer.pos.current;
       const enemyPos = enemy.pos.current;
@@ -10463,10 +10800,16 @@ window.grbtp = 35;
         // damaging one wants the ground beside the trap that already holds
         // them. Both are world points, and both are only usable if my ring
         // reaches them.
-        if (ctx.gates.primaryTrap && role.pins && far !== null && this.threat.trappedIn === null &&
+        if (ctx.gates.primaryTrap && role.pins && this.threat.trappedIn === null &&
             myPos.distance(enemyPos) <= TRAP_PRIMARY_RANGE) {
-          const a = this.candidates.anchored(myPos, item, itemId, role, now, far, item.scale, RYN_PLACE_REASON.IMMEDIATE, null);
-          if (a !== null) all.push(a);
+          // Where their path crosses the ring this build lands on, if it does.
+          // That is the point a build placed now actually meets them at; `far`
+          // is only where they will be, which is not the same question.
+          const meet = this.threat.interceptOn(myPos, now.ring, TRAP_LOOKAHEAD_TICKS, item.scale) ?? far;
+          if (meet !== null) {
+            const a = this.candidates.anchored(myPos, item, itemId, role, now, meet, item.scale, RYN_PLACE_REASON.IMMEDIATE, null);
+            if (a !== null) all.push(a);
+          }
         }
         if (role.damages && this.threat.trappedIn !== null) {
           const t = this.threat.trappedIn.pos.current;
@@ -10504,6 +10847,7 @@ window.grbtp = 35;
         enemyTrapped: this.threat.trappedIn,
         memory: this.memory,
         conflict: this.conflict,
+        book: this.book,
         capped: (itemId, freed) => {
           const group = Items[itemId].itemGroup;
           const { count: count, limit: limit } = myPlayer.getItemCount(group);
@@ -10514,6 +10858,14 @@ window.grbtp = 35;
       });
       this.lastPlan = chosen;
       if (chosen.length === 0) return 0;
+
+      // A build that has to wait is a bet on a reading; record it with what it
+      // was betting on so the next tick can check whether that is still true.
+      // An immediate build is not a bet -- it is already gone.
+      for (const c of chosen) {
+        this.book.yield(c);
+        if (c.reason !== RYN_PLACE_REASON.IMMEDIATE) this.book.hold(c, tick, this.threat.motion, enemy);
+      }
 
       const socket = client2.SocketManager;
       const sends = this.scheduler.schedule(chosen, {
