@@ -14858,12 +14858,18 @@ window.grbtp = 35;
 
   const ARBITER_ADVISORY = [ "useWeapon", "useItem", "forceWeapon", "useHat", "forceHat", "useAcc", "useAngle" ];
 
-  class Arbiter {
-    core;
+  // Collects one bid per feature, resolves them into a single plan, and writes
+  // that plan to the intent board. It is the only writer of resolved intent:
+  // before this, each unit wrote its wishes straight onto the shared handler and
+  // the last one to run won by accident of array position.
+  class RynArbiter {
+    board;
+    actions;
     bids = [];
     _claimedAbove = false;
-    constructor(core) {
-      this.core = core;
+    constructor(board, actions = null) {
+      this.board = board;
+      this.actions = actions;
     }
     // True once any higher-priority unit has claimed this tick.
     get claimedAbove() {
@@ -14873,10 +14879,19 @@ window.grbtp = 35;
       this.bids.length = 0;
       this._claimedAbove = false;
     }
-    // Run one unit against a bid of its own and file it.
-    offer(unit, priority) {
+    // Run one unit against a bid of its own and file it. The feature is named
+    // on RynActions for the duration so an action request can be checked
+    // against what that feature declared it may do.
+    offer(unit, priority, feature = null) {
       const bid = new TickBid(unit.unitID, priority);
-      unit.runTick(bid);
+      const actions = this.actions;
+      const previous = actions === null ? null : actions.actor;
+      if (actions !== null) actions.actor = feature;
+      try {
+        unit.runTick(bid);
+      } finally {
+        if (actions !== null) actions.actor = previous;
+      }
       if (bid.claimed) {
         this._claimedAbove = true;
       }
@@ -14909,13 +14924,13 @@ window.grbtp = 35;
     }
     // Write the resolved intent where the send phase reads it.
     commit(resolved) {
-      const core = this.core;
-      core.moduleActive = resolved.moduleActive;
-      core.activeModule = resolved.activeModule;
-      core.shouldAttack = resolved.shouldAttack;
-      core.shouldEquipSoldier = resolved.shouldEquipSoldier;
-      for (const field of ARBITER_ADVISORY) core[field] = resolved[field];
-      if (resolved.moveTo !== undefined) core.moveTo = resolved.moveTo;
+      const board = this.board;
+      board.moduleActive = resolved.moduleActive;
+      board.activeModule = resolved.activeModule;
+      board.shouldAttack = resolved.shouldAttack;
+      board.shouldEquipSoldier = resolved.shouldEquipSoldier;
+      for (const field of ARBITER_ADVISORY) board[field] = resolved[field];
+      if (resolved.moveTo !== undefined) board.moveTo = resolved.moveTo;
     }
   }
 
@@ -14933,7 +14948,7 @@ window.grbtp = 35;
   //
   //   RynClock     counts ticks and walks the phases; owns time
   //   RynEvents    routes named signals; owns subscriptions
-  //   RynRegistry  holds what runs, where, and in what order; owns the table
+  //   RynFeatureRegistry  holds what runs, where, and in what order; owns the table
   //   RynRuntime   drives boot/spawn/death/teardown; owns lifecycle state
   //
   // RynRuntime holds the other three but does not do their work — asking it
@@ -15057,6 +15072,8 @@ window.grbtp = 35;
     priority;
     needs;
     cost;
+    owns;
+    may;
     owner;
     run;
     when;
@@ -15072,6 +15089,12 @@ window.grbtp = 35;
       this.priority = spec.priority ?? 0;
       this.needs = spec.needs ?? [];
       this.cost = spec.cost ?? 0;
+      // What this feature writes. Declared so ownership is answerable by
+      // reading the registry rather than by grepping for assignments.
+      this.owns = spec.owns ?? [];
+      // What this feature may emit. Enforced by RynActions; an empty list
+      // means the feature was never audited and is passed through.
+      this.may = spec.may ?? [];
       this.owner = spec.owner ?? null;
       this.run = spec.run;
       this.when = spec.when ?? null;
@@ -15126,10 +15149,28 @@ window.grbtp = 35;
   // record, not a position: it declares its phase, what it must follow, and
   // how it ranks against its peers, so reordering is an edit to a declaration
   // rather than a move of code whose order nothing documents.
-  class RynRegistry {
+  class RynFeatureRegistry {
     _byPhase = new Map;
     _byId = new Map;
     _schedule = new Map;
+    // The units themselves, by id. This is the table ModuleHandler used to hold
+    // as `unitTable`: features look each other up here for published readings
+    // (reload timers, cached targets) rather than through a shared handler.
+    // Lookups are reads -- writing into another feature's fields through this
+    // table is the thing the registry exists to make visible.
+    units = Object.create(null);
+    install(units) {
+      for (const key of Object.keys(units)) this.units[key] = units[key];
+      return this.units;
+    }
+    unit(id) {
+      const found = this.units[id];
+      if (found === undefined) {
+        Logger.error(`RynFeatureRegistry: no unit named "${id}"`);
+        return null;
+      }
+      return found;
+    }
     constructor() {
       for (const phase of RYN_PHASE_ORDER) {
         this._byPhase.set(phase, []);
@@ -15138,11 +15179,11 @@ window.grbtp = 35;
     }
     add(spec) {
       if (!spec || !spec.id || !this._byPhase.has(spec.phase) || typeof spec.run !== "function") {
-        Logger.error(`RynRegistry: refused "${spec && spec.id}" -- needs an id, a known phase and a run()`);
+        Logger.error(`RynFeatureRegistry: refused "${spec && spec.id}" -- needs an id, a known phase and a run()`);
         return null;
       }
       if (this._byId.has(spec.id)) {
-        Logger.error(`RynRegistry: "${spec.id}" is already registered`);
+        Logger.error(`RynFeatureRegistry: "${spec.id}" is already registered`);
         return this._byId.get(spec.id);
       }
       const feature = new RynFeature(spec);
@@ -15211,7 +15252,7 @@ window.grbtp = 35;
       // priority rather than dropping work on the floor.
       if (ordered.length !== list.length) {
         const stuck = list.filter(f => !ordered.includes(f));
-        Logger.error(`RynRegistry: dependency cycle in ${phase} -- ${stuck.map(f => f.id).join(", ")}`);
+        Logger.error(`RynFeatureRegistry: dependency cycle in ${phase} -- ${stuck.map(f => f.id).join(", ")}`);
         for (const feature of stuck.sort((a, b) => a.priority - b.priority)) ordered.push(feature);
       }
       this._schedule.set(phase, ordered);
@@ -15242,12 +15283,48 @@ window.grbtp = 35;
     client;
     clock = new RynClock;
     events = new RynEvents;
-    registry = new RynRegistry;
+    registry = new RynFeatureRegistry;
     budget = new RynBudget;
     services = new RynServices;
+    scheduler;
     state = "cold";
     constructor(client2) {
       this.client = client2;
+      const svc = this.services;
+      svc.clock = this.clock;
+      svc.events = this.events;
+      svc.features = this.registry;
+      svc.budget = this.budget;
+      svc.arbiter = new RynArbiter(svc.intent, svc.actions);
+      this.scheduler = new RynScheduler(this);
+      // Explicit collaborators, named one at a time. None of these services
+      // holds the client: each was given the four or five things it actually
+      // reads, which is what the reference counts said the real need was.
+      const packets = () => client2.PacketManager;
+      const player = () => client2.myPlayer;
+      const peers = () => client2.isOwner ? client2.clients : [];
+      svc.loadout.bind({
+        packets: packets,
+        player: player,
+        peers: peers,
+        ledger: svc.ledger,
+        intent: svc.intent,
+        actions: svc.actions,
+        features: this.registry,
+        nearestTurret: () => client2.EnemyManager.nearestTurretEntity
+      });
+      svc.motion.bind({
+        packets: packets,
+        intent: svc.intent,
+        collides: () => client2.myPlayer.simulation.collisionSimulation(client2)
+      });
+      svc.actions.bind({
+        packets: packets,
+        player: player,
+        loadout: svc.loadout,
+        ledger: svc.ledger,
+        network: svc.network
+      });
     }
     boot() {
       if (this.state !== "cold") return;
@@ -15261,13 +15338,26 @@ window.grbtp = 35;
     spawned() {
       this.state = "alive";
       this.clock.reset();
+      this.resetOwnedState();
       this.registry.resetAll();
       this.events.emit("player:spawn", this);
     }
     died() {
       this.state = "attached";
+      this.resetOwnedState();
       this.registry.resetAll();
       this.events.emit("player:death", this);
+    }
+    // Every service that owns state clears its own. The runtime does not know
+    // what is inside any of them, only that each answers `reset`.
+    resetOwnedState() {
+      const svc = this.services;
+      svc.intent.reset();
+      svc.ledger.reset();
+      svc.loadout.reset();
+      svc.motion.reset();
+      svc.actions.reset();
+      this.scheduler.reset();
     }
     // Wipe one area without naming the things inside it.
     resetDomain(domain) {
@@ -15454,6 +15544,23 @@ window.grbtp = 35;
     drift = 0;
     spent = 0;
     limit = 0;
+    // Packets per second, not per tick -- PacketManager zeroes the counter on a
+    // 1s interval. This is the client-wide allowance the scheduler opens the
+    // per-tick budget from, so it has to be readable before the tick is
+    // sampled; `packetCount` stays live off the sender for the same reason.
+    //
+    // 70 was well under what the field runs: Luna gates builds at 119/s, Sakuna
+    // refuses to send anything above 120/s, and Sakuna and auraro both carry
+    // secMax = 110. 115 sits below that stop with five packets of room.
+    packetLimit = 115;
+    _sender = null;
+    get packetCount() {
+      return this._sender === null ? 0 : this._sender.packetCount;
+    }
+    bindSender(sender) {
+      this._sender = sender;
+      return this;
+    }
     sample(transport, socketManager, budget, clock) {
       this.connected = transport.open === true;
       this.ping = socketManager.pong ?? 0;
@@ -15534,6 +15641,513 @@ window.grbtp = 35;
     }
   }
 
+  // ==========================================================================
+  // Owned state: what ModuleHandler used to be
+  //
+  // What this replaces: one class held the unit table, the tick order, the
+  // per-tick reset, the arbitration result, the equipment store, the movement
+  // state, the packet allowance, and every action a unit could take. Sixty-four
+  // units reached into it through sixty-eight members. Because those members
+  // were public and shared, a unit that wanted to change what another unit did
+  // wrote into the same object instead of asking for it -- which is why the
+  // ordering of the unit array was load-bearing and undocumented.
+  //
+  // The responsibilities are separate now, and each piece of state has exactly
+  // one writer:
+  //
+  //   RynIntentBoard  the resolved intent for this tick. Written by the
+  //                   arbiter alone; every feature reads it, none writes it.
+  //   RynTickLedger   what already happened this tick. Cleared by the
+  //                   scheduler, appended to by whoever did the thing.
+  //   RynLoadout      hats, accessories, weapons: durable equipment state and
+  //                   the buy/equip/select operations over it.
+  //   RynMotion       where the player is going, and the move packets for it.
+  //   RynActions      the only way to emit an attack, a heal or a placement,
+  //                   gated by what the calling feature declared it may do.
+  //
+  // A feature declares `owns` (state it writes) and `may` (actions it can
+  // request). The second is enforced -- RynActions refuses a request from a
+  // feature that did not declare it.
+  // ==========================================================================
+
+  // The resolved intent for the current tick. The arbiter is the only writer.
+  // The fields are accessors over a backing record so `seal` is a real guard:
+  // once the tick is resolved and committed, a late write is reported and
+  // dropped instead of silently overriding a resolution that already happened.
+  const RYN_INTENT_FIELDS = Object.freeze([ "moduleActive", "activeModule", "useWeapon", "useItem", "forceWeapon", "useHat", "forceHat", "useAcc", "useAngle", "shouldAttack", "shouldEquipSoldier", "moveTo" ]);
+
+  class RynIntentBoard {
+    _v = {
+      moduleActive: false,
+      activeModule: null,
+      useWeapon: null,
+      useItem: null,
+      forceWeapon: null,
+      useHat: null,
+      forceHat: null,
+      useAcc: null,
+      useAngle: null,
+      shouldAttack: false,
+      shouldEquipSoldier: false,
+      moveTo: "disable"
+    };
+    prevMoveTo = "disable";
+    _sealed = false;
+    begin() {
+      const v = this._v;
+      this._sealed = false;
+      this.prevMoveTo = v.moveTo;
+      v.moduleActive = false;
+      v.activeModule = null;
+      v.useWeapon = null;
+      v.useItem = null;
+      v.forceWeapon = null;
+      v.useHat = null;
+      v.forceHat = null;
+      v.useAcc = null;
+      v.useAngle = null;
+      v.shouldAttack = false;
+      v.shouldEquipSoldier = false;
+      v.moveTo = "disable";
+    }
+    seal() {
+      this._sealed = true;
+    }
+    // The soldier rule and the hat units both want to pin a hat. First writer
+    // holds it, which is the behaviour the old setForceHat had.
+    setForceHat(hat) {
+      if (this.forceHat !== null && hat !== null) return;
+      this.forceHat = hat;
+    }
+    reset() {
+      this.begin();
+      this._v.moveTo = "disable";
+      this.prevMoveTo = "disable";
+    }
+  }
+
+  for (const field of RYN_INTENT_FIELDS) {
+    Object.defineProperty(RynIntentBoard.prototype, field, {
+      get() {
+        return this._v[field];
+      },
+      set(value) {
+        if (this._sealed) {
+          Logger.error(`RynIntentBoard: "${field}" written after the tick was resolved`);
+          return;
+        }
+        this._v[field] = value;
+      },
+      enumerable: true,
+      configurable: true
+    });
+  }
+
+  // Facts about the tick that is running: what has been placed, healed, hit,
+  // and which angles are already spoken for. Read by features that must not
+  // repeat work another feature already did. The scheduler clears it.
+  class RynTickLedger {
+    placedOnce = false;
+    healedOnce = false;
+    attacked = false;
+    canHitEntity = false;
+    didAntiInsta = false;
+    totalPlaces = 0;
+    sentAngle = 0;
+    sentHatEquip = false;
+    sentAccEquip = false;
+    // [0] is the single reserved angle, [1] the list of angles taken this tick.
+    placeAngles = [ null, [] ];
+    // Published by the break units so the placer does not rebuild what was
+    // just broken. A published fact, not another feature's private field.
+    breakActive = false;
+    breakAngle = null;
+    begin() {
+      this.placedOnce = false;
+      this.healedOnce = false;
+      this.attacked = false;
+      this.canHitEntity = false;
+      this.didAntiInsta = false;
+      this.totalPlaces = 0;
+      this.sentAngle = 0;
+      this.sentHatEquip = false;
+      this.sentAccEquip = false;
+      this.placeAngles[0] = null;
+      this.placeAngles[1].length = 0;
+      if (!this.breakActive) this.breakAngle = null;
+      this.breakActive = false;
+    }
+    // Angle priority is a high-water mark: a lower-priority sender must not
+    // undo a higher-priority one that already went out this tick.
+    updateSentAngle(priority) {
+      if (this.sentAngle >= priority) return;
+      this.sentAngle = priority;
+    }
+    reset() {
+      this.begin();
+      this.breakActive = false;
+      this.breakAngle = null;
+    }
+  }
+
+  // Hats, accessories and weapons. Owns the two store records, what has been
+  // bought, and what is currently held -- plus the operations that change any
+  // of it, because a store that anyone may write is a store nobody owns.
+  class RynLoadout {
+    store = [ {
+      utility: new Map,
+      lastUtility: null,
+      current: 0,
+      best: 0,
+      actual: -1,
+      last: 0
+    }, {
+      utility: new Map,
+      lastUtility: null,
+      current: 0,
+      best: 0,
+      actual: -1,
+      last: 0
+    } ];
+    bought = [ new Set, new Set ];
+    weapon = 0;
+    currentHolding = 0;
+    currentType = null;
+    _deps = null;
+    bind(deps) {
+      this._deps = deps;
+      return this;
+    }
+    get holdingWeapon() {
+      return this.currentHolding <= 1;
+    }
+    getHatStore() {
+      return this.store[0];
+    }
+    getAccStore() {
+      return this.store[1];
+    }
+    hasStoreItem(type, id) {
+      return this.bought[type].has(id);
+    }
+    canBuy(type, id) {
+      if (id === -1) return false;
+      const price = DataHandler_ref.getStore(type)[id].price;
+      const player = this._deps.player();
+      return this.bought[type].has(id) || player.tempGold >= price && player.isSandbox;
+    }
+    buy(type, id, force = false) {
+      const store2 = DataHandler_ref.getStore(type);
+      const player = this._deps.player();
+      if (!player.inGame) return false;
+      if (force) {
+        for (const peer of this._deps.peers()) peer.services.loadout.buy(type, id, force);
+      }
+      const price = store2[id].price;
+      const bought = this.bought[type];
+      if (price === 0) {
+        bought.add(id);
+        return true;
+      }
+      if (!bought.has(id) && player.tempGold >= price && (player.isSandbox || force)) {
+        this._deps.packets().buy(type, id);
+        player.tempGold -= price;
+        return false;
+      }
+      return bought.has(id);
+    }
+    equip(type, id, force = false, toggle = false) {
+      const store2 = this.store[type];
+      const player = this._deps.player();
+      if (toggle && store2.last === id && id !== 0) id = 0;
+      if (!player.inGame || !this.buy(type, id, force)) return false;
+      if (store2.last === id && player.storeData[type] === id) return false;
+      store2.last = id;
+      this._deps.packets().equip(type, id);
+      const ledger = this._deps.ledger;
+      if (type === 0) ledger.sentHatEquip = true; else ledger.sentAccEquip = true;
+      if (force) {
+        store2.actual = id;
+        for (const peer of this._deps.peers()) peer.services.features.units.tempData.setStore(type, id);
+      }
+      // Turret hat re-equip re-arms the turret; the reload unit owns that clock.
+      const reloading = this._deps.features.units.reloading;
+      if (this._deps.nearestTurret() !== null && reloading.isReloaded(2) && type === 0 && id === 53) {
+        reloading.resetByType(2);
+      }
+      return true;
+    }
+    upgradeItem(id, isItem = false) {
+      if (isItem) id += 16;
+      this._deps.packets().upgradeItem(id);
+      this._deps.player().upgradeItem(id);
+      if (DataHandler_ref.isWeapon(id)) {
+        this._deps.features.units.reloading.updateMaxReload(DataHandler_ref.getWeapon(id).type);
+      }
+    }
+    selectItem(type) {
+      const player = this._deps.player();
+      const item = player.getItemByType(type);
+      if (player.currentItem !== -1) player.currentItem = -1;
+      this._deps.packets().selectItemByID(item, false);
+      this.currentHolding = type;
+    }
+    whichWeapon(type = this.weapon) {
+      const weapon = this._deps.player().getItemByType(type);
+      if (weapon === null) return;
+      this.currentHolding = type;
+      this.weapon = type;
+      this._deps.packets().selectItemByID(weapon, true);
+    }
+    startPlacement(type) {
+      this.currentType = type;
+    }
+    // Which weapon we will be holding after the current action resolves.
+    // Reload state wins over intent, because a reloading weapon cannot swing.
+    predictWeapon() {
+      const player = this._deps.player();
+      if (!player) return this.weapon;
+      const intent = this._deps.intent;
+      const actions = this._deps.actions;
+      const prim = player.getItemByType(0);
+      const sec = player.getItemByType(1);
+      const hasPrim = prim !== null && prim !== undefined;
+      const hasSec = sec !== null && sec !== undefined;
+      const reloading = type => {
+        const r = player.reload && player.reload[type];
+        if (!r || typeof r.current !== "number" || typeof r.max !== "number") return false;
+        return r.current < r.max;
+      };
+      if (intent.forceWeapon !== null && intent.forceWeapon !== undefined) return intent.forceWeapon;
+      if (hasSec && reloading(1)) return 1;
+      if (hasPrim && reloading(0)) return 0;
+      if (actions.attacking === 2 && hasSec) return 1;
+      if (actions.attacking === 1 && hasPrim) return 0;
+      const pW = hasPrim ? DataHandler_ref?.getWeapon?.(prim) : null;
+      const sW = hasSec ? DataHandler_ref?.getWeapon?.(sec) : null;
+      if (pW?.name?.toLowerCase().includes("dagger")) return 0;
+      if (sW?.name?.toLowerCase().includes("hammer")) return 1;
+      return hasPrim ? 0 : hasSec ? 1 : this.weapon;
+    }
+    reset() {
+      this.getHatStore().utility.clear();
+      this.getAccStore().utility.clear();
+      this.weapon = 0;
+      this.currentHolding = 0;
+      this.currentType = null;
+    }
+  }
+
+  // Where the player is going. Owns the direction, its reverse, the follow and
+  // look targets, and the two packets that start and stop movement.
+  class RynMotion {
+    move_dir = null;
+    reverse_move_dir = null;
+    followTarget = new Vector_ref(0, 0);
+    lookTarget = new Vector_ref(0, 0);
+    endTarget = new Vector_ref(0, 0);
+    followPath = false;
+    circleOffset = 0;
+    targetSpeed = 65;
+    _deps = null;
+    bind(deps) {
+      this._deps = deps;
+      return this;
+    }
+    get isMoving() {
+      return this.move_dir !== null;
+    }
+    setFollowTarget(x, y) {
+      this.followTarget._setXY(x, y);
+    }
+    setLookTarget(x, y) {
+      this.lookTarget._setXY(x, y);
+    }
+    // `ignore` sends the packet without recording a direction -- used by the
+    // units that nudge one tick and expect the previous direction to stand.
+    start(angle = this.move_dir, ignore = false) {
+      if (!ignore) {
+        this.move_dir = angle;
+        this.reverse_move_dir = angle === null ? null : reverseAngle(angle);
+        if (this._deps.intent.moveTo !== "disable") return;
+      }
+      if (this._deps.collides()) return false;
+      this._deps.packets().move(angle);
+      return true;
+    }
+    stop() {
+      this._deps.packets().resetMoveDir();
+    }
+    reset() {
+      this.move_dir = null;
+      this.reverse_move_dir = null;
+    }
+  }
+
+  // The only path to an outgoing action. Every emission a feature can request
+  // goes through here, which is what makes `may` enforceable: the actor is
+  // known because the scheduler sets it before handing a feature the tick.
+  const RYN_ACTION_NAMES = Object.freeze([ "attack", "heal", "place", "angle", "move", "equip", "buy", "select", "upgrade" ]);
+
+  class RynActions {
+    mouse = {
+      sentAngle: 0
+    };
+    attacking = 0;
+    attackingState = 0;
+    autoattack = false;
+    norecoil = false;
+    currentAngle = 0;
+    // A heal landing inside the shame window is what gets a player shamed, so
+    // it is queued and flushed once the window has passed.
+    _SHAME_GUARD_MARGIN = 130;
+    _shameHealQueue = 0;
+    _shameHealDeadline = null;
+    actor = null;
+    _deps = null;
+    bind(deps) {
+      this._deps = deps;
+      return this;
+    }
+    // Declared-capability check. A feature that never declared an action does
+    // not get to perform it; unregistered callers (boot, UI, the owner's bot
+    // control) are outside the feature contract and pass through.
+    _allowed(action) {
+      const actor = this.actor;
+      if (actor === null) return true;
+      if (actor.may.length === 0 || actor.may.includes(action)) return true;
+      Logger.error(`RynActions: "${actor.id}" requested "${action}" without declaring it`);
+      return false;
+    }
+    attack(angle, priority = 2) {
+      if (!this._allowed("attack")) return;
+      if (angle !== null) this.mouse.sentAngle = angle;
+      this._deps.ledger.updateSentAngle(priority);
+      this._deps.packets().attack(angle);
+      if (this._deps.loadout.holdingWeapon) this._deps.ledger.attacked = true;
+    }
+    stopAttack(angle = null) {
+      if (!this._allowed("attack")) return;
+      this._deps.packets().stopAttack(angle);
+    }
+    updateAngle(angle, force = false) {
+      if (!this._allowed("angle")) return;
+      if (!force && angle === this.mouse.sentAngle) return;
+      this.mouse.sentAngle = angle;
+      this._deps.ledger.updateSentAngle(3);
+      this._deps.packets().updateAngle(angle);
+    }
+    toggleAutoattack(state = !this.autoattack) {
+      this.autoattack = state;
+      this.attacking = state ? 1 : 0;
+    }
+    place(type, angle = this.currentAngle, reset = false) {
+      if (!this._allowed("place")) return;
+      const loadout = this._deps.loadout;
+      this._deps.ledger.totalPlaces += 1;
+      loadout.selectItem(type);
+      this.attack(angle, 1);
+      this.stopAttack(angle);
+      loadout.whichWeapon(loadout.predictWeapon());
+    }
+    _rawHeal() {
+      const loadout = this._deps.loadout;
+      loadout.selectItem(2);
+      this.attack(null, 1);
+      loadout.whichWeapon(loadout.predictWeapon());
+    }
+    _healBudgetLeft() {
+      const net = this._deps.network;
+      return net.packetLimit - net.packetCount;
+    }
+    heal() {
+      if (!this._allowed("heal")) return;
+      if (this._healBudgetLeft() < 3) return;
+      const player = this._deps.player();
+      if (player && !player.isSandbox && player.receivedDamage) {
+        if (Date.now() - player.receivedDamage <= this._SHAME_GUARD_MARGIN) {
+          this._shameHealQueue = Math.min(this._shameHealQueue + 1, 12);
+          this._shameHealDeadline = player.receivedDamage + this._SHAME_GUARD_MARGIN;
+          return;
+        }
+      }
+      this._rawHeal();
+    }
+    flushShameHealQueue() {
+      if (this._shameHealQueue <= 0 || this._shameHealDeadline === null) return;
+      if (Date.now() < this._shameHealDeadline) return;
+      const affordable = Math.max(0, Math.floor(this._healBudgetLeft() / 3));
+      const count = Math.min(this._shameHealQueue, affordable);
+      this._shameHealQueue -= count;
+      if (this._shameHealQueue <= 0) {
+        this._shameHealQueue = 0;
+        this._shameHealDeadline = null;
+      }
+      for (let i = 0; i < count; i++) this._rawHeal();
+    }
+    reset() {
+      this.attacking = 0;
+      this.attackingState = 0;
+      this.autoattack = false;
+      this.mouse.sentAngle = 0;
+      this._shameHealQueue = 0;
+      this._shameHealDeadline = null;
+    }
+  }
+
+  // Opens the tick, walks the phases in order, and closes it. This is the whole
+  // of what ModuleHandler.runTick did that was not a feature: everything else
+  // that used to sit inline in that method is now a registered feature with a
+  // declared phase, so the order it runs in is written down rather than being
+  // the order the statements happened to be typed.
+  class RynScheduler {
+    runtime;
+    running = false;
+    startedAt = 0;
+    lastDuration = 0;
+    maxDuration = 0;
+    constructor(runtime) {
+      this.runtime = runtime;
+    }
+    // SAMPLE and DERIVE read. DECIDE bids. The arbiter resolves between DECIDE
+    // and COMMIT, which is the point the intent stops being negotiable. EMIT
+    // runs against a sealed board.
+    tick(ctx) {
+      if (this.running) {
+        Logger.error("RynScheduler: re-entered mid-tick -- the second call was dropped");
+        return false;
+      }
+      this.running = true;
+      this.startedAt = performance.now();
+      const runtime = this.runtime;
+      const svc = runtime.services;
+      try {
+        runtime.clock.advance(this.startedAt);
+        runtime.budget.open(svc.network.packetLimit - svc.network.packetCount);
+        svc.intent.begin();
+        svc.ledger.begin();
+        svc.arbiter.begin();
+        runtime.runPhase(RYN_PHASE.SAMPLE, ctx);
+        runtime.runPhase(RYN_PHASE.DERIVE, ctx);
+        runtime.runPhase(RYN_PHASE.DECIDE, ctx);
+        svc.arbiter.commit(svc.arbiter.resolve());
+        runtime.runPhase(RYN_PHASE.COMMIT, ctx);
+        svc.intent.seal();
+        runtime.runPhase(RYN_PHASE.EMIT, ctx);
+      } finally {
+        this.running = false;
+        this.lastDuration = Math.round(performance.now() - this.startedAt);
+        this.maxDuration = Math.max(this.maxDuration, this.lastDuration);
+        runtime.events.emit("tick:done", runtime.clock.tick);
+      }
+      return true;
+    }
+    reset() {
+      this.maxDuration = 0;
+      this.lastDuration = 0;
+    }
+  }
+
   // Everything a system might be given, assembled once and handed out by name.
   // A system asks for what it needs; it is never passed the container.
   class RynServices {
@@ -15546,6 +16160,19 @@ window.grbtp = 35;
     placement = null;
     bot = new RynBotState;
     ui = new RynUIState;
+    // The five that carry what ModuleHandler used to hold, plus the kernel
+    // pieces a feature legitimately needs by name. Filled in by RynRuntime so
+    // there is one clock, one bus and one registry, not a second copy here.
+    intent = new RynIntentBoard;
+    ledger = new RynTickLedger;
+    loadout = new RynLoadout;
+    motion = new RynMotion;
+    actions = new RynActions;
+    arbiter = null;
+    clock = null;
+    events = null;
+    features = null;
+    budget = null;
     // Named services only. Asking for one that does not exist is an error at
     // the point of asking rather than an undefined read somewhere later.
     provide(names) {
