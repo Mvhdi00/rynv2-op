@@ -9941,66 +9941,205 @@ window.grbtp = 35;
     }
   }
 
+  // ── Utility weights ───────────────────────────────────────────────────────
+  // Every number the scorer applies, in one object. Tuning placement is editing
+  // a weight here; nothing in the scoring, planning or sending reads a literal.
+  // The terms are each normalised to 0..1 before weighting, so the weights are
+  // directly comparable -- movement being four times enclosure means exactly
+  // that.
+  const RYN_PLACE_UTILITY = Object.freeze({
+    // A build the enemy walks into is the whole point, so this dominates.
+    movement: 100,
+    // Does the build suit the fight as it currently stands -- a trap on a free
+    // enemy, a spike on a pinned one.
+    tactical: 45,
+    // How much of their escape circle it closes, counting what is already
+    // standing. Two builds that each intercept are not equal if one of them
+    // also shuts a door.
+    enclosure: 40,
+    // Does it set up the next action rather than just landing.
+    followUp: 35,
+    // Close beats far, measured against the reach the build actually has.
+    distance: 25,
+    // Clearance from what is around it, less what it does to my own footing.
+    safety: 20,
+    // What it costs against what is left. Scales itself: irrelevant when the
+    // allowance is full, decisive when it is nearly spent.
+    packet: -30,
+    // Ticks before it can actually go out. A plan that has to wait is a plan
+    // that can be overtaken.
+    timing: -10,
+    // Below this, a build is not worth the send. This is the packet-waste
+    // guard: a candidate that only scores for being legal never goes out.
+    minUtility: 28,
+    // How far the target may drift between planning a delayed build and
+    // sending it. Past the build's own radius it is aimed at ground they have
+    // already left, so the send is cancelled rather than wasted.
+    staleFactor: 1
+  });
+
   // ── Scoring ───────────────────────────────────────────────────────────────
-  // One number per placement, from five terms that are all readings of RYN's
-  // own state. Nothing here is a tie-breaker bolted on after the fact: a
-  // placement that scores zero is one there is no reason to make.
+  // One number per placement from eight readings of RYN's own state. Pure: it
+  // reads a candidate and a context and writes a score, and knows nothing about
+  // budgets, ordering or sending. Every term is normalised before weighting so
+  // the weights above mean what they say.
   class RynPlacementScorer {
-    score(cand, ctx) {
-      const t = {
-        intercept: 0,
-        flush: 0,
-        knockback: 0,
-        selfBlock: 0,
-        stale: 0
-      };
+    constructor(weights = RYN_PLACE_UTILITY) {
+      this.w = weights;
+    }
 
-      // Does the build stand where the enemy is going? A build they never
-      // touch is a wasted send, so this is the term that dominates.
-      if (ctx.path !== null) {
-        const pad = cand.role.pins ? cand.scale : ctx.enemyScale + cand.scale - 1;
-        if (lineHitsBox(cand.x, cand.y, pad, ctx.path.from, ctx.path.to)) t.intercept = 100;
-        else if (ctx.far !== null && lineHitsBox(cand.x, cand.y, pad, ctx.path.from, ctx.far)) t.intercept = 60;
+    // 1. Movement. Does it stand on the ground they are crossing? The near
+    //    projection is worth full marks and the far one less, because the
+    //    further ahead the projection reaches the more it assumes they hold a
+    //    straight line.
+    _movement(c, ctx) {
+      if (ctx.path === null) return 0;
+      const pad = c.role.pins ? c.scale : ctx.enemyScale + c.scale - 1;
+      if (lineHitsBox(c.x, c.y, pad, ctx.path.from, ctx.path.to)) return 1;
+      if (ctx.far !== null && lineHitsBox(c.x, c.y, pad, ctx.path.from, ctx.far)) return .6;
+      return 0;
+    }
+
+    // 2. Tactical fit. A spike on an untrapped enemy is chip damage; a spike on
+    //    a pinned one is the exchange. A trap on a pinned enemy is worth
+    //    something -- it is where they land when they break out -- but not what
+    //    a trap on a free one is worth.
+    _tactical(c, ctx) {
+      if (ctx.enemyTrapped) return c.role.damages ? 1 : .35;
+      return c.role.pins ? 1 : .5;
+    }
+
+    // 3. Enclosure. Of the directions the enemy could leave in, how many does
+    //    this build close that were not closed already? Measured as the arc it
+    //    subtends seen from them, minus whatever overlaps ground my structures
+    //    already deny.
+    _enclosure(c, ctx) {
+      if (ctx.path === null) return 0;
+      const e = ctx.path.from;
+      const d = Math.hypot(c.x - e.x, c.y - e.y);
+      const reach = ctx.enemyScale + c.scale;
+      if (d <= 1e-6 || d > reach * 3) return 0;
+      // Half-angle the build hides behind itself, from where they stand.
+      const half = Math.asin(Math.min(1, reach / Math.max(d, reach)));
+      const bearing = Math.atan2(c.y - e.y, c.x - e.x);
+      for (const s of ctx.nearThem ?? []) {
+        const sd = Math.hypot(s.pos.current.x - e.x, s.pos.current.y - e.y);
+        if (sd <= 1e-6) continue;
+        const sb = Math.atan2(s.pos.current.y - e.y, s.pos.current.x - e.x);
+        let gap = Math.abs(bearing - sb);
+        if (gap > Math.PI) gap = Math.PI * 2 - gap;
+        // Already covered by something standing there.
+        if (gap < half) return 0;
       }
+      return Math.min(1, half / (Math.PI / 3));
+    }
 
-      // Packed against something beats standing in the open: there is no gap
-      // beside it to walk through.
-      if (cand.origin === RYN_PLACE_ORIGIN.FLUSH) t.flush = 18;
-      else if (cand.origin === RYN_PLACE_ORIGIN.ANCHORED) t.flush = 12;
-      else if (cand.origin === RYN_PLACE_ORIGIN.AIMED) t.flush = 10;
-
-      // A spike that pushes them onto another spike is the exchange; one that
-      // pushes them away is chip damage.
-      if (cand.role.damages && ctx.ourSpikes.length > 0 && ctx.path !== null) {
-        const kb = Math.atan2(ctx.path.to.y - cand.y, ctx.path.to.x - cand.x);
-        const tipX = ctx.path.to.x + 200 * Math.cos(kb);
-        const tipY = ctx.path.to.y + 200 * Math.sin(kb);
-        for (const s of ctx.ourSpikes) {
-          if (lineHitsBox(s.pos.current.x, s.pos.current.y, s.scale, ctx.path.to, { x: tipX, y: tipY })) {
-            t.knockback = 35;
-            break;
+    // 4. Follow-up. Does this build make the next action available rather than
+    //    merely happening?
+    _followUp(c, ctx) {
+      if (c.role.damages) {
+        // The spike whose knockback throws them onto another spike.
+        if (ctx.ourSpikes.length > 0 && ctx.path !== null) {
+          const kb = Math.atan2(ctx.path.to.y - c.y, ctx.path.to.x - c.x);
+          const tipX = ctx.path.to.x + 200 * Math.cos(kb);
+          const tipY = ctx.path.to.y + 200 * Math.sin(kb);
+          for (const s of ctx.ourSpikes) {
+            if (lineHitsBox(s.pos.current.x, s.pos.current.y, s.scale, ctx.path.to, { x: tipX, y: tipY })) return 1;
           }
         }
+        // Or the spike that lands against the trap already holding them.
+        if (ctx.enemyTrapped !== null) {
+          const t = ctx.enemyTrapped.pos.current;
+          if (Math.hypot(c.x - t.x, c.y - t.y) < ctx.enemyTrapped.scale + c.scale + 10) return .9;
+        }
+        return 0;
       }
+      // A trap is worth more where a spike is already waiting for whoever it
+      // catches.
+      for (const s of ctx.ourSpikes) {
+        if (Math.hypot(c.x - s.pos.current.x, c.y - s.pos.current.y) < c.scale + s.scale + ctx.enemyScale) return .8;
+      }
+      return 0;
+    }
 
-      // Would it wall me in? The exact angular half-width the build subtends at
-      // ring radius -- not a rectangle drawn down the corridor, which is what
-      // this replaces.
-      if (ctx.moveDir !== null && !DataHandler.canMoveOnTop?.(cand.itemId)) {
-        const half = Math.asin(Math.min(1, cand.scale / cand.ring));
-        let d = Math.abs(normalizeArcAngle(cand.angle) - normalizeArcAngle(ctx.moveDir));
+    // 5. Distance, against the reach the build actually has rather than a flat
+    //    number: a trap that catches at 50 and a spike that catches at 84 are
+    //    not comparable in raw units.
+    _distance(c, ctx) {
+      if (ctx.path === null) return 0;
+      const d = Math.hypot(c.x - ctx.path.from.x, c.y - ctx.path.from.y);
+      const reach = ctx.enemyScale + c.scale + c.ring;
+      return Math.max(0, 1 - d / reach);
+    }
+
+    // 6. Collision safety, from both sides. A build packed against something is
+    //    worth more -- there is no gap beside it -- but one that stands in the
+    //    corridor I am walking down costs me the fight it was meant to win. The
+    //    cone is the exact angular half-width the build subtends at ring radius.
+    _safety(c, ctx) {
+      let v = 0;
+      if (c.origin === RYN_PLACE_ORIGIN.FLUSH) v += 1;
+      else if (c.origin === RYN_PLACE_ORIGIN.ANCHORED) v += .65;
+      else if (c.origin === RYN_PLACE_ORIGIN.AIMED) v += .5;
+      if (ctx.moveDir !== null && !DataHandler.canMoveOnTop?.(c.itemId)) {
+        const half = Math.asin(Math.min(1, c.scale / c.ring));
+        let d = Math.abs(normalizeArcAngle(c.angle) - normalizeArcAngle(ctx.moveDir));
         if (d > Math.PI) d = Math.PI * 2 - d;
-        if (d < half) t.selfBlock = -70;
-        else if (d < half * 2) t.selfBlock = -25;
+        if (d < half) v -= 3.5;
+        else if (d < half * 2) v -= 1.25;
       }
+      return v;
+    }
 
-      // The further ahead a prediction reaches, the likelier it is wrong by the
-      // time the build lands.
-      if (cand.reason === RYN_PLACE_REASON.OPENING) t.stale = -8 * Math.max(1, cand.blockedBy.length);
+    // 7. Packet cost, relative to what is left rather than absolute. Full
+    //    allowance and it barely registers; nearly spent and it decides.
+    _packet(c, ctx) {
+      const left = ctx.budget;
+      if (typeof left !== "number" || !isFinite(left) || left <= 0) return 1;
+      return Math.min(1, 1 / left);
+    }
 
-      cand.terms = t;
-      cand.score = t.intercept + t.flush + t.knockback + t.selfBlock + t.stale;
-      return cand.score;
+    // 8. Timing. Ticks before this can go out at all -- zero for a build with
+    //    nothing in its way, one per thing that has to die first.
+    _timing(c) {
+      return c.reason === RYN_PLACE_REASON.IMMEDIATE ? 0 : Math.min(1, .5 + .25 * c.blockedBy.length);
+    }
+
+    score(c, ctx) {
+      const w = this.w;
+      const t = {
+        movement: this._movement(c, ctx),
+        tactical: this._tactical(c, ctx),
+        enclosure: this._enclosure(c, ctx),
+        followUp: this._followUp(c, ctx),
+        distance: this._distance(c, ctx),
+        safety: this._safety(c, ctx),
+        packet: this._packet(c, ctx),
+        timing: this._timing(c)
+      };
+      c.terms = t;
+      c.score = t.movement * w.movement + t.tactical * w.tactical + t.enclosure * w.enclosure +
+                t.followUp * w.followUp + t.distance * w.distance + t.safety * w.safety +
+                t.packet * w.packet + t.timing * w.timing;
+      return c.score;
+    }
+
+    // What a pinning build and a damaging build are worth together, beyond what
+    // they are worth apart. A spike touching the ground a trap will hold them
+    // on is the exchange -- neither half is that on its own, so the pair has to
+    // be scored as a pair or the planner will keep taking two of whichever
+    // scored higher alone.
+    synergy(pin, dmg, ctx) {
+      if (!pin.role.pins || !dmg.role.damages) return 0;
+      // Without a target size there is no "ground the trap holds them on", and
+      // an absent one must read as zero rather than as NaN -- a NaN here makes
+      // every comparison below false, which would hand the bonus to every pair.
+      const scale = typeof ctx.enemyScale === "number" && isFinite(ctx.enemyScale) ? ctx.enemyScale : 0;
+      const held = scale + pin.scale;
+      const gap = Math.hypot(pin.x - dmg.x, pin.y - dmg.y);
+      if (gap > held + dmg.scale) return 0;
+      if (gap < pin.scale + dmg.scale) return 0;
+      return this.w.tactical + this.w.followUp;
     }
   }
 
@@ -10059,49 +10198,91 @@ window.grbtp = 35;
   // ── Planner ───────────────────────────────────────────────────────────────
   // The part that stops this being a ladder. Given every legal placement and
   // what the tick can afford, choose the best *set* -- not the first angle that
-  // passes a rule.
+  // passes a rule, and not the top N scores either.
   //
-  // Ordering by score and taking greedily while rejecting overlaps is the right
-  // shape here: the true optimum is a packing problem, the candidate count is
-  // small, and a build that overlaps a better one was never compatible with it.
-  // The reserve is what keeps a trap from losing its slot to three spikes that
-  // each scored slightly higher.
+  // Two builds can be worth more together than apart. A trap pins them and a
+  // spike touching that ground is the exchange; taken separately the spike is
+  // chip damage and the trap is a delay. So combinations are scored as
+  // combinations before singles are considered, or the planner spends its whole
+  // budget on two copies of whichever half scored higher alone.
+  //
+  // Beyond that: ranked by score, greedy with overlap rejection. The true
+  // optimum is a packing problem, the candidate count is small, and a build
+  // that overlaps a better one was never compatible with it.
   class RynPlacementPlanner {
+    constructor(scorer) {
+      this.scorer = scorer;
+    }
+
     plan(candidates, ctx) {
+      const w = this.scorer.w;
       const conflict = ctx.conflict;
-      const ranked = candidates.filter(c => c.score > 0).sort((a, b) => b.score - a.score);
-      const taken = [];
+      // The packet-waste guard: a candidate that only scores for being legal
+      // never reaches the wire.
+      const ranked = candidates.filter(c => c.score >= w.minUtility).sort((a, b) => b.score - a.score);
+      if (ranked.length === 0) return [];
+
       const chosen = [];
-      let spent = 0;
+      const taken = [];
+      let openings = 0;
       let pinsTaken = 0;
 
       // Pinning builds get first refusal on a slice of the allowance: a trap is
-      // what opens the exchange, and a ladder that spends on damage first will
-      // never reach it.
+      // what opens the exchange, and a ladder that spends on damage first never
+      // reaches it.
       const reserve = Math.min(ctx.budget, Math.floor(TRAP_RESERVED_PLACES / PLACE_PACKET_COST) + 1);
-      let openings = 0;
 
-      for (const pass of [ "pins", "all" ]) {
-        for (const cand of ranked) {
-          if (spent >= ctx.budget) break;
-          if (pass === "pins" && !cand.role.pins) continue;
-          if (pass === "pins" && pinsTaken >= reserve) break;
-          if (chosen.includes(cand)) continue;
-          // A build waiting on ground to clear costs two sends, not one, and
-          // three of them against one opening slot was measured in play as the
-          // whole placer going sluggish. Two keeps the second chance.
-          if (cand.reason !== RYN_PLACE_REASON.IMMEDIATE && openings >= PREPLACE_CANDIDATES) continue;
-          if (ctx.capped(cand.itemId, cand.blockedBy)) continue;
-          if (ctx.memory.blocked(cand.x, cand.y)) continue;
-          if (conflict.collides(cand, taken)) continue;
-          chosen.push(cand);
-          taken.push(cand);
-          spent += 1;
-          if (cand.role.pins) pinsTaken += 1;
-          if (cand.reason !== RYN_PLACE_REASON.IMMEDIATE) openings += 1;
+      const admissible = cand => {
+        if (chosen.includes(cand)) return false;
+        // A build waiting on ground to clear costs two sends, not one, and
+        // three against one opening slot was measured in play as the whole
+        // placer going sluggish. Two keeps the second chance.
+        if (cand.reason !== RYN_PLACE_REASON.IMMEDIATE && openings >= PREPLACE_CANDIDATES) return false;
+        if (ctx.capped(cand.itemId, cand.blockedBy)) return false;
+        // Ground a send is already flying towards, or that the server refused.
+        // This is also what keeps an immediate build off the spot a delayed one
+        // is holding: the delayed send marked it when it was planned.
+        if (ctx.memory.blocked(cand.x, cand.y)) return false;
+        if (conflict.collides(cand, taken)) return false;
+        return true;
+      };
+      const take = cand => {
+        chosen.push(cand);
+        taken.push(cand);
+        if (cand.role.pins) pinsTaken += 1;
+        if (cand.reason !== RYN_PLACE_REASON.IMMEDIATE) openings += 1;
+      };
+
+      // Pass 1: the best pair, if two builds fit and a pair is worth more than
+      // the two best singles. Only the strongest few are considered from each
+      // side -- the tail cannot win a pair it could not win alone.
+      if (ctx.budget >= 2) {
+        const pins = ranked.filter(c => c.role.pins).slice(0, 4);
+        const dmgs = ranked.filter(c => c.role.damages).slice(0, 4);
+        let best = null, bestVal = -Infinity;
+        for (const pin of pins) {
+          for (const dmg of dmgs) {
+            if (conflict.collides(pin, [ dmg ])) continue;
+            const val = pin.score + dmg.score + this.scorer.synergy(pin, dmg, ctx);
+            if (val > bestVal) { bestVal = val; best = [ pin, dmg ]; }
+          }
+        }
+        if (best !== null && this.scorer.synergy(best[0], best[1], ctx) > 0) {
+          for (const c of best) if (admissible(c)) take(c);
         }
       }
-      return chosen;
+
+      // Pass 2: pinning builds against their reserve, then everything on merit.
+      for (const pass of [ "pins", "all" ]) {
+        for (const cand of ranked) {
+          if (chosen.length >= ctx.budget) break;
+          if (pass === "pins" && !cand.role.pins) continue;
+          if (pass === "pins" && pinsTaken >= reserve) break;
+          if (!admissible(cand)) continue;
+          take(cand);
+        }
+      }
+      return chosen.slice(0, ctx.budget);
     }
   }
 
@@ -10114,11 +10295,15 @@ window.grbtp = 35;
     schedule(chosen, ctx) {
       const sends = [];
       for (const cand of chosen) {
+        // Where the target stood when this was planned. A delayed send is aimed
+        // at ground chosen for where they were; if they have left it by the
+        // time it fires, the send is cancelled rather than spent.
+        const at = ctx.targetAt;
         if (cand.reason === RYN_PLACE_REASON.IMMEDIATE) {
-          sends.push({ cand: cand, delay: 0, tick: ctx.tick });
+          sends.push({ cand: cand, delay: 0, tick: ctx.tick, targetAt: at });
         } else {
-          sends.push({ cand: cand, delay: Math.max(1, ctx.tickMs - ctx.ping), tick: ctx.tick });
-          if (ctx.resend) sends.push({ cand: cand, delay: Math.max(1, ctx.tickMs - ctx.minPing), tick: ctx.tick });
+          sends.push({ cand: cand, delay: Math.max(1, ctx.tickMs - ctx.ping), tick: ctx.tick, targetAt: at });
+          if (ctx.resend) sends.push({ cand: cand, delay: Math.max(1, ctx.tickMs - ctx.minPing), tick: ctx.tick, targetAt: at });
         }
       }
       return sends;
@@ -10148,6 +10333,16 @@ window.grbtp = 35;
       this.memory.pending(cand.x, cand.y, cand.scale, tick);
       return true;
     }
+    // Has the target left the ground this build was chosen for? Past the
+    // build's own radius the answer is yes: a trap of scale 50 aimed at where
+    // they stood catches nothing once they are 50 units away from it.
+    stale(send, ctx) {
+      const now = ctx.target();
+      if (now === null || send.targetAt === undefined) return false;
+      const drift = Math.hypot(now.x - send.targetAt.x, now.y - send.targetAt.y);
+      return drift > send.cand.scale * RYN_PLACE_UTILITY.staleFactor;
+    }
+
     run(sends, ctx) {
       let sent = 0;
       for (const s of sends) {
@@ -10157,6 +10352,7 @@ window.grbtp = 35;
           const aim = ctx.aim;
           setTimeout(() => {
             try {
+              if (this.stale(s, ctx)) return;
               this.client.network.emit("aim", aim());
               this.fire(s.cand, s.tick);
             } catch (_) {}
@@ -10177,8 +10373,8 @@ window.grbtp = 35;
     angles = new RynAngleSolver;
     candidates = new RynCandidateGenerator;
     threat = new RynThreatAnalyzer;
-    scorer = new RynPlacementScorer;
-    planner = new RynPlacementPlanner;
+    scorer = new RynPlacementScorer(RYN_PLACE_UTILITY);
+    planner;
     conflict = new RynConflictResolver;
     scheduler = new RynPlacementScheduler;
     memory = new RynPlacementMemory;
@@ -10186,6 +10382,7 @@ window.grbtp = 35;
     lastPlan = [];
     constructor(client2) {
       this.client = client2;
+      this.planner = new RynPlacementPlanner(this.scorer);
       this.executor = new RynPlacementExecutor(client2, this.memory);
     }
 
@@ -10223,9 +10420,14 @@ window.grbtp = 35;
         if (obj) nearby.push(obj);
         return false;
       });
+      // Everything standing near them, for the enclosure reading, and my own
+      // spikes separately, for the knockback one.
+      const nearThem = [];
       client2.ObjectManager.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
         const obj = client2.ObjectManager.objects.get(id);
-        if (obj && obj instanceof PlayerObject && obj.itemGroup === 2 &&
+        if (!obj) return false;
+        nearThem.push(obj);
+        if (obj instanceof PlayerObject && obj.itemGroup === 2 &&
             !client2.PlayerManager.isEnemyByID(obj.ownerID, myPlayer)) ourSpikes.push(obj);
         return false;
       });
@@ -10282,8 +10484,11 @@ window.grbtp = 35;
         path: this.threat.enemyPath,
         far: far,
         enemyScale: enemy.collisionScale,
+        enemyTrapped: this.threat.trappedIn,
         ourSpikes: ourSpikes,
-        moveDir: ryn.motion.move_dir
+        nearThem: nearThem,
+        moveDir: ryn.motion.move_dir,
+        budget: ctx.budget
       };
       for (const c of all) this.scorer.score(c, sctx);
 
@@ -10295,6 +10500,8 @@ window.grbtp = 35;
 
       const chosen = this.planner.plan(pool, {
         budget: ctx.budget,
+        enemyScale: enemy.collisionScale,
+        enemyTrapped: this.threat.trappedIn,
         memory: this.memory,
         conflict: this.conflict,
         capped: (itemId, freed) => {
@@ -10311,6 +10518,7 @@ window.grbtp = 35;
       const socket = client2.SocketManager;
       const sends = this.scheduler.schedule(chosen, {
         tick: tick,
+        targetAt: { x: enemyPos.x, y: enemyPos.y },
         tickMs: socket?.TICK ?? 111,
         ping: socket?.pong ?? 0,
         minPing: Number.isFinite(socket?.minPingTime) ? socket.minPingTime : 0,
@@ -10318,6 +10526,10 @@ window.grbtp = 35;
       });
       return this.executor.run(sends, {
         tick: tick,
+        target: () => {
+          const e = client2.EnemyManager.nearestEnemy;
+          return e === null || e === undefined ? null : e.pos.current;
+        },
         aim: () => ryn.ledger.breakActive && ryn.ledger.breakAngle !== null && ryn.ledger.breakAngle !== undefined ? ryn.ledger.breakAngle : ryn.actions.currentAngle ?? 0
       });
     }
