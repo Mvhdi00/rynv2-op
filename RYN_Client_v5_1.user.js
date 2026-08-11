@@ -9555,6 +9555,45 @@ window.grbtp = 35;
   // every other tick.
   const ARC_TOUCH_EPS = .01;
 
+  // The finest angle the server can be told about. The game's own aim function
+  // returns fixTo(angle, 2), so every bearing is rounded to two decimals before
+  // it leaves the client -- 0.01 rad, which is 629 distinct angles around the
+  // circle and about 0.8 units of arc on a trap ring.
+  //
+  // This is not a detail. An angle solved exactly against an obstacle sits ON
+  // the boundary, and rounding it to the nearest grid step moves it up to half
+  // a step -- 0.4 units -- which lands it inside the obstacle a third of the
+  // time. Solving exactly and then sending the nearest grid angle is not the
+  // same as solving on the grid.
+  const WIRE_ANGLE_STEP = .01;
+
+  // The angle that will actually be sent for a requested bearing.
+  //
+  // The grid lives on the [-pi, pi] form, because that is what the game rounds:
+  // fixTo(atan2(sin, cos), 2). Rounding first and normalising to [0, 2pi)
+  // afterwards puts the angle back OFF the grid -- 2pi is not a multiple of
+  // 0.01 -- and the wire then rounds it a second time, moving the build by up
+  // to 0.4 units. Every angle the engine hands out is already in this form, so
+  // the wire leaves it alone.
+  function toWireAngle(angle) {
+    return Math.round(Math.atan2(Math.sin(angle), Math.cos(angle)) / WIRE_ANGLE_STEP) * WIRE_ANGLE_STEP;
+  }
+
+  // Snap a bearing to the wire grid without letting the rounding push it out of
+  // the run it was solved for. Nearest grid angle first, and if that leaves the
+  // run, one step either way -- enough, because the rounding error is under
+  // half a step. A run too narrow to hold any grid angle cannot be addressed at
+  // all and is refused rather than approximated.
+  function wireAngleInArc(angle, s, e) {
+    const snapped = toWireAngle(angle);
+    if (arcContains(s, e, normalizeArcAngle(snapped))) return snapped;
+    const up = toWireAngle(snapped + WIRE_ANGLE_STEP);
+    if (arcContains(s, e, normalizeArcAngle(up))) return up;
+    const down = toWireAngle(snapped - WIRE_ANGLE_STEP);
+    if (arcContains(s, e, normalizeArcAngle(down))) return down;
+    return null;
+  }
+
   // Does the segment a->b pass through the square of half-width `pad` centred
   // on (cx, cy)? Segment-versus-box, used everywhere the engine asks "will they
   // walk into this" or "does this stand between us".
@@ -9714,15 +9753,49 @@ window.grbtp = 35;
       const R = arcs.ring;
       const step = RynGeometrySolver.tangentStep(item, R);
       const seen = new Set;
-      const emit = (angle, origin2) => {
-        const a = normalizeArcAngle(angle);
+
+      // Does a build at this point actually clear everything? The arcs say it
+      // should, but they were solved for an exact angle and the wire carries
+      // only two decimals -- so the answer is measured at the angle that will
+      // really be sent rather than trusted from the geometry.
+      const clears = point => {
+        for (const o of arcs.blockers) {
+          if (spared !== null && spared.has(o)) continue;
+          if (Math.hypot(point.x - o.pos.current.x, point.y - o.pos.current.y) < item.scale + o.placementScale) return false;
+        }
+        return true;
+      };
+
+      // `run` is the free arc this angle was solved against; the snap is kept
+      // inside it. A whole-ring run bounds nothing, so there is nothing to stay
+      // inside of and the plain snap is correct.
+      //
+      // A flush angle sits exactly on an obstacle's boundary, and rounding it
+      // to the wire can land it a fraction of a unit inside. Where that happens
+      // the angle steps one grid position further into the run -- 0.8 units of
+      // arc, more than the rounding can ever cost -- and is dropped if even
+      // that does not clear. Solving exactly and sending the nearest wire angle
+      // are not the same thing, and this is where the difference is paid.
+      const emit = (angle, origin2, run) => {
+        let a = run === null ? toWireAngle(angle) : wireAngleInArc(angle, run[0], run[1]);
+        if (a === null) return;
+        let p = RynGeometrySolver.pointAt(origin, R, a);
+        if (!clears(p)) {
+          if (run === null) return;
+          const step2 = arcContains(run[0], run[1], normalizeArcAngle(toWireAngle(a + WIRE_ANGLE_STEP))) ? WIRE_ANGLE_STEP : -WIRE_ANGLE_STEP;
+          const b = toWireAngle(a + step2);
+          if (!arcContains(run[0], run[1], normalizeArcAngle(b))) return;
+          const q = RynGeometrySolver.pointAt(origin, R, b);
+          if (!clears(q)) return;
+          a = b;
+          p = q;
+        }
         // Four generators asking different questions can arrive at one answer.
         // Rounded to a thousandth of a radian, which on the ring is a tenth of
         // a unit, that is the same build and the second one is a wasted send.
         const key = Math.round(a * 1e3);
         if (seen.has(key)) return;
         seen.add(key);
-        const p = RynGeometrySolver.pointAt(origin, R, a);
         if (RynGeometrySolver.inRiver(p.y, itemId)) return;
         out.push({
           itemId: itemId,
@@ -9747,26 +9820,28 @@ window.grbtp = 35;
         // angle anyway. It is covered by packing alone.
         const whole = span >= Math.PI * 2 - 1e-6;
 
+        const run = whole ? null : [ s, e ];
+
         if (!whole) {
-          emit(s, RYN_PLACE_ORIGIN.FLUSH);
-          if (span > 1e-6) emit(e, RYN_PLACE_ORIGIN.FLUSH);
+          emit(s, RYN_PLACE_ORIGIN.FLUSH, run);
+          if (span > 1e-6) emit(e, RYN_PLACE_ORIGIN.FLUSH, run);
         }
 
         // A bearing we asked for, if this run contains it.
         for (const aim of aims) {
-          if (aim !== null && arcContains(s, e, normalizeArcAngle(aim))) emit(aim, RYN_PLACE_ORIGIN.AIMED);
+          if (aim !== null && arcContains(s, e, normalizeArcAngle(aim))) emit(aim, RYN_PLACE_ORIGIN.AIMED, run);
         }
 
         // The centre of the run, once it is wide enough to hold a build clear
         // of both ends. Below that width the two flush angles already describe
         // everything the run can take, and on a whole ring there is no centre.
-        if (!whole && span > step * 1.5) emit(s + span / 2, RYN_PLACE_ORIGIN.GAP);
+        if (!whole && span > step * 1.5) emit(s + span / 2, RYN_PLACE_ORIGIN.GAP, run);
 
         // Tangent packing. On a bounded run it starts one step in so the first
         // packed angle does not sit on top of the flush end; on a whole ring it
         // starts at the anchor, because there is no flush end to avoid.
         if (whole || span > step * 2) {
-          for (let t = whole ? 0 : step; t < span - step * .5; t += step) emit(s + t, RYN_PLACE_ORIGIN.PACKED);
+          for (let t = whole ? 0 : step; t < span - step * .5; t += step) emit(s + t, RYN_PLACE_ORIGIN.PACKED, run);
         }
       }
       return out;
@@ -9777,15 +9852,19 @@ window.grbtp = 35;
     // if the ring passes near it -- which is checked here rather than assumed.
     anchored(origin, item, itemId, role, arcs, point, tolerance, reason, spared) {
       const R = arcs.ring;
-      const angle = normalizeArcAngle(Math.atan2(point.y - origin.y, point.x - origin.x));
+      const wanted = normalizeArcAngle(Math.atan2(point.y - origin.y, point.x - origin.x));
+      // Find the run first, then snap inside it -- snapping to the nearest grid
+      // angle and asking afterwards would accept a bearing the server refuses.
+      let angle = null;
+      for (const [s, e] of arcs.free) {
+        if (!arcContains(s, e, wanted)) continue;
+        angle = wireAngleInArc(wanted, s, e);
+        break;
+      }
+      if (angle === null) return null;
       const p = RynGeometrySolver.pointAt(origin, R, angle);
       if (Math.hypot(p.x - point.x, p.y - point.y) > tolerance) return null;
       if (RynGeometrySolver.inRiver(p.y, itemId)) return null;
-      let inFree = false;
-      for (const [s, e] of arcs.free) {
-        if (arcContains(s, e, angle)) { inFree = true; break; }
-      }
-      if (!inFree) return null;
       return {
         itemId: itemId, role: role, angle: angle, x: p.x, y: p.y,
         scale: item.scale, ring: R, origin: RYN_PLACE_ORIGIN.ANCHORED,
