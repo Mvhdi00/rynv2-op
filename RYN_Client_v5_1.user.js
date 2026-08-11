@@ -9620,12 +9620,20 @@ window.grbtp = 35;
     return minY <= maxY;
   }
 
-  // Why a build is wanted. The reason decides how it is scheduled, not how it
-  // is generated -- generation is identical for all three.
-  const RYN_PLACE_REASON = Object.freeze({
-    IMMEDIATE: "immediate",   // nothing in the way; goes out this tick
-    OPENING: "opening",       // blocked only by objects that are about to die
-    RESEND: "resend"          // an opening whose blocker has actually gone
+  // The three planning modes. They are not three subsystems -- they are one
+  // candidate wanted for three different reasons, and the reason decides when
+  // it is sent, never how it is found. Generation, scoring, conflict and
+  // budget are identical across all three.
+  const RYN_PLACE_MODE = Object.freeze({
+    // The ground is free now. Send it now.
+    AUTO: "auto",
+    // The ground will be free: everything on it is about to break. Send it
+    // timed for when that happens, and again at min ping in case the first
+    // send lost its race.
+    PREPLACE: "preplace",
+    // The ground just became free -- something of mine there came down. Send it
+    // now: the hole already exists, and waiting only widens it.
+    REPLACE: "replace"
   });
 
   // How a candidate angle was arrived at. Kept on the record because the scorer
@@ -9750,7 +9758,7 @@ window.grbtp = 35;
   // physically holds four or five builds. These produce a handful, and every
   // one of them means something.
   class RynCandidateGenerator {
-    build(origin, item, itemId, role, arcs, aims, reason, spared) {
+    build(origin, item, itemId, role, arcs, aims, mode, spared) {
       const out = [];
       const R = arcs.ring;
       const step = RynGeometrySolver.tangentStep(item, R);
@@ -9808,7 +9816,7 @@ window.grbtp = 35;
           scale: item.scale,
           ring: R,
           origin: origin2,
-          reason: reason,
+          mode: mode,
           blockedBy: spared === null ? [] : arcs.blockers.filter(o => spared.has(o) && Math.hypot(p.x - o.pos.current.x, p.y - o.pos.current.y) < item.scale + o.placementScale),
           score: 0,
           terms: null
@@ -9852,7 +9860,7 @@ window.grbtp = 35;
     // A build aimed at a world point rather than at a bearing. The server
     // projects onto my ring whatever I ask for, so the point is only reachable
     // if the ring passes near it -- which is checked here rather than assumed.
-    anchored(origin, item, itemId, role, arcs, point, tolerance, reason, spared) {
+    anchored(origin, item, itemId, role, arcs, point, tolerance, mode, spared) {
       const R = arcs.ring;
       const wanted = normalizeArcAngle(Math.atan2(point.y - origin.y, point.x - origin.x));
       // Find the run first, then snap inside it -- snapping to the nearest grid
@@ -9870,7 +9878,7 @@ window.grbtp = 35;
       return {
         itemId: itemId, role: role, angle: angle, x: p.x, y: p.y,
         scale: item.scale, ring: R, origin: RYN_PLACE_ORIGIN.ANCHORED,
-        reason: reason, blockedBy: [], score: 0, terms: null
+        mode: mode, blockedBy: [], score: 0, terms: null
       };
     }
   }
@@ -10517,7 +10525,7 @@ window.grbtp = 35;
     // 8. Timing. Ticks before this can go out at all -- zero for a build with
     //    nothing in its way, one per thing that has to die first.
     _timing(c) {
-      return c.reason === RYN_PLACE_REASON.IMMEDIATE ? 0 : Math.min(1, .5 + .25 * c.blockedBy.length);
+      return c.mode === RYN_PLACE_MODE.AUTO ? 0 : Math.min(1, .5 + .25 * c.blockedBy.length);
     }
 
     score(c, ctx) {
@@ -10700,8 +10708,8 @@ window.grbtp = 35;
 
     _conflicts(cand, chosen, ctx) {
       if (ctx.conflict.collides(cand, chosen)) return true;
-      let openings = cand.reason !== RYN_PLACE_REASON.IMMEDIATE ? 1 : 0;
-      for (const c of chosen) if (c.reason !== RYN_PLACE_REASON.IMMEDIATE) openings += 1;
+      let openings = cand.mode !== RYN_PLACE_MODE.AUTO ? 1 : 0;
+      for (const c of chosen) if (c.mode !== RYN_PLACE_MODE.AUTO) openings += 1;
       if (openings > PREPLACE_CANDIDATES) return true;
       return false;
     }
@@ -10735,11 +10743,19 @@ window.grbtp = 35;
         // at ground chosen for where they were; if they have left it by the
         // time it fires, the send is cancelled rather than spent.
         const at = ctx.targetAt;
-        if (cand.reason === RYN_PLACE_REASON.IMMEDIATE) {
-          sends.push({ cand: cand, delay: 0, tick: ctx.tick, targetAt: at });
-        } else {
+        // Only a preplace waits. Its ground is not free yet, so the send is
+        // timed for when it should be, and repeated at min ping in case the
+        // first lost its race to the server.
+        //
+        // A replace does not wait: its hole already exists, and delaying only
+        // gives them longer to walk through it. Treating it as a preplace --
+        // which is what "anything that is not immediate waits" did -- sent it
+        // two ticks after the ground opened, every time.
+        if (cand.mode === RYN_PLACE_MODE.PREPLACE) {
           sends.push({ cand: cand, delay: Math.max(1, ctx.tickMs - ctx.ping), tick: ctx.tick, targetAt: at });
           if (ctx.resend) sends.push({ cand: cand, delay: Math.max(1, ctx.tickMs - ctx.minPing), tick: ctx.tick, targetAt: at });
+        } else {
+          sends.push({ cand: cand, delay: 0, tick: ctx.tick, targetAt: at });
         }
       }
       return sends;
@@ -10859,48 +10875,68 @@ window.grbtp = 35;
       this.lastPlan = [];
     }
 
-    // One tick. Returns how many sends were issued, so the caller can bid.
+    // ── The cycle ─────────────────────────────────────────────────────────
+    // One tick, nine stages, one shared everything. Auto place, preplace and
+    // replace are not three passes over the world -- they are three modes of
+    // the same candidate, produced by the same solver, judged by the same
+    // scorer and spent from the same budget. Nothing here scans the world
+    // twice, and nothing competes with anything.
+    //
+    //   SENSE     read the world once
+    //   PREDICT   turn positions into motion
+    //   GENERATE  every legal build, in every mode
+    //   SCORE     one number each, one scorer
+    //   RESOLVE   drop what conflicts with the world or with a standing bet
+    //   PLAN      search sets for the best combination the budget allows
+    //   VALIDATE  re-check against the world as it is now, substituting
+    //   EXECUTE   send
+    //   RECORD    remember what was sent, bet and filled
+    //
+    // Each stage takes the cycle and adds to it. They are separate methods so
+    // any one of them can be exercised on its own.
     run(ctx) {
-      const ryn = this.client.services;
+      const cycle = this.sense(ctx);
+      if (cycle.stand) { this.lastPlan = []; return 0; }
+      this.predict(cycle);
+      this.generate(cycle);
+      this.score(cycle);
+      this.resolve(cycle);
+      this.plan(cycle);
+      this.validate(cycle);
+      const sent = this.execute(cycle);
+      this.record(cycle);
+      return sent;
+    }
+
+    // ── SENSE ─────────────────────────────────────────────────────────────
+    // One read of the world, shared by every mode and every item. Everything
+    // downstream works from this and never queries again.
+    sense(ctx) {
       const client2 = this.client;
+      const ryn = client2.services;
       const myPlayer = client2.myPlayer;
       const tick = ryn.clock.tick;
-      this.memory.expire(tick);
+      const cycle = { ctx: ctx, client: client2, ryn: ryn, myPlayer: myPlayer, tick: tick, stand: true, all: [], pool: [], chosen: [], sends: [] };
 
+      this.memory.expire(tick);
       const stand = this.conflict.check(ryn, client2);
-      if (stand.stand) { this.lastPlan = []; return 0; }
+      if (stand.stand) { cycle.why = stand.why; return cycle; }
 
       const enemy = client2.EnemyManager.nearestEnemy;
-      if (!enemy) { this.lastPlan = []; return 0; }
-
-      this.threat.sample(client2, enemy, client2.ObjectManager, client2.PlayerManager, myPlayer, this.estimator, tick);
-
-      // Review the open bets before planning anything new. A preplace that was
-      // aimed at a heading they have since abandoned is not a plan, it is a
-      // reservation on ground nobody is walking to -- and holding it would keep
-      // this tick's work off that ground for no reason.
-      this.book.review(tick, enemy, this.threat.motion);
-
-      // What came down since last tick. Ground that was mine a moment ago and
-      // is open now is the strongest reason to build there is: it was worth
-      // holding, and the hole is where they will go.
-      const vacancies = this.watch.scan(client2, myPlayer, myPlayer.pos.current, ctx.radius, tick);
-
+      if (!enemy) { cycle.why = "no-target"; return cycle; }
       const myPos = myPlayer.pos.current;
       const enemyPos = enemy.pos.current;
-      if (myPos.distance(enemyPos) > ctx.radius) { this.lastPlan = []; return 0; }
+      if (myPos.distance(enemyPos) > ctx.radius) { cycle.why = "out-of-range"; return cycle; }
 
-      // One read of the ground, shared by every item.
-      const nearby = [];
-      const ourSpikes = [];
+      // Ground around me, for what blocks a build; ground around them, for what
+      // already covers them. Two queries because they are two questions, and
+      // both are asked once.
+      const nearby = [], nearThem = [], ourSpikes = [];
       client2.ObjectManager.grid2D.query(myPos.x, myPos.y, 3, id => {
         const obj = client2.ObjectManager.objects.get(id);
         if (obj) nearby.push(obj);
         return false;
       });
-      // Everything standing near them, for the enclosure reading, and my own
-      // spikes separately, for the knockback one.
-      const nearThem = [];
       client2.ObjectManager.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
         const obj = client2.ObjectManager.objects.get(id);
         if (!obj) return false;
@@ -10910,133 +10946,225 @@ window.grbtp = 35;
         return false;
       });
 
-      const aimAtEnemy = myPos.angle(enemyPos);
-      const far = this.threat.project(TRAP_LOOKAHEAD_TICKS);
-      const all = [];
+      // What came down since last tick. Ground that was mine a moment ago and
+      // is open now was worth holding, and the hole is where they will go.
+      const vacancies = this.watch.scan(client2, myPlayer, myPos, ctx.radius, tick);
 
+      Object.assign(cycle, {
+        stand: false, enemy: enemy, myPos: myPos, enemyPos: enemyPos,
+        nearby: nearby, nearThem: nearThem, ourSpikes: ourSpikes, vacancies: vacancies
+      });
+      return cycle;
+    }
+
+    // ── PREDICT ───────────────────────────────────────────────────────────
+    // Positions become motion: velocity, acceleration, a confidence, and a
+    // horizon earned rather than assumed.
+    predict(cycle) {
+      const c = cycle;
+      this.threat.sample(c.client, c.enemy, c.client.ObjectManager, c.client.PlayerManager, c.myPlayer, this.estimator, c.tick);
+
+      // Review the standing bets before planning anything new. A preplace aimed
+      // along a heading they have since abandoned is not a plan, it is a
+      // reservation on ground nobody is walking to.
+      this.book.review(c.tick, c.enemy, this.threat.motion);
+
+      c.motion = this.threat.motion;
+      c.far = this.threat.project(TRAP_LOOKAHEAD_TICKS);
+      c.aimAtEnemy = c.myPos.angle(c.enemyPos);
+      return c;
+    }
+
+    // ── GENERATE ──────────────────────────────────────────────────────────
+    // Every legal build, in every mode, from one solver. The mode is a field on
+    // the candidate, not a separate pass: AUTO is ground that is free, PREPLACE
+    // is ground that will be, REPLACE is ground that just became free.
+    generate(cycle) {
+      const c = cycle;
+      const gates = c.ctx.gates;
       for (const roleName of Object.keys(RYN_BUILD_ROLE)) {
         const role = RYN_BUILD_ROLE[roleName];
-        const itemId = myPlayer.getItemByType(role.itemType);
+        const itemId = c.myPlayer.getItemByType(role.itemType);
         if (itemId === null || itemId === undefined) continue;
         const item = Items[itemId];
         if (!item) continue;
 
-        // Two solves per item: what fits now, and what would fit if everything
-        // the enemy is about to break were already gone. The second is where
-        // preplace comes from, and it is the same code path.
-        const now = this.angles.solve(myPos, item, nearby, null);
-        for (const c of this.candidates.build(myPos, item, itemId, role, now,
-              [ aimAtEnemy, far === null ? null : Math.atan2(far.y - myPos.y, far.x - myPos.x) ],
-              RYN_PLACE_REASON.IMMEDIATE, null)) all.push(c);
+        // AUTO -- what fits right now.
+        const now = this.angles.solve(c.myPos, item, c.nearby, null);
+        const aims = [ c.aimAtEnemy, c.far === null ? null : Math.atan2(c.far.y - c.myPos.y, c.far.x - c.myPos.x) ];
+        for (const cand of this.candidates.build(c.myPos, item, itemId, role, now, aims, RYN_PLACE_MODE.AUTO, null)) c.all.push(cand);
 
-        if (ctx.gates.preplace && this.threat.doomed.size > 0) {
-          const after = this.angles.solve(myPos, item, nearby, this.threat.doomed);
-          for (const c of this.candidates.build(myPos, item, itemId, role, after,
-                [ aimAtEnemy ], RYN_PLACE_REASON.OPENING, this.threat.doomed)) {
-            if (c.blockedBy.length > 0) all.push(c);
+        // PREPLACE -- what would fit if everything about to break were gone.
+        if (gates.preplace && this.threat.doomed.size > 0) {
+          const after = this.angles.solve(c.myPos, item, c.nearby, this.threat.doomed);
+          for (const cand of this.candidates.build(c.myPos, item, itemId, role, after, [ c.aimAtEnemy ], RYN_PLACE_MODE.PREPLACE, this.threat.doomed)) {
+            if (cand.blockedBy.length > 0) c.all.push(cand);
           }
         }
 
-        // A pinning build wants the ground the enemy is walking onto; a
-        // damaging one wants the ground beside the trap that already holds
-        // them. Both are world points, and both are only usable if my ring
-        // reaches them.
-        if (ctx.gates.primaryTrap && role.pins && this.threat.trappedIn === null &&
-            myPos.distance(enemyPos) <= TRAP_PRIMARY_RANGE) {
-          // Where their path crosses the ring this build lands on, if it does.
-          // That is the point a build placed now actually meets them at; `far`
-          // is only where they will be, which is not the same question.
-          const meet = this.threat.interceptOn(myPos, now.ring, TRAP_LOOKAHEAD_TICKS, item.scale) ?? far;
-          if (meet !== null) {
-            const a = this.candidates.anchored(myPos, item, itemId, role, now, meet, item.scale, RYN_PLACE_REASON.IMMEDIATE, null);
-            if (a !== null) all.push(a);
-          }
-        }
-        // Ground that just opened, asked of every role separately. Whether a
-        // spike or a trap belongs in the hole is a scoring question, not one
+        // REPLACE -- the holes that just opened, offered to every role. Whether
+        // a spike or a trap belongs in one is a scoring question, not one
         // answered by which loop runs first.
-        for (const v of vacancies) {
-          if (v.expires < tick) continue;
-          const a = this.candidates.anchored(myPos, item, itemId, role, now, v, item.scale, RYN_PLACE_REASON.RESEND, null);
-          if (a !== null) {
-            a.fills = v;
-            all.push(a);
-          }
+        for (const v of c.vacancies) {
+          if (v.expires < c.tick) continue;
+          const cand = this.candidates.anchored(c.myPos, item, itemId, role, now, v, item.scale, RYN_PLACE_MODE.REPLACE, null);
+          if (cand !== null) { cand.fills = v; c.all.push(cand); }
         }
 
+        // A pinning build wants the ground they are walking onto; a damaging one
+        // wants the ground beside the trap already holding them. Both are world
+        // points, and both are only usable if my ring reaches them.
+        if (gates.primaryTrap && role.pins && this.threat.trappedIn === null &&
+            c.myPos.distance(c.enemyPos) <= TRAP_PRIMARY_RANGE) {
+          const meet = this.threat.interceptOn(c.myPos, now.ring, TRAP_LOOKAHEAD_TICKS, item.scale) ?? c.far;
+          if (meet !== null) {
+            const cand = this.candidates.anchored(c.myPos, item, itemId, role, now, meet, item.scale, RYN_PLACE_MODE.AUTO, null);
+            if (cand !== null) c.all.push(cand);
+          }
+        }
         if (role.damages && this.threat.trappedIn !== null) {
           const t = this.threat.trappedIn.pos.current;
-          const away = Math.atan2(enemyPos.y - t.y, enemyPos.x - t.x);
+          const away = Math.atan2(c.enemyPos.y - t.y, c.enemyPos.x - t.x);
           const want = {
             x: t.x + Math.cos(away) * (this.threat.trappedIn.scale + item.scale),
             y: t.y + Math.sin(away) * (this.threat.trappedIn.scale + item.scale)
           };
-          const a = this.candidates.anchored(myPos, item, itemId, role, now, want, item.scale, RYN_PLACE_REASON.IMMEDIATE, null);
-          if (a !== null) all.push(a);
+          const cand = this.candidates.anchored(c.myPos, item, itemId, role, now, want, item.scale, RYN_PLACE_MODE.AUTO, null);
+          if (cand !== null) c.all.push(cand);
         }
       }
+      return c;
+    }
 
-      const sctx = {
+    // ── SCORE ─────────────────────────────────────────────────────────────
+    // One scorer over the whole pool, whatever mode a candidate is in. A
+    // preplace and an auto place are compared on the same eight terms.
+    score(cycle) {
+      const c = cycle;
+      c.sctx = {
         path: this.threat.enemyPath,
-        far: far,
-        enemyScale: enemy.collisionScale,
+        far: c.far,
+        enemyScale: c.enemy.collisionScale,
         enemyTrapped: this.threat.trappedIn,
-        ourSpikes: ourSpikes,
-        nearThem: nearThem,
-        moveDir: ryn.motion.move_dir,
-        budget: ctx.budget
+        ourSpikes: c.ourSpikes,
+        nearThem: c.nearThem,
+        moveDir: c.ryn.motion.move_dir,
+        budget: c.ctx.budget
       };
-      for (const c of all) this.scorer.score(c, sctx);
+      for (const cand of c.all) this.scorer.score(cand, c.sctx);
+      return c;
+    }
 
-      // Spike fallback off means damaging builds stop competing for ground
-      // whose only merit is that it was empty. A spike that intercepts, or that
-      // packs flush against something, is still wanted -- the toggle governs
-      // filling, not placing.
-      const pool = ctx.gates.spikeFallback ? all : all.filter(c => c.role.pins || c.terms.intercept > 0 || c.origin === RYN_PLACE_ORIGIN.FLUSH);
-
-      const chosen = this.planner.plan(pool, {
-        budget: ctx.budget,
-        enemyScale: enemy.collisionScale,
-        enemyTrapped: this.threat.trappedIn,
+    // ── RESOLVE ───────────────────────────────────────────────────────────
+    // What may not be built, whatever it scored: ground the server refused,
+    // ground a send is already flying towards, ground a stronger bet is holding,
+    // and -- where the toggle says so -- filling for its own sake.
+    resolve(cycle) {
+      const c = cycle;
+      const pool = c.ctx.gates.spikeFallback ? c.all
+        : c.all.filter(x => x.role.pins || x.terms.intercept > 0 || x.origin === RYN_PLACE_ORIGIN.FLUSH || x.mode === RYN_PLACE_MODE.REPLACE);
+      c.capped = (itemId, freed) => {
+        const group = Items[itemId].itemGroup;
+        const { count: count, limit: limit } = c.myPlayer.getItemCount(group);
+        let credit = 0;
+        for (const o of freed) if (o.itemGroup === group && c.myPlayer.objects?.has(o)) credit += 1;
+        return !!limit && count - credit >= limit;
+      };
+      c.pctx = {
+        budget: c.ctx.budget,
         memory: this.memory,
         conflict: this.conflict,
         book: this.book,
-        capped: (itemId, freed) => {
-          const group = Items[itemId].itemGroup;
-          const { count: count, limit: limit } = myPlayer.getItemCount(group);
-          let credit = 0;
-          for (const o of freed) if (o.itemGroup === group && myPlayer.objects?.has(o)) credit += 1;
-          return !!limit && count - credit >= limit;
+        enemyScale: c.enemy.collisionScale,
+        enemyTrapped: this.threat.trappedIn,
+        capped: c.capped
+      };
+      c.pool = pool;
+      return c;
+    }
+
+    // ── PLAN ──────────────────────────────────────────────────────────────
+    plan(cycle) {
+      cycle.chosen = this.planner.plan(cycle.pool, cycle.pctx);
+      this.lastPlan = cycle.chosen;
+      return cycle;
+    }
+
+    // ── VALIDATE ──────────────────────────────────────────────────────────
+    // The plan was made from a reading and is about to be sent from a later
+    // one. Anything that stopped being buildable in between is dropped -- and
+    // rather than simply losing the slot, the next best candidate that is still
+    // compatible with what has already been kept takes its place.
+    validate(cycle) {
+      const c = cycle;
+      if (c.chosen.length === 0) return c;
+      const kept = [];
+      const spare = c.pool
+        .filter(x => !c.chosen.includes(x))
+        .sort((a, b) => b.score - a.score);
+
+      for (const cand of c.chosen) {
+        if (this.executor.valid(cand) && !this.conflict.collides(cand, kept)) {
+          kept.push(cand);
+          continue;
         }
-      });
-      this.lastPlan = chosen;
-      if (chosen.length === 0) return 0;
-
-      // A build that has to wait is a bet on a reading; record it with what it
-      // was betting on so the next tick can check whether that is still true.
-      // An immediate build is not a bet -- it is already gone.
-      for (const c of chosen) {
-        this.book.yield(c);
-        if (c.reason !== RYN_PLACE_REASON.IMMEDIATE) this.book.hold(c, tick, this.threat.motion, enemy);
+        // Substitute: the best remaining candidate that is buildable now, fits
+        // the ground already kept, and is still allowed.
+        let taken = null;
+        for (let i = 0; i < spare.length; i++) {
+          const alt = spare[i];
+          if (this.conflict.collides(alt, kept)) continue;
+          if (c.capped(alt.itemId, alt.blockedBy)) continue;
+          if (this.memory.blocked(alt.x, alt.y)) continue;
+          if (this.book.holds(alt)) continue;
+          if (!this.executor.valid(alt)) continue;
+          taken = alt;
+          spare.splice(i, 1);
+          break;
+        }
+        if (taken !== null) kept.push(taken);
       }
+      c.substituted = kept.filter(x => !c.chosen.includes(x)).length;
+      c.chosen = kept;
+      this.lastPlan = kept;
+      return c;
+    }
 
-      const socket = client2.SocketManager;
-      const sends = this.scheduler.schedule(chosen, {
-        tick: tick,
-        targetAt: { x: enemyPos.x, y: enemyPos.y },
+    // ── EXECUTE ───────────────────────────────────────────────────────────
+    execute(cycle) {
+      const c = cycle;
+      if (c.chosen.length === 0) return 0;
+      const socket = c.client.SocketManager;
+      c.sends = this.scheduler.schedule(c.chosen, {
+        tick: c.tick,
+        targetAt: { x: c.enemyPos.x, y: c.enemyPos.y },
         tickMs: socket?.TICK ?? 111,
         ping: socket?.pong ?? 0,
         minPing: Number.isFinite(socket?.minPingTime) ? socket.minPingTime : 0,
-        resend: ctx.gates.replace
+        resend: c.ctx.gates.replace
       });
-      return this.executor.run(sends, {
-        tick: tick,
+      return this.executor.run(c.sends, {
+        tick: c.tick,
         target: () => {
-          const e = client2.EnemyManager.nearestEnemy;
+          const e = c.client.EnemyManager.nearestEnemy;
           return e === null || e === undefined ? null : e.pos.current;
         },
-        aim: () => ryn.ledger.breakActive && ryn.ledger.breakAngle !== null && ryn.ledger.breakAngle !== undefined ? ryn.ledger.breakAngle : ryn.actions.currentAngle ?? 0
+        aim: () => c.ryn.ledger.breakActive && c.ryn.ledger.breakAngle !== null && c.ryn.ledger.breakAngle !== undefined
+          ? c.ryn.ledger.breakAngle : c.ryn.actions.currentAngle ?? 0
       });
+    }
+
+    // ── RECORD ────────────────────────────────────────────────────────────
+    // A build that has to wait is a bet on a reading; it is recorded with what
+    // it was betting on so the next tick can check whether that is still true.
+    // A build already gone is not a bet, and one that took ground a weaker bet
+    // was holding releases that bet.
+    record(cycle) {
+      for (const cand of cycle.chosen) {
+        this.book.yield(cand);
+        if (cand.mode === RYN_PLACE_MODE.PREPLACE) this.book.hold(cand, cycle.tick, this.threat.motion, cycle.enemy);
+      }
+      return cycle;
     }
   }
 
@@ -11087,7 +11215,7 @@ window.grbtp = 35;
 
       // A build that waits on ground to clear owns the next tick as well as
       // this one, because that is when its send actually lands.
-      if (this.engine.lastPlan.some(c => c.reason !== RYN_PLACE_REASON.IMMEDIATE)) {
+      if (this.engine.lastPlan.some(c => c.mode !== RYN_PLACE_MODE.AUTO)) {
         this._preplaceSentTick = ryn.clock.tick;
       }
       bid.claim = true;
