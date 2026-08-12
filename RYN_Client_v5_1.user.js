@@ -94,7 +94,12 @@ const RynDiag = new class {
   emitted(action) {
     this._emits.set(action, (this._emits.get(action) ?? 0) + 1);
   }
-  tick(t, resolved, ran) {
+  // What the tick was actually working with, not just what it decided. The
+  // first reading said no feature ever wanted an attack, which is the same
+  // reading whether the mouse was never down, no enemy was ever in range, or
+  // the bid chain is broken -- three very different faults. These separate
+  // them.
+  tick(t, resolved, ran, ctx) {
     if (!this.enabled) return;
     this._ticks.push({
       t: t,
@@ -102,9 +107,23 @@ const RynDiag = new class {
       attack: resolved.shouldAttack === true,
       hat: resolved.forceHat,
       weapon: resolved.forceWeapon,
-      ran: ran
+      ran: ran,
+      attacking: ctx ? ctx.attacking : null,
+      state: ctx ? ctx.state : null,
+      enemy: ctx ? ctx.enemy : null,
+      dist: ctx ? ctx.dist : null
     });
     if (this._ticks.length > this._limit) this._ticks.shift();
+  }
+
+  // Every equip the client asked for and what came of it. A hat that is not
+  // owned cannot be worn, and the client asks anyway -- so "asked 30 times,
+  // 30 refused for not-owned" and "never asked at all" look identical from
+  // the outside and mean opposite things.
+  _equips = new Map;
+  equipTried(type, id, outcome) {
+    const key = (type === 0 ? "hat " : "acc ") + id + " -> " + outcome;
+    this._equips.set(key, (this._equips.get(key) ?? 0) + 1);
   }
 
   report() {
@@ -156,6 +175,11 @@ const RynDiag = new class {
     for (const [a, n] of [...this._emits].sort((x, y) => y[1] - x[1])) say("  " + a.padEnd(12) + n);
 
     say("");
+    say("-- equips asked for --");
+    if (this._equips.size === 0) say("  none asked for at all");
+    for (const [k, v] of [...this._equips].sort((a, b) => b[1] - a[1]).slice(0, 12)) say("  " + k.padEnd(34) + v);
+
+    say("");
     say("-- actions the contract refused --");
     if (this._refusals.size === 0) say("  none");
     for (const [k, n] of [...this._refusals].sort((x, y) => y[1] - x[1])) say("  " + k.padEnd(34) + n);
@@ -174,13 +198,43 @@ const RynDiag = new class {
     for (const [who, n] of [...held].sort((x, y) => y[1] - x[1])) {
       say("  " + String(who === null ? "(nobody)" : who).padEnd(26) + n + " of " + this._ticks.length);
     }
+    const n = this._ticks.length;
     const attacks = this._ticks.filter(r => r.attack).length;
-    say("  ticks wanting an attack   : " + attacks + " of " + this._ticks.length);
+    say("  ticks wanting an attack   : " + attacks + " of " + n);
     const hats = this._ticks.filter(r => r.hat !== null && r.hat !== undefined).length;
-    say("  ticks wanting a hat       : " + hats + " of " + this._ticks.length);
+    say("  ticks wanting a hat       : " + hats + " of " + n);
+    const heldTicks = this._ticks.filter(r => r.attacking).length;
+    const stated = this._ticks.filter(r => r.state).length;
+    say("  ticks with attack held    : " + heldTicks + " of " + n + "   (attackingState set on " + stated + ")");
+    const withEnemy = this._ticks.filter(r => r.enemy).length;
+    const dists = this._ticks.filter(r => typeof r.dist === "number").map(r => r.dist);
+    say("  ticks with an enemy       : " + withEnemy + " of " + n +
+        (dists.length ? "   nearest " + Math.round(Math.min(...dists)) + "-" + Math.round(Math.max(...dists)) : ""));
+    if (heldTicks === 0) {
+      say("  >> the attack was never held during this window. Either the mouse");
+      say("     was not down, or mousedown is not reaching the client.");
+    } else if (attacks === 0) {
+      say("  >> the attack WAS held and no feature ever asked to swing.");
+      say("     That is the bid chain, not the input.");
+    }
     const ranMin = this._ticks.length ? Math.min(...this._ticks.map(r => r.ran)) : 0;
     const ranMax = this._ticks.length ? Math.max(...this._ticks.map(r => r.ran)) : 0;
     say("  features run per tick     : " + ranMin + "-" + ranMax);
+
+    say("");
+    say("-- settings that gate the missing things --");
+    const S = R && R._settings;
+    if (!S) say("  settings not reachable");
+    else {
+      const show = [ "_autoplacer", "_prePlace", "_replace", "_autoheal", "_spikeTick",
+                     "_spikeTickBreak", "_spikeTickNear", "_spikeTickTrap", "_autoShield",
+                     "_biomehats", "_adaptiveGearSwitching", "_tailPriority", "_autobreak",
+                     "_antienemy", "_antianimal", "_soldierDefault" ];
+      const on = show.filter(k => S[k] === true);
+      const off = show.filter(k => S[k] === false);
+      say("  on : " + (on.length ? on.join(", ") : "(none)"));
+      say("  off: " + (off.length ? off.join(", ") : "(none)"));
+    }
 
     say("");
     say("-- state --");
@@ -219,6 +273,7 @@ const RynDiag = new class {
     this._emits.clear();
     this._ticks.length = 0;
     this._fatal.length = 0;
+    this._equips.clear();
   }
 }();
 
@@ -16695,8 +16750,16 @@ window.grbtp = 35;
       const store2 = this.store[type];
       const player = this._deps.player();
       if (toggle && store2.last === id && id !== 0) id = 0;
-      if (!player.inGame || !this.buy(type, id, force)) return false;
-      if (store2.last === id && player.storeData[type] === id) return false;
+      if (!player.inGame) { RynDiag.equipTried(type, id, "not in game"); return false; }
+      if (!this.buy(type, id, force)) {
+        RynDiag.equipTried(type, id, this.bought[type].has(id) ? "buy said no" : "NOT OWNED");
+        return false;
+      }
+      if (store2.last === id && player.storeData[type] === id) {
+        RynDiag.equipTried(type, id, "already worn");
+        return false;
+      }
+      RynDiag.equipTried(type, id, "sent");
       store2.last = id;
       this._deps.net().emit("equip", type, id);
       const ledger = this._deps.ledger;
@@ -17005,7 +17068,24 @@ window.grbtp = 35;
         runtime.runPhase(RYN_PHASE.DERIVE, ctx);
         const decided = runtime.runPhase(RYN_PHASE.DECIDE, ctx);
         const resolved = svc.arbiter.resolve();
-        RynDiag.tick(runtime.clock.tick, resolved, decided);
+        {
+          // What the tick had to work with, sampled where it is known.
+          let enemy = null, dist = null;
+          try {
+            const e = this.client.EnemyManager && this.client.EnemyManager.nearestEnemy;
+            if (e) {
+              enemy = true;
+              const me = this.client.myPlayer && this.client.myPlayer.pos.current;
+              if (me) dist = me.distance(e.pos.current);
+            } else enemy = false;
+          } catch (err) {}
+          RynDiag.tick(runtime.clock.tick, resolved, decided, {
+            attacking: svc.actions.attacking !== 0,
+            state: svc.actions.attackingState !== 0,
+            enemy: enemy,
+            dist: dist
+          });
+        }
         svc.arbiter.commit(resolved);
         runtime.runPhase(RYN_PHASE.COMMIT, ctx);
         svc.intent.seal();
