@@ -443,6 +443,165 @@ const EXP = (function() {
         });
     }
 
+    function suppressWarningBanner() {
+        if (typeof document == "undefined" || typeof document.createElement != "function") return;
+        const WARNING = "userscript-warning";
+        function plant() {
+            const root = document.body || document.documentElement;
+            if (!root || typeof root.appendChild != "function") return null;
+            let mine = document.getElementById(WARNING);
+            if (mine && mine.getAttribute("data-guard") !== "1") {
+                if (mine.parentNode) mine.parentNode.removeChild(mine);
+                mine = null;
+            }
+            if (mine) return mine;
+            const div = document.createElement("div");
+            div.id = WARNING;
+            div.setAttribute("data-guard", "1");
+            div.style.display = "none";
+            root.appendChild(div);
+            return div;
+        }
+        if (!plant()) return;
+        try {
+            if (typeof MutationObserver != "function") return;
+            const watch = new MutationObserver(function() { plant(); });
+            const target = document.body || document.documentElement;
+            if (target) watch.observe(target, { childList: true });
+            if (!document.body && typeof document.addEventListener == "function") {
+                document.addEventListener("DOMContentLoaded", function() {
+                    plant();
+                    if (document.body) watch.observe(document.body, { childList: true });
+                });
+            }
+        } catch (e) {}
+    }
+
+    const TURNSTILE_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
+    const TURNSTILE_API = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    const entryStats = { renders: 0, holds: 0 };
+    function guardEntry(readToken, saveToken) {
+        if (typeof window == "undefined" || typeof document == "undefined") return;
+        let box = null, rendered = false, told = false, gaveUp = false;
+        const started = Date.now();
+
+        function haveToken() { try { return !!readToken(); } catch (e) { return false; } }
+
+        function loadApi() {
+            if (window.turnstile) return;
+            try {
+                if (document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]')) return;
+                const s = document.createElement("script");
+                s.src = TURNSTILE_API;
+                s.async = true;
+                (document.head || document.documentElement).appendChild(s);
+            } catch (e) {}
+        }
+
+        function ownHost() {
+            const root = document.body || document.documentElement;
+            if (!root) return null;
+            box = document.createElement("div");
+            box.id = "moo-turnstile-fallback";
+            box.style.cssText = ["position:fixed", "right:12px", "bottom:12px", "z-index:2147483000",
+                "background:rgba(0,0,0,.35)", "padding:6px", "border-radius:6px"].join(";");
+            const target = document.createElement("div");
+            target.style.cssText = "width:300px;height:65px";
+            box.appendChild(target);
+            root.appendChild(box);
+            return target;
+        }
+
+        function render() {
+            if (rendered || !window.turnstile || typeof window.turnstile.render != "function") return;
+            const page = document.getElementById("turnstileWidget");
+            const usable = page && page.offsetParent !== null;
+            if (usable && (page.childElementCount > 0 || Date.now() - started < 6000)) return;
+            const where = usable ? page : ownHost();
+            if (!where) return;
+            rendered = true;
+            try {
+                window.turnstile.render(where, {
+                    sitekey: TURNSTILE_SITEKEY,
+                    theme: "light",
+                    callback: function(t) {
+                        try {
+                            if (typeof window.onGotTurnstileToken == "function") window.onGotTurnstileToken(t);
+                            else saveToken(t);
+                        } catch (e) { saveToken(t); }
+                    },
+                    "error-callback": function() {},
+                    "expired-callback": function() {}
+                });
+                entryStats.renders++;
+                console.info("[EXP] the page's Turnstile widget was not usable, so one was rendered "
+                    + "bottom-right. Solve it and ENTER GAME will work.");
+            } catch (e) {
+                rendered = false;
+                console.warn("[EXP] could not render Turnstile", e);
+            }
+        }
+
+        function note(text) {
+            if (told) return;
+            told = true;
+            try {
+                const n = document.createElement("div");
+                n.textContent = text;
+                n.style.cssText = ["position:fixed", "left:50%", "bottom:16px", "transform:translateX(-50%)",
+                    "z-index:2147483001", "background:#2c3e50", "color:#fff",
+                    "font-family:Hammersmith One, sans-serif", "font-size:14px",
+                    "padding:8px 14px", "border-radius:6px", "pointer-events:none"].join(";");
+                (document.body || document.documentElement).appendChild(n);
+                setTimeout(function() {
+                    if (n.parentNode) n.parentNode.removeChild(n);
+                    told = false;
+                }, 4000);
+            } catch (e) {}
+        }
+
+        ["click", "mousedown", "mouseup", "pointerdown", "pointerup", "touchstart", "touchend"]
+            .forEach(function(type) {
+                try {
+                    document.addEventListener(type, function(e) {
+                        const btn = document.getElementById("enterGame");
+                        if (!btn || !e.target) return;
+                        if (e.target !== btn && !(btn.contains && btn.contains(e.target))) return;
+                        if (haveToken()) return;
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        entryStats.holds++;
+                        note(gaveUp
+                            ? "Cloudflare check unavailable - reload, or allow challenges.cloudflare.com"
+                            : "Waiting for the Cloudflare check. ENTER GAME will work as soon as it passes.");
+                    }, true);
+                } catch (e) {}
+            });
+
+        function tick() {
+            if (haveToken()) {
+                try {
+                    const btn = document.getElementById("enterGame");
+                    if (btn && btn.classList) btn.classList.remove("disabled");
+                } catch (e) {}
+                if (box && box.parentNode) { box.parentNode.removeChild(box); box = null; }
+                return;
+            }
+            if (Date.now() - started > 120000) { gaveUp = true; return; }
+            loadApi();
+            render();
+            setTimeout(tick, 500);
+        }
+        if (document.readyState === "loading" && typeof document.addEventListener == "function") {
+            document.addEventListener("DOMContentLoaded", function() { setTimeout(tick, 500); });
+        } else {
+            setTimeout(tick, 500);
+        }
+    }
+
+    try { suppressWarningBanner(); } catch (e) {}
+    try { if (window.MOO_ENTRY_GUARD !== false) guardEntry(token, function(t) { captchaToken = t; }); } catch (e) {}
+
     let handler = null;
     NativeWebSocket.prototype.nsend = nativeSend;
     NativeWebSocket.prototype.send = function(data) {
@@ -463,6 +622,7 @@ const EXP = (function() {
         setHandler: function(fn) { handler = fn; },
         token: token,
         freshToken: freshToken,
+        entryStats: function() { return { turnstileRenders: entryStats.renders, entryPressesHeld: entryStats.holds }; },
         nativeSend: nativeSend,
         PACKET_MAP: PACKET_MAP,
         _internals: { buildTables, tag, hexToBytes, HEADER_LEN, MODE_SECURE, states }

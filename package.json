@@ -2,7 +2,7 @@
   "name": "revelation-userscript",
   "private": true,
   "scripts": {
-    "test": "node test/e2e.js && node test/bot.js && node test/revelation-entry.js && node test/external.js && node test/laffer.js && node test/ae86.js && node test/aurora.js && node test/lemon.js && node test/unpatcher.js && node test/x18k.js && node test/robotics.js && node test/peter.js && node test/unx.js && node test/sakuna.js && node test/annihilator.js && node test/caramila.js && node test/ryn.js && node test/autoplay.js && node test/fullfps.js",
+    "test": "node test/e2e.js && node test/bot.js && node test/revelation-entry.js && node test/external.js && node test/laffer.js && node test/ae86.js && node test/aurora.js && node test/lemon.js && node test/unpatcher.js && node test/x18k.js && node test/robotics.js && node test/peter.js && node test/unx.js && node test/sakuna.js && node test/annihilator.js && node test/caramila.js && node test/ryn.js && node test/autoplay.js && node test/fullfps.js && node test/entry-guard.js",
     "deobfuscate": "DEOB_AFTER='function __lemonBoot() {' DEOB_UNTIL='} // end __lemonBoot' node tools/deobfuscate.js LemonMod.obfuscated.user.js LemonMod.user.js",
     "build:unpatcher": "node tools/build-unpatcher.js",
     "probe:unpatcher": "node tools/probe-unpatcher.js",
@@ -12,7 +12,10 @@
     "build:ryn": "node tools/build-ryn.js",
     "build:annihilator": "node tools/build-annihilator.js",
     "preview:menu": "node tools/preview-menu.js menu-preview.html && node tools/shot.js menu-preview.html menu-preview.png",
-    "preview:unx": "node tools/preview-chicken.js chicken-preview.html && node tools/shot.js chicken-preview.html chicken-preview.png"
+    "preview:unx": "node tools/preview-chicken.js chicken-preview.html && node tools/shot.js chicken-preview.html chicken-preview.png",
+    "build:all": "node tools/build-all.js",
+    "sync:shim": "node tools/sync-shim.js",
+    "probe:entry": "node tools/probe-entry.js"
   },
   "dependencies": {
     "acorn": "^8.18.0",

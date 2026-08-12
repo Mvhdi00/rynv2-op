@@ -687,6 +687,8 @@ const UNPATCH = (function () {
 
     // One line you can paste back instead of a whole mod file.
     function report() {
+        let entry = { turnstileRenders: 0, entryPressesHeld: 0 };
+        try { if (typeof EXP.entryStats == "function") entry = EXP.entryStats(); } catch (e) {}
         let handshake = log.handshake;
         for (let i = 0; i < seenSockets.length && !handshake; i++)
             if (EXP.isSecure(seenSockets[i])) handshake = true;
@@ -698,6 +700,10 @@ const UNPATCH = (function () {
             unknownPacketNames: log.dropped.slice(),
             unframeableBuffers: log.unframeable,
             connectUrlFixes: log.urlFixes,
+            // the banner guard and the ENTER GAME hold live in the EXP core,
+            // so that every script built on it gets them and not just this one
+            turnstileRenders: entry.turnstileRenders,
+            entryPressesHeld: entry.entryPressesHeld,
             shims: log.shims.slice(),
             placeholdersHandedOut: log.placeholders.slice(),
             errors: log.errors.slice()

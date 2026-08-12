@@ -163,6 +163,61 @@ body2 = body2.replace(
   }
 }
 
+/* --- 2c-3. a client replacement waiting on ALTCHA -------------------------
+ * A mod that carries its own copy of the client carries its own copy of the
+ * entry state machine too, and in this generation that machine waits for
+ * ALTCHA:
+ *
+ *     var V0;
+ *     function U0(e) {
+ *         e?.detail?.state === "verified" && (V0 = e.detail.payload, ...)
+ *     }
+ *     window.addEventListener("load", () => {
+ *         document.getElementById("altcha_checkbox").click();       // null now
+ *         ...addEventListener("statechange", U0)
+ *     });
+ *
+ *     !O0 || $1 || ($1 = !0, ... V0 && th("alt:" + V0) : ...)
+ *
+ * The widget is gone, so the listener throws on its first line, `V0` is never
+ * set, and the connect is the same latched dead end the game itself has: press
+ * ENTER GAME, get "Connecting...", and nothing else ever happens. Guarding the
+ * null would stop the throw and change nothing about the outcome.
+ *
+ * The token it wants is a captcha token, and there is one -- Cloudflare's. So
+ * the ALTCHA wiring is replaced by a wait on EXP.token(). The "alt:" prefix the
+ * mod puts on the wire is left alone: the shim's fixUrl already replaces a
+ * stale alt:/re: token with the live cf: one on the way out, which is the job
+ * it was written for.
+ */
+{
+  const payload = /\(\s*(\w+) = \w+\.detail\.payload,/.exec(body2);
+  const loader = /window\.addEventListener\("load", \(\) => \{\n\s*document\.getElementById\("altcha_checkbox"\)[\s\S]*?\n\}\);\n/.exec(body2);
+  if (payload && loader) {
+    const v = payload[1];
+    // The original hangs this off window "load". The body is deferred now, so
+    // "load" can have fired already -- and a listener added after the event is
+    // a listener that never runs, which would be the same dead end by another
+    // route. Start immediately if the page is done.
+    body2 = body2.replace(loader[0],
+      '(document.readyState === "complete" ? function (f) { f(); }\n' +
+      '                                    : function (f) { window.addEventListener("load", f); })(function () {\n' +
+      '    const btn = document.getElementById("enterGame");\n' +
+      '    if (btn) btn.innerText = "Generating Token";\n' +
+      '    (function wait() {\n' +
+      '        const t = EXP.token();\n' +
+      '        if (!t) return setTimeout(wait, 300);\n' +
+      '        ' + v + ' = t.replace(/^cf:/, "");\n' +
+      '        if (btn) {\n' +
+      '            btn.innerText = "Enter Game";\n' +
+      '            if (btn.classList) btn.classList.remove("disabled");\n' +
+      '        }\n' +
+      '    })();\n' +
+      '});\n');
+    report.altcha = v;
+  }
+}
+
 /* --- 2d. client replacements ----------------------------------------------
  * A mod that opens its own socket and decodes with its own bundled codec has
  * no game bundle underneath it, so its message handler is the FIRST one on
@@ -216,6 +271,7 @@ console.log(report.name.trim());
 console.log('  @run-at  : ' + report.runAt);
 console.log('  @require : ' + (report.requires.length ? report.requires.join(', ') : '(none dead)'));
 if (report.passwordGate) console.log('  password : removed an unskippable prompt loop (dismissing it hung the tab for ever)');
+if (report.altcha) console.log('  captcha  : its own ALTCHA wait replaced by the Turnstile token (was "' + report.altcha + '", never set)');
 if (report.client) console.log('  transport: client replacement -- shim told to treat every handler as the mod\'s');
 if (report.guarded) console.log('  guarded  : ' + report.guarded + ' dereference(s) of page furniture the game removed');
 if (report.jquery) console.log('  jQuery   : added (used but never required)');

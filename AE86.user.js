@@ -471,6 +471,249 @@ const EXP = (function() {
         });
     }
 
+    /* --- the "userscript manager detected" strip ------------------------ */
+    // BEGIN page-guards (lifted verbatim by tools/build-ryn.js)
+    // The bundle looks for a userscript manager and, if it finds one, draws a
+    // red bar across the top of the page:
+    //
+    //     function ys(e) {
+    //         if (document.getElementById("userscript-warning")) return;
+    //         ...  i.id = "userscript-warning"; i.style.cssText = "...#c0392b..."
+    //     }
+    //
+    // It is only a bar. Nothing else in the bundle reads it, no packet carries
+    // it, and the server is never told -- ys() draws it and returns. It is also
+    // unavoidable from here: the GM_* and unsafeWindow shims every script in
+    // this repo installs are three of the four things ws() tests for, and the
+    // fourth is an image probe against the extension's own files, which no page
+    // script can influence.
+    //
+    // Its own first line is the way out. An element with that id already in the
+    // document makes ys() a no-op, so put one there -- empty, hidden, and ours.
+    // That is a guard rather than a removal: there is no flash of red to take
+    // away afterwards, and it costs one div.
+    function suppressWarningBanner() {
+        if (typeof document == "undefined" || typeof document.createElement != "function") return;
+        const WARNING = "userscript-warning";
+        function plant() {
+            const root = document.body || document.documentElement;
+            if (!root || typeof root.appendChild != "function") return null;
+            let mine = document.getElementById(WARNING);
+            if (mine && mine.getAttribute("data-guard") !== "1") {
+                // the bundle got there first -- the only case with anything to
+                // remove, and the observer below is what makes that a flicker
+                // rather than a permanent bar
+                if (mine.parentNode) mine.parentNode.removeChild(mine);
+                mine = null;
+            }
+            if (mine) return mine;
+            const div = document.createElement("div");
+            div.id = WARNING;
+            div.setAttribute("data-guard", "1");
+            div.style.display = "none";
+            root.appendChild(div);
+            return div;
+        }
+        if (!plant()) return;
+        // Ours can be taken away by anything that clears the body -- a mod
+        // rebuilding the menu, the game's own DOM churn -- and the bundle's
+        // 1.5s check would then find nothing in its way. Watching is cheap.
+        try {
+            if (typeof MutationObserver != "function") return;
+            const watch = new MutationObserver(function() { plant(); });
+            const target = document.body || document.documentElement;
+            if (target) watch.observe(target, { childList: true });
+            if (!document.body && typeof document.addEventListener == "function") {
+                document.addEventListener("DOMContentLoaded", function() {
+                    plant();
+                    if (document.body) watch.observe(document.body, { childList: true });
+                });
+            }
+        } catch (e) {}
+    }
+
+    /* --- getting past "Connecting..." ----------------------------------- */
+    // Press ENTER GAME and the menu says "Connecting..." for ever, with no
+    // error, no alert and no socket. It is not a mod bug and not a transport
+    // bug. It is this, in the bundle:
+    //
+    //     function Fi() {
+    //         !vi || ei || (ei = !0,
+    //         Sa || pi ? ue && Lt("cf:" + ue) : ue ? Lt("cf:" + ue) : Lt())
+    //     }
+    //
+    // `ue` is the Turnstile token and `ei` is "we already tried". On moomoo.io
+    // the first branch is the live one, so if the token has not arrived when the
+    // button is pressed, the whole statement is `ei = true` and nothing else --
+    // no connect, and every press afterwards is a no-op because `ei` is set. The
+    // click handler has already written "Connecting..." to the screen by then.
+    // The dead end is latched: once pressed too early the tab can only be
+    // reloaded. tools/probe-entry.js reproduces it against the shipped bundle
+    // with no mod loaded at all.
+    //
+    // The token goes missing more easily than it looks. Turnstile refuses to
+    // render into an element that is not laid out, and the bundle's renderer
+    //
+    //     const e = document.getElementById("turnstileWidget");
+    //     if (!e || e.offsetParent === null) return !1;
+    //
+    // is polled every 150ms for 100 tries and then never again. A mod that lays
+    // its menu over the page, hides the card the widget sits in, or is still
+    // building at 15 seconds costs the page its captcha permanently.
+    //
+    // So: keep the widget rendering past the point the game gives up, and until
+    // there is a token, do not let the press through to the handler that would
+    // latch the dead end.
+    const TURNSTILE_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
+    const TURNSTILE_API = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    const entryStats = { renders: 0, holds: 0 };
+    // readToken/saveToken are parameters rather than closure references so that
+    // this block can be lifted whole into a script that has no EXP core --
+    // RYN carries its own client and its own token, and needed the same guard.
+    function guardEntry(readToken, saveToken) {
+        if (typeof window == "undefined" || typeof document == "undefined") return;
+        let box = null, rendered = false, told = false, gaveUp = false;
+        const started = Date.now();
+
+        function haveToken() { try { return !!readToken(); } catch (e) { return false; } }
+
+        function loadApi() {
+            if (window.turnstile) return;
+            try {
+                if (document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]')) return;
+                const s = document.createElement("script");
+                s.src = TURNSTILE_API;
+                s.async = true;
+                (document.head || document.documentElement).appendChild(s);
+            } catch (e) {}
+        }
+
+        // Somewhere visible and out of the way, used only when the game's own
+        // widget cannot be rendered into. If the page's widget is laid out it is
+        // left alone and the game solves it as usual.
+        function ownHost() {
+            const root = document.body || document.documentElement;
+            if (!root) return null;
+            box = document.createElement("div");
+            box.id = "moo-turnstile-fallback";
+            box.style.cssText = ["position:fixed", "right:12px", "bottom:12px", "z-index:2147483000",
+                "background:rgba(0,0,0,.35)", "padding:6px", "border-radius:6px"].join(";");
+            // The widget goes in a plain child, not in the fixed box itself:
+            // offsetParent is null for a position:fixed element, and that is the
+            // exact test the game uses to decide something is not laid out. No
+            // reason to hand Cloudflare a target that reads as invisible by the
+            // one measure known to matter here.
+            const target = document.createElement("div");
+            target.style.cssText = "width:300px;height:65px";
+            box.appendChild(target);
+            root.appendChild(box);
+            return target;
+        }
+
+        function render() {
+            if (rendered || !window.turnstile || typeof window.turnstile.render != "function") return;
+            const page = document.getElementById("turnstileWidget");
+            const usable = page && page.offsetParent !== null;
+            // The game renders into its own widget the moment it can. Give it
+            // six seconds of clear air before putting a second one on the page:
+            // two widgets both work, but each solve is a round trip Cloudflare
+            // did not need to be asked for.
+            if (usable && (page.childElementCount > 0 || Date.now() - started < 6000)) return;
+            const where = usable ? page : ownHost();
+            if (!where) return;
+            rendered = true;
+            try {
+                window.turnstile.render(where, {
+                    sitekey: TURNSTILE_SITEKEY,
+                    theme: "light",
+                    callback: function(t) {
+                        try {
+                            if (typeof window.onGotTurnstileToken == "function") window.onGotTurnstileToken(t);
+                            else saveToken(t);
+                        } catch (e) { saveToken(t); }
+                    },
+                    "error-callback": function() {},
+                    "expired-callback": function() {}
+                });
+                entryStats.renders++;
+                console.info("[EXP] the page's Turnstile widget was not usable, so one was rendered "
+                    + "bottom-right. Solve it and ENTER GAME will work.");
+            } catch (e) {
+                rendered = false;
+                console.warn("[EXP] could not render Turnstile", e);
+            }
+        }
+
+        function note(text) {
+            if (told) return;
+            told = true;
+            try {
+                const n = document.createElement("div");
+                n.textContent = text;
+                n.style.cssText = ["position:fixed", "left:50%", "bottom:16px", "transform:translateX(-50%)",
+                    "z-index:2147483001", "background:#2c3e50", "color:#fff",
+                    "font-family:Hammersmith One, sans-serif", "font-size:14px",
+                    "padding:8px 14px", "border-radius:6px", "pointer-events:none"].join(";");
+                (document.body || document.documentElement).appendChild(n);
+                setTimeout(function() {
+                    if (n.parentNode) n.parentNode.removeChild(n);
+                    told = false;
+                }, 4000);
+            } catch (e) {}
+        }
+
+        // Capture on the document, so the press is stopped before it reaches the
+        // button's own onclick -- which is where `ei` gets latched. Pointer and
+        // touch go with it: the bundle hooks touch events onto the same button
+        // and turns them into the same call.
+        ["click", "mousedown", "mouseup", "pointerdown", "pointerup", "touchstart", "touchend"]
+            .forEach(function(type) {
+                try {
+                    document.addEventListener(type, function(e) {
+                        const btn = document.getElementById("enterGame");
+                        if (!btn || !e.target) return;
+                        if (e.target !== btn && !(btn.contains && btn.contains(e.target))) return;
+                        if (haveToken()) return;
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        entryStats.holds++;
+                        note(gaveUp
+                            ? "Cloudflare check unavailable - reload, or allow challenges.cloudflare.com"
+                            : "Waiting for the Cloudflare check. ENTER GAME will work as soon as it passes.");
+                    }, true);
+                } catch (e) {}
+            });
+
+        function tick() {
+            if (haveToken()) {
+                // the game does this in its own callback; doing it again costs
+                // nothing and covers a mod that put the class back
+                try {
+                    const btn = document.getElementById("enterGame");
+                    if (btn && btn.classList) btn.classList.remove("disabled");
+                } catch (e) {}
+                if (box && box.parentNode) { box.parentNode.removeChild(box); box = null; }
+                return;
+            }
+            if (Date.now() - started > 120000) { gaveUp = true; return; }
+            loadApi();
+            render();
+            setTimeout(tick, 500);
+        }
+        if (document.readyState === "loading" && typeof document.addEventListener == "function") {
+            document.addEventListener("DOMContentLoaded", function() { setTimeout(tick, 500); });
+        } else {
+            setTimeout(tick, 500);
+        }
+    }
+
+    // END page-guards
+    // Both are page-level and idempotent, and both have to be in place before
+    // the bundle's own timers run, so they go in here rather than in any one
+    // script's boot.
+    try { suppressWarningBanner(); } catch (e) {}
+    try { if (window.MOO_ENTRY_GUARD !== false) guardEntry(token, function(t) { captchaToken = t; }); } catch (e) {}
+
     /* --- send trampoline ------------------------------------------------ */
     // The game captures WebSocket.prototype.send at bundle load. We install
     // this now so that captured reference is ours; the client installs its
@@ -495,6 +738,7 @@ const EXP = (function() {
         setHandler: function(fn) { handler = fn; },
         token: token,
         freshToken: freshToken,
+        entryStats: function() { return { turnstileRenders: entryStats.renders, entryPressesHeld: entryStats.holds }; },
         nativeSend: nativeSend,
         PACKET_MAP: PACKET_MAP,
         // exposed for the test harness

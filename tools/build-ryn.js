@@ -11,6 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const acorn = require('acorn');
+const { stripComments } = require('./strip-comments.js');
 
 // Every structural cut below is verified immediately: if the file stops
 // parsing, the build stops and names the step. A brace miscounted in one
@@ -455,6 +456,51 @@ mustParse('drop the display-name entries');
 // brace balance moved a boundary elsewhere in the file -- the parse check
 // above caught it every time -- and none of them is reachable or named in any
 // user-visible surface, so leaving them beats a cut I cannot prove is right.
+
+/* --- the page guards ------------------------------------------------------
+ * RYN carries its own client and its own Turnstile handling, so it has no EXP
+ * core to inherit these from -- and it needs both. Without them it shows the
+ * game's red "userscript manager detected" bar, and it goes through the game's
+ * own ENTER GAME handler, which latches on "Connecting..." for ever if the
+ * page's Turnstile widget never rendered. tools/probe-entry.js reproduces both.
+ *
+ * The two functions are lifted verbatim from ExternalClient.user.js rather than
+ * copied into this file, so there is one source for them and no way for the
+ * copies to drift. They take their token accessors as parameters for exactly
+ * this reason; here they read RYN's own captured token, falling back to asking
+ * Turnstile directly.
+ */
+{
+  const ext = fs.readFileSync(path.join(ROOT, 'ExternalClient.user.js'), 'utf8');
+  const a = ext.indexOf('// BEGIN page-guards');
+  const b = ext.indexOf('// END page-guards');
+  if (a < 0 || b < 0) { console.error('build-ryn: no page-guards block in ExternalClient.user.js'); process.exit(1); }
+  const guards = stripComments(ext.slice(a, b), { metadata: false }).out.trim();
+  const meta = '// ==/UserScript==\n';
+  if (src.indexOf(meta) < 0) { console.error('build-ryn: no metadata block'); process.exit(1); }
+  src = src.replace(meta, meta + '\n(function () {\n' + guards + `
+    let held = null;
+    function readToken() {
+        if (held) return held;
+        try {
+            const client = typeof RYN !== "undefined" && RYN._myClient;
+            if (client && client._turnstileToken) return client._turnstileToken;
+        } catch (e) {}
+        try {
+            if (window.turnstile && typeof window.turnstile.getResponse === "function")
+                return window.turnstile.getResponse() || null;
+        } catch (e) {}
+        return null;
+    }
+    try { suppressWarningBanner(); } catch (e) {}
+    try {
+        if (window.MOO_ENTRY_GUARD !== false)
+            guardEntry(readToken, function (t) { held = t; });
+    } catch (e) {}
+})();
+`);
+  mustParse('add the banner and entry guards');
+}
 
 fs.writeFileSync(OUT, src);
 console.log('wrote', path.relative(ROOT, OUT));

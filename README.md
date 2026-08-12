@@ -1733,3 +1733,120 @@ mod logic inside it — is re-evaluated in a fraction of a millisecond instead o
 waiting up to ~16 ms for the next frame, which matters for tick-timed features.
 What it costs is a pinned CPU core and ~4,800 canvas repaints a second that
 nobody ever sees. Both scripts therefore ship it **off**.
+
+# The red bar, and "Connecting..." for ever (every script)
+
+Two problems that had nothing to do with any one mod, found by running the
+shipped game bundle rather than by reading it.
+
+`tools/probe-entry.js` serves `reference/game-index.js` and `game-vendor.js`
+over a fake moomoo.io, plants the ids the bundle looks up, fakes the server
+list and Cloudflare's `api.js`, installs a `WebSocket` the bundle captures at
+load, and then **presses ENTER GAME with a real mouse click**. It reports what
+the button did, whether a socket was opened and with what URL, and whether the
+red bar appeared. With no mod loaded it is a control.
+
+## "Connecting..." is a latched dead end in the game itself
+
+```js
+function Fi() {
+    !vi || ei || (ei = !0,
+    Sa || pi ? ue && Lt("cf:" + ue) : ue ? Lt("cf:" + ue) : Lt())
+}
+```
+
+`ue` is the Turnstile token, `ei` is "we already tried". On moomoo.io the first
+branch is the live one, so **if the token has not arrived when the button is
+pressed, the entire statement is `ei = true`** — no connect, no error, no
+alert. The click handler has already written "Connecting..." to the screen, and
+every press after it is a no-op because `ei` is set. The only way out is a
+reload.
+
+The control run reproduces it with nothing loaded at all:
+
+```
+$ node tools/probe-entry.js --turnstile never
+  token issued    : false
+  loadingText     : "Connecting..."
+  sockets opened  : (none)
+=> entry DID NOT reach a socket -- stuck on "Connecting..."
+```
+
+The token goes missing more easily than it looks. Turnstile will not render
+into an element that is not laid out, and the bundle's renderer
+
+```js
+const e = document.getElementById("turnstileWidget");
+if (!e || e.offsetParent === null) return !1;
+```
+
+is polled every 150 ms for 100 tries and then **never again**. A mod that lays
+its menu over the page, hides the card the widget sits in, or is still building
+at 15 seconds costs the page its captcha permanently:
+
+```
+$ node tools/probe-entry.js --turnstile solve --hide-widget
+=> entry DID NOT reach a socket -- stuck on "Connecting..."
+```
+
+So the EXP core now does two things. It keeps rendering Turnstile past the
+point the game gave up — into the page's own widget if that is usable, into a
+laid-out holder of its own if it is not — and until there is a token it holds
+the press in the capture phase, so it never reaches the handler that would
+latch `ei`. Touch and pointer events go with it, because the bundle turns
+touches on that button into the same call. Same run, guarded:
+
+```
+$ node tools/probe-entry.js --unpatcher --turnstile solve --hide-widget
+  renders         : [{"id":"","laidOut":true,"sitekey":"0x4AAAAAAAMYHI96GFiJzMmp"}]
+  token issued    : true
+=> entry reached the socket: wss://a.eu-west.moomoo.io?token=cf%3ATOKEN-w1
+```
+
+All ten repaired scripts pass that case now. `x18k` needed one more thing: it
+carries its own client, and its own copy of this state machine waits on ALTCHA
+(`V0 = e.detail.payload`, set by a listener on a widget that no longer exists).
+`repair-mod.js` now replaces that wait with a wait on `EXP.token()`.
+
+## The red bar
+
+```js
+function ys(e) {
+    if (document.getElementById("userscript-warning")) return;
+    ...
+    i.textContent = "A browser extension (" + (e || "userscript manager")
+        + ") that can modify the game was detected. ..."
+}
+```
+
+`ws()` triggers it from `window.__gmMonkey || window.GM_info || window.GM ||
+window.unsafeWindow` after 1.5 s, and from an image probe against
+Tampermonkey's and Violentmonkey's own extension files. Three of those four are
+shims these scripts install on purpose, and the fourth is not something a page
+script can influence — so it cannot be avoided, only answered.
+
+`ys()`'s own first line is the answer: an element with that id already in the
+document makes it a no-op. Every script now plants one — empty, hidden, and
+marked as its own — with a `MutationObserver` to put it back if something
+clears the body. It is a guard rather than a removal, so there is no flash of
+red to take away afterwards, and it costs one `div`. Nothing else in the bundle
+reads that element, and the server is never told about it.
+
+## Keeping it in step
+
+Both guards live in one place, the EXP core in `ExternalClient.user.js`, and
+everything else takes its copy from there:
+
+- `node tools/build-all.js` rebuilds all twelve scripts that are built from an
+  original (the unpatcher, Annihilator, CaraMila, RYN, and everything
+  `repair-mod.js` produces);
+- `node tools/sync-shim.js` copies the core into the eight that carry it inline
+  and are checked byte-for-byte by `test/ae86.js`;
+- RYN has no EXP core, so `tools/build-ryn.js` lifts the two functions out of
+  `ExternalClient.user.js` verbatim and wires them to RYN's own token — the
+  reason they take their token accessors as parameters.
+
+`test/entry-guard.js` drives both against a fake page (the press is held, a
+press elsewhere is not, a press on a child of the button is, the holder it
+renders into is laid out, the sitekey matches the bundle's) and checks that
+every shipped script still carries them.
