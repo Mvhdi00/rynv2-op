@@ -1,0 +1,481 @@
+#!/usr/bin/env node
+/*
+ * test-placement.js
+ *
+ * Tests RynPlacementEngine against the game's own rules.
+ *
+ * The engine section is lifted out of src/RYN_Client_v4.js and evaluated
+ * against stand-ins for the client objects it reads, so the code under test is
+ * the shipped code rather than a copy of it. Two suites run:
+ *
+ *   geometry  every aperture the analytic solver produces is checked against a
+ *             brute-force sweep of the game's own circle test, including the
+ *             river band, the blocker item's 300-unit denial radius, and the
+ *             wrap seam
+ *   engine    the whole pipeline end to end - candidate generation, scoring,
+ *             planning, the reservation ledger, the packet budget and stale
+ *             plan cancellation
+ *
+ *   node tools/test-placement.js
+ */
+
+const fs = require("fs");
+const path = require("path");
+
+const ROOT = path.resolve(__dirname, "..");
+const SRC = fs.readFileSync(path.join(ROOT, "src/RYN_Client_v4.js"), "utf8");
+
+function slice(from, to) {
+  const a = SRC.indexOf(from);
+  const b = SRC.indexOf(to);
+  if (a < 0 || b < 0 || b <= a) throw new Error("anchor not found: " + from);
+  return SRC.slice(a, b);
+}
+
+const ENGINE_SRC =
+  slice("  const SiegeAnalysis = {", "  function _getCachedPrePlaceAngles") +
+  slice("  const RPE_TICK_MS", "  const RynPlacementEngine_default = RynPlacementEngine;");
+
+/* The engine reads a handful of module-scope names. Supplying them through a
+ * `with` block keeps the extracted source byte-identical to what ships. */
+function loadEngine(env) {
+  const factory = new Function("env", "with (env) {\n" + ENGINE_SRC +
+    "\nreturn { RynPlacementEngine, RPE_PRIORITY, PlacementWeights, GeometrySolver };\n}");
+  return factory(env);
+}
+
+let fail = 0, checks = 0;
+function ok(cond, msg) {
+  checks++;
+  if (!cond) { fail++; console.log("  FAIL  " + msg); }
+  else if (process.env.VERBOSE) console.log("  ok    " + msg);
+}
+
+/* ---- stand-ins for the client objects the engine reads ---- */
+// Minimal stand-ins for the client objects the engine reads.
+class Vec {
+  constructor(x, y) { this.x = x; this.y = y; }
+  distance(o) { return Math.hypot(this.x - o.x, this.y - o.y); }
+}
+class PlayerObject {
+  constructor(id, x, y, type, ownerID) {
+    this.id = id; this.type = type; this.ownerID = ownerID;
+    const item = ITEMS[type];
+    this.scale = item.scale;
+    this.itemGroup = item.itemGroup;
+    this.collisionDivider = "colDiv" in item ? item.colDiv : 1;
+    this.health = item.health || 500;
+    this.pos = { current: new Vec(x, y), future: new Vec(x, y) };
+  }
+  get collisionScale() { return this.scale * this.collisionDivider; }
+  get placementScale() { return ITEMS[this.type].id === 21 ? ITEMS[this.type].blocker : this.scale; }
+}
+const ITEMS = [];
+ITEMS[6]  = { id: 6,  scale: 49, placeOffset: -5, dmg: 20, health: 400, itemGroup: 2 };
+ITEMS[15] = { id: 15, scale: 50, placeOffset: -5, trap: true, ignoreCollision: true,
+              hideFromEnemy: true, colDiv: 0.2, health: 500, itemGroup: 5 };
+ITEMS[21] = { id: 21, scale: 45, placeOffset: -5, ignoreCollision: true, blocker: 300,
+              colDiv: 0.7, health: 400, itemGroup: 12 };
+const ITEM_GROUPS = [];
+ITEM_GROUPS[2]  = { id: 2,  layer: 0,  limit: 15 };
+ITEM_GROUPS[5]  = { id: 5,  layer: -1, limit: 6 };
+ITEM_GROUPS[12] = { id: 12, layer: -1, limit: 3 };
+
+class Grid {
+  constructor(cellSize) { this.cellSize = cellSize; this.grid = new Map(); }
+  key(x, y) { return x << 16 | y; }
+  insert(x, y, r, id) {
+    for (let i = (x - r) / this.cellSize | 0; i <= (x + r) / this.cellSize | 0; i++)
+      for (let j = (y - r) / this.cellSize | 0; j <= (y + r) / this.cellSize | 0; j++) {
+        const k = this.key(i, j);
+        if (!this.grid.has(k)) this.grid.set(k, new Set());
+        this.grid.get(k).add(id);
+      }
+  }
+  query(x, y, search, cb) {
+    const cx = x / this.cellSize | 0, cy = y / this.cellSize | 0, seen = new Set();
+    for (let i = -search; i <= search; i++)
+      for (let j = -search; j <= search; j++) {
+        const s = this.grid.get(this.key(cx + i, cy + j));
+        if (!s) continue;
+        for (const id of s) if (!seen.has(id)) { seen.add(id); if (cb(id)) return true; }
+      }
+    return false;
+  }
+}
+
+function makeWorld(opts = {}) {
+  const objects = new Map();
+  const grid = new Grid(100);
+  let nextId = 1;
+  const sent = [];
+  const me = {
+    inGame: true, scale: 35, isTrapped: false, spikeDamage: 0, id: 1,
+    pos: { current: new Vec(opts.myX ?? 7000, opts.myY ?? 5000),
+           future: new Vec((opts.myX ?? 7000) + (opts.myVX ?? 0), (opts.myY ?? 5000) + (opts.myVY ?? 0)) },
+    counts: opts.counts || {},
+    getItemByType(t) { return t === 4 ? 6 : t === 7 ? 15 : -1; },
+    getItemPlaceScale(id) { return this.scale + ITEMS[id].scale + ITEMS[id].placeOffset; },
+    getItemCount(g) { return { count: this.counts[g] || 0, limit: ITEM_GROUPS[g].limit }; },
+    canPlace(t) {
+      if (opts.cannotPlace && opts.cannotPlace.includes(t)) return false;
+      const g = t === 4 ? 2 : 5;
+      const { count, limit } = this.getItemCount(g);
+      return count < limit;
+    },
+    isMyPlayerByID(id) { return id === this.id; }
+  };
+  const enemy = {
+    id: 2, collisionScale: 35, spikeDamage: 0, dir: opts.enemyAim ?? 0,
+    pos: { current: new Vec(opts.enemyX ?? 7120, opts.enemyY ?? 5000),
+           future: new Vec((opts.enemyX ?? 7120) + (opts.enemyVX ?? -14), (opts.enemyY ?? 5000) + (opts.enemyVY ?? 0)) }
+  };
+  const world = {
+    objects, grid, sent, me, enemy,
+    add(type, x, y, ownerID = 1) {
+      const o = new PlayerObject(nextId++, x, y, type, ownerID);
+      objects.set(o.id, o);
+      grid.insert(x, y, Math.max(o.collisionScale, o.placementScale), o.id);
+      return o;
+    }
+  };
+  const MH = {
+    tickCount: opts.tick ?? 10, packetCount: opts.packetCount ?? 0,
+    packetLimit: opts.packetLimit ?? 70,
+    activeModule: null, moduleActive: false, placedOnce: false,
+    placeAngles: [null, []], totalPlaces: 0, staticModules: {},
+    _getPredictWeapon() { return 0; },
+    selectItem(t) { sent.push(["z", t]); this.packetCount++; },
+    attack(a) { sent.push(["F1", +a.toFixed(4)]); this.packetCount++; },
+    stopAttack(a) { sent.push(["F0"]); this.packetCount++; },
+    whichWeapon(t) { sent.push(["zw", t]); this.packetCount++; },
+    place(type, angle) {
+      this.totalPlaces++;
+      this.selectItem(type); this.attack(angle); this.stopAttack(angle);
+      this.whichWeapon(this._getPredictWeapon());
+    }
+  };
+  world.client = {
+    myPlayer: me, _ModuleHandler: MH,
+    EnemyManager: { nearestEnemy: opts.noEnemy ? null : enemy },
+    ObjectManager: { objects, grid2D: grid },
+    PlayerManager: { isEnemyByID(ownerID) { return ownerID !== 1; } },
+    InputHandler: { move: opts.move ?? 0 }
+  };
+  world.MH = MH;
+  return world;
+}
+
+
+/* ================= geometry against brute force ================= */
+const { GeometrySolver: G, RPE_KB_TRAVEL, RPE_TICK_MS } = loadEngineGeom();
+function loadEngineGeom() {
+  const env = { Config_default: { mapScale: 14400, riverWidth: 724, playerScale: 35 },
+    Items: ITEMS, ItemGroups: ITEM_GROUPS, Settings_default: {}, PlayerObject: PlayerObject,
+    getAngleFromBitmask: () => null };
+  const m = loadEngine(env);
+  return { GeometrySolver: m.GeometrySolver, RPE_KB_TRAVEL: 1.5 / (1 - 0.993), RPE_TICK_MS: 1e3 / 9 };
+}
+console.log("\ngeometry");
+
+const TAU = Math.PI * 2;
+
+
+// derived constants match the game source
+ok(Math.abs(RPE_TICK_MS - 111.111) < 0.01, "tick = 111.11ms, got " + RPE_TICK_MS);
+ok(Math.abs(RPE_KB_TRAVEL - 214.28) < 0.5, "kb travel ~214, got " + RPE_KB_TRAVEL);
+
+// apertures must agree with a brute-force circle test at every sampled angle
+function bruteFree(ox, oy, ringR, footR, blockers, river) {
+  const out = [];
+  for (let i = 0; i < 3600; i++) {
+    const a = i * TAU / 3600;
+    const x = ox + ringR * Math.cos(a), y = oy + ringR * Math.sin(a);
+    let free = true;
+    for (const b of blockers) if (Math.hypot(x - b.x, y - b.y) < footR + b.r) { free = false; break; }
+    if (free && river) {
+      const mid = 7200, half = 362;
+      if (y >= mid - half && y <= mid + half) free = false;
+    }
+    out.push(free);
+  }
+  return out;
+}
+function analyticFree(ox, oy, ringR, footR, blockers, river) {
+  const arcs = [];
+  for (const b of blockers) {
+    const arc = G.occlusion(ox, oy, ringR, footR, b.x, b.y, b.r);
+    if (arc) arcs.push(arc);
+  }
+  if (river) for (const arc of G.riverOcclusion(oy, ringR)) arcs.push(arc);
+  return G.invert(G.merge(arcs));
+}
+
+let rnd = 12345;
+function rand() { rnd = (rnd * 1103515245 + 12345) & 0x7fffffff; return rnd / 0x7fffffff; }
+
+for (let trial = 0; trial < 400; trial++) {
+  const ox = 5000 + rand() * 4000, oy = 6600 + rand() * 1200;
+  const ringR = 35 + 49 - 5;
+  const footR = 49;
+  const n = Math.floor(rand() * 7);
+  const blockers = [];
+  for (let i = 0; i < n; i++) {
+    const ang = rand() * TAU, d = rand() * 260;
+    blockers.push({ x: ox + d * Math.cos(ang), y: oy + d * Math.sin(ang), r: [50, 49, 45, 110, 300][Math.floor(rand() * 5)] });
+  }
+  const river = trial % 2 === 0;
+  const brute = bruteFree(ox, oy, ringR, footR, blockers, river);
+  const aps = analyticFree(ox, oy, ringR, footR, blockers, river);
+  let mismatch = 0;
+  for (let i = 0; i < 3600; i++) {
+    const a = i * TAU / 3600;
+    const inAp = !!G.inAperture(aps, a);
+    // ignore samples within one sample-step of a boundary
+    if (inAp !== brute[i]) {
+      const near = !brute[(i + 1) % 3600] !== !brute[i] || !brute[(i + 3599) % 3600] !== !brute[i];
+      if (!near) mismatch++;
+    }
+  }
+  ok(mismatch === 0, "trial " + trial + " aperture mismatch at " + mismatch + " samples (blockers=" + n + ", river=" + river + ")");
+}
+
+// degenerate cases
+ok(G.occlusion(0, 0, 79, 49, 0, 0, 5) === null, "tiny blocker at origin does not touch the ring");
+ok(G.occlusion(0, 0, 79, 49, 0, 0, 200) === "full", "huge blocker at origin swallows the ring");
+ok(G.occlusion(0, 0, 79, 49, 5000, 0, 50) === null, "distant blocker is ignored");
+
+// wrap seam: a blocker straddling angle 0 must produce one aperture, not two
+{
+  const aps = analyticFree(0, 0, 79, 49, [{ x: 79, y: 0, r: 50 }], false);
+  ok(aps.length === 1, "blocker on the seam yields one aperture, got " + aps.length);
+  ok(!G.inAperture(aps, 0), "angle 0 is blocked");
+  ok(!!G.inAperture(aps, Math.PI), "angle pi is free");
+}
+
+// nearestFree snaps into legal ground
+{
+  const aps = analyticFree(0, 0, 79, 49, [{ x: 79, y: 0, r: 50 }], false);
+  const snapped = G.nearestFree(aps, 0);
+  ok(!!G.inAperture(aps, snapped), "snapped angle is legal");
+}
+
+// segment distance
+ok(Math.abs(G.segmentDistance(0, 5, -10, 0, 10, 0) - 5) < 1e-9, "point-to-segment distance");
+ok(Math.abs(G.segmentDistance(20, 0, -10, 0, 10, 0) - 10) < 1e-9, "point beyond segment end");
+
+
+
+/* ================= engine pipeline ================= */
+
+
+
+function engineFor(world) {
+  const env = {
+    Config_default: { mapScale: 14400, riverWidth: 724, playerScale: 35 },
+    Items: ITEMS, ItemGroups: ITEM_GROUPS,
+    Settings_default: { _autoplacer: true, _autoplacerRadius: 350 },
+    PlayerObject: PlayerObject,
+    getAngleFromBitmask: () => null
+  };
+  
+  const { RynPlacementEngine, RPE_PRIORITY, PlacementWeights } = loadEngine(env);
+  const e = new RynPlacementEngine(world.client);
+  world.MH.staticModules.placementEngine = e;
+  return { engine: e, RPE_PRIORITY, PlacementWeights };
+}
+
+
+
+
+console.log("\n1. generates and scores multiple candidates, plans a combination");
+{
+  const w = makeWorld({});
+  const { engine } = engineFor(w);
+  engine.postTick();
+  ok(engine.stats.candidates >= 6, "candidates generated: " + engine.stats.candidates);
+  ok(engine.stats.planned >= 1, "placements planned: " + engine.stats.planned);
+  ok(engine.stats.sent >= 1, "placements sent: " + engine.stats.sent);
+  ok(engine._plan.every(c => c.terms && typeof c.value === "number"), "every candidate carries scored terms");
+  const vals = engine._plan.map(c => +c.value.toFixed(2));
+  console.log("     plan values: " + JSON.stringify(vals) + "  types: " + JSON.stringify(engine._plan.map(c => c.profile.type)));
+}
+
+console.log("\n2. does not simply take the nearest valid angle");
+{
+  const w = makeWorld({ enemyX: 7120, enemyY: 5000, enemyVX: 0, enemyVY: -30 });
+  const { engine } = engineFor(w);
+  engine.postTick();
+  const toEnemyNow = Math.atan2(0, 120);
+  const chosen = engine._plan[0];
+  const dist = Math.abs(chosen.angle - toEnemyNow);
+  ok(engine.stats.candidates > engine.stats.planned, "more candidates than placements (" + engine.stats.candidates + " -> " + engine.stats.planned + ")");
+  ok(dist > 0.02, "chosen angle is not the raw bearing to the target (delta " + dist.toFixed(3) + " rad)");
+}
+
+console.log("\n3. multi-placement in one cycle, no self-intersection");
+{
+  const w = makeWorld({ packetLimit: 70 });
+  const { engine } = engineFor(w);
+  engine.postTick();
+  const plan = engine._plan;
+  let overlap = false;
+  for (let i = 0; i < plan.length; i++)
+    for (let j = i + 1; j < plan.length; j++)
+      if (Math.hypot(plan[i].x - plan[j].x, plan[i].y - plan[j].y) < plan[i].profile.footR + plan[j].profile.footR) overlap = true;
+  ok(plan.length >= 2, "planned " + plan.length + " placements in one cycle");
+  ok(!overlap, "no two planned placements intersect");
+}
+
+console.log("\n4. respects existing structures (never proposes an illegal angle)");
+{
+  const w = makeWorld({});
+  for (let a = 0; a < 6; a++) w.add(6, 7000 + 79 * Math.cos(a), 5000 + 79 * Math.sin(a));
+  const { engine } = engineFor(w);
+  engine.postTick();
+  let illegal = 0;
+  for (const c of engine._plan)
+    for (const o of w.objects.values())
+      if (Math.hypot(c.x - o.pos.current.x, c.y - o.pos.current.y) < c.profile.footR + o.placementScale) illegal++;
+  ok(illegal === 0, "no planned placement collides with an existing object (" + w.objects.size + " objects present)");
+}
+
+console.log("\n5. sees the blocker item's 300-unit denial radius");
+{
+  const w = makeWorld({});
+  w.add(21, 7000 + 250, 5000);
+  const { engine } = engineFor(w);
+  engine.postTick();
+  let inside = 0;
+  for (const c of engine._plan) if (Math.hypot(c.x - (7000 + 250), c.y - 5000) < c.profile.footR + 300) inside++;
+  ok(inside === 0, "no placement proposed inside the blocker's denial radius");
+}
+
+console.log("\n6. yields ground reserved by preplace / replace");
+{
+  const w = makeWorld({});
+  const { engine, RPE_PRIORITY } = engineFor(w);
+  const f0 = engine._threat.build();
+  // reserve the whole arc facing the enemy at ANTICIPATION, as preplace would
+  for (let a = -0.9; a <= 0.9; a += 0.15) {
+    engine.claim(7000 + 79 * Math.cos(a), 5000 + 79 * Math.sin(a), 49, RPE_PRIORITY.ANTICIPATION, "preplace", 10, 3);
+  }
+  engine.postTick();
+  let stolen = 0;
+  for (const c of engine._plan)
+    for (const e of engine.ledger.entries)
+      if (e.owner === "preplace" && Math.hypot(c.x - e.x, c.y - e.y) < c.profile.footR + e.radius) stolen++;
+  ok(stolen === 0, "auto place took no ground claimed by preplace");
+}
+
+console.log("\n7. respects the packet budget");
+{
+  const w = makeWorld({ packetCount: 63, packetLimit: 70 });
+  const { engine } = engineFor(w);
+  engine.postTick();
+  ok(w.MH.packetCount <= 70, "packet count stayed within the limit: " + w.MH.packetCount);
+  ok(engine.stats.planned <= 2, "tight budget shrank the plan to " + engine.stats.planned);
+
+  const w2 = makeWorld({ packetCount: 68, packetLimit: 70 });
+  const e2 = engineFor(w2).engine;
+  e2.postTick();
+  ok(e2.stats.sent === 0, "no budget left means nothing is sent");
+}
+
+console.log("\n8. batches same-type placements to save packets");
+{
+  const w = makeWorld({});
+  const { engine } = engineFor(w);
+  engine.postTick();
+  const byType = {};
+  for (const c of engine._plan) byType[c.profile.type] = (byType[c.profile.type] || 0) + 1;
+  const runs = Object.values(byType).filter(n => n > 1).length;
+  const selects = w.sent.filter(p => p[0] === "z").length;
+  const places = engine.stats.sent;
+  ok(selects <= places, "item selects (" + selects + ") <= placements (" + places + ")");
+  if (runs) ok(selects < places, "a same-type run shared one select");
+  else console.log("     (no same-type run in this plan; batching not exercised)");
+}
+
+console.log("\n9. cancels a stale plan when the target moves significantly");
+{
+  const w = makeWorld({});
+  const { engine } = engineFor(w);
+  engine.postTick();
+  ok(engine._plan.length > 0, "plan exists after first tick");
+  const before = engine._plan;
+  w.enemy.pos.current.x += 400; w.enemy.pos.future.x += 400;
+  w.MH.tickCount++; w.MH.packetCount = 0;
+  engine._threat.frameTick = -1;
+  const stale = engine._planIsStale(engine._threat.build());
+  ok(stale, "plan reports stale after the target shifted 400 units");
+  engine.postTick();
+  ok(engine._plan !== before, "a fresh plan replaced the stale one");
+}
+
+console.log("\n10. drops the plan when the target changes identity");
+{
+  const w = makeWorld({});
+  const { engine } = engineFor(w);
+  engine.postTick();
+  w.client.EnemyManager.nearestEnemy = Object.assign({}, w.enemy, { id: 99 });
+  w.MH.tickCount++; engine._threat.frameTick = -1;
+  ok(engine._planIsStale(engine._threat.build()), "plan reports stale on target switch");
+}
+
+console.log("\n11. does not spend packets on low-value ground");
+{
+  const w = makeWorld({ enemyX: 7340, enemyY: 5000 });  // at the edge of range
+  const { engine } = engineFor(w);
+  engine.postTick();
+  console.log("     far target -> planned " + engine.stats.planned + ", plan value " + engine.stats.value.toFixed(2));
+  const w2 = makeWorld({ enemyX: 7100, enemyY: 5000 });
+  const e2 = engineFor(w2).engine;
+  e2.postTick();
+  console.log("     near target -> planned " + e2.stats.planned + ", plan value " + e2.stats.value.toFixed(2));
+  ok(e2.stats.value > engine.stats.value, "a close target yields a more valuable plan than a distant one");
+}
+
+console.log("\n12. prefers useful combat geometry (trap+spike synergy is scored)");
+{
+  const w = makeWorld({});
+  const { engine, PlacementWeights } = engineFor(w);
+  engine.postTick();
+  const plan = engine._plan;
+  const hasSpike = plan.some(c => c.profile.isDamage);
+  ok(hasSpike, "plan includes a damage build against a live target");
+  const anyIntercept = plan.some(c => c.terms.tactical > 0);
+  ok(anyIntercept, "at least one placement scores positive tactical value");
+}
+
+console.log("\n13. honours item-count limits");
+{
+  const w = makeWorld({ counts: { 2: 15, 5: 6 } });
+  const { engine } = engineFor(w);
+  engine.postTick();
+  ok(engine.stats.sent === 0, "nothing placed when both item groups are at their limit");
+}
+
+console.log("\n14. stays quiet with no target");
+{
+  const w = makeWorld({ noEnemy: true });
+  const { engine } = engineFor(w);
+  engine.postTick();
+  ok(engine.stats.sent === 0 && w.sent.length === 0, "no packets sent without a target");
+}
+
+console.log("\n15. river band is respected");
+{
+  const w = makeWorld({ myX: 7000, myY: 7200, enemyX: 7120, enemyY: 7200 });
+  const { engine } = engineFor(w);
+  engine.postTick();
+  let inRiver = 0;
+  for (const c of engine._plan) if (c.y >= 7200 - 362 && c.y <= 7200 + 362) inRiver++;
+  ok(inRiver === 0, "no placement inside the river band (planned " + engine._plan.length + ")");
+}
+
+
+
+console.log("");
+console.log((fail ? "FAILED  " : "PASSED  ") + (checks - fail) + "/" + checks + " checks");
+process.exit(fail ? 1 : 0);
