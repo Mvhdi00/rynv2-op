@@ -5716,6 +5716,7 @@ window.grbtp = 35;
     }
     // Returns how the packet went out, or null if nothing could send it.
     encodeAndSend(transport, type, args) {
+      RynDiag.emitted(type);
       const crypto = this.client._gameCrypto;
       const gameNet = this.client._gameNet;
       if (gameNet && gameNet.socket && typeof gameNet.send === "function") {
@@ -15966,6 +15967,7 @@ window.grbtp = 35;
           ran += 1;
         } catch (err) {
           Logger.error(`RynRuntime: feature "${feature.id}" threw in ${phase} -- ${err && err.message}`);
+          RynDiag.threw(feature.id, phase, err);
         } finally {
           actions.actor = null;
         }
@@ -16652,6 +16654,7 @@ window.grbtp = 35;
       if (actor === null) return true;
       if (actor.may.includes(action)) return true;
       Logger.error(`RynActions: "${actor.id}" requested "${action}" without declaring it`);
+      RynDiag.refused(actor.id, action);
       return false;
     }
     // Run the body of an action that is built out of other actions. Nothing
@@ -16774,8 +16777,10 @@ window.grbtp = 35;
         svc.arbiter.begin();
         runtime.runPhase(RYN_PHASE.SAMPLE, ctx);
         runtime.runPhase(RYN_PHASE.DERIVE, ctx);
-        runtime.runPhase(RYN_PHASE.DECIDE, ctx);
-        svc.arbiter.commit(svc.arbiter.resolve());
+        const decided = runtime.runPhase(RYN_PHASE.DECIDE, ctx);
+        const resolved = svc.arbiter.resolve();
+        RynDiag.tick(runtime.clock.tick, resolved, decided);
+        svc.arbiter.commit(resolved);
         runtime.runPhase(RYN_PHASE.COMMIT, ctx);
         svc.intent.seal();
         runtime.runPhase(RYN_PHASE.EMIT, ctx);
@@ -19516,6 +19521,133 @@ window.grbtp = 35;
       this.staticLog(msg);
     }
   }
+  // ── Diagnostics ───────────────────────────────────────────────────────
+  // The runtime swallows a feature that throws, which is right -- one broken
+  // unit must not take the tick down with it -- but it means a unit can be
+  // dead for a whole session and the only trace is one console line that
+  // scrolled away. And a feature that never runs, or an action the contract
+  // refuses, leaves no trace at all.
+  //
+  // This records the last few seconds of that: who claimed each tick, what the
+  // intent resolved to, what actually reached the wire, and every throw and
+  // refusal with the unit that caused it. `RYN.diag()` prints it.
+  const RynDiag = new class {
+    _throws = new Map;      // feature id -> { count, last, phase }
+    _refusals = new Map;    // "unit:action" -> count
+    _emits = new Map;       // action -> count
+    _ticks = [];            // rolling window of resolved ticks
+    _limit = 40;
+    enabled = true;
+
+    threw(id, phase, err) {
+      const key = id + " @" + phase;
+      const row = this._throws.get(key) ?? { count: 0, last: null };
+      row.count += 1;
+      row.last = err && err.message ? err.message : String(err);
+      this._throws.set(key, row);
+    }
+    refused(unitID, action) {
+      const key = unitID + " -> " + action;
+      this._refusals.set(key, (this._refusals.get(key) ?? 0) + 1);
+    }
+    emitted(action) {
+      this._emits.set(action, (this._emits.get(action) ?? 0) + 1);
+    }
+    tick(t, resolved, ran) {
+      if (!this.enabled) return;
+      this._ticks.push({
+        t: t,
+        claim: resolved.activeFeature,
+        attack: resolved.shouldAttack === true,
+        hat: resolved.forceHat,
+        weapon: resolved.forceWeapon,
+        ran: ran
+      });
+      if (this._ticks.length > this._limit) this._ticks.shift();
+    }
+
+    report() {
+      const client2 = typeof RYN !== "undefined" ? RYN._myClient : null;
+      const ryn = client2 ? client2.services : null;
+      const L = [];
+      const say = m => L.push(m);
+
+      say("=== RYN diagnostics ===");
+      say("");
+      say("-- wire --");
+      const cr = client2 ? client2._gameCrypto : undefined;
+      const gn = client2 ? client2._gameNet : undefined;
+      say("  game net exposed   : " + (gn ? "yes, socket " + (gn.socket ? "open" : "MISSING") : "NO -- the exposeGameNet hook did not take"));
+      say("  crypto exposed     : " + (cr ? "yes, mode " + cr.mode + ", seq " + cr.seq : "NO -- nothing can be sent"));
+      if (cr) {
+        say("  key / tables       : " + (cr.key ? cr.key.length + " bytes" : "MISSING") + " / " +
+            (cr.tables && cr.tables.c2s ? Object.keys(cr.tables.c2s.enc).length + " client opcodes" : "MISSING"));
+      }
+      const enc = typeof RYN !== "undefined" && RYN._enc;
+      say("  crypto fns exposed : " + (enc ? "yes" : "NO -- the exposeCryptoFns hook did not take"));
+      say("  packets this second: " + (ryn && ryn.network ? ryn.network.packetCount + "/" + ryn.network.packetLimit : "?"));
+
+      say("");
+      say("-- what reached the wire --");
+      if (this._emits.size === 0) say("  nothing at all");
+      for (const [a, n] of [...this._emits].sort((x, y) => y[1] - x[1])) say("  " + a.padEnd(12) + n);
+
+      say("");
+      say("-- actions the contract refused --");
+      if (this._refusals.size === 0) say("  none");
+      for (const [k, n] of [...this._refusals].sort((x, y) => y[1] - x[1])) say("  " + k.padEnd(34) + n);
+
+      say("");
+      say("-- features that threw --");
+      if (this._throws.size === 0) say("  none");
+      for (const [k, r] of [...this._throws].sort((x, y) => y[1].count - x[1].count)) {
+        say("  " + k.padEnd(34) + r.count + "x  " + r.last);
+      }
+
+      say("");
+      say("-- who held the last ticks --");
+      const held = new Map;
+      for (const row of this._ticks) held.set(row.claim, (held.get(row.claim) ?? 0) + 1);
+      for (const [who, n] of [...held].sort((x, y) => y[1] - x[1])) {
+        say("  " + String(who === null ? "(nobody)" : who).padEnd(26) + n + " of " + this._ticks.length);
+      }
+      const attacks = this._ticks.filter(r => r.attack).length;
+      say("  ticks wanting an attack   : " + attacks + " of " + this._ticks.length);
+      const hats = this._ticks.filter(r => r.hat !== null && r.hat !== undefined).length;
+      say("  ticks wanting a hat       : " + hats + " of " + this._ticks.length);
+      const ranMin = this._ticks.length ? Math.min(...this._ticks.map(r => r.ran)) : 0;
+      const ranMax = this._ticks.length ? Math.max(...this._ticks.map(r => r.ran)) : 0;
+      say("  features run per tick     : " + ranMin + "-" + ranMax);
+
+      say("");
+      say("-- state --");
+      if (client2 && client2.myPlayer) {
+        const mp = client2.myPlayer;
+        say("  inGame " + mp.inGame + ", attacking " + (ryn ? ryn.actions.attacking : "?") +
+            ", attackingState " + (ryn ? ryn.actions.attackingState : "?"));
+        say("  intent.shouldAttack " + (ryn ? ryn.intent.shouldAttack : "?") +
+            ", forceHat " + (ryn ? ryn.intent.forceHat : "?") +
+            ", forceWeapon " + (ryn ? ryn.intent.forceWeapon : "?"));
+        say("  owned hats " + (ryn && ryn.loadout ? ryn.loadout.bought[0].size : "?") +
+            ", owned accs " + (ryn && ryn.loadout ? ryn.loadout.bought[1].size : "?"));
+      } else {
+        say("  no player yet");
+      }
+      return L.join("\n");
+    }
+    print() {
+      const text = this.report();
+      console.log(text);
+      return text;
+    }
+    reset() {
+      this._throws.clear();
+      this._refusals.clear();
+      this._emits.clear();
+      this._ticks.length = 0;
+    }
+  }();
+
   class Regexer {
     code;
     COPY_CODE;
@@ -20396,6 +20528,10 @@ window.grbtp = 35;
   const win = window;
   const RYN = {
     _myClient: client,
+    // Print what the last few seconds actually did: what reached the wire,
+    // what the contract refused, which units threw, and who held each tick.
+    diag() { return RynDiag.print(); },
+    _diag: RynDiag,
     _settings: Settings_ref,
     _Renderer: Renderer,
     _ZoomHandler: ZoomHandler,
@@ -20418,6 +20554,11 @@ window.grbtp = 35;
     }
   };
   win.RYN = RYN;
+  // The bundle takes window.RYN away once it has captured it, so the
+  // diagnostic gets a handle of its own that survives. Type rynDiag() in the
+  // console at any point and it prints what the last few seconds did.
+  win.rynDiag = () => RynDiag.print();
+  win.rynDiagReset = () => RynDiag.reset();
   try {
     setInterval(() => {
       try {
