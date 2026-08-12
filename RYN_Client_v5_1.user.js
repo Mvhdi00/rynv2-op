@@ -19531,6 +19531,25 @@ window.grbtp = 35;
   // This records the last few seconds of that: who claimed each tick, what the
   // intent resolved to, what actually reached the wire, and every throw and
   // refusal with the unit that caused it. `RYN.diag()` prints it.
+  // What each hook is actually carrying, so a failed one reads as a symptom.
+  const RYN_HOOK_CARRIES = Object.freeze({
+    exposeCryptoFns: "the key and opcode tables. Without it NOTHING can be sent at all.",
+    exposeGameCrypto: "the per-connection key and sequence number",
+    exposeGameNet: "the socket every packet goes through",
+    handleEquip: "HATS and accessories -- every equip",
+    handleBuy: "buying hats and accessories",
+    upgradeItem: "upgrades",
+    RemoveSendAngle: "suppressing the game's own aim packet so RYN owns the angle",
+    captureTurnstile: "the connection token",
+    checkTrusted: "pressing play programmatically",
+    playerDied: "autospawn",
+    unlockedItems: "using items the account has not unlocked",
+    LockRotationClient: "the aim angle",
+    gameInit: "starting the game at all",
+    preRenderLoop: "the render hooks",
+    postRenderLoop: "the render hooks"
+  });
+
   const RynDiag = new class {
     _throws = new Map;      // feature id -> { count, last, phase }
     _refusals = new Map;    // "unit:action" -> count
@@ -19538,6 +19557,16 @@ window.grbtp = 35;
     _ticks = [];            // rolling window of resolved ticks
     _limit = 40;
     enabled = true;
+
+    // Which hooks did not match the bundle the browser actually served. This
+    // is the one thing that cannot be checked from outside: a saved copy of
+    // the bundle may not be what is being served today, and a hook that stops
+    // matching removes whatever it was carrying without a word.
+    _hookFails = [];
+    _hookCount = 0;
+    _hookAttempts = 0;
+    hookFailed(name) { this._hookFails.push(name); }
+    hooksDone(count, attempts) { this._hookCount = count; this._hookAttempts = attempts; }
 
     threw(id, phase, err) {
       const key = id + " @" + phase;
@@ -19573,6 +19602,19 @@ window.grbtp = 35;
       const say = m => L.push(m);
 
       say("=== RYN diagnostics ===");
+      say("  version " + (typeof RYN !== "undefined" ? RYN.version : "?"));
+      say("");
+      say("-- bundle hooks --");
+      say("  matched            : " + this._hookCount + "/" + this._hookAttempts);
+      if (this._hookFails.length === 0) {
+        say("  all hooks matched the bundle the browser served");
+      } else {
+        say("  FAILED, and whatever each one carried is simply absent:");
+        for (const n of this._hookFails) {
+          const carries = RYN_HOOK_CARRIES[n];
+          say("    " + n + (carries ? "  -- " + carries : ""));
+        }
+      }
       say("");
       say("-- wire --");
       const cr = client2 ? client2._gameCrypto : undefined;
@@ -19638,6 +19680,16 @@ window.grbtp = 35;
     print() {
       const text = this.report();
       console.log(text);
+      // Copied as well as printed: a console block this size is awkward to
+      // select by hand, and the whole point is that it gets pasted somewhere.
+      try {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(
+            () => console.log("[copied to clipboard]"),
+            () => {}
+          );
+        }
+      } catch (e) {}
       return text;
     }
     reset() {
@@ -19699,6 +19751,7 @@ window.grbtp = 35;
       const expression = RegExp(regex, flags);
       if (!expression.test(this.code)) {
         Logger.error("Failed to find: " + name);
+        RynDiag.hookFailed(name);
       } else {
         this.hookCount++;
       }
@@ -19785,6 +19838,7 @@ window.grbtp = 35;
     const addCode = isProd ? "const RYN=window.RYN;delete window.RYN;" : "";
     Hook.wrap("(async function THIS_STORAGE(){const FRVR=window.FRVR;window.FRVR=FRVR;" + addCode, "})();");
     Logger.test(`Modified bundle, total amount of hooks: ${Hook.hookCount}/${Hook.hookAttempts}`);
+    RynDiag.hooksDone(Hook.hookCount, Hook.hookAttempts);
     return Hook.code;
   };
   const formatCode_ref = formatCode2;
