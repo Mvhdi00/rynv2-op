@@ -454,7 +454,10 @@ const EXP = (function() {
                 if (mine.parentNode) mine.parentNode.removeChild(mine);
                 mine = null;
             }
-            if (mine) return mine;
+            if (mine) {
+                if (document.body && mine.parentNode !== document.body) document.body.appendChild(mine);
+                return mine;
+            }
             const div = document.createElement("div");
             div.id = WARNING;
             div.setAttribute("data-guard", "1");
@@ -462,19 +465,29 @@ const EXP = (function() {
             root.appendChild(div);
             return div;
         }
-        if (!plant()) return;
-        try {
-            if (typeof MutationObserver != "function") return;
-            const watch = new MutationObserver(function() { plant(); });
-            const target = document.body || document.documentElement;
-            if (target) watch.observe(target, { childList: true });
-            if (!document.body && typeof document.addEventListener == "function") {
-                document.addEventListener("DOMContentLoaded", function() {
-                    plant();
-                    if (document.body) watch.observe(document.body, { childList: true });
-                });
+        let watching = false;
+        function watch() {
+            if (watching || typeof MutationObserver != "function") return;
+            const target = document.body;
+            if (!target) return;
+            watching = true;
+            try { new MutationObserver(function() { plant(); }).observe(target, { childList: true }); }
+            catch (e) { watching = false; }
+        }
+        function attempt() { plant(); watch(); }
+
+        attempt();
+        if (!document.body && typeof setInterval == "function") {
+            let tries = 0;
+            const poll = setInterval(function() {
+                attempt();
+                if (watching || ++tries > 1000) clearInterval(poll);
+            }, 10);
+            if (typeof document.addEventListener == "function") {
+                document.addEventListener("DOMContentLoaded", attempt);
+                document.addEventListener("readystatechange", attempt);
             }
-        } catch (e) {}
+        }
     }
 
     const TURNSTILE_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";

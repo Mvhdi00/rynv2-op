@@ -17,8 +17,8 @@ const check = (cond, label) => {
 };
 
 /* --- a page, reduced to what the guards touch ---------------------------- */
-function makePage() {
-  const timers = [];
+function makePage(opts) {
+  const timers = [], intervals = [];
   class El {
     constructor(tag) {
       this.tagName = String(tag).toUpperCase();
@@ -80,31 +80,46 @@ function makePage() {
       return { reachedTarget: !stopped, prevented };
     }
   };
-  document.body = new El('body');
-  index(document.body);
+  // At document-start Chrome gives a userscript a document with NO
+  // documentElement and NO body. `bare: true` models that; attach() is the
+  // parser catching up.
+  if (!(opts && opts.bare)) { document.body = new El('body'); index(document.body); }
+  else { document.documentElement = null; }
 
   const window = { location: { hostname: 'moomoo.io' }, document };
   return {
     window, document, El, byId, index,
+    attach() {
+      document.documentElement = new El('html');
+      document.body = new El('body');
+      index(document.body);
+    },
     // Timers are collected rather than run, so a test decides when the guard's
     // poll advances instead of racing it.
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     run(times) { for (let i = 0; i < (times || 1); i++) { const t = timers.shift(); if (t) t.fn(); } },
-    pending: () => timers.length
+    pending: () => timers.length,
+    // The retry loop the banner guard needs at document-start, under the
+    // test's control rather than the clock's.
+    setInterval: (fn) => { intervals.push(fn); return intervals.length; },
+    clearInterval: (id) => { intervals[id - 1] = null; },
+    ticks: () => intervals.filter(Boolean).length,
+    tick(times) { for (let i = 0; i < (times || 1); i++) intervals.filter(Boolean).forEach(f => f()); }
   };
 }
 
 // Lift the guards straight out of the shipped core, so this test is about the
 // code that ships and not about a copy of it.
-function loadGuards(page, opts) {
+function loadGuards(page) {
   const ext = fs.readFileSync(path.join(ROOT, 'ExternalClient.user.js'), 'utf8');
   const a = ext.indexOf('// BEGIN page-guards');
   const b = ext.indexOf('// END page-guards');
   if (a < 0 || b < 0) throw new Error('no page-guards block in ExternalClient.user.js');
   const src = ext.slice(a, b);
-  const fn = new Function('window', 'document', 'setTimeout', 'MutationObserver', 'console',
+  const fn = new Function('window', 'document', 'setTimeout', 'setInterval', 'clearInterval',
+    'MutationObserver', 'console',
     src + '\nreturn { suppressWarningBanner: suppressWarningBanner, guardEntry: guardEntry };');
-  return fn(page.window, page.document, page.setTimeout,
+  return fn(page.window, page.document, page.setTimeout, page.setInterval, page.clearInterval,
             undefined,                       // no observer: exercise the plain path
             { info() {}, warn() {} });
 }
@@ -139,6 +154,26 @@ console.log('\n1. the red bar');
   const now = page.document.getElementById('userscript-warning');
   check(now !== theirs, 'a bar already on the page is removed');
   check(now && now.textContent === '', 'and what is left says nothing');
+}
+
+{
+  // The case that actually happens on install. A userscript at document-start
+  // gets a document with no <html> and no <body> -- both null in Chrome -- so
+  // the guard's first attempt has nothing to append to. Giving up there is
+  // what let the bar through on every file for a whole round: the guard ran
+  // once, found no document, and never tried again. The bug hid behind a check
+  // of my own that used offsetParent, which is null for a position:fixed
+  // element -- so it reported "no banner" while the bar was on screen.
+  const page = makePage({ bare: true });
+  const { suppressWarningBanner } = loadGuards(page);
+  suppressWarningBanner();
+  check(page.ticks() > 0, 'with no document yet, the guard keeps trying instead of giving up');
+
+  page.attach();                              // the parser catches up
+  page.tick(1);
+  const planted = page.document.getElementById('userscript-warning');
+  check(!!planted, 'and plants the guard as soon as there is a body');
+  check(planted && planted.parentNode === page.document.body, 'in the body, not on <html>');
 }
 
 // --------------------------------------------------------------------------

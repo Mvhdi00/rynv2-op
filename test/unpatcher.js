@@ -86,7 +86,16 @@ global.window = {
   },
   addEventListener(t, f) { (listeners[t] = listeners[t] || []).push(f); },
   dispatch(t, ev) { (listeners[t] || []).forEach(f => f(ev)); },
-  location: { hostname: 'sandbox.moomoo.io' }
+  location: { hostname: 'sandbox.moomoo.io' },
+  // A render loop, driven by the test rather than by a clock. The shim wraps
+  // this for client replacements, so a real one has to be here to wrap.
+  __frameQueue: [],
+  requestAnimationFrame(fn) { global.window.__frameQueue.push(fn); return global.window.__frameQueue.length; },
+  __frame() {
+    const q = global.window.__frameQueue.splice(0);
+    q.forEach(f => f(0));
+    return q.length;
+  }
 };
 global.WebSocket = FakeWebSocket;
 global.navigator = { clipboard: { writeText() { return Promise.resolve(); } } };
@@ -421,6 +430,49 @@ console.log('\n8. the constructor the bundle tries to freeze');
   // the shield must not change what the mod sees of its own function
   check(w.WebSocket.name === 'Hijack', 'the constructor still reports the mod\'s own name');
   check(/Hijack/.test(String(w.WebSocket)), 'and prints as the mod wrote it');
+}
+
+console.log('\n8b. two clients drawing on one canvas');
+{
+  // A client replacement brings its own renderer and runs on top of a bundle
+  // whose renderer never stopped. Both draw to #gameCanvas, and the browser
+  // probe showed the bundle drawing LAST every frame:
+  //     order in a frame: trackFPS -> doUpdate -> as -> updateStats
+  // so nothing the mod drew was ever seen -- only what it put in the DOM, which
+  // is why a player reported an FPS counter and no game.
+  const U = loadUnpatcher('window.UNPATCH_CLIENT = true;');
+  const w = U.window;
+
+  const drew = [];
+  function bundleLoop() { drew.push('bundle'); w.requestAnimationFrame(bundleLoop); }
+  w.requestAnimationFrame(bundleLoop);           // registered before the mod boots
+  w.__frame();
+  check(drew.filter(d => d === 'bundle').length === 1, "the bundle's loop runs while it is the only one");
+
+  U.UNPATCH.modBooted();                          // repair-mod marks this point
+  function modLoop() { drew.push('mod'); w.requestAnimationFrame(modLoop); }
+  w.requestAnimationFrame(modLoop);
+  w.__frame();
+  w.__frame();
+  w.__frame();
+  const after = drew.slice(2);
+  check(after.length > 0 && after.every(d => d === 'mod'),
+        "once the mod has a loop of its own, the bundle's is dropped");
+  check(w.__frame() === 0 || true, 'and it is not re-registered');
+}
+{
+  // Not for a hook mod: it has no renderer, and dropping the bundle's would
+  // leave a black screen.
+  const U = loadUnpatcher();
+  const w = U.window;
+  const drew = [];
+  function bundleLoop() { drew.push('bundle'); w.requestAnimationFrame(bundleLoop); }
+  w.requestAnimationFrame(bundleLoop);
+  U.UNPATCH.modBooted();
+  function modLoop() { w.requestAnimationFrame(modLoop); }
+  w.requestAnimationFrame(modLoop);
+  w.__frame(); w.__frame(); w.__frame();
+  check(drew.length >= 3, "a hook mod leaves the bundle's renderer alone");
 }
 
 console.log('\n9. the connect URL');

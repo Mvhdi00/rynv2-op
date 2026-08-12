@@ -327,7 +327,12 @@ const TOUCHES_DOM = /document\.(?:body|head|getElementById|querySelector)|\bgetE
 let out;
 if (TOUCHES_DOM) {
   report.deferred = true;
-  out = meta + '// ==/UserScript==\n\n' + shim + '\n\nfunction __repairedBoot() {\n' + body2 +
+  out = meta + '// ==/UserScript==\n\n' + shim +
+    // The shim needs to know when the mod's own code starts running: anything
+    // that asked for an animation frame before this point belongs to the game
+    // bundle, and a client replacement's renderer has to displace it rather
+    // than be painted over by it.
+    '\n\nfunction __repairedBoot() {\n    try { UNPATCH.modBooted(); } catch (e) {}\n' + body2 +
     '\n}\n(function __repairedStart(tries) {\n' +
     '    tries = tries || 0;\n' +
     '    if ((document.readyState === "loading" || !document.getElementById("gameUI")) && tries < 400) {\n' +

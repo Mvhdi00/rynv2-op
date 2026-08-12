@@ -454,7 +454,10 @@ const EXP = (function() {
                 if (mine.parentNode) mine.parentNode.removeChild(mine);
                 mine = null;
             }
-            if (mine) return mine;
+            if (mine) {
+                if (document.body && mine.parentNode !== document.body) document.body.appendChild(mine);
+                return mine;
+            }
             const div = document.createElement("div");
             div.id = WARNING;
             div.setAttribute("data-guard", "1");
@@ -462,19 +465,29 @@ const EXP = (function() {
             root.appendChild(div);
             return div;
         }
-        if (!plant()) return;
-        try {
-            if (typeof MutationObserver != "function") return;
-            const watch = new MutationObserver(function() { plant(); });
-            const target = document.body || document.documentElement;
-            if (target) watch.observe(target, { childList: true });
-            if (!document.body && typeof document.addEventListener == "function") {
-                document.addEventListener("DOMContentLoaded", function() {
-                    plant();
-                    if (document.body) watch.observe(document.body, { childList: true });
-                });
+        let watching = false;
+        function watch() {
+            if (watching || typeof MutationObserver != "function") return;
+            const target = document.body;
+            if (!target) return;
+            watching = true;
+            try { new MutationObserver(function() { plant(); }).observe(target, { childList: true }); }
+            catch (e) { watching = false; }
+        }
+        function attempt() { plant(); watch(); }
+
+        attempt();
+        if (!document.body && typeof setInterval == "function") {
+            let tries = 0;
+            const poll = setInterval(function() {
+                attempt();
+                if (watching || ++tries > 1000) clearInterval(poll);
+            }, 10);
+            if (typeof document.addEventListener == "function") {
+                document.addEventListener("DOMContentLoaded", attempt);
+                document.addEventListener("readystatechange", attempt);
             }
-        } catch (e) {}
+        }
     }
 
     const TURNSTILE_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
@@ -981,6 +994,29 @@ const UNPATCH = (function () {
         info: { script: { name: "unpatched mod", version: "0" }, scriptHandler: "MooUnpatcher" }
     });
 
+    let modBooting = false, tookOver = false;
+    const preBoot = [];
+    if (forceMod && hasWin && typeof window.requestAnimationFrame == "function"
+        && window.UNPATCH_KEEP_GAME_RENDER !== true) {
+        const raf = window.requestAnimationFrame.bind(window);
+        window.requestAnimationFrame = function (fn) {
+            if (typeof fn != "function") return raf(fn);
+            if (!modBooting) {
+                if (preBoot.indexOf(fn) === -1 && preBoot.length < 64) preBoot.push(fn);
+            } else if (preBoot.indexOf(fn) === -1) {
+                if (!tookOver && preBoot.length) {
+                    tookOver = true;
+                    console.info("[unpatch] the mod brought its own game loop, so the bundle's "
+                        + "renderer is being stopped -- otherwise it paints over the mod every frame. "
+                        + "Set window.UNPATCH_KEEP_GAME_RENDER = true to leave it running.");
+                }
+            } else if (tookOver) {
+                return 0;
+            }
+            return raf(fn);
+        };
+    }
+
     const GONE_IDS = [
         "adCard", "promoImg", "promoImgHolder", "linksContainer1", "linksContainer2",
         "moomooio_728x90_home", "moomooio_300x250_home", "moomooio_160x600_home",
@@ -1203,6 +1239,7 @@ const UNPATCH = (function () {
         report: report,
         diagnose: diagnose,
         fixUrl: fixUrl,
+        modBooted: function () { modBooting = true; },
         goneIds: GONE_IDS,
         sockets: seenSockets,
         maps: { OLD_TO_NEW_OUT: OLD_TO_NEW_OUT, NEW_TO_OLD_IN: NEW_TO_OLD_IN, STRAGGLERS: STRAGGLERS }
@@ -1217,6 +1254,7 @@ console.info("%c[unpatch]%c active - transport, environment shims and boot diagn
     "color:#8ecc51;font-weight:bold", "color:inherit");
 
 function __repairedBoot() {
+    try { UNPATCH.modBooted(); } catch (e) {}
 
 (function () {
   "use strict";

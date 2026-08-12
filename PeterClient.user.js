@@ -524,7 +524,12 @@ const EXP = (function() {
                 if (mine.parentNode) mine.parentNode.removeChild(mine);
                 mine = null;
             }
-            if (mine) return mine;
+            if (mine) {
+                // Once there is a body, park it there: a div appended to <html>
+                // before the parser reached <body> is odd, if harmless.
+                if (document.body && mine.parentNode !== document.body) document.body.appendChild(mine);
+                return mine;
+            }
             const div = document.createElement("div");
             div.id = WARNING;
             div.setAttribute("data-guard", "1");
@@ -532,22 +537,39 @@ const EXP = (function() {
             root.appendChild(div);
             return div;
         }
-        if (!plant()) return;
         // Ours can be taken away by anything that clears the body -- a mod
         // rebuilding the menu, the game's own DOM churn -- and the bundle's
-        // 1.5s check would then find nothing in its way. Watching is cheap.
-        try {
-            if (typeof MutationObserver != "function") return;
-            const watch = new MutationObserver(function() { plant(); });
-            const target = document.body || document.documentElement;
-            if (target) watch.observe(target, { childList: true });
-            if (!document.body && typeof document.addEventListener == "function") {
-                document.addEventListener("DOMContentLoaded", function() {
-                    plant();
-                    if (document.body) watch.observe(document.body, { childList: true });
-                });
+        // 1.5s check would then find nothing in its way. Watching is cheap;
+        // the bar is appended to document.body, so its direct children are the
+        // whole of what needs watching.
+        let watching = false;
+        function watch() {
+            if (watching || typeof MutationObserver != "function") return;
+            const target = document.body;
+            if (!target) return;
+            watching = true;
+            try { new MutationObserver(function() { plant(); }).observe(target, { childList: true }); }
+            catch (e) { watching = false; }
+        }
+        function attempt() { plant(); watch(); }
+
+        attempt();
+        // At document-start there is no <html> yet -- in Chrome, document.body
+        // AND document.documentElement are both null -- so the first attempt
+        // has nothing to append to. Giving up there is exactly what let the bar
+        // through: the guard ran once, found no document, and never tried
+        // again. Keep trying until there is a body.
+        if (!document.body && typeof setInterval == "function") {
+            let tries = 0;
+            const poll = setInterval(function() {
+                attempt();
+                if (watching || ++tries > 1000) clearInterval(poll);
+            }, 10);
+            if (typeof document.addEventListener == "function") {
+                document.addEventListener("DOMContentLoaded", attempt);
+                document.addEventListener("readystatechange", attempt);
             }
-        } catch (e) {}
+        }
     }
 
     /* --- getting past "Connecting..." ----------------------------------- */

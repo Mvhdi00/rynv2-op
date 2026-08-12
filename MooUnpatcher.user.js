@@ -574,7 +574,12 @@ const EXP = (function() {
                 if (mine.parentNode) mine.parentNode.removeChild(mine);
                 mine = null;
             }
-            if (mine) return mine;
+            if (mine) {
+                // Once there is a body, park it there: a div appended to <html>
+                // before the parser reached <body> is odd, if harmless.
+                if (document.body && mine.parentNode !== document.body) document.body.appendChild(mine);
+                return mine;
+            }
             const div = document.createElement("div");
             div.id = WARNING;
             div.setAttribute("data-guard", "1");
@@ -582,22 +587,39 @@ const EXP = (function() {
             root.appendChild(div);
             return div;
         }
-        if (!plant()) return;
         // Ours can be taken away by anything that clears the body -- a mod
         // rebuilding the menu, the game's own DOM churn -- and the bundle's
-        // 1.5s check would then find nothing in its way. Watching is cheap.
-        try {
-            if (typeof MutationObserver != "function") return;
-            const watch = new MutationObserver(function() { plant(); });
-            const target = document.body || document.documentElement;
-            if (target) watch.observe(target, { childList: true });
-            if (!document.body && typeof document.addEventListener == "function") {
-                document.addEventListener("DOMContentLoaded", function() {
-                    plant();
-                    if (document.body) watch.observe(document.body, { childList: true });
-                });
+        // 1.5s check would then find nothing in its way. Watching is cheap;
+        // the bar is appended to document.body, so its direct children are the
+        // whole of what needs watching.
+        let watching = false;
+        function watch() {
+            if (watching || typeof MutationObserver != "function") return;
+            const target = document.body;
+            if (!target) return;
+            watching = true;
+            try { new MutationObserver(function() { plant(); }).observe(target, { childList: true }); }
+            catch (e) { watching = false; }
+        }
+        function attempt() { plant(); watch(); }
+
+        attempt();
+        // At document-start there is no <html> yet -- in Chrome, document.body
+        // AND document.documentElement are both null -- so the first attempt
+        // has nothing to append to. Giving up there is exactly what let the bar
+        // through: the guard ran once, found no document, and never tried
+        // again. Keep trying until there is a body.
+        if (!document.body && typeof setInterval == "function") {
+            let tries = 0;
+            const poll = setInterval(function() {
+                attempt();
+                if (watching || ++tries > 1000) clearInterval(poll);
+            }, 10);
+            if (typeof document.addEventListener == "function") {
+                document.addEventListener("DOMContentLoaded", attempt);
+                document.addEventListener("readystatechange", attempt);
             }
-        } catch (e) {}
+        }
     }
 
     /* --- getting past "Connecting..." ----------------------------------- */
@@ -1288,6 +1310,51 @@ const UNPATCH = (function () {
         info: { script: { name: "unpatched mod", version: "0" }, scriptHandler: "MooUnpatcher" }
     });
 
+    /* --- two clients drawing on one canvas ------------------------------- */
+    // A client replacement brings its own renderer and its own game loop, and
+    // it runs on top of a bundle whose renderer never stopped. Both draw to
+    // #gameCanvas, and tools/probe-entry.js showed which one wins:
+    //
+    //     order in a frame: trackFPS -> doUpdate -> as -> updateStats
+    //
+    // `doUpdate` is novastorm's, `as` is the bundle's. The bundle paints over
+    // the mod every single frame, so nothing the mod draws is ever seen -- only
+    // whatever it puts in the DOM, which is why an FPS counter survives and the
+    // world does not. That is the "the mod does not load" report: it loaded,
+    // and it was being painted over sixty times a second.
+    //
+    // The bundle's client is a decoy here anyway: the mod hijacked the socket,
+    // so the bundle has no data and is drawing an empty world. Its loop is
+    // dropped once the mod has one of its own. Which loop is whose is not a
+    // guess: everything registered before the mod's body ran belongs to the
+    // bundle, and repair-mod.js marks that moment by calling modBooted().
+    //
+    // Only in client-replacement mode. A hook mod has no renderer of its own
+    // and needs the bundle's.
+    let modBooting = false, tookOver = false;
+    const preBoot = [];
+    if (forceMod && hasWin && typeof window.requestAnimationFrame == "function"
+        && window.UNPATCH_KEEP_GAME_RENDER !== true) {
+        const raf = window.requestAnimationFrame.bind(window);
+        window.requestAnimationFrame = function (fn) {
+            if (typeof fn != "function") return raf(fn);
+            if (!modBooting) {
+                if (preBoot.indexOf(fn) === -1 && preBoot.length < 64) preBoot.push(fn);
+            } else if (preBoot.indexOf(fn) === -1) {
+                // the first loop the mod registers for itself
+                if (!tookOver && preBoot.length) {
+                    tookOver = true;
+                    console.info("[unpatch] the mod brought its own game loop, so the bundle's "
+                        + "renderer is being stopped -- otherwise it paints over the mod every frame. "
+                        + "Set window.UNPATCH_KEEP_GAME_RENDER = true to leave it running.");
+                }
+            } else if (tookOver) {
+                return 0;                    // the bundle asking for another frame
+            }
+            return raf(fn);
+        };
+    }
+
     /* --- page furniture the mod expects and the page no longer has ------- */
     // Every mod of this era opens by tearing out the ads and the promo strip:
     //
@@ -1601,6 +1668,9 @@ const UNPATCH = (function () {
         report: report,
         diagnose: diagnose,
         fixUrl: fixUrl,
+        // repair-mod.js calls this as the first statement of the deferred body,
+        // so the shim can tell the bundle's animation callbacks from the mod's
+        modBooted: function () { modBooting = true; },
         goneIds: GONE_IDS,
         sockets: seenSockets,
         maps: { OLD_TO_NEW_OUT: OLD_TO_NEW_OUT, NEW_TO_OLD_IN: NEW_TO_OLD_IN, STRAGGLERS: STRAGGLERS }

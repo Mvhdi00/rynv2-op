@@ -1942,3 +1942,55 @@ sat on top of the two real bugs, which is the worst place for a fake one to be.
 The fake now gives `onmessage` a slot in the list, and the control run (stock
 game, no mod) is what caught it: the shipped bundle has to reach the server
 cleanly, and it did not.
+
+# The mod loads, and you cannot see it
+
+novastorm reached the server and played, and the report back was that nothing
+of it appeared -- no menu, no visuals, only its FPS/ping counter. That counter
+is the clue: it is a `div`, and everything else novastorm draws is canvas.
+
+`tools/probe-entry.js` now counts render loops and records the order they run
+in a frame. With novastorm loaded:
+
+```
+render loops    : 4 distinct
+  x 627  function as() { He = Date.now(), K = He - Xi, ...        <- the bundle
+  x 626  function doUpdate() { now = Date.now(), delta = ...      <- novastorm
+  ...
+order in a frame: trackFPS -> doUpdate -> as -> updateStats
+```
+
+Both draw to `#gameCanvas`, and **the bundle draws last, every frame**. So
+novastorm's world was being painted over sixty times a second. Nothing was
+broken; it was underneath.
+
+The bundle's client is a decoy in this arrangement anyway -- novastorm hijacked
+the socket, so the bundle has no data and is drawing an empty world. Its loop is
+therefore dropped once the mod has one of its own. Which loop belongs to whom is
+not a guess: everything registered before the mod's body ran is the bundle's,
+and `repair-mod.js` marks that moment by calling `UNPATCH.modBooted()` as the
+first statement of the deferred boot. Only in client-replacement mode -- a hook
+mod has no renderer and needs the bundle's. `window.UNPATCH_KEEP_GAME_RENDER =
+true` turns it off.
+
+```
+render loops    : 3 distinct
+  x 616  function updateStats() ...
+  x 616  function trackFPS() ...
+  x 616  function doUpdate() ...
+order in a frame: updateStats -> trackFPS -> doUpdate
+```
+
+## Two harness bugs found on the way
+
+Neither was in a shipped file, and both were sitting on top of the real
+problem, which is the worst place for a fake one to be.
+
+- The probe's server framed its **server-to-client** packets. Only the client's
+  packets carry the 6-byte HMAC; the bundle's own `onmessage` decodes what
+  arrives with no header at all. Signing them fed the mod six bytes of garbage
+  in front of its packet, and it looked as though the opcode table was wrong.
+- Errors thrown while handling a delivered packet arrive on the `page.evaluate`
+  promise, not as a `pageerror` -- and that promise was being `.catch`ed and
+  discarded. novastorm looked as though it had simply chosen not to send its
+  spawn.

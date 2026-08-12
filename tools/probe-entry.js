@@ -262,7 +262,7 @@ window.FRVR = {
   // The framing is the game's own: opcode tables from the seed, HMAC from the
   // key, both lifted out of reference/game-index.js by test/extract.js. A
   // signature that does not verify here would not verify on the live server.
-  const wire = { sent: [], bad: 0, names: [], detail: [], handshakes: 0, unsigned: 0, threw: [], rejected: [] };
+  const wire = { sent: [], bad: 0, names: [], detail: [], handshakes: 0, unsigned: 0, threw: [], rejected: [], spawned: false };
   if (SERVER) {
     const { game, msgpack: vendor } = extract.load();
     const enc = new vendor.Encoder(), dec = new vendor.Decoder();
@@ -276,7 +276,10 @@ window.FRVR = {
     // send its spawn.
     const deliver = (id, bytes) =>
       page.evaluate(([i, b]) => window.__deliver(i, b), [id, Array.from(bytes)])
-        .catch(e => { wire.threw.push(String(e.message || e).split('\n')[0]); });
+        .catch(e => {
+          const text = String(e.message || e);
+          wire.threw.push(text.split('\n').slice(0, 4).join(' | '));
+        });
 
     await page.exposeFunction('__serverOpened', async (id) => {
       wire.handshakes++;
@@ -303,9 +306,52 @@ window.FRVR = {
       if (!name) { wire.bad++; return; }
       wire.names.push(name);
       wire.detail.push(name + ' seq=' + decoded[2] + ' ' + JSON.stringify(decoded[1]).slice(0, 90));
+      // Answer the spawn, so the client actually enters the game. Everything a
+      // player complains about -- "no menu", "no visuals" -- happens after this
+      // point, and a probe that stops at the spawn cannot see any of it.
+      // "C" is setupGame(yourSID) in both the current bundle and the 2019
+      // client every replacement in this family is built from.
+      if (name === 'M') {
+        // Server -> client is NOT signed. Only the client's packets carry the
+        // 6-byte HMAC; the bundle's own onmessage decodes what arrives with no
+        // header at all. Framing these too fed the mod six bytes of garbage in
+        // front of its packet and made it look as though the opcode table was
+        // wrong.
+        const s2c = (n, args) => {
+          const code = tables.s2c.enc[n];
+          if (code === undefined) return;
+          deliver(id, enc.encode([code, args]));
+        };
+        wire.spawned = true;
+        s2c('C', [1]);
+      }
     });
   }
 
+  // How many render loops are running. A client replacement draws to
+  // #gameCanvas -- and so does the bundle it is loaded on top of, which is
+  // still running whether or not it has a connection. Two loops on one canvas
+  // is not a subtle bug: whichever draws last is what the player sees.
+  await page.addInitScript({ content: `
+    window.__rafLoops = new Map();
+    window.__drawOrder = [];
+    (function () {
+      var raf = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = function (fn) {
+        var name = "?";
+        try {
+          name = (String(fn).match(/function\\s+([A-Za-z_$][\\w$]*)/) || [, "anon"])[1];
+          var src = String(fn).replace(/\\s+/g, ' ').slice(0, 70);
+          window.__rafLoops.set(src, (window.__rafLoops.get(src) || 0) + 1);
+        } catch (e) {}
+        return raf(function (t) {
+          // Two render loops on one canvas: the one that runs LAST in a frame
+          // is the one the player sees. Record the order.
+          if (window.__drawOrder.length < 40) window.__drawOrder.push(name);
+          return fn(t);
+        });
+      };
+    })();` });
   await page.addInitScript({ content: FAKE_WS });
   await page.addInitScript({ content: FRVR });
   if (WITH_UNPATCHER) {
@@ -326,11 +372,18 @@ window.FRVR = {
     widgetLaidOut: (() => { const w = document.getElementById('turnstileWidget'); return !!(w && w.offsetParent !== null); })(),
     renders: window.__turnstileRenders || [],
     token: !!window.__turnstileToken,
-    // The shim's answer to the banner is to occupy the id with an empty
-    // hidden div, so "is the element there" is no longer the question -- "is
-    // there red text across the top of the page" is.
-    banner: (() => { const b = document.getElementById('userscript-warning');
-                     return !!(b && b.textContent && b.offsetParent !== null); })(),
+    // The shim's answer to the banner is to occupy the id with an empty hidden
+    // div, so "is the element there" is not the question -- "is there red text
+    // across the top of the page" is.
+    // NOT offsetParent: it is null for a position:fixed element, and the bar is
+    // position:fixed. That mistake had this reporting "no banner" while the bar
+    // was on screen, which is the worst possible way for a check to be wrong.
+    banner: (() => {
+      const b = document.getElementById('userscript-warning');
+      if (!b || !b.textContent) return false;
+      const cs = getComputedStyle(b);
+      return cs.display !== 'none' && cs.visibility !== 'hidden' && parseFloat(cs.opacity) > 0.01;
+    })(),
     detectable: ['__gmMonkey', 'GM_info', 'GM', 'unsafeWindow'].filter(n => !!window[n]),
     sockets: window.__sockets.slice(),
   }));
@@ -338,6 +391,41 @@ window.FRVR = {
   // "the click did nothing" has three quite different causes -- nothing is
   // bound, something is sitting on top of the button, or the handler ran and
   // took an early exit -- and they need different fixes, so tell them apart.
+  // "the mod loaded" and "the mod's UI is there" are different questions, and
+  // the second one is what a player actually sees. This lists what the mod put
+  // on the page and whether any of it is visible.
+  if (argv.includes('--dom')) {
+    console.log('\n--- what the mod put on the page ---');
+    const added = await page.evaluate((planted) => {
+      const known = new Set(planted);
+      const out = [];
+      for (const el of document.body.children) {
+        if (el.id && known.has(el.id)) continue;
+        if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
+        const r = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        out.push({
+          tag: el.tagName.toLowerCase(),
+          id: el.id || null,
+          cls: (el.className && String(el.className).slice(0, 60)) || null,
+          size: Math.round(r.width) + 'x' + Math.round(r.height),
+          display: cs.display, visibility: cs.visibility, opacity: cs.opacity,
+          seen: !!(r.width && r.height && cs.display !== 'none' &&
+                   cs.visibility !== 'hidden' && parseFloat(cs.opacity) > 0.01),
+          kids: el.children.length,
+        });
+      }
+      return { added: out, styles: document.querySelectorAll('style').length };
+    }, [...ids]);
+    console.log('  <style> blocks on the page: ' + added.styles);
+    for (const el of added.added) {
+      console.log('  ' + (el.seen ? 'VISIBLE ' : 'hidden  ') +
+        el.tag + (el.id ? '#' + el.id : '') + (el.cls ? '.' + el.cls.replace(/\s+/g, '.') : '') +
+        '  ' + el.size + '  display:' + el.display + ' opacity:' + el.opacity +
+        ' children:' + el.kids);
+    }
+  }
+
   if (argv.includes('--debug')) {
     console.log('\n--- #enterGame, in detail ---');
     console.log(JSON.stringify(await page.evaluate(() => {
@@ -368,13 +456,21 @@ window.FRVR = {
 
   const after = await page.evaluate(() => ({
     loadingText: (document.getElementById('loadingText') || {}).textContent,
-    banner: (() => { const b = document.getElementById('userscript-warning');
-                     return !!(b && b.textContent && b.offsetParent !== null); })(),
+    banner: (() => {
+      const b = document.getElementById('userscript-warning');
+      if (!b || !b.textContent) return false;
+      const cs = getComputedStyle(b);
+      return cs.display !== 'none' && cs.visibility !== 'hidden' && parseFloat(cs.opacity) > 0.01;
+    })(),
     sockets: window.__sockets.slice(),
     // a bundled 2019 io-client, if the mod carries one: whether it got a
     // session, and how far its own entry got
     io: window.io ? { connected: window.io.connected, socketId: window.io.socketId,
                       hasSocket: !!window.io.socket, started: !!window.io._started } : null,
+    // only loops that actually kept going -- a one-shot rAF is not a loop
+    drawOrder: (window.__drawOrder || []).slice(-16).join(' -> '),
+    loops: [...(window.__rafLoops || new Map())].filter(([, n]) => n > 20)
+             .sort((a, b) => b[1] - a[1]).slice(0, 6),
     unpatch: window.unpatch ? window.unpatch.report() : null,
   }));
 
@@ -397,6 +493,11 @@ window.FRVR = {
   console.log('  sockets opened  : ' + (after.sockets.length ? after.sockets.join('\n                    ') : '(none)'));
   console.log('  red banner      : ' + after.banner);
   if (after.io) console.log('  bundled client  : ' + JSON.stringify(after.io));
+  if (after.loops && after.loops.length) {
+    console.log('  render loops    : ' + after.loops.length + ' distinct');
+    for (const [src, n] of after.loops) console.log('    x' + String(n).padStart(4) + '  ' + src);
+    console.log('  order in a frame: ' + after.drawOrder);
+  }
 
   if (errors.length) {
     console.log('\n--- page errors ---');
@@ -410,7 +511,8 @@ window.FRVR = {
 
   if (SERVER) {
     console.log('\n--- what reached the server ---');
-    console.log('  io-init sent    : ' + wire.handshakes);
+    console.log('  io-init sent    : ' + wire.handshakes +
+                (wire.spawned ? ', and setupGame sent back after the spawn' : ''));
     console.log('  packets         : ' + wire.sent.length +
                 ' (' + wire.names.length + ' signed and understood, ' +
                 wire.bad + ' rejected, ' + wire.unsigned + ' too short to be framed)');

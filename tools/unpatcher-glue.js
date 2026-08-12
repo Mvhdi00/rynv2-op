@@ -472,6 +472,51 @@ const UNPATCH = (function () {
         info: { script: { name: "unpatched mod", version: "0" }, scriptHandler: "MooUnpatcher" }
     });
 
+    /* --- two clients drawing on one canvas ------------------------------- */
+    // A client replacement brings its own renderer and its own game loop, and
+    // it runs on top of a bundle whose renderer never stopped. Both draw to
+    // #gameCanvas, and tools/probe-entry.js showed which one wins:
+    //
+    //     order in a frame: trackFPS -> doUpdate -> as -> updateStats
+    //
+    // `doUpdate` is novastorm's, `as` is the bundle's. The bundle paints over
+    // the mod every single frame, so nothing the mod draws is ever seen -- only
+    // whatever it puts in the DOM, which is why an FPS counter survives and the
+    // world does not. That is the "the mod does not load" report: it loaded,
+    // and it was being painted over sixty times a second.
+    //
+    // The bundle's client is a decoy here anyway: the mod hijacked the socket,
+    // so the bundle has no data and is drawing an empty world. Its loop is
+    // dropped once the mod has one of its own. Which loop is whose is not a
+    // guess: everything registered before the mod's body ran belongs to the
+    // bundle, and repair-mod.js marks that moment by calling modBooted().
+    //
+    // Only in client-replacement mode. A hook mod has no renderer of its own
+    // and needs the bundle's.
+    let modBooting = false, tookOver = false;
+    const preBoot = [];
+    if (forceMod && hasWin && typeof window.requestAnimationFrame == "function"
+        && window.UNPATCH_KEEP_GAME_RENDER !== true) {
+        const raf = window.requestAnimationFrame.bind(window);
+        window.requestAnimationFrame = function (fn) {
+            if (typeof fn != "function") return raf(fn);
+            if (!modBooting) {
+                if (preBoot.indexOf(fn) === -1 && preBoot.length < 64) preBoot.push(fn);
+            } else if (preBoot.indexOf(fn) === -1) {
+                // the first loop the mod registers for itself
+                if (!tookOver && preBoot.length) {
+                    tookOver = true;
+                    console.info("[unpatch] the mod brought its own game loop, so the bundle's "
+                        + "renderer is being stopped -- otherwise it paints over the mod every frame. "
+                        + "Set window.UNPATCH_KEEP_GAME_RENDER = true to leave it running.");
+                }
+            } else if (tookOver) {
+                return 0;                    // the bundle asking for another frame
+            }
+            return raf(fn);
+        };
+    }
+
     /* --- page furniture the mod expects and the page no longer has ------- */
     // Every mod of this era opens by tearing out the ads and the promo strip:
     //
@@ -785,6 +830,9 @@ const UNPATCH = (function () {
         report: report,
         diagnose: diagnose,
         fixUrl: fixUrl,
+        // repair-mod.js calls this as the first statement of the deferred body,
+        // so the shim can tell the bundle's animation callbacks from the mod's
+        modBooted: function () { modBooting = true; },
         goneIds: GONE_IDS,
         sockets: seenSockets,
         maps: { OLD_TO_NEW_OUT: OLD_TO_NEW_OUT, NEW_TO_OLD_IN: NEW_TO_OLD_IN, STRAGGLERS: STRAGGLERS }
