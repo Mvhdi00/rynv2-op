@@ -19,6 +19,230 @@
   } catch (e) {}
 })();
 
+// What each hook is actually carrying, so a failed one reads as a symptom.
+const RYN_HOOK_CARRIES = Object.freeze({
+  exposeCryptoFns: "the key and opcode tables. Without it NOTHING can be sent at all.",
+  exposeGameCrypto: "the per-connection key and sequence number",
+  exposeGameNet: "the socket every packet goes through",
+  handleEquip: "HATS and accessories -- every equip",
+  handleBuy: "buying hats and accessories",
+  upgradeItem: "upgrades",
+  RemoveSendAngle: "suppressing the game's own aim packet so RYN owns the angle",
+  captureTurnstile: "the connection token",
+  checkTrusted: "pressing play programmatically",
+  playerDied: "autospawn",
+  unlockedItems: "using items the account has not unlocked",
+  LockRotationClient: "the aim angle",
+  gameInit: "starting the game at all",
+  preRenderLoop: "the render hooks",
+  postRenderLoop: "the render hooks"
+});
+
+const RynDiag = new class {
+  _throws = new Map;      // feature id -> { count, last, phase }
+  _refusals = new Map;    // "unit:action" -> count
+  _emits = new Map;       // action -> count
+  _ticks = [];            // rolling window of resolved ticks
+  _limit = 40;
+  enabled = true;
+
+  // Which hooks did not match the bundle the browser actually served. This
+  // is the one thing that cannot be checked from outside: a saved copy of
+  // the bundle may not be what is being served today, and a hook that stops
+  // matching removes whatever it was carrying without a word.
+  _hookFails = [];
+  _hookCount = 0;
+  _hookAttempts = 0;
+  hookFailed(name) { this._hookFails.push(name); }
+  hooksDone(count, attempts) { this._hookCount = count; this._hookAttempts = attempts; }
+
+  // Anything that escaped entirely. If the client's own initialisation
+  // throws, everything after that line never runs and there is no other
+  // record of it -- the menu is simply absent or half-built and nothing
+  // works. This is the case the whole diagnostic exists for, so it has to
+  // be armed before there is anything to diagnose.
+  // The client hands itself over once it exists. Reaching for a `RYN` binding
+  // from here would not work: this lives at the top of the file so that it
+  // survives an initialisation that dies, and the client's own RYN is declared
+  // inside a closure further down that may never be reached.
+  _ryn = null;
+  attach(ryn) { this._ryn = ryn; }
+  get ryn() {
+    return this._ryn || (typeof window !== "undefined" && window.RYN) || null;
+  }
+
+  _fatal = [];
+  fatal(where, err) {
+    this._fatal.push({
+      where: where,
+      message: err && err.message ? err.message : String(err),
+      stack: err && err.stack ? String(err.stack).split("\n").slice(0, 4).join(" | ") : null
+    });
+  }
+
+  threw(id, phase, err) {
+    const key = id + " @" + phase;
+    const row = this._throws.get(key) ?? { count: 0, last: null };
+    row.count += 1;
+    row.last = err && err.message ? err.message : String(err);
+    this._throws.set(key, row);
+  }
+  refused(unitID, action) {
+    const key = unitID + " -> " + action;
+    this._refusals.set(key, (this._refusals.get(key) ?? 0) + 1);
+  }
+  emitted(action) {
+    this._emits.set(action, (this._emits.get(action) ?? 0) + 1);
+  }
+  tick(t, resolved, ran) {
+    if (!this.enabled) return;
+    this._ticks.push({
+      t: t,
+      claim: resolved.activeFeature,
+      attack: resolved.shouldAttack === true,
+      hat: resolved.forceHat,
+      weapon: resolved.forceWeapon,
+      ran: ran
+    });
+    if (this._ticks.length > this._limit) this._ticks.shift();
+  }
+
+  report() {
+    const R = this.ryn;
+    const client2 = R ? R._myClient : null;
+    const ryn = client2 ? client2.services : null;
+    const L = [];
+    const say = m => L.push(m);
+
+    say("=== RYN diagnostics ===");
+    say("  version " + (R && R.version ? R.version : "?"));
+    if (this._fatal.length) {
+      say("");
+      say("-- SOMETHING DIED. Nothing below is meaningful until this is fixed --");
+      for (const f of this._fatal) {
+        say("  " + f.where + ": " + f.message);
+        if (f.stack) say("      " + f.stack);
+      }
+    }
+    say("");
+    say("-- bundle hooks --");
+    say("  matched            : " + this._hookCount + "/" + this._hookAttempts);
+    if (this._hookFails.length === 0) {
+      say("  all hooks matched the bundle the browser served");
+    } else {
+      say("  FAILED, and whatever each one carried is simply absent:");
+      for (const n of this._hookFails) {
+        const carries = RYN_HOOK_CARRIES[n];
+        say("    " + n + (carries ? "  -- " + carries : ""));
+      }
+    }
+    say("");
+    say("-- wire --");
+    const cr = client2 ? client2._gameCrypto : undefined;
+    const gn = client2 ? client2._gameNet : undefined;
+    say("  game net exposed   : " + (gn ? "yes, socket " + (gn.socket ? "open" : "MISSING") : "NO -- the exposeGameNet hook did not take"));
+    say("  crypto exposed     : " + (cr ? "yes, mode " + cr.mode + ", seq " + cr.seq : "NO -- nothing can be sent"));
+    if (cr) {
+      say("  key / tables       : " + (cr.key ? cr.key.length + " bytes" : "MISSING") + " / " +
+          (cr.tables && cr.tables.c2s ? Object.keys(cr.tables.c2s.enc).length + " client opcodes" : "MISSING"));
+    }
+    const enc = R && R._enc;
+    say("  crypto fns exposed : " + (enc ? "yes" : "NO -- the exposeCryptoFns hook did not take"));
+    say("  packets this second: " + (ryn && ryn.network ? ryn.network.packetCount + "/" + ryn.network.packetLimit : "?"));
+
+    say("");
+    say("-- what reached the wire --");
+    if (this._emits.size === 0) say("  nothing at all");
+    for (const [a, n] of [...this._emits].sort((x, y) => y[1] - x[1])) say("  " + a.padEnd(12) + n);
+
+    say("");
+    say("-- actions the contract refused --");
+    if (this._refusals.size === 0) say("  none");
+    for (const [k, n] of [...this._refusals].sort((x, y) => y[1] - x[1])) say("  " + k.padEnd(34) + n);
+
+    say("");
+    say("-- features that threw --");
+    if (this._throws.size === 0) say("  none");
+    for (const [k, r] of [...this._throws].sort((x, y) => y[1].count - x[1].count)) {
+      say("  " + k.padEnd(34) + r.count + "x  " + r.last);
+    }
+
+    say("");
+    say("-- who held the last ticks --");
+    const held = new Map;
+    for (const row of this._ticks) held.set(row.claim, (held.get(row.claim) ?? 0) + 1);
+    for (const [who, n] of [...held].sort((x, y) => y[1] - x[1])) {
+      say("  " + String(who === null ? "(nobody)" : who).padEnd(26) + n + " of " + this._ticks.length);
+    }
+    const attacks = this._ticks.filter(r => r.attack).length;
+    say("  ticks wanting an attack   : " + attacks + " of " + this._ticks.length);
+    const hats = this._ticks.filter(r => r.hat !== null && r.hat !== undefined).length;
+    say("  ticks wanting a hat       : " + hats + " of " + this._ticks.length);
+    const ranMin = this._ticks.length ? Math.min(...this._ticks.map(r => r.ran)) : 0;
+    const ranMax = this._ticks.length ? Math.max(...this._ticks.map(r => r.ran)) : 0;
+    say("  features run per tick     : " + ranMin + "-" + ranMax);
+
+    say("");
+    say("-- state --");
+    if (client2 && client2.myPlayer) {
+      const mp = client2.myPlayer;
+      say("  inGame " + mp.inGame + ", attacking " + (ryn ? ryn.actions.attacking : "?") +
+          ", attackingState " + (ryn ? ryn.actions.attackingState : "?"));
+      say("  intent.shouldAttack " + (ryn ? ryn.intent.shouldAttack : "?") +
+          ", forceHat " + (ryn ? ryn.intent.forceHat : "?") +
+          ", forceWeapon " + (ryn ? ryn.intent.forceWeapon : "?"));
+      say("  owned hats " + (ryn && ryn.loadout ? ryn.loadout.bought[0].size : "?") +
+          ", owned accs " + (ryn && ryn.loadout ? ryn.loadout.bought[1].size : "?"));
+    } else {
+      say("  no player yet");
+    }
+    return L.join("\n");
+  }
+  print() {
+    const text = this.report();
+    console.log(text);
+    // Copied as well as printed: a console block this size is awkward to
+    // select by hand, and the whole point is that it gets pasted somewhere.
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(
+          () => console.log("[copied to clipboard]"),
+          () => {}
+        );
+      }
+    } catch (e) {}
+    return text;
+  }
+  reset() {
+    this._throws.clear();
+    this._refusals.clear();
+    this._emits.clear();
+    this._ticks.length = 0;
+    this._fatal.length = 0;
+  }
+}();
+
+// Reachable from the console the instant the recorder exists, and armed to
+// catch whatever kills initialisation. Putting this at the end of the file
+// -- where it was -- meant that the one failure it is for, the client dying
+// partway through setup, also took the diagnostic with it: `rynDiag` was
+// simply not defined, which is a symptom nobody can read.
+try {
+  if (typeof window !== "undefined") {
+    window.rynDiag = () => RynDiag.print();
+    window.rynDiagReset = () => RynDiag.reset();
+    window.addEventListener("error", e => {
+      const f = e && (e.filename || "");
+      // Only what came from this script; the page throws its own things.
+      if (f && !/moomoo|userscript|blob:|^$/i.test(f) && e.error === undefined) return;
+      RynDiag.fatal("uncaught" + (e && e.lineno ? " @line " + e.lineno : ""), e && e.error ? e.error : (e && e.message) || e);
+    }, true);
+    window.addEventListener("unhandledrejection", e => {
+      RynDiag.fatal("unhandled promise", e && e.reason);
+    }, true);
+  }
+} catch (e) {}
+
 const RYN_FAVICON_URL = "https://i.postimg.cc/yY4X1kc4/ryn.png";
 
 function _applyRynBranding() {
@@ -7356,7 +7580,9 @@ window.grbtp = 35;
         this.client.connectSuccess = true;
         this.client.clientID = temp[1];
         try {
-          const enc = typeof RYN !== "undefined" && RYN._enc;
+          // Same source the codec reads from, so the two cannot disagree about
+          // whether the crypto is available.
+          const enc = RynDiag.ryn && RynDiag.ryn._enc;
           const mode = decoded[1][3];
           const seed = decoded[1][1];
           const keyHex = decoded[1][2];
@@ -19531,174 +19757,7 @@ window.grbtp = 35;
   // This records the last few seconds of that: who claimed each tick, what the
   // intent resolved to, what actually reached the wire, and every throw and
   // refusal with the unit that caused it. `RYN.diag()` prints it.
-  // What each hook is actually carrying, so a failed one reads as a symptom.
-  const RYN_HOOK_CARRIES = Object.freeze({
-    exposeCryptoFns: "the key and opcode tables. Without it NOTHING can be sent at all.",
-    exposeGameCrypto: "the per-connection key and sequence number",
-    exposeGameNet: "the socket every packet goes through",
-    handleEquip: "HATS and accessories -- every equip",
-    handleBuy: "buying hats and accessories",
-    upgradeItem: "upgrades",
-    RemoveSendAngle: "suppressing the game's own aim packet so RYN owns the angle",
-    captureTurnstile: "the connection token",
-    checkTrusted: "pressing play programmatically",
-    playerDied: "autospawn",
-    unlockedItems: "using items the account has not unlocked",
-    LockRotationClient: "the aim angle",
-    gameInit: "starting the game at all",
-    preRenderLoop: "the render hooks",
-    postRenderLoop: "the render hooks"
-  });
 
-  const RynDiag = new class {
-    _throws = new Map;      // feature id -> { count, last, phase }
-    _refusals = new Map;    // "unit:action" -> count
-    _emits = new Map;       // action -> count
-    _ticks = [];            // rolling window of resolved ticks
-    _limit = 40;
-    enabled = true;
-
-    // Which hooks did not match the bundle the browser actually served. This
-    // is the one thing that cannot be checked from outside: a saved copy of
-    // the bundle may not be what is being served today, and a hook that stops
-    // matching removes whatever it was carrying without a word.
-    _hookFails = [];
-    _hookCount = 0;
-    _hookAttempts = 0;
-    hookFailed(name) { this._hookFails.push(name); }
-    hooksDone(count, attempts) { this._hookCount = count; this._hookAttempts = attempts; }
-
-    threw(id, phase, err) {
-      const key = id + " @" + phase;
-      const row = this._throws.get(key) ?? { count: 0, last: null };
-      row.count += 1;
-      row.last = err && err.message ? err.message : String(err);
-      this._throws.set(key, row);
-    }
-    refused(unitID, action) {
-      const key = unitID + " -> " + action;
-      this._refusals.set(key, (this._refusals.get(key) ?? 0) + 1);
-    }
-    emitted(action) {
-      this._emits.set(action, (this._emits.get(action) ?? 0) + 1);
-    }
-    tick(t, resolved, ran) {
-      if (!this.enabled) return;
-      this._ticks.push({
-        t: t,
-        claim: resolved.activeFeature,
-        attack: resolved.shouldAttack === true,
-        hat: resolved.forceHat,
-        weapon: resolved.forceWeapon,
-        ran: ran
-      });
-      if (this._ticks.length > this._limit) this._ticks.shift();
-    }
-
-    report() {
-      const client2 = typeof RYN !== "undefined" ? RYN._myClient : null;
-      const ryn = client2 ? client2.services : null;
-      const L = [];
-      const say = m => L.push(m);
-
-      say("=== RYN diagnostics ===");
-      say("  version " + (typeof RYN !== "undefined" ? RYN.version : "?"));
-      say("");
-      say("-- bundle hooks --");
-      say("  matched            : " + this._hookCount + "/" + this._hookAttempts);
-      if (this._hookFails.length === 0) {
-        say("  all hooks matched the bundle the browser served");
-      } else {
-        say("  FAILED, and whatever each one carried is simply absent:");
-        for (const n of this._hookFails) {
-          const carries = RYN_HOOK_CARRIES[n];
-          say("    " + n + (carries ? "  -- " + carries : ""));
-        }
-      }
-      say("");
-      say("-- wire --");
-      const cr = client2 ? client2._gameCrypto : undefined;
-      const gn = client2 ? client2._gameNet : undefined;
-      say("  game net exposed   : " + (gn ? "yes, socket " + (gn.socket ? "open" : "MISSING") : "NO -- the exposeGameNet hook did not take"));
-      say("  crypto exposed     : " + (cr ? "yes, mode " + cr.mode + ", seq " + cr.seq : "NO -- nothing can be sent"));
-      if (cr) {
-        say("  key / tables       : " + (cr.key ? cr.key.length + " bytes" : "MISSING") + " / " +
-            (cr.tables && cr.tables.c2s ? Object.keys(cr.tables.c2s.enc).length + " client opcodes" : "MISSING"));
-      }
-      const enc = typeof RYN !== "undefined" && RYN._enc;
-      say("  crypto fns exposed : " + (enc ? "yes" : "NO -- the exposeCryptoFns hook did not take"));
-      say("  packets this second: " + (ryn && ryn.network ? ryn.network.packetCount + "/" + ryn.network.packetLimit : "?"));
-
-      say("");
-      say("-- what reached the wire --");
-      if (this._emits.size === 0) say("  nothing at all");
-      for (const [a, n] of [...this._emits].sort((x, y) => y[1] - x[1])) say("  " + a.padEnd(12) + n);
-
-      say("");
-      say("-- actions the contract refused --");
-      if (this._refusals.size === 0) say("  none");
-      for (const [k, n] of [...this._refusals].sort((x, y) => y[1] - x[1])) say("  " + k.padEnd(34) + n);
-
-      say("");
-      say("-- features that threw --");
-      if (this._throws.size === 0) say("  none");
-      for (const [k, r] of [...this._throws].sort((x, y) => y[1].count - x[1].count)) {
-        say("  " + k.padEnd(34) + r.count + "x  " + r.last);
-      }
-
-      say("");
-      say("-- who held the last ticks --");
-      const held = new Map;
-      for (const row of this._ticks) held.set(row.claim, (held.get(row.claim) ?? 0) + 1);
-      for (const [who, n] of [...held].sort((x, y) => y[1] - x[1])) {
-        say("  " + String(who === null ? "(nobody)" : who).padEnd(26) + n + " of " + this._ticks.length);
-      }
-      const attacks = this._ticks.filter(r => r.attack).length;
-      say("  ticks wanting an attack   : " + attacks + " of " + this._ticks.length);
-      const hats = this._ticks.filter(r => r.hat !== null && r.hat !== undefined).length;
-      say("  ticks wanting a hat       : " + hats + " of " + this._ticks.length);
-      const ranMin = this._ticks.length ? Math.min(...this._ticks.map(r => r.ran)) : 0;
-      const ranMax = this._ticks.length ? Math.max(...this._ticks.map(r => r.ran)) : 0;
-      say("  features run per tick     : " + ranMin + "-" + ranMax);
-
-      say("");
-      say("-- state --");
-      if (client2 && client2.myPlayer) {
-        const mp = client2.myPlayer;
-        say("  inGame " + mp.inGame + ", attacking " + (ryn ? ryn.actions.attacking : "?") +
-            ", attackingState " + (ryn ? ryn.actions.attackingState : "?"));
-        say("  intent.shouldAttack " + (ryn ? ryn.intent.shouldAttack : "?") +
-            ", forceHat " + (ryn ? ryn.intent.forceHat : "?") +
-            ", forceWeapon " + (ryn ? ryn.intent.forceWeapon : "?"));
-        say("  owned hats " + (ryn && ryn.loadout ? ryn.loadout.bought[0].size : "?") +
-            ", owned accs " + (ryn && ryn.loadout ? ryn.loadout.bought[1].size : "?"));
-      } else {
-        say("  no player yet");
-      }
-      return L.join("\n");
-    }
-    print() {
-      const text = this.report();
-      console.log(text);
-      // Copied as well as printed: a console block this size is awkward to
-      // select by hand, and the whole point is that it gets pasted somewhere.
-      try {
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-          navigator.clipboard.writeText(text).then(
-            () => console.log("[copied to clipboard]"),
-            () => {}
-          );
-        }
-      } catch (e) {}
-      return text;
-    }
-    reset() {
-      this._throws.clear();
-      this._refusals.clear();
-      this._emits.clear();
-      this._ticks.length = 0;
-    }
-  }();
 
   class Regexer {
     code;
@@ -20608,6 +20667,9 @@ window.grbtp = 35;
     }
   };
   win.RYN = RYN;
+  // Hand the diagnostic its handle. It lives above this scope so that it can
+  // still be called when initialisation never gets this far.
+  RynDiag.attach(RYN);
   // The bundle takes window.RYN away once it has captured it, so the
   // diagnostic gets a handle of its own that survives. Type rynDiag() in the
   // console at any point and it prints what the last few seconds did.
