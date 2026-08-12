@@ -1850,3 +1850,95 @@ everything else takes its copy from there:
 press elsewhere is not, a press on a child of the button is, the holder it
 renders into is laid out, the sitekey matches the bundle's) and checks that
 every shipped script still carries them.
+
+# novastorm 1.4: connected, and then silent
+
+The banner and the entry guard got novastorm as far as a socket. It still did
+not play, and the reason was two things underneath the entry that no amount of
+staring at the file would have shown. Both were found by giving
+`tools/probe-entry.js` a **real server**: the io-init handshake and the HMAC
+framing, computed in node from the game bundle's own crypto, so a packet the
+mod sends is verified the way the live server verifies it.
+
+## Its client never ran at all
+
+novastorm is a complete client behind one door:
+
+```js
+window.OriginalWebSocket = window.WebSocket;
+window.WebSocket = class { constructor(addr) { connectSocket(addr) } };
+```
+
+It was written when the game said `new WebSocket(...)` at the call site. The
+current bundle does not:
+
+```js
+const kn = window.WebSocket;      // ...at load
+this.socket = new kn(e);          // ...much later
+```
+
+so the replacement is never reached, and the game plays on with novastorm's UI
+code loaded and its client asleep. Keeping `window.WebSocket` assignable — v2's
+fix — made the assignment stick and still changed nothing.
+
+So the constructor the bundle captured now forwards to whatever is on
+`window.WebSocket` at call time. Every replacement of this kind keeps a
+reference to what it replaced and constructs it, and that inner call comes back
+through the same function, so the replacement is handed out through a thin
+proxy that counts while it runs — forwarding once, never twice, and never for
+ever. The proxy copies prototype, statics, `name` and `toString`, so
+`instanceof` and anything printing the constructor see no difference.
+
+Counterfactual, with the forwarding cut back out: `packetsFramed: 0`, and the
+three packets on the wire are the game's own.
+
+## Its client spawned before it had a key
+
+With the door open, novastorm connected — and the server rejected its spawn:
+
+```
+  packets : 3 (1 signed and understood, 1 rejected, 1 too short to be framed)
+  rejected: unsigned ["M",[{"name":"...","moofoll":null,"skin":0}]]
+```
+
+Its bundled 2019 io-client starts on socket-open:
+
+```js
+this.socket.onopen = function () { _this.connected = true; callback(); };
+```
+
+The current game does not, and cannot: io-init is what carries the seed and the
+key every frame after it is signed with, so it calls its callback from inside
+`onmessage`, on the io-init branch. A client that starts on `open` sends its
+spawn into a socket with no session — out it goes unsigned, the server drops
+it, and the client sits on "Loading..." having said nothing the server would
+answer. The shim underneath cannot rescue it: at that moment it has nothing to
+sign with either.
+
+`repair-mod.js` moves the start to the io-init branch, where the game keeps it.
+`connected` stays on open, because that is what it means. The callback is
+stashed on the client object rather than called by name, because x18k carries
+the same client minified and its handler opens with `const n = ol.decode(t)` —
+which shadows `n`, the callback. x18k had the identical bug and is fixed by the
+same rule.
+
+Both, on the wire, after:
+
+```
+$ node tools/probe-entry.js --mod novastorm.v1.4.js --turnstile solve --server --hide-widget
+  0 seq=1 []
+  M seq=2 [{"name":"probe42","moofoll":null,"skin":0}]
+  0 seq=3 []
+=> and the server accepted 3 packet(s) from it
+```
+
+## One of those bugs was mine
+
+The fake socket in the probe dispatched `onmessage` before listeners registered
+earlier. The browser does not: `onmessage` takes its place in the listener list
+when it is first assigned. That put novastorm's client ahead of the shim's
+io-init sniffer and produced a wedge that existed only in my harness — and it
+sat on top of the two real bugs, which is the worst place for a fake one to be.
+The fake now gives `onmessage` a slot in the list, and the control run (stock
+game, no mod) is what caught it: the shipped bundle has to reach the server
+cleanly, and it did not.

@@ -398,6 +398,30 @@ console.log('\n8. the constructor the bundle tries to freeze');
   const sock = new w.WebSocket('wss://example');
   check(seen.length === 1 && sock instanceof U.WebSocket, "a mod's own wrapper still takes effect");
 }
+{
+  // ...and the other half of it. The bundle does not call window.WebSocket; it
+  // calls the reference it captured at load:
+  //     const kn = window.WebSocket; ... this.socket = new kn(e)
+  // so a mod that replaces the constructor afterwards was never reached for the
+  // one socket that matters. novastorm's entire client sits behind that door.
+  const U = loadUnpatcher();
+  const w = U.window;
+  const captured = w.WebSocket;             // what the bundle holds
+
+  const saw = [];
+  const kept = w.WebSocket;
+  w.WebSocket = function Hijack(url) {
+    saw.push(url);
+    return new kept(url);                   // the shape every one of these has
+  };
+  const sock = new captured('wss://x.moomoo.io');
+  check(saw.length === 1, 'a replacement installed after the bundle captured us is reached, once');
+  check(sock instanceof U.WebSocket, 'and one real socket comes back');
+
+  // the shield must not change what the mod sees of its own function
+  check(w.WebSocket.name === 'Hijack', 'the constructor still reports the mod\'s own name');
+  check(/Hijack/.test(String(w.WebSocket)), 'and prints as the mod wrote it');
+}
 
 console.log('\n9. the connect URL');
 {

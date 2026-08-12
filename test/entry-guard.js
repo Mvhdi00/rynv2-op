@@ -271,5 +271,30 @@ console.log('\n5. x18k waited on a captcha that no longer exists');
         'its captcha payload is taken from the Turnstile token instead');
 }
 
+// --------------------------------------------------------------------------
+console.log('\n6. two clients that spawned before the handshake');
+{
+  // A mod carrying its own copy of the 2019 io-client started on socket-open,
+  // which is too early: io-init is what brings the seed and the key, so the
+  // spawn went out unsigned and the server dropped it. The client then sat on
+  // "Loading..." for ever, having said nothing the server would answer.
+  // tools/probe-entry.js shows it on the wire; this checks the repair is in
+  // the shipped files and did not just work once on my machine.
+  for (const name of ['novastorm.v1.4.js', 'x18k-Original.v5.3.js']) {
+    const before = fs.readFileSync(path.join(ROOT, 'reference/originals/' + name), 'utf8');
+    const after = fs.readFileSync(path.join(ROOT, name), 'utf8');
+    check(/onopen = function ?\(\) ?\{\s*\w+\.connected = (?:true|!0)[,;]\s*\w+\(\)/.test(before),
+          name + ': the original starts its client from socket-open');
+    check(!/onopen = function ?\(\) ?\{\s*\w+\.connected = (?:true|!0)[,;]\s*\w+\(\)/.test(after),
+          name + ': the repaired file does not');
+    check(/_started = 1, \w+\._go && \w+\._go\(\)/.test(after),
+          name + ': it starts from the io-init branch instead');
+    // The callback is stashed rather than named at the call site: x18k's
+    // minified handler opens with `const n = ol.decode(t)`, which shadows the
+    // callback `n`. Calling it by name there threw "n is not a function".
+    check(/\._go = \w+/.test(after), name + ': and the callback is stashed, not named');
+  }
+}
+
 console.log('\n' + (fails ? '=> ' + fails + ' FAILURE(S)' : '=> ALL ENTRY GUARD TESTS PASSED'));
 process.exit(fails ? 1 : 0);

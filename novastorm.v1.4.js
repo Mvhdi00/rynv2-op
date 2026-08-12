@@ -771,7 +771,7 @@ const UNPATCH = (function () {
 
     function trampoline(data) {
         const current = WebSocket.prototype.send;
-        if (current !== shimSend && !inModHook) {
+        if (typeof current === "function" && current !== shimSend && !inModHook) {
             const un = EXP.unframe(this, data);
             let give = data;
             if (un) {
@@ -1070,11 +1070,31 @@ const UNPATCH = (function () {
         return text + (text.indexOf("?") === -1 ? "?" : "&") + "token=" + encoded;
     }
 
+    let inside = 0;
+    function shield(fn) {
+        const Shielded = function (url, protocols) {
+            inside++;
+            try {
+                return protocols === undefined ? new fn(url) : new fn(url, protocols);
+            } finally { inside--; }
+        };
+        try { Shielded.prototype = fn.prototype; } catch (e) {}
+        ["CONNECTING", "OPEN", "CLOSING", "CLOSED"].forEach(function (k) {
+            try { Shielded[k] = fn[k]; } catch (e) {}
+        });
+        try { Object.defineProperty(Shielded, "name", { value: fn.name, configurable: true }); } catch (e) {}
+        Shielded.toString = function () { return Function.prototype.toString.call(fn); };
+        return Shielded;
+    }
+
     if (hasWin && typeof ctor == "function") {
         const inner = ctor;
         const Wrapped = function (url, protocols) {
-            const fixed = fixUrl(url)
-                , s = protocols === undefined ? new inner(fixed) : new inner(fixed, protocols);
+            const fixed = fixUrl(url);
+            if (inside === 0 && typeof ctor == "function" && ctor !== Wrapped) {
+                return protocols === undefined ? new ctor(fixed) : new ctor(fixed, protocols);
+            }
+            const s = protocols === undefined ? new inner(fixed) : new inner(fixed, protocols);
             if (seenSockets.length < 32) seenSockets.push(s);
             return s;
         };
@@ -1088,7 +1108,7 @@ const UNPATCH = (function () {
                 configurable: false,
                 enumerable: true,
                 get: function () { return ctor; },
-                set: function (v) { ctor = v; }
+                set: function (v) { ctor = typeof v == "function" ? shield(v) : v; }
             });
             noteShim("WebSocket kept assignable");
         } catch (e) {
@@ -19771,14 +19791,13 @@ for (let tree of trees) {
 
                         // CALL EVENT:
                         if (type == "io-init") {
-                            _this.socketId = data[0];
+                            _this.socketId = data[0]; _this._started || (_this._started = 1, _this._go && _this._go());
                         } else {
                             events[type].apply(undefined, data);
                         }
                     };
                     this.socket.onopen = function () {
-                        _this.connected = true;
-                        callback();
+                        _this.connected = true; _this._go = callback;
                     };
                     this.socket.onclose = function (event) {
                         _this.connected = false;

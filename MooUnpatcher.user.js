@@ -1019,8 +1019,21 @@ const UNPATCH = (function () {
     let inModHook = false;
 
     function trampoline(data) {
+        // Not `window.WebSocket.prototype.send` -- `WebSocket` here is whatever
+        // the accessor currently hands back, and a mod is free to have put
+        // something else there.
         const current = WebSocket.prototype.send;
-        if (current !== shimSend && !inModHook) {
+        // "different from ours" is not the same as "a hook". novastorm hijacks
+        // socket construction by putting a class with an empty prototype on
+        // window.WebSocket:
+        //
+        //     window.OriginalWebSocket = window.WebSocket;
+        //     window.WebSocket = class { constructor(addr) { connectSocket(addr) } };
+        //
+        // so `current` is undefined, which is different from ours, and calling
+        // it threw on every outgoing packet -- the client connected and was
+        // then mute. Anything that is not callable is not a hook.
+        if (typeof current === "function" && current !== shimSend && !inModHook) {
             // A mod has installed its hook. It expects plain msgpack in its own
             // dialect, so unframe and rename before handing it over.
             const un = EXP.unframe(this, data);
@@ -1415,11 +1428,62 @@ const UNPATCH = (function () {
         return text + (text.indexOf("?") === -1 ? "?" : "&") + "token=" + encoded;
     }
 
+    // Keeping the property assignable was only half of it. The bundle does
+    //
+    //     const kn = window.WebSocket;      // ...at load
+    //     this.socket = new kn(e);          // ...much later
+    //
+    // so a mod that replaces window.WebSocket after the bundle has run -- to
+    // hijack the connection, read the address, or put a transport of its own
+    // underneath -- is still never reached for the socket that matters. The
+    // assignment sticks and does nothing.
+    //
+    // novastorm is the whole of its client behind that door:
+    //
+    //     window.OriginalWebSocket = window.WebSocket;
+    //     window.WebSocket = class { constructor(addr) { connectSocket(addr) } };
+    //
+    // It was written when the game said `new WebSocket(...)` at the call site.
+    // Against the current bundle nothing of it ever ran.
+    //
+    // So the constructor the bundle captured forwards to whatever is on
+    // window.WebSocket at call time.
+    //
+    // Which needs care, because every replacement of this kind keeps a
+    // reference to what it replaced and constructs it -- and that inner call
+    // comes back through here. Forwarding again would run the replacement
+    // twice (or for ever). Knowing when we are inside one is the whole
+    // difficulty: a replacement invoked through window.WebSocket by some other
+    // script is not something we started, so a flag we set around our own
+    // forwarding is not enough. Handing the replacement out through a thin
+    // proxy that raises the count while it runs covers both, and the proxy
+    // copies across prototype, statics, name and toString so that instanceof
+    // and anything printing it see no difference.
+    let inside = 0;
+    function shield(fn) {
+        const Shielded = function (url, protocols) {
+            inside++;
+            try {
+                return protocols === undefined ? new fn(url) : new fn(url, protocols);
+            } finally { inside--; }
+        };
+        try { Shielded.prototype = fn.prototype; } catch (e) {}
+        ["CONNECTING", "OPEN", "CLOSING", "CLOSED"].forEach(function (k) {
+            try { Shielded[k] = fn[k]; } catch (e) {}
+        });
+        try { Object.defineProperty(Shielded, "name", { value: fn.name, configurable: true }); } catch (e) {}
+        Shielded.toString = function () { return Function.prototype.toString.call(fn); };
+        return Shielded;
+    }
+
     if (hasWin && typeof ctor == "function") {
         const inner = ctor;
         const Wrapped = function (url, protocols) {
-            const fixed = fixUrl(url)
-                , s = protocols === undefined ? new inner(fixed) : new inner(fixed, protocols);
+            const fixed = fixUrl(url);
+            if (inside === 0 && typeof ctor == "function" && ctor !== Wrapped) {
+                return protocols === undefined ? new ctor(fixed) : new ctor(fixed, protocols);
+            }
+            const s = protocols === undefined ? new inner(fixed) : new inner(fixed, protocols);
             if (seenSockets.length < 32) seenSockets.push(s);
             return s;
         };
@@ -1433,7 +1497,7 @@ const UNPATCH = (function () {
                 configurable: false,
                 enumerable: true,
                 get: function () { return ctor; },
-                set: function (v) { ctor = v; }
+                set: function (v) { ctor = typeof v == "function" ? shield(v) : v; }
             });
             noteShim("WebSocket kept assignable");
         } catch (e) {

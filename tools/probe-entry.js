@@ -19,9 +19,13 @@
  *     be told to solve (--turnstile solve), to load but never solve
  *     (--turnstile never), or to never load at all (--turnstile blocked). Those
  *     are the three things that actually happen to people.
- *   - WebSocket, installed before the bundle so the bundle captures it. There
- *     is no server here; what matters is whether a socket is opened at all and
- *     what URL it carries.
+ *   - WebSocket, installed before the bundle so the bundle captures it. Behind
+ *     it (--server) sits the real thing: the io-init handshake and the HMAC
+ *     framing, computed in node with the game bundle's own crypto lifted out of
+ *     reference/game-index.js. So a packet the mod sends is verified the way
+ *     the live server verifies it -- signature, opcode, sequence -- and a reply
+ *     goes back framed the same way. That turns "a socket was opened" into
+ *     "the mod is talking, and the server understands it".
  *
  * Usage:
  *   node tools/probe-entry.js [--mod <file>] [--unpatcher]
@@ -34,6 +38,7 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const extract = require('../test/extract.js');
 
 const ROOT = path.join(__dirname, '..');
 const argv = process.argv.slice(2);
@@ -42,6 +47,7 @@ function flag(name, dflt) {
   return i < 0 ? dflt : argv[i + 1];
 }
 const MOD = flag('mod', null);
+const SERVER = argv.includes('--server');
 const WITH_UNPATCHER = argv.includes('--unpatcher');
 const TURNSTILE = flag('turnstile', 'solve');
 const WAIT = parseInt(flag('wait', '6000'), 10);
@@ -131,28 +137,69 @@ window.turnstile = {
 const FAKE_WS = `
 window.__sockets = [];
 (function () {
+  var nextId = 0;
   function FakeWS(url, protocols) {
     var self = this;
     this.url = String(url); this.readyState = 0; this.binaryType = "blob";
     this._l = {};
+    this.__id = ++nextId;
     window.__sockets.push(this.url);
     setTimeout(function () {
       self.readyState = 1;
+      window.__live = window.__live || {};
+      window.__live[self.__id] = self;
       var e = { type: "open" };
-      if (self.onopen) self.onopen(e);
-      (self._l.open || []).forEach(function (f) { f(e); });
+      (self._l.open || []).forEach(function (f) { if (f) f.call(self, e); });
+      // The server speaks first: io-init carries the seed and key every frame
+      // after it is signed with.
+      if (window.__serverOpened) window.__serverOpened(self.__id);
     }, 30);
   }
-  FakeWS.prototype.send = function () {};
+  FakeWS.prototype.send = function (data) {
+    if (!window.__serverRecv) return;
+    var bytes = data;
+    if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+    else if (ArrayBuffer.isView(data)) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    else return;
+    window.__serverRecv(this.__id, Array.from(bytes));
+  };
   FakeWS.prototype.close = function () {
     this.readyState = 3;
     var e = { type: "close", code: 1000 };
-    if (this.onclose) this.onclose(e);
-    (this._l.close || []).forEach(function (f) { f(e); });
+    var self = this;
+    (this._l.close || []).forEach(function (f) { if (f) f.call(self, e); });
   };
   FakeWS.prototype.addEventListener = function (t, f) { (this._l[t] = this._l[t] || []).push(f); };
   FakeWS.prototype.removeEventListener = function () {};
+  // onmessage is not a slot that runs first: the browser gives it a place in
+  // the listener list at the moment it is FIRST assigned, and reassigning
+  // replaces it where it already stands. Dispatching it ahead of listeners
+  // registered earlier put novastorm's client in front of the shim's io-init
+  // sniffer, so the client sent its spawn on a socket the shim had not yet
+  // seen a session for -- a wedge invented entirely by this harness.
+  ["message", "open", "close", "error"].forEach(function (kind) {
+    Object.defineProperty(FakeWS.prototype, "on" + kind, {
+      configurable: true,
+      get: function () { return this["_h" + kind] || null; },
+      set: function (fn) {
+        var list = this._l[kind] = this._l[kind] || [];
+        var at = this["_i" + kind];
+        if (at === undefined) { this["_i" + kind] = list.length; list.push(fn); }
+        else { list[at] = fn; }
+        this["_h" + kind] = fn;
+      }
+    });
+  });
   FakeWS.CONNECTING = 0; FakeWS.OPEN = 1; FakeWS.CLOSING = 2; FakeWS.CLOSED = 3;
+  // Delivered from node, which is where the framing is done.
+  window.__deliver = function (id, bytes) {
+    var sock = (window.__live || {})[id];
+    if (!sock) return;
+    var buf = new Uint8Array(bytes).buffer;
+    var payload = sock.binaryType === "arraybuffer" ? buf : new Blob([buf]);
+    var e = { type: "message", data: payload, target: sock };
+    (sock._l.message || []).forEach(function (f) { if (f) f.call(sock, e); });
+  };
   window.WebSocket = FakeWS;
 })();
 `;
@@ -211,6 +258,54 @@ window.FRVR = {
         if (w) w.style.display = "none";
       });` });
   }
+  /* --- the server, in node ---------------------------------------------- */
+  // The framing is the game's own: opcode tables from the seed, HMAC from the
+  // key, both lifted out of reference/game-index.js by test/extract.js. A
+  // signature that does not verify here would not verify on the live server.
+  const wire = { sent: [], bad: 0, names: [], detail: [], handshakes: 0, unsigned: 0, threw: [], rejected: [] };
+  if (SERVER) {
+    const { game, msgpack: vendor } = extract.load();
+    const enc = new vendor.Encoder(), dec = new vendor.Decoder();
+    const SEED = 0x00DEFACE, KEY_HEX = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const tables = game.Po(SEED);
+    const key = game.Ro(KEY_HEX);
+    // A packet is delivered by calling into the page, so anything the mod's
+    // message handler throws comes back on THIS promise -- it is never a
+    // pageerror. Swallowing it here hid novastorm's real failure for an
+    // embarrassingly long time: the client looked like it simply chose not to
+    // send its spawn.
+    const deliver = (id, bytes) =>
+      page.evaluate(([i, b]) => window.__deliver(i, b), [id, Array.from(bytes)])
+        .catch(e => { wire.threw.push(String(e.message || e).split('\n')[0]); });
+
+    await page.exposeFunction('__serverOpened', async (id) => {
+      wire.handshakes++;
+      await deliver(id, enc.encode(['io-init', [1, SEED, KEY_HEX, game.Ht]]));
+    });
+    await page.exposeFunction('__serverRecv', (id, arr) => {
+      const buf = Buffer.from(arr);
+      wire.sent.push(buf.length);
+      if (buf.length <= 6) { wire.unsigned++; return; }
+      const want = Buffer.from(game.Eo(key, buf.subarray(6)));
+      if (!want.equals(buf.subarray(0, 6))) {
+        wire.bad++;
+        // Unsigned traffic is the interesting kind of wrong: it means someone
+        // sent before the session existed. Say what it was.
+        try {
+          const plain = dec.decode(new Uint8Array(buf));
+          wire.rejected.push('unsigned ' + JSON.stringify(plain).slice(0, 90));
+        } catch (e) { wire.rejected.push('bad signature, ' + buf.length + ' bytes'); }
+        return;
+      }
+      let decoded;
+      try { decoded = dec.decode(new Uint8Array(buf.subarray(6))); } catch (e) { wire.bad++; return; }
+      const name = tables.c2s.dec[decoded[0]];
+      if (!name) { wire.bad++; return; }
+      wire.names.push(name);
+      wire.detail.push(name + ' seq=' + decoded[2] + ' ' + JSON.stringify(decoded[1]).slice(0, 90));
+    });
+  }
+
   await page.addInitScript({ content: FAKE_WS });
   await page.addInitScript({ content: FRVR });
   if (WITH_UNPATCHER) {
@@ -255,6 +350,10 @@ window.FRVR = {
         whatIsOnTop: hit ? (hit.id || hit.tagName + '.' + hit.className) : null,
         listeners: !!el.onclick,
         onclick: el.onclick ? el.onclick.toString().replace(/\s+/g, ' ').slice(0, 400) : null,
+        // a bundled 2019 io-client, if the mod carries one: whether it got its
+        // session and how far its own entry got
+        io: window.io ? { connected: window.io.connected, socketId: window.io.socketId,
+                          hasSocket: !!window.io.socket, started: !!window.io._started } : null,
       };
     }), null, 2));
   }
@@ -272,6 +371,10 @@ window.FRVR = {
     banner: (() => { const b = document.getElementById('userscript-warning');
                      return !!(b && b.textContent && b.offsetParent !== null); })(),
     sockets: window.__sockets.slice(),
+    // a bundled 2019 io-client, if the mod carries one: whether it got a
+    // session, and how far its own entry got
+    io: window.io ? { connected: window.io.connected, socketId: window.io.socketId,
+                      hasSocket: !!window.io.socket, started: !!window.io._started } : null,
     unpatch: window.unpatch ? window.unpatch.report() : null,
   }));
 
@@ -293,6 +396,7 @@ window.FRVR = {
   console.log('  loadingText     : ' + JSON.stringify(after.loadingText));
   console.log('  sockets opened  : ' + (after.sockets.length ? after.sockets.join('\n                    ') : '(none)'));
   console.log('  red banner      : ' + after.banner);
+  if (after.io) console.log('  bundled client  : ' + JSON.stringify(after.io));
 
   if (errors.length) {
     console.log('\n--- page errors ---');
@@ -304,10 +408,34 @@ window.FRVR = {
     console.log([...new Set(interesting)].slice(0, 20).join('\n'));
   }
 
+  if (SERVER) {
+    console.log('\n--- what reached the server ---');
+    console.log('  io-init sent    : ' + wire.handshakes);
+    console.log('  packets         : ' + wire.sent.length +
+                ' (' + wire.names.length + ' signed and understood, ' +
+                wire.bad + ' rejected, ' + wire.unsigned + ' too short to be framed)');
+    console.log('  opcodes         : ' + (wire.names.length
+      ? [...new Set(wire.names)].join(' ') : '(none)'));
+    for (const d of wire.detail.slice(0, 12)) console.log('    ' + d);
+    for (const r of wire.rejected.slice(0, 8)) console.log('    rejected: ' + r);
+    if (wire.threw.length) {
+      console.log('  handling a packet threw:');
+      for (const t of [...new Set(wire.threw)]) console.log('    ' + t);
+    }
+  }
+
   const connected = after.sockets.some(u => /^wss:/.test(u));
   console.log('\n=> ' + (connected
     ? 'entry reached the socket: ' + after.sockets.filter(u => /^wss:/.test(u))[0]
     : 'entry DID NOT reach a socket -- stuck on ' + JSON.stringify(after.loadingText)));
+  // With a server behind it, "opened a socket" is not the bar any more: the
+  // mod has to say something the server accepts.
+  const ok = SERVER ? (connected && wire.names.length > 0 && wire.bad === 0) : connected;
+  if (SERVER && connected) {
+    console.log('   ' + (ok
+      ? 'and the server accepted ' + wire.names.length + ' packet(s) from it'
+      : 'but nothing it sent was accepted'));
+  }
   await browser.close();
-  process.exit(connected ? 0 : 1);
+  process.exit(ok ? 0 : 1);
 })();

@@ -218,6 +218,84 @@ body2 = body2.replace(
   }
 }
 
+/* --- 2c-4. a client that spawns before the handshake ----------------------
+ * A mod carrying its own copy of the 2019 io-client opens the game like this:
+ *
+ *     this.socket.onopen = function () {
+ *         _this.connected = true;
+ *         callback();                       // "we are connected, go"
+ *     };
+ *     this.socket.onmessage = function (message) {
+ *         ...
+ *         if (type == "io-init") { _this.socketId = data[0]; }
+ *
+ * The current game does not. It calls its callback from *inside* onmessage,
+ * on the io-init branch:
+ *
+ *     if (m === "io-init") { ... o || (o = !0, t()); return }
+ *
+ * and it has to, because io-init is what carries the seed and the key every
+ * frame after it is signed with. A client that starts on `open` sends its
+ * spawn into a socket that has no session yet: the packet goes out unsigned,
+ * the server drops it, and the client sits on "Loading..." having said nothing
+ * the server would answer. tools/probe-entry.js shows it on the wire --
+ *
+ *     rejected: unsigned ["M",[{"name":"...","moofoll":null,"skin":0}]]
+ *
+ * -- and no amount of transport shimming underneath can fix it, because the
+ * shim has nothing to sign with that early either.
+ *
+ * So the callback moves to where the game keeps it. `connected` stays on open,
+ * since that is what it means. Both novastorm and x18k carry this client, one
+ * pretty-printed and one minified, so both spellings are matched.
+ */
+{
+  const openShapes = [
+    // this.socket.onopen = function () { _this.connected = true; callback(); };
+    [/(\.onopen = function \(\) \{\s*(\w+)\.connected = true;)\s*(\w+)\(\);/, 1],
+    // this.socket.onopen = function() { o.connected = !0, n() }
+    [/(\.onopen = function\(\) \{\s*(\w+)\.connected = !0), (\w+)\(\)/, 2],
+  ];
+  let obj = null;
+  for (const [re, style] of openShapes) {
+    const m = re.exec(body2);
+    if (!m) continue;
+    obj = m[2];
+    // The callback is stashed on the client object rather than called by name
+    // at the io-init site. x18k is minified and its message handler opens with
+    //     const n = ol.decode(t)
+    // which shadows `n`, the callback -- calling it there got "n is not a
+    // function". `open` always fires before the first message, so stashing it
+    // here is both safe and immune to whatever the minifier called things.
+    body2 = body2.replace(re, style === 1 ? `$1 ${obj}._go = $3;` : `$1, ${obj}._go = $3`);
+    break;
+  }
+  if (obj) {
+    const start = `${obj}._started || (${obj}._started = 1, ${obj}._go && ${obj}._go())`;
+    const initShapes = [
+      // if (type == "io-init") { _this.socketId = data[0]; }
+      [new RegExp('(if \\(\\w+ == "io-init"\\) \\{\\s*' + obj + '\\.socketId = \\w+\\[0\\];)'),
+       (m) => m[1] + ' ' + start + ';'],
+      // i == "io-init" ? o.socketId = t[0] : ...
+      [new RegExp('(\\w+ == "io-init" \\? )(' + obj + '\\.socketId = \\w+\\[0\\])( :)'),
+       (m) => m[1] + '(' + m[2] + ', ' + start + ')' + m[3]],
+    ];
+    let done = false;
+    for (const [re, build] of initShapes) {
+      const m = re.exec(body2);
+      if (!m) continue;
+      body2 = body2.replace(re, build(m));
+      done = true;
+      break;
+    }
+    if (!done) {
+      console.error('repair-mod: moved the client off socket-open but found no io-init branch to start it from');
+      process.exit(1);
+    }
+    report.handshakeOrder = true;
+  }
+}
+
 /* --- 2d. client replacements ----------------------------------------------
  * A mod that opens its own socket and decodes with its own bundled codec has
  * no game bundle underneath it, so its message handler is the FIRST one on
@@ -271,6 +349,7 @@ console.log(report.name.trim());
 console.log('  @run-at  : ' + report.runAt);
 console.log('  @require : ' + (report.requires.length ? report.requires.join(', ') : '(none dead)'));
 if (report.passwordGate) console.log('  password : removed an unskippable prompt loop (dismissing it hung the tab for ever)');
+if (report.handshakeOrder) console.log('  handshake: its client started on socket-open; moved to io-init, where the session key arrives');
 if (report.altcha) console.log('  captcha  : its own ALTCHA wait replaced by the Turnstile token (was "' + report.altcha + '", never set)');
 if (report.client) console.log('  transport: client replacement -- shim told to treat every handler as the mod\'s');
 if (report.guarded) console.log('  guarded  : ' + report.guarded + ' dereference(s) of page furniture the game removed');
