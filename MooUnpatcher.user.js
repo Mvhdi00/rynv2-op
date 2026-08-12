@@ -822,8 +822,18 @@ const UNPATCH = (function () {
     // on positive evidence -- a manager that injects without leaving a trace
     // (Violentmonkey's page mode) falls back to the ordering rule unchanged,
     // so nothing that worked before can start failing.
+    // A repaired client replacement inlines this shim into itself, so it can
+    // simply say so: window.UNPATCH_CLIENT means every message handler on the
+    // page belongs to the mod, because there is no game bundle underneath it.
+    // That is knowledge the file has and this shim cannot infer, and it beats
+    // the stack sniffing below, which is a guess that happens to be right.
+    let forceMod = false;
+    try { forceMod = hasWin && window.UNPATCH_CLIENT === true; } catch (e) {}
+    if (forceMod) noteShim("client-replacement mode");
+
     const USERSCRIPT_FRAME = /(?:moz-extension|chrome-extension|safari-web-extension|safari-extension):\/\/|userscript\.html|\bGM_info\b/;
     function fromUserscript() {
+        if (forceMod) return true;
         try {
             const s = new Error().stack;
             return typeof s == "string" && USERSCRIPT_FRAME.test(s);

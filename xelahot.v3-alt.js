@@ -636,8 +636,13 @@ const UNPATCH = (function () {
         } catch (e) {}
     });
 
+    let forceMod = false;
+    try { forceMod = hasWin && window.UNPATCH_CLIENT === true; } catch (e) {}
+    if (forceMod) noteShim("client-replacement mode");
+
     const USERSCRIPT_FRAME = /(?:moz-extension|chrome-extension|safari-web-extension|safari-extension):\/\/|userscript\.html|\bGM_info\b/;
     function fromUserscript() {
+        if (forceMod) return true;
         try {
             const s = new Error().stack;
             return typeof s == "string" && USERSCRIPT_FRAME.test(s);
@@ -3954,7 +3959,7 @@ CanvasRenderingContext2D.prototype.lineTo = function(x, y) {
             let upgradeCounter = getEl("upgradeCounter");
             let chatBox = getEl("chatBox");
             chatBox.autocomplete = "off";
-            chatBox.style.textAlign = "center";
+            if (chatBox) chatBox.style.textAlign = "center";
             chatBox.style.width = "18em";
             let chatHolder = getEl("chatHolder");
             let actionBar = getEl("actionBar");

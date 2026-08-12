@@ -639,8 +639,13 @@ const UNPATCH = (function () {
         } catch (e) {}
     });
 
+    let forceMod = false;
+    try { forceMod = hasWin && window.UNPATCH_CLIENT === true; } catch (e) {}
+    if (forceMod) noteShim("client-replacement mode");
+
     const USERSCRIPT_FRAME = /(?:moz-extension|chrome-extension|safari-web-extension|safari-extension):\/\/|userscript\.html|\bGM_info\b/;
     function fromUserscript() {
+        if (forceMod) return true;
         try {
             const s = new Error().stack;
             return typeof s == "string" && USERSCRIPT_FRAME.test(s);
@@ -1511,7 +1516,7 @@ let pe = [];
 
 let me = [];
 
-document.querySelector("#gameCanvas").remove();
+document.querySelector("#gameCanvas")?.remove();
 
 let ge = document.createElement("canvas");
 

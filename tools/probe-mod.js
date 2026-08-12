@@ -217,7 +217,11 @@ const CONFIG = {
   const state = await page.evaluate((names) => ({
     // Either the mod hooked prototype.send itself, or it installed a handler
     // on a transport shim of its own. Both count as "the socket is wired up".
-    modHookedSend: WebSocket.prototype.send.toString().length > 120,
+    // a client replacement may swap WebSocket for a class of its own, so this
+    // must not assume prototype.send is still there
+    modHookedSend: !!(window.WebSocket && window.WebSocket.prototype &&
+                      typeof window.WebSocket.prototype.send === 'function' &&
+                      window.WebSocket.prototype.send.toString().length > 120),
     msgpackPresent: typeof window.msgpack === 'object' && typeof window.msgpack.decode === 'function',
     shimPresent: typeof EXP === 'object' && typeof EXP.send === 'function',
     constructorFreeze: window.__frozen,

@@ -10,6 +10,7 @@
 // @run-at       document-start
 // ==/UserScript==
 
+window.UNPATCH_CLIENT = true;
 const EXP = (function() {
     "use strict";
 
@@ -636,8 +637,13 @@ const UNPATCH = (function () {
         } catch (e) {}
     });
 
+    let forceMod = false;
+    try { forceMod = hasWin && window.UNPATCH_CLIENT === true; } catch (e) {}
+    if (forceMod) noteShim("client-replacement mode");
+
     const USERSCRIPT_FRAME = /(?:moz-extension|chrome-extension|safari-web-extension|safari-extension):\/\/|userscript\.html|\bGM_info\b/;
     function fromUserscript() {
+        if (forceMod) return true;
         try {
             const s = new Error().stack;
             return typeof s == "string" && USERSCRIPT_FRAME.test(s);
@@ -1512,7 +1518,7 @@ he.innerHTML = `
 function Be() {
     const e = document.getElementById("transparentMenu");
     const t = e.style.display === "block";
-    e.style.display = t ? "none" : "block"
+    if (e) e.style.display = t ? "none" : "block"
 }
 
 function De(e, t, n) {
@@ -12646,7 +12652,7 @@ const Uh = document.getElementById("mainMenu"),
       jh = document.getElementById("enterGame"),
       Hh = document.getElementById("promoImg");
 Hh.remove();
-document.getElementById("promoImgHolder").remove();
+document.getElementById("promoImgHolder")?.remove();
 const Wh = document.getElementById("joinPartyButton"),
       Qh = document.getElementById("settingsButton"),
       Yh = Qh.getElementsByTagName("span")[0],
@@ -12754,7 +12760,7 @@ var V0;
 
 function U0(e) {
     var t;
-    ((t = e == null ? void 0 : e.detail) == null ? void 0 : t.state) === "verified" && (V0 = e.detail.payload, document.getElementById("script-altcha").remove(), jh.classList.remove("disabled"), ! function() {
+    ((t = e == null ? void 0 : e.detail) == null ? void 0 : t.state) === "verified" && (V0 = e.detail.payload, document.getElementById("script-altcha")?.remove(), jh.classList.remove("disabled"), ! function() {
         document.getElementById("enterGame").innerText = "Enter Game";
     }())
 }
@@ -17464,7 +17470,7 @@ const Kg = document.getElementById("fakePing");
 Kg.addEventListener("change", function() {
     const e = document.getElementById("sliderContainer");
     if (this.checked) {
-        e.style.display = "block"
+        if (e) e.style.display = "block"
     } else {
         e.style.display = "none"
     }
@@ -17472,7 +17478,7 @@ Kg.addEventListener("change", function() {
 const Xg = document.getElementById("pingSlider");
 const Jg = document.getElementById("pingSliderValue");
 Xg.addEventListener("input", function() {
-    Jg.innerText = this.value
+    if (Jg) Jg.innerText = this.value
 });
 const qg = false;
 
@@ -20222,10 +20228,10 @@ function fx(t) {
 function hx(e) {
     const t = document.getElementById(`tab${e}`);
     if (t) {
-        t.remove();
+        if (t) t.remove();
         const n = document.getElementById(`page${e}`);
         if (n) {
-            n.remove()
+            if (n) n.remove()
         }
     }
 }
@@ -20244,7 +20250,7 @@ function mx(e) {
     n.forEach(e => e.style.display = "none");
     const i = document.getElementById(`page${e}`);
     if (i) {
-        i.style.display = "block"
+        if (i) i.style.display = "block"
     }
     lx = e
 }

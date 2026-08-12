@@ -639,8 +639,13 @@ const UNPATCH = (function () {
         } catch (e) {}
     });
 
+    let forceMod = false;
+    try { forceMod = hasWin && window.UNPATCH_CLIENT === true; } catch (e) {}
+    if (forceMod) noteShim("client-replacement mode");
+
     const USERSCRIPT_FRAME = /(?:moz-extension|chrome-extension|safari-web-extension|safari-extension):\/\/|userscript\.html|\bGM_info\b/;
     function fromUserscript() {
+        if (forceMod) return true;
         try {
             const s = new Error().stack;
             return typeof s == "string" && USERSCRIPT_FRAME.test(s);
@@ -1048,7 +1053,7 @@ let enterGame = document.getElementById("enterGame");
 let verifying = false;
 let token = undefined;
 
-enterGame.innerHTML = "Verifying...";
+if (enterGame) enterGame.innerHTML = "Verifying...";
 let antiAltcha = setInterval(() => {
     if (!altcha) altcha = document.getElementById("altcha"), verifying = false
     if (!checkbox) checkbox = document.getElementById('altcha_checkbox'), verifying = false
@@ -2444,7 +2449,7 @@ function getEl(_0x370e34) {
   let _0x4ffa3e = getEl("upgradeCounter");
   let _0x53cc64 = getEl("chatBox");
   _0x53cc64.autocomplete = "off";
-  _0x53cc64.style.textAlign = "center";
+  if (_0x53cc64) _0x53cc64.style.textAlign = "center";
   _0x53cc64.style.width = "18em";
   let _0x19c9b3 = getEl("chatHolder");
   let _0x318ea5 = getEl("actionBar");
@@ -12316,21 +12321,21 @@ document.addEventListener("keydown", function (_0x1ad05c) {
     const _0x305634 = document.getElementById("menuChatDiv");
     if (_0x305634) {
       const _0x13ef43 = _0x305634.style.display;
-      _0x305634.style.display = _0x13ef43 === "none" ? "block" : "none";
+      if (_0x305634) _0x305634.style.display = _0x13ef43 === "none" ? "block" : "none";
     }
   }
   if (_0x1ad05c.keyCode === 192) {
     const _0x38ed54 = document.getElementById("gameUI");
     if (_0x38ed54) {
       const _0xf39bb0 = _0x38ed54.style.display;
-      _0x38ed54.style.display = _0xf39bb0 === "none" ? "block" : "none";
+      if (_0x38ed54) _0x38ed54.style.display = _0xf39bb0 === "none" ? "block" : "none";
     }
   }
   if (_0x1ad05c.keyCode === 99) {
     const _0x74c653 = document.getElementById("gameCanvas");
     if (_0x74c653) {
       const _0x1c227a = _0x74c653.style.display;
-      _0x74c653.style.display = _0x1c227a === "none" ? "block" : "none";
+      if (_0x74c653) _0x74c653.style.display = _0x1c227a === "none" ? "block" : "none";
     }
   }
 });

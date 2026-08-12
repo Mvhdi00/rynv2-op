@@ -634,8 +634,13 @@ const UNPATCH = (function () {
         } catch (e) {}
     });
 
+    let forceMod = false;
+    try { forceMod = hasWin && window.UNPATCH_CLIENT === true; } catch (e) {}
+    if (forceMod) noteShim("client-replacement mode");
+
     const USERSCRIPT_FRAME = /(?:moz-extension|chrome-extension|safari-web-extension|safari-extension):\/\/|userscript\.html|\bGM_info\b/;
     function fromUserscript() {
+        if (forceMod) return true;
         try {
             const s = new Error().stack;
             return typeof s == "string" && USERSCRIPT_FRAME.test(s);
@@ -2081,7 +2086,7 @@ let serverID;
                 if (cK) {
                     const cd = new fY();
                     cC(cd);
-                    cK.innerHTML = cd.content;
+                    if (cK) cK.innerHTML = cd.content;
                 }
             }
             TabContent(ci, cC) {

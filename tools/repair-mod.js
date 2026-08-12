@@ -104,14 +104,31 @@ for (const [re, rep] of guards) {
 // whole family. The element is gone from the page, the mod only wants it gone,
 // and the deref kills everything after it. The unpatcher stubs a closed list of
 // ids, but mods reach for others too, so guard the pattern itself.
+// The dereference is not always on the very next line -- novastorm fetches
+// partyButton, does two other things, and removes it three lines later -- so
+// allow a couple of statements in between, as long as they do not touch the
+// variable themselves.
 body2 = body2.replace(
-  /^(\s*)(let|const|var) (\w+) = ((?:getEl|document\.getElementById)\([^)]*\));\n(\s*)\3\.(remove\(\)|style\.\w+ =|innerHTML =|innerText =)/gm,
-  (m, i1, kw, v, call, i2, tail) => {
+  /^(\s*)(let|const|var) (\w+) = ((?:getEl|document\.getElementById)\([^)]*\));\n((?:(?!\3)[^\n]*\n){0,3}?)(\s*)\3\.(remove\(\)|style\.\w+ =|innerHTML =|innerText =)/gm,
+  (m, i1, kw, v, call, between, i2, tail) => {
     report.guarded = (report.guarded || 0) + 1;
     // the call is kept exactly as written -- rewriting it to reach for `getEl`
     // defensively broke two mods that declare it later, or not at all
-    return `${i1}${kw} ${v} = ${call};\n${i2}if (${v}) ${v}.${tail}`;
+    return `${i1}${kw} ${v} = ${call};\n${between}${i2}if (${v}) ${v}.${tail}`;
   });
+
+// The same thing written inline, with no variable in between:
+//   document.querySelector('#guideCard .menuText').remove();
+//   document.getElementById("adCard").remove();
+// Optional chaining is exactly the semantics wanted here -- remove it if it is
+// there, do nothing if it is not -- and it cannot change what happens when the
+// element does exist.
+// Only method calls: `x?.style.display = "none"` is a syntax error, because
+// optional chaining cannot be the target of an assignment. The parse check
+// caught that on the first attempt.
+body2 = body2.replace(
+  /(document\.(?:querySelector|getElementById)\((?:[^()]|\([^()]*\))*\))\.(remove\(\)|classList\.(?:add|remove|toggle)\()/g,
+  (m, call, tail) => { report.guarded = (report.guarded || 0) + 1; return call + '?.' + tail; });
 
 // `let a = document.getElementById(x); let b = a.firstChild; if (b.nodeType`
 // -- an empty or absent element makes firstChild null and the next line throws.
@@ -122,17 +139,58 @@ body2 = body2.replace(
     return `${i1}${kw} ${v} = ${parent} && ${parent}.firstChild;\n${i2}if (${v} && ${v}.nodeType`;
   });
 
+/* --- 2c-2. an unskippable password prompt ---------------------------------
+ * novastorm opens with:
+ *
+ *     let pass = prompt("Lutfen mod sifresini giriniz:");
+ *     while (pass !== "novabruh") { pass = prompt("Yanlis sifre! ..."); }
+ *
+ * Two things are wrong with it. prompt() returns null when the dialog is
+ * dismissed, and null never equals the password, so pressing Escape re-opens
+ * it for ever -- the tab hangs and cannot be closed by the page. And the
+ * password it is checking against sits in plaintext three lines above the
+ * check, so it gates nothing anyway. Sakuna shipped the same shape.
+ *
+ * The loop goes. Only this shape is matched: a prompt assigned at the top
+ * level, then a while comparing it to a string literal.
+ */
+{
+  const gate = /^let (\w+) = prompt\([^)]*\);\n\s*while \(\1 !== "[^"]*"\) \{\n(?:[^\n]*\n)*?\s*\}\n/m;
+  const m = gate.exec(body2);
+  if (m) {
+    body2 = body2.replace(gate, '');
+    report.passwordGate = true;
+  }
+}
+
+/* --- 2d. client replacements ----------------------------------------------
+ * A mod that opens its own socket and decodes with its own bundled codec has
+ * no game bundle underneath it, so its message handler is the FIRST one on
+ * that socket -- and the shim's ordering rule ("the game got there first")
+ * would hand it raw numeric opcodes. The shim can also tell from a stack
+ * trace, but that is a guess about how the userscript manager injected the
+ * file. Here the answer is known, so say it outright.
+ */
+const OWNS_SOCKET = /new (?:Original)?WebSocket\s*\(/.test(body2)
+  && !/WebSocket\.prototype\.send\s*=/.test(body2);
+if (OWNS_SOCKET) report.client = true;
+
 /* --- 3. the unpatcher, inlined -------------------------------------------- */
 const unpatcher = fs.readFileSync(path.join(ROOT, 'MooUnpatcher.user.js'), 'utf8');
 const uMeta = unpatcher.indexOf('// ==/UserScript==');
-const shim = stripComments(unpatcher.slice(uMeta + '// ==/UserScript=='.length), { metadata: false }).out.trim();
+let shim = stripComments(unpatcher.slice(uMeta + '// ==/UserScript=='.length), { metadata: false }).out.trim();
+if (report.client) shim = 'window.UNPATCH_CLIENT = true;\n' + shim;
 
 /* --- 4. defer the body ---------------------------------------------------- */
 // Only if it needs it: a mod that already waits for the DOM must not be made
 // to wait twice, and one that touches nothing at its top level loses nothing
 // by running immediately.
-const TOUCHES_DOM = /^[^\s/].*\b(?:document\.(?:body|getElementById|querySelector)|getEl\()/m.test(body2)
-  || /^\s{0,2}(?:let|const|var)\s+\w+\s*=\s*(?:document\.getElementById|getEl)\(/m.test(body2);
+// The first version only looked at column-0 lines, which is wrong for a
+// webpack bundle: novastorm's DOM code all sits indented inside modules, so it
+// was judged DOM-free and left to run at document-start against an empty page.
+// Any use of the DOM at all is enough -- running a moment later costs a mod
+// nothing, and running too early costs it everything.
+const TOUCHES_DOM = /document\.(?:body|head|getElementById|querySelector)|\bgetEl\(/.test(body2);
 let out;
 if (TOUCHES_DOM) {
   report.deferred = true;
@@ -157,6 +215,8 @@ fs.writeFileSync(OUT, out);
 console.log(report.name.trim());
 console.log('  @run-at  : ' + report.runAt);
 console.log('  @require : ' + (report.requires.length ? report.requires.join(', ') : '(none dead)'));
+if (report.passwordGate) console.log('  password : removed an unskippable prompt loop (dismissing it hung the tab for ever)');
+if (report.client) console.log('  transport: client replacement -- shim told to treat every handler as the mod\'s');
 if (report.guarded) console.log('  guarded  : ' + report.guarded + ' dereference(s) of page furniture the game removed');
 if (report.jquery) console.log('  jQuery   : added (used but never required)');
 console.log('  body     : ' + (report.deferred ? 'deferred behind __repairedBoot' : 'left at top level (touches no DOM)'));
