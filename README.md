@@ -1832,6 +1832,15 @@ clears the body. It is a guard rather than a removal, so there is no flash of
 red to take away afterwards, and it costs one `div`. Nothing else in the bundle
 reads that element, and the server is never told about it.
 
+**This did not work on the first attempt, and the check said it did.** At
+document-start Chrome hands a userscript a document with no `<body>` *and* no
+`documentElement` — both null — so the guard had nothing to append to, and it
+gave up instead of trying again. The bar went up on every file. It was
+invisible to the probe because the probe asked `offsetParent !== null`, and
+`offsetParent` is null for a `position:fixed` element, which the bar is. A
+check that reports "clean" while the thing is on screen is worse than no check:
+it now asks `getComputedStyle`, and the guard retries until there is a body.
+
 ## Keeping it in step
 
 Both guards live in one place, the EXP core in `ExternalClient.user.js`, and
