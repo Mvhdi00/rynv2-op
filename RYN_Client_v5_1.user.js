@@ -1621,38 +1621,6 @@ window.grbtp = 35;
     const rectEnd = rectPos.copy().add(screen);
     return pointInsideRect(target, rectStart, rectEnd);
   };
-  const findPlacementAngles = angles => {
-    const output = new Set;
-    for (let i = 0; i < angles.length; i++) {
-      const [angle, offset] = angles[i];
-      const start = angle - offset;
-      const end = angle + offset;
-      let startIntersects = false;
-      let endIntersects = false;
-      for (let j = 0; j < angles.length; j++) {
-        if (startIntersects && endIntersects) {
-          break;
-        }
-        if (i === j) {
-          continue;
-        }
-        const [angle2, offset2] = angles[j];
-        if (getAngleDist(start, angle2) <= offset2) {
-          startIntersects = true;
-        }
-        if (getAngleDist(end, angle2) <= offset2) {
-          endIntersects = true;
-        }
-      }
-      if (!startIntersects) {
-        output.add(start);
-      }
-      if (!endIntersects) {
-        output.add(end);
-      }
-    }
-    return [ ...output ];
-  };
   const createAction = (callback, time = 0) => {
     let state = false;
     const timeoutID = setTimeout(() => {
@@ -2598,8 +2566,8 @@ window.grbtp = 35;
     willCollideSpike=false;
     pushingOnSpike=false;
     collidingSpike=false;
-    nearestSpikePlacerAngle=null;
-    prevNearestSpikePlacerAngle=null;
+    spikeReachPlacements=null;
+    prevSpikeReachPlacements=null;
     nearestEnemyToNearestEnemy=null;
     enemyCanPlaceSpike=false;
     possibleToKnockback=false;
@@ -2640,8 +2608,8 @@ window.grbtp = 35;
       this.willCollideSpike = false;
       this.pushingOnSpike = false;
       this.collidingSpike = false;
-      this.prevNearestSpikePlacerAngle = this.nearestSpikePlacerAngle;
-      this.nearestSpikePlacerAngle = null;
+      this.prevSpikeReachPlacements = this.spikeReachPlacements;
+      this.spikeReachPlacements = null;
       this.dangerousEnemies.length = 0;
       this.nearestTrap = null;
       this.nearestCollider = null;
@@ -2688,9 +2656,9 @@ window.grbtp = 35;
       }
       return null;
     }
-    get nearestPlaceSpikeAngle() {
-      const prevAngle = this.prevNearestSpikePlacerAngle;
-      const currAngle = this.nearestSpikePlacerAngle;
+    get spikeReachOpened() {
+      const prevAngle = this.prevSpikeReachPlacements;
+      const currAngle = this.spikeReachPlacements;
       if (prevAngle === null && currAngle !== null) {
         return currAngle;
       }
@@ -2703,7 +2671,7 @@ window.grbtp = 35;
       return this._nearestEnemy[1];
     }
     get canSpikeSync() {
-      return this.nearestPlaceSpikeAngle !== null && this.client.ObjectManager.isDestroyedObject();
+      return this.spikeReachOpened !== null && this.client.ObjectManager.isDestroyedObject();
     }
     isNear(enemy, nearest, owner = this.client.myPlayer) {
       if (nearest === null || enemy === nearest) {
@@ -3035,19 +3003,20 @@ window.grbtp = 35;
       this.handleNearest(1, animal);
       this.handleNearestDangerAnimal(animal);
     }
+    // The spike the tick is built around. It goes out through the engine's
+    // executor like every other build -- same last-moment validity check,
+    // same record of what was sent, same ground reserved against the placer
+    // planning on top of it a moment later.
+    //
+    // It also stops at one. Placing every angle that happened to reach was
+    // three or four spikes for a tick that needs exactly one, and the rest
+    // were spent out of the same allowance the tick's own swing draws on.
     attemptSpikePlacement() {
-      const {services: ryn} = this.client;
-      const placementAngles = this.nearestSpikePlacerAngle;
-      if (placementAngles === null) {
-        return;
-      }
-      const itemType = 4;
-      for (const angle of placementAngles) {
-        ryn.actions.place(itemType, angle);
-      }
-      ryn.ledger.placedOnce = true;
-      ryn.ledger.placeAngles[0] = itemType;
-      ryn.ledger.placeAngles[1] = placementAngles;
+      const cands = this.spikeReachPlacements;
+      if (cands === null || cands.length === 0) return;
+      const engine = rynPlacement(this.client);
+      if (engine === null) return;
+      engine.submit(cands, { limit: 1 });
     }
     handleEnemies(enemies) {
       this.reset();
@@ -3090,27 +3059,14 @@ window.grbtp = 35;
         const pos1 = myPlayer.pos.current;
         const pos2 = nearest.pos.current;
         const angleToEnemy = pos1.angle(pos2);
-        const itemType = 4;
-        const spikeID = myPlayer.getItemByType(itemType);
-        const placeLength = myPlayer.getItemPlaceScale(spikeID);
-        const angles = ObjectManager.getBestPlacementAngles({
-          position: pos1,
-          id: spikeID,
-          targetAngle: angleToEnemy,
-          ignoreID: null,
-          preplace: false,
-          reduce: false,
-          fill: false
-        });
-        const spikeScale = Items[spikeID].scale;
-        const possibleAngles = angles.filter(angle => {
-          const spikePos = pos1.addDirection(angle, placeLength);
-          const distance = pos2.distance(spikePos);
-          const range = nearest.collisionScale + spikeScale;
-          return distance <= range;
-        });
-        if (possibleAngles.length !== 0) {
-          this.nearestSpikePlacerAngle = possibleAngles;
+        // The spike tick's own spikes come from the placement engine's solver,
+        // not from a second scanner living here. `reach` is the shape this
+        // always was -- solve, keep what touches the enemy, nearest first --
+        // and now it is that shape once instead of in five places.
+        const engine = rynPlacement(this.client);
+        if (engine !== null) {
+          const hits = engine.reach(pos1, 4, angleToEnemy, pos2, nearest.collisionScale);
+          if (hits.length !== 0) this.spikeReachPlacements = hits;
         }
         if (Settings_ref._autoSync) {
           for (let i = 0; i < PlayerManager.players.length; i++) {
@@ -3816,23 +3772,13 @@ window.grbtp = 35;
       if (distance > range) {
         return 0;
       }
-      const angles = ObjectManager.getBestPlacementAngles({
-        position: pos1,
-        id: spikeID,
-        targetAngle: angleToMyPlayer,
-        ignoreID: null,
-        preplace: false,
-        reduce: false,
-        fill: false
-      });
-      for (const angle of angles) {
-        const spikePos = pos1.addDirection(angle, placeLength);
-        const distance2 = pos2.distance(spikePos);
-        if (distance2 <= range) {
-          return spike.damage;
-        }
-      }
-      return 0;
+      // Where THEY could put a spike, from their origin with their item. The
+      // same geometry as my own placement, asked from the other side -- which
+      // is the point of the solver taking an origin rather than assuming me.
+      const engine = rynPlacement(this.client);
+      if (engine === null) return 0;
+      const hits = engine.reach(pos1, 4, angleToMyPlayer, pos2, this.collisionScale, { itemId: spikeID });
+      return hits.length > 0 ? spike.damage : 0;
     }
     canPossiblyInstakill() {
       const {PlayerManager: PlayerManager, myPlayer: myPlayer} = this.client;
@@ -5394,21 +5340,10 @@ window.grbtp = 35;
         return dist1 - dist2;
       };
     }
-    static byAngleDistance(angle) {
-      return (a, b) => getAngleDist(a, angle) - getAngleDist(b, angle);
-    }
     static byDanger(a, b) {
       return b.danger - a.danger;
     }
   }
-    // How many candidate angles a placement helper hands back. Four is one per
-  // quadrant, which is enough spread that a refused angle has an alternative
-  // pointing somewhere genuinely different.
-  //
-  // NEEDS VALIDATION: unrelated to PREPLACE_CANDIDATES, which is the placer's
-  // own answer to the same question and is 2 for reasons that were measured in
-  // play. These two should probably agree, or the difference should be stated.
-  const PLACE_ATTEMPTS = 4;
   class ObjectManager {
     objects=new Map;
     grid2D=new SpatialHashGrid2D(100);
@@ -5506,18 +5441,19 @@ window.grbtp = 35;
         }
       }
     }
+    // The grid narrows the search; the rule itself is the placement engine's,
+    // stated once in RynGeometrySolver.free. This method used to carry its own
+    // copy of the same arithmetic, which is one rule written twice and two
+    // rules the moment either is touched.
     canPlaceItem(id, position, addRadius = 0) {
-      if (id !== 18 && pointInRiver(position)) {
-        return false;
-      }
       const item = Items[id];
-      return !this.grid2D.query(position.x, position.y, 1, id2 => {
+      if (!item) return false;
+      const near = [];
+      this.grid2D.query(position.x, position.y, 1, id2 => {
         const object = this.objects.get(id2);
-        const scale = item.scale + object.placementScale + addRadius;
-        if (position.distance(object.pos.current) < scale) {
-          return true;
-        }
+        if (object) near.push(object);
       });
+      return RynGeometrySolver.free(position, item, id, near, addRadius);
     }
     inPlacementRange(object) {
       const owner = this.client.PlayerManager.playerData.get(object.ownerID);
@@ -5529,56 +5465,6 @@ window.grbtp = 35;
       const item = Items[object.type];
       const range = owner.scale * 2 + item.scale + item.placeOffset;
       return a0.distance(b0) <= range || a1.distance(b0) <= range || a2.distance(b0) <= range;
-    }
-    getBestPlacementAngles(options) {
-      const {position: position, id: id, targetAngle: targetAngle, ignoreID: ignoreID, reduce: reduce, preplace: preplace, fill: fill} = options;
-      const item = DataHandler.getItem(id);
-      const {myPlayer: myPlayer, services: ryn} = this.client;
-      const length = myPlayer.getItemPlaceScale(id);
-      const angles = [];
-      this.grid2D.query(position.x, position.y, 1, id2 => {
-        const object = this.objects.get(id2);
-        if (ignoreID !== null && ignoreID === object.id) {
-          return;
-        }
-        const pos1 = object.pos.current;
-        const angle = position.angle(pos1);
-        const a = object.placementScale + item.scale + 1;
-        const b = position.distance(pos1);
-        const c = length;
-        const cosArg = (b * b + c * c - a * a) / (2 * b * c);
-        if (cosArg < -1) {
-          angles.push([ angle, Math.PI ]);
-        } else if (cosArg <= 1) {
-          const offset = Math.acos(cosArg);
-          angles.push([ angle, offset ]);
-        }
-      });
-      const finalAngles = findPlacementAngles(angles);
-      const targetAngleOverlaps = angles.some(([angle, offset]) => getAngleDist(targetAngle, angle) <= offset);
-      if (!targetAngleOverlaps) {
-        finalAngles.push(targetAngle);
-        if (finalAngles.length === 1 && fill) {
-          if (item.itemType === 4) {
-            return [];
-          }
-          const offset = Math.asin((2 * item.scale + 1) / (2 * length)) * 2;
-          finalAngles.push(targetAngle - offset);
-          finalAngles.push(targetAngle + offset);
-          finalAngles.push(reverseAngle(targetAngle));
-          return finalAngles.slice(0, PLACE_ATTEMPTS);
-        }
-      }
-      let anglesSorted = finalAngles.sort(Sorting.byAngleDistance(targetAngle));
-      if (reduce) {
-        if (!DataHandler.canMoveOnTop(id) && ryn.motion.move_dir !== null && myPlayer.speed !== 0) {
-          const scale = item.scale;
-          const offset = Math.asin(2 * scale / (2 * length));
-          anglesSorted = anglesSorted.filter(angle => getAngleDist(angle, ryn.motion.move_dir) > offset);
-        }
-        return anglesSorted.slice(0, PLACE_ATTEMPTS);
-      }
-      return anglesSorted;
     }
   }
     const _RYNCrypto = function() {
@@ -8829,62 +8715,31 @@ window.grbtp = 35;
       const enemyVelY = enemy.yVel != null ? enemy.yVel : enemyPos.y;
       const trapItem = Items[trapId];
       const trapScale = trapItem.scale;
-      const placeDist = 35 + trapScale + (trapItem.placeOffset || 0);
       const rawKB = myPlayer.getMaxKnockback?.() ?? 120;
       const kbDist = rawKB * (111 / 60);
       const kbBaseAngle = Math.atan2(myPos.y - enemyPos.y, myPos.x - enemyPos.x);
       const myKbX = myPos.x + kbDist * Math.cos(kbBaseAngle);
       const myKbY = myPos.y + kbDist * Math.sin(kbBaseAngle);
-      const ANGLE_STEPS = 36;
-      for (let i = 0; i < ANGLE_STEPS; i++) {
-        const angle = i * (Math.PI * 2 / ANGLE_STEPS);
-        const cfgX = enemyPos.x + placeDist * Math.cos(angle);
-        const cfgY = enemyPos.y + placeDist * Math.sin(angle);
-        const cfgS = trapScale;
-        if (this._lineInRect(cfgX - cfgS, cfgY - cfgS, cfgX + cfgS, cfgY + cfgS, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)) {
-          return true;
-        }
-        if (this._lineInRect(cfgX - cfgS, cfgY - cfgS, cfgX + cfgS, cfgY + cfgS, myPos.x, myPos.y, myKbX, myKbY)) {
-          return true;
-        }
-        const kbA200 = Math.atan2(enemyVelY - cfgY, enemyVelX - cfgX);
-        const proj200X = enemyVelX + 200 * Math.cos(kbA200);
-        const proj200Y = enemyVelY + 200 * Math.sin(kbA200);
-        if (this._lineInRect(cfgX - cfgS, cfgY - cfgS, cfgX + cfgS, cfgY + cfgS, myPos.x, myPos.y, proj200X, proj200Y)) {
-          return true;
-        }
-      }
-      const bestAngles = ObjectManager2.getBestPlacementAngles({
-        position: enemyPos,
-        id: trapId,
-        targetAngle: enemyPos.angle(myPos),
-        ignoreID: null,
-        preplace: false,
-        reduce: false,
-        fill: false
-      });
-      if (bestAngles && bestAngles.length > 0) {
-        for (const angle of bestAngles) {
-          const cfgX = enemyPos.x + Math.cos(angle) * placeDist;
-          const cfgY = enemyPos.y + Math.sin(angle) * placeDist;
-          const cfgS = trapScale;
-          if (this._lineInRect(cfgX - cfgS, cfgY - cfgS, cfgX + cfgS, cfgY + cfgS, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)) return true;
-          if (this._lineInRect(cfgX - cfgS, cfgY - cfgS, cfgX + cfgS, cfgY + cfgS, myPos.x, myPos.y, myKbX, myKbY)) return true;
-          const kbA200 = Math.atan2(enemyVelY - cfgY, enemyVelX - cfgX);
-          const pX200 = enemyVelX + 200 * Math.cos(kbA200);
-          const pY200 = enemyVelY + 200 * Math.sin(kbA200);
-          if (this._lineInRect(cfgX - cfgS, cfgY - cfgS, cfgX + cfgS, cfgY + cfgS, myPos.x, myPos.y, pX200, pY200)) return true;
-        }
+      // Where they could actually put a trap, from the one solver, asked from
+      // their origin. This used to be two scanners in one method: a 36-step
+      // sweep that never checked whether the ground was free, and then a
+      // second pass through the old angle helper. The sweep counted ground
+      // the enemy physically cannot build on, so it answered yes more often
+      // than the world allows -- this is the same question asked once, and
+      // asked correctly.
+      const engine = rynPlacement(this.client);
+      if (engine === null) return false;
+      const cands = engine.solve(enemyPos, 7, [ enemyPos.angle(myPos) ], { itemId: trapId });
+      for (const c of cands) {
+        // A trap catches by radius, not by the corner of a square around it.
+        if (segHitsDisc(c.x, c.y, trapScale, enemyPos, enemyFut)) return true;
+        if (segHitsDisc(c.x, c.y, trapScale, myPos, { x: myKbX, y: myKbY })) return true;
+        const kbA = Math.atan2(enemyVelY - c.y, enemyVelX - c.x);
+        const projX = enemyVelX + 200 * Math.cos(kbA);
+        const projY = enemyVelY + 200 * Math.sin(kbA);
+        if (segHitsDisc(c.x, c.y, trapScale, myPos, { x: projX, y: projY })) return true;
       }
       return false;
-    }
-    _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
-      const dx = bx - ax, dy = by - ay;
-      const len2 = dx * dx + dy * dy;
-      if (len2 === 0) return ax >= x1 && ax <= x2 && ay >= y1 && ay <= y2;
-      const t = Math.max(0, Math.min(1, ((x1 + x2) / 2 - ax) * dx / len2 + ((y1 + y2) / 2 - ay) * dy / len2));
-      const cx = ax + t * dx, cy = ay + t * dy;
-      return cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2;
     }
     getWeaponRange(id, target) {
       if (id === null) {
@@ -9507,16 +9362,19 @@ window.grbtp = 35;
   // this is true the placer stands all the way down instead of alternating,
   // so the two never contend for the tick's packets or its aim.
   //
-  // `nearestSpikePlacerAngle` is EnemyManager's own set of angles whose spike
-  // lands within `collisionScale + spikeScale` of the enemy, so a non-empty
-  // one is exactly "a spike reaches them".
+  // `spikeReachPlacements` is EnemyManager's own set of engine candidates
+  // whose spike lands within `collisionScale + spikeScale` of the enemy, so a
+  // non-empty one is exactly "a spike reaches them". They come from the
+  // placement engine's solver, which is the same one the placer uses -- the
+  // tick and the placer agree about what is legal because they are asking one
+  // thing, not two.
   function spikeTickKillWindow(client2) {
     if (!Settings_ref._spikeTick || !Settings_ref._spikeTickBreak) return false;
     const {myPlayer: myPlayer, EnemyManager: EnemyManager2} = client2;
     if (!myPlayer || !myPlayer.isTrapped) return false;
     const enemy = EnemyManager2.nearestEnemy;
     if (!enemy || !enemy.isTrapped) return false;
-    const angles = EnemyManager2.nearestSpikePlacerAngle;
+    const angles = EnemyManager2.spikeReachPlacements;
     return Array.isArray(angles) ? angles.length > 0 : !!angles;
   }
 
@@ -9717,6 +9575,20 @@ window.grbtp = 35;
       const mid = Config.mapScale / 2;
       const half = Config.riverWidth / 2;
       return y >= mid - half && y <= mid + half;
+    }
+
+    // Will the game accept a build of this item at this point? The single
+    // statement of the rule -- distance against combined radii, plus the
+    // river -- so that everything asking the question gets the same answer.
+    // It was written out twice before, here and in ObjectManager, and two
+    // copies of a rule are a disagreement waiting to happen.
+    static free(point, item, itemId, objects, pad = 0) {
+      if (RynGeometrySolver.inRiver(point.y, itemId)) return false;
+      for (const o of objects) {
+        const p = o.pos.current;
+        if (Math.hypot(point.x - p.x, point.y - p.y) < item.scale + o.placementScale + pad) return false;
+      }
+      return true;
     }
   }
 
@@ -10925,6 +10797,147 @@ window.grbtp = 35;
       this.lastPlan = [];
     }
 
+    // ── The engine as a service ───────────────────────────────────────────
+    // Not every build is the placer's decision. A spike tick has already
+    // decided it wants a spike; an insta combo has already decided it wants a
+    // trap; the animal trapper has already decided. What none of them should
+    // own is a second answer to "where can this legally go", and before this
+    // they each carried one -- a copy of the same arc scanner, with its own
+    // collision test and its own idea of what the wire carries.
+    //
+    // So the engine offers two doors:
+    //
+    //   solve()    where can this item legally go, from this origin. All the
+    //              geometry, none of the opinion. The caller decides whether
+    //              to build; the engine decides where that is possible.
+    //   submit()   send builds the caller has already chosen. Skips the
+    //              planner -- there is nothing to plan when the build is step
+    //              two of a four-packet combo -- but goes through the same
+    //              conflict check and the same executor as everything else,
+    //              so there is one path to the wire and one record of it.
+    //
+    // What deliberately does NOT happen here is scoring. Putting a combo step
+    // through a utility threshold and a packet budget would have the placer
+    // veto the insta, which is not one engine with one policy: it is the
+    // placer's policy applied to something that is not a placement decision.
+
+    // Objects around a point, in the form the solver wants them.
+    _near(origin, cells = 3) {
+      const OM = this.client.ObjectManager;
+      const out = [];
+      if (!OM) return out;
+      OM.grid2D.query(origin.x, origin.y, cells, id => {
+        const obj = OM.objects.get(id);
+        if (obj) out.push(obj);
+        return false;
+      });
+      return out;
+    }
+
+    // The role record a candidate needs, for items that have no combat role of
+    // their own. Cached so identity comparisons hold.
+    static roleFor(itemType) {
+      for (const key of Object.keys(RYN_BUILD_ROLE)) {
+        if (RYN_BUILD_ROLE[key].itemType === itemType) return RYN_BUILD_ROLE[key];
+      }
+      let role = RynPlacementEngine._plainRoles.get(itemType);
+      if (role === undefined) {
+        role = Object.freeze({ itemType: itemType, pins: false, damages: false, blocks: true });
+        RynPlacementEngine._plainRoles.set(itemType, role);
+      }
+      return role;
+    }
+    static _plainRoles = new Map;
+
+    // Where this item can legally go from this origin, as candidates carrying
+    // the exact bearing that will be sent. `origin` need not be me -- asking
+    // where an ENEMY could put a spike is the same geometry from a different
+    // point, and that is how their insta is predicted.
+    solve(origin, itemType, aims = [], opts = {}) {
+      const myPlayer = this.client.myPlayer;
+      const itemId = opts.itemId ?? (myPlayer ? myPlayer.getItemByType(itemType) : null);
+      const item = itemId === null || itemId === undefined ? null : Items[itemId];
+      if (!item) return [];
+      const spared = opts.spared ?? null;
+      const objects = opts.objects ?? this._near(origin);
+      const arcs = this.angles.solve(origin, item, objects, spared);
+      const role = RynPlacementEngine.roleFor(itemType);
+      return this.candidates.build(origin, item, itemId, role, arcs,
+        aims.filter(a => a !== null && a !== undefined),
+        opts.mode ?? RYN_PLACE_MODE.AUTO, spared);
+    }
+
+    // The same question aimed at one world point rather than a bearing.
+    solveAt(origin, itemType, point, tolerance, opts = {}) {
+      const myPlayer = this.client.myPlayer;
+      const itemId = opts.itemId ?? (myPlayer ? myPlayer.getItemByType(itemType) : null);
+      const item = itemId === null || itemId === undefined ? null : Items[itemId];
+      if (!item) return null;
+      const objects = opts.objects ?? this._near(origin);
+      const arcs = this.angles.solve(origin, item, objects, opts.spared ?? null);
+      return this.candidates.anchored(origin, item, itemId, RynPlacementEngine.roleFor(itemType),
+        arcs, point, tolerance ?? item.scale, opts.mode ?? RYN_PLACE_MODE.AUTO, opts.spared ?? null);
+    }
+
+    // Send builds the caller chose. Returns how many actually went out.
+    submit(cands, opts = {}) {
+      const tick = this.client.services.clock.tick;
+      const limit = opts.limit ?? cands.length;
+      const taken = opts.against ? opts.against.slice() : [];
+      let sent = 0;
+      for (const cand of cands) {
+        if (sent >= limit) break;
+        if (cand === null || cand === undefined) continue;
+        // Two builds cannot share ground, whoever asked for them -- including
+        // ground the placer's own plan is already flying towards.
+        if (this.conflict.collides(cand, taken)) continue;
+        if (!opts.ignoreMemory && this.memory.blocked(cand.x, cand.y)) continue;
+        if (!this.executor.fire(cand, tick)) continue;
+        taken.push(cand);
+        sent += 1;
+      }
+      return sent;
+    }
+
+    // Send one build at a bearing the caller already chose. The bearing is
+    // snapped to the wire, the point is checked against the game's rule as the
+    // world stands, the ground is checked against what the placer is already
+    // sending, and the send goes out through the one executor.
+    //
+    // This is the migration path for a feature that computes its own angle for
+    // its own reasons -- an insta step, a trap fan, a defensive wall. It keeps
+    // its decision and gives up its private route to the socket, which is the
+    // part that mattered: before this, those builds were aimed at the exact
+    // angle rather than the one the wire carries, were never re-checked
+    // against the world, and could land on ground a planned build was already
+    // flying towards.
+    placeAt(itemType, angle, opts = {}) {
+      const myPlayer = this.client.myPlayer;
+      if (!myPlayer) return false;
+      const itemId = opts.itemId ?? myPlayer.getItemByType(itemType);
+      const item = itemId === null || itemId === undefined ? null : Items[itemId];
+      if (!item) return false;
+      const R = RynGeometrySolver.ring(item);
+      const a = toWireAngle(angle);
+      const p = RynGeometrySolver.pointAt(opts.origin ?? myPlayer.pos.current, R, a);
+      return this.submit([ {
+        itemId: itemId, role: RynPlacementEngine.roleFor(itemType), angle: a,
+        x: p.x, y: p.y, scale: item.scale, ring: R,
+        origin: RYN_PLACE_ORIGIN.AIMED, mode: RYN_PLACE_MODE.AUTO,
+        blockedBy: [], score: 0, terms: null
+      } ], { limit: 1, ignoreMemory: opts.ignoreMemory, against: opts.against }) === 1;
+    }
+
+    // Convenience for the common shape: solve, keep the ones that reach a
+    // point, send the best few. Used by the features that used to each carry
+    // their own copy of exactly this.
+    reach(origin, itemType, aim, target, radius, opts = {}) {
+      const cands = this.solve(origin, itemType, [ aim ], opts);
+      if (cands.length === 0) return [];
+      return cands.filter(c => Math.hypot(c.x - target.x, c.y - target.y) <= radius + c.scale)
+                  .sort((a, b) => Math.hypot(a.x - target.x, a.y - target.y) - Math.hypot(b.x - target.x, b.y - target.y));
+    }
+
     // ── The cycle ─────────────────────────────────────────────────────────
     // One tick, nine stages, one shared everything. Auto place, preplace and
     // replace are not three passes over the world -- they are three modes of
@@ -11223,6 +11236,11 @@ window.grbtp = 35;
   // placement questions from one candidate model. What is left here is the
   // feature contract: read the toggles, price the tick, hand the engine a
   // budget, and claim if anything went out.
+  // The one placement engine, reachable from anywhere that needs its geometry
+  // without having to know which feature happens to hold it. Null before the
+  // units are built, so every caller checks.
+  const rynPlacement = client2 => client2?.services?.features?.units?.autoPlacer?.engine ?? null;
+
   class AutoPlacer {
     unitID="autoPlacer";
     client;
@@ -11326,19 +11344,14 @@ window.grbtp = 35;
       if (this.phase === 0) {
         const trapID = myPlayer.getItemByType(7);
         if (trapID === -1 || !myPlayer.canPlace(7)) return;
-        const trapAngles = ObjectManager2.getBestPlacementAngles({
-          position: pos0,
-          id: trapID,
-          targetAngle: angleToAnimal,
-          ignoreID: null,
-          preplace: false,
-          reduce: true,
-          fill: false
-        });
-        if (!trapAngles || trapAngles.length === 0) return;
-        const bestTrapAngle = this._bestAngle(trapAngles, angleToAnimal);
-        ryn.actions.place(7, bestTrapAngle);
-
+        // One trap, on the ground the animal is walking onto, from the one
+        // solver and out through the one executor.
+        const engine = rynPlacement(this.client);
+        if (engine === null) return;
+        const hits = engine.reach(pos0, 7, angleToAnimal, animal.pos.current, animal.collisionRange ?? animal.scale ?? 0);
+        if (hits.length === 0) return;
+        if (engine.submit(hits, { limit: 1 }) === 0) return;
+        const bestTrapAngle = hits[0].angle;
         ryn.ledger.placedOnce = true;
         this.trapPlacedAngle = bestTrapAngle;
         this.phaseTimer = 0;
@@ -11397,26 +11410,18 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
+    // The placement rule is the engine's, not a third copy of it. Both copies
+    // this replaced carried a river half-width of 310 where the game's is 362
+    // (riverWidth 724), so both accepted a band of ground fifty units wide
+    // that the server refuses -- and the bearing they measured was the exact
+    // one, not the two-decimal one the wire actually carries.
     _canPlace(id, angle, myPos, ObjectManager2) {
       const item = Items[id];
       if (!item) return false;
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const cx = myPos.x + dist * Math.cos(angle);
-      const cy = myPos.y + dist * Math.sin(angle);
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        const blockS = obj.placementScale;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < item.scale + blockS) {
-          collision = true;
-        }
-      });
-      if (collision) return false;
-      const mid = 14400 / 2, riverHalf = 310;
-      if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      return true;
+      const dist = RynGeometrySolver.ring(item);
+      const a = toWireAngle(angle);
+      const point = { x: myPos.x + dist * Math.cos(a), y: myPos.y + dist * Math.sin(a) };
+      return ObjectManager2.canPlaceItem(id, point);
     }
     runTick(bid) {
       if (!Settings_ref._antiTrapProtect) return;
@@ -11439,7 +11444,7 @@ window.grbtp = 35;
         for (let off = -Math.PI / 2; off <= Math.PI / 2 + 1e-6; off += Math.PI / 6) {
           const angle = protectDir + off;
           if (this._canPlace(spikeID, angle, myPos, ObjectManager2)) {
-            ryn.actions.place(4, angle);
+            rynPlacement(this.client)?.placeAt(4, angle);
             placedAny = true;
           }
         }
@@ -11449,7 +11454,7 @@ window.grbtp = 35;
         for (let off = -Math.PI / 3; off <= Math.PI / 3 + 1e-6; off += Math.PI / 6) {
           const angle = protectDir + off;
           if (this._canPlace(wallID, angle, myPos, ObjectManager2)) {
-            ryn.actions.place(3, angle);
+            rynPlacement(this.client)?.placeAt(3, angle);
             placedAny = true;
           }
         }
@@ -11483,23 +11488,18 @@ window.grbtp = 35;
         tachyon: Math.acos(clamped)
       };
     }
+    // The placement rule is the engine's, not a third copy of it. Both copies
+    // this replaced carried a river half-width of 310 where the game's is 362
+    // (riverWidth 724), so both accepted a band of ground fifty units wide
+    // that the server refuses -- and the bearing they measured was the exact
+    // one, not the two-decimal one the wire actually carries.
     _canPlace(id, angle, myPos, ObjectManager2) {
       const item = Items[id];
       if (!item) return false;
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const cx = myPos.x + dist * Math.cos(angle);
-      const cy = myPos.y + dist * Math.sin(angle);
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < item.scale + obj.placementScale) collision = true;
-      });
-      if (collision) return false;
-      const mid = 14400 / 2, riverHalf = 310;
-      if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      return true;
+      const dist = RynGeometrySolver.ring(item);
+      const a = toWireAngle(angle);
+      const point = { x: myPos.x + dist * Math.cos(a), y: myPos.y + dist * Math.sin(a) };
+      return ObjectManager2.canPlaceItem(id, point);
     }
     _protect(aim, agnes, myPos, ObjectManager2, actions, spikeID) {
       if (!agnes.possible) return false;
@@ -11507,7 +11507,7 @@ window.grbtp = 35;
       const fail = agnes.tachyon - 0.0676;
       const tryPlace = a => {
         if ((currPlaced === null || Math.abs(this._angDiff(currPlaced, a)) > 1.36) && this._canPlace(spikeID, a, myPos, ObjectManager2)) {
-          actions.place(4, a);
+          rynPlacement(this.client)?.placeAt(4, a);
           currPlaced = a;
           count++;
           return true;
@@ -11515,12 +11515,12 @@ window.grbtp = 35;
         return false;
       };
       if (this._canPlace(spikeID, aim + fail, myPos, ObjectManager2)) {
-        actions.place(4, aim + fail);
+        rynPlacement(this.client)?.placeAt(4, aim + fail);
         currPlaced = aim + fail;
         count++;
       }
       if (this._canPlace(spikeID, aim - fail, myPos, ObjectManager2)) {
-        actions.place(4, aim - fail);
+        rynPlacement(this.client)?.placeAt(4, aim - fail);
         currPlaced = aim - fail;
         count++;
         if (count >= 2) return true;
@@ -11531,7 +11531,7 @@ window.grbtp = 35;
       if (tryPlace(aim - fail * 0.25) && count >= 2) return true;
       tryPlace(aim);
       if (count !== 1) return count > 0;
-      if (this._canPlace(spikeID, currPlaced + 1.36, myPos, ObjectManager2)) actions.place(4, currPlaced + 1.36); else if (this._canPlace(spikeID, currPlaced - 1.36, myPos, ObjectManager2)) actions.place(4, currPlaced - 1.36);
+      if (this._canPlace(spikeID, currPlaced + 1.36, myPos, ObjectManager2)) rynPlacement(this.client)?.placeAt(4, currPlaced + 1.36); else if (this._canPlace(spikeID, currPlaced - 1.36, myPos, ObjectManager2)) rynPlacement(this.client)?.placeAt(4, currPlaced - 1.36);
       return true;
     }
     _angDiff(a, b) {
@@ -11756,8 +11756,8 @@ window.grbtp = 35;
       if (!ryn.ledger.placedOnce) {
         const spikeID = myPlayer.getItemByType(4);
         if (spikeID !== -1 && myPlayer.canPlace(4)) {
-          ryn.actions.place(4, angle + Math.PI * 0.25);
-          ryn.actions.place(4, angle - Math.PI * 0.25);
+          rynPlacement(this.client)?.placeAt(4, angle + Math.PI * 0.25);
+          rynPlacement(this.client)?.placeAt(4, angle - Math.PI * 0.25);
           ryn.ledger.placedOnce = true;
         }
       }
@@ -11861,7 +11861,7 @@ window.grbtp = 35;
       if (this._setupPhase === 0 && this._setupCool === 0 && dist <= 400) {
         if (spikeID !== -1 && mp.canPlace(4) && !ryn.ledger.placedOnce) {
           const ang1 = this._deceptiveAngle(anglEnm, Math.PI * 0.25);
-          ryn.actions.place(4, ang1);
+          rynPlacement(this.client)?.placeAt(4, ang1);
           ryn.ledger.placedOnce = true;
           this._spike1Placed = true;
           this._setupPhase = 1;
@@ -11872,7 +11872,7 @@ window.grbtp = 35;
       if (this._setupPhase === 1 && !ryn.ledger.placedOnce) {
         if (spikeID !== -1 && mp.canPlace(4)) {
           const ang2 = this._deceptiveAngle(anglEnm, -Math.PI * 0.25);
-          ryn.actions.place(4, ang2);
+          rynPlacement(this.client)?.placeAt(4, ang2);
           ryn.ledger.placedOnce = true;
           this._spike2Placed = true;
           this._setupPhase = 2;
@@ -11881,24 +11881,16 @@ window.grbtp = 35;
       }
       if (this._setupPhase === 2 && !ryn.ledger.placedOnce) {
         if (trapID !== -1 && trapID !== 16 && mp.canPlace(7)) {
-          const trapAngle = anglEnm;
-          const trapAngles = OM.getBestPlacementAngles({
-            position: pos0,
-            id: trapID,
-            targetAngle: trapAngle,
-            ignoreID: null,
-            preplace: false,
-            reduce: false,
-            fill: true
-          });
-          if (trapAngles.length > 0) {
-            ryn.actions.place(7, trapAngles[0]);
+          // The combo's trap: the engine says where it can go, the engine
+          // sends it. The step itself is still this unit's decision -- a
+          // combo step is not a candidate competing for a budget.
+          const engine = rynPlacement(this.client);
+          const trapCands = engine === null ? [] : engine.solve(pos0, 7, [ anglEnm ]);
+          if (trapCands.length > 0 && engine.submit(trapCands, { limit: 1 }) > 0) {
             ryn.ledger.placedOnce = true;
             this._trapPlaced = true;
-            this._setupPhase = 3;
-          } else {
-            this._setupPhase = 3;
           }
+          this._setupPhase = 3;
         } else {
           this._setupPhase = 3;
         }
@@ -12115,7 +12107,7 @@ window.grbtp = 35;
     // neither pushes off nor gets pushed, so the swing is spent for nothing.
     //
     // With both of us trapped it is a different exchange, and a sound one.
-    // nearestSpikePlacerAngle only keeps angles whose spike physically touches
+    // spikeReachPlacements only keeps candidates whose spike physically touches
     // the enemy (`distance <= collisionScale + spikeScale`), so the damage
     // comes from contact, not from a push — no knockback is needed for it to
     // land. A trapped enemy cannot step off the spike either. And my own
@@ -12128,8 +12120,8 @@ window.grbtp = 35;
     // enemy goes ahead.
     // What actually decides whether the exchange works while I am pinned is
     // whether a spike can be put where it touches them.
-    // EnemyManager.nearestSpikePlacerAngle is already exactly that set — it
-    // keeps only angles whose spike lands within `collisionScale + spikeScale`
+    // EnemyManager.spikeReachPlacements is already exactly that set — it
+    // keeps only candidates whose spike lands within `collisionScale + spikeScale`
     // of the enemy — so when it is non-empty the damage comes from contact and
     // needs no knockback from either of us.
     //
@@ -12140,7 +12132,7 @@ window.grbtp = 35;
     // tick bothTrapped collapses, and with me still pinned the gate shut on
     // precisely the swing it was meant to allow, while we stood next to each
     // other.
-    const touchAngles = EnemyManager2.nearestSpikePlacerAngle;
+    const touchAngles = EnemyManager2.spikeReachPlacements;
     const canTouchThem = Array.isArray(touchAngles) ? touchAngles.length > 0 : !!touchAngles;
     const bothTrapped = myPlayer.isTrapped && nearest.isTrapped;
     if (myPlayer.isTrapped && !bothTrapped && !canTouchThem) {
@@ -12420,7 +12412,7 @@ window.grbtp = 35;
         return;
       }
       const nearest = EnemyManager2.nearestEnemy;
-      const placementAngles = EnemyManager2.nearestSpikePlacerAngle;
+      const placementAngles = EnemyManager2.spikeReachPlacements;
       const reloading = ryn.features.units.reloading;
       const primary = myPlayer.getItemByType(0);
       const isPolearm = primary !== 8;
@@ -12444,13 +12436,12 @@ window.grbtp = 35;
         const pos1 = myPlayer.pos.current;
         const pos2 = nearest.pos.current;
         const angleTo = pos1.angle(pos2);
-        const itemType = 4;
-        for (const angle of placementAngles) {
-          ryn.actions.place(itemType, angle);
-        }
+        // The sync's spike is the same spike the tick places, from the same
+        // solver, out through the same executor -- and one of it, not one per
+        // angle that happened to reach.
+        const engine = rynPlacement(this.client);
+        if (engine === null || engine.submit(placementAngles, { limit: 1 }) === 0) return;
         ryn.ledger.placedOnce = true;
-        ryn.ledger.placeAngles[0] = itemType;
-        ryn.ledger.placeAngles[1] = placementAngles;
         bid.claim = true;
         bid.useAngle = angleTo;
         bid.forceHat = 7;
@@ -12505,14 +12496,10 @@ window.grbtp = 35;
         const angleFromSpike = spikePos.angle(pos2);
         const futureEnemyPos = spikePos.addDirection(angleFromSpike, 140);
         const futureAngle = pos1.angle(futureEnemyPos);
-        const placementAngles = EnemyManager2.nearestSpikePlacerAngle;
-        if (placementAngles !== null) {
-          for (const angle of placementAngles) {
-            ryn.actions.place(itemType, angle);
-          }
+        const placementAngles = EnemyManager2.spikeReachPlacements;
+        const engine = rynPlacement(this.client);
+        if (placementAngles !== null && engine !== null && engine.submit(placementAngles, { limit: 1 }) > 0) {
           ryn.ledger.placedOnce = true;
-          ryn.ledger.placeAngles[0] = itemType;
-          ryn.ledger.placeAngles[1] = placementAngles;
           bid.claim = true;
           bid.useAngle = futureAngle;
           bid.forceHat = 7;
@@ -12546,25 +12533,15 @@ window.grbtp = 35;
         const angleToEnemy = pos1.angle(pos2);
         const angleToTrap = pos1.angle(pos3);
         const middleAngle = findMiddleAngle(angleToEnemy, angleToTrap);
-        const angles = ObjectManager2.getBestPlacementAngles({
-          position: pos1,
-          id: spikeID,
-          targetAngle: angleToEnemy,
-          ignoreID: nearestLowHPObject.id,
-          preplace: false,
-          reduce: false,
-          fill: false
-        });
-        const spikeScale = Items[spikeID].scale;
-        const possibleAngles = angles.filter(angle => {
-          const spikePos = pos1.addDirection(angle, placeLength);
-          const distance = pos2.distance(spikePos);
-          const range = nearestSyncEnemy.collisionScale + spikeScale;
-          return distance <= range;
-        });
+        // The object being broken is spared: this spike is aimed at ground
+        // that object still holds and is about to give up, which is the
+        // engine's own preplace idea rather than a second one spelled
+        // `ignoreID`.
+        const engine = rynPlacement(this.client);
+        const possibleAngles = engine === null ? [] :
+          engine.reach(pos1, itemType, angleToEnemy, pos2, nearestSyncEnemy.collisionScale,
+            { spared: new Set([ nearestLowHPObject ]), mode: RYN_PLACE_MODE.PREPLACE });
         if (possibleAngles.length !== 0) {
-          ryn.ledger.placeAngles[0] = itemType;
-          ryn.ledger.placeAngles[1] = possibleAngles;
           bid.claim = true;
           bid.useAngle = middleAngle;
           bid.forceHat = 40;
@@ -14311,34 +14288,20 @@ window.grbtp = 35;
         if (myPlayer.canPlace(5)) {
           type = 5;
         }
-        const id = myPlayer.getItemByType(type);
-        const length = myPlayer.getItemPlaceScale(id);
-        const angles = ObjectManager2.getBestPlacementAngles({
-          position: pos1,
-          id: id,
-          targetAngle: angle,
-          ignoreID: null,
-          preplace: false,
-          reduce: true,
-          fill: false
-        });
-        if (angles.length === 0) {
-          return;
-        }
+        // A wall between me and the shot: from the one solver, kept only where
+        // it actually stands on the line the projectile travels. The line test
+        // is a radius like everywhere else -- the box corners this used to
+        // measure reached forty per cent further than the wall does.
+        const engine = rynPlacement(this.client);
+        if (engine === null) return;
+        const cands = engine.solve(pos1, type, [ angle ]);
+        if (cands.length === 0) return;
         const distance1 = pos1.distance(pos2);
-        const placementScale = DataHandler.getItem(id).scale;
-        for (const angle2 of angles) {
-          const pos3 = pos1.addDirection(angle2, length);
-          const rectStart = pos3.copy().sub(placementScale);
-          const rectEnd = pos3.copy().add(placementScale);
-          const distance2 = pos3.distance(pos2);
-          if (distance2 < distance1 && lineIntersectsRect(pos2, pos1, rectStart, rectEnd)) {
-            ryn.actions.place(type, angle2);
-          }
-        }
-        ryn.ledger.placedOnce = true;
-        ryn.ledger.placeAngles[0] = type;
-        ryn.ledger.placeAngles[1] = [ angle ];
+        const shields = cands
+          .filter(c => Math.hypot(c.x - pos2.x, c.y - pos2.y) < distance1 && segHitsDisc(c.x, c.y, c.scale, pos2, pos1))
+          .sort((a, b) => Math.hypot(a.x - pos2.x, a.y - pos2.y) - Math.hypot(b.x - pos2.x, b.y - pos2.y));
+        if (shields.length === 0) return;
+        if (engine.submit(shields, { limit: 2 }) > 0) ryn.ledger.placedOnce = true;
       }
     }
   }
@@ -14617,7 +14580,7 @@ window.grbtp = 35;
       InputHandler2.instaReset();
       this.client.network.emit("leaveClan");
       for (const angle2 of angles) {
-        ryn.actions.place(4, angle2);
+        rynPlacement(this.client)?.placeAt(4, angle2);
       }
     }
   }
@@ -14655,7 +14618,7 @@ window.grbtp = 35;
         return;
       }
       for (const angle2 of angles) {
-        ryn.actions.place(4, angle2);
+        rynPlacement(this.client)?.placeAt(4, angle2);
       }
     }
   }
@@ -16214,7 +16177,7 @@ window.grbtp = 35;
     sample(enemyManager, local) {
       const target = enemyManager.nearestEnemy ?? null;
       this.target = target;
-      this.spikePlacerAngles = enemyManager.nearestSpikePlacerAngle ?? null;
+      this.spikePlacerAngles = enemyManager.spikeReachPlacements ?? null;
       this.incoming = (enemyManager.potentialDamage ?? 0) + Math.max(enemyManager.potentialSpikeDamage ?? 0, enemyManager.potentialSpikeKnockbackDamage ?? 0);
       this.flagged = enemyManager.detectedDangerEnemy === true || enemyManager.detectedEnemy === true || enemyManager.dangerWithoutSoldier === true;
       this.knockbackRisk = enemyManager.possibleToKnockback === true && local.trapped !== true;
@@ -17029,9 +16992,14 @@ window.grbtp = 35;
     spikeSyncHammer: [ "place" ],
     antiSync: [ "heal", "move" ],
     adaptiveGearSwitching: [],
-    spikeTickBreak: [],
-    spikeTickNear: [],
-    spikeTickTrap: [],
+    // All three reach spikeTickHit, which places the spike the tick is built
+    // around, through EnemyManager.attemptSpikePlacement. Declaring nothing
+    // meant the hat went on, the weapon was forced, the swing went out -- and
+    // the spike itself was refused. The emission is one hop outside the unit,
+    // which is why a flat reading of the class body missed it.
+    spikeTickBreak: [ "place" ],
+    spikeTickNear: [ "place" ],
+    spikeTickTrap: [ "place" ],
     spikeSync: [ "place" ],
     spikeTrap: [ "place" ],
     teammateSpikeTrap: [ "place" ],
