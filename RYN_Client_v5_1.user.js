@@ -16657,6 +16657,9 @@ window.grbtp = 35;
     _shameHealQueue = 0;
     _shameHealDeadline = null;
     actor = null;
+    // How deep inside an already-authorised action we are. Zero means a
+    // feature is asking directly and the contract applies.
+    _depth = 0;
     _deps = null;
     bind(deps) {
       this._deps = deps;
@@ -16670,11 +16673,29 @@ window.grbtp = 35;
     // Callers outside a feature's run -- the spawn path, the owner's keyboard,
     // bot control -- have no actor and are not covered by the contract.
     _allowed(action) {
+      // A compound action is defined in terms of simpler ones: `place` is
+      // select, attack, stop; `heal` is select and attack. A feature that
+      // declared `place` declared those parts by declaring the whole, so
+      // re-checking them against the declaration refuses the action it was
+      // given permission for -- the item is selected, the build never goes
+      // out, and the only trace is a log line blaming the feature for an
+      // action it never asked for. Every unit that declared "place" without
+      // also declaring "attack" was silently unable to build anything.
+      //
+      // So the contract is enforced where a feature actually asks -- at the
+      // public method -- and not again inside it.
+      if (this._depth > 0) return true;
       const actor = this.actor;
       if (actor === null) return true;
       if (actor.may.includes(action)) return true;
       Logger.error(`RynActions: "${actor.id}" requested "${action}" without declaring it`);
       return false;
+    }
+    // Run the body of an action that is built out of other actions. Nothing
+    // inside is re-checked; the check already happened on the way in.
+    _compound(fn) {
+      this._depth += 1;
+      try { return fn(); } finally { this._depth -= 1; }
     }
     attack(angle, priority = 2) {
       if (!this._allowed("attack")) return;
@@ -16700,18 +16721,22 @@ window.grbtp = 35;
     }
     place(type, angle = this.currentAngle, reset = false) {
       if (!this._allowed("place")) return;
-      const loadout = this._deps.loadout;
-      this._deps.ledger.totalPlaces += 1;
-      loadout.selectItem(type);
-      this.attack(angle, 1);
-      this.stopAttack(angle);
-      loadout.whichWeapon(loadout.predictWeapon());
+      return this._compound(() => {
+        const loadout = this._deps.loadout;
+        this._deps.ledger.totalPlaces += 1;
+        loadout.selectItem(type);
+        this.attack(angle, 1);
+        this.stopAttack(angle);
+        loadout.whichWeapon(loadout.predictWeapon());
+      });
     }
     _rawHeal() {
-      const loadout = this._deps.loadout;
-      loadout.selectItem(2);
-      this.attack(null, 1);
-      loadout.whichWeapon(loadout.predictWeapon());
+      return this._compound(() => {
+        const loadout = this._deps.loadout;
+        loadout.selectItem(2);
+        this.attack(null, 1);
+        loadout.whichWeapon(loadout.predictWeapon());
+      });
     }
     _healBudgetLeft() {
       const net = this._deps.network;
@@ -17035,7 +17060,10 @@ window.grbtp = 35;
     placementDefense: [ "place" ],
     trapAnimal: [ "attack", "place" ],
     antiTrapProtect: [ "place" ],
-    antiTrapStar: [],
+    // Places a fan of spikes around the trap it is breaking out of, so it
+    // needs `place` -- it declared nothing and every one of those builds was
+    // refused by the contract.
+    antiTrapStar: [ "place" ],
     antiRetrap: [],
     autoPush: [],
     autoPlay: [ "move" ],
