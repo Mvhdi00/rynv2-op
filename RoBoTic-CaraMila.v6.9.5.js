@@ -490,6 +490,7 @@ const EXP = (function() {
 
     const TURNSTILE_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
     const TURNSTILE_API = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    const GAME_GIVES_UP = 16000;
     const entryStats = { renders: 0, holds: 0 };
     function guardEntry(readToken, saveToken) {
         if (typeof window == "undefined" || typeof document == "undefined") return;
@@ -526,9 +527,9 @@ const EXP = (function() {
         function render() {
             if (rendered || !window.turnstile || typeof window.turnstile.render != "function") return;
             const page = document.getElementById("turnstileWidget");
-            const usable = page && page.offsetParent !== null;
-            if (usable && (page.childElementCount > 0 || Date.now() - started < 6000)) return;
-            const where = usable ? page : ownHost();
+            if (page && page.childElementCount > 0) return;
+            if (Date.now() - started < GAME_GIVES_UP) return;
+            const where = page && page.offsetParent !== null ? page : ownHost();
             if (!where) return;
             rendered = true;
             try {
@@ -590,6 +591,11 @@ const EXP = (function() {
             });
 
         function tick() {
+            const page = document.getElementById("turnstileWidget");
+            if (box && page && page.childElementCount > 0 && box.parentNode) {
+                box.parentNode.removeChild(box);
+                box = null;
+            }
             if (haveToken()) {
                 try {
                     const btn = document.getElementById("enterGame");

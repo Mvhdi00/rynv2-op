@@ -87,8 +87,13 @@ function makePage(opts) {
   else { document.documentElement = null; }
 
   const window = { location: { hostname: 'moomoo.io' }, document };
+  // The guard waits out the game's own fifteen seconds before adding a widget
+  // of its own, so a test has to be able to move the clock rather than sleep.
+  let clock = 1000000;
   return {
     window, document, El, byId, index,
+    Date: { now: () => clock },
+    advance(ms) { clock += ms; },
     attach() {
       document.documentElement = new El('html');
       document.body = new El('body');
@@ -117,11 +122,12 @@ function loadGuards(page) {
   if (a < 0 || b < 0) throw new Error('no page-guards block in ExternalClient.user.js');
   const src = ext.slice(a, b);
   const fn = new Function('window', 'document', 'setTimeout', 'setInterval', 'clearInterval',
-    'MutationObserver', 'console',
+    'MutationObserver', 'console', 'Date',
     src + '\nreturn { suppressWarningBanner: suppressWarningBanner, guardEntry: guardEntry };');
   return fn(page.window, page.document, page.setTimeout, page.setInterval, page.clearInterval,
             undefined,                       // no observer: exercise the plain path
-            { info() {}, warn() {} });
+            { info() {}, warn() {} },
+            page.Date);
 }
 
 // --------------------------------------------------------------------------
@@ -246,7 +252,11 @@ console.log('\n3. rendering Turnstile when the page will not');
   guardEntry(() => token, (t) => { token = t; });
 
   page.run(1);                              // the guard's first tick
-  check(rendered.length === 1, 'a widget is rendered even though the page\'s is hidden');
+  check(rendered.length === 0, 'nothing is rendered while the game is still trying');
+
+  page.advance(17000);                      // past the game's hundred tries
+  page.run(page.pending());
+  check(rendered.length === 1, 'a widget is rendered once the game has given up');
   check(rendered[0] && rendered[0].el !== widget, 'into a holder of its own, not the hidden one');
   check(rendered[0] && rendered[0].el.offsetParent !== null,
         'and that holder is laid out, which is the test the game applies');
@@ -269,8 +279,27 @@ console.log('\n3. rendering Turnstile when the page will not');
   page.window.turnstile = { render(el, o) { rendered.push(el); return 'w1'; }, getResponse: () => '' };
   const { guardEntry } = loadGuards(page);
   guardEntry(() => null, () => {});
+  page.advance(17000);
   page.run(1);
-  check(rendered.length === 0, 'a laid-out widget is left to the game');
+  check(rendered.length === 1, 'an empty widget the game never filled is rendered into');
+}
+{
+  // The bug a player actually saw: two checkboxes, the game's in the middle of
+  // the menu and a second one bottom-right. The game had rendered its own --
+  // the widget has children -- so there is nothing to rescue, however long it
+  // has been.
+  const page = makePage();
+  const widget = page.document.createElement('div');
+  widget.id = 'turnstileWidget';
+  widget.appendChild(page.document.createElement('iframe'));
+  page.document.body.appendChild(widget);
+  const rendered = [];
+  page.window.turnstile = { render(el) { rendered.push(el); return 'w1'; }, getResponse: () => '' };
+  const { guardEntry } = loadGuards(page);
+  guardEntry(() => null, () => {});
+  page.advance(60000);
+  page.run(3);
+  check(rendered.length === 0, 'a widget the game already filled is never doubled up');
 }
 
 // --------------------------------------------------------------------------
@@ -329,6 +358,25 @@ console.log('\n6. two clients that spawned before the handshake');
     // callback `n`. Calling it by name there threw "n is not a function".
     check(/\._go = \w+/.test(after), name + ': and the callback is stashed, not named');
   }
+}
+
+// --------------------------------------------------------------------------
+console.log('\n7. novastorm keeps the sandbox link');
+{
+  // Not a repair -- an undo. novastorm's author tore this out on purpose:
+  //     document.getElementById("altServer").remove(); // REMOVE THE link ...
+  // and it only survived because the mod never ran far enough to reach the
+  // line. The player who uses that link asked for it back.
+  const before = fs.readFileSync(path.join(ROOT, 'reference/originals/novastorm.v1.4.js'), 'utf8');
+  const after = fs.readFileSync(path.join(ROOT, 'novastorm.v1.4.js'), 'utf8');
+  check(/getElementById\("altServer"\)\.remove\(\)/.test(before),
+        'the original removes the sandbox link');
+  check(!/getElementById\("altServer"\)\??\.remove\(\)/.test(after),
+        'the shipped file does not');
+  // and nothing else in that neighbourhood went with it
+  check(/REMOVE THE link/.test(before) && !/REMOVE THE link/.test(after),
+        'the line went, comment and all');
+  check(after.length > before.length - 200, 'and nothing else was taken with it');
 }
 
 console.log('\n' + (fails ? '=> ' + fails + ' FAILURE(S)' : '=> ALL ENTRY GUARD TESTS PASSED'));

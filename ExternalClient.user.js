@@ -610,6 +610,9 @@ const EXP = (function() {
     // latch the dead end.
     const TURNSTILE_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
     const TURNSTILE_API = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    // The bundle polls for a laid-out #turnstileWidget every 150ms, 100 times,
+    // and then never again. Sixteen seconds is one tick past that.
+    const GAME_GIVES_UP = 16000;
     const entryStats = { renders: 0, holds: 0 };
     // readToken/saveToken are parameters rather than closure references so that
     // this block can be lifted whole into a script that has no EXP core --
@@ -657,13 +660,19 @@ const EXP = (function() {
         function render() {
             if (rendered || !window.turnstile || typeof window.turnstile.render != "function") return;
             const page = document.getElementById("turnstileWidget");
-            const usable = page && page.offsetParent !== null;
-            // The game renders into its own widget the moment it can. Give it
-            // six seconds of clear air before putting a second one on the page:
-            // two widgets both work, but each solve is a round trip Cloudflare
-            // did not need to be asked for.
-            if (usable && (page.childElementCount > 0 || Date.now() - started < 6000)) return;
-            const where = usable ? page : ownHost();
+            // The game got there: leave it alone. Nothing else to decide.
+            if (page && page.childElementCount > 0) return;
+            // Otherwise wait out the game's own attempt before adding a second
+            // widget. It polls every 150ms for 100 tries -- fifteen seconds --
+            // and it does not even start until the menu is laid out, which is
+            // after the server list arrives. The first version gave it six
+            // seconds and only while the widget was already laid out, so on an
+            // ordinary load it fired before the menu existed and the player got
+            // two checkboxes: the game's in the middle of the menu, and this
+            // one bottom-right. A rescue that arrives before the thing it is
+            // rescuing is just clutter.
+            if (Date.now() - started < GAME_GIVES_UP) return;
+            const where = page && page.offsetParent !== null ? page : ownHost();
             if (!where) return;
             rendered = true;
             try {
@@ -729,6 +738,13 @@ const EXP = (function() {
             });
 
         function tick() {
+            // If the game's own widget turned up after ours did, ours is
+            // surplus -- take it away rather than leave two on screen.
+            const page = document.getElementById("turnstileWidget");
+            if (box && page && page.childElementCount > 0 && box.parentNode) {
+                box.parentNode.removeChild(box);
+                box = null;
+            }
             if (haveToken()) {
                 // the game does this in its own callback; doing it again costs
                 // nothing and covers a mod that put the class back

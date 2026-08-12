@@ -25,13 +25,16 @@ const steps = [
   ['tools/build-ryn.js', []],
 ];
 for (const name of ['SamMod.v698.js', 'Robotics-kusoi.v1.8.4.js', 'xelahot.v3.js',
-                    'xelahot.v3-alt.js', 'x18k-Original.v5.3.js', 'novastorm.v1.4.js']) {
+                    'xelahot.v3-alt.js', 'x18k-Original.v5.3.js']) {
   steps.push(['tools/repair-mod.js', ['reference/originals/' + name, name]]);
 }
-// Balthazar takes a second pass of its own after the generic repair.
-const balth = path.join(tmp, 'balthazar-repaired.js');
-steps.push(['tools/repair-mod.js', ['reference/originals/Balthazar-priv.js', balth]]);
-steps.push(['tools/patch-balthazar.js', [balth, 'Balthazar-priv.js']]);
+// Two take a second pass of their own after the generic repair.
+for (const [name, patch] of [['Balthazar-priv.js', 'tools/patch-balthazar.js'],
+                             ['novastorm.v1.4.js', 'tools/patch-novastorm.js']]) {
+  const mid = path.join(tmp, 'repaired-' + name);
+  steps.push(['tools/repair-mod.js', ['reference/originals/' + name, mid]]);
+  steps.push([patch, [mid, name]]);
+}
 
 let failed = 0;
 for (const [script, args] of steps) {

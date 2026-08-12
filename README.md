@@ -2003,3 +2003,38 @@ problem, which is the worst place for a fake one to be.
   promise, not as a `pageerror` -- and that promise was being `.catch`ed and
   discarded. novastorm looked as though it had simply chosen not to send its
   spawn.
+
+# Two things that were mine to undo
+
+## A second captcha, bottom-right
+
+The entry guard renders a Turnstile widget of its own when the page's cannot be
+rendered into. It was doing that six seconds in, and only while
+`#turnstileWidget` was already laid out — which on an ordinary load it is not,
+because the menu does not appear until the server list arrives. So the fallback
+fired before the game's menu existed, and then the game rendered its own: two
+checkboxes, one in the middle of the menu and one bottom-right.
+
+It now waits out the game's own attempt in full — the bundle polls every 150 ms
+for 100 tries, so sixteen seconds — and never renders at all if
+`#turnstileWidget` already has children, however long it has been. If the game's
+widget turns up after the fallback did, the fallback is taken away. The
+hidden-widget rescue still works; it just arrives when it is actually needed.
+
+## "Try the sandbox"
+
+That link is `#altServer`, and novastorm removes it on purpose:
+
+```js
+document.getElementById("altServer").remove(); // REMOVE THE link to sandbox / normal moo
+```
+
+It survived only because, until the transport was fixed, novastorm never ran
+far enough to reach that line. `tools/patch-novastorm.js` drops the line. It is
+a separate step from `repair-mod.js` on purpose: undoing a choice the author
+made deliberately is not a repair, and should not happen to every mod that
+passes through.
+
+`tools/probe-entry.js --dom` now lists what a mod removes from the page as well
+as what it adds, which is how the next one of these gets noticed without
+someone having to play the game to find it.

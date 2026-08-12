@@ -415,9 +415,18 @@ window.FRVR = {
           kids: el.children.length,
         });
       }
-      return { added: out, styles: document.querySelectorAll('style').length };
+      // ...and what it took away. A mod tearing out page furniture is normal
+      // (the ads are gone anyway), but tearing out something the player uses
+      // is the kind of thing only a list makes obvious.
+      const gone = planted.filter(id => !document.getElementById(id));
+      const emptied = planted.filter(id => {
+        const el = document.getElementById(id);
+        return el && el.tagName === 'DIV' && !el.textContent && !el.children.length;
+      });
+      return { added: out, gone, emptied, styles: document.querySelectorAll('style').length };
     }, [...ids]);
     console.log('  <style> blocks on the page: ' + added.styles);
+    console.log('  removed from the page: ' + (added.gone.length ? added.gone.join(' ') : '(nothing)'));
     for (const el of added.added) {
       console.log('  ' + (el.seen ? 'VISIBLE ' : 'hidden  ') +
         el.tag + (el.id ? '#' + el.id : '') + (el.cls ? '.' + el.cls.replace(/\s+/g, '.') : '') +
