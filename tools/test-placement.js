@@ -1031,14 +1031,23 @@ console.log("\n43. every mode uses the same components");
 
 console.log("\n44. auto and preplace compete in one plan, not in turns");
 {
-  const { w, engine } = replaceWorld({ _autoplacer: true, _preplacer: true }, { enemyX: 7290, enemyY: 5000 });
+  // The target closes to within reach over the run. Started further out, auto
+  // place correctly has nothing to contribute - nothing on a ring 79 units
+  // across can touch a target 200 away - and the due pool would be empty for a
+  // reason that has nothing to do with what this case is testing.
+  const { w, engine } = replaceWorld({ _autoplacer: true, _preplacer: true }, { enemyX: 7230, enemyY: 5000 });
   // observe what the real cycle sees, rather than probing a ring it has
   // already spent
-  const seen = { pool: [], due: [], deferred: [] };
+  // accumulate across the run: a slot booked on one tick is not regenerated on
+  // the next, so no single tick shows everything
+  const seen = { pool: [], due: [], deferred: [], modes: new Set() };
   const realResolve = engine.resolve.bind(engine);
   engine.resolve = function (pool, frame, trigger) {
     const r = realResolve(pool, frame, trigger);
-    if (pool.length > seen.pool.length) { seen.pool = pool; seen.due = r.due; seen.deferred = r.deferred; }
+    for (const c of pool) seen.modes.add(c.mode);
+    if (pool.length > seen.pool.length) seen.pool = pool;
+    if (r.due.length > seen.due.length) seen.due = r.due;
+    if (r.deferred.length > seen.deferred.length) seen.deferred = r.deferred;
     return r;
   };
   for (let i = 0; i < 4; i++) {
@@ -1046,9 +1055,8 @@ console.log("\n44. auto and preplace compete in one plan, not in turns");
     w.step(-22, 0);
     engine.postTick();
   }
-  const poolModes = new Set(seen.pool.map(c => c.mode));
-  ok(poolModes.has("auto"), "one generate pass produced auto candidates");
-  ok(poolModes.has("preplace"), "and preplace candidates, in the same pool");
+  ok(seen.modes.has("auto"), "one generate pass produced auto candidates");
+  ok(seen.modes.has("preplace"), "and preplace candidates, in the same pool");
   ok(seen.due.length > 0, "candidates reached one shared due pool: " + seen.due.length);
   ok(seen.deferred.length > 0, "and predictions not yet due were deferred, not discarded: " + seen.deferred.length);
   const bothCompeted = new Set(seen.due.map(c => c.mode)).size > 1 || seen.deferred.length > 0;

@@ -12129,6 +12129,7 @@ window.grbtp = 35;
     distanceFalloff: 260,
     distanceWeight: 1.4,
     approach: 1.2,
+    recession: 2.6,
     // safety
     clearance: .8,
     clearanceIdeal: 12,
@@ -12767,41 +12768,61 @@ window.grbtp = 35;
       const dNext = Math.hypot(cand.x - frame.targetNext.x, cand.y - frame.targetNext.y);
 
       // Tactical value ----------------------------------------------------
-      let tactical = 0;
+      // `reach` is the part of the tactical score that represents actually
+      // being able to affect something. Modifiers that only shade the value of
+      // a build that already reaches are deliberately kept out of it, so a
+      // candidate cannot qualify as useful on flavour alone.
+      let tactical = 0, reach = 0;
       const touching = dTarget < p.footR + frame.targetScale + 8;
-      if (touching && p.isDamage) tactical += w.contact;
+      if (touching && p.isDamage) {
+        tactical += w.contact;
+        reach += w.contact;
+      }
       // Does the footprint sit across the path the target is about to walk?
       const sweep = GeometrySolver.segmentDistance(cand.x, cand.y, frame.targetPos.x, frame.targetPos.y, frame.targetNext.x, frame.targetNext.y);
       const intercepts = sweep < p.footR + frame.targetScale;
-      if (intercepts) tactical += w.intercept;
+      if (intercepts) {
+        tactical += w.intercept;
+        reach += w.intercept;
+      }
       if (p.isDamage) {
         const rebound = this._reboundOf(cand, frame);
         if (rebound) {
-          if (rebound.doubleSpike) tactical += w.reboundDouble;
-          else if (rebound.willHit) tactical += w.rebound;
-          else if (rebound.inEscapable) tactical += w.reboundTrap;
+          const bounce = rebound.doubleSpike ? w.reboundDouble : rebound.willHit ? w.rebound : rebound.inEscapable ? w.reboundTrap : 0;
+          tactical += bounce;
+          reach += bounce;
         }
         if (ctx.exits && ctx.exits.length) {
           const toCand = Math.atan2(cand.y - frame.targetPos.y, cand.x - frame.targetPos.x);
           for (const exit of ctx.exits) {
             if (GeometrySolver.angleDist(toCand, exit.angle) < .45) {
               tactical += w.sealExit;
+              reach += w.sealExit;
               break;
             }
           }
         }
       }
       if (p.isTrap) {
-        // A trap is worth what it is likely to catch: close to where they are
-        // going, and out of the arc they are looking down.
-        if (intercepts && !frame.targetTrapped && !frame.imTrapped) tactical += w.capture;
-        const aim = frame.target.dir ?? frame.target.angle ?? null;
-        if (aim !== null && aim !== undefined) {
-          const toCand = Math.atan2(cand.y - frame.targetPos.y, cand.x - frame.targetPos.x);
-          if (GeometrySolver.angleDist(toCand, aim) > 2) tactical += w.aimAway;
+        // A trap is worth what it is likely to catch. Sitting outside the arc
+        // they are looking down makes a trap that can catch them better; on
+        // its own it makes a trap that cannot catch them no better at all,
+        // which is why the bonus hangs off the catch rather than standing
+        // beside it. Benchmarking found this buying traps 230 units behind the
+        // player on the strength of the modifier alone.
+        const catches = intercepts && !frame.targetTrapped && !frame.imTrapped;
+        if (catches) {
+          tactical += w.capture;
+          reach += w.capture;
+          const aim = frame.target.dir ?? frame.target.angle ?? null;
+          if (aim !== null && aim !== undefined) {
+            const toCand = Math.atan2(cand.y - frame.targetPos.y, cand.x - frame.targetPos.x);
+            if (GeometrySolver.angleDist(toCand, aim) > 2) tactical += w.aimAway;
+          }
         }
       }
       terms.tactical = tactical;
+      cand.reach = reach;
 
       // Recovery ----------------------------------------------------------
       // Ground that just opened, weighted by what the object that vacated it
@@ -12832,6 +12853,19 @@ window.grbtp = 35;
       const closing = Math.hypot(frame.targetNext.x - frame.myPos.x, frame.targetNext.y - frame.myPos.y) < Math.hypot(frame.targetPos.x - frame.myPos.x, frame.targetPos.y - frame.myPos.y);
       if (closing && intercepts) movement += w.approach;
       terms.movement = movement;
+
+      // Contact and interception are earned against where the target is, but
+      // the build lands where the target will be. Benchmarking showed the
+      // engine paying full price for spikes behind a target already leaving,
+      // so that value is discounted by how much ground they are predicted to
+      // put between us.
+      let recession = 0;
+      if (touching || intercepts) {
+        const dNow = Math.hypot(frame.targetPos.x - frame.myPos.x, frame.targetPos.y - frame.myPos.y);
+        const dNext = Math.hypot(frame.targetNext.x - frame.myPos.x, frame.targetNext.y - frame.myPos.y);
+        if (dNext > dNow) recession = w.recession * Math.min(1, (dNext - dNow) / 24);
+      }
+      terms.recession = -recession;
 
       // Collision safety --------------------------------------------------
       // Margin to the aperture edge, in world units at the ring. Too little
@@ -13293,10 +13327,15 @@ window.grbtp = 35;
       this.records.push(rec);
       return rec;
     }
-    has(type, x, y, radius) {
+    // Ground, not item type. Keying this on the type let a spike candidate and
+    // a trap candidate book the same slot, and then evict each other every
+    // tick as each was re-booked, so neither ever survived to its own
+    // deadline. The book exists to hold ground; what ends up on it is decided
+    // once, by value, before anything is booked.
+    has(x, y, radius) {
       for (const r of this.records) {
         if (r.state !== "pending") continue;
-        if (r.type === type && Math.hypot(r.x - x, r.y - y) < radius) return true;
+        if (Math.hypot(r.x - x, r.y - y) < radius + r.footR) return true;
       }
       return false;
     }
@@ -13449,7 +13488,7 @@ window.grbtp = 35;
       return !this.memory.sentThisTick(cand.profile, cand.angle, tick);
     }
     unbooked(cand) {
-      return !this.book.has(cand.profile.type, cand.x, cand.y, cand.profile.footR);
+      return !this.book.has(cand.x, cand.y, cand.profile.footR);
     }
     // Takes ground for a claim that outranks whoever holds it, and tells the
     // book, so a preplace record learns its slot is gone rather than finding
@@ -13822,7 +13861,7 @@ window.grbtp = 35;
           const y = frame.myPos.y + profile.ringR * Math.sin(angle);
           const hit = this.motion.intercept(frame.target, x, y, captureR, RPE_PREPLACE_MAX_LEAD);
           if (!hit) continue;
-          if (this.book.has(profile.type, x, y, profile.footR)) continue;
+          if (this.book.has(x, y, profile.footR)) continue;
           pool.push(this._candidate(profile, angle, open, RPE_MODE.PREPLACE, {
             source: "predict",
             kind: "intercept",
@@ -13846,7 +13885,7 @@ window.grbtp = 35;
         if (GeometrySolver.inAperture(open, angle)) continue;
         const x = frame.myPos.x + profile.ringR * Math.cos(angle);
         const y = frame.myPos.y + profile.ringR * Math.sin(angle);
-        if (this.book.has(profile.type, x, y, profile.footR)) continue;
+        if (this.book.has(x, y, profile.footR)) continue;
         pool.push(this._candidate(profile, angle, freed, RPE_MODE.PREPLACE, {
           source: "vacating",
           kind: "vacating",
@@ -13951,6 +13990,7 @@ window.grbtp = 35;
       const due = [], deferred = [];
       for (const cand of pool) {
         if (cand.value < this.weights.minValue) continue;
+        if (!this._interacts(cand)) continue;
         if (!this._conflicts.freshGround(cand, frame.tick)) continue;
         if (!this._conflicts.availableGround(cand)) continue;
         if (this._scheduler.due(cand, frame.tick)) due.push(cand);
@@ -13963,11 +14003,30 @@ window.grbtp = 35;
       };
     }
 
+    // Positional comfort is not a reason to spend packets. A candidate has to
+    // be able to do something to something: touch or intercept the target,
+    // close a way out, or take back ground that just opened. Clearance,
+    // packing and follow-up describe how pleasant a slot is, and on their own
+    // they were buying placements that measurably did nothing.
+    //
+    // A prediction is exempt, because its whole point is that the interaction
+    // has not happened yet — it was required to have a real interception
+    // before it could be generated at all.
+    _interacts(cand) {
+      if (cand.mode === RPE_MODE.PREPLACE) return true;
+      const t = cand.terms || {};
+      return (cand.reach || 0) + (t.enclosure || 0) + (t.recovery || 0) > 0;
+    }
+
     // Deferred candidates go into the book and hold their ground softly, so
     // nothing else wanders onto a slot we are waiting on — while still yielding
     // to anything that outranks a prediction.
     defer(deferred, frame) {
       let booked = 0;
+      // Highest expected value first, so when two builds want the same slot the
+      // better one takes it and the other is simply not booked, rather than
+      // the two trading it back and forth.
+      deferred = deferred.slice().sort((a, b) => b.expected - a.expected);
       for (const cand of deferred) {
         if (!this._conflicts.unbooked(cand)) continue;
         const token = this._conflicts.take(cand, "preplace", frame.tick, cand.interceptTick + 3, true);
