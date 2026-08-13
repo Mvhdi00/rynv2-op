@@ -10194,6 +10194,50 @@ window.grbtp = 35;
     }
   }
 
+  // ── Placement intent ──────────────────────────────────────────────────────
+  // The engine's candidate record, named and completed. Everything that
+  // produces a placement fills this same shape and everything that consumes
+  // one reads these fields, so a consumer never has to know which mode a
+  // placement came from.
+  //
+  // This is not a second candidate model. It is the one the engine already
+  // built, with the fields a consumer needs to judge age and validity stamped
+  // on at creation instead of being re-derived later.
+  const RPE_INTENT = {
+    FRESH: "fresh",
+    VALID: "valid",
+    STALE: "stale",
+    CONSUMED: "consumed"
+  };
+  const PlacementIntent = {
+    // Stamped once, where the candidate is built.
+    stamp(cand, frame, lifetime) {
+      cand.target = frame && frame.target ? frame.target : null;
+      cand.targetId = frame ? frame.targetId : null;
+      cand.targetAt = frame && frame.targetPos ? {
+        x: frame.targetPos.x,
+        y: frame.targetPos.y
+      } : null;
+      cand.originAt = frame && frame.myPos ? {
+        x: frame.myPos.x,
+        y: frame.myPos.y
+      } : null;
+      cand.createdTick = frame ? frame.tick : 0;
+      cand.expiresTick = (frame ? frame.tick : 0) + (lifetime === undefined ? RPE_INTENT_LIFETIME : lifetime);
+      cand.packetCost = RPE_PLACE_PACKETS;
+      cand.state = RPE_INTENT.FRESH;
+      return cand;
+    },
+    age(cand, tick) {
+      return tick - (cand.createdTick || 0);
+    },
+    expired(cand, tick) {
+      return cand.expiresTick !== undefined && tick >= cand.expiresTick;
+    }
+  };
+  const RPE_INTENT_LIFETIME = 6;
+
+
   // ── Planning modes ────────────────────────────────────────────────────────
   // Auto place, preplace and replace are not three systems. They are three
   // reasons for a candidate to exist, and the reason travels on the candidate
@@ -10367,6 +10411,7 @@ window.grbtp = 35;
     _scheduler;
     _plan=[];
     _replacePlan=[];
+    _pool=[];
     _planTargetId=null;
     _planTargetPos=null;
     _profiles=new Map;
@@ -10608,6 +10653,9 @@ window.grbtp = 35;
         x: myPos.x + profile.ringR * Math.cos(angle),
         y: myPos.y + profile.ringR * Math.sin(angle)
       };
+      // Stamped here so a consumer can judge the intent's age and the drift
+      // since it was chosen without re-deriving either.
+      PlacementIntent.stamp(cand, this._threat.frame, extra.lifetime);
       return cand;
     }
     _generateAuto(pool, profile, frame) {
@@ -10974,6 +11022,73 @@ window.grbtp = 35;
       return sent;
     }
 
+    // Rebuilds a booked record as a live intent so a consumer can take the
+    // decision preplace already made instead of making a second one. The
+    // record is left pending: an intent that is offered and not used has not
+    // been invalidated.
+    promoteRecord(rec, tick) {
+      const profile = this.profileFor(rec.type);
+      if (!profile) return null;
+      const myPos = this.client.myPlayer.pos.current;
+      const cand = {
+        profile: profile,
+        angle: Math.atan2(rec.y - myPos.y, rec.x - myPos.x),
+        aperture: null, source: "booked", mode: RPE_MODE.PREPLACE,
+        kind: rec.kind, priority: RPE_PRIORITY.ANTICIPATION,
+        confidence: rec.confidence, interceptTick: rec.interceptTick,
+        dueTick: rec.deadlineTick, vacates: rec.vacates,
+        excludes: rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null,
+        x: rec.x, y: rec.y, value: rec.value, expected: rec.expected,
+        terms: rec.terms || {}, reach: rec.value,
+        bookRecord: rec, bookToken: rec.token,
+        createdTick: rec.createdTick, expiresTick: rec.hardExpiry,
+        packetCost: RPE_PLACE_PACKETS, state: RPE_INTENT.FRESH,
+        target: null, targetId: rec.targetId, targetAt: null,
+        originAt: { x: myPos.x, y: myPos.y }
+      };
+      return cand;
+    }
+
+    // A single intent at a chosen angle, for a consumer that has an angle from
+    // anglesFor and wants it in the same shape as everything else.
+    intentAt(type, angle, opts) {
+      opts = opts || {};
+      const profile = this.profileFor(type);
+      if (!profile) return null;
+      const myPos = this.client.myPlayer.pos.current;
+      const a = GeometrySolver.norm(angle);
+      const cand = {
+        profile: profile, angle: a, aperture: null, source: "directed",
+        mode: RPE_MODE.AUTO, kind: "directed",
+        priority: opts.priority === undefined ? this.priorityFor(opts.owner) : opts.priority,
+        confidence: 1, value: opts.value === undefined ? 1 : opts.value,
+        terms: {}, reach: 1, excludes: opts.excludes || null,
+        dueTick: this.client._ModuleHandler.tickCount, vacates: null,
+        x: myPos.x + profile.ringR * Math.cos(a),
+        y: myPos.y + profile.ringR * Math.sin(a)
+      };
+      cand.expected = cand.value;
+      PlacementIntent.stamp(cand, this._threat.frame, opts.lifetime);
+      return cand;
+    }
+
+    // Sends an intent a consumer has already validated. It still goes through
+    // the conflict resolver and the executor - the consumer decided when, not
+    // whether it may have the ground or what it costs.
+    commitIntent(intent, owner) {
+      const ModuleHandler = this.client._ModuleHandler;
+      const myPos = this.client.myPlayer.pos.current;
+      const tick = ModuleHandler.tickCount;
+      if (!this._validAt(intent, myPos, [])) return 0;
+      if (intent.bookToken) this.ledger.releaseToken(intent.bookToken);
+      const sent = this._executor.flush([ intent ], { tick: tick, myPos: myPos }, this.ledger, this.memory, this);
+      if (sent > 0) {
+        ModuleHandler.placedOnce = true;
+        this.stats.directed += sent;
+      }
+      return sent;
+    }
+
     // Legal angles for a caller that wants the engine to choose the angle but
     // not the intent. Replaces the standalone angle helper the pre-engine
     // modules used, so there is one geometry engine rather than two that can
@@ -11045,6 +11160,7 @@ window.grbtp = 35;
 
       const pool = this.generate(frame, trigger);
       this.stats.candidates = pool.length;
+      this._pool = pool;
       if (pool.length === 0) return 0;
       this.score(pool, frame, trigger);
 
@@ -11908,7 +12024,16 @@ window.grbtp = 35;
   };
   const spikeTickHit = (client2, enemy) => {
     const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
-    EnemyManager2.attemptSpikePlacement();
+    // The swing, the hat and the aim are still this module's business. The
+    // spike itself is handed to the timing layer, which takes an intent the
+    // placement engine already produced and sends it only once it has
+    // revalidated the moment. Where the spike goes was never decided here.
+    const spikeTick = ModuleHandler.staticModules && ModuleHandler.staticModules.spikeTickController;
+    if (spikeTick) {
+      spikeTick.arm(enemy, "spikeTick");
+    } else {
+      EnemyManager2.attemptSpikePlacement();
+    }
     ModuleHandler.moduleActive = true;
     ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
     ModuleHandler.forceHat = 7;
@@ -11932,6 +12057,305 @@ window.grbtp = 35;
       ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
     }
   };
+  // ── Spike tick ────────────────────────────────────────────────────────────
+  // A timing and validation layer, not a placer. The engine decides where a
+  // spike goes; this decides whether the moment to send it has arrived, and
+  // refuses to send it when the world has moved out from under the decision.
+  //
+  // It never searches for angles. It consumes an intent the engine has already
+  // produced this tick - from auto place, from preplace, or from auto replace -
+  // and if none exists it asks the engine for one through the same solver
+  // every other caller uses. There is no second scan and no second scheduler:
+  // the state machine advances on the engine's own tick.
+  //
+  //   IDLE ──arm──▶ PREPARE ──▶ VALIDATE ──▶ EXECUTE ──▶ COMPLETE
+  //                    │            │
+  //                    │            ├──▶ REPLAN   (intent stale, world still good)
+  //                    │            └──▶ CANCEL   (moment gone)
+  //                    └──────────────▶ CANCEL
+  const SPIKE_TICK_PHASE = {
+    IDLE: "idle",
+    PREPARE: "prepare",
+    VALIDATE: "validate",
+    EXECUTE: "execute",
+    COMPLETE: "complete",
+    REPLAN: "replan",
+    CANCEL: "cancel"
+  };
+  // How far either side may drift before the intent describes ground that no
+  // longer relates to the fight it was chosen for.
+  const SPIKE_TICK_TARGET_DRIFT = 70;
+  const SPIKE_TICK_SELF_DRIFT = 45;
+  const SPIKE_TICK_REPLANS = 2;
+
+  class SpikeTickController {
+    moduleName="spikeTickController";
+    client;
+    phase=SPIKE_TICK_PHASE.IDLE;
+    intent=null;
+    target=null;
+    source=null;
+    armedTick=-1;
+    replans=0;
+    stats={
+      armed: 0,
+      consumed: 0,
+      requested: 0,
+      executed: 0,
+      replanned: 0,
+      cancelled: 0,
+      lost: 0
+    };
+    lastReason=null;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.phase = SPIKE_TICK_PHASE.IDLE;
+      this.intent = null;
+      this.target = null;
+      this.source = null;
+      this.armedTick = -1;
+      this.replans = 0;
+      this.lastReason = null;
+    }
+    get engine() {
+      const mh = this.client._ModuleHandler;
+      return mh && mh.staticModules && mh.staticModules.placementEngine || null;
+    }
+
+    // Called by the modules that detect a spike-tick moment. They keep their
+    // trigger logic; this takes over the question of whether and when the
+    // spike itself should go out.
+    arm(target, source) {
+      if (!target) return false;
+      if (this.phase !== SPIKE_TICK_PHASE.IDLE && this.target === target) return true;
+      this.phase = SPIKE_TICK_PHASE.PREPARE;
+      this.target = target;
+      this.source = source || "spikeTick";
+      this.armedTick = this.client._ModuleHandler.tickCount;
+      this.replans = 0;
+      this.intent = null;
+      this.lastReason = null;
+      this.stats.armed += 1;
+      return true;
+    }
+
+    // ── PREPARE ─────────────────────────────────────────────────────────────
+    // Take an intent the engine already has before asking it for anything.
+    // Order matters: a preplace or replace decision is a commitment the engine
+    // has already reasoned about and reserved ground for, so consuming it is
+    // both cheaper and less disruptive than making a new one.
+    _acquire(engine, tick) {
+      const spike = c => c && c.profile && c.profile.isDamage;
+
+      // 1. a preplace intent already holding ground for this target
+      for (const rec of engine.book.pending()) {
+        if (rec.type !== 4) continue;
+        if (rec.targetId !== null && rec.targetId !== this.target.id) continue;
+        const cand = engine.promoteRecord ? engine.promoteRecord(rec, tick) : null;
+        if (cand) {
+          cand.consumedFrom = "preplace";
+          cand.bookRecord = rec;
+          return cand;
+        }
+      }
+      // 2. an intent the engine planned this tick - auto place or auto replace
+      for (const pool of [ engine._replacePlan, engine._plan ]) {
+        if (!pool) continue;
+        for (const cand of pool) {
+          if (!spike(cand) || cand.state === RPE_INTENT.CONSUMED) continue;
+          cand.consumedFrom = cand.mode;
+          return cand;
+        }
+      }
+      // 3. a candidate the engine scored this tick but did not plan
+      if (engine._pool) {
+        let best = null;
+        for (const cand of engine._pool) {
+          if (!spike(cand) || cand.state === RPE_INTENT.CONSUMED) continue;
+          if (!best || cand.value > best.value) best = cand;
+        }
+        if (best) {
+          best.consumedFrom = "pool";
+          return best;
+        }
+      }
+      // 4. nothing to consume: ask the engine, through the solver every other
+      //    caller uses, for the few angles nearest the target. This is the
+      //    engine's cached aperture set, not a fresh scan.
+      const myPos = this.client.myPlayer.pos.current;
+      const aim = Math.atan2(this.target.pos.current.y - myPos.y, this.target.pos.current.x - myPos.x);
+      const angles = engine.anglesFor(4, aim, { limit: 3 });
+      if (!angles.length) return null;
+      const cand = engine.intentAt(4, angles[0], {
+        owner: this.source,
+        priority: RPE_PRIORITY.SYNC
+      });
+      if (cand) {
+        cand.consumedFrom = "requested";
+        this.stats.requested += 1;
+      }
+      return cand;
+    }
+
+    // ── VALIDATE ────────────────────────────────────────────────────────────
+    // Everything that could have changed since the intent was chosen. A failure
+    // here is not a reason to force the send; it is a reason to take a fresh
+    // intent or to stand down.
+    _validate(engine, tick) {
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2} = this.client;
+      const intent = this.intent;
+      if (!intent) return "noIntent";
+      // target still exists, and is still the one worth hitting
+      const target = this.target;
+      if (!target || !ObjectManager2 || target.pos === undefined) return "targetGone";
+      if (EnemyManager2.nearestEnemy === null) return "noEnemy";
+      if (target.id !== undefined && EnemyManager2.nearestEnemy.id !== target.id) return "targetChanged";
+      // intent age
+      if (PlacementIntent.expired(intent, tick)) return "expired";
+      // how far the world moved since the intent was chosen
+      const myPos = myPlayer.pos.current;
+      if (intent.originAt && Math.hypot(myPos.x - intent.originAt.x, myPos.y - intent.originAt.y) > SPIKE_TICK_SELF_DRIFT) return "selfMoved";
+      const tPos = target.pos.current;
+      if (intent.targetAt && Math.hypot(tPos.x - intent.targetAt.x, tPos.y - intent.targetAt.y) > SPIKE_TICK_TARGET_DRIFT) return "targetMoved";
+      // the spike still has to be able to reach them once it lands
+      const reach = intent.profile.footR + target.collisionScale + 8;
+      if (Math.hypot(intent.x - tPos.x, intent.y - tPos.y) > reach) return "outOfReach";
+      // object availability and resources
+      if (!myPlayer.canPlace(4)) return "unavailable";
+      // packet budget
+      if (!engine._scheduler.affords(0, false)) return "budget";
+      // collision, existing objects and placement range, asked the engine's way
+      if (!engine._validAt(intent, myPos, [])) return "blocked";
+      return null;
+    }
+
+    // ── EXECUTE ─────────────────────────────────────────────────────────────
+    // Arbitration is the ledger's, not ours. The intent carries a value built
+    // from how urgent this moment is, how good the ground is, how fresh the
+    // decision is and what it costs; if something better already holds that
+    // ground, the ledger says so and the spike stands down. Nothing here
+    // asserts that a spike outranks anything by virtue of being a spike.
+    _urgencyValue(intent, tick) {
+      const target = this.target;
+      const tPos = target.pos.current;
+      const myPos = this.client.myPlayer.pos.current;
+      const contact = Math.hypot(intent.x - tPos.x, intent.y - tPos.y);
+      const reach = intent.profile.footR + target.collisionScale;
+      // closing on the moment is what makes a spike tick worth interrupting
+      // for; a spike that only just reaches is worth much less than one the
+      // target is standing on.
+      const timing = Math.max(0, 1 - contact / Math.max(1, reach + 40));
+      const tactical = Math.max(0, intent.value || 0);
+      const age = PlacementIntent.age(intent, tick);
+      const freshness = Math.max(0, 1 - age / RPE_INTENT_LIFETIME);
+      const cost = (intent.packetCost || RPE_PLACE_PACKETS) / Math.max(1, this.client._ModuleHandler.packetLimit);
+      const near = Math.max(0, 1 - myPos.distance(tPos) / 300);
+      return tactical + 6 * timing + 2 * freshness + 3 * near - 4 * cost;
+    }
+
+    postTick() {
+      const engine = this.engine;
+      if (!engine) return;
+      const ModuleHandler = this.client._ModuleHandler;
+      const tick = ModuleHandler.tickCount;
+
+      switch (this.phase) {
+       case SPIKE_TICK_PHASE.IDLE:
+        return;
+
+       case SPIKE_TICK_PHASE.PREPARE:
+        {
+          if (!this.target || tick - this.armedTick > RPE_INTENT_LIFETIME) {
+            this.lastReason = "armExpired";
+            this.phase = SPIKE_TICK_PHASE.CANCEL;
+            return this.postTick();
+          }
+          const intent = this._acquire(engine, tick);
+          if (!intent) {
+            this.lastReason = "noGround";
+            this.phase = SPIKE_TICK_PHASE.CANCEL;
+            return this.postTick();
+          }
+          this.intent = intent;
+          if (intent.consumedFrom !== "requested") this.stats.consumed += 1;
+          this.phase = SPIKE_TICK_PHASE.VALIDATE;
+          return this.postTick();
+        }
+
+       case SPIKE_TICK_PHASE.VALIDATE:
+        {
+          const fault = this._validate(engine, tick);
+          if (!fault) {
+            this.phase = SPIKE_TICK_PHASE.EXECUTE;
+            return this.postTick();
+          }
+          this.lastReason = fault;
+          // Some faults mean the moment is gone; the rest mean only that this
+          // particular intent has gone stale and a fresh one may still serve.
+          const terminal = fault === "targetGone" || fault === "noEnemy" ||
+            fault === "targetChanged" || fault === "unavailable" || fault === "budget";
+          this.phase = terminal || this.replans >= SPIKE_TICK_REPLANS ?
+            SPIKE_TICK_PHASE.CANCEL : SPIKE_TICK_PHASE.REPLAN;
+          return this.postTick();
+        }
+
+       case SPIKE_TICK_PHASE.REPLAN:
+        {
+          // Hand the stale intent back rather than quietly keeping its ground,
+          // then look for another. Preplace records are left as they were: a
+          // spike tick that could not use one has not invalidated it.
+          this.replans += 1;
+          this.stats.replanned += 1;
+          if (this.intent && this.intent.consumedFrom === "requested" && this.intent.token) {
+            engine.ledger.releaseToken(this.intent.token);
+          }
+          this.intent = null;
+          this.phase = SPIKE_TICK_PHASE.PREPARE;
+          return this.postTick();
+        }
+
+       case SPIKE_TICK_PHASE.EXECUTE:
+        {
+          const intent = this.intent;
+          intent.priority = RPE_PRIORITY.SYNC;
+          intent.value = this._urgencyValue(intent, tick);
+          intent.expected = intent.value;
+          // The ledger arbitrates. If ground is held by something worth more,
+          // the spike does not take it.
+          if (!engine._conflicts.availableGround(intent)) {
+            this.lastReason = "outranked";
+            this.stats.lost += 1;
+            this.phase = SPIKE_TICK_PHASE.CANCEL;
+            return this.postTick();
+          }
+          const sent = engine.commitIntent(intent, this.source);
+          if (sent > 0) {
+            intent.state = RPE_INTENT.CONSUMED;
+            if (intent.bookRecord) {
+              intent.bookRecord.state = "fired";
+              intent.bookRecord.firedTick = tick;
+            }
+            this.stats.executed += 1;
+            this.phase = SPIKE_TICK_PHASE.COMPLETE;
+          } else {
+            this.lastReason = "refused";
+            this.phase = SPIKE_TICK_PHASE.CANCEL;
+          }
+          return this.postTick();
+        }
+
+       case SPIKE_TICK_PHASE.COMPLETE:
+       case SPIKE_TICK_PHASE.CANCEL:
+        if (this.phase === SPIKE_TICK_PHASE.CANCEL) this.stats.cancelled += 1;
+        this.reset();
+        return;
+      }
+    }
+  }
+  const SpikeTickController_default = SpikeTickController;
+
   class SpikeTickBreak {
     moduleName="spikeTickBreak";
     client;
@@ -15186,6 +15610,7 @@ window.grbtp = 35;
         autoPlay: new AutoPlay_default(client2),
         trapTick: new TrapTick_default(client2),
         placementEngine: new RynPlacementEngine_default(client2),
+        spikeTickController: new SpikeTickController_default(client2),
         placer: new Placer_default(client2),
         autoMill: new Automill_default(client2),
         autoGrind: new AutoGrind(client2),
@@ -15199,7 +15624,7 @@ window.grbtp = 35;
         rynLink: new RYNLinkModule(client2)
       };
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.movement ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.placementEngine, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.placementEngine, this.staticModules.spikeTickController, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
       this.reset();
     }
     movementReset() {

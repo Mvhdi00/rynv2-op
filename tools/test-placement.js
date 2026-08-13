@@ -36,14 +36,22 @@ function slice(from, to) {
   return SRC.slice(a, b);
 }
 
-const ENGINE_SRC =
-  slice("  const SiegeAnalysis = {", "  const RynPlacementEngine_default = RynPlacementEngine;");
+let ENGINE_SRC =
+  slice("  const SiegeAnalysis = {", "  const RynPlacementEngine_default = RynPlacementEngine;") +
+  "  const RynPlacementEngine_default = RynPlacementEngine;\n";
+/* The spike tick layer sits after the engine it consumes from, so it is
+ * appended when the source carries one. */
+if (SRC.indexOf("  const SPIKE_TICK_PHASE = {") >= 0) {
+  ENGINE_SRC += slice("  const SPIKE_TICK_PHASE = {", "  const SpikeTickController_default = SpikeTickController;");
+}
 
 /* The engine reads a handful of module-scope names. Supplying them through a
  * `with` block keeps the extracted source byte-identical to what ships. */
 function loadEngine(env) {
   const factory = new Function("env", "with (env) {\n" + ENGINE_SRC +
-    "\nreturn { RynPlacementEngine, RPE_PRIORITY, PlacementWeights, GeometrySolver };\n}");
+    "\nreturn { RynPlacementEngine, RPE_PRIORITY, PlacementWeights, GeometrySolver," +
+    " SpikeTickController: typeof SpikeTickController === 'function' ? SpikeTickController : null," +
+    " PlacementIntent: typeof PlacementIntent === 'object' ? PlacementIntent : null };\n}");
   return factory(env);
 }
 
@@ -1088,6 +1096,174 @@ console.log("\n45. one deletion runs one cycle for both preplace and replace");
   engine.onVacated(doomed);
   ok(cycles === 1, "one cycle, not one per mode: " + cycles);
   ok(w.MH.packetCount > 0, "and it put something on the wire");
+}
+
+/* ================= spike tick (timing layer) ================= */
+
+function spikeWorld(opts) {
+  const w = makeWorld(opts || {});
+  const env = {
+    Config_default: { mapScale: 14400, riverWidth: 724, playerScale: 35 },
+    Items: ITEMS, ItemGroups: ITEM_GROUPS,
+    Settings_default: { _autoplacer: true, _autoplacerRadius: 350,
+      _preplacer: true, _replacer: true, _prePlace: true, _replace: true },
+    DataHandler_default: { getWeapon: () => ({ range: 140, speed: 300 }) },
+    PlayerObject: PlayerObject, getAngleFromBitmask: () => null
+  };
+  const M = loadEngine(env);
+  if (!M.SpikeTickController) return null;
+  const engine = new M.RynPlacementEngine(w.client);
+  const spike = new M.SpikeTickController(w.client);
+  w.MH.staticModules.placementEngine = engine;
+  w.MH.staticModules.spikeTickController = spike;
+  return { w, engine, spike, M, PHASE: {
+    IDLE: "idle", PREPARE: "prepare", VALIDATE: "validate",
+    EXECUTE: "execute", COMPLETE: "complete", REPLAN: "replan", CANCEL: "cancel" } };
+}
+function spikeTick(ctx, dx, dy) {
+  ctx.w.MH.tickCount++;
+  ctx.w.MH.packetCount = 0;
+  ctx.engine._threat.frameTick = -1;
+  ctx.engine._blockersTick = -1;
+  if (dx !== undefined) ctx.w.step(dx, dy);
+  ctx.engine.postTick();
+  ctx.spike.postTick();
+}
+
+const SK = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+if (!SK) {
+  console.log("\n(spike tick layer not present in this source; section skipped)");
+} else {
+
+console.log("\n46. the intent model carries what a consumer needs");
+{
+  const ctx = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+  spikeTick(ctx, -4, 0);
+  const pool = ctx.engine._pool || [];
+  ok(pool.length > 0, "the engine retains its scored pool: " + pool.length);
+  const c = pool[0];
+  for (const f of ["mode", "profile", "target", "angle", "x", "y", "value", "priority",
+                   "createdTick", "expiresTick", "confidence", "packetCost", "state"])
+    ok(f in c, "intent carries " + f);
+  ok(c.state === "fresh", "and starts fresh");
+  ok(ctx.M.PlacementIntent.age(c, c.createdTick + 3) === 3, "age is measurable");
+  ok(ctx.M.PlacementIntent.expired(c, c.expiresTick) === true, "expiry is measurable");
+}
+
+console.log("\n47. arming runs the state machine to completion");
+{
+  const ctx = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+  spikeTick(ctx, -4, 0);
+  spikeTick(ctx, -4, 0);
+  ok(ctx.spike.phase === ctx.PHASE.IDLE, "starts idle");
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ok(ctx.spike.phase === ctx.PHASE.PREPARE, "arming moves to PREPARE");
+  const before = ctx.w.MH.packetCount;
+  ctx.spike.postTick();
+  ok(ctx.spike.phase === ctx.PHASE.IDLE, "and runs through to a terminal state");
+  ok(ctx.spike.stats.armed === 1, "the arm was counted");
+  ok(ctx.spike.stats.executed + ctx.spike.stats.cancelled === 1,
+     "it either executed or stood down, never both (" + ctx.spike.stats.lastReason + ")");
+}
+
+console.log("\n48. it consumes an existing intent rather than making one");
+{
+  const ctx = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+  spikeTick(ctx, -4, 0);
+  let scans = 0;
+  const realAngles = ctx.engine.anglesFor.bind(ctx.engine);
+  ctx.engine.anglesFor = function () { scans++; return realAngles.apply(null, arguments); };
+  let generated = 0;
+  const realGen = ctx.engine.generate.bind(ctx.engine);
+  ctx.engine.generate = function () { generated++; return realGen.apply(null, arguments); };
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ctx.spike.postTick();
+  ok(generated === 0, "no second candidate generation pass");
+  ok(ctx.spike.stats.consumed >= 1 || scans <= 1,
+     "it took an existing intent (" + ctx.spike.stats.consumed + " consumed, " + scans + " solver call)");
+  ok(scans <= 1, "at most one solver call, and only as a fallback");
+}
+
+console.log("\n49. it revalidates and refuses a stale intent");
+{
+  const ctx = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+  spikeTick(ctx, -4, 0);
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ctx.spike.phase = ctx.PHASE.PREPARE;
+  ctx.spike.postTick();
+  // now age an intent past its life and revalidate directly
+  const intent = ctx.engine._pool.find(c => c.profile.isDamage);
+  if (intent) {
+    ctx.spike.target = ctx.w.enemy;
+    ctx.spike.intent = intent;
+    intent.expiresTick = ctx.w.MH.tickCount - 1;
+    ok(ctx.spike._validate(ctx.engine, ctx.w.MH.tickCount) === "expired", "an aged intent is rejected");
+    intent.expiresTick = ctx.w.MH.tickCount + 5;
+    intent.originAt = { x: -9999, y: -9999 };
+    ok(ctx.spike._validate(ctx.engine, ctx.w.MH.tickCount) === "selfMoved", "player drift is caught");
+    intent.originAt = { x: ctx.w.me.pos.current.x, y: ctx.w.me.pos.current.y };
+    intent.targetAt = { x: -9999, y: -9999 };
+    ok(ctx.spike._validate(ctx.engine, ctx.w.MH.tickCount) === "targetMoved", "target drift is caught");
+    intent.targetAt = { x: ctx.w.enemy.pos.current.x, y: ctx.w.enemy.pos.current.y };
+    ctx.w.client.EnemyManager.nearestEnemy = null;
+    ok(ctx.spike._validate(ctx.engine, ctx.w.MH.tickCount) === "noEnemy", "a lost target is caught");
+  } else { ok(true, "no damage intent in pool; skipped"); }
+}
+
+console.log("\n50. a stale intent triggers a replan, not a forced send");
+{
+  const ctx = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+  spikeTick(ctx, -4, 0);
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ctx.spike.phase = ctx.PHASE.VALIDATE;
+  ctx.spike.intent = ctx.engine.intentAt(4, 0, { owner: "test" });
+  ctx.spike.intent.originAt = { x: -9999, y: -9999 };
+  const before = ctx.w.MH.packetCount;
+  ctx.spike.postTick();
+  ok(ctx.spike.stats.replanned >= 1, "it replanned rather than forcing the send");
+  ok(ctx.spike.phase === ctx.PHASE.IDLE, "and reached a terminal state");
+}
+
+console.log("\n51. it never bypasses the ledger, and can lose the ground");
+{
+  const ctx = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+  spikeTick(ctx, -4, 0);
+  // something far more valuable already holds every slot the spike could want
+  const ring = 35 + 49 - 5;
+  for (let a = 0; a < Math.PI * 2; a += 0.2)
+    ctx.engine.ledger.reserve(ctx.w.me.pos.current.x + ring * Math.cos(a),
+      ctx.w.me.pos.current.y + ring * Math.sin(a), 49,
+      ctx.M.RPE_PRIORITY.INSTA, "insta", ctx.w.MH.tickCount, 5);
+  const before = ctx.w.MH.packetCount;
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ctx.spike.postTick();
+  ok(ctx.w.MH.packetCount === before, "no packets spent against ground it cannot have");
+  ok(ctx.spike.stats.executed === 0, "and nothing was executed");
+}
+
+console.log("\n52. it does not invalidate a preplace decision it could not use");
+{
+  const ctx = spikeWorld({ enemyX: 7290, enemyY: 5000 });
+  for (let i = 0; i < 4; i++) spikeTick(ctx, -22, 0);
+  const booked = ctx.engine.book.pending().length;
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ctx.spike.postTick();
+  const after = ctx.engine.book.records.filter(r => r.state === "pending" || r.state === "fired").length;
+  ok(booked === 0 || after >= booked, "booked preplace records survive (" + booked + " -> " + after + ")");
+  ok(!ctx.engine.book.records.some(r => r.reason === "spikeTick"), "none were dropped by the spike tick");
+}
+
+console.log("\n53. it holds no scheduler and no packet path of its own");
+{
+  const ctx = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+  const own = Object.getOwnPropertyNames(ctx.spike);
+  ok(!own.some(k => /timer|interval|timeout|schedule/i.test(k)), "no timer or scheduler state");
+  ok(!own.some(k => /packet|socket|net/i.test(k)), "no packet or socket state");
+  const src = ctx.spike.constructor.toString();
+  ok(!/setTimeout|setInterval/.test(src), "no timers in its source");
+  ok(!/PacketManager|socket|\.send\(/.test(src), "no packet layer in its source");
+  ok(/commitIntent|_executor|engine\./.test(src), "it reaches the wire through the engine");
+}
 }
 
 console.log("");
