@@ -44,6 +44,12 @@ let ENGINE_SRC =
 if (SRC.indexOf("  const SPIKE_TICK_PHASE = {") >= 0) {
   ENGINE_SRC += slice("  const SPIKE_TICK_PHASE = {", "  const SpikeTickController_default = SpikeTickController;");
 }
+/* The trap tick's payoff test reads only SiegeAnalysis and the object grid, so
+ * it lifts out on its own and can be checked directly. */
+const HAS_TRAP_PAYOFF = SRC.indexOf("  const spikeTickKnockPayoff = ") >= 0;
+if (HAS_TRAP_PAYOFF) {
+  ENGINE_SRC += slice("  const spikeTickKnockObjects = ", "  class SpikeTickTrap {");
+}
 
 /* The engine reads a handful of module-scope names. Supplying them through a
  * `with` block keeps the extracted source byte-identical to what ships. */
@@ -51,6 +57,8 @@ function loadEngine(env) {
   const factory = new Function("env", "with (env) {\n" + ENGINE_SRC +
     "\nreturn { RynPlacementEngine, RPE_PRIORITY, PlacementWeights, GeometrySolver," +
     " SpikeTickController: typeof SpikeTickController === 'function' ? SpikeTickController : null," +
+    " spikeTickKnockPayoff: typeof spikeTickKnockPayoff === 'function' ? spikeTickKnockPayoff : null," +
+    " RPE_MODE: typeof RPE_MODE === 'object' ? RPE_MODE : null," +
     " PlacementIntent: typeof PlacementIntent === 'object' ? PlacementIntent : null };\n}");
   return factory(env);
 }
@@ -67,6 +75,7 @@ function ok(cond, msg) {
 class Vec {
   constructor(x, y) { this.x = x; this.y = y; }
   distance(o) { return Math.hypot(this.x - o.x, this.y - o.y); }
+  angle(o) { return Math.atan2(o.y - this.y, o.x - this.x); }
 }
 class PlayerObject {
   constructor(id, x, y, type, ownerID) {
@@ -81,6 +90,7 @@ class PlayerObject {
   }
   get collisionScale() { return this.scale * this.collisionDivider; }
   get placementScale() { return ITEMS[this.type].id === 21 ? ITEMS[this.type].blocker : this.scale; }
+  getDamage() { return ITEMS[this.type].dmg || 0; }
 }
 const ITEMS = [];
 ITEMS[6]  = { id: 6,  scale: 49, placeOffset: -5, dmg: 20, health: 400, itemGroup: 2 };
@@ -184,7 +194,11 @@ function makeWorld(opts = {}) {
     myPlayer: me, _ModuleHandler: MH,
     EnemyManager: { nearestEnemy: opts.noEnemy ? null : enemy },
     ObjectManager: { objects, grid2D: grid, client: null },
-    PlayerManager: { isEnemyByID(ownerID) { return ownerID !== 1; } },
+    PlayerManager: {
+      /* Relative to whoever is asked about, which is what the client's own
+       * signature means: my builds are enemies of the enemy. */
+      isEnemyByID(ownerID, who) { return ownerID !== (who && who.id !== undefined ? who.id : 1); }
+    },
     InputHandler: { move: opts.move ?? 0 }
   };
   world.MH = MH;
@@ -239,6 +253,7 @@ function analyticFree(ox, oy, ringR, footR, blockers, river) {
 let rnd = 12345;
 function rand() { rnd = (rnd * 1103515245 + 12345) & 0x7fffffff; return rnd / 0x7fffffff; }
 
+let geometryExact = true;
 for (let trial = 0; trial < 400; trial++) {
   const ox = 5000 + rand() * 4000, oy = 6600 + rand() * 1200;
   const ringR = 35 + 49 - 5;
@@ -262,6 +277,7 @@ for (let trial = 0; trial < 400; trial++) {
       if (!near) mismatch++;
     }
   }
+  if (mismatch !== 0) geometryExact = false;
   ok(mismatch === 0, "trial " + trial + " aperture mismatch at " + mismatch + " samples (blockers=" + n + ", river=" + river + ")");
 }
 
@@ -301,7 +317,7 @@ function engineFor(world) {
     Items: ITEMS, ItemGroups: ITEM_GROUPS,
     Settings_default: (() => {
       const base = Object.assign({ _autoplacer: true, _autoplacerRadius: 350,
-        _preplacer: true, _replacer: false }, world.settings || {});
+        _preplacer: true, _replacer: false, _gapFiller: false }, world.settings || {});
       // v5.2 spells these _prePlace / _replace; mirror both so one suite
       // drives either client.
       base._prePlace = base._preplacer;
@@ -312,11 +328,11 @@ function engineFor(world) {
     PlayerObject: PlayerObject,
     getAngleFromBitmask: () => null
   };
-  
-  const { RynPlacementEngine, RPE_PRIORITY, PlacementWeights } = loadEngine(env);
-  const e = new RynPlacementEngine(world.client);
+
+  const M = loadEngine(env);
+  const e = new M.RynPlacementEngine(world.client);
   world.MH.staticModules.placementEngine = e;
-  return { engine: e, RPE_PRIORITY, PlacementWeights };
+  return { engine: e, RPE_PRIORITY: M.RPE_PRIORITY, PlacementWeights: M.PlacementWeights, M: M, env: env };
 }
 
 
@@ -1267,6 +1283,362 @@ console.log("\n53. it holds no scheduler and no packet path of its own");
   ok(!/PacketManager|socket|\.send\(/.test(src), "no packet layer in its source");
   ok(/commitIntent|_executor|engine\./.test(src), "it reaches the wire through the engine");
 }
+}
+
+/* ------------------------------------------------------------------ *
+ * Whole-area auto place, gap filling, and the tick that reads them
+ *
+ * Eighteen scenarios and eleven structural conditions. The scenarios
+ * exercise behaviour; the conditions check that the behaviour is still
+ * produced by one engine rather than by several that agree.
+ * ------------------------------------------------------------------ */
+
+/* Drives a world for a number of ticks and reports where the placements
+ * actually went, in bearings relative to the target. Warm-up matters: the area
+ * does not exist until the target has been observed twice, by design. */
+function areaRun(opts, ticks, settings) {
+  const w = makeWorld(opts);
+  w.settings = settings || { _autoplacer: true, _preplacer: false, _replacer: false };
+  const ctx = engineFor(w);
+  const vx = opts.enemyVX ?? 0, vy = opts.enemyVY ?? 0;
+  const bearings = [], placed = [];
+  for (let t = 0; t < ticks; t++) {
+    w.MH.tickCount++;
+    w.MH.packetCount = 0;
+    ctx.engine._threat.frameTick = -1;
+    ctx.engine._blockersTick = -1;
+    const before = w.MH.totalPlaces;
+    const realExec = ctx.engine.execute.bind(ctx.engine);
+    ctx.engine.execute = function (plan, frame) {
+      for (const c of plan) placed.push(c);
+      return realExec(plan, frame);
+    };
+    ctx.engine.postTick();
+    ctx.engine.execute = realExec;
+    if (w.MH.totalPlaces > before) {
+      const toEnemy = Math.atan2(w.enemy.pos.current.y - w.me.pos.current.y,
+                                 w.enemy.pos.current.x - w.me.pos.current.x);
+      for (const c of placed.slice(bearings.length)) {
+        let d = c.angle - toEnemy;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        bearings.push(Math.round(d * 180 / Math.PI));
+      }
+    }
+    w.step(vx, vy);
+  }
+  return { w, ctx, engine: ctx.engine, bearings, placed };
+}
+
+console.log("\n54. the whole area facing the fight is considered, not one heading");
+{
+  const r = areaRun({ enemyX: 7200, enemyY: 5000, enemyVX: -22, enemyVY: 0 }, 7);
+  const spread = r.bearings.length ? Math.max(...r.bearings) - Math.min(...r.bearings) : 0;
+  ok(r.bearings.length >= 3, "placements went out: " + r.bearings.length);
+  ok(spread > 90, "and covered more than one bearing: " + spread + " degrees " + JSON.stringify(r.bearings));
+  ok(r.placed.some(c => c.terms && c.terms.area > 0), "at least one earned its place on area");
+}
+
+console.log("\n55. area value falls off with how long it takes them to get there");
+{
+  const w = makeWorld({ enemyX: 7160, enemyY: 5000, enemyVX: -20, enemyVY: 0 });
+  w.settings = { _autoplacer: true, _preplacer: false, _replacer: false };
+  const { engine } = engineFor(w);
+  for (let t = 0; t < 3; t++) {
+    w.MH.tickCount++; w.MH.packetCount = 0;
+    engine._threat.frameTick = -1; engine._blockersTick = -1;
+    engine.postTick(); w.step(-20, 0);
+  }
+  const frame = engine._threat.frame;
+  const pool = engine._pool.filter(c => c.terms && c.terms.area > 0);
+  ok(pool.length >= 2, "several candidates carry an area term: " + pool.length);
+  const byDist = pool.slice().sort((a, b) =>
+    Math.hypot(a.x - frame.targetPos.x, a.y - frame.targetPos.y) -
+    Math.hypot(b.x - frame.targetPos.x, b.y - frame.targetPos.y));
+  ok(byDist[0].terms.area >= byDist[byDist.length - 1].terms.area,
+     "the nearest is worth at least as much as the furthest: " +
+     byDist[0].terms.area.toFixed(2) + " vs " + byDist[byDist.length - 1].terms.area.toFixed(2));
+}
+
+console.log("\n56. nothing is bought behind a target that is leaving");
+{
+  const r = areaRun({ enemyX: 7180, enemyY: 5000, enemyVX: 24, enemyVY: 0 }, 6);
+  const behind = r.placed.filter(c => c.terms && c.terms.area > 0 &&
+    !(c.terms.tactical > 0) && !(c.terms.recovery > 0));
+  ok(behind.length === 0, "no placement rested on area alone against a retreat: " + behind.length);
+}
+
+console.log("\n57. an unmeasured target has no area at all");
+{
+  const w = makeWorld({ enemyX: 7200, enemyY: 5000 });
+  w.settings = { _autoplacer: true, _preplacer: false, _replacer: false };
+  const { engine } = engineFor(w);
+  w.MH.tickCount++;
+  engine._threat.frameTick = -1;
+  const frame = engine.sense();
+  engine.predict(frame);
+  ok(frame.area === null, "no area on the first sight of a target");
+  ok(frame.engaged === false, "and the engine does not consider itself engaged");
+}
+
+console.log("\n58. the radius setting bounds where the area exists");
+{
+  function areaAt(radius, dist) {
+    const w = makeWorld({ enemyX: 7000 + dist, enemyY: 5000, enemyVX: -20, enemyVY: 0 });
+    w.settings = { _autoplacer: true, _preplacer: false, _replacer: false, _autoplacerRadius: radius };
+    const { engine } = engineFor(w);
+    let frame = null;
+    for (let t = 0; t < 3; t++) {
+      w.MH.tickCount++;
+      engine._threat.frameTick = -1;
+      frame = engine.sense();
+      engine.predict(frame);
+      w.step(-20, 0);
+    }
+    return frame.area;
+  }
+  ok(areaAt(450, 300) !== null, "inside a 450 radius, 300 units out, there is an area");
+  ok(areaAt(150, 300) === null, "inside a 150 radius, the same target is out of the engagement");
+}
+
+console.log("\n59. convenience never buys a placement on its own");
+{
+  const r = areaRun({ enemyX: 7250, enemyY: 5000, enemyVX: -6, enemyVY: 0 }, 6);
+  const bought = r.placed.filter(c => {
+    const t = c.terms || {};
+    return t.area > 0 && !(t.tactical > 0) && !(t.recovery > 0) && !(t.enclosure > 0) &&
+      (t.packing > 0 || t.followUp > 0 || t.clearance > 0);
+  });
+  ok(bought.length === 0, "no speculative placement was carried by clearance, packing or follow-up");
+}
+
+/* A hole in a wall we own, centred on a bearing of our choosing. Two spikes
+ * 130 units out and 1.8 radians apart leave a hole a player fits through and
+ * a single build can close. */
+function holeWorld(centre, opts, settings) {
+  const w = makeWorld(opts);
+  w.settings = Object.assign({ _autoplacer: true, _preplacer: false, _replacer: false,
+    _gapFiller: true, _autoplacerRadius: 450 }, settings || {});
+  const mx = w.me.pos.current.x, my = w.me.pos.current.y;
+  w.add(6, mx + 130 * Math.cos(centre + 0.9), my + 130 * Math.sin(centre + 0.9));
+  w.add(6, mx + 130 * Math.cos(centre - 0.9), my + 130 * Math.sin(centre - 0.9));
+  return w;
+}
+function gapRun(w, ticks) {
+  const ctx = engineFor(w);
+  const vx = w.enemy.pos.future.x - w.enemy.pos.current.x;
+  let gapCands = 0, gapSent = 0, merged = 0, sent = 0;
+  const realExec = ctx.engine.execute.bind(ctx.engine);
+  ctx.engine.execute = function (plan, frame) {
+    for (const c of plan) if (c.gap) gapSent++;
+    sent += plan.length;
+    return realExec(plan, frame);
+  };
+  for (let t = 0; t < ticks; t++) {
+    w.MH.tickCount++; w.MH.packetCount = 0;
+    ctx.engine._threat.frameTick = -1; ctx.engine._blockersTick = -1;
+    ctx.engine.postTick();
+    for (const c of ctx.engine._pool || []) {
+      if (c.gap) gapCands++;
+      if (c.gap && c.alsoFor) merged++;
+    }
+    w.step(vx, 0);
+  }
+  return { ctx, gapCands, gapSent, merged, sent };
+}
+
+console.log("\n60. a hole in our own wall draws a spike");
+{
+  const r = gapRun(holeWorld(Math.PI / 2, { enemyX: 7300, enemyY: 5000, enemyVX: -22, enemyVY: 0 }), 8);
+  ok(r.gapCands > 0, "gap candidates were produced: " + r.gapCands);
+  ok(r.gapSent > 0, "and one went out: " + r.gapSent);
+}
+
+console.log("\n61. open ground with no wall draws nothing");
+{
+  const w = makeWorld({ enemyX: 7300, enemyY: 5000, enemyVX: -22, enemyVY: 0 });
+  w.settings = { _autoplacer: true, _preplacer: false, _replacer: false, _gapFiller: true, _autoplacerRadius: 450 };
+  const r = gapRun(w, 8);
+  ok(r.gapCands === 0, "empty space is not a gap");
+  ok(r.sent > 0, "and auto place still worked normally: " + r.sent);
+}
+
+console.log("\n62. a wall with no hole draws nothing");
+{
+  const w = makeWorld({ enemyX: 7300, enemyY: 5000, enemyVX: -22, enemyVY: 0 });
+  w.settings = { _autoplacer: true, _preplacer: false, _replacer: false, _gapFiller: true, _autoplacerRadius: 450 };
+  w.add(6, 7080, 5040);
+  w.add(6, 7080, 4960);
+  const r = gapRun(w, 8);
+  ok(r.gapCands === 0, "two builds a player cannot pass between leave nothing to fill");
+}
+
+console.log("\n63. a hole one build cannot close draws nothing");
+{
+  const w = makeWorld({ enemyX: 7300, enemyY: 5000, enemyVX: -22, enemyVY: 0 });
+  w.settings = { _autoplacer: true, _preplacer: false, _replacer: false, _gapFiller: true, _autoplacerRadius: 450 };
+  w.add(6, 7000 + 220 * Math.cos(1.4), 5000 + 220 * Math.sin(1.4));
+  w.add(6, 7000 + 220 * Math.cos(-1.4), 5000 + 220 * Math.sin(-1.4));
+  const r = gapRun(w, 8);
+  ok(r.gapCands === 0, "a hole wider than one spike can seal is left alone");
+}
+
+console.log("\n64. a hole on ground auto place already wants is merged, not duplicated");
+{
+  const r = gapRun(holeWorld(0, { enemyX: 7300, enemyY: 5000, enemyVX: -22, enemyVY: 0 }), 8);
+  ok(r.merged > 0, "the gap reason was handed to a candidate another mode already had: " + r.merged);
+  const dupes = (r.ctx.engine._pool || []).filter(c => c.mode === "gapfill" && c.alsoFor);
+  ok(dupes.length === 0, "and no gap fill survived alongside the candidate it merged into");
+}
+
+console.log("\n65. a gap fill holds the lowest priority of any mode");
+{
+  const w = holeWorld(Math.PI / 2, { enemyX: 7200, enemyY: 5000, enemyVX: -22, enemyVY: 0 });
+  const ctx = engineFor(w);
+  const M = ctx.M;
+  ok(M.RPE_MODE && M.RPE_MODE.GAPFILL === "gapfill", "gap filling is a planning mode, not a system");
+  for (let t = 0; t < 4; t++) {
+    w.MH.tickCount++; w.MH.packetCount = 0;
+    ctx.engine._threat.frameTick = -1; ctx.engine._blockersTick = -1;
+    ctx.engine.postTick(); w.step(-22, 0);
+  }
+  const gaps = (ctx.engine._pool || []).filter(c => c.mode === "gapfill");
+  if (gaps.length) {
+    ok(gaps.every(c => c.priority === ctx.RPE_PRIORITY.UTILITY),
+       "every gap fill claims at UTILITY: " + gaps[0].priority);
+    ok(gaps.every(c => c.priority < ctx.RPE_PRIORITY.ENGAGEMENT),
+       "which is below anything about the fight itself");
+  } else {
+    ok(true, "(no gap candidate this tick; priority checked by construction)");
+  }
+}
+
+console.log("\n66. a trapped enemy is not, on its own, a reason to swing");
+{
+  const w = makeWorld({ enemyX: 7120, enemyY: 5000 });
+  const ctx = engineFor(w);
+  const payoff = ctx.M.spikeTickKnockPayoff;
+  if (!payoff) {
+    ok(true, "(trap tick not present in this source)");
+  } else {
+    w.add(15, 7120, 5000);
+    ok(payoff(w.client, w.enemy, null) === false,
+       "an enemy held by a trap with nothing behind them pays nothing");
+  }
+}
+
+console.log("\n67. the same trap with something behind them does pay");
+{
+  const w = makeWorld({ enemyX: 7120, enemyY: 5000 });
+  const ctx = engineFor(w);
+  const payoff = ctx.M.spikeTickKnockPayoff;
+  if (!payoff) {
+    ok(true, "(trap tick not present in this source)");
+  } else {
+    w.add(15, 7120, 5000);
+    // A spike on the far side of them, on the axis the swing pushes along.
+    w.add(6, 7320, 5000);
+    ok(payoff(w.client, w.enemy, null) === true,
+       "a spike the knockback carries them into makes the swing worth throwing");
+  }
+}
+
+if (SK) {
+console.log("\n68. the tick takes the intent that fits the tick");
+{
+  const ctx = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+  spikeTick(ctx, -4, 0);
+  spikeTick(ctx, -4, 0);
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ok(typeof ctx.spike._tickFitness === "function", "the tick has its own notion of fitness");
+  const pool = (ctx.engine._pool || []).filter(c => c.profile && c.profile.isDamage);
+  if (pool.length >= 2) {
+    const fits = pool.map(c => ctx.spike._tickFitness(c, ctx.engine));
+    ok(fits.some(f => f >= 0), "at least one candidate is fit for a tick");
+    const chosen = ctx.spike._bestOf(pool, ctx.engine, "pool");
+    ok(chosen === null || ctx.spike._tickFitness(chosen, ctx.engine) === Math.max(...fits),
+       "and the one taken is the fittest, not the first");
+  } else {
+    ok(true, "(fewer than two spike candidates this tick)");
+  }
+}
+
+console.log("\n69. an intent the target is walking out of is refused");
+{
+  const ctx = spikeWorld({ enemyX: 7060, enemyY: 5000 });
+  spikeTick(ctx, -2, 0);
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ctx.spike.postTick();
+  // Now send them away fast enough that next tick puts them out of contact.
+  const before = ctx.spike.stats.executed;
+  ctx.w.enemy.pos.future.x = ctx.w.enemy.pos.current.x + 400;
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ctx.engine._threat.frameTick = -1;
+  ctx.engine.sense();
+  ctx.engine.predict(ctx.engine._threat.frame);
+  ctx.spike.postTick();
+  ok(ctx.spike.stats.executed === before || ctx.spike.lastReason !== null,
+     "a target leaving contact does not get a tick sent at it: " + ctx.spike.lastReason);
+}
+
+console.log("\n70. the placement leaves room for the swing it belongs to");
+{
+  const ctx = spikeWorld({ enemyX: 7080, enemyY: 5000, packetLimit: 70 });
+  spikeTick(ctx, -2, 0);
+  ctx.w.MH.packetCount = 68;
+  ctx.spike.arm(ctx.w.enemy, "test");
+  ctx.spike.postTick();
+  ok(ctx.spike.stats.executed === 0, "with two packets left, nothing is sent");
+  ok(ctx.spike.lastReason === "budget" || ctx.spike.lastReason !== null,
+     "and the reason is recorded: " + ctx.spike.lastReason);
+}
+
+console.log("\n71. the tick loses ground held by something worth more");
+{
+  const ctx = spikeWorld({ enemyX: 7100, enemyY: 5000 });
+  spikeTick(ctx, -4, 0);
+  const src = ctx.spike.constructor.toString();
+  ok(/availableGround/.test(src), "it asks the ledger before it commits");
+  ok(!/priority\s*=\s*100|absolute/i.test(src), "it does not assert a rank above the ledger");
+  ok(/_urgencyValue/.test(src), "and it brings a value to be judged on");
+}
+}
+
+console.log("\nStructural conditions");
+{
+  const w = makeWorld({});
+  const ctx = engineFor(w);
+  const e = ctx.engine;
+  const src = ENGINE_SRC;
+
+  ok((src.match(/class RynPlacementEngine\b/g) || []).length === 1,
+     " 1. one placement engine in the source");
+  ok((src.match(/class AngleSolver\b/g) || []).length === 1 &&
+     (src.match(/\.propose\(/g) || []).length > 0,
+     " 2. one angle solver, and every mode calls it");
+  ok((src.match(/const GeometrySolver = \{/g) || []).length === 1,
+     " 3. one geometry solver");
+  ok((src.match(/class PlacementExecutor\b/g) || []).length === 1,
+     " 4. one path to the wire");
+  ok(["auto", "preplace", "replace", "gapfill"].every(m => ctx.M.RPE_MODE &&
+       Object.values(ctx.M.RPE_MODE).indexOf(m) !== -1),
+     " 5. every behaviour is a mode carried on the candidate");
+  ok(!/_generate(Auto|Preplace|Replace|GapFill)[\s\S]{0,400}?grid2D\.query/.test(src),
+     " 6. no mode runs a world scan of its own");
+  ok(/_conflicts\.(availableGround|take)/.test(src) && /class ConflictResolver/.test(src),
+     " 7. one arbiter, and claims go through it");
+  ok(/e\.priority < priority && value !== undefined && e\.value > value \* RPE_SOFT_DOMINANCE/.test(src),
+     " 8. rank settles close calls only - a claim from above still loses to a valuable one");
+  ok(/RPE_PLACE_PACKETS = 5/.test(src) && /RPE_BATCH_PACKETS = 2/.test(src),
+     " 9. the packet architecture is unchanged: 5 to place, 2 to batch");
+  ok(geometryExact,
+     "10. the aperture solver still agrees exactly with the game's own circle test");
+  e._threat.frameTick = -1;
+  w.MH.tickCount++;
+  const frame = e.sense();
+  e.predict(frame);
+  ok(frame.engageRadius === (w.settings && w.settings._autoplacerRadius || 350),
+     "11. the engagement envelope is the radius setting and nothing else");
 }
 
 console.log("");

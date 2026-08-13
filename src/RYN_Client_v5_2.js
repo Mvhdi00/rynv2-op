@@ -9205,6 +9205,13 @@ window.grbtp = 35;
     // soft claim that is worth clearly more than the claim trying to take it
     // keeps its ground. Priority decides who wins a close call; it does not
     // let a marginal placement bulldoze a valuable one.
+    //
+    // That last rule is what stops any class of placement from being
+    // privileged outright. A spike tick claims at SYNC, near the top of the
+    // order, and still loses ground held by a defensive or recovery claim
+    // worth more than its own urgency — being a spike tick buys the argument,
+    // not the verdict. The only claim nothing overrides is a hard one, and
+    // that is not a matter of rank: the build is already on the wire.
     blocked(x, y, radius, priority, value, ignoreToken) {
       for (const e of this.entries) {
         if (ignoreToken !== undefined && e.token === ignoreToken) continue;
@@ -12380,8 +12387,33 @@ window.grbtp = 35;
     const range = Math.min(SPIKE_TICK_RANGE, DataHandler_default.getWeapon(primary).range + nearest.hitScale);
     return myPlayer.collidingSimple(nearest, range) ? nearest : null;
   };
+  // What a spike tick wears, in one place, so the three modules that open one
+  // cannot drift apart on it and nothing has to invent a second equipment
+  // path. These are hat ids the client already equips through
+  // ModuleHandler.forceHat; the reasoning is the only thing that lives here.
+  //
+  //   swing   Bull Helmet, +damage on the hit the whole tick is built around
+  //   break   Tank Gear, because the swing has to actually take the trap down
+  //           and a turret hat leaves it at a fraction of the damage
+  //   turret  Turret Gear, for the shot on the tick after the swing
+  const SPIKE_TICK_GEAR = {
+    swing: 7,
+    break: 40,
+    turret: 53
+  };
+  // Commits this tick to the swing half: the aim, the weapon and the hat, all
+  // through the handler every other module uses. Returns whether it committed,
+  // because the turret half that follows is only owed a tick if this one
+  // happened — arming it off a swing the reload refused leaves the follow-up
+  // chasing a tick that never took place.
   const spikeTickHit = (client2, enemy) => {
     const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
+    if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
+      return false;
+    }
+    if (!ModuleHandler.staticModules.reloading.isReloaded(0)) {
+      return false;
+    }
     // The swing, the hat and the aim are still this module's business. The
     // spike itself is handed to the timing layer, which takes an intent the
     // placement engine already produced and sends it only once it has
@@ -12394,26 +12426,28 @@ window.grbtp = 35;
     }
     ModuleHandler.moduleActive = true;
     ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
-    ModuleHandler.forceHat = 7;
+    ModuleHandler.forceHat = SPIKE_TICK_GEAR.swing;
     ModuleHandler.forceWeapon = 0;
     ModuleHandler.shouldAttack = true;
+    return true;
   };
   const spikeTickTurret = (client2, enemy) => {
     const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
     if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
-      return;
+      return false;
     }
     if (!ModuleHandler.staticModules.reloading.isReloaded(2)) {
-      return;
+      return false;
     }
     ModuleHandler.moduleActive = true;
-    ModuleHandler.forceHat = 53;
+    ModuleHandler.forceHat = SPIKE_TICK_GEAR.turret;
     // Sakuna holds my.autoAim across both halves of insta(5) so the aim stays
     // on the target through the turret half instead of snapping back to the
     // mouse the tick after the swing.
     if (enemy) {
       ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.current);
     }
+    return true;
   };
   // ── Spike tick ────────────────────────────────────────────────────────────
   // A timing and validation layer, not a placer. The engine decides where a
@@ -12445,6 +12479,15 @@ window.grbtp = 35;
   const SPIKE_TICK_TARGET_DRIFT = 70;
   const SPIKE_TICK_SELF_DRIFT = 45;
   const SPIKE_TICK_REPLANS = 2;
+  // How far past bare contact a spike may sit and still be counted as touching
+  // them when the swing resolves. The game applies build damage on overlap, so
+  // this is small on purpose: a spike they are merely near is a spike they
+  // walk away from.
+  const SPIKE_TICK_CONTACT_SLACK = 8;
+  // What the swing beside the spike costs: the hat swap, the weapon swap and
+  // the attack frame. Reserved so the placement cannot spend the budget the
+  // tick it belongs to needs.
+  const SPIKE_TICK_SWING_PACKETS = 3;
 
   class SpikeTickController {
     moduleName="spikeTickController";
@@ -12468,6 +12511,9 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
+    // lastReason survives a reset on purpose: it is the record of why the last
+    // tick ended the way it did, and it is only cleared when a new one is
+    // armed. Nulling it here left every cancelled tick looking uneventful.
     reset() {
       this.phase = SPIKE_TICK_PHASE.IDLE;
       this.intent = null;
@@ -12475,7 +12521,6 @@ window.grbtp = 35;
       this.source = null;
       this.armedTick = -1;
       this.replans = 0;
-      this.lastReason = null;
     }
     get engine() {
       const mh = this.client._ModuleHandler;
@@ -12499,46 +12544,77 @@ window.grbtp = 35;
       return true;
     }
 
+    // How well a piece of ground serves this particular tick, which is not the
+    // same question the engine's own score answers. A spike tick lands when
+    // the swing pushes them onto the spike, so what matters is that the spike
+    // is already in contact when the hit resolves — a build that only just
+    // reaches is a build they walk out of — and, after that, whether the push
+    // off it carries them into something else that hurts. Both come from the
+    // game's own arithmetic: contact from the footprint radii, the chain from
+    // the same knockback analysis the scorer uses.
+    _tickFitness(cand, engine) {
+      const target = this.target;
+      if (!target || !cand || !cand.profile) return -1;
+      const tPos = target.pos.current;
+      const reach = cand.profile.footR + target.collisionScale;
+      const contact = Math.hypot(cand.x - tPos.x, cand.y - tPos.y);
+      if (contact > reach + SPIKE_TICK_CONTACT_SLACK) return -1;
+      let fit = 1 - contact / Math.max(1, reach + SPIKE_TICK_CONTACT_SLACK);
+      const frame = engine._threat.frame;
+      if (frame) {
+        const rebound = engine._scorer._reboundOf(cand, frame);
+        if (rebound) {
+          if (rebound.doubleSpike) fit += 1; else if (rebound.willHit) fit += .6; else if (rebound.inEscapable) fit += .3;
+        }
+      }
+      return fit;
+    }
+    // Of everything on offer, the one that best serves the tick. Ties are
+    // broken by the order the sources are consulted, which is the order of how
+    // much has already been committed to them.
+    _bestOf(cands, engine, from) {
+      let best = null, bestFit = -1;
+      for (const cand of cands) {
+        if (!cand || !cand.profile || !cand.profile.isDamage) continue;
+        if (cand.state === RPE_INTENT.CONSUMED) continue;
+        const fit = this._tickFitness(cand, engine);
+        if (fit <= bestFit) continue;
+        bestFit = fit;
+        best = cand;
+      }
+      if (best) best.consumedFrom = from === null ? best.mode : from;
+      return best;
+    }
+
     // ── PREPARE ─────────────────────────────────────────────────────────────
     // Take an intent the engine already has before asking it for anything.
     // Order matters: a preplace or replace decision is a commitment the engine
     // has already reasoned about and reserved ground for, so consuming it is
-    // both cheaper and less disruptive than making a new one.
+    // both cheaper and less disruptive than making a new one. Within each
+    // source, the choice is by fitness for the tick rather than by the order
+    // the engine happened to plan things in — the first spike in a plan is the
+    // one worth the most in general, which is not the one that lands a tick.
     _acquire(engine, tick) {
-      const spike = c => c && c.profile && c.profile.isDamage;
-
       // 1. a preplace intent already holding ground for this target
+      const booked = [];
       for (const rec of engine.book.pending()) {
         if (rec.type !== 4) continue;
         if (rec.targetId !== null && rec.targetId !== this.target.id) continue;
         const cand = engine.promoteRecord ? engine.promoteRecord(rec, tick) : null;
         if (cand) {
-          cand.consumedFrom = "preplace";
           cand.bookRecord = rec;
-          return cand;
+          booked.push(cand);
         }
       }
+      const fromBook = this._bestOf(booked, engine, "preplace");
+      if (fromBook) return fromBook;
       // 2. an intent the engine planned this tick - auto place or auto replace
-      for (const pool of [ engine._replacePlan, engine._plan ]) {
-        if (!pool) continue;
-        for (const cand of pool) {
-          if (!spike(cand) || cand.state === RPE_INTENT.CONSUMED) continue;
-          cand.consumedFrom = cand.mode;
-          return cand;
-        }
-      }
+      const planned = (engine._replacePlan || []).concat(engine._plan || []);
+      const fromPlan = this._bestOf(planned, engine, null);
+      if (fromPlan) return fromPlan;
       // 3. a candidate the engine scored this tick but did not plan
-      if (engine._pool) {
-        let best = null;
-        for (const cand of engine._pool) {
-          if (!spike(cand) || cand.state === RPE_INTENT.CONSUMED) continue;
-          if (!best || cand.value > best.value) best = cand;
-        }
-        if (best) {
-          best.consumedFrom = "pool";
-          return best;
-        }
-      }
+      const fromPool = this._bestOf(engine._pool || [], engine, "pool");
+      if (fromPool) return fromPool;
       // 4. nothing to consume: ask the engine, through the solver every other
       //    caller uses, for the few angles nearest the target. This is the
       //    engine's cached aperture set, not a fresh scan.
@@ -12577,13 +12653,23 @@ window.grbtp = 35;
       if (intent.originAt && Math.hypot(myPos.x - intent.originAt.x, myPos.y - intent.originAt.y) > SPIKE_TICK_SELF_DRIFT) return "selfMoved";
       const tPos = target.pos.current;
       if (intent.targetAt && Math.hypot(tPos.x - intent.targetAt.x, tPos.y - intent.targetAt.y) > SPIKE_TICK_TARGET_DRIFT) return "targetMoved";
-      // the spike still has to be able to reach them once it lands
-      const reach = intent.profile.footR + target.collisionScale + 8;
+      // The spike still has to be touching them when the swing resolves. It is
+      // checked against where they are and against where the frame says they
+      // will be, and both have to hold: a spike that reaches now and not next
+      // tick is one they walk out of before the hit lands, and a spike that
+      // will reach but does not yet is a tick opened one tick early.
+      const reach = intent.profile.footR + target.collisionScale + SPIKE_TICK_CONTACT_SLACK;
       if (Math.hypot(intent.x - tPos.x, intent.y - tPos.y) > reach) return "outOfReach";
+      const frame = engine._threat.frame;
+      if (frame && frame.tick === tick && frame.targetId === target.id) {
+        if (Math.hypot(intent.x - frame.targetNext.x, intent.y - frame.targetNext.y) > reach) return "leaving";
+      }
       // object availability and resources
       if (!myPlayer.canPlace(4)) return "unavailable";
-      // packet budget
-      if (!engine._scheduler.affords(0, false)) return "budget";
+      // The placement and the swing that follows it share this tick's budget.
+      // Sending the spike and then finding there is nothing left to swing with
+      // is the one failure this layer exists to prevent.
+      if (!engine._scheduler.affords(SPIKE_TICK_SWING_PACKETS, false)) return "budget";
       // collision, existing objects and placement range, asked the engine's way
       if (!engine._validAt(intent, myPos, [])) return "blocked";
       return null;
@@ -12754,9 +12840,10 @@ window.grbtp = 35;
       if (!broken) {
         return;
       }
-      spikeTickHit(this.client, nearest);
-      this.useTurret = true;
-      this.turretTarget = nearest;
+      if (spikeTickHit(this.client, nearest)) {
+        this.useTurret = true;
+        this.turretTarget = nearest;
+      }
     }
   }
   class SpikeTickNear {
@@ -12815,9 +12902,10 @@ window.grbtp = 35;
       if (!knockedInto && !this.isTouchingDamage(nearest)) {
         return;
       }
-      spikeTickHit(this.client, nearest);
-      this.useTurret = true;
-      this.turretTarget = nearest;
+      if (spikeTickHit(this.client, nearest)) {
+        this.useTurret = true;
+        this.turretTarget = nearest;
+      }
     }
   }
   // Everything near a target that would hurt it if it were pushed into it,
@@ -12898,8 +12986,8 @@ window.grbtp = 35;
         // A tick has passed and the trap is gone. Ask the same question again
         // against the world as it now is, rather than swinging on the strength
         // of a decision taken before the break landed.
-        if (!ModuleHandler.moduleActive && spikeTickKnockPayoff(this.client, enemy, null)) {
-          spikeTickHit(this.client, enemy);
+        if (!ModuleHandler.moduleActive && spikeTickKnockPayoff(this.client, enemy, null) &&
+            spikeTickHit(this.client, enemy)) {
           this.useTurret = true;
           this.turretTarget = enemy;
         }
@@ -12947,7 +13035,7 @@ window.grbtp = 35;
       }
       ModuleHandler.moduleActive = true;
       ModuleHandler.useAngle = myPlayer.pos.current.angle(trapped.pos.current);
-      ModuleHandler.forceHat = 40;
+      ModuleHandler.forceHat = SPIKE_TICK_GEAR.break;
       ModuleHandler.forceWeapon = 1;
       ModuleHandler.shouldAttack = true;
       this.target = trapped;

@@ -12320,6 +12320,13 @@ window.grbtp = 35;
     // soft claim that is worth clearly more than the claim trying to take it
     // keeps its ground. Priority decides who wins a close call; it does not
     // let a marginal placement bulldoze a valuable one.
+    //
+    // That last rule is what stops any class of placement from being
+    // privileged outright. A spike tick claims at SYNC, near the top of the
+    // order, and still loses ground held by a defensive or recovery claim
+    // worth more than its own urgency — being a spike tick buys the argument,
+    // not the verdict. The only claim nothing overrides is a hard one, and
+    // that is not a matter of rank: the build is already on the wire.
     blocked(x, y, radius, priority, value, ignoreToken) {
       for (const e of this.entries) {
         if (ignoreToken !== undefined && e.token === ignoreToken) continue;
