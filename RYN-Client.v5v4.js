@@ -119,8 +119,9 @@ function suppressWarningBanner() {
                     "expired-callback": function() {}
                 });
                 entryStats.renders++;
-                console.info("[EXP] the page's Turnstile widget was not usable, so one was rendered "
-                    + "bottom-right. Solve it and ENTER GAME will work.");
+                console.info("[EXP] the game stopped trying to render its Turnstile widget, so one was "
+                    + "rendered " + (where === page ? "into the page's own widget"
+                                                    : "bottom-right") + ". Solve it and ENTER GAME will work.");
             } catch (e) {
                 rendered = false;
                 console.warn("[EXP] could not render Turnstile", e);

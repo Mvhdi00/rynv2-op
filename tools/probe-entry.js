@@ -484,6 +484,14 @@ window.FRVR = {
     io: window.io ? { connected: window.io.connected, socketId: window.io.socketId,
                       hasSocket: !!window.io.socket, started: !!window.io._started } : null,
     // only loops that actually kept going -- a one-shot rAF is not a loop
+    // The captcha at the end of the run, not the start: a mod that rebuilds the
+    // menu can detach the widget the game rendered into, and then the shim's
+    // fallback fires for a widget that "exists" but has been orphaned.
+    widget: (() => {
+      const w = document.getElementById('turnstileWidget');
+      return w ? { kids: w.childElementCount, inDoc: document.contains(w) } : null;
+    })(),
+    fallback: !!document.getElementById('moo-turnstile-fallback'),
     drawOrder: (window.__drawOrder || []).slice(-16).join(' -> '),
     loops: [...(window.__rafLoops || new Map())].filter(([, n]) => n > 20)
              .sort((a, b) => b[1] - a[1]).slice(0, 6),
@@ -509,6 +517,8 @@ window.FRVR = {
   console.log('  sockets opened  : ' + (after.sockets.length ? after.sockets.join('\n                    ') : '(none)'));
   console.log('  red banner      : ' + after.banner);
   if (after.io) console.log('  bundled client  : ' + JSON.stringify(after.io));
+  console.log('  #turnstileWidget: ' + JSON.stringify(after.widget) +
+              '   shim fallback on page: ' + after.fallback);
   if (after.loops && after.loops.length) {
     console.log('  render loops    : ' + after.loops.length + ' distinct');
     for (const [src, n] of after.loops) console.log('    x' + String(n).padStart(4) + '  ' + src);

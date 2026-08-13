@@ -2080,3 +2080,47 @@ belt to its braces.
 
 All ten scripts now reach the server and are accepted with the bundle delayed
 900 ms, which is the ordering that used to break them.
+
+# Remedy 4.1
+
+Eleventh file, and the first that arrived as a bare `.txt`: 25,000 lines, a
+changelog and a wishlist at the top, and no userscript header at all. Whoever
+installed it typed the metadata by hand.
+
+Every fix in `repair-mod.js` is expressed through that block, so it now writes
+one when there is none — `@grant none`, a plain `@match`, and the name and
+version passed in by the build. Everything after that is the ordinary pipeline:
+`@run-at document-start` (its hook is `WebSocket.prototype.send = ...`, the
+shape the unpatcher was built for, and it is left exactly as written), the
+shim inlined, jQuery added for the one `$()` call it makes, six dereferences of
+page furniture guarded, the body deferred behind the shared boot starter.
+
+One thing was its own: **its bots minted a captcha token each from ALTCHA.**
+
+```js
+async generate() {
+    const chal = await this.getChallenge();   // https://api.moomoo.io/verify
+    const sol = await this.solve(chal);       // proof-of-work across a worker pool
+    return "alt:" + Altcha.makePayload(chal, sol);
+}
+```
+
+That endpoint belongs to a captcha the game no longer uses, so `getChallenge()`
+fails, `generate()` rejects, and every bot connection died before it opened —
+silently, because nothing awaits it. `EXP.freshToken()` asks Turnstile for a
+fresh token instead (Cloudflare treats them as single-use, so one per bot is the
+right shape) and returns it with the `cf:` prefix the server wants. The ALTCHA
+path stays underneath as a fallback.
+
+On the wire, with the bundle delayed 900 ms — the ordering that used to break
+these:
+
+```
+0 seq=1 []
+M seq=2 [{"name":"probe72","moofoll":true,"skin":0}]
+0 seq=3 [] ... 0 seq=9 []
+=> 9 signed and understood, 0 rejected
+```
+
+Boots clean, no red bar, one captcha widget, and the same result whichever way
+the load race falls.

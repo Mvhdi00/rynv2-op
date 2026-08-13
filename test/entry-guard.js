@@ -393,11 +393,42 @@ console.log('\n8. the boot order is not a coin toss');
   //   Cannot read properties of null (reading 'parentElement') at __carBoot
   for (const name of ['novastorm.v1.4.js', 'x18k-Original.v5.3.js', 'SamMod.v698.js',
                       'Robotics-kusoi.v1.8.4.js', 'xelahot.v3.js', 'Balthazar-priv.js',
-                      'xelahot.v3-alt.js', 'Annihilator.v0.8.9.js', 'RoBoTic-CaraMila.v6.9.5.js']) {
+                      'xelahot.v3-alt.js', 'Annihilator.v0.8.9.js', 'RoBoTic-CaraMila.v6.9.5.js',
+                      'Remedy.v4.1.js']) {
     const s = fs.readFileSync(path.join(ROOT, name), 'utf8');
     check(/window\.loadedScript === true \|\| document\.readyState === "complete"/.test(s),
           name + ': waits for the bundle, not just for the page');
   }
+}
+
+// --------------------------------------------------------------------------
+console.log('\n9. Remedy 4.1');
+{
+  const before = fs.readFileSync(path.join(ROOT, 'reference/originals/Remedy.v4.1.js'), 'utf8');
+  const after = fs.readFileSync(path.join(ROOT, 'Remedy.v4.1.js'), 'utf8');
+
+  // It arrived as a bare .txt: 25,000 lines, a changelog at the top, and no
+  // userscript header at all. Every fix in repair-mod.js is expressed through
+  // that block, so one gets written.
+  check(!/==UserScript==/.test(before), 'the original has no userscript header');
+  check(/^\/\/ ==UserScript==/m.test(after), 'the repaired file has one');
+  check(/@name\s+Remedy 4\.1/.test(after), 'with its name');
+  check(/@run-at\s+document-start/.test(after),
+        'and document-start, without which the transport hook is too late');
+
+  // Its bots minted a token each from ALTCHA, whose endpoint is part of a
+  // captcha the game no longer uses -- so generate() rejected and every bot
+  // connection died before it opened, silently, since nothing awaited it.
+  check(/await this\.getChallenge\(\)/.test(before), 'the original solves ALTCHA for each bot');
+  check(/const cf = await EXP\.freshToken\(\);\n\s*if \(cf\) return cf;/.test(after),
+        'the repaired file asks Turnstile first');
+  check(/await this\.getChallenge\(\)/.test(after),
+        'and keeps ALTCHA underneath, in case that endpoint ever comes back');
+
+  // the hook it is built around is untouched -- that is the whole point of
+  // inlining the shim rather than rewiring the mod
+  check(/WebSocket\.prototype\.send = function \(message\) \{/.test(after),
+        "its own socket hook is left exactly as written");
 }
 
 console.log('\n' + (fails ? '=> ' + fails + ' FAILURE(S)' : '=> ALL ENTRY GUARD TESTS PASSED'));

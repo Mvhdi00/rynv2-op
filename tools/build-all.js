@@ -25,7 +25,7 @@ const steps = [
   ['tools/build-ryn.js', []],
 ];
 for (const name of ['SamMod.v698.js', 'Robotics-kusoi.v1.8.4.js', 'xelahot.v3.js',
-                    'xelahot.v3-alt.js', 'x18k-Original.v5.3.js']) {
+                    'xelahot.v3-alt.js', 'x18k-Original.v5.3.js', 'Remedy.v4.1.js']) {
   steps.push(['tools/repair-mod.js', ['reference/originals/' + name, name]]);
 }
 // Two take a second pass of their own after the generic repair.
@@ -39,7 +39,11 @@ for (const [name, patch] of [['Balthazar-priv.js', 'tools/patch-balthazar.js'],
 let failed = 0;
 for (const [script, args] of steps) {
   try {
-    execFileSync(process.execPath, [path.join(ROOT, script), ...args], { cwd: ROOT, stdio: 'pipe' });
+    // Remedy arrived as a bare .txt with no userscript header, so the name and
+    // version repair-mod.js writes into the one it synthesises come from here.
+    const env = /Remedy/.test(args[0] || '')
+      ? { ...process.env, MOD_NAME: 'Remedy 4.1', MOD_VERSION: '4.1' } : process.env;
+    execFileSync(process.execPath, [path.join(ROOT, script), ...args], { cwd: ROOT, stdio: 'pipe', env });
     console.log('  ok  ' + script + (args.length ? '  ' + path.basename(args[args.length - 1]) : ''));
   } catch (e) {
     failed++;

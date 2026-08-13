@@ -41,8 +41,26 @@ if (!IN || !OUT) { console.error('usage: node tools/repair-mod.js <in.js> <out.j
 let src = fs.readFileSync(IN, 'utf8').replace(/\r\n/g, '\n');
 const report = { name: null, runAt: null, requires: [], deferred: false, bytes: [src.length, 0] };
 
-const metaEnd = src.indexOf('// ==/UserScript==');
-if (metaEnd < 0) { console.error('repair-mod: no userscript metadata block'); process.exit(1); }
+// Not every mod arrives as a userscript. Remedy is 25,000 lines with a
+// changelog at the top and no header at all -- it was pasted into a manager by
+// hand, and whoever did that chose the metadata themselves. Since every fix
+// below is expressed through that block, one gets written. @grant none and a
+// plain @match are what these mods assume anyway; @run-at is filled in by the
+// next step, like any other file's.
+let metaEnd = src.indexOf('// ==/UserScript==');
+if (metaEnd < 0) {
+  const name = (process.env.MOD_NAME || path.basename(IN).replace(/\.(user\.)?js$|\.txt$/, ''));
+  const header = '// ==UserScript==\n'
+    + '// @name         ' + name + '\n'
+    + '// @namespace    http://tampermonkey.net/\n'
+    + '// @version      ' + (process.env.MOD_VERSION || '1.0') + '\n'
+    + '// @match        *://*.moomoo.io/*\n'
+    + '// @grant        none\n'
+    + '// ==/UserScript==\n';
+  src = header + src;
+  metaEnd = src.indexOf('// ==/UserScript==');
+  report.header = name;
+}
 let meta = src.slice(0, metaEnd);
 const body = src.slice(metaEnd + '// ==/UserScript=='.length + 1);
 
@@ -297,6 +315,35 @@ body2 = body2.replace(
   }
 }
 
+/* --- 2c-5. bots that still solve ALTCHA -----------------------------------
+ * Mods that spawn extra connections mint a captcha token for each one, and in
+ * this generation that meant ALTCHA: fetch a proof-of-work challenge from
+ *
+ *     https://api.moomoo.io/verify
+ *
+ * grind it across a pool of workers, and hand the server "alt:<payload>". The
+ * endpoint is part of a captcha the game no longer uses, so getChallenge()
+ * fails, generate() rejects, and every bot connection dies before it opens --
+ * silently, since nothing awaits it.
+ *
+ * There is a live token to be had: the one the page already holds.
+ * EXP.freshToken() asks Turnstile for a fresh one (Cloudflare treats them as
+ * single-use, so a fresh one per bot is the right shape) and returns it with
+ * the "cf:" prefix the server wants. The ALTCHA path is left in place
+ * underneath as a fallback -- if that endpoint ever comes back, it still works.
+ */
+{
+  const gen = /(async generate\(\) \{\n)(\s*)(const \w+ = await this\.getChallenge\(\);)/;
+  if (gen.test(body2)) {
+    body2 = body2.replace(gen, (m, head, indent, first) =>
+      head +
+      indent + 'const cf = await EXP.freshToken();\n' +
+      indent + 'if (cf) return cf;\n' +
+      indent + first);
+    report.botToken = true;
+  }
+}
+
 /* --- 2d. client replacements ----------------------------------------------
  * A mod that opens its own socket and decodes with its own bundled codec has
  * no game bundle underneath it, so its message handler is the FIRST one on
@@ -346,10 +393,12 @@ report.bytes[1] = out.length;
 fs.writeFileSync(OUT, out);
 
 console.log(report.name.trim());
+if (report.header) console.log('  metadata : written from scratch -- the file arrived with no userscript header');
 console.log('  @run-at  : ' + report.runAt);
 console.log('  @require : ' + (report.requires.length ? report.requires.join(', ') : '(none dead)'));
 if (report.passwordGate) console.log('  password : removed an unskippable prompt loop (dismissing it hung the tab for ever)');
 if (report.handshakeOrder) console.log('  handshake: its client started on socket-open; moved to io-init, where the session key arrives');
+if (report.botToken) console.log('  bots     : their ALTCHA token now comes from Turnstile (api.moomoo.io/verify is gone)');
 if (report.altcha) console.log('  captcha  : its own ALTCHA wait replaced by the Turnstile token (was "' + report.altcha + '", never set)');
 if (report.client) console.log('  transport: client replacement -- shim told to treat every handler as the mod\'s');
 if (report.guarded) console.log('  guarded  : ' + report.guarded + ' dereference(s) of page furniture the game removed');
