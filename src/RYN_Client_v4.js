@@ -1619,38 +1619,6 @@ window.grbtp = 35;
     const rectEnd = rectPos.copy().add(screen);
     return pointInsideRect(target, rectStart, rectEnd);
   };
-  const findPlacementAngles = angles => {
-    const output = new Set;
-    for (let i = 0; i < angles.length; i++) {
-      const [angle, offset] = angles[i];
-      const start = angle - offset;
-      const end = angle + offset;
-      let startIntersects = false;
-      let endIntersects = false;
-      for (let j = 0; j < angles.length; j++) {
-        if (startIntersects && endIntersects) {
-          break;
-        }
-        if (i === j) {
-          continue;
-        }
-        const [angle2, offset2] = angles[j];
-        if (getAngleDist(start, angle2) <= offset2) {
-          startIntersects = true;
-        }
-        if (getAngleDist(end, angle2) <= offset2) {
-          endIntersects = true;
-        }
-      }
-      if (!startIntersects) {
-        output.add(start);
-      }
-      if (!endIntersects) {
-        output.add(end);
-      }
-    }
-    return [ ...output ];
-  };
   const createAction = (callback, time = 0) => {
     let state = false;
     const timeoutID = setTimeout(() => {
@@ -3061,7 +3029,7 @@ window.grbtp = 35;
       }
       const itemType = 4;
       for (const angle of placementAngles) {
-        ModuleHandler.place(itemType, angle);
+        ModuleHandler.requestPlace(itemType, angle, "spikeSync");
       }
       ModuleHandler.placedOnce = true;
       ModuleHandler.placeAngles[0] = itemType;
@@ -5884,55 +5852,30 @@ window.grbtp = 35;
       const range = owner.scale * 2 + item.scale + item.placeOffset;
       return a0.distance(b0) <= range || a1.distance(b0) <= range || a2.distance(b0) <= range;
     }
+    // Superseded by RynPlacementEngine.anglesFor. Kept as a thin adapter so
+    // its callers keep their argument shape while the geometry underneath is
+    // the engine's - two solvers that could disagree about what is legal was
+    // the whole problem.
     getBestPlacementAngles(options) {
-      const {position: position, id: id, targetAngle: targetAngle, ignoreID: ignoreID, reduce: reduce, preplace: preplace, fill: fill} = options;
-      const item = DataHandler_default.getItem(id);
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      const length = myPlayer.getItemPlaceScale(id);
-      const angles = [];
-      this.grid2D.query(position.x, position.y, 1, id2 => {
-        const object = this.objects.get(id2);
-        if (ignoreID !== null && ignoreID === object.id) {
-          return;
-        }
-        const pos1 = object.pos.current;
-        const angle = position.angle(pos1);
-        const a = object.placementScale + item.scale + 1;
-        const b = position.distance(pos1);
-        const c = length;
-        const cosArg = (b * b + c * c - a * a) / (2 * b * c);
-        if (cosArg < -1) {
-          angles.push([ angle, Math.PI ]);
-        } else if (cosArg <= 1) {
-          const offset = Math.acos(cosArg);
-          angles.push([ angle, offset ]);
-        }
+      const {position: position, id: id, targetAngle: targetAngle, ignoreID: ignoreID, reduce: reduce} = options;
+      const engine = this.client._ModuleHandler?.staticModules?.placementEngine;
+      const type = Items[id] && Items[id].itemGroup === 5 ? 7 : 4;
+      if (!engine) return [];
+      const excludes = ignoreID !== null && ignoreID !== undefined ? this.objects.get(ignoreID) || null : null;
+      const angles = engine.anglesFor(type, targetAngle, {
+        position: position,
+        excludes: excludes,
+        limit: reduce ? PLACE_ATTEMPTS : undefined
       });
-      const finalAngles = findPlacementAngles(angles);
-      const targetAngleOverlaps = angles.some(([angle, offset]) => getAngleDist(targetAngle, angle) <= offset);
-      if (!targetAngleOverlaps) {
-        finalAngles.push(targetAngle);
-        if (finalAngles.length === 1 && fill) {
-          if (item.itemType === 4) {
-            return [];
-          }
-          const offset = Math.asin((2 * item.scale + 1) / (2 * length)) * 2;
-          finalAngles.push(targetAngle - offset);
-          finalAngles.push(targetAngle + offset);
-          finalAngles.push(reverseAngle(targetAngle));
-          return finalAngles.slice(0, Settings_default._placeAttempts);
-        }
-      }
-      let anglesSorted = finalAngles.sort(Sorting_default.byAngleDistance(targetAngle));
-      if (reduce) {
-        if (!DataHandler_default.canMoveOnTop(id) && ModuleHandler.move_dir !== null && myPlayer.speed !== 0) {
-          const scale = item.scale;
-          const offset = Math.asin(2 * scale / (2 * length));
-          anglesSorted = anglesSorted.filter(angle => getAngleDist(angle, ModuleHandler.move_dir) > offset);
-        }
-        return anglesSorted.slice(0, Settings_default._placeAttempts);
-      }
-      return anglesSorted;
+      if (!reduce) return angles;
+      // `reduce` asked the old helper to drop angles the player is walking
+      // into; the engine keeps that behaviour for the callers that relied on
+      // it.
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (DataHandler_default.canMoveOnTop(id) || ModuleHandler.move_dir === null || myPlayer.speed === 0) return angles;
+      const item = Items[id];
+      const offset = Math.asin(2 * item.scale / (2 * myPlayer.getItemPlaceScale(id)));
+      return angles.filter(a => getAngleDist(a, ModuleHandler.move_dir) > offset);
     }
   }
   const ObjectManager_default = ObjectManager;
@@ -8232,19 +8175,19 @@ window.grbtp = 35;
         try {
           const mh = this.client._ModuleHandler;
           const base = mh._currentAngle;
-          mh.place(4, base);
-          mh.place(4, base + toRadians(90));
-          mh.place(4, base + toRadians(180));
-          mh.place(4, base + toRadians(270));
+          mh.requestPlace(4, base, "manual");
+          mh.requestPlace(4, base + toRadians(90), "manual");
+          mh.requestPlace(4, base + toRadians(180), "manual");
+          mh.requestPlace(4, base + toRadians(270), "manual");
           if (this.client.isOwner) {
             for (const bot2 of this.client.clients) {
               const bmh = bot2._ModuleHandler;
               if (!bmh) continue;
               const ba = bmh._currentAngle;
-              bmh.place(4, ba);
-              bmh.place(4, ba + toRadians(90));
-              bmh.place(4, ba + toRadians(180));
-              bmh.place(4, ba + toRadians(270));
+              bmh.requestPlace(4, ba, "manual");
+              bmh.requestPlace(4, ba + toRadians(90), "manual");
+              bmh.requestPlace(4, ba + toRadians(180), "manual");
+              bmh.requestPlace(4, ba + toRadians(270), "manual");
             }
           }
         } catch (_) {}
@@ -8253,19 +8196,19 @@ window.grbtp = 35;
         try {
           const mh = this.client._ModuleHandler;
           const base = mh._currentAngle;
-          mh.place(7, base);
-          mh.place(7, base + toRadians(90));
-          mh.place(7, base + toRadians(180));
-          mh.place(7, base + toRadians(270));
+          mh.requestPlace(7, base, "manual");
+          mh.requestPlace(7, base + toRadians(90), "manual");
+          mh.requestPlace(7, base + toRadians(180), "manual");
+          mh.requestPlace(7, base + toRadians(270), "manual");
           if (this.client.isOwner) {
             for (const bot2 of this.client.clients) {
               const bmh = bot2._ModuleHandler;
               if (!bmh) continue;
               const ba = bmh._currentAngle;
-              bmh.place(7, ba);
-              bmh.place(7, ba + toRadians(90));
-              bmh.place(7, ba + toRadians(180));
-              bmh.place(7, ba + toRadians(270));
+              bmh.requestPlace(7, ba, "manual");
+              bmh.requestPlace(7, ba + toRadians(90), "manual");
+              bmh.requestPlace(7, ba + toRadians(180), "manual");
+              bmh.requestPlace(7, ba + toRadians(270), "manual");
             }
           }
         } catch (_) {}
@@ -8310,17 +8253,17 @@ window.grbtp = 35;
         try {
           const mh = this.client._ModuleHandler;
           const angle = mh._currentAngle;
-          mh.place(7, angle);
-          mh.place(4, angle + toRadians(90));
-          mh.place(4, angle - toRadians(90));
+          mh.requestPlace(7, angle, "manual");
+          mh.requestPlace(4, angle + toRadians(90), "manual");
+          mh.requestPlace(4, angle - toRadians(90), "manual");
           if (this.client.isOwner) {
             for (const bot2 of this.client.clients) {
               const bmh = bot2._ModuleHandler;
               if (!bmh) continue;
               const ba = bmh._currentAngle;
-              bmh.place(7, ba);
-              bmh.place(4, ba + toRadians(90));
-              bmh.place(4, ba - toRadians(90));
+              bmh.requestPlace(7, ba, "manual");
+              bmh.requestPlace(4, ba + toRadians(90), "manual");
+              bmh.requestPlace(4, ba - toRadians(90), "manual");
             }
           }
         } catch (_) {}
@@ -8593,27 +8536,27 @@ window.grbtp = 35;
             const tactic = Math.floor(Math.random() * 7);
             if (dist < 300) {
               if (tactic === 0) {
-                mh.place(4, toOwner);
+                mh.requestPlace(4, toOwner, "formation");
               } else if (tactic === 1) {
-                mh.place(7, toOwner);
+                mh.requestPlace(7, toOwner, "formation");
               } else if (tactic === 2) {
-                mh.place(4, toOwner + 0.5);
-                mh.place(4, toOwner - 0.5);
+                mh.requestPlace(4, toOwner + 0.5, "formation");
+                mh.requestPlace(4, toOwner - 0.5, "formation");
               } else if (tactic === 3) {
-                mh.place(3, toOwner);
-                mh.place(4, toOwner);
+                mh.requestPlace(3, toOwner, "formation");
+                mh.requestPlace(4, toOwner, "formation");
               } else if (tactic === 4) {
-                mh.place(7, toOwner);
-                mh.place(4, toOwner);
+                mh.requestPlace(7, toOwner, "formation");
+                mh.requestPlace(4, toOwner, "formation");
               } else if (tactic === 5) {
-                mh.place(3, away);
-                mh.place(4, toOwner);
+                mh.requestPlace(3, away, "formation");
+                mh.requestPlace(4, toOwner, "formation");
               } else {
-                mh.place(7, toOwner + 0.3);
-                mh.place(7, toOwner - 0.3);
+                mh.requestPlace(7, toOwner + 0.3, "formation");
+                mh.requestPlace(7, toOwner - 0.3, "formation");
               }
             } else {
-              mh.place(4, toOwner);
+              mh.requestPlace(4, toOwner, "formation");
             }
           }
           if (!botPlayer.inGame && botPlayer.diedOnce) {
@@ -11082,8 +11025,6 @@ window.grbtp = 35;
       }
     }
   }
-  const _prePlaceAngleCache = new WeakMap;
-  const PRE_PLACE_ROTATION = 2;
   class AutoPush {
     moduleName="autoPush";
     client;
@@ -11316,39 +11257,28 @@ window.grbtp = 35;
         broken.length = 0;
         return;
       }
-      const ap = MH.staticModules.autoPlacer;
       const trapId = myPlayer.getItemByType(7);
       const myPos = myPlayer.pos.current;
-      if (broken.length && ap && trapId != null) {
+      if (broken.length && trapId != null && myPlayer.canPlace(7)) {
         const enemy = EM.nearestEnemy;
         const near = enemy && myPos.distance(enemy.pos.current) < 300;
-        if (near && !ap._isItemLimit(trapId, myPlayer)) {
-          const item = Items[trapId];
-          const dist = 35 + item.scale + (item.placeOffset || 0);
+        if (near) {
+          const dist = myPlayer.getItemPlaceScale(trapId);
+          // This module decides *which* ground it wants back; legality, the
+          // reservation ledger, the packet budget and the repeat suppression
+          // that used to live in the old placer's ban list all belong to the
+          // engine now, so the angle is simply requested.
+          const wanted = [];
           for (const sid of broken) {
             const rec = this._mine.get(sid);
-            if (!rec) continue;
-            if (rec.type !== 15) continue;
-            if (MH.packetCount + 5 > MH.packetLimit) break;
+            if (!rec || rec.type !== 15) continue;
             const angle = Math.atan2(rec.y - myPos.y, rec.x - myPos.x);
             const px = myPos.x + dist * Math.cos(angle);
             const py = myPos.y + dist * Math.sin(angle);
             if (Math.hypot(px - rec.x, py - rec.y) > this._tolerance) continue;
-            let banned = false;
-            if (ap._bannedAngles) {
-              for (const ba of ap._bannedAngles.keys()) {
-                if (Math.abs(ba - angle) < .01) {
-                  banned = true;
-                  break;
-                }
-              }
-            }
-            if (banned) continue;
-            if (!ap._canPlace(trapId, angle, myPos, OM, null)) continue;
-            MH.place(7, angle);
-            MH.placeAngles[0] = 7;
-            MH.placeAngles[1].push(angle);
+            wanted.push(angle);
           }
+          if (wanted.length) MH.requestPlaceMany(7, wanted, "trapRebuild");
         }
       }
       broken.length = 0;
@@ -12021,52 +11951,12 @@ window.grbtp = 35;
       };
     }
   };
-  function _getCachedPrePlaceAngles(client, tickCount, cacheKey, computeAngle, forceFull = false, rotationGroups = PRE_PLACE_ROTATION, priorityIndex = -1) {
-    let clientCache = _prePlaceAngleCache.get(client);
-    if (!clientCache) {
-      clientCache = new Map;
-      _prePlaceAngleCache.set(client, clientCache);
-    }
-    let entry = clientCache.get(cacheKey);
-    if (!entry) {
-      entry = {
-        angles: new Array(72).fill(null),
-        lastTick: -1,
-        wasFull: false
-      };
-      clientCache.set(cacheKey, entry);
-    }
-    const isNewTick = entry.lastTick !== tickCount;
-    if (isNewTick) {
-      entry.lastTick = tickCount;
-      entry.wasFull = false;
-    }
-    if (forceFull && !entry.wasFull) {
-      for (let i = 0; i < 72; i++) {
-        entry.angles[i] = computeAngle(i);
-      }
-      entry.wasFull = true;
-    } else if (isNewTick) {
-      const phase = tickCount % rotationGroups;
-      for (let i = phase; i < 72; i += rotationGroups) {
-        entry.angles[i] = computeAngle(i);
-      }
-      for (let i = 0; i < 72; i++) {
-        if (entry.angles[i] === null) entry.angles[i] = computeAngle(i);
-      }
-    }
-    if (priorityIndex >= 0 && priorityIndex < 72) {
-      entry.angles[priorityIndex] = computeAngle(priorityIndex);
-    }
-    return entry.angles;
-  }
   // ==========================================================================
   // RYN PLACEMENT ENGINE
   //
-  // One placement engine for auto place, preplace and auto replace. Auto place
-  // is built on it here; preplace and replace still live in AutoPlacer and
-  // cooperate through the shared reservation ledger, so the two can no longer
-  // choose the same ground.
+  // The one placement system in the client. Auto place, preplace and auto
+  // replace are planning modes on this engine, and every other module that
+  // builds anything reaches the wire through it.
   //
   // Every constant below is derived from the game's own build path rather than
   // from another client:
@@ -13579,7 +13469,8 @@ window.grbtp = 35;
       booked: 0,
       preplaced: 0,
       replaced: 0,
-      dropped: 0
+      dropped: 0,
+      directed: 0
     };
     _threat;
     _generator;
@@ -14107,21 +13998,128 @@ window.grbtp = 35;
       return accepted;
     }
     _valid(cand, frame, accepted) {
+      return this._validAt(cand, frame.myPos, accepted);
+    }
+    // Validation needs a position and a blocker set, not a combat frame, so a
+    // placement made with no enemy on the board is checked exactly as
+    // carefully as one made in a fight.
+    _validAt(cand, myPos, accepted) {
       const myPlayer = this.client.myPlayer;
       if (!myPlayer.canPlace(cand.profile.type)) return false;
-      // Against what this same plan has already committed to.
       for (const other of accepted) {
         if (Math.hypot(cand.x - other.x, cand.y - other.y) < cand.profile.footR + other.profile.footR) return false;
       }
-      // Against ground someone else took while we were deciding.
       if (!this._conflicts.availableGround(cand)) return false;
-      // And against the world as it is now. The ring moves with us, so the
-      // angle that reaches this ground is re-derived rather than remembered.
-      const angle = Math.atan2(cand.y - frame.myPos.y, cand.x - frame.myPos.x);
-      const apertures = this._generator.apertures(cand.profile, frame.myPos.x, frame.myPos.y, this._blockers, cand.excludes);
+      // The ring moves with us, so the angle that reaches this ground is
+      // re-derived rather than remembered.
+      const angle = Math.atan2(cand.y - myPos.y, cand.x - myPos.x);
+      const apertures = this._generator.apertures(cand.profile, myPos.x, myPos.y, this._blockers, cand.excludes);
       if (!GeometrySolver.inAperture(apertures, angle)) return false;
       cand.angle = angle;
       return true;
+    }
+    _ensureBlockers(myPos, tick) {
+      if (this._blockers && this._blockersTick === tick) return;
+      let maxRing = 0, maxFoot = 0;
+      for (const p of this.activeProfiles()) {
+        if (p.ringR > maxRing) maxRing = p.ringR;
+        if (p.footR > maxFoot) maxFoot = p.footR;
+      }
+      this._blockers = this._generator.blockersAround(myPos.x, myPos.y, maxRing || 120, maxFoot || 60);
+      this._blockersTick = tick;
+      this._generator.cache.clear();
+    }
+
+    // ── directed intent ─────────────────────────────────────────────────────
+    // A module that has already decided what it wants still comes through the
+    // engine. It skips only the part of the pipeline that is about choosing -
+    // the planner has nothing to search when the caller has named the angle -
+    // and passes through everything that is about not getting in the way:
+    // legality against the live world, the reservation ledger, the packet
+    // budget, batching and memory.
+    //
+    // This is what stops a sync, an insta or a hotkey from quietly building on
+    // ground the engine is holding, and what stops them spending packets the
+    // engine has already committed.
+    request(type, angle, opts) {
+      return this.requestMany(type, [ angle ], opts);
+    }
+    requestMany(type, angles, opts) {
+      opts = opts || {};
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (!myPlayer || !myPlayer.inGame) return 0;
+      if (!myPlayer.canPlace(type)) return 0;
+      const profile = this.profileFor(type);
+      if (!profile) return 0;
+      const tick = ModuleHandler.tickCount;
+      const myPos = myPlayer.pos.current;
+      this._ensureBlockers(myPos, tick);
+      const owner = opts.owner || ModuleHandler.activeModule || "module";
+      const priority = opts.priority !== undefined ? opts.priority : this.priorityFor(owner);
+      // A directed placement outvalues the engine's own opportunism unless the
+      // caller says otherwise: the module asking has context the scorer does
+      // not.
+      const value = opts.value === undefined ? 1e6 : opts.value;
+      const wanted = [];
+      for (const angle of angles) {
+        if (angle === null || angle === undefined || !isFinite(angle)) continue;
+        const a = GeometrySolver.norm(angle);
+        wanted.push({
+          profile: profile, angle: a, aperture: null, source: "directed",
+          mode: RPE_MODE.AUTO, kind: "directed", priority: priority,
+          confidence: 1, value: value, expected: value, terms: {}, reach: value,
+          excludes: opts.excludes || null, dueTick: tick, vacates: null,
+          x: myPos.x + profile.ringR * Math.cos(a),
+          y: myPos.y + profile.ringR * Math.sin(a)
+        });
+      }
+      if (wanted.length === 0) return 0;
+      const accepted = [];
+      for (const cand of wanted) {
+        if (!this._scheduler.affords(accepted.length * RPE_BATCH_PACKETS, accepted.length > 0)) break;
+        if (!this._validAt(cand, myPos, accepted)) continue;
+        accepted.push(cand);
+      }
+      if (accepted.length === 0) return 0;
+      const sent = this._executor.flush(accepted, { tick: tick, myPos: myPos }, this.ledger, this.memory, this);
+      if (sent > 0) {
+        ModuleHandler.placedOnce = true;
+        this.stats.directed += sent;
+      }
+      return sent;
+    }
+
+    // Legal angles for a caller that wants the engine to choose the angle but
+    // not the intent. Replaces the standalone angle helper the pre-engine
+    // modules used, so there is one geometry engine rather than two that can
+    // disagree about what is legal.
+    anglesFor(type, targetAngle, opts) {
+      opts = opts || {};
+      const myPlayer = this.client.myPlayer;
+      if (!myPlayer) return [];
+      const profile = this.profileFor(type);
+      if (!profile) return [];
+      const myPos = opts.position || myPlayer.pos.current;
+      this._ensureBlockers(myPos, this.client._ModuleHandler.tickCount);
+      const apertures = this._generator.apertures(profile, myPos.x, myPos.y, this._blockers, opts.excludes || null);
+      if (apertures.length === 0) return [];
+      const out = [];
+      const target = GeometrySolver.norm(targetAngle ?? 0);
+      if (GeometrySolver.inAperture(apertures, target)) out.push(target);
+      for (const ap of apertures) {
+        const inset = Math.min(.03, ap[2] / 3);
+        out.push(GeometrySolver.norm(ap[0] + inset), GeometrySolver.norm(ap[1] - inset));
+        if (ap[2] > .7) out.push(GeometrySolver.norm(ap[0] + ap[2] / 2));
+      }
+      const seen = new Set, uniq = [];
+      for (const a of out) {
+        const k = Math.round(a * 200);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        uniq.push(a);
+      }
+      uniq.sort((x, y) => GeometrySolver.angleDist(x, target) - GeometrySolver.angleDist(y, target));
+      return opts.limit ? uniq.slice(0, opts.limit) : uniq;
     }
 
     // ── EXECUTE + RECORD ────────────────────────────────────────────────────
@@ -14261,379 +14259,6 @@ window.grbtp = 35;
 
   const RynPlacementEngine_default = RynPlacementEngine;
 
-  class AutoPlacer {
-    moduleName="autoPlacer";
-    _glotusAngles=new Map;
-    _glotusCount=0;
-    client;
-    _bannedAngles=new Map;
-    _predictObjects=[];
-    _placedAngles=[];
-    _tick=0;
-    _lastPrePlaceObj=null;
-    _spamPrePlacer=false;
-    constructor(client2) {
-      this.client = client2;
-    }
-    _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
-      let minX = ax, maxX = bx;
-      if (ax > bx) {
-        minX = bx;
-        maxX = ax;
-      }
-      if (maxX > x2) maxX = x2;
-      if (minX < x1) minX = x1;
-      if (minX > maxX) return false;
-      let minY = ay, maxY = by;
-      const dx = bx - ax;
-      if (Math.abs(dx) > 0.0000001) {
-        const slope = (by - ay) / dx;
-        const intercept = ay - slope * ax;
-        minY = slope * minX + intercept;
-        maxY = slope * maxX + intercept;
-      }
-      if (minY > maxY) {
-        const tmp = maxY;
-        maxY = minY;
-        minY = tmp;
-      }
-      if (maxY > y2) maxY = y2;
-      if (minY < y1) minY = y1;
-      if (minY > maxY) return false;
-      return true;
-    }
-    _getConfig(id, myPos) {
-      return angle => {
-        const item = Items[id];
-        const dist = 35 + item.scale + (item.placeOffset || 0);
-        return {
-          id: id,
-          angle: angle,
-          x: myPos.x + dist * Math.cos(angle),
-          y: myPos.y + dist * Math.sin(angle),
-          scale: item.scale
-        };
-      };
-    }
-    _canPlace(id, angle, myPos, ObjectManager2, excludeObj) {
-      const cfg = this._getConfig(id, myPos)(angle);
-      const cx = cfg.x, cy = cfg.y, cs = cfg.scale;
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        if (excludeObj && obj === excludeObj) return;
-        const blockS = obj.placementScale;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < cs + blockS) collision = true;
-      });
-      if (collision) return false;
-      if (id !== 18) {
-        const mid = Config_default.mapScale / 2;
-        const riverHalf = Config_default.riverWidth / 2;
-        if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      }
-      return true;
-    }
-    _isItemLimit(id, myPlayer) {
-      const group = ItemGroups[Items[id].itemGroup];
-      const limit = ("sandboxLimit" in group ? group.sandboxLimit : null) || 99;
-      const count = myPlayer.itemCount.get(Items[id].itemGroup) || 0;
-      return count >= limit;
-    }
-    _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
-      if (this._isItemLimit(id, myPlayer)) return [];
-      const tickCount = this.client._ModuleHandler.tickCount;
-      const cacheKey = this.moduleName + "_" + id + "_" + (excludeObj ? excludeObj.id : "n");
-      const getConfig = this._getConfig(id, myPos);
-      const retrapQuadrant = this.client._retrapQuadrant ?? -1;
-      const computeAngle = i => {
-        if (retrapQuadrant >= 0 && Math.floor(i / 18) === retrapQuadrant) {
-          return {
-            angle: i * (Math.PI * 2 / 72),
-            placeable: false,
-            perfect: false
-          };
-        }
-        const angle = i * (Math.PI * 2 / 72);
-        const cfg = getConfig(angle);
-        return {
-          ...cfg,
-          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
-          perfect: false
-        };
-      };
-      const forceFull = tickCount < (this.client._focusUntilTick || -1);
-      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1);
-      for (let i = 1; i < angles.length; i++) {
-        angles[i].perfect = false;
-      }
-      if (angles[0]) angles[0].perfect = false;
-      for (let i = 1; i < angles.length; i++) {
-        if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
-        if (!angles[i].placeable && angles[i - 1].placeable) angles[i - 1].perfect = true;
-      }
-      return angles;
-    }
-    _addPredictObject(id, angle, preplace, myPos) {
-      const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const x = myPos.x + dist * Math.cos(angle);
-      const y = myPos.y + dist * Math.sin(angle);
-      for (const obj of this._predictObjects) {
-        if (obj.id !== 17 && Math.hypot(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
-      }
-      this._predictObjects.push({
-        id: id,
-        angle: angle,
-        x: x,
-        y: y,
-        scale: item.scale,
-        preplace: preplace
-      });
-    }
-    _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2) {
-      let findObject = null;
-      const _mh = this.client._ModuleHandler;
-      const _agb = _mh.staticModules.autoGatherBreak;
-      const _autogathering = _agb && _agb._on || _mh.autoattack || _mh.forceWeapon !== null;
-      const justGathered = _autogathering;
-      if (justGathered) {
-        const predictType = _mh._getPredictWeapon();
-        const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
-        const predictReady = myWeapon != null && myPlayer.isReloaded && myPlayer.isReloaded(predictType, 0);
-        if (myWeapon != null && predictReady) {
-          const wd = DataHandler_default?.getWeapon?.(myWeapon);
-          if (wd) {
-            const myRange = wd.range ?? 0;
-            const ownsTank = this.client._ModuleHandler.canBuy(0, 40);
-            const myDmg = myPlayer.getBuildingDamage?.(myWeapon, ownsTank) ?? 0;
-            const gatherAngle = Config_default.gatherAngle;
-            const myFut = myPlayer.pos.future ?? myPos;
-            const attackAngle = _mh._autoBreakActive && _mh._lastBreakAngle != null ? _mh._lastBreakAngle : _mh._currentAngle ?? myPos.angle(enemyPos);
-            const selfCandidates = [];
-            ObjectManager2.grid2D.query(myPos.x, myPos.y, 3, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return;
-              const rawScale = Items[obj.type].scale;
-              const distEdge = myFut.distance(obj.pos.current) - rawScale;
-              if (distEdge > myRange) return;
-              const objAngle = myFut.angle(obj.pos.current);
-              let diff = Math.abs(objAngle - attackAngle);
-              if (diff > Math.PI) diff = 2 * Math.PI - diff;
-              if (diff > gatherAngle) return;
-              if (obj.health <= myDmg) selfCandidates.push(obj);
-            });
-            if (selfCandidates.length > 0) {
-              selfCandidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = selfCandidates[0];
-            }
-          }
-        }
-      }
-      if (!findObject) {
-        const secReload = enemy.reload?.[1];
-        const primReload = enemy.reload?.[0];
-        const secJustReady = secReload && secReload.previous < secReload.max && secReload.current >= secReload.max;
-        const primJustReady = primReload && primReload.previous < primReload.max && primReload.current >= primReload.max;
-        const secID = enemy.weapon?.secondary ?? null;
-        const primID = enemy.weapon?.primary ?? null;
-        let weaponToCheck = null;
-        if (secID === 10 && secJustReady) {
-          weaponToCheck = secID;
-        }
-        if (weaponToCheck === null && primID !== null && primJustReady) {
-          const wd = DataHandler_default?.getWeapon?.(primID);
-          if (wd && (wd.speed ?? 999) <= 400) {
-            weaponToCheck = primID;
-          }
-        }
-        if (weaponToCheck !== null) {
-          const wd = DataHandler_default?.getWeapon?.(weaponToCheck);
-          if (wd) {
-            const weaponRange = wd.range ?? 0;
-            const dmgToBuilding = enemy.getBuildingDamage?.(weaponToCheck, true) ?? 50;
-            const candidates = [];
-            ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return;
-              if (Items[obj.type] && Items[obj.type].hideFromEnemy && !obj._lunaUnhidden) return;
-              if (enemyPos.distance(obj.pos.current) - Items[obj.type].scale > weaponRange) return;
-              if (obj.health <= dmgToBuilding) candidates.push(obj);
-            });
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = candidates[0];
-            }
-          }
-        }
-      }
-      if (findObject) {
-        this._spamPrePlacer = true;
-      }
-      return findObject;
-    }
-    // ══════════════════════════════════════════════════════════════════════
-    // GLOTUS MODE — نسخة Glotus من الوضع التلقائي، منقولة حرفياً
-    // ──────────────────────────────────────────────────────────────────────
-    // تشتغل بدل منطق RYN لما يكون Settings._glotusPlacer مفعّلاً. أبسط بكثير
-    // (١٥٦ سطر مقابل ٦٠١): تعتمد على getBestPlacementAngles ثم تفلتر بثلاثة
-    // شروط — العدو كان محبوس، أو السبايك يلمسه/يلمس فخه، أو الـ knockback
-    // بيرميه على سبايك موجود.
-    // ══════════════════════════════════════════════════════════════════════
-    _glotusCanKnockbackSpike(newSpikePos, scale, enemy) {
-      const pos1 = newSpikePos;
-      const pos2 = enemy.pos.current;
-      const knockbackAngle = pos1.angle(pos2);
-      const hasEnoughDistance = pos1.distance(pos2) <= enemy.collisionScale + scale;
-      if (!hasEnoughDistance) {
-        return false;
-      }
-      const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
-      return ObjectManager2.grid2D.query(pos1.x, pos1.y, 3, id => {
-        const object = ObjectManager2.objects.get(id);
-        if (!object) {
-          return;
-        }
-        const pos3 = object.pos.current;
-        const isPlayerObject = object instanceof PlayerObject;
-        const isCactus = !isPlayerObject && object.isCactus;
-        const isSpike = isPlayerObject && object.itemGroup === 2;
-        const isEnemyObject = !isPlayerObject || PlayerManager2.isEnemyByID(object.ownerID, enemy);
-        const isDangerObjectToEnemy = isEnemyObject && (isSpike || isCactus);
-        if (!isDangerObjectToEnemy) {
-          return;
-        }
-        const KBDistance = 200;
-        const spikeScale = object.collisionScale + enemy.collisionScale;
-        const angleToSpike = pos1.angle(pos3);
-        const distanceToTarget = pos2.distance(pos3);
-        const distanceToSpike = pos1.distance(pos3);
-        const offset = Math.asin(2 * spikeScale / (2 * distanceToSpike));
-        const angleDistance = getAngleDist(knockbackAngle, angleToSpike);
-        const intersecting = angleDistance <= offset;
-        const overlapping = distanceToTarget <= distanceToSpike;
-        const inRange2 = enemy.collidingObject(object, KBDistance);
-        return intersecting && overlapping && inRange2;
-      });
-    }
-    _glotusPlace() {
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
-      const {currentType: currentType} = ModuleHandler;
-      const pos0 = myPlayer.pos.current;
-      if (ModuleHandler.placedOnce) {
-        return;
-      }
-      const nearestEnemy = EnemyManager2.nearestTrappedEnemy || EnemyManager2.nearestEnemy;
-      if (nearestEnemy === null) {
-        return;
-      }
-      if (!myPlayer.collidingSimple(nearestEnemy, Settings_default._autoplacerRadius)) {
-        return;
-      }
-      const shouldResetAngles = myPlayer.speed > 5 || ObjectManager2.isDestroyedObject() || nearestEnemy.lastAttacked === myPlayer.tickCount;
-      if (shouldResetAngles) {
-        this._glotusAngles.clear();
-      }
-      const nearestAngle = pos0.angle(nearestEnemy.pos.current);
-      let itemType = null;
-      const spike = myPlayer.getItemByType(4);
-      if (spike === null) {
-        return;
-      }
-      const spikeAngles = ObjectManager2.getBestPlacementAngles({
-        position: pos0,
-        id: spike,
-        targetAngle: nearestAngle,
-        ignoreID: null,
-        preplace: true,
-        reduce: true,
-        fill: true
-      });
-      const spikeScale = Items[spike].scale;
-      let angles = [];
-      const length = myPlayer.getItemPlaceScale(spike);
-      for (const angle of spikeAngles) {
-        const newPos = pos0.addDirection(angle, length);
-        let shouldPlaceSpike = nearestEnemy.wasTrapped();
-        const enemy = EnemyManager2.nearestTrappedEnemy;
-        if (enemy !== null && !shouldPlaceSpike) {
-          const distanceToEnemy = newPos.distance(enemy.pos.current);
-          const enemyRange = spikeScale + enemy.collisionScale + 8;
-          const trap = enemy.trappedIn;
-          if (trap) {
-            const distanceToTrap = newPos.distance(trap.pos.current);
-            const trapRange = spikeScale + trap.placementScale + 8;
-            if (distanceToEnemy <= enemyRange || distanceToTrap <= trapRange) {
-              shouldPlaceSpike = true;
-            }
-          } else if (distanceToEnemy <= enemyRange) {
-            shouldPlaceSpike = true;
-          }
-        }
-        if (!shouldPlaceSpike && this._glotusCanKnockbackSpike(newPos, spikeScale, nearestEnemy)) {
-          shouldPlaceSpike = true;
-        }
-        if (shouldPlaceSpike) {
-          angles = spikeAngles;
-          itemType = 4;
-          break;
-        }
-      }
-      if (angles.length === 0) {
-        let type = currentType && currentType !== 2 ? currentType : 7;
-        if (!myPlayer.canPlace(type)) {
-          return;
-        }
-        let id = myPlayer.getItemByType(type);
-        if (id === 16 && !myPlayer.isTrapped) {
-          return;
-        }
-        if (this._glotusCount >= 3) {
-          type = 4;
-          id = myPlayer.getItemByType(type);
-        }
-        angles = ObjectManager2.getBestPlacementAngles({
-          position: pos0,
-          id: id,
-          targetAngle: nearestAngle,
-          ignoreID: null,
-          preplace: true,
-          reduce: true,
-          fill: type !== 4
-        });
-        itemType = type;
-        if (type === 4 && angles.length !== 0) {
-          this._glotusCount = 0;
-        }
-      }
-      if (itemType === null || angles.length === 0) {
-        return;
-      }
-      ModuleHandler.placeAngles[0] = itemType;
-      ModuleHandler.placedOnce = true;
-      for (const angle of angles) {
-        const angleKey = Math.round(angle * 20) / 20;
-        if (!this._glotusAngles.has(angleKey)) {
-          this._glotusAngles.set(angleKey, 0);
-        }
-        const angleCount = this._glotusAngles.get(angleKey);
-        if (angleCount >= 4) {
-          continue;
-        }
-        this._glotusAngles.set(angleKey, angleCount + 1);
-        ModuleHandler.place(itemType, angle);
-        ModuleHandler.placeAngles[1].push(angle);
-      }
-      if (itemType !== 4) {
-        this._glotusCount += 1;
-      }
-    }
-    // Auto place and preplace both moved to RynPlacementEngine, so this
-    // module no longer runs per tick. The class stays because trapRebuild
-    // still calls its angle and item-limit helpers directly.
-    postTick() {}
-  }
   class TrapAnimal {
     moduleName="trapAnimal";
     client;
@@ -14692,7 +14317,7 @@ window.grbtp = 35;
         });
         if (!trapAngles || trapAngles.length === 0) return;
         const bestTrapAngle = this._bestAngle(trapAngles, angleToAnimal);
-        ModuleHandler.place(7, bestTrapAngle);
+        ModuleHandler.requestPlace(7, bestTrapAngle, "trapAnimal");
         ModuleHandler.placedOnce = true;
         this.trapPlacedAngle = bestTrapAngle;
         this.phaseTimer = 0;
@@ -14722,644 +14347,9 @@ window.grbtp = 35;
           return;
         }
         const bestSpikeAngle = this._bestAngle(spikeAngles, angleToFuture);
-        ModuleHandler.place(4, bestSpikeAngle);
+        ModuleHandler.requestPlace(4, bestSpikeAngle, "trapAnimal");
         ModuleHandler.placedOnce = true;
         this.reset();
-      }
-    }
-  }
-  const AutoPlacer_default = AutoPlacer;
-  class AutoRetrap {
-    moduleName="autoRetrap";
-    client;
-    _bannedAngles=new Map;
-    _predictObjects=[];
-    _placedAngles=[];
-    _tick=0;
-    _lastPrePlaceObj=null;
-    _spamPrePlacer=false;
-    constructor(client2) {
-      this.client = client2;
-    }
-    _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
-      let minX = ax, maxX = bx;
-      if (ax > bx) {
-        minX = bx;
-        maxX = ax;
-      }
-      if (maxX > x2) maxX = x2;
-      if (minX < x1) minX = x1;
-      if (minX > maxX) return false;
-      let minY = ay, maxY = by;
-      const dx = bx - ax;
-      if (Math.abs(dx) > 0.0000001) {
-        const slope = (by - ay) / dx;
-        const intercept = ay - slope * ax;
-        minY = slope * minX + intercept;
-        maxY = slope * maxX + intercept;
-      }
-      if (minY > maxY) {
-        const tmp = maxY;
-        maxY = minY;
-        minY = tmp;
-      }
-      if (maxY > y2) maxY = y2;
-      if (minY < y1) minY = y1;
-      if (minY > maxY) return false;
-      return true;
-    }
-    _getConfig(id, myPos) {
-      return angle => {
-        const item = Items[id];
-        const dist = 35 + item.scale + (item.placeOffset || 0);
-        return {
-          id: id,
-          angle: angle,
-          x: myPos.x + dist * Math.cos(angle),
-          y: myPos.y + dist * Math.sin(angle),
-          scale: item.scale
-        };
-      };
-    }
-    _canPlace(id, angle, myPos, ObjectManager2, excludeObj) {
-      const cfg = this._getConfig(id, myPos)(angle);
-      const cx = cfg.x, cy = cfg.y, cs = cfg.scale;
-      let collision = false;
-      ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        if (collision) return;
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return;
-        if (excludeObj && obj === excludeObj) return;
-        const blockS = obj.placementScale;
-        if (Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < cs + blockS) collision = true;
-      });
-      if (collision) return false;
-      if (id !== 18) {
-        const mid = Config_default.mapScale / 2;
-        const riverHalf = Config_default.riverWidth / 2;
-        if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      }
-      return true;
-    }
-    _isItemLimit(id, myPlayer) {
-      const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
-      return count >= limit;
-    }
-    _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj, enemyPos = null) {
-      if (this._isItemLimit(id, myPlayer)) return [];
-      const tickCount = this.client._ModuleHandler.tickCount;
-      const cacheKey = this.moduleName + "_" + id + "_" + (excludeObj ? excludeObj.id : "n");
-      const getConfig = this._getConfig(id, myPos);
-      let priorityIndex = -1;
-      let myQuadrant = -1;
-      if (enemyPos) {
-        const dirAngle = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
-        const normalized = (dirAngle % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-        priorityIndex = Math.round(normalized / (Math.PI * 2 / 72)) % 72;
-        myQuadrant = Math.floor(priorityIndex / 18);
-      }
-      this.client._retrapQuadrant = myQuadrant;
-      const computeAngle = i => {
-        if (myQuadrant >= 0 && Math.floor(i / 18) !== myQuadrant) {
-          return {
-            angle: i * (Math.PI * 2 / 72),
-            placeable: false,
-            perfect: false
-          };
-        }
-        const angle = i * (Math.PI * 2 / 72);
-        const cfg = getConfig(angle);
-        return {
-          ...cfg,
-          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
-          perfect: false
-        };
-      };
-      const forceFull = tickCount < (this.client._focusUntilTick || -1);
-      const angles = _getCachedPrePlaceAngles(this.client, tickCount, cacheKey, computeAngle, forceFull, 1, priorityIndex);
-      for (let i = 1; i < angles.length; i++) {
-        angles[i].perfect = false;
-      }
-      if (angles[0]) angles[0].perfect = false;
-      for (let i = 1; i < angles.length; i++) {
-        if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
-        if (!angles[i].placeable && angles[i - 1].placeable) angles[i - 1].perfect = true;
-      }
-      return angles;
-    }
-    _addPredictObject(id, angle, preplace, myPos) {
-      const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const x = myPos.x + dist * Math.cos(angle);
-      const y = myPos.y + dist * Math.sin(angle);
-      for (const obj of this._predictObjects) {
-        if (obj.id !== 17 && Math.hypot(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
-      }
-      this._predictObjects.push({
-        id: id,
-        angle: angle,
-        x: x,
-        y: y,
-        scale: item.scale,
-        preplace: preplace
-      });
-    }
-    _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2) {
-      let findObject = null;
-      const _mh = this.client._ModuleHandler;
-      const justGathered = _mh.autoattack || _mh.forceWeapon !== null;
-      if (justGathered) {
-        const predictType = _mh._getPredictWeapon();
-        const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
-        const predictReady = myWeapon != null && myPlayer.isReloaded && myPlayer.isReloaded(predictType, 0);
-        if (myWeapon != null && predictReady) {
-          const wd = DataHandler_default?.getWeapon?.(myWeapon);
-          if (wd) {
-            const myRange = wd.range ?? 0;
-            const ownsTank = this.client._ModuleHandler.canBuy(0, 40);
-            const myDmg = myPlayer.getBuildingDamage?.(myWeapon, ownsTank) ?? 0;
-            const gatherAngle = Config_default.gatherAngle;
-            const myFut = myPlayer.pos.future ?? myPos;
-            const attackAngle = myPos.angle(enemyPos);
-            const selfCandidates = [];
-            ObjectManager2.grid2D.query(myPos.x, myPos.y, 2, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return;
-              if (!myPlayer.isMyPlayerByID(obj.ownerID)) return;
-              const distEdge = myFut.distance(obj.pos.current) - obj.collisionScale;
-              if (distEdge > myRange) return;
-              const objAngle = myFut.angle(obj.pos.current);
-              let diff = Math.abs(objAngle - attackAngle);
-              if (diff > Math.PI) diff = 2 * Math.PI - diff;
-              if (diff > gatherAngle) return;
-              if (obj.health <= myDmg) selfCandidates.push(obj);
-            });
-            if (selfCandidates.length > 0) {
-              selfCandidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = selfCandidates[0];
-            }
-          }
-        }
-      }
-      if (!findObject) {
-        const secReload = enemy.reload?.[1];
-        const primReload = enemy.reload?.[0];
-        const secJustReady = secReload && secReload.previous < secReload.max && secReload.current >= secReload.max;
-        const primJustReady = primReload && primReload.previous < primReload.max && primReload.current >= primReload.max;
-        const secID = enemy.weapon?.secondary ?? null;
-        const primID = enemy.weapon?.primary ?? null;
-        let weaponToCheck = null;
-        if (secID === 10 && secJustReady) {
-          weaponToCheck = secID;
-        }
-        if (weaponToCheck === null && primID !== null && primJustReady) {
-          const wd = DataHandler_default?.getWeapon?.(primID);
-          if (wd && (wd.speed ?? 999) <= 400) {
-            weaponToCheck = primID;
-          }
-        }
-        if (weaponToCheck !== null) {
-          const wd = DataHandler_default?.getWeapon?.(weaponToCheck);
-          if (wd) {
-            const weaponRange = wd.range ?? 0;
-            const dmgToBuilding = enemy.getBuildingDamage?.(weaponToCheck, true) ?? 50;
-            const candidates = [];
-            ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 2, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return;
-              if (!myPlayer.isMyPlayerByID(obj.ownerID)) return;
-              if (Items[obj.type] && Items[obj.type].hideFromEnemy && !obj._lunaUnhidden) return;
-              if (enemyPos.distance(obj.pos.current) - obj.collisionScale > weaponRange) return;
-              if (obj.health <= dmgToBuilding) candidates.push(obj);
-            });
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = candidates[0];
-            }
-          }
-        }
-      }
-      if (findObject) {
-        this._spamPrePlacer = true;
-      }
-      return findObject;
-    }
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
-      // [مُصلَّح] كان هنا return; عارٍ يقتل ٦٢٧ سطر تحته
-      if (!Settings_default._autoRetrap) return;
-      if (!myPlayer.canPlace(7) && !myPlayer.canPlace(4)) return;
-      this._tick++;
-      for (const [angle, expiry] of this._bannedAngles) {
-        if (this._tick > expiry) this._bannedAngles.delete(angle);
-      }
-      const trapId = myPlayer.getItemByType(7);
-      const spikeId = myPlayer.getItemByType(4);
-      const myPos = myPlayer.pos.current;
-      const myFut = myPlayer.pos.future;
-      const enemy = EnemyManager2.nearestEnemy;
-      if (!enemy) return;
-      const enemyPos = enemy.pos.current;
-      const enemyFut = enemy.pos.future;
-      const enemyScale = enemy.collisionScale;
-      const spikesOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject) || obj.itemGroup !== 2) return;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, enemy)) return;
-        spikesOur.push(obj);
-      });
-      const trapsOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 4, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject) || obj.type !== 15) return;
-        if (obj.ownerID !== myPlayer.id) return;
-        trapsOur.push(obj);
-      });
-      const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < t.collisionScale) || null;
-      if (enemyTrapped && !this.client._wasEnemyTrapped) {
-        this.client._focusUntilTick = this.client._ModuleHandler.tickCount + 3;
-      }
-      this.client._wasEnemyTrapped = !!enemyTrapped;
-      const imTrapped = !!myPlayer.isTrapped;
-      const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
-      const pingTime = PacketManager2?.pong || 0;
-      const minPingTime = PacketManager2?.minPingTime || 0;
-      const _tryShameHammerBreak = () => {
-        if (!Settings_default._shameGrind) return false;
-        if (ModuleHandler.moduleActive) return false;
-        const mySec = myPlayer.weapon?.secondary ?? null;
-        const mySecW = DataHandler_default?.getWeapon?.(mySec);
-        if (!mySecW?.name?.toLowerCase().includes("hammer")) return false;
-        if (enemy.spikeDamage > 0 || (enemy.shameCount ?? 0) > 6) return false;
-        if (!enemyTrapped) return false;
-        const {reloading: reloading} = ModuleHandler.staticModules;
-        if (!reloading.isReloaded(1)) return false;
-        const hammerDmg = myPlayer.getBuildingDamage?.(mySec, ModuleHandler.canBuy(0, 40)) ?? 0;
-        if (enemyTrapped.health > hammerDmg) return false;
-        if (enemyTrapped.pos.current.distance(myPos) > 50 + 75) return false;
-        if (enemyPos.distance(myPos) > 35 * 1.8 + 75) return false;
-        const sp2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, enemyTrapped) : [];
-        const tr2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, enemyTrapped) : [];
-        const canPlaceTrap = tr2.some(o => o.placeable && o.x !== undefined && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 50);
-        const canPlaceSpike = sp2.some(o => o.placeable && o.x !== undefined && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 35 + 52);
-        if (!canPlaceTrap || !canPlaceSpike) return false;
-        const newTrapAngle = tr2.find(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 50)?.angle;
-        if (newTrapAngle !== undefined && myPlayer.canPlace(7)) {
-          ModuleHandler.place(7, newTrapAngle, true);
-        }
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.forceWeapon = 1;
-        ModuleHandler.forceHat = 40;
-        ModuleHandler.useAngle = myPos.angle(enemyTrapped.pos.current);
-        ModuleHandler.shouldAttack = true;
-        return true;
-      };
-      if (_tryShameHammerBreak()) return;
-      const canTrapTick = () => false;
-      const canShamePlace = () => {
-        if (!Settings_default._shameGrind) return false;
-        const _mySecW = DataHandler_default?.getWeapon?.(myPlayer.weapon?.secondary ?? null);
-        if (!_mySecW?.name?.toLowerCase().includes("hammer")) return false;
-        if (enemy.spikeDamage > 0 || (enemy.shameCount ?? 0) > 6) return false;
-        if (!enemyTrapped) return false;
-        const hammerDmg = myPlayer.getBuildingDamage?.(myPlayer.weapon?.secondary, this.client._ModuleHandler.canBuy(0, 40)) ?? 0;
-        if (enemyTrapped.health > hammerDmg) return false;
-        if (Math.hypot(enemyTrapped.pos.current.x - myPos.x, enemyTrapped.pos.current.y - myPos.y) > 125) return false;
-        if (Math.hypot(enemyPos.x - myPos.x, enemyPos.y - myPos.y) > 35 * 1.8 + 75) return false;
-        const sp2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, enemyTrapped, enemyTrapped ? enemyPos : null) : [];
-        const tr2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, enemyTrapped, enemyTrapped ? enemyPos : null) : [];
-        return tr2.some(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 50) && sp2.some(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 35 + 52);
-      };
-      const canAutoShame = () => {
-        if (!Settings_default._autoShame) return false;
-        if (!enemy) return false;
-        if ((enemy.shameCount ?? 0) >= (Settings_default._autoShameLimit ?? 6)) return false;
-        if (myPlayer.isTrapped) return false;
-        if (enemyTrapped) return false;
-        if (enemy.receivedDamage !== null && Date.now() - enemy.receivedDamage < 600) return false;
-        if (!myPlayer.isReloaded(0, 1)) return false;
-        const primaryRange = 35 * 1.8 + (DataHandler_default.getWeapon(myPlayer.weapon?.primary)?.range ?? 110);
-        const dist = myPos.distance(enemyPos);
-        if (dist <= primaryRange) return false;
-        return true;
-      };
-      const LOOKAHEAD = 222, START_OFFSET = 35;
-      const futX = myPos.x + Math.cos(predictMoveAngle) * LOOKAHEAD;
-      const futY = myPos.y + Math.sin(predictMoveAngle) * LOOKAHEAD;
-      const stX = myPos.x + Math.cos(predictMoveAngle) * START_OFFSET;
-      const stY = myPos.y + Math.sin(predictMoveAngle) * START_OFFSET;
-      const _los = cfg => {
-        const blockFuture = this._lineInRect(cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5, stX, stY, futX, futY);
-        const blockEnemy = this._lineInRect(cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5, myFut.x, myFut.y, enemyFut.x, enemyFut.y);
-        let canSpikeTick = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < cfg.scale + 35;
-        if (canSpikeTick) {
-          const kbA = Math.atan2(enemyPos.y - cfg.y, enemyPos.x - cfg.x);
-          const e2p = Math.atan2(myPos.y - enemyPos.y, myPos.x - enemyPos.x);
-          let diff = Math.abs(kbA - e2p);
-          if (diff > Math.PI) diff = 2 * Math.PI - diff;
-          canSpikeTick = diff >= Math.PI / 5;
-        }
-        const canRetrap = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < 50;
-        const willRetrap = true;
-        return {
-          blockFuture: blockFuture,
-          blockEnemy: blockEnemy,
-          canSpikeTick: canSpikeTick,
-          canRetrap: canRetrap,
-          willRetrap: willRetrap
-        };
-      };
-      const _findClosestSpikeToKb = spikeList => {
-        const validKb = spikeList.filter(a => {
-          const canHit = this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-          if (!canHit) return false;
-          const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-          const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-          for (const sp of spikesOur) {
-            const s = sp.pos.current, sc = sp.collisionScale;
-            if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-          }
-          return false;
-        }).map(a => {
-          const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-          const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-          let best = Infinity;
-          for (const sp of spikesOur) {
-            const s = sp.pos.current, sc = sp.collisionScale;
-            if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-              const a2e = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x), e2s = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-              let d = Math.abs(a2e - e2s);
-              if (d > Math.PI) d = 2 * Math.PI - d;
-              best = Math.min(best, d);
-            }
-          }
-          return {
-            angle: a,
-            alignment: best
-          };
-        });
-        if (!validKb.length) return null;
-        const bestScore = Math.min(...validKb.map(v => v.alignment));
-        return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle || null;
-      };
-      let forcedSpam = false;
-      if (this._lastPrePlaceObj) {
-        const stillExists = ObjectManager2.objects.has(this._lastPrePlaceObj.id);
-        if (!stillExists) {
-          forcedSpam = true;
-        }
-      }
-      this._predictObjects = [];
-      this._lastPrePlaceObj = null;
-      this._spamPrePlacer = forcedSpam;
-      if (Settings_default._replacer) {
-        this._spamPrePlacer = true;
-      }
-      if (this._placedAngles && this._placedAngles.length > 0) {
-        const _chkS = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _chkT = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _allChk = [ ..._chkS, ..._chkT ];
-        for (const pa of this._placedAngles) {
-          const _m = _allChk.find(a => Math.abs(a.angle - pa) < 0.01);
-          if (_m && _m.placeable) {
-            this._bannedAngles.set(pa, this._tick + 18);
-          }
-        }
-      }
-      this._placedAngles = [];
-      if (Settings_default._preplacer && myPos.distance(enemyPos) < 300 && !(imTrapped && myPlayer.spikeDamage > 0)) {
-        const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2);
-        if (findObject) {
-          const spikeAngles = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, findObject, enemyTrapped ? enemyPos : null) : [];
-          const trapAngles = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, findObject, enemyTrapped ? enemyPos : null) : [];
-          const placeableSpikeAngles = spikeAngles.filter(o => o.placeable);
-          const placeableTrapAngles = trapAngles.filter(o => o.placeable);
-          const enemyScale = enemy.collisionScale;
-          const closestSpikeToEnemy = placeableSpikeAngles.filter(a => this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0];
-          const closestTrapToEnemy = placeableTrapAngles.filter(a => this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0];
-          const closestSpikeToKbPP = (() => {
-            const validKb = placeableSpikeAngles.filter(a => {
-              const canHit = this._lineInRect(a.x - (enemyScale + a.scale - 2), a.y - (enemyScale + a.scale - 2), a.x + (enemyScale + a.scale - 2), a.y + (enemyScale + a.scale - 2), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-              if (!canHit) return false;
-              const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-              const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-              for (const sp of spikesOur) {
-                const s = sp.pos.current, sc = sp.collisionScale;
-                if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-              }
-              return false;
-            }).map(a => {
-              const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-              const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-              let best = Infinity;
-              for (const sp of spikesOur) {
-                const s = sp.pos.current, sc = sp.collisionScale;
-                if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-                  const a2e = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x), e2s = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-                  let d = Math.abs(a2e - e2s);
-                  if (d > Math.PI) d = 2 * Math.PI - d;
-                  best = Math.min(best, d);
-                }
-              }
-              return {
-                angle: a,
-                alignment: best
-              };
-            });
-            if (!validKb.length) return undefined;
-            const bestScore = Math.min(...validKb.map(v => v.alignment));
-            return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle;
-          })();
-          const isPrePlaceAngle = config => {
-            if (!enemy) return false;
-            const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-            const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
-            const {blockFuture: blockFuture, blockEnemy: blockEnemy, canSpikeTick: canSpikeTick, canRetrap: canRetrap} = _los(config);
-            if (isSpike && canSpikeTick && canTrapTick()) return true;
-            if (isTrap && canRetrap && canShamePlace()) return true;
-            if (isSpike && enemyTrapped && findObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            if (isTrap && enemy.spikeDamage > 0 && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
-            if (isSpike && closestSpikeToKbPP && config === closestSpikeToKbPP && !canShamePlace()) return true;
-            if (isSpike && enemyTrapped && !blockFuture && !blockEnemy && findObject !== enemyTrapped) return true;
-            if (isTrap) return true;
-            return false;
-          };
-          let findAngle = null;
-          if (!findAngle) {
-            const obj = spikeAngles.filter(o => o.placeable && isPrePlaceAngle(o)).sort((a, b) => Math.hypot(findObject.pos.current.x - a.x, findObject.pos.current.y - a.y) - Math.hypot(findObject.pos.current.x - b.x, findObject.pos.current.y - b.y))[0];
-            if (obj) findAngle = obj;
-          }
-          if (!findAngle) {
-            const obj = trapAngles.filter(o => o.placeable && isPrePlaceAngle(o)).sort((a, b) => Math.hypot(findObject.pos.current.x - a.x, findObject.pos.current.y - a.y) - Math.hypot(findObject.pos.current.x - b.x, findObject.pos.current.y - b.y))[0];
-            if (obj) findAngle = obj;
-          }
-          if (findAngle) {
-            this._addPredictObject(findAngle.id, findAngle.angle, true, myPos);
-            this._lastPrePlaceObj = findObject;
-            // Preplace fires a tick from now, so it holds its ground from the
-            // moment it decides on it — otherwise auto place, which sends
-            // immediately, would take the slot out from under it.
-            const engine = ModuleHandler.staticModules && ModuleHandler.staticModules.placementEngine;
-            if (engine) {
-              engine.claim(findAngle.x, findAngle.y, findAngle.scale, RPE_PRIORITY.ANTICIPATION, "preplace", ModuleHandler.tickCount, 3);
-            }
-          }
-        }
-      }
-      if (Settings_default._autoplacer && enemy) {
-        const spikeAngles2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null, enemyTrapped ? enemyPos : null) : [];
-        const trapAngles2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null, enemyTrapped ? enemyPos : null) : [];
-        const filterBanned = a => !this._bannedAngles.has(a.angle);
-        const validSpike = spikeAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
-        const validTrap = trapAngles2.filter(a => filterBanned(a) && (a.placeable || a.perfect));
-        const validAngles = [ ...validSpike, ...validTrap ];
-        const closestSpikeToEnemy2 = validSpike.filter(a => this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] || null;
-        const closestTrapToEnemy2 = validTrap.filter(a => this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] || null;
-        const closestSpikeToKb2 = _findClosestSpikeToKb(validSpike);
-        const neitherTrapped = !enemyTrapped && !imTrapped;
-        let _escapeExits = null;
-        if (enemy) {
-          const surroundSpikes = [];
-          ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
-            const o = ObjectManager2.objects.get(id);
-            if (!o || !(o instanceof PlayerObject)) return;
-            if (o.itemGroup !== 2 && o.type !== 15) return;
-            if (PlayerManager2.isEnemyByID(o.ownerID, myPlayer)) return;
-            const d = enemyPos.distance(o.pos.current);
-            if (d > enemyScale + o.collisionScale + 40) return;
-            surroundSpikes.push({
-              x: o.pos.current.x,
-              y: o.pos.current.y,
-              escapeScale: o.collisionScale
-            });
-          });
-          if (surroundSpikes.length >= 2) {
-            const esc = SiegeAnalysis.isEscapable(enemyPos.x, enemyPos.y, enemyScale, surroundSpikes);
-            if (esc.escapable) _escapeExits = esc.exits;
-          }
-        }
-        const _sealsExit = cfg => {
-          if (!_escapeExits || _escapeExits.length === 0) return false;
-          const angToConfig = Math.atan2(cfg.y - enemyPos.y, cfg.x - enemyPos.x);
-          for (const exit of _escapeExits) {
-            let diff = Math.abs(angToConfig - exit.angle);
-            if (diff > Math.PI) diff = 2 * Math.PI - diff;
-            if (diff < 0.45) return true;
-          }
-          return false;
-        };
-        const _primaryType = myPlayer.getItemByType(0);
-        const _hasPolearm = _primaryType === 4 || _primaryType === 5;
-        const _kbObjects = [];
-        ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 4, id => {
-          const o = ObjectManager2.objects.get(id);
-          if (!o || !(o instanceof PlayerObject)) return;
-          const isSpk = o.itemGroup === 2, isTrp = o.type === 15;
-          if (!isSpk && !isTrp) return;
-          if (PlayerManager2.isEnemyByID(o.ownerID, myPlayer)) return;
-          _kbObjects.push({
-            x: o.pos.current.x,
-            y: o.pos.current.y,
-            dmg: isSpk,
-            trap: isTrp,
-            isCactus: false,
-            colScale: o.collisionScale
-          });
-        });
-        const _kbDir = Math.atan2(enemyPos.y - myPos.y, enemyPos.x - myPos.x);
-        const _bouncesOntoSpike = cfg => {
-          if (_kbObjects.length === 0) return false;
-          const res = SiegeAnalysis.knockInto(cfg.x, cfg.y, _kbObjects, enemyPos.x, enemyPos.y, _kbDir, _hasPolearm);
-          return res.willHit || res.inEscapable;
-        };
-        const _isDoubleSpike = cfg => {
-          if (_kbObjects.length === 0) return false;
-          const res = SiegeAnalysis.knockInto(cfg.x, cfg.y, _kbObjects, enemyPos.x, enemyPos.y, _kbDir, _hasPolearm);
-          return res.doubleSpike;
-        };
-        const isAutoPlaceAngle = config => {
-          if (!enemy) return false;
-          if (myPos.distance(enemyPos) > (Settings_default._autoplacerRadius ?? 350)) return false;
-          const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-          const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
-          const {blockFuture: blockFuture, blockEnemy: blockEnemy, canSpikeTick: canSpikeTick, canRetrap: canRetrap, willRetrap: willRetrap} = _los(config);
-          if (isSpike && _sealsExit(config)) return true;
-          if (isSpike && _isDoubleSpike(config)) return true;
-          if (isSpike && _bouncesOntoSpike(config)) return true;
-          if (isSpike) {
-            if (enemyTrapped && closestSpikeToEnemy2 && config === closestSpikeToEnemy2) return true;
-            if (closestSpikeToKb2 && config === closestSpikeToKb2) return true;
-            if (enemyTrapped && !blockFuture && !blockEnemy) return true;
-            if (enemyTrapped) {
-              const distSpikeToEnemy = Math.hypot(config.x - enemyPos.x, config.y - enemyPos.y);
-              if (distSpikeToEnemy < config.scale + enemyScale + 15) return true;
-            }
-            if (!enemyTrapped && !imTrapped) {
-              if (closestSpikeToEnemy2 && config === closestSpikeToEnemy2) return true;
-              const distSpikeToEnemy = Math.hypot(config.x - enemyPos.x, config.y - enemyPos.y);
-              if (distSpikeToEnemy < config.scale + enemyScale + 15) return true;
-            }
-          }
-          if (isTrap) {
-            if (closestTrapToEnemy2 && config === closestTrapToEnemy2 && willRetrap && neitherTrapped) return true;
-            if (neitherTrapped) return true;
-            return false;
-          }
-          return false;
-        };
-        for (const obj of validAngles.filter(a => a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
-        }
-        for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
-        }
-      }
-      const autoObjects = this._predictObjects.filter(o => !o.preplace);
-      const preObjects = this._predictObjects.filter(o => o.preplace);
-      for (const obj of autoObjects) {
-        if (ModuleHandler.totalPlaces >= 20) break;
-        const type = obj.id === trapId ? 7 : 4;
-        ModuleHandler.place(type, obj.angle);
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.placeAngles[0] = type;
-        ModuleHandler.placeAngles[1].push(obj.angle);
-        ModuleHandler.moduleActive = true;
-        this._bannedAngles.set(obj.angle, this._tick + 18);
-        this._placedAngles.push(obj.angle);
-      }
-      if (preObjects.length > 0) {
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              PacketManager2.updateAngle(obj.angle);
-            }
-          } catch (_) {}
-        }, 1);
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placedOnce = true;
-              ModuleHandler.placeAngles[0] = type;
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              ModuleHandler.moduleActive = true;
-              PacketManager2.updateAngle(obj.angle);
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - pingTime));
-        setTimeout(() => {
-          if (!this._spamPrePlacer) return;
-          try {
-            for (const obj of preObjects) {
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              PacketManager2.updateAngle(obj.angle);
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - minPingTime));
       }
     }
   }
@@ -15501,7 +14491,7 @@ window.grbtp = 35;
         for (let off = -Math.PI / 2; off <= Math.PI / 2 + 1e-6; off += Math.PI / 6) {
           const angle = protectDir + off;
           if (this._canPlace(spikeID, angle, myPos, ObjectManager2)) {
-            ModuleHandler.place(4, angle);
+            ModuleHandler.requestPlace(4, angle, "antiTrapProtect");
             placedAny = true;
           }
         }
@@ -15511,7 +14501,7 @@ window.grbtp = 35;
         for (let off = -Math.PI / 3; off <= Math.PI / 3 + 1e-6; off += Math.PI / 6) {
           const angle = protectDir + off;
           if (this._canPlace(wallID, angle, myPos, ObjectManager2)) {
-            ModuleHandler.place(3, angle);
+            ModuleHandler.requestPlace(3, angle, "antiTrapProtect");
             placedAny = true;
           }
         }
@@ -15569,7 +14559,7 @@ window.grbtp = 35;
       const fail = agnes.tachyon - 0.0676;
       const tryPlace = a => {
         if ((currPlaced === null || Math.abs(this._angDiff(currPlaced, a)) > 1.36) && this._canPlace(spikeID, a, myPos, ObjectManager2)) {
-          ModuleHandler.place(4, a);
+          ModuleHandler.requestPlace(4, a, "antiTrapStar");
           currPlaced = a;
           count++;
           return true;
@@ -15577,12 +14567,12 @@ window.grbtp = 35;
         return false;
       };
       if (this._canPlace(spikeID, aim + fail, myPos, ObjectManager2)) {
-        ModuleHandler.place(4, aim + fail);
+        ModuleHandler.requestPlace(4, aim + fail, "antiTrapStar");
         currPlaced = aim + fail;
         count++;
       }
       if (this._canPlace(spikeID, aim - fail, myPos, ObjectManager2)) {
-        ModuleHandler.place(4, aim - fail);
+        ModuleHandler.requestPlace(4, aim - fail, "antiTrapStar");
         currPlaced = aim - fail;
         count++;
         if (count >= 2) return true;
@@ -15593,7 +14583,7 @@ window.grbtp = 35;
       if (tryPlace(aim - fail * 0.25) && count >= 2) return true;
       tryPlace(aim);
       if (count !== 1) return count > 0;
-      if (this._canPlace(spikeID, currPlaced + 1.36, myPos, ObjectManager2)) ModuleHandler.place(4, currPlaced + 1.36); else if (this._canPlace(spikeID, currPlaced - 1.36, myPos, ObjectManager2)) ModuleHandler.place(4, currPlaced - 1.36);
+      if (this._canPlace(spikeID, currPlaced + 1.36, myPos, ObjectManager2)) ModuleHandler.requestPlace(4, currPlaced + 1.36, "antiTrapStar"); else if (this._canPlace(spikeID, currPlaced - 1.36, myPos, ObjectManager2)) ModuleHandler.requestPlace(4, currPlaced - 1.36, "antiTrapStar");
       return true;
     }
     _angDiff(a, b) {
@@ -15820,8 +14810,8 @@ window.grbtp = 35;
       if (!ModuleHandler.placedOnce) {
         const spikeID = myPlayer.getItemByType(4);
         if (spikeID !== -1 && myPlayer.canPlace(4)) {
-          ModuleHandler.place(4, angle + Math.PI * 0.25);
-          ModuleHandler.place(4, angle - Math.PI * 0.25);
+          ModuleHandler.requestPlace(4, angle + Math.PI * 0.25, "instakill");
+          ModuleHandler.requestPlace(4, angle - Math.PI * 0.25, "instakill");
           ModuleHandler.placedOnce = true;
         }
       }
@@ -15911,7 +14901,7 @@ window.grbtp = 35;
       if (this._setupPhase === 0 && this._setupCool === 0 && dist <= 400) {
         if (spikeID !== -1 && mp.canPlace(4) && !MH.placedOnce) {
           const ang1 = this._deceptiveAngle(anglEnm, Math.PI * 0.25);
-          MH.place(4, ang1);
+          MH.requestPlace(4, ang1, "smartInsta");
           MH.placedOnce = true;
           this._spike1Placed = true;
           this._setupPhase = 1;
@@ -15922,7 +14912,7 @@ window.grbtp = 35;
       if (this._setupPhase === 1 && !MH.placedOnce) {
         if (spikeID !== -1 && mp.canPlace(4)) {
           const ang2 = this._deceptiveAngle(anglEnm, -Math.PI * 0.25);
-          MH.place(4, ang2);
+          MH.requestPlace(4, ang2, "smartInsta");
           MH.placedOnce = true;
           this._spike2Placed = true;
           this._setupPhase = 2;
@@ -15942,7 +14932,7 @@ window.grbtp = 35;
             fill: true
           });
           if (trapAngles.length > 0) {
-            MH.place(7, trapAngles[0]);
+            MH.requestPlace(7, trapAngles[0], "smartInsta");
             MH.placedOnce = true;
             this._trapPlaced = true;
             this._setupPhase = 3;
@@ -16291,7 +15281,7 @@ window.grbtp = 35;
         const angleTo = pos1.angle(pos2);
         const itemType = 4;
         for (const angle of placementAngles) {
-          ModuleHandler.place(itemType, angle);
+          ModuleHandler.requestPlace(itemType, angle, "spikeSync");
         }
         ModuleHandler.placedOnce = true;
         ModuleHandler.placeAngles[0] = itemType;
@@ -16353,7 +15343,7 @@ window.grbtp = 35;
         const placementAngles = EnemyManager2.nearestSpikePlacerAngle;
         if (placementAngles !== null) {
           for (const angle of placementAngles) {
-            ModuleHandler.place(itemType, angle);
+            ModuleHandler.requestPlace(itemType, angle, "spikeSyncHammer");
           }
           ModuleHandler.placedOnce = true;
           ModuleHandler.placeAngles[0] = itemType;
@@ -17170,7 +16160,7 @@ window.grbtp = 35;
       if (placedOnce) {
         return;
       }
-      ModuleHandler.place(currentType, currentAngle);
+      ModuleHandler.requestPlace(currentType, currentAngle, "placer");
       ModuleHandler.placedOnce = true;
     }
   }
@@ -18151,7 +17141,7 @@ window.grbtp = 35;
       if (!ObjectManager2.canPlaceItem(id, position)) {
         return false;
       }
-      ModuleHandler.place(8, angle);
+      ModuleHandler.requestPlace(8, angle, "autoGrind");
       if (!Array.isArray(ModuleHandler.placeAngles[1])) {
         ModuleHandler.placeAngles[1] = [];
       }
@@ -18259,7 +17249,7 @@ window.grbtp = 35;
     placeWindmill(angle) {
       const {_ModuleHandler: ModuleHandler} = this.client;
       const type = 5;
-      ModuleHandler.place(type, angle);
+      ModuleHandler.requestPlace(type, angle, "autoMill");
       ModuleHandler.placedOnce = true;
       ModuleHandler.placeAngles[0] = type;
       ModuleHandler.placeAngles[1].push(angle);
@@ -18511,7 +17501,7 @@ window.grbtp = 35;
       if (this._tick - this._lastPlaceTick < 10) return;
       if (!myPlayer.canPlace(8)) return;
       const angle = ModuleHandler.useAngle ?? myPlayer.angle;
-      ModuleHandler.place(8, angle);
+      ModuleHandler.requestPlace(8, angle, "platformMusket");
       this._lastPlaceTick = this._tick;
     }
   }
@@ -18597,10 +17587,10 @@ window.grbtp = 35;
         ModuleHandler._upgradeItem(18, true);
       }
       if (myPlayer.upgradeAge === 8 && myPlayer.getItemByType(8) === 18) {
-        ModuleHandler.place(8, angle);
-        ModuleHandler.place(8, angle - toRadians(90));
-        ModuleHandler.place(8, angle + toRadians(90));
-        ModuleHandler.place(8, reverseAngle(angle));
+        ModuleHandler.requestPlace(8, angle, "bowInsta");
+        ModuleHandler.requestPlace(8, angle - toRadians(90), "bowInsta");
+        ModuleHandler.requestPlace(8, angle + toRadians(90), "bowInsta");
+        ModuleHandler.requestPlace(8, reverseAngle(angle), "bowInsta");
       }
       this.tickAction = 1;
       this.targetEnemy = nearestEnemy;
@@ -18650,7 +17640,7 @@ window.grbtp = 35;
           const rectEnd = pos3.copy().add(placementScale);
           const distance2 = pos3.distance(pos2);
           if (distance2 < distance1 && lineIntersectsRect(pos2, pos1, rectStart, rectEnd)) {
-            ModuleHandler.place(type, angle2);
+            ModuleHandler.requestPlace(type, angle2, "placementDefense");
           }
         }
         ModuleHandler.placedOnce = true;
@@ -18935,7 +17925,7 @@ window.grbtp = 35;
       InputHandler2.instaReset();
       PacketManager2.leaveClan();
       for (const angle2 of angles) {
-        ModuleHandler.place(4, angle2);
+        ModuleHandler.requestPlace(4, angle2, "teammateSpikeTrap");
       }
     }
   }
@@ -18974,7 +17964,7 @@ window.grbtp = 35;
         return;
       }
       for (const angle2 of angles) {
-        ModuleHandler.place(4, angle2);
+        ModuleHandler.requestPlace(4, angle2, "spikeTrap");
       }
     }
   }
@@ -19059,7 +18049,7 @@ window.grbtp = 35;
       }
       const prevWeapon = ModuleHandler.currentHolding;
       const dashAngle = ModuleHandler.move_dir !== null ? ModuleHandler.move_dir : currentAngle;
-      ModuleHandler.place(currentType, dashAngle);
+      ModuleHandler.requestPlace(currentType, dashAngle, "dashMovement");
       ModuleHandler.useAngle = dashAngle;
       ModuleHandler.useHat = 40;
       if (ModuleHandler.canBuy(1, 11)) {
@@ -19438,11 +18428,11 @@ window.grbtp = 35;
           const canWall = myPlayer.canPlace(3);
           const canMill = myPlayer.canPlace(6) || myPlayer.canPlace(7);
           if (canWall) {
-            MH.place(3, enemyAngle);
+            MH.requestPlace(3, enemyAngle, "guardModule");
             MH.moduleActive = true;
           } else if (canMill) {
             const millType = myPlayer.canPlace(6) ? 6 : 7;
-            MH.place(millType, enemyAngle);
+            MH.requestPlace(millType, enemyAngle, "guardModule");
             MH.moduleActive = true;
           } else {
             this._forceWeapon(MH, 1, false);
@@ -19786,11 +18776,11 @@ window.grbtp = 35;
             fill: true
           })?.[0];
           if (placementAngle !== undefined) {
-            MH.place(7, placementAngle, true);
+            MH.requestPlace(7, placementAngle, true, "shameSpam");
             const delay = this.client.SocketManager.TICK - this.client.SocketManager.pong / 2;
             setTimeout(() => {
               try {
-                MH.place(7, placementAngle, true);
+                MH.requestPlace(7, placementAngle, true, "shameSpam");
               } catch (_) {}
             }, Math.max(8, delay));
           }
@@ -19824,11 +18814,11 @@ window.grbtp = 35;
             fill: true
           })?.[0];
           if (placementAngle !== undefined) {
-            MH.place(7, placementAngle, true);
+            MH.requestPlace(7, placementAngle, true, "shameSpam");
             const delay = this.client.SocketManager.TICK - this.client.SocketManager.pong / 2;
             setTimeout(() => {
               try {
-                MH.place(7, placementAngle, true);
+                MH.requestPlace(7, placementAngle, true, "shameSpam");
               } catch (_) {}
             }, Math.max(8, delay));
           }
@@ -20035,7 +19025,6 @@ window.grbtp = 35;
         trapAnimal: new TrapAnimal(client2),
         antiTrapProtect: new AntiTrapProtect(client2),
         antiTrapStar: new AntiTrapStar(client2),
-        autoRetrap: new AutoRetrap(client2),
         antiRetrap: new AntiRetrap(client2),
         autoPush: new AutoPush_default(client2),
         autoPlay: new AutoPlay_default(client2),
@@ -20044,7 +19033,6 @@ window.grbtp = 35;
         trapTick: new TrapTick_default(client2),
         lunaPathfinder: new LunaPathfinder_default(client2),
         lunaSafeWalk: new LunaSafeWalk_default(client2),
-        autoPlacer: new AutoPlacer_default(client2),
         placementEngine: new RynPlacementEngine_default(client2),
         placer: new Placer_default(client2),
         autoMill: new Automill_default(client2),
@@ -20058,7 +19046,7 @@ window.grbtp = 35;
         safeWalk: new SafeWalk(client2)
       };
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.movement ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.shameSpam, this.staticModules.autoHitToShame, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.autoRetrap, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTick, this.staticModules.knockbackTickTrap, this.staticModules.knockbackTickHammer, this.staticModules.kbTickHammerV2, this.staticModules.knockbackTick, this.staticModules.kbPredictInsta, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.comboApproach, this.staticModules.chatLog, this.staticModules.autoPlay, this.staticModules.lunaSafeWalk, this.staticModules.autoGatherBreak, this.staticModules.placementEngine, this.staticModules.trapRebuild, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.shameSpam, this.staticModules.autoHitToShame, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTick, this.staticModules.knockbackTickTrap, this.staticModules.knockbackTickHammer, this.staticModules.kbTickHammerV2, this.staticModules.knockbackTick, this.staticModules.kbPredictInsta, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.comboApproach, this.staticModules.chatLog, this.staticModules.autoPlay, this.staticModules.lunaSafeWalk, this.staticModules.autoGatherBreak, this.staticModules.placementEngine, this.staticModules.trapRebuild, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule ];
       this.reset();
     }
     movementReset() {
@@ -20301,6 +19289,24 @@ window.grbtp = 35;
       if (pW?.name?.toLowerCase().includes("dagger")) return 0;
       if (sW?.name?.toLowerCase().includes("hammer")) return 1;
       return hasPrim ? 0 : hasSec ? 1 : this.weapon;
+    }
+    // The one call a module makes to build something. It routes through the
+    // placement engine so the request is checked against the live world, the
+    // reservation ledger and the packet budget, and is batched and recorded
+    // like every other placement. place() below is the wire primitive the
+    // engine's executor drives; nothing else should be calling it.
+    requestPlace(type, angle, owner) {
+      const engine = this.staticModules && this.staticModules.placementEngine;
+      if (engine) return engine.request(type, angle, { owner: owner || this.activeModule });
+      this.place(type, angle);
+      return 1;
+    }
+    requestPlaceMany(type, angles, owner) {
+      const engine = this.staticModules && this.staticModules.placementEngine;
+      if (engine) return engine.requestMany(type, angles, { owner: owner || this.activeModule });
+      let n = 0;
+      for (const a of angles) { this.place(type, a); n++; }
+      return n;
     }
     place(type, angle = this._currentAngle, reset = false) {
       this.totalPlaces += 1;

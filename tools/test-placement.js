@@ -33,8 +33,7 @@ function slice(from, to) {
 }
 
 const ENGINE_SRC =
-  slice("  const SiegeAnalysis = {", "  function _getCachedPrePlaceAngles") +
-  slice("  const RPE_TICK_MS", "  const RynPlacementEngine_default = RynPlacementEngine;");
+  slice("  const SiegeAnalysis = {", "  const RynPlacementEngine_default = RynPlacementEngine;");
 
 /* The engine reads a handful of module-scope names. Supplying them through a
  * `with` block keeps the extracted source byte-identical to what ships. */

@@ -135,34 +135,13 @@ edit(
 );
 
 /* ------------------------------------------------------------------ *
- * Autoplacer item-limit check
+ * item limits
  *
- * AutoPlacer._isItemLimit read `group.sandboxLimit || 99` and never looked at
- * `group.limit`, so outside sandbox the cap was 99 for everything without a
- * sandboxLimit (spikes 15, traps 6, turrets 2, mines 1) and 299 for the three
- * that have one. The limit gate therefore effectively never fired, and the
- * placer kept spending placement ticks on items it could not place.
- *
- * This came from Luna, which has the same expression. The rest of the client
- * already gets it right: ClientPlayer.getItemCount picks sandboxLimit only when
- * actually in sandbox and falls back to group.limit otherwise, and AutoRetrap's
- * own _isItemLimit is written against that. AutoPlacer is switched to the same
- * call so all three agree.
+ * This step used to correct the ported placer's item-limit test, which read
+ * the sandbox limit in every mode. Both copies of that placer are gone and
+ * the placement engine reads the real group limit through
+ * ClientPlayer.canPlace, so there is nothing left to correct here.
  * ------------------------------------------------------------------ */
-
-edit(
-  "autoplacer: honour real item-group limits",
-  `    _isItemLimit(id, myPlayer) {
-      const group = ItemGroups[Items[id].itemGroup];
-      const limit = ("sandboxLimit" in group ? group.sandboxLimit : null) || 99;
-      const count = myPlayer.itemCount.get(Items[id].itemGroup) || 0;
-      return count >= limit;
-    }`,
-  `    _isItemLimit(id, myPlayer) {
-      const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
-      return count >= limit;
-    }`
-);
 
 /* Legit Mode flips every boolean setting off. The ported toggles are cosmetic
  * (rotation) or naming (cycler), so they sit alongside the other exclusions

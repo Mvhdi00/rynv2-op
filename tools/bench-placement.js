@@ -260,8 +260,7 @@ const adapters = [];
 {
   const SRC = fs.readFileSync(path.join(ROOT, "src/RYN_Client_v4.js"), "utf8");
   const ENGINE =
-    slice(SRC, "  const SiegeAnalysis = {", "  function _getCachedPrePlaceAngles") +
-    slice(SRC, "  const RPE_TICK_MS", "  const RynPlacementEngine_default = RynPlacementEngine;");
+    slice(SRC, "  const SiegeAnalysis = {", "  const RynPlacementEngine_default = RynPlacementEngine;");
 
   adapters.push({
     name: "RYN",
