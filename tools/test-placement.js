@@ -23,7 +23,11 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const SRC = fs.readFileSync(path.join(ROOT, "src/RYN_Client_v4.js"), "utf8");
+/* --src=<file> points the suite at another client carrying the engine, so a
+ * port can be verified against the same checks as the original. */
+const SRC_ARG = (process.argv.find(a => a.startsWith("--src=")) || "").slice(6);
+const SRC_PATH = SRC_ARG ? path.resolve(ROOT, SRC_ARG) : path.join(ROOT, "src/RYN_Client_v4.js");
+const SRC = fs.readFileSync(SRC_PATH, "utf8");
 
 function slice(from, to) {
   const a = SRC.indexOf(from);
@@ -287,8 +291,15 @@ function engineFor(world) {
   const env = {
     Config_default: { mapScale: 14400, riverWidth: 724, playerScale: 35 },
     Items: ITEMS, ItemGroups: ITEM_GROUPS,
-    Settings_default: Object.assign({ _autoplacer: true, _autoplacerRadius: 350,
-      _preplacer: true, _replacer: false }, world.settings || {}),
+    Settings_default: (() => {
+      const base = Object.assign({ _autoplacer: true, _autoplacerRadius: 350,
+        _preplacer: true, _replacer: false }, world.settings || {});
+      // v5.2 spells these _prePlace / _replace; mirror both so one suite
+      // drives either client.
+      base._prePlace = base._preplacer;
+      base._replace = base._replacer;
+      return base;
+    })(),
     DataHandler_default: { getWeapon: () => ({ range: 140, speed: 300 }) },
     PlayerObject: PlayerObject,
     getAngleFromBitmask: () => null

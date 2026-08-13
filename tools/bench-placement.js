@@ -258,7 +258,8 @@ const adapters = [];
 
 /* ---- RYN: the full pipeline ---- */
 {
-  const SRC = fs.readFileSync(path.join(ROOT, "src/RYN_Client_v4.js"), "utf8");
+  const SRC_ARG = (args.find(a => a.startsWith("--src=")) || "").slice(6);
+  const SRC = fs.readFileSync(SRC_ARG ? path.resolve(ROOT, SRC_ARG) : path.join(ROOT, "src/RYN_Client_v4.js"), "utf8");
   const ENGINE =
     slice(SRC, "  const SiegeAnalysis = {", "  const RynPlacementEngine_default = RynPlacementEngine;");
 
@@ -595,7 +596,8 @@ function makeRynWorld(scn) {
 
   const env = {
     Config_default: GAME, Items: ITEMS, ItemGroups: ITEM_GROUPS,
-    Settings_default: { _autoplacer: true, _autoplacerRadius: 350, _preplacer: true, _replacer: true },
+    Settings_default: { _autoplacer: true, _autoplacerRadius: 350, _preplacer: true, _replacer: true,
+      _prePlace: true, _replace: true },
     DataHandler_default: { getWeapon: () => ({ range: 140, speed: 300 }) },
     PlayerObject, getAngleFromBitmask: () => null
   };
