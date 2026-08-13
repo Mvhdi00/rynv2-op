@@ -944,12 +944,15 @@ console.log("\n38. only candidates still valid at execution time are sent, and g
   ok(!engine._valid(first, frame, [{ x: first.x, y: first.y, profile: first.profile }]),
      "an entry is rejected against what the plan already placed");
 
-  // validate substitutes rather than simply coming up short
+  // Validate a single-entry plan, so a substitute is guaranteed to have room
+  // if the mechanism works at all. Validating the full plan leaves the
+  // alternatives overlapping what the plan already accepted, which tests the
+  // overlap rule rather than the substitution rule.
   engine.stats.substituted = 0;
-  const validated = engine.validate(plan, due, frame);
+  const validated = engine.validate([ first ], due, frame);
   ok(validated.indexOf(first) === -1, "the invalid entry did not survive validation");
   ok(engine.stats.substituted > 0, "a replacement was substituted for it: " + engine.stats.substituted);
-  ok(validated.length >= plan.length - 1, "the plan did not simply shrink (" + plan.length + " -> " + validated.length + ")");
+  ok(validated.length === 1, "the slot was refilled rather than left empty");
   let clash = 0;
   for (let i = 0; i < validated.length; i++)
     for (let j = i + 1; j < validated.length; j++)

@@ -12669,11 +12669,29 @@ window.grbtp = 35;
         reach += w.contact;
       }
       // Does the footprint sit across the path the target is about to walk?
-      const sweep = GeometrySolver.segmentDistance(cand.x, cand.y, frame.targetPos.x, frame.targetPos.y, frame.targetNext.x, frame.targetNext.y);
-      const intercepts = sweep < p.footR + frame.targetScale;
+      // Does the ground the target is predicted to cover run through this
+      // footprint, and how soon? A build they walk into next tick is worth
+      // much more than one they reach in eight, but both are worth something -
+      // scoring only the next tick is what made the engagement radius inert.
+      const capture = p.footR + frame.targetScale;
+      let interceptLead = -1;
+      const path = frame.path;
+      if (path && path.length > 1) {
+        for (let i = 0; i < path.length - 1; i++) {
+          if (GeometrySolver.segmentDistance(cand.x, cand.y, path[i].x, path[i].y, path[i + 1].x, path[i + 1].y) < capture) {
+            interceptLead = i;
+            break;
+          }
+        }
+      } else if (GeometrySolver.segmentDistance(cand.x, cand.y, frame.targetPos.x, frame.targetPos.y, frame.targetNext.x, frame.targetNext.y) < capture) {
+        interceptLead = 0;
+      }
+      const intercepts = interceptLead >= 0;
       if (intercepts) {
-        tactical += w.intercept;
-        reach += w.intercept;
+        const lead = 1 - interceptLead / Math.max(2, (frame.horizon || 2) + 1);
+        tactical += w.intercept * lead;
+        reach += w.intercept * lead;
+        cand.interceptLead = interceptLead;
       }
       if (p.isDamage) {
         const rebound = this._reboundOf(cand, frame);
@@ -13159,6 +13177,17 @@ window.grbtp = 35;
       };
     }
 
+    // The predicted course as a polyline, built once per tick and read by
+    // every candidate rather than re-integrated for each one.
+    pathOf(entity, ticks) {
+      const out = [];
+      for (let n = 0; n <= ticks; n++) {
+        const p = this.predict(entity, n);
+        out.push({ x: p.x, y: p.y, confidence: p.confidence });
+      }
+      return out;
+    }
+
     // Earliest tick at which the predicted path enters a circle, or null.
     intercept(entity, cx, cy, radius, maxTicks) {
       for (let n = 0; n <= maxTicks; n++) {
@@ -13202,6 +13231,14 @@ window.grbtp = 35;
   // climbs towards the firing bar as the target closes — or is dropped.
   const RPE_PREPLACE_BOOK_CONFIDENCE = .12;
   const RPE_PREPLACE_MAX_AGE = 8;
+  // Lookahead bounds. The floor keeps a close fight responsive; the ceiling is
+  // about a second of prediction, past which the estimate is not worth acting
+  // on however far the radius is wound out.
+  const RPE_MIN_HORIZON = 2;
+  const RPE_MAX_HORIZON = 10;
+  // A spike's ring, used only to turn the radius into a distance the target
+  // still has to cover.
+  const RPE_NOMINAL_RING = 79;
   const RPE_REPLACE_RANGE = 300;
   // How much more a soft claim has to be worth to hold ground against a claim
   // of higher priority.
@@ -13605,6 +13642,18 @@ window.grbtp = 35;
       this.memory.expire(tick, frame.myPos);
       this.motion.expire(tick);
       frame.motion = this.motion.observe(frame.target, tick);
+      // The engagement radius says how far out the player wants this to act.
+      // Judging reach against a single tick of the target's path capped the
+      // real range at roughly 170 units however high the radius was set, so
+      // the horizon is derived from the radius and the target's own measured
+      // closing speed: how many ticks it takes them to cross the band the
+      // player asked the engine to cover.
+      const radius = Settings_default._autoplacerRadius ?? 350;
+      const closing = frame.motion && frame.motion.speed > 1 ? frame.motion.speed : 22;
+      const span = Math.max(0, radius - RPE_NOMINAL_RING);
+      const horizon = Math.max(RPE_MIN_HORIZON, Math.min(RPE_MAX_HORIZON, Math.ceil(span / closing)));
+      frame.horizon = horizon;
+      frame.path = this.motion.pathOf(frame.target, horizon);
       this.stats.dropped = this.book.sweep(tick, frame, this);
       if (this._planIsStale(frame)) this._plan = [];
       this._planTargetId = frame.targetId;
