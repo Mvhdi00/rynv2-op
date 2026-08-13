@@ -51,8 +51,8 @@ const SERVER = argv.includes('--server');
 const WITH_UNPATCHER = argv.includes('--unpatcher');
 const TURNSTILE = flag('turnstile', 'solve');
 const WAIT = parseInt(flag('wait', '6000'), 10);
-if (!['solve', 'never', 'blocked'].includes(TURNSTILE)) {
-  console.error('--turnstile must be solve, never or blocked'); process.exit(2);
+if (!['solve', 'never', 'blocked', 'expire'].includes(TURNSTILE)) {
+  console.error('--turnstile must be solve, never, blocked or expire'); process.exit(2);
 }
 
 const INDEX = fs.readFileSync(path.join(ROOT, 'reference/game-index.js'), 'utf8');
@@ -119,11 +119,20 @@ window.turnstile = {
     });
     if (node) { var f = document.createElement("iframe"); f.width = 300; f.height = 65; node.appendChild(f); }
     var id = "w" + window.__turnstileRenders.length;
-    ${TURNSTILE === 'solve' ? `
+    ${TURNSTILE === 'solve' || TURNSTILE === 'expire' ? `
     setTimeout(function () {
       window.__turnstileToken = "TOKEN-" + id;
       opts && opts.callback && opts.callback(window.__turnstileToken);
     }, 300);` : ''}
+    ${TURNSTILE === 'expire' ? `
+    // Cloudflare expires a token after about five minutes and calls this. The
+    // game clears its own \`ue\` and puts the disabled class back; anything
+    // holding a cached copy of the token has to hear about it too, or it will
+    // wave through a press the game can no longer act on.
+    setTimeout(function () {
+      window.__turnstileToken = null;
+      opts && opts["expired-callback"] && opts["expired-callback"]();
+    }, 2500);` : ''}
     return id;
   },
   getResponse: function () { return window.__turnstileToken || ""; },

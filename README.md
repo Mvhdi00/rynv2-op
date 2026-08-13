@@ -2124,3 +2124,35 @@ M seq=2 [{"name":"probe72","moofoll":true,"skin":0}]
 
 Boots clean, no red bar, one captcha widget, and the same result whichever way
 the load race falls.
+
+## Whose "disabled" is it anyway
+
+The entry guard used to clear the `disabled` class off `#enterGame` whenever
+*its own* cached token was non-empty. The reasoning was that the game clears it
+too, so doing it again costs nothing.
+
+It costs plenty. The game clears that class when **its** token arrives, and the
+shim's cache is not the same token: it falls back to
+`window.turnstile.getResponse()`, which can hand back a solve the game's
+callback never saw, or one that has since expired out from under `ue`. Clearing
+the class on that basis disarms the game's own check —
+
+```js
+we.classList.contains("disabled") || (Si("Connecting..."), ... Fi())
+```
+
+— and lets a press through to `Fi()` with `ue` still null, which is the latched
+"Connecting..." this whole guard exists to prevent. The guard was creating the
+condition it was written to stop.
+
+So: the class is the game's, and it is the authority. The guard does not touch
+it, and holds the press while it is present as well as when it has no token of
+its own. It also clears its cache when the game reports the token expired or
+errored — the same wrapper trick already used for `onGotTurnstileToken` — and
+keeps polling afterwards instead of stopping, so an expiry five minutes into a
+menu gets a fresh widget rather than silence.
+
+The rescue is unaffected: with `#turnstileWidget` hidden, the fallback widget
+still renders, its solve still goes through `window.onGotTurnstileToken`, and
+the game removes its own class and connects. The stock game, same conditions,
+still wedges.

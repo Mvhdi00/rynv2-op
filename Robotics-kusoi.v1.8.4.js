@@ -402,6 +402,22 @@ const EXP = (function() {
         }
     })();
 
+    ["onTurnstileExpired", "onTurnstileError"].forEach(function(name) {
+        let inner = null;
+        try {
+            Object.defineProperty(window, name, {
+                configurable: true,
+                get: function() {
+                    return function() {
+                        captchaToken = null;
+                        if (inner) return inner.apply(this, arguments);
+                    };
+                },
+                set: function(fn) { inner = fn; }
+            });
+        } catch (e) {}
+    });
+
     function token() {
         if (!captchaToken && window.turnstile && typeof window.turnstile.getResponse === "function") {
             try {
@@ -580,7 +596,11 @@ const EXP = (function() {
                         const btn = document.getElementById("enterGame");
                         if (!btn || !e.target) return;
                         if (e.target !== btn && !(btn.contains && btn.contains(e.target))) return;
-                        if (haveToken()) return;
+                        let ready = haveToken();
+                        try {
+                            if (btn.classList && btn.classList.contains("disabled")) ready = false;
+                        } catch (e2) {}
+                        if (ready) return;
                         e.preventDefault();
                         e.stopImmediatePropagation();
                         entryStats.holds++;
@@ -598,11 +618,8 @@ const EXP = (function() {
                 box = null;
             }
             if (haveToken()) {
-                try {
-                    const btn = document.getElementById("enterGame");
-                    if (btn && btn.classList) btn.classList.remove("disabled");
-                } catch (e) {}
                 if (box && box.parentNode) { box.parentNode.removeChild(box); box = null; }
+                setTimeout(tick, 2000);
                 return;
             }
             if (Date.now() - started > 120000) { gaveUp = true; return; }

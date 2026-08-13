@@ -153,7 +153,11 @@ function suppressWarningBanner() {
                         const btn = document.getElementById("enterGame");
                         if (!btn || !e.target) return;
                         if (e.target !== btn && !(btn.contains && btn.contains(e.target))) return;
-                        if (haveToken()) return;
+                        let ready = haveToken();
+                        try {
+                            if (btn.classList && btn.classList.contains("disabled")) ready = false;
+                        } catch (e2) {}
+                        if (ready) return;
                         e.preventDefault();
                         e.stopImmediatePropagation();
                         entryStats.holds++;
@@ -171,11 +175,8 @@ function suppressWarningBanner() {
                 box = null;
             }
             if (haveToken()) {
-                try {
-                    const btn = document.getElementById("enterGame");
-                    if (btn && btn.classList) btn.classList.remove("disabled");
-                } catch (e) {}
                 if (box && box.parentNode) { box.parentNode.removeChild(box); box = null; }
+                setTimeout(tick, 2000);
                 return;
             }
             if (Date.now() - started > 120000) { gaveUp = true; return; }

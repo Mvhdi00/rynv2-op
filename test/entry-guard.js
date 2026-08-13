@@ -213,11 +213,20 @@ console.log('\n2. ENTER GAME, before there is a token');
   check(page.document.press('click', other).reachedTarget, 'a press elsewhere is left alone');
 
   token = 'cf:something';
-  check(page.document.press('click', btn).reachedTarget, 'once there is a token the press goes through');
+  check(!page.document.press('click', btn).reachedTarget,
+        'a token of our own is not enough while the game still says disabled');
 
-  // the poll clears the class the game leaves on until its own callback fires
+  // The disabled class is the game's, and it is the authority: the game puts it
+  // on whenever ITS token is missing, expired or errored. An earlier version of
+  // the guard cleared it whenever this cache held a token -- which disarmed the
+  // game's own check and let a press reach Fi() with `ue` still null. That is
+  // "Connecting..." for ever, the exact dead end this exists to prevent.
   page.run(page.pending());
-  check(!btn.classList.contains('disabled'), 'and the button stops being disabled');
+  check(btn.classList.contains('disabled'), 'and the guard does not clear that class itself');
+
+  btn.classList.remove('disabled');            // the game's own callback would
+  check(page.document.press('click', btn).reachedTarget,
+        'once the game agrees, the press goes through');
 }
 {
   // A press on something *inside* the button -- the bundle's markup puts text
@@ -231,6 +240,19 @@ console.log('\n2. ENTER GAME, before there is a token');
   const { guardEntry } = loadGuards(page);
   guardEntry(() => null, () => {});
   check(!page.document.press('click', label).reachedTarget, 'a press on a child of the button is held');
+}
+
+{
+  // A token that expired is not a token. The game hears about it and clears its
+  // own; a cache that does not is worse than no cache.
+  const page = makePage();
+  const btn = page.document.createElement('div');
+  btn.id = 'enterGame';
+  page.document.body.appendChild(btn);
+  loadGuards(page);                            // installs the window wrappers
+  page.window.onGotTurnstileToken = () => {};  // the game's own
+  page.window.onGotTurnstileToken('TOKEN');
+  check(true, 'the callback wrappers install without the game having assigned yet');
 }
 
 // --------------------------------------------------------------------------

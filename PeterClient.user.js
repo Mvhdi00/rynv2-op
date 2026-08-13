@@ -444,6 +444,27 @@ const EXP = (function() {
         }
     })();
 
+    // The game clears its own token on expiry and on error, and puts the
+    // disabled class back on the button. A cached copy that does not hear about
+    // that is worse than no cache: it says "there is a token" when there is
+    // not, and whatever trusts it waves through a press the game can no longer
+    // act on. Same wrapper trick as the callback above.
+    ["onTurnstileExpired", "onTurnstileError"].forEach(function(name) {
+        let inner = null;
+        try {
+            Object.defineProperty(window, name, {
+                configurable: true,
+                get: function() {
+                    return function() {
+                        captchaToken = null;
+                        if (inner) return inner.apply(this, arguments);
+                    };
+                },
+                set: function(fn) { inner = fn; }
+            });
+        } catch (e) {}
+    });
+
     function token() {
         // Fall back to reading the widget directly: if the page rendered and
         // solved it before our wrapper was in place, the callback never fired
@@ -723,7 +744,17 @@ const EXP = (function() {
                         const btn = document.getElementById("enterGame");
                         if (!btn || !e.target) return;
                         if (e.target !== btn && !(btn.contains && btn.contains(e.target))) return;
-                        if (haveToken()) return;
+                        // Two ways to know it is too early. Ours: no token.
+                        // The game's: it puts "disabled" on the button whenever
+                        // its own token is missing, expired or errored, and
+                        // that is the authority -- the token this cache holds
+                        // and the token the game holds are not guaranteed to be
+                        // the same one.
+                        let ready = haveToken();
+                        try {
+                            if (btn.classList && btn.classList.contains("disabled")) ready = false;
+                        } catch (e2) {}
+                        if (ready) return;
                         e.preventDefault();
                         e.stopImmediatePropagation();
                         entryStats.holds++;
@@ -743,13 +774,20 @@ const EXP = (function() {
                 box = null;
             }
             if (haveToken()) {
-                // the game does this in its own callback; doing it again costs
-                // nothing and covers a mod that put the class back
-                try {
-                    const btn = document.getElementById("enterGame");
-                    if (btn && btn.classList) btn.classList.remove("disabled");
-                } catch (e) {}
                 if (box && box.parentNode) { box.parentNode.removeChild(box); box = null; }
+                // The disabled class is NOT ours to clear. An earlier version
+                // did clear it, reasoning that the game clears it too -- but the
+                // game clears it when IT has a token, and this cache is not the
+                // same thing. Clearing it on our say-so disarms the game's own
+                // guard, and then a press reaches Fi() with `ue` still null:
+                // "Connecting..." for ever, which is the exact dead end all of
+                // this exists to prevent. The game manages that class in step
+                // with its own token; leave it alone.
+                //
+                // Keep the poll running, quietly. A token expires after about
+                // five minutes, and if it does, the widget has to be rendered
+                // again -- returning here would mean never noticing.
+                setTimeout(tick, 2000);
                 return;
             }
             if (Date.now() - started > 120000) { gaveUp = true; return; }
