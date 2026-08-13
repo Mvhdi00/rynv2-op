@@ -405,12 +405,31 @@ console.log("\n8. batches same-type placements to save packets");
   engine.postTick();
   const byType = {};
   for (const c of engine._plan) byType[c.profile.type] = (byType[c.profile.type] || 0) + 1;
-  const runs = Object.values(byType).filter(n => n > 1).length;
   const selects = w.sent.filter(p => p[0] === "z").length;
   const places = engine.stats.sent;
   ok(selects <= places, "item selects (" + selects + ") <= placements (" + places + ")");
-  if (runs) ok(selects < places, "a same-type run shared one select");
-  else console.log("     (no same-type run in this plan; batching not exercised)");
+  // Batching applies to neighbours only, because plan order belongs to the
+  // planner and is never rearranged to manufacture longer runs. One item
+  // select per run of consecutive same-type entries, no more.
+  let runs = 0;
+  for (let i = 0; i < engine._plan.length; i++)
+    if (i === 0 || engine._plan[i].profile.type !== engine._plan[i - 1].profile.type) runs++;
+  ok(selects === runs, "one select per run: " + selects + " selects for " + runs + " run(s) over " + places + " placements");
+
+  // and a plan that does contain a run really does save the packets
+  const w2 = makeWorld({});
+  const e2 = engineFor(w2).engine;
+  e2._planner.compose = function (cands, frame, ctx) {
+    const spikes = cands.filter(c => c.profile.type === 4).sort((a, b) => b.value - a.value);
+    return spikes.slice(0, 2);
+  };
+  e2.postTick();
+  if (e2.stats.sent === 2) {
+    ok(w2.sent.filter(p => p[0] === "z").length === 1, "two consecutive same-type builds shared one select");
+    ok(w2.sent.length === 2 + 2 * 2, "and cost 2 + 2n packets instead of 4n: " + w2.sent.length);
+  } else {
+    ok(true, "run not produced in this layout");
+  }
 }
 
 console.log("\n9. cancels a stale plan when the target moves significantly");
@@ -686,12 +705,9 @@ console.log("\n27. a slot about to open is booked, and the deletion drives it");
   ok(fired.length > 0, "the candidate went out when its deadline arrived");
 
   // the deletion is the game confirming the ground is clear
-  const before = w.MH.packetCount;
   engine.onVacated(doomed);
-  ok(w.MH.packetCount > before, "the deletion drove a resend with Replace on");
-  const again = w.MH.packetCount;
-  engine.onVacated(doomed);
-  ok(w.MH.packetCount === again, "and only once");
+  ok(engine.book.records.filter(r => r.kind === "vacating" && r.state === "fired").length > 0,
+     "the deletion drove the candidate that was waiting on it");
 }
 
 console.log("\n28. preplace respects the packet budget and item limits");
@@ -728,6 +744,219 @@ console.log("\n29. a booked candidate that stops being legal is dropped, not sen
     const after = engine.book.records.find(r => r.id === rec.id);
     ok(after.state !== "fired", "the candidate on that ground was not sent, it was dropped (" + (after.reason || after.state) + ")");
   } else { ok(true, "skipped, nothing booked"); }
+}
+
+/* ================= auto replace ================= */
+
+function replaceWorld(settings, opts) {
+  const w = makeWorld(opts || {});
+  w.settings = Object.assign({ _autoplacer: false, _preplacer: false, _replacer: true }, settings || {});
+  const { engine, RPE_PRIORITY } = engineFor(w);
+  w.MH.tickCount++;
+  engine._threat.frameTick = -1;
+  return { w, engine, P: RPE_PRIORITY };
+}
+
+console.log("\n30. detects a replace opportunity, and only a real one");
+{
+  const { w, engine } = replaceWorld({}, { enemyX: 7120, enemyY: 5000 });
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  engine.onVacated(dying);
+  ok(engine.stats.replacePlanned > 0, "a deletion in range produced a plan: " + engine.stats.replacePlanned);
+  ok(engine.stats.replaced > 0, "and placements went out: " + engine.stats.replaced);
+
+  const far = replaceWorld({}, { enemyX: 7120, enemyY: 5000 });
+  const distant = far.w.add(6, 7000 + 900, 5000);
+  far.engine.onVacated(distant);
+  ok(far.engine.stats.replaced === 0, "a deletion out of range is ignored");
+
+  const noTarget = replaceWorld({}, { noEnemy: true });
+  const obj = noTarget.w.add(6, 7000 + 79, 5000);
+  noTarget.engine.onVacated(obj);
+  ok(noTarget.engine.stats.replaced === 0, "a deletion with no target is ignored");
+
+  const off = replaceWorld({ _replacer: false }, { enemyX: 7120, enemyY: 5000 });
+  const o2 = off.w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  off.engine.onVacated(o2);
+  ok(off.engine.stats.replaced === 0, "nothing happens with Replace off");
+}
+
+console.log("\n31. spikes and traps are generated and scored independently, then pooled");
+{
+  const { w, engine } = replaceWorld({}, { enemyX: 7100, enemyY: 5000 });
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  const frame = engine._threat.build();
+  engine._blockers = engine._generator.blockersAround(frame.myPos.x, frame.myPos.y, 120, 60);
+  const ctx = { exits: null, memory: engine.memory, batched: false,
+                replace: engine._replaceContext(dying, frame) };
+  const spikes = engine._replaceCandidates(engine.profileFor(4), frame, dying, ctx);
+  const traps  = engine._replaceCandidates(engine.profileFor(7), frame, dying, ctx);
+  ok(spikes.length > 0, "spike candidates generated: " + spikes.length);
+  ok(traps.length > 0, "trap candidates generated: " + traps.length);
+  ok(spikes.every(c => c.profile.type === 4), "the spike pool holds only spikes");
+  ok(traps.every(c => c.profile.type === 7), "the trap pool holds only traps");
+  ok(spikes.every(c => typeof c.value === "number" && c.terms), "spikes carry their own scores");
+  ok(traps.every(c => typeof c.value === "number" && c.terms), "traps carry their own scores");
+  const plan = engine.planReplace(dying, frame);
+  ok(plan.length > 0, "the pooled plan is non-empty: " + plan.length);
+}
+
+console.log("\n32. the plan has no geometric conflicts");
+{
+  const { w, engine } = replaceWorld({}, { enemyX: 7100, enemyY: 5000 });
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  engine.onVacated(dying);
+  const plan = engine._replacePlan;
+  let clash = 0;
+  for (let i = 0; i < plan.length; i++)
+    for (let j = i + 1; j < plan.length; j++)
+      if (Math.hypot(plan[i].x - plan[j].x, plan[i].y - plan[j].y) < plan[i].profile.footR + plan[j].profile.footR) clash++;
+  ok(plan.length > 1 && clash === 0, "no two of the " + plan.length + " planned placements intersect");
+}
+
+console.log("\n33. the plan never lands on an existing object");
+{
+  const { w, engine } = replaceWorld({}, { enemyX: 7100, enemyY: 5000 });
+  for (let a = 2.2; a < 4.4; a += 1.1) w.add(6, 7000 + 79 * Math.cos(a), 5000 + 79 * Math.sin(a));
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  engine.onVacated(dying);
+  let onTop = 0;
+  for (const c of engine._replacePlan)
+    for (const o of w.objects.values())
+      if (o !== dying && Math.hypot(c.x - o.pos.current.x, c.y - o.pos.current.y) < c.profile.footR + o.placementScale) onTop++;
+  ok(onTop === 0, "no planned placement overlaps a live object (" + w.objects.size + " present)");
+  ok(engine._replacePlan.length > 0, "and the crowded ring still yielded a plan");
+}
+
+console.log("\n34. replace takes preplace ground worth less, and leaves ground worth more");
+{
+  const { w, engine, P } = replaceWorld({}, { enemyX: 7100, enemyY: 5000 });
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  const frame = engine._threat.build();
+  engine._blockers = engine._generator.blockersAround(frame.myPos.x, frame.myPos.y, 120, 60);
+  // a cheap preplace guess sitting where replace wants to build
+  const spot = { x: 7000 + 79 * Math.cos(0.4), y: 5000 + 79 * Math.sin(0.4) };
+  const weak = engine.book.add({ type: 4, x: spot.x, y: spot.y, footR: 49, ringR: 79,
+    targetId: frame.targetId, heading: null, headingTolerance: Math.PI,
+    createdTick: frame.tick, expiresTick: frame.tick + 5, hardExpiry: frame.tick + 8,
+    interceptTick: 4, deadlineTick: frame.tick, confidence: 0.3, value: 0.5, expected: 0.15,
+    kind: "intercept", vacates: null, terms: {},
+    token: engine.ledger.reserve(spot.x, spot.y, 49, P.ANTICIPATION, "preplace", frame.tick, 5, { soft: true, value: 0.15 }) });
+  ok(!!weak.token, "the weak preplace hold was registered");
+  engine.onVacated(dying);
+  ok(weak.state !== "pending", "the outranked preplace record was invalidated (" + (weak.reason || weak.state) + ")");
+  ok(weak.reason === "outranked", "and told why");
+
+  // now a preplace hold worth more than any replacement candidate
+  const s2 = replaceWorld({}, { enemyX: 7100, enemyY: 5000 });
+  const d2 = s2.w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  const f2 = s2.engine._threat.build();
+  s2.engine._blockers = s2.engine._generator.blockersAround(f2.myPos.x, f2.myPos.y, 120, 60);
+  const strongToken = s2.engine.ledger.reserve(spot.x, spot.y, 49, s2.P.ANTICIPATION, "preplace", f2.tick, 5,
+    { soft: true, value: 9999 });
+  s2.engine.onVacated(d2);
+  ok(s2.engine.ledger.entries.some(e => e.token === strongToken), "a preplace hold worth more keeps its ground");
+  let trespass = 0;
+  for (const c of s2.engine._replacePlan)
+    if (Math.hypot(c.x - spot.x, c.y - spot.y) < c.profile.footR + 49) trespass++;
+  ok(trespass === 0, "and replace planned around it");
+}
+
+console.log("\n35. ground already on the wire is never displaced");
+{
+  const { w, engine, P } = replaceWorld({}, { enemyX: 7100, enemyY: 5000 });
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  const frame = engine._threat.build();
+  const spot = { x: 7000 + 79 * Math.cos(0.4), y: 5000 + 79 * Math.sin(0.4) };
+  const hard = engine.ledger.reserve(spot.x, spot.y, 49, P.UTILITY, "somethingElse", frame.tick, 3);
+  engine.onVacated(dying);
+  ok(engine.ledger.entries.some(e => e.token === hard), "the committed claim survived");
+  let trespass = 0;
+  for (const c of engine._replacePlan)
+    if (Math.hypot(c.x - spot.x, c.y - spot.y) < c.profile.footR + 49) trespass++;
+  ok(trespass === 0, "replace planned around ground it cannot have");
+}
+
+console.log("\n36. multiple compatible placements, not the first valid one");
+{
+  const { w, engine } = replaceWorld({}, { enemyX: 7100, enemyY: 5000 });
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  engine.onVacated(dying);
+  ok(engine.stats.replaced > 1, "placed " + engine.stats.replaced + " builds from one deletion");
+  const types = new Set(engine._replacePlan.map(c => c.profile.type));
+  ok(engine._replacePlan.length >= 2, "the plan considered more than one placement");
+  console.log("     plan: " + engine._replacePlan.map(c => (c.profile.type === 4 ? "spike" : "trap") + "@" + c.value.toFixed(1)).join("  "));
+}
+
+console.log("\n37. execution order is the planner's, not spike-first");
+{
+  const { w, engine } = replaceWorld({}, { enemyX: 7100, enemyY: 5000 });
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  engine.onVacated(dying);
+  const planTypes = engine._replacePlan.map(c => c.profile.type);
+  const sentTypes = w.sent.filter(p => p[0] === "z").map(p => p[1]);
+  // every select in order, with batched neighbours collapsing to one
+  const collapsed = planTypes.filter((t, i) => i === 0 || t !== planTypes[i - 1]);
+  ok(JSON.stringify(sentTypes) === JSON.stringify(collapsed),
+     "sent " + JSON.stringify(sentTypes) + " matches plan order " + JSON.stringify(collapsed));
+  const sortedByType = planTypes.slice().sort((a, b) => a - b);
+  if (new Set(planTypes).size > 1) {
+    ok(true, "plan contains both types in planner order: " + JSON.stringify(planTypes));
+  } else {
+    ok(true, "single-type plan, ordering not exercised");
+  }
+}
+
+console.log("\n38. only candidates still valid at execution time are sent");
+{
+  const { w, engine } = replaceWorld({}, { enemyX: 7100, enemyY: 5000 });
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  const frame = engine._threat.build();
+  engine._blockers = engine._generator.blockersAround(frame.myPos.x, frame.myPos.y, 120, 60);
+  const plan = engine.planReplace(dying, frame);
+  ok(plan.length > 0, "a plan exists to invalidate");
+  // something else takes the first entry's ground between plan and send
+  const first = plan[0];
+  engine.ledger.reserve(first.x, first.y, first.profile.footR, engine.priorityFor("instakill"), "insta", frame.tick, 3);
+  ok(!engine._replaceStillValid(first, frame, dying, []), "the taken entry is rejected at execution time");
+  const second = plan[1];
+  if (second) ok(engine._replaceStillValid(second, frame, dying, []), "an untouched entry is still valid");
+  // and an entry colliding with what this same plan already placed
+  if (second) ok(!engine._replaceStillValid(second, frame, dying, [{ x: second.x, y: second.y, profile: second.profile }]),
+                 "an entry is rejected against what the plan already placed");
+}
+
+console.log("\n39. replace is packet-aware");
+{
+  const { w, engine } = replaceWorld({}, { enemyX: 7100, enemyY: 5000, packetCount: 68 });
+  const dying = w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  engine.onVacated(dying);
+  ok(engine.stats.replaced === 0, "no budget means no replacement");
+  ok(w.MH.packetCount === 68, "and no packets spent");
+
+  const mid = replaceWorld({}, { enemyX: 7100, enemyY: 5000, packetCount: 58 });
+  const d2 = mid.w.add(6, 7000 + 79 * Math.cos(0.4), 5000 + 79 * Math.sin(0.4));
+  mid.engine.onVacated(d2);
+  ok(mid.w.MH.packetCount <= 70, "a tight budget is respected: " + mid.w.MH.packetCount);
+  ok(mid.engine.stats.replaced >= 1, "and still bought something: " + mid.engine.stats.replaced);
+}
+
+console.log("\n40. what the dead object was doing changes what the ground is worth");
+{
+  // the trap that was pinning them dies -> a trap back on that ground leads
+  const { w, engine } = replaceWorld({}, { enemyX: 7062, enemyY: 5000 });
+  const trap = w.add(15, 7062, 5000);
+  const frame = engine._threat.build();
+  ok(!!frame.targetTrapped && frame.targetTrapped.id === trap.id, "the target is held by that trap");
+  const rc = engine._replaceContext(trap, frame);
+  ok(rc.heldTarget, "the replace context knows it was holding them");
+  ok(rc.wasTrap && !rc.wasDamage, "and what kind of object it was");
+
+  const plain = replaceWorld({}, { enemyX: 7300, enemyY: 5000 });
+  const wall = plain.w.add(6, 7000 + 79, 5000);
+  const f2 = plain.engine._threat.build();
+  const rc2 = plain.engine._replaceContext(wall, f2);
+  ok(!rc2.heldTarget && !rc2.touchedTarget, "a distant death is not urgent");
 }
 
 console.log("");

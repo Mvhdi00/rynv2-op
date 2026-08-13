@@ -12135,6 +12135,10 @@ window.grbtp = 35;
     staleness: 1.6,
     // timing
     timing: .9,
+    // recovery
+    recovery: 3,
+    recoveryRetrap: 3.4,
+    recoveryPin: 2.6,
     // plan-level
     synergyTrapSpike: 2.4,
     synergyTrapHold: 2.2,
@@ -12380,17 +12384,22 @@ window.grbtp = 35;
       }
     }
     // A hard claim is ground already committed to the wire, and always holds:
-    // the build either exists or is on its way. A soft claim is an intention —
-    // it holds against equal or lower priority so nothing else wanders onto
-    // the slot, and yields to anything above it, because a decision made from
-    // something that has actually happened outranks a prediction about what
-    // might.
+    // the build either exists or is on its way.
+    //
+    // A soft claim is an intention. It holds against equal or lower priority
+    // so nothing wanders onto the slot, and normally yields to anything above
+    // it, because a decision taken from something that actually happened
+    // outranks a prediction about what might. Normally, but not blindly: a
+    // soft claim that is worth clearly more than the claim trying to take it
+    // keeps its ground. Priority decides who wins a close call; it does not
+    // let a marginal placement bulldoze a valuable one.
     blocked(x, y, radius, priority, value) {
       for (const e of this.entries) {
         if (Math.hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
         if (!e.soft) return true;
         if (e.priority > priority) return true;
         if (e.priority === priority && (value === undefined || value <= e.value)) return true;
+        if (e.priority < priority && value !== undefined && e.value > value * RPE_SOFT_DOMINANCE) return true;
       }
       return false;
     }
@@ -12405,6 +12414,7 @@ window.grbtp = 35;
         if (Math.hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
         if (e.priority > priority) continue;
         if (e.priority === priority && (value === undefined || value <= e.value)) continue;
+        if (e.priority < priority && value !== undefined && e.value > value * RPE_SOFT_DOMINANCE) continue;
         taken.push(e.token);
         this.entries.splice(i, 1);
       }
@@ -12786,6 +12796,21 @@ window.grbtp = 35;
       }
       terms.tactical = tactical;
 
+      // Recovery ----------------------------------------------------------
+      // Ground that just opened, weighted by what the object that vacated it
+      // was doing when it died.
+      let recovery = 0;
+      if (ctx.replace) {
+        const d = Math.hypot(cand.x - ctx.replace.x, cand.y - ctx.replace.y);
+        const reach = p.footR + ctx.replace.radius;
+        if (d < reach) {
+          recovery = w.recovery * (1 - d / reach);
+          if (ctx.replace.heldTarget && p.isTrap) recovery += w.recoveryRetrap;
+          if (ctx.replace.touchedTarget && p.isDamage) recovery += w.recoveryPin;
+        }
+      }
+      terms.recovery = recovery;
+
       // Enclosure ---------------------------------------------------------
       // How much of the ring around a pinned target this build takes away.
       let enclosure = 0;
@@ -12972,9 +12997,11 @@ window.grbtp = 35;
       }
       const best = beam.sort((a, b) => b.value - a.value)[0];
       if (!best || best.plan.length === 0) return [];
-      // Same-type builds go out together so the executor can share one item
-      // select between them.
-      return best.plan.slice().sort((a, b) => a.profile.type - b.profile.type || b.value - a.value);
+      // Returned in the order the search chose them, which is by marginal
+      // value. Nothing is reordered by item type: batching is a packet saving
+      // the executor takes when two neighbours happen to share a type, not a
+      // reason to put every spike before every trap.
+      return best.plan;
     }
   }
 
@@ -12992,6 +13019,8 @@ window.grbtp = 35;
       engine.sending = true;
       try {
       while (i < plan.length) {
+        // Consecutive entries of the same type share one item select. The plan
+        // order is the planner's and is not disturbed to create longer runs.
         const type = plan[i].profile.type;
         let j = i;
         while (j < plan.length && plan[j].profile.type === type) j++;
@@ -13237,6 +13266,10 @@ window.grbtp = 35;
   // climbs towards the firing bar as the target closes — or is dropped.
   const RPE_PREPLACE_BOOK_CONFIDENCE = .12;
   const RPE_PREPLACE_MAX_AGE = 8;
+  const RPE_REPLACE_RANGE = 300;
+  // How much more a soft claim has to be worth to hold ground against a claim
+  // of higher priority.
+  const RPE_SOFT_DOMINANCE = 1.5;
   const RPE_PREPLACE_MIN_CONFIDENCE = .3;
 
   class PreplaceBook {
@@ -13352,7 +13385,9 @@ window.grbtp = 35;
       value: 0,
       booked: 0,
       preplaced: 0,
-      dropped: 0
+      dropped: 0,
+      replacePlanned: 0,
+      replaced: 0
     };
     _threat;
     _generator;
@@ -13368,6 +13403,9 @@ window.grbtp = 35;
     _profiles=new Map;
     _profileTick=-1;
     _blockers=null;
+    _blockersTick=-1;
+    _exits=null;
+    _replacePlan=[];
     constructor(client2) {
       this.client = client2;
       this._threat = new ThreatAnalyzer(client2);
@@ -13642,35 +13680,232 @@ window.grbtp = 35;
       return true;
     }
 
-    // The deletion packet is the game telling us a slot just opened. Acting on
-    // it is exact where a timer is a guess, so a candidate waiting on that
-    // object goes out now rather than when its deadline happens to arrive.
-    onVacated(object) {
-      if (!object || !Settings_default._preplacer) return;
-      const ModuleHandler = this.client._ModuleHandler;
-      const frame = this._threat.frame;
-      if (!frame || frame.tick !== ModuleHandler.tickCount) return;
-      for (const rec of this.book.pending()) {
-        if (rec.vacates !== object.id) continue;
-        if (ModuleHandler.packetCount + RPE_PLACE_PACKETS > ModuleHandler.packetLimit) break;
-        this._send(rec, frame);
+    // ── Auto replace ──────────────────────────────────────────────────────
+    // A deletion is the game telling us ground just opened. That is a fact,
+    // not a prediction, which is why replace outranks preplace and why it does
+    // not wait for a timer: the packet that announced the death is the best
+    // moment there will ever be to build on that ground.
+    //
+    // What the dead object was doing decides what the ground is worth. A trap
+    // that was holding the target and a wall that was holding nothing free the
+    // same geometry and are worth completely different things, so that goes
+    // into the scoring context rather than into a branch that picks an angle.
+    _replaceContext(object, frame) {
+      const pos = object.pos.current;
+      const item = Items[object.type];
+      const toTarget = frame.targetPos.distance(pos);
+      return {
+        x: pos.x,
+        y: pos.y,
+        radius: object.scale,
+        // The trap that was pinning them just died — whatever else happens,
+        // getting a trap back onto that ground is the most valuable thing on
+        // the board.
+        heldTarget: !!(frame.targetTrapped && frame.targetTrapped.id === object.id),
+        // It was in contact with them, so the ground reaches them.
+        touchedTarget: toTarget < object.scale + frame.targetScale + 8,
+        wasTrap: !!(item && item.trap),
+        wasDamage: !!(item && item.dmg),
+        distToTarget: toTarget
+      };
+    }
+
+    // Candidates for one build type around freed ground. Spikes and traps come
+    // through here separately and are scored on their own merits; they only
+    // meet each other in the pool the planner searches.
+    _replaceCandidates(profile, frame, object, ctx) {
+      const out = [];
+      const apertures = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, object);
+      if (apertures.length === 0) return out;
+      const proposals = this._angles.propose(profile, apertures, frame, this.memory);
+      // The freed ground itself is the one direction the ring scan would not
+      // think to ask about, so it is offered explicitly.
+      const toFreed = Math.atan2(ctx.replace.y - frame.myPos.y, ctx.replace.x - frame.myPos.x);
+      const snapped = GeometrySolver.nearestFree(apertures, toFreed);
+      if (snapped !== null) {
+        proposals.push({
+          angle: snapped,
+          aperture: GeometrySolver.inAperture(apertures, snapped) || apertures[0],
+          source: "freed"
+        });
       }
-      // With Replace on, a candidate that already went out for this object is
-      // sent once more now that the ground is provably clear — the first send
-      // may have lost the race to the server.
+      for (const proposal of proposals) {
+        const x = frame.myPos.x + profile.ringR * Math.cos(proposal.angle);
+        const y = frame.myPos.y + profile.ringR * Math.sin(proposal.angle);
+        const cand = {
+          profile: profile,
+          angle: proposal.angle,
+          aperture: proposal.aperture,
+          source: proposal.source,
+          x: x,
+          y: y
+        };
+        this._scorer.weigh(cand, frame, ctx);
+        out.push(cand);
+      }
+      return out;
+    }
+
+    // Takes ground for a claim that outranks whatever is holding it, and tells
+    // the book so a preplace record learns its slot is gone instead of finding
+    // out when it tries to use it.
+    _takeGround(x, y, radius, priority, value, owner, tick, ttl) {
+      const displaced = this.ledger.preempt(x, y, radius, priority, value);
+      if (displaced.length) {
+        for (const rec of this.book.records) {
+          if (rec.state === "pending" && displaced.indexOf(rec.token) !== -1) {
+            this.book.drop(rec, "outranked");
+          }
+        }
+      }
+      return this.ledger.reserve(x, y, radius, priority, owner, tick, ttl);
+    }
+
+    planReplace(object, frame) {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const replace = this._replaceContext(object, frame);
+      const ctx = {
+        exits: this._exits,
+        memory: this.memory,
+        batched: false,
+        replace: replace
+      };
+
+      const profiles = [];
+      for (const type of RPE_ROLE_TYPES) {
+        if (!myPlayer.canPlace(type)) continue;
+        const profile = this.profileFor(type);
+        if (profile) profiles.push(profile);
+      }
+      if (profiles.length === 0) return [];
+
+      // One pool, built from independently generated and independently scored
+      // spike and trap candidates. Nothing is preferred for being a spike, and
+      // nothing stops after the first one that works.
+      let pool = [];
+      for (const profile of profiles) {
+        pool = pool.concat(this._replaceCandidates(profile, frame, object, ctx));
+      }
+      if (pool.length === 0) return [];
+
+      // Ground held by something already on the wire is gone, and ground held
+      // by a prediction worth less than this candidate is ours to take. A
+      // preplace guess never blocks a replacement that is worth more, and a
+      // replacement never walks over one that is worth more than it.
+      pool = pool.filter(c => !this.ledger.blocked(c.x, c.y, c.profile.footR, RPE_PRIORITY.RECOVERY, c.value));
+      if (pool.length === 0) return [];
+
+      const perTypeCap = new Map;
+      for (const p of profiles) {
+        const {count: count, limit: limit} = myPlayer.getItemCount(p.item.itemGroup);
+        perTypeCap.set(p.type, limit ? Math.max(0, limit - count) : this.weights.maxPlacements);
+      }
+      return this._planner.compose(pool, frame, {
+        budget: Math.max(0, ModuleHandler.packetLimit - ModuleHandler.packetCount),
+        perTypeCap: perTypeCap
+      });
+    }
+
+    // The deletion packet is the game telling us a slot just opened. Acting on
+    // it is exact where a timer is a guess, so this runs on the event rather
+    // than on a schedule: a candidate that was waiting for this object goes
+    // out now, and then replace plans fresh on the ground it left.
+    onVacated(object) {
+      if (!object) return;
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      if (!Settings_default._preplacer && !Settings_default._replacer) return;
+      if (!myPlayer || !myPlayer.inGame) return;
+      if (ModuleHandler.packetCount + RPE_PLACE_PACKETS > ModuleHandler.packetLimit) return;
+      const frame = this._threat.build();
+      if (!frame) return;
+      if (frame.myPos.distance(object.pos.current) > RPE_REPLACE_RANGE) return;
+      if (frame.range > RPE_REPLACE_RANGE) return;
+      // The object is still in the world while its deletion is being handled,
+      // so every legality question below is asked with it taken out.
+      if (!this._blockers || this._blockersTick !== frame.tick) {
+        this._blockers = this._generator.blockersAround(frame.myPos.x, frame.myPos.y, 120, 60);
+        this._blockersTick = frame.tick;
+      }
+      this._generator.cache.clear();
+
+      if (Settings_default._preplacer) {
+        for (const rec of this.book.pending()) {
+          if (rec.vacates !== object.id) continue;
+          if (ModuleHandler.packetCount + RPE_PLACE_PACKETS > ModuleHandler.packetLimit) break;
+          this._send(rec, frame);
+        }
+      }
       if (!Settings_default._replacer) return;
-      for (const rec of this.book.records) {
-        if (rec.state !== "fired" || rec.vacates !== object.id || rec.resent) continue;
-        if (ModuleHandler.packetCount + RPE_PLACE_PACKETS > ModuleHandler.packetLimit) break;
-        rec.resent = true;
-        const angle = Math.atan2(rec.y - frame.myPos.y, rec.x - frame.myPos.x);
+
+      const plan = this.planReplace(object, frame);
+      this._replacePlan = plan;
+      this.stats.replacePlanned = plan.length;
+      if (plan.length === 0) return;
+      // Nothing is sent on the strength of having been planned. Each entry is
+      // re-derived and re-checked against the world as it is at the instant it
+      // goes out, because the entries ahead of it in this same plan have
+      // changed that world.
+      let fired = 0;
+      const placed = [];
+      let i = 0;
+      while (i < plan.length) {
+        const type = plan[i].profile.type;
+        let j = i;
+        while (j < plan.length && plan[j].profile.type === type) j++;
+        const run = plan.slice(i, j);
+        i = j;
+        if (!myPlayer.canPlace(type)) continue;
+        const valid = [];
+        for (const cand of run) {
+          if (ModuleHandler.packetCount + RPE_PLACE_PACKETS + valid.length * RPE_BATCH_PACKETS > ModuleHandler.packetLimit) break;
+          if (!this._replaceStillValid(cand, frame, object, placed)) continue;
+          valid.push(cand);
+        }
+        if (valid.length === 0) continue;
         this.sending = true;
         try {
-          ModuleHandler.place(rec.type, angle);
+          if (valid.length > 1) {
+            ModuleHandler.selectItem(type);
+            for (const cand of valid) {
+              ModuleHandler.attack(cand.angle, 1);
+              ModuleHandler.stopAttack(cand.angle);
+            }
+            ModuleHandler.whichWeapon(ModuleHandler._getPredictWeapon());
+          } else {
+            ModuleHandler.place(type, valid[0].angle);
+          }
         } finally {
           this.sending = false;
         }
+        for (const cand of valid) {
+          this._takeGround(cand.x, cand.y, cand.profile.footR, RPE_PRIORITY.RECOVERY, cand.value, "replace", frame.tick, 2);
+          this.memory.note(cand.profile, cand.angle, frame.tick);
+          ModuleHandler.placeAngles[0] = type;
+          ModuleHandler.placeAngles[1].push(cand.angle);
+          placed.push(cand);
+          fired++;
+        }
       }
+      if (fired > 0) {
+        ModuleHandler.placedOnce = true;
+        ModuleHandler.moduleActive = true;
+        this.stats.replaced += fired;
+      }
+    }
+
+    _replaceStillValid(cand, frame, object, placed) {
+      // Against what this plan has already put down.
+      for (const other of placed) {
+        if (Math.hypot(cand.x - other.x, cand.y - other.y) < cand.profile.footR + other.profile.footR) return false;
+      }
+      // Against ground someone else took while we were deciding.
+      if (this.ledger.blocked(cand.x, cand.y, cand.profile.footR, RPE_PRIORITY.RECOVERY, cand.value)) return false;
+      // And against the world, with the dying object taken out of it.
+      const apertures = this._generator.apertures(cand.profile, frame.myPos.x, frame.myPos.y, this._blockers, object);
+      const angle = Math.atan2(cand.y - frame.myPos.y, cand.x - frame.myPos.x);
+      if (!GeometrySolver.inAperture(apertures, angle)) return false;
+      cand.angle = angle;
+      return true;
     }
     // Maps a module name onto a priority class. Anything that outranks auto
     // place takes the ground; anything below it yields.
@@ -13763,6 +13998,7 @@ window.grbtp = 35;
       }
       const blockers = this._generator.blockersAround(frame.myPos.x, frame.myPos.y, maxRing, maxFoot);
       this._blockers = blockers;
+      this._blockersTick = frame.tick;
 
       // Escape analysis is shared by every candidate, so it is computed once.
       let exits = null;
@@ -13782,6 +14018,7 @@ window.grbtp = 35;
           if (esc.escapable) exits = esc.exits;
         }
       }
+      this._exits = exits;
 
       const ctx = {
         exits: exits,
@@ -23447,7 +23684,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-13T03:03:50.554Z",
+      "builtAt": "2026-08-13T03:15:46.379Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
