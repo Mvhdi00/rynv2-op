@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { stripComments } = require('./strip-comments.js');
+const { bootStarter } = require('./boot-starter.js');
 
 const ROOT = path.join(__dirname, '..');
 const ORIGINAL = process.argv[2] || path.join(ROOT, 'reference', 'caramila-original.js');
@@ -433,15 +434,7 @@ const at = src.indexOf(marker) + marker.length;
 const head = src.slice(0, at);
 const body = src.slice(at);
 
-const starter = `
-(function __carStart(tries) {
-    tries = tries || 0;
-    if ((document.readyState === "loading" || !document.getElementById("gameUI")) && tries < 400) {
-        return setTimeout(function () { __carStart(tries + 1); }, 50);
-    }
-    __carBoot();
-})();
-`;
+const starter = bootStarter('__carBoot');
 
 const out = head + '\n' + shim + '\n\nfunction __carBoot() {\n' + body + '\n}\n' + starter;
 fs.writeFileSync(OUT, out);

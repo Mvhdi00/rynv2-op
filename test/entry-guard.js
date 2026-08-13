@@ -379,5 +379,26 @@ console.log('\n7. novastorm keeps the sandbox link');
   check(after.length > before.length - 200, 'and nothing else was taken with it');
 }
 
+// --------------------------------------------------------------------------
+console.log('\n8. the boot order is not a coin toss');
+{
+  // The bundle is a deferred module; the mod's deferred boot polls for the
+  // same moment. readyState stops being "loading" BEFORE deferred modules run,
+  // so "the page is ready" and "the bundle has run" are different instants and
+  // the two could land either way round -- the same install working on one
+  // refresh and not the next. tools/probe-entry.js --slow-bundle forces the
+  // losing order; this checks the gate that removes the race is in the files.
+  // Annihilator and CaraMila are built by hand and had the same racy starter.
+  // CaraMila does not merely lose its visuals when it wins the race, it dies:
+  //   Cannot read properties of null (reading 'parentElement') at __carBoot
+  for (const name of ['novastorm.v1.4.js', 'x18k-Original.v5.3.js', 'SamMod.v698.js',
+                      'Robotics-kusoi.v1.8.4.js', 'xelahot.v3.js', 'Balthazar-priv.js',
+                      'xelahot.v3-alt.js', 'Annihilator.v0.8.9.js', 'RoBoTic-CaraMila.v6.9.5.js']) {
+    const s = fs.readFileSync(path.join(ROOT, name), 'utf8');
+    check(/window\.loadedScript === true \|\| document\.readyState === "complete"/.test(s),
+          name + ': waits for the bundle, not just for the page');
+  }
+}
+
 console.log('\n' + (fails ? '=> ' + fails + ' FAILURE(S)' : '=> ALL ENTRY GUARD TESTS PASSED'));
 process.exit(fails ? 1 : 0);

@@ -12822,10 +12822,12 @@ window.prepareUI = function (tmpObj) {
 };
 }
 
-(function __annStart(tries) {
+(function __annBootStart(tries) {
     tries = tries || 0;
-    if ((document.readyState === "loading" || !document.getElementById("gameUI")) && tries < 400) {
-        return setTimeout(function () { __annStart(tries + 1); }, 50);
+    var page = document.readyState !== "loading" && document.getElementById("gameUI");
+    var bundle = window.loadedScript === true || document.readyState === "complete";
+    if ((!page || !bundle) && tries < 400) {
+        return setTimeout(function () { __annBootStart(tries + 1); }, 50);
     }
     __annBoot();
 })();

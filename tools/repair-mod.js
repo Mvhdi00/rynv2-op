@@ -32,6 +32,7 @@ const fs = require('fs');
 const path = require('path');
 const acorn = require('acorn');
 const { stripComments } = require('./strip-comments.js');
+const { bootStarter } = require('./boot-starter.js');
 
 const ROOT = path.join(__dirname, '..');
 const IN = process.argv[2], OUT = process.argv[3];
@@ -333,13 +334,7 @@ if (TOUCHES_DOM) {
     // bundle, and a client replacement's renderer has to displace it rather
     // than be painted over by it.
     '\n\nfunction __repairedBoot() {\n    try { UNPATCH.modBooted(); } catch (e) {}\n' + body2 +
-    '\n}\n(function __repairedStart(tries) {\n' +
-    '    tries = tries || 0;\n' +
-    '    if ((document.readyState === "loading" || !document.getElementById("gameUI")) && tries < 400) {\n' +
-    '        return setTimeout(function () { __repairedStart(tries + 1); }, 50);\n' +
-    '    }\n' +
-    '    __repairedBoot();\n' +
-    '})();\n';
+    '\n}\n' + bootStarter('__repairedBoot');
 } else {
   out = meta + '// ==/UserScript==\n\n' + shim + '\n' + body2;
 }

@@ -230,8 +230,15 @@ window.FRVR = {
       return route.fulfill({ status: 200, contentType: 'text/html', body: html.join('\n') });
     }
     if (/\/assets\/index\.js$/.test(url)) {
-      return route.fulfill({ status: 200, contentType: 'text/javascript',
+      // The bundle is a deferred module: it runs after parsing, and the mod's
+      // deferred boot polls every 50ms for the same moment. Which of the two
+      // goes first is a race, and on a slow or cold load the bundle loses it.
+      // --slow-bundle forces that outcome so the race is a case, not a
+      // coin toss.
+      const delay = parseInt(flag('slow-bundle', '0'), 10);
+      const send = () => route.fulfill({ status: 200, contentType: 'text/javascript',
         body: INDEX.replace('./vendor-b760dbba.js', '/assets/vendor-b760dbba.js') });
+      return delay ? new Promise(r => setTimeout(() => r(send()), delay)) : send();
     }
     if (/vendor-b760dbba\.js$/.test(url)) {
       return route.fulfill({ status: 200, contentType: 'text/javascript', body: VENDOR });

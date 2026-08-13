@@ -90,11 +90,16 @@ check(src.indexOf('getEl("gameUI").appendChild(mStatus)') > bootAt,
       'including the part that needs gameUI, which is what actually threw');
 
 {
-  const starter = src.slice(src.indexOf('(function __annStart(tries)'));
-  check(/document\.readyState === "loading"/.test(starter),
+  const starter = src.slice(src.indexOf('(function __annBootStart(tries)'));
+  check(/document\.readyState !== "loading"/.test(starter),
         'the starter waits for the document to stop parsing');
-  check(/!document\.getElementById\("gameUI"\)/.test(starter),
+  check(/document\.getElementById\("gameUI"\)/.test(starter),
         'and for gameUI, since that is the element it dies without');
+  // "the page is ready" is not "the bundle has run": the bundle is a deferred
+  // module and readyState stops being "loading" before deferred modules run.
+  // Waiting only for the page made the boot order a coin toss.
+  check(/window\.loadedScript === true \|\| document\.readyState === "complete"/.test(starter),
+        'and for the bundle itself, which is a separate moment');
   check(/tries < 400/.test(starter),
         'and gives up polling rather than spinning forever');
   check(/__annBoot\(\);/.test(starter), 'then runs the body');

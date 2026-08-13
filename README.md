@@ -2038,3 +2038,45 @@ passes through.
 `tools/probe-entry.js --dom` now lists what a mod removes from the page as well
 as what it adds, which is how the next one of these gets noticed without
 someone having to play the game to find it.
+
+# "It works, then I refresh and it doesn't"
+
+A race, and it had been there since the first repair.
+
+Every repaired mod installs its transport at document-start and defers its
+body. What the body waited for was `readyState !== "loading"` and `#gameUI` —
+which reads like "the page is ready" and is *not* the same instant as "the
+bundle has run". The bundle is a deferred module: `readyState` stops being
+`"loading"` when parsing ends, and deferred modules run after that. So the mod
+and the bundle could land either way round, decided by how fast the bundle came
+off the network. Same install, works on one refresh and not the next.
+
+`tools/probe-entry.js --slow-bundle <ms>` makes that a case instead of a coin
+toss. With the bundle losing:
+
+```
+$ node tools/probe-entry.js --mod novastorm.v1.4.js --slow-bundle 900
+render loops: 4 distinct        <- the bundle's `as` survived
+```
+
+Because the takeover classified loops as "registered before the mod's body
+ran" — and if the mod ran first, the bundle's list came out empty and the
+takeover silently did nothing. Booting first is not harmless elsewhere either:
+CaraMila dereferences elements the bundle creates and dies on the spot
+(`Cannot read properties of null (reading 'parentElement') at __carBoot`).
+
+The bundle sets `window.loadedScript = !0` before it starts its render loop, so
+that is the marker the starter waits for, with `readyState === "complete"` as
+the way out if the bundle never arrives. One source for it —
+`tools/boot-starter.js` — used by `repair-mod.js` and by the two hand builds,
+which had drifted into their own copies of the racy version.
+
+The loop classification was made order-independent too: a callback registered
+from a userscript frame is the mod's whatever the order was. That alone is not
+enough — under Playwright's injection there is no userscript frame to see, and
+the counterfactual with the `loadedScript` gate removed still ends up with four
+loops — so the gate is what actually removes the race, and the stack test is the
+belt to its braces.
+
+All ten scripts now reach the server and are accepted with the bundle delayed
+900 ms, which is the ordering that used to break them.

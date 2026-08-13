@@ -1001,23 +1001,32 @@ const UNPATCH = (function () {
     });
 
     let modBooting = false, tookOver = false;
-    const preBoot = [];
+    const pageLoops = [], modLoops = [];
     if (forceMod && hasWin && typeof window.requestAnimationFrame == "function"
         && window.UNPATCH_KEEP_GAME_RENDER !== true) {
         const raf = window.requestAnimationFrame.bind(window);
         window.requestAnimationFrame = function (fn) {
             if (typeof fn != "function") return raf(fn);
-            if (!modBooting) {
-                if (preBoot.indexOf(fn) === -1 && preBoot.length < 64) preBoot.push(fn);
-            } else if (preBoot.indexOf(fn) === -1) {
-                if (!tookOver && preBoot.length) {
+            if (pageLoops.indexOf(fn) !== -1) {
+                if (tookOver) return 0;
+                return raf(fn);
+            }
+            if (modLoops.indexOf(fn) === -1) {
+                let mine = modBooting;
+                if (!mine) {
+                    try {
+                        const st = new Error().stack;
+                        mine = typeof st == "string" && USERSCRIPT_FRAME.test(st);
+                    } catch (e) {}
+                }
+                const into = mine ? modLoops : pageLoops;
+                if (into.length < 64) into.push(fn);
+                if (!tookOver && modLoops.length && pageLoops.length) {
                     tookOver = true;
                     console.info("[unpatch] the mod brought its own game loop, so the bundle's "
                         + "renderer is being stopped -- otherwise it paints over the mod every frame. "
                         + "Set window.UNPATCH_KEEP_GAME_RENDER = true to leave it running.");
                 }
-            } else if (tookOver) {
-                return 0;
             }
             return raf(fn);
         };
@@ -21097,10 +21106,13 @@ for (let tree of trees) {
     // Your code here...
 })();
 }
-(function __repairedStart(tries) {
+
+(function __repairedBootStart(tries) {
     tries = tries || 0;
-    if ((document.readyState === "loading" || !document.getElementById("gameUI")) && tries < 400) {
-        return setTimeout(function () { __repairedStart(tries + 1); }, 50);
+    var page = document.readyState !== "loading" && document.getElementById("gameUI");
+    var bundle = window.loadedScript === true || document.readyState === "complete";
+    if ((!page || !bundle) && tries < 400) {
+        return setTimeout(function () { __repairedBootStart(tries + 1); }, 50);
     }
     __repairedBoot();
 })();

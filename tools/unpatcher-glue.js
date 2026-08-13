@@ -493,25 +493,42 @@ const UNPATCH = (function () {
     //
     // Only in client-replacement mode. A hook mod has no renderer of its own
     // and needs the bundle's.
+    // Whose loop is whose is decided twice over, because deciding it once was
+    // not enough. The obvious rule -- registered before the mod's body ran, so
+    // it is the bundle's -- assumed the bundle runs first, and it does not
+    // always: both are deferred, and on a slow load the mod won the race, the
+    // list of the bundle's loops came out empty, and the takeover silently did
+    // nothing. Same install, works on one refresh and not the next. So the
+    // registration stack is asked as well: a callback registered from a
+    // userscript frame is the mod's whatever the order was. If a manager
+    // injects without leaving a trace, the ordering rule still covers it.
     let modBooting = false, tookOver = false;
-    const preBoot = [];
+    const pageLoops = [], modLoops = [];
     if (forceMod && hasWin && typeof window.requestAnimationFrame == "function"
         && window.UNPATCH_KEEP_GAME_RENDER !== true) {
         const raf = window.requestAnimationFrame.bind(window);
         window.requestAnimationFrame = function (fn) {
             if (typeof fn != "function") return raf(fn);
-            if (!modBooting) {
-                if (preBoot.indexOf(fn) === -1 && preBoot.length < 64) preBoot.push(fn);
-            } else if (preBoot.indexOf(fn) === -1) {
-                // the first loop the mod registers for itself
-                if (!tookOver && preBoot.length) {
+            if (pageLoops.indexOf(fn) !== -1) {
+                if (tookOver) return 0;      // the bundle asking for another frame
+                return raf(fn);
+            }
+            if (modLoops.indexOf(fn) === -1) {
+                let mine = modBooting;
+                if (!mine) {
+                    try {
+                        const st = new Error().stack;
+                        mine = typeof st == "string" && USERSCRIPT_FRAME.test(st);
+                    } catch (e) {}
+                }
+                const into = mine ? modLoops : pageLoops;
+                if (into.length < 64) into.push(fn);
+                if (!tookOver && modLoops.length && pageLoops.length) {
                     tookOver = true;
                     console.info("[unpatch] the mod brought its own game loop, so the bundle's "
                         + "renderer is being stopped -- otherwise it paints over the mod every frame. "
                         + "Set window.UNPATCH_KEEP_GAME_RENDER = true to leave it running.");
                 }
-            } else if (tookOver) {
-                return 0;                    // the bundle asking for another frame
             }
             return raf(fn);
         };

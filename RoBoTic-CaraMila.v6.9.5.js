@@ -16320,10 +16320,12 @@ window.prepareUI = function (tmpObj) {
 
 }
 
-(function __carStart(tries) {
+(function __carBootStart(tries) {
     tries = tries || 0;
-    if ((document.readyState === "loading" || !document.getElementById("gameUI")) && tries < 400) {
-        return setTimeout(function () { __carStart(tries + 1); }, 50);
+    var page = document.readyState !== "loading" && document.getElementById("gameUI");
+    var bundle = window.loadedScript === true || document.readyState === "complete";
+    if ((!page || !bundle) && tries < 400) {
+        return setTimeout(function () { __carBootStart(tries + 1); }, 50);
     }
     __carBoot();
 })();

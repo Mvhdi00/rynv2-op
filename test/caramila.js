@@ -53,9 +53,14 @@ check(bootAt > 0 && shimStart < bootAt,
 check(src.indexOf('document.body.appendChild(menuDiv)') > bootAt,
       'the DOM work waits, since at document-start there is no body to append to');
 {
-  const starter = src.slice(src.indexOf('(function __carStart(tries)'));
-  check(/document\.readyState === "loading"/.test(starter) && /getElementById\("gameUI"\)/.test(starter),
+  const starter = src.slice(src.indexOf('(function __carBootStart(tries)'));
+  check(/document\.readyState !== "loading"/.test(starter) && /getElementById\("gameUI"\)/.test(starter),
         'and waits for both the document and gameUI');
+  // Waiting only for those two was a race the bundle could lose, and CaraMila
+  // does not merely lose its visuals when it wins -- it dies:
+  //   Cannot read properties of null (reading 'parentElement') at __carBoot
+  check(/window\.loadedScript === true \|\| document\.readyState === "complete"/.test(starter),
+        'and for the bundle, which is a later moment than either of them');
   check(/tries < 400/.test(starter), 'with a bounded poll');
 }
 
