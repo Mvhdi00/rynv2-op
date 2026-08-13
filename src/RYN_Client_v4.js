@@ -11986,6 +11986,10 @@ window.grbtp = 35;
   // The pitch normally binds first; this stops a degenerate ring (a tiny item
   // on a large ring) from turning the sweep back into a blind scan.
   const RPE_AREA_SAMPLES = 12;
+  // Gap filling. The search radius is a little beyond the widest hole a single
+  // build can close, and the wall cap bounds the pair scan.
+  const RPE_GAP_SEARCH = 280;
+  const RPE_GAP_WALLS = 12;
   const RPE_EPS = 1e-6;
   const RPE_TAU = Math.PI * 2;
 
@@ -12020,6 +12024,7 @@ window.grbtp = 35;
     packing: .9,
     followUp: 1.6,
     area: .8,
+    gap: 2.4,
     // target geometry
     distanceFalloff: 260,
     distanceWeight: 1.4,
@@ -12792,6 +12797,16 @@ window.grbtp = 35;
       terms.area = area;
       reach += area;
 
+      // Closing a hole in a wall we already own. This is the one term that
+      // scores the ground rather than the target, and it is only ever set on a
+      // candidate the gap analysis produced — which has already established
+      // that a player fits through the hole and that this build would leave
+      // nothing they can fit through.
+      let seal = 0;
+      if (cand.gap) seal = w.gap * cand.gap.closure;
+      terms.gap = seal;
+      reach += seal;
+
       terms.tactical = tactical;
       cand.reach = reach;
 
@@ -12917,7 +12932,7 @@ window.grbtp = 35;
       // a trap behind a retreating enemy scored 1.27, every point of it from
       // terms that say nothing about the enemy at all. Convenience does not
       // pay for packets; the ground has to.
-      if (area > 0 && tactical === 0 && recovery === 0 && enclosure === 0) {
+      if (area > 0 && seal === 0 && tactical === 0 && recovery === 0 && enclosure === 0) {
         terms.clearance = 0;
         terms.packing = 0;
         terms.followUp = 0;
@@ -13430,26 +13445,33 @@ window.grbtp = 35;
   }
 
   // ── Planning modes ────────────────────────────────────────────────────────
-  // Auto place, preplace and replace are not three systems. They are three
-  // reasons for a candidate to exist, and the reason travels on the candidate
-  // itself. Everything downstream — geometry, angles, scoring, conflict
-  // resolution, planning, validation, execution, memory — is the same code for
-  // all three, and none of them looks at the world on its own.
+  // Auto place, preplace, replace and gap filling are not four systems. They
+  // are four reasons for a candidate to exist, and the reason travels on the
+  // candidate itself. Everything downstream — geometry, angles, scoring,
+  // conflict resolution, planning, validation, execution, memory — is the same
+  // code for all of them, and none of them looks at the world on its own.
   //
   //   AUTO      the world as it is, this tick
   //   PREPLACE  the world as it is predicted to be, held until it is due
   //   REPLACE   the world as it just became, on the packet that said so
+  //   GAPFILL   the world we have already built, and where it leaks
   const RPE_MODE = {
     AUTO: "auto",
     PREPLACE: "preplace",
-    REPLACE: "replace"
+    REPLACE: "replace",
+    GAPFILL: "gapfill"
   };
   const RPE_MODE_PRIORITY = {
     auto: RPE_PRIORITY.ENGAGEMENT,
     preplace: RPE_PRIORITY.ANTICIPATION,
-    replace: RPE_PRIORITY.RECOVERY
+    replace: RPE_PRIORITY.RECOVERY,
+    // Structural work, and it says so. Closing a hole is worth doing when
+    // nothing more urgent wants the ground, and worth losing the moment
+    // something does — a gap fill must never displace a claim made about the
+    // fight actually happening.
+    gapfill: RPE_PRIORITY.UTILITY
   };
-  // One scorer, three emphases. The terms are identical everywhere; what
+  // One scorer, four emphases. The terms are identical everywhere; what
   // changes is how much each mode cares about each of them.
   const RPE_MODE_WEIGHTS = {
     auto: {
@@ -13469,6 +13491,16 @@ window.grbtp = 35;
       timing: 1.2,
       followUp: .8,
       staleness: .6
+    },
+    // A hole does not become more urgent because the target is about to walk
+    // into it, and it does not stop being a hole if they walk somewhere else,
+    // so timing carries almost no weight here. Repeated refusals still do:
+    // a gap we have failed to close three times is one we cannot reach.
+    gapfill: {
+      recovery: 0,
+      timing: .3,
+      followUp: 1,
+      staleness: 1.4
     }
   };
 
@@ -13861,6 +13893,9 @@ window.grbtp = 35;
         if (trigger.modes.indexOf(RPE_MODE.REPLACE) !== -1 && trigger.vacated) {
           this._generateReplace(pool, profile, frame, trigger);
         }
+        if (trigger.modes.indexOf(RPE_MODE.GAPFILL) !== -1) {
+          this._generateGapFill(pool, profile, frame);
+        }
       }
       return pool;
     }
@@ -13947,6 +13982,109 @@ window.grbtp = 35;
         }));
       }
     }
+    // ── Gap filling ─────────────────────────────────────────────────────────
+    // A wall of builds with a hole in it is a wall the enemy walks through.
+    // This looks for the holes and offers a spike for the ones worth closing.
+    // It is a reason for a candidate to exist and nothing more: the apertures,
+    // the angles, the scoring, the ledger, the planner and the wire are the
+    // same ones every other mode uses, and a hole that cannot be reached from
+    // where we are standing is simply never offered.
+    //
+    // "Useful" is three questions, asked in this order:
+    //   1. is there a hole — wide enough for a player to walk through
+    //   2. would this build close it — are both halves left too narrow to pass
+    //   3. does it matter — is it ground the target can reach in this fight,
+    //      or one of the ways out of the pocket they are already standing in
+    // Open map fails the first, a hole too wide for one spike fails the
+    // second, and a wall behind the fight fails the third. Nothing here fills
+    // empty space, because empty space has no two sides to measure.
+    _gapWalls(frame) {
+      const {PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
+      const out = [];
+      for (const obj of this._blockers || []) {
+        if (obj instanceof PlayerObject && PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) continue;
+        const p = obj.pos.current;
+        const d = Math.hypot(p.x - frame.myPos.x, p.y - frame.myPos.y);
+        if (d > RPE_GAP_SEARCH) continue;
+        // What stops the target, not what stops a build. A trap has almost no
+        // collision radius — the game gives it colDiv 0.2 — but it holds
+        // anything whose centre comes inside its full scale, so for the
+        // purpose of "can they get through here" that scale is its wall.
+        const escape = obj.type === 15 ? obj.scale : obj.collisionScale;
+        if (!escape || escape <= 0) continue;
+        out.push({
+          x: p.x,
+          y: p.y,
+          escape: escape,
+          d: d
+        });
+      }
+      out.sort((a, b) => a.d - b.d);
+      return out.slice(0, RPE_GAP_WALLS);
+    }
+    // A hole is worth closing when the target can get to it before this is
+    // over, or when it is one of the ways out of the pocket they are already
+    // in. A hole on the far side of the fight is still a hole; it is just not
+    // one that is costing us anything.
+    _gapMatters(x, y, frame) {
+      if (this._exits && this._exits.length) {
+        const bearing = Math.atan2(y - frame.targetPos.y, x - frame.targetPos.x);
+        for (const exit of this._exits) {
+          if (GeometrySolver.angleDist(bearing, exit.angle) < .45) return true;
+        }
+      }
+      if (!frame.area) return false;
+      const gap = Math.max(0, Math.hypot(x - frame.targetPos.x, y - frame.targetPos.y) - frame.targetScale);
+      return gap / Math.max(1, frame.closing) <= frame.horizon;
+    }
+    _generateGapFill(pool, profile, frame) {
+      // Only a build that hurts is worth spending on a hole. A trap in a gap
+      // catches one player once; a spike in the same gap denies it.
+      if (!profile.isDamage) return;
+      const walls = this._gapWalls(frame);
+      if (walls.length < 2) return;
+      const apertures = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, null);
+      if (apertures.length === 0) return;
+      // The game's own test for whether a player fits between two things, from
+      // the same arithmetic isEscapable uses.
+      const pass = Config_default.playerScale * 2 + 10;
+      const seen = new Set;
+      for (let i = 0; i < walls.length; i++) {
+        for (let j = i + 1; j < walls.length; j++) {
+          const a = walls[i], b = walls[j];
+          const hole = Math.hypot(a.x - b.x, a.y - b.y) - a.escape - b.escape;
+          if (hole <= pass) continue;
+          if (hole - 2 * profile.footR > 2 * pass) continue;
+          const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+          const angle = GeometrySolver.nearestFree(apertures, Math.atan2(midY - frame.myPos.y, midX - frame.myPos.x));
+          if (angle === null) continue;
+          const x = frame.myPos.x + profile.ringR * Math.cos(angle);
+          const y = frame.myPos.y + profile.ringR * Math.sin(angle);
+          // Snapping to legal ground can land the build well away from the
+          // hole it was chosen for, so the seal is measured where the build
+          // actually goes rather than where we wished it would.
+          const gapA = Math.hypot(x - a.x, y - a.y) - a.escape - profile.footR;
+          const gapB = Math.hypot(x - b.x, y - b.y) - b.escape - profile.footR;
+          if (gapA >= pass || gapB >= pass) continue;
+          if (!this._gapMatters(midX, midY, frame)) continue;
+          const key = (x / 24 | 0) + ":" + (y / 24 | 0);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const cand = this._candidate(profile, angle, apertures, RPE_MODE.GAPFILL, {
+            source: "gap",
+            kind: "gap",
+            dueTick: frame.tick
+          });
+          cand.gap = {
+            x: midX,
+            y: midY,
+            width: hole,
+            closure: Math.max(0, 1 - Math.max(0, gapA, gapB) / pass)
+          };
+          pool.push(cand);
+        }
+      }
+    }
     _generateReplace(pool, profile, frame, trigger) {
       const object = trigger.vacated;
       const apertures = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, object);
@@ -13975,6 +14113,70 @@ window.grbtp = 35;
     // Merit and belief stay separate: value says how good the ground is,
     // confidence says how much the prediction behind it is worth, and their
     // product is what arbitration uses.
+    _weighOne(cand, frame, ctx) {
+      ctx.mode = cand.mode;
+      this._scorer.weigh(cand, frame, ctx);
+      const emphasis = RPE_MODE_WEIGHTS[cand.mode];
+      if (emphasis) {
+        let value = 0;
+        for (const k in cand.terms) {
+          if (emphasis[k] !== undefined) cand.terms[k] *= emphasis[k];
+          value += cand.terms[k];
+        }
+        cand.value = value;
+      }
+      cand.expected = cand.value * cand.confidence;
+    }
+
+    // Two modes can want the same ground for different reasons — most often
+    // auto place and the gap filler, when the hole in our wall is also the way
+    // the target is walking. That is one build, not two claims to arbitrate,
+    // so the reasons are merged onto whichever candidate is worth more and the
+    // duplicate is dropped before anything downstream ever sees it. Merging a
+    // gap onto the survivor changes what it is worth, so it is re-weighed
+    // rather than kept at the score it had without that reason.
+    _merge(pool, frame, ctx) {
+      // Only gap fills are collapsed this way. Auto, preplace and replace are
+      // different moments rather than different reasons — a prediction holding
+      // ground for a tick that has not arrived is not the same object as a
+      // build going out now — and folding those together would silently cancel
+      // bookings that had already been reasoned about and paid for in ground.
+      //
+      // A gap fill is a reason and nothing else. When it lands on ground
+      // another mode has already claimed, it hands its reason over and steps
+      // aside: the surviving candidate is re-weighed knowing it also closes a
+      // hole, and one build goes out instead of two claims arbitrating over
+      // the same slot.
+      let merged = 0;
+      const out = [];
+      for (const cand of pool) {
+        if (cand.mode !== RPE_MODE.GAPFILL) {
+          out.push(cand);
+          continue;
+        }
+        let host = null;
+        for (const other of pool) {
+          if (other === cand || other.mode === RPE_MODE.GAPFILL) continue;
+          if (other.profile.type !== cand.profile.type) continue;
+          if (Math.hypot(other.x - cand.x, other.y - cand.y) >= cand.profile.footR) continue;
+          host = other;
+          break;
+        }
+        if (host === null) {
+          out.push(cand);
+          continue;
+        }
+        (host.alsoFor || (host.alsoFor = [])).push(cand.mode);
+        if (!host.gap) {
+          host.gap = cand.gap;
+          this._weighOne(host, frame, ctx);
+        }
+        merged++;
+      }
+      this.stats.merged = merged;
+      return merged === 0 ? pool : out;
+    }
+
     score(pool, frame, trigger) {
       const ctx = {
         exits: this._exits,
@@ -13982,21 +14184,8 @@ window.grbtp = 35;
         batched: false,
         replace: trigger.replace || null
       };
-      for (const cand of pool) {
-        ctx.mode = cand.mode;
-        this._scorer.weigh(cand, frame, ctx);
-        const emphasis = RPE_MODE_WEIGHTS[cand.mode];
-        if (emphasis) {
-          let value = 0;
-          for (const k in cand.terms) {
-            if (emphasis[k] !== undefined) cand.terms[k] *= emphasis[k];
-            value += cand.terms[k];
-          }
-          cand.value = value;
-        }
-        cand.expected = cand.value * cand.confidence;
-      }
-      return pool;
+      for (const cand of pool) this._weighOne(cand, frame, ctx);
+      return this._merge(pool, frame, ctx);
     }
 
     // ── RESOLVE ─────────────────────────────────────────────────────────────
@@ -14323,10 +14512,14 @@ window.grbtp = 35;
       }
       if (this._scheduler.budget() < RPE_PLACE_PACKETS) return 0;
 
-      const pool = this.generate(frame, trigger);
-      this.stats.candidates = pool.length;
-      if (pool.length === 0) return 0;
-      this.score(pool, frame, trigger);
+      const generated = this.generate(frame, trigger);
+      this.stats.candidates = generated.length;
+      if (generated.length === 0) {
+        this._pool = generated;
+        return 0;
+      }
+      const pool = this.score(generated, frame, trigger);
+      this._pool = pool;
 
       const {due: due, deferred: deferred} = this.resolve(pool, frame, trigger);
       this.stats.viable = due.length;
@@ -14351,6 +14544,7 @@ window.grbtp = 35;
       const modes = [];
       if (Settings_default._autoplacer) modes.push(RPE_MODE.AUTO);
       if (Settings_default._preplacer) modes.push(RPE_MODE.PREPLACE);
+      if (Settings_default._gapFiller) modes.push(RPE_MODE.GAPFILL);
       if (modes.length === 0) {
         if (this.book.records.length) this.book.invalidateAll("disabled", this);
         return;
@@ -21602,6 +21796,7 @@ window.grbtp = 35;
     _placementDefense: true,
     _preplacer: false,
     _replacer: false,
+    _gapFiller: false,
     _lunaExactPlacer: false,
     _lunaMode: false,
     _autoPlay: false,
