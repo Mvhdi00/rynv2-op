@@ -11982,6 +11982,10 @@ window.grbtp = 35;
   const RPE_PLACE_PACKETS = 5;
   const RPE_BATCH_PACKETS = 2;
   const RPE_MAX_BLOCK_RADIUS = 300;
+  // Ceiling on how many angles the engagement-area sweep may offer per item.
+  // The pitch normally binds first; this stops a degenerate ring (a tiny item
+  // on a large ring) from turning the sweep back into a blind scan.
+  const RPE_AREA_SAMPLES = 12;
   const RPE_EPS = 1e-6;
   const RPE_TAU = Math.PI * 2;
 
@@ -12015,6 +12019,7 @@ window.grbtp = 35;
     enclosure: 2.8,
     packing: .9,
     followUp: 1.6,
+    area: .8,
     // target geometry
     distanceFalloff: 260,
     distanceWeight: 1.4,
@@ -12199,6 +12204,26 @@ window.grbtp = 35;
       const half = Math.acos(cosArg);
       const centre = Math.atan2(dy, dx);
       return [ this.norm(centre - half), this.norm(centre + half) ];
+    },
+
+    // The arc of the placement ring that lies inside a disc somewhere else on
+    // the map — the same law of cosines as occlusion and contactAngles, asked
+    // a third way. Returns the arc centre and half-width, "full" when the ring
+    // is entirely inside, or null when it does not reach at all.
+    discSector(ox, oy, ringR, cx, cy, discR) {
+      const dx = cx - ox, dy = cy - oy;
+      const d = Math.hypot(dx, dy);
+      if (d + ringR <= discR) return "full";
+      if (d >= ringR + discR) return null;
+      if (d + discR <= ringR) return null;
+      if (d < RPE_EPS) return "full";
+      const cosArg = (d * d + ringR * ringR - discR * discR) / (2 * d * ringR);
+      if (cosArg <= -1) return "full";
+      if (cosArg >= 1) return null;
+      return {
+        centre: Math.atan2(dy, dx),
+        half: Math.acos(cosArg)
+      };
     },
 
     // Distance from a point to a segment. Used for our own tactical reasoning
@@ -12605,6 +12630,27 @@ window.grbtp = 35;
       const toNext = Math.atan2(targetNext.y - myPos.y, targetNext.x - myPos.x);
       push(GeometrySolver.nearestFree(apertures, toTarget), "intent");
       push(GeometrySolver.nearestFree(apertures, toNext), "intent");
+      // Edges, spans, contacts and intents between them describe the ring
+      // around obstacles and the line to the target, and in open ground that
+      // is three angles for the entire half of the ring the fight is in. The
+      // part of the ring that lies inside the engagement area is swept as
+      // well, at the item's own packing pitch — the angular width of its
+      // footprint — so every distinct slot in the relevant area is offered
+      // exactly once, and nothing between two slots is offered twice. This
+      // widens what is considered, not what is built: each of these still has
+      // to out-score everything else to survive resolution and planning.
+      if (frame.area) {
+        const sector = GeometrySolver.discSector(myPos.x, myPos.y, profile.ringR, frame.area.x, frame.area.y, frame.area.r + profile.footR);
+        if (sector) {
+          const centre = sector === "full" ? toTarget : sector.centre;
+          const half = sector === "full" ? Math.PI : sector.half;
+          const pitch = 2 * Math.asin(Math.min(1, profile.footR / profile.ringR));
+          const steps = Math.min(RPE_AREA_SAMPLES, Math.max(1, Math.floor(2 * half / Math.max(pitch, .12))));
+          for (let i = 0; i <= steps; i++) {
+            push(GeometrySolver.nearestFree(apertures, centre - half + 2 * half * i / steps), "area");
+          }
+        }
+      }
       if (frame.targetTrapped) {
         const t = frame.targetTrapped.pos.current;
         push(GeometrySolver.nearestFree(apertures, Math.atan2(t.y - myPos.y, t.x - myPos.x)), "intent");
@@ -12729,6 +12775,23 @@ window.grbtp = 35;
           }
         }
       }
+      // Ground inside the engagement area is ground the target can reach
+      // before this is over, whether or not the line they happen to be walking
+      // right now runs through it. What it is worth is how quickly they could
+      // be standing on it — a slot two ticks away in any direction is a real
+      // constraint on them, one nine ticks away at the fringe barely is. That
+      // is a fact about distance and speed with no bearing in it, so it widens
+      // what auto place will consider without restoring the heading bias it
+      // exists to remove.
+      let area = 0;
+      if (frame.area) {
+        const gap = Math.max(0, dTarget - frame.targetScale - p.footR);
+        const ticks = gap / Math.max(1, frame.closing);
+        if (ticks <= frame.horizon) area = w.area * (1 - ticks / (frame.horizon + 1));
+      }
+      terms.area = area;
+      reach += area;
+
       terms.tactical = tactical;
       cand.reach = reach;
 
@@ -12767,8 +12830,14 @@ window.grbtp = 35;
       // engine paying full price for spikes behind a target already leaving,
       // so that value is discounted by how much ground they are predicted to
       // put between us.
+      //
+      // Area candidates are charged the same way, and it is the whole of what
+      // keeps the area from being a licence to build in every direction: the
+      // ground behind a retreating target is reachable and worth nothing, and
+      // saying so here is a judgement about that particular ground rather than
+      // a rule about which bearings may be considered.
       let recession = 0;
-      if (touching || intercepts) {
+      if (touching || intercepts || area > 0) {
         const dNow = Math.hypot(frame.targetPos.x - frame.myPos.x, frame.targetPos.y - frame.myPos.y);
         const dNext = Math.hypot(frame.targetNext.x - frame.myPos.x, frame.targetNext.y - frame.myPos.y);
         if (dNext > dNow) recession = w.recession * Math.min(1, (dNext - dNow) / 24);
@@ -12839,6 +12908,20 @@ window.grbtp = 35;
       // Timing --------------------------------------------------------------
       // Worth more when the target arrives while the build is still fresh.
       terms.timing = dNext < dTarget && dNext < frame.targetScale + p.footR + 40 ? w.timing : 0;
+
+      // Clearance, packing and follow-up all describe the slot: how safe it is
+      // to build there, how neatly it packs, how much room it leaves for the
+      // next one. On a candidate that already does something to the target
+      // they are a fair tiebreak between equals. On one whose only claim is
+      // that the target could get there, they were buying the build outright —
+      // a trap behind a retreating enemy scored 1.27, every point of it from
+      // terms that say nothing about the enemy at all. Convenience does not
+      // pay for packets; the ground has to.
+      if (area > 0 && tactical === 0 && recovery === 0 && enclosure === 0) {
+        terms.clearance = 0;
+        terms.packing = 0;
+        terms.followUp = 0;
+      }
 
       let value = 0;
       for (const k in terms) value += terms[k];
@@ -13654,6 +13737,33 @@ window.grbtp = 35;
       const horizon = Math.max(RPE_MIN_HORIZON, Math.min(RPE_MAX_HORIZON, Math.ceil(span / closing)));
       frame.horizon = horizon;
       frame.path = this.motion.pathOf(frame.target, horizon);
+      // The predicted path is one line through the fight; it is not the fight.
+      // A target free to turn covers a disc, not a line, and judging relevance
+      // against the line alone is what made auto place build down the enemy's
+      // current heading and ignore ground they were one turn away from. The
+      // engagement area is the ground they can actually reach before the
+      // engagement is over, and the radius setting decides when there is an
+      // engagement at all.
+      //
+      // It also needs a measurement to exist at all. With fewer than two
+      // observations there is no speed, the horizon rests on a nominal one,
+      // and the "area" would be a guess wearing the clothes of a fact — which
+      // is exactly how a speculative fill ends up spending ground that a
+      // measured interception was about to book one tick later.
+      frame.engageRadius = radius;
+      // How fast the target may be assumed to cross ground, for judging what
+      // is within reach of them. The nominal speed above is the right number
+      // for deciding how far out to engage; it is the wrong one here, because
+      // it would credit a target who has not moved all fight with the ability
+      // to be anywhere. The fastest we have actually seen them move is the
+      // honest bound, with a small floor so ground beside them stays relevant.
+      frame.closing = Math.max(4, frame.motion ? Math.max(frame.motion.speed, frame.motion.peakSpeed || 0) : 0);
+      frame.engaged = frame.range <= radius && !!(frame.motion && frame.motion.samples.length >= 2);
+      frame.area = frame.engaged ? {
+        x: frame.targetPos.x,
+        y: frame.targetPos.y,
+        r: closing * horizon + frame.targetScale
+      } : null;
       this.stats.dropped = this.book.sweep(tick, frame, this);
       if (this._planIsStale(frame)) this._plan = [];
       this._planTargetId = frame.targetId;
@@ -13944,10 +14054,16 @@ window.grbtp = 35;
     }
 
     // Positional comfort is not a reason to spend packets. A candidate has to
-    // be able to do something to something: touch or intercept the target,
-    // close a way out, or take back ground that just opened. Clearance,
-    // packing and follow-up describe how pleasant a slot is, and on their own
-    // they were buying placements that measurably did nothing.
+    // be able to do something to something: sit on ground the target can
+    // reach, touch or intercept them, close a way out, or take back ground
+    // that just opened. Clearance, packing and follow-up describe how pleasant
+    // a slot is, and on their own they were buying placements that measurably
+    // did nothing.
+    //
+    // Reaching the target and standing in the area they are fighting in are
+    // both admitted here, and deliberately so: requiring contact or a crossed
+    // path made this a directional filter, and the whole ring facing the fight
+    // went unbuilt because the enemy happened to be walking the other way.
     //
     // A prediction is exempt, because its whole point is that the interaction
     // has not happened yet — it was required to have a real interception
