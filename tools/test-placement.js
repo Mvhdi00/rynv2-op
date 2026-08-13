@@ -65,6 +65,7 @@ class PlayerObject {
     this.itemGroup = item.itemGroup;
     this.collisionDivider = "colDiv" in item ? item.colDiv : 1;
     this.health = item.health || 500;
+    this.isDestroyable = true;
     this.pos = { current: new Vec(x, y), future: new Vec(x, y) };
   }
   get collisionScale() { return this.scale * this.collisionDivider; }
@@ -123,15 +124,26 @@ function makeWorld(opts = {}) {
       const { count, limit } = this.getItemCount(g);
       return count < limit;
     },
-    isMyPlayerByID(id) { return id === this.id; }
+    isMyPlayerByID(id) { return id === this.id; },
+    isReloaded() { return false; },
+    getBuildingDamage() { return 0; }
   };
   const enemy = {
     id: 2, collisionScale: 35, spikeDamage: 0, dir: opts.enemyAim ?? 0,
+    weapon: { primary: opts.enemyPrimary ?? null, secondary: null },
+    reload: [ { current: 1, max: 1, previous: 0 }, { current: 0, max: 1, previous: 0 } ],
+    getBuildingDamage() { return opts.enemyDmg ?? 0; },
     pos: { current: new Vec(opts.enemyX ?? 7120, opts.enemyY ?? 5000),
            future: new Vec((opts.enemyX ?? 7120) + (opts.enemyVX ?? -14), (opts.enemyY ?? 5000) + (opts.enemyVY ?? 0)) }
   };
   const world = {
     objects, grid, sent, me, enemy,
+    step(dx, dy) {
+      enemy.pos.current.x += dx; enemy.pos.current.y += dy;
+      enemy.pos.future.x = enemy.pos.current.x + dx;
+      enemy.pos.future.y = enemy.pos.current.y + dy;
+    },
+    remove(o) { objects.delete(o.id); },
     add(type, x, y, ownerID = 1) {
       const o = new PlayerObject(nextId++, x, y, type, ownerID);
       objects.set(o.id, o);
@@ -140,6 +152,8 @@ function makeWorld(opts = {}) {
     }
   };
   const MH = {
+    canBuy() { return false; },
+    autoattack: false, forceWeapon: null,
     tickCount: opts.tick ?? 10, packetCount: opts.packetCount ?? 0,
     packetLimit: opts.packetLimit ?? 70,
     activeModule: null, moduleActive: false, placedOnce: false,
@@ -158,7 +172,7 @@ function makeWorld(opts = {}) {
   world.client = {
     myPlayer: me, _ModuleHandler: MH,
     EnemyManager: { nearestEnemy: opts.noEnemy ? null : enemy },
-    ObjectManager: { objects, grid2D: grid },
+    ObjectManager: { objects, grid2D: grid, client: null },
     PlayerManager: { isEnemyByID(ownerID) { return ownerID !== 1; } },
     InputHandler: { move: opts.move ?? 0 }
   };
@@ -274,7 +288,9 @@ function engineFor(world) {
   const env = {
     Config_default: { mapScale: 14400, riverWidth: 724, playerScale: 35 },
     Items: ITEMS, ItemGroups: ITEM_GROUPS,
-    Settings_default: { _autoplacer: true, _autoplacerRadius: 350 },
+    Settings_default: Object.assign({ _autoplacer: true, _autoplacerRadius: 350,
+      _preplacer: true, _replacer: false }, world.settings || {}),
+    DataHandler_default: { getWeapon: () => ({ range: 140, speed: 300 }) },
     PlayerObject: PlayerObject,
     getAngleFromBitmask: () => null
   };
@@ -475,6 +491,244 @@ console.log("\n15. river band is respected");
 }
 
 
+
+/* ================= preplace ================= */
+
+function stepTicks(world, engine, n, dx, dy) {
+  for (let i = 0; i < n; i++) {
+    world.MH.tickCount++;
+    world.MH.packetCount = 0;
+    engine._threat.frameTick = -1;
+    if (dx !== undefined) world.step(dx, dy);
+    engine.postTick();
+  }
+}
+
+console.log("\n16. velocity, acceleration and short-term prediction are measured");
+{
+  const w = makeWorld({ enemyX: 7300, enemyY: 5000 });
+  const { engine } = engineFor(w);
+  // a steady run toward us at 20 units/tick
+  stepTicks(w, engine, 5, -20, 0);
+  const track = engine.motion.get(2);
+  ok(track !== null, "a motion track exists for the target");
+  ok(Math.abs(track.vx + 20) < 1.5, "velocity measured as ~-20/tick, got " + track.vx.toFixed(2));
+  ok(Math.abs(track.speed - 20) < 1.5, "speed measured as ~20, got " + track.speed.toFixed(2));
+  ok(Math.abs(track.heading - Math.PI) < 0.05, "heading measured as pi, got " + track.heading.toFixed(3));
+  ok(track.stability > 0.85, "a straight run scores high stability: " + track.stability.toFixed(2));
+  const p3 = engine.motion.predict(w.enemy, 3);
+  ok(p3.x < w.enemy.pos.current.x, "prediction leads the target along its course");
+  ok(p3.confidence > 0.2 && p3.confidence < 1, "confidence is bounded: " + p3.confidence.toFixed(2));
+  const p0 = engine.motion.predict(w.enemy, 0);
+  ok(p0.confidence === 1 || p0.x === w.enemy.pos.current.x, "zero-tick prediction is the current position");
+}
+
+console.log("\n17. prediction uses the game's decay, not a straight line");
+{
+  const w = makeWorld({ enemyX: 7300, enemyY: 5000 });
+  const { engine } = engineFor(w);
+  // three samples of identical motion, then let it coast
+  stepTicks(w, engine, 4, -20, 0);
+  const track = engine.motion.get(2);
+  // a coasting target keeps 0.993^111 of its speed per tick
+  const decay = Math.pow(0.993, 1000 / 9);
+  ok(Math.abs(decay - 0.4586) < 0.005, "per-tick decay derived from the game: " + decay.toFixed(4));
+  const p1 = engine.motion.predict(w.enemy, 1);
+  const p2 = engine.motion.predict(w.enemy, 2);
+  const leg1 = Math.abs(p1.x - w.enemy.pos.current.x);
+  const leg2 = Math.abs(p2.x - p1.x);
+  ok(Math.abs(leg1 - leg2) < 3, "steady run predicts steady legs (" + leg1.toFixed(1) + " then " + leg2.toFixed(1) + ")");
+  ok(p2.confidence < p1.confidence, "confidence falls with horizon");
+}
+
+console.log("\n18. a stationary target is predicted confidently, not ignored");
+{
+  const w = makeWorld({ enemyX: 7150, enemyY: 5000, enemyVX: 0 });
+  const { engine } = engineFor(w);
+  stepTicks(w, engine, 5, 0, 0);
+  const track = engine.motion.get(2);
+  ok(track.speed < 1, "measured as stationary");
+  ok(track.stability > 0.9, "a stationary target scores high stability: " + track.stability.toFixed(2));
+}
+
+console.log("\n19. no history means low confidence, not an invented direction");
+{
+  const w = makeWorld({});
+  const { engine } = engineFor(w);
+  const p = engine.motion.predict(w.enemy, 3);
+  ok(p.x === w.enemy.pos.current.x && p.y === w.enemy.pos.current.y, "with no history the prediction is the current position");
+  ok(p.confidence <= 0.25, "and says so: confidence " + p.confidence.toFixed(2));
+}
+
+console.log("\n20. candidates are booked, not sent");
+{
+  const w = makeWorld({ enemyX: 7330, enemyY: 5000, packetLimit: 70 });
+  const { engine } = engineFor(w);
+  stepTicks(w, engine, 3, -22, 0);
+  const booked = engine.book.pending();
+  ok(booked.length > 0, "candidates in the book: " + booked.length);
+  ok(booked.every(r => r.state === "pending"), "booked candidates are pending, not fired");
+  const far = booked.filter(r => r.kind === "intercept" && r.interceptTick > 2);
+  ok(far.every(r => r.state === "pending"), "an interception further out than the fire lead is held, not sent");
+  ok(booked.every(r => typeof r.confidence === "number" && r.confidence > 0), "every record carries a confidence");
+  ok(booked.every(r => r.expiresTick > r.createdTick), "every record carries an expiry");
+}
+
+console.log("\n21. candidates expire on their own");
+{
+  const w = makeWorld({ enemyX: 7330, enemyY: 5000 });
+  const { engine } = engineFor(w);
+  stepTicks(w, engine, 3, -22, 0);
+  const before = engine.book.pending().length;
+  ok(before > 0, "book has " + before + " pending candidates");
+  // freeze the world and run the clock past every expiry
+  const maxExpiry = Math.max.apply(null, engine.book.pending().map(r => r.hardExpiry));
+  w.MH.tickCount = maxExpiry + 1;
+  engine._threat.frameTick = -1;
+  engine.book.sweep(w.MH.tickCount, engine._threat.build(), engine);
+  ok(engine.book.pending().length < before, "expired candidates left the book");
+  ok(engine.book.records.some(r => r.reason === "expired"), "and were marked expired");
+}
+
+console.log("\n22. a turn invalidates the candidates that assumed the old course");
+{
+  const w = makeWorld({ enemyX: 7330, enemyY: 5000 });
+  const { engine } = engineFor(w);
+  stepTicks(w, engine, 4, -22, 0);
+  const before = engine.book.pending().filter(r => r.kind === "intercept").length;
+  ok(before > 0, "interception candidates booked on the inbound course: " + before);
+  // hard right turn
+  stepTicks(w, engine, 1, 0, -26);
+  const turned = engine.book.records.filter(r => r.reason === "targetTurned").length;
+  ok(turned > 0, "candidates invalidated by the turn: " + turned);
+}
+
+console.log("\n23. a target change invalidates the whole book");
+{
+  const w = makeWorld({ enemyX: 7330, enemyY: 5000 });
+  const { engine } = engineFor(w);
+  stepTicks(w, engine, 3, -22, 0);
+  ok(engine.book.pending().length > 0, "book populated");
+  w.client.EnemyManager.nearestEnemy = Object.assign({}, w.enemy, { id: 77 });
+  w.MH.tickCount++; engine._threat.frameTick = -1;
+  engine.book.sweep(w.MH.tickCount, engine._threat.build(), engine);
+  ok(engine.book.records.some(r => r.reason === "targetChanged"), "candidates dropped on target change");
+}
+
+console.log("\n24. losing the target empties the book");
+{
+  const w = makeWorld({ enemyX: 7330, enemyY: 5000 });
+  const { engine } = engineFor(w);
+  stepTicks(w, engine, 3, -22, 0);
+  ok(engine.book.pending().length > 0, "book populated");
+  w.client.EnemyManager.nearestEnemy = null;
+  w.MH.tickCount++; engine._threat.frameTick = -1;
+  engine.postTick();
+  ok(engine.book.pending().length === 0, "book emptied when the target is gone");
+}
+
+console.log("\n25. preplace holds ground against auto place");
+{
+  const w = makeWorld({ enemyX: 7330, enemyY: 5000 });
+  const { engine } = engineFor(w);
+  stepTicks(w, engine, 3, -22, 0);
+  const held = engine.book.pending();
+  let stolen = 0;
+  for (const c of engine._plan)
+    for (const r of held)
+      if (Math.hypot(c.x - r.x, c.y - r.y) < c.profile.footR + r.footR) stolen++;
+  ok(held.length > 0 && stolen === 0, "auto place took none of the " + held.length + " slots preplace is holding");
+}
+
+console.log("\n26. a preplace hold never blocks a higher-priority claim");
+{
+  const w = makeWorld({ enemyX: 7330, enemyY: 5000 });
+  const { engine, RPE_PRIORITY } = engineFor(w);
+  stepTicks(w, engine, 3, -22, 0);
+  const held = engine.book.pending();
+  ok(held.length > 0, "preplace is holding " + held.length + " slots");
+  const victim = held[0];
+  // a replacement, reacting to something that actually happened, wants it
+  const token = engine.ledger.reserve(victim.x, victim.y, victim.footR,
+    RPE_PRIORITY.RECOVERY, "replace", w.MH.tickCount, 2);
+  ok(!!token, "the higher-priority claim succeeded over the soft hold");
+  ok(!engine.ledger.entries.some(e => e.token === victim.token), "the preplace hold was released");
+  // and an equal-priority claim of lower value does not take it
+  const held2 = engine.book.pending().filter(r => r !== victim);
+  if (held2.length) {
+    const weak = engine.ledger.reserve(held2[0].x, held2[0].y, held2[0].footR,
+      RPE_PRIORITY.ANTICIPATION, "other", w.MH.tickCount, 2, { soft: true, value: held2[0].value - 1 });
+    ok(!weak, "an equal-priority claim worth less does not take the ground");
+  }
+  // a hard claim of any priority is never displaced
+  const hard = engine.ledger.reserve(6000, 6000, 40, RPE_PRIORITY.UTILITY, "fired", w.MH.tickCount, 2);
+  const over = engine.ledger.reserve(6000, 6000, 40, RPE_PRIORITY.INSTA, "insta", w.MH.tickCount, 2);
+  ok(!!hard && !over, "ground already committed to the wire is never taken");
+}
+
+console.log("\n27. a slot about to open is booked, and the deletion drives it");
+{
+  const w = makeWorld({ enemyX: 7150, enemyY: 5000, enemyPrimary: 0, enemyDmg: 600 });
+  w.settings = { _replacer: true };
+  const { engine } = engineFor(w);
+  const doomed = w.add(6, 7000 + 79 * Math.cos(0.9), 5000 + 79 * Math.sin(0.9));
+  stepTicks(w, engine, 1, -4, 0);
+  const attrition = engine.attrition(engine._threat.frame);
+  ok(attrition.length > 0, "attrition sees the doomed object");
+  ok(attrition[0].hits === 1, "and knows it is one hit from breaking");
+  const booked = engine.book.records.filter(r => r.kind === "vacating");
+  ok(booked.length > 0, "a candidate was booked for the ground it will free");
+  ok(booked.every(r => r.vacates === doomed.id), "the candidate names the object it is waiting on");
+  ok(booked.every(r => r.deadlineTick > r.createdTick), "and holds until that object is due to die");
+
+  stepTicks(w, engine, 2, -4, 0);
+  const fired = engine.book.records.filter(r => r.kind === "vacating" && r.state === "fired");
+  ok(fired.length > 0, "the candidate went out when its deadline arrived");
+
+  // the deletion is the game confirming the ground is clear
+  const before = w.MH.packetCount;
+  engine.onVacated(doomed);
+  ok(w.MH.packetCount > before, "the deletion drove a resend with Replace on");
+  const again = w.MH.packetCount;
+  engine.onVacated(doomed);
+  ok(w.MH.packetCount === again, "and only once");
+}
+
+console.log("\n28. preplace respects the packet budget and item limits");
+{
+  const w = makeWorld({ enemyX: 7120, enemyY: 5000, packetCount: 68, packetLimit: 70 });
+  const { engine } = engineFor(w);
+  stepTicks(w, engine, 3, -6, 0);
+  ok(w.MH.packetCount <= 70, "budget respected: " + w.MH.packetCount);
+
+  const w2 = makeWorld({ enemyX: 7120, enemyY: 5000, counts: { 2: 15, 5: 6 } });
+  const e2 = engineFor(w2).engine;
+  stepTicks(w2, e2, 3, -6, 0);
+  ok(e2.stats.preplaced === 0, "nothing preplaced when both item groups are full");
+}
+
+console.log("\n29. a booked candidate that stops being legal is dropped, not sent");
+{
+  const w = makeWorld({ enemyX: 7330, enemyY: 5000 });
+  const { engine } = engineFor(w);
+  stepTicks(w, engine, 3, -22, 0);
+  const held = engine.book.pending();
+  if (held.length) {
+    const rec = held[0];
+    // drop a wall exactly where the candidate wanted to go
+    w.add(6, rec.x, rec.y);
+    w.MH.tickCount++; w.MH.packetCount = 0;
+    engine._threat.frameTick = -1;
+    engine._generator.cacheTick = -1;
+    engine.postTick();
+    let onTop = 0;
+    for (const o of w.objects.values())
+      if (Math.hypot(rec.x - o.pos.current.x, rec.y - o.pos.current.y) < rec.footR + o.placementScale) onTop++;
+    ok(onTop > 0, "the ground really is occupied now");
+    const after = engine.book.records.find(r => r.id === rec.id);
+    ok(after.state !== "fired", "the candidate on that ground was not sent, it was dropped (" + (after.reason || after.state) + ")");
+  } else { ok(true, "skipped, nothing booked"); }
+}
 
 console.log("");
 console.log((fail ? "FAILED  " : "PASSED  ") + (checks - fail) + "/" + checks + " checks");

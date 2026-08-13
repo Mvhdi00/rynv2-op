@@ -5789,6 +5789,12 @@ window.grbtp = 35;
       return this.deletedObjects.size !== 0;
     }
     removeObject(object) {
+      const engine = this.client._ModuleHandler && this.client._ModuleHandler.staticModules && this.client._ModuleHandler.staticModules.placementEngine;
+      if (engine) {
+        try {
+          engine.onVacated(object);
+        } catch (_) {}
+      }
       this.grid2D.remove(object.pos.current.x, object.pos.current.y, Math.max(object.collisionScale, object.placementScale), object.id);
       this.objects.delete(object.id);
       if (object instanceof PlayerObject) {
@@ -12350,6 +12356,7 @@ window.grbtp = 35;
   // lower one.
   class PlacementLedger {
     entries=[];
+    nextToken=1;
     expire(tick) {
       for (let i = this.entries.length - 1; i >= 0; i--) {
         if (this.entries[i].expires <= tick) this.entries.splice(i, 1);
@@ -12360,25 +12367,73 @@ window.grbtp = 35;
         if (this.entries[i].owner === owner) this.entries.splice(i, 1);
       }
     }
-    // True when something at least as important already holds this ground.
-    blocked(x, y, radius, priority) {
+    touch(token, tick, ttl, value) {
+      if (!token) return;
       for (const e of this.entries) {
-        if (e.priority < priority) continue;
-        if (Math.hypot(x - e.x, y - e.y) < radius + e.radius) return true;
+        if (e.token !== token) continue;
+        e.expires = tick + ttl;
+        if (value !== undefined) e.value = value;
+        return;
+      }
+    }
+    releaseToken(token) {
+      if (!token) return;
+      for (let i = this.entries.length - 1; i >= 0; i--) {
+        if (this.entries[i].token === token) {
+          this.entries.splice(i, 1);
+          return;
+        }
+      }
+    }
+    // A hard claim is ground already committed to the wire, and always holds:
+    // the build either exists or is on its way. A soft claim is an intention —
+    // it holds against equal or lower priority so nothing else wanders onto
+    // the slot, and yields to anything above it, because a decision made from
+    // something that has actually happened outranks a prediction about what
+    // might.
+    blocked(x, y, radius, priority, value) {
+      for (const e of this.entries) {
+        if (Math.hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
+        if (!e.soft) return true;
+        if (e.priority > priority) return true;
+        if (e.priority === priority && (value === undefined || value <= e.value)) return true;
       }
       return false;
     }
-    reserve(x, y, radius, priority, owner, tick, ttl = 3) {
-      if (this.blocked(x, y, radius, priority)) return false;
+    // Takes the soft claims this one outranks and hands back their tokens, so
+    // whoever owned them learns their ground is gone instead of discovering it
+    // when they try to use it.
+    preempt(x, y, radius, priority, value) {
+      const taken = [];
+      for (let i = this.entries.length - 1; i >= 0; i--) {
+        const e = this.entries[i];
+        if (!e.soft) continue;
+        if (Math.hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
+        if (e.priority > priority) continue;
+        if (e.priority === priority && (value === undefined || value <= e.value)) continue;
+        taken.push(e.token);
+        this.entries.splice(i, 1);
+      }
+      return taken;
+    }
+    reserve(x, y, radius, priority, owner, tick, ttl = 3, opts) {
+      const soft = !!(opts && opts.soft);
+      const value = opts && opts.value !== undefined ? opts.value : Infinity;
+      if (this.blocked(x, y, radius, priority, value)) return false;
+      this.preempt(x, y, radius, priority, value);
+      const token = this.nextToken++;
       this.entries.push({
         x: x,
         y: y,
         radius: radius,
         priority: priority,
         owner: owner,
-        expires: tick + ttl
+        expires: tick + ttl,
+        soft: soft,
+        value: value,
+        token: token
       });
-      return true;
+      return token;
     }
   }
 
@@ -12993,6 +13048,299 @@ window.grbtp = 35;
     }
   }
 
+  // ── Target motion ─────────────────────────────────────────────────────────
+  // Preplace is only as good as its guess about where the target is going, so
+  // the guess is measured rather than assumed. Each tracked entity gets a short
+  // history of observed positions; velocity is the difference between them and
+  // acceleration the difference between velocities. Nothing here presumes a
+  // direction, a speed or a straight line — when there is no history yet the
+  // confidence says so instead of the model inventing one.
+  //
+  // Forward integration continues the observed trend rather than re-applying
+  // the game's decay. The decay is real — velocity is multiplied by playerDecel
+  // once per millisecond, so a coasting entity keeps 0.993^111.11 of its speed
+  // across a tick — but it is already contained in the velocities we measured.
+  // Applying it a second time would model a target that has stopped steering,
+  // which is an assumption we have no evidence for: a player holding a
+  // direction is at terminal speed, and their observed velocity is flat.
+  //
+  // So the estimator carries the measured velocity forward and adds the
+  // measured change in it. A flat run predicts flat, a target visibly slowing
+  // predicts slowing, and one speeding up predicts speeding up. The decay only
+  // enters as a floor on how fast a target can plausibly shed speed, which is
+  // what bounds the extrapolation.
+  const RPE_TICK_DECAY = Math.pow(RPE_DECEL, RPE_TICK_MS);
+  const RPE_MOTION_SAMPLES = 5;
+
+  class TargetMotion {
+    tracks=new Map;
+    observe(entity, tick) {
+      const id = entity.id;
+      let track = this.tracks.get(id);
+      if (!track) {
+        track = {
+          samples: [],
+          vx: 0,
+          vy: 0,
+          ax: 0,
+          ay: 0,
+          heading: null,
+          speed: 0,
+          stability: 0,
+          lastTick: tick
+        };
+        this.tracks.set(id, track);
+      }
+      if (track.samples.length && track.samples[track.samples.length - 1].tick === tick) return track;
+      const pos = entity.pos.current;
+      // A gap in observation makes the old samples useless — the entity moved
+      // while we were not looking.
+      if (tick - track.lastTick > 2) track.samples.length = 0;
+      track.samples.push({
+        x: pos.x,
+        y: pos.y,
+        tick: tick
+      });
+      if (track.samples.length > RPE_MOTION_SAMPLES) track.samples.shift();
+      track.lastTick = tick;
+
+      const s = track.samples;
+      if (s.length >= 2) {
+        const a = s[s.length - 2], b = s[s.length - 1];
+        const span = Math.max(1, b.tick - a.tick);
+        const vx = (b.x - a.x) / span, vy = (b.y - a.y) / span;
+        if (s.length >= 3) {
+          const c = s[s.length - 3];
+          const prevSpan = Math.max(1, a.tick - c.tick);
+          track.ax = vx - (a.x - c.x) / prevSpan;
+          track.ay = vy - (a.y - c.y) / prevSpan;
+        } else {
+          track.ax = 0;
+          track.ay = 0;
+        }
+        track.vx = vx;
+        track.vy = vy;
+        track.speed = Math.hypot(vx, vy);
+        track.peakSpeed = Math.max(track.peakSpeed ?? 0, track.speed);
+        const prevHeading = track.heading;
+        track.heading = track.speed > .5 ? Math.atan2(vy, vx) : prevHeading;
+        track.headingShift = prevHeading !== null && track.heading !== null ? GeometrySolver.angleDist(track.heading, prevHeading) : 0;
+      }
+      track.stability = this._stability(track);
+      return track;
+    }
+
+    // How consistent the recent course has been. A target standing still is
+    // perfectly predictable in position even though its heading is undefined,
+    // so slow movement scores high rather than low.
+    _stability(track) {
+      const s = track.samples;
+      if (s.length < 3) return .35;
+      if (track.speed < .5) return .95;
+      const headings = [];
+      for (let i = 1; i < s.length; i++) {
+        const dx = s[i].x - s[i - 1].x, dy = s[i].y - s[i - 1].y;
+        if (Math.hypot(dx, dy) < .5) continue;
+        headings.push(Math.atan2(dy, dx));
+      }
+      if (headings.length < 2) return .5;
+      let spread = 0;
+      for (let i = 1; i < headings.length; i++) spread += GeometrySolver.angleDist(headings[i], headings[i - 1]);
+      spread /= headings.length - 1;
+      return Math.max(.05, 1 - spread / (Math.PI / 2));
+    }
+
+    get(id) {
+      return this.tracks.get(id) ?? null;
+    }
+
+    // Where the entity will be `ticks` ticks from now, and how much that is
+    // worth believing.
+    predict(entity, ticks) {
+      const track = this.tracks.get(entity.id);
+      const pos = entity.pos.current;
+      if (!track || track.samples.length < 2) {
+        // No history: the only honest prediction is that they are where they
+        // are, said with low confidence.
+        return {
+          x: pos.x,
+          y: pos.y,
+          confidence: ticks === 0 ? 1 : .25
+        };
+      }
+      let x = pos.x, y = pos.y, vx = track.vx, vy = track.vy;
+      // A target cannot shed speed faster than the game's decay allows, and
+      // will not accelerate past the speed we have already seen it hold, so
+      // the trend is followed between those two bounds.
+      const seen = Math.max(track.speed, track.peakSpeed ?? track.speed);
+      const floor = track.speed * RPE_TICK_DECAY;
+      for (let i = 0; i < ticks; i++) {
+        x += vx;
+        y += vy;
+        vx += track.ax;
+        vy += track.ay;
+        const sp = Math.hypot(vx, vy);
+        if (sp > seen * 1.1 && sp > 0) {
+          const k = seen * 1.1 / sp;
+          vx *= k;
+          vy *= k;
+        } else if (sp < floor && sp > 0) {
+          const k = floor / sp;
+          vx *= k;
+          vy *= k;
+        }
+      }
+      const depth = Math.min(1, (track.samples.length - 1) / 2);
+      const horizon = Math.exp(-ticks / 3.5);
+      const turning = 1 - Math.min(1, (track.headingShift ?? 0) / (Math.PI / 2));
+      return {
+        x: x,
+        y: y,
+        confidence: Math.max(.02, track.stability * depth * horizon * (.4 + .6 * turning))
+      };
+    }
+
+    // Earliest tick at which the predicted path enters a circle, or null.
+    intercept(entity, cx, cy, radius, maxTicks) {
+      for (let n = 0; n <= maxTicks; n++) {
+        const p = this.predict(entity, n);
+        if (Math.hypot(p.x - cx, p.y - cy) < radius) {
+          return {
+            tick: n,
+            confidence: p.confidence,
+            x: p.x,
+            y: p.y
+          };
+        }
+      }
+      return null;
+    }
+
+    expire(tick) {
+      for (const [id, track] of this.tracks) {
+        if (tick - track.lastTick > 20) this.tracks.delete(id);
+      }
+    }
+  }
+
+  // ── Preplace candidate book ───────────────────────────────────────────────
+  // Candidates live here, not in the send path. A record in this book has not
+  // been placed and may never be: it is a claim on ground plus a prediction
+  // about when it will matter. Auto place plans and fires inside one tick;
+  // preplace deliberately does not, because holding a candidate for a tick or
+  // two is what buys the chance to drop it when the target turns instead of
+  // paying for it.
+  //
+  // Ground is held softly. A soft claim keeps auto place off the same slot but
+  // yields immediately to anything of higher priority — a replacement reacting
+  // to a real deletion outranks a guess about the future, and should never
+  // have to wait behind one.
+  const RPE_PREPLACE_MAX_LEAD = 6;
+  const RPE_PREPLACE_FIRE_LEAD = 2;
+  // Booking costs nothing, so the bar for writing a candidate down is low.
+  // Sending costs packets and commits ground, so the bar for firing one is
+  // much higher. A candidate booked far out is re-measured every tick and
+  // climbs towards the firing bar as the target closes — or is dropped.
+  const RPE_PREPLACE_BOOK_CONFIDENCE = .12;
+  const RPE_PREPLACE_MAX_AGE = 8;
+  const RPE_PREPLACE_MIN_CONFIDENCE = .3;
+
+  class PreplaceBook {
+    records=[];
+    nextId=1;
+    add(rec) {
+      rec.id = this.nextId++;
+      rec.state = "pending";
+      this.records.push(rec);
+      return rec;
+    }
+    has(type, x, y, radius) {
+      for (const r of this.records) {
+        if (r.state !== "pending") continue;
+        if (r.type === type && Math.hypot(r.x - x, r.y - y) < radius) return true;
+      }
+      return false;
+    }
+    pending() {
+      return this.records.filter(r => r.state === "pending");
+    }
+    drop(rec, reason) {
+      rec.state = "expired";
+      rec.reason = reason;
+    }
+    // Records are held by world position rather than by angle, because the
+    // angle that reaches a point changes every time we move.
+    //
+    // Every pending record is re-measured against the target's current motion
+    // before it is judged. A candidate booked five ticks out is not a decision
+    // taken five ticks ago and left alone — its interception and confidence
+    // are recomputed each tick, so it climbs towards the firing bar as the
+    // target commits to its course and falls away when it does not.
+    sweep(tick, frame, engine) {
+      let dropped = 0;
+      for (const rec of this.records) {
+        if (rec.state !== "pending") continue;
+        // A course change is checked before anything is recomputed: the
+        // candidate was chosen for a path the target has abandoned, and
+        // re-measuring it against the new one would only confirm that more
+        // expensively.
+        if (rec.heading !== null && frame.motion && frame.motion.heading !== null && GeometrySolver.angleDist(rec.heading, frame.motion.heading) > rec.headingTolerance) {
+          this.drop(rec, "targetTurned");
+          engine.ledger.releaseToken(rec.token);
+          dropped++;
+          continue;
+        }
+        if (rec.kind === "intercept" && rec.targetId === frame.targetId) {
+          const hit = engine.motion.intercept(frame.target, rec.x, rec.y, rec.footR + frame.targetScale, RPE_PREPLACE_MAX_LEAD);
+          if (hit) {
+            rec.interceptTick = hit.tick;
+            rec.confidence = hit.confidence;
+            rec.expected = rec.value * hit.confidence;
+            // Refreshing keeps a live interception alive, but not forever: a
+            // candidate that has been about to matter for eight ticks is not
+            // about to matter.
+            rec.expiresTick = Math.min(rec.hardExpiry, Math.max(rec.expiresTick, tick + 2));
+            engine.ledger.touch(rec.token, tick, hit.tick + 2, rec.expected);
+          } else {
+            this.drop(rec, "noIntercept");
+            engine.ledger.releaseToken(rec.token);
+            dropped++;
+            continue;
+          }
+        }
+        let reason = null;
+        if (tick >= rec.expiresTick || tick >= rec.hardExpiry) reason = "expired";
+        else if (rec.targetId !== frame.targetId) reason = "targetChanged";
+        else if (rec.kind === "vacating" && !engine.client.ObjectManager.objects.has(rec.vacates)) reason = "vacated";
+        else {
+          // Still on our ring? We move, so a point that was reachable may not
+          // be any more.
+          const d = Math.hypot(rec.x - frame.myPos.x, rec.y - frame.myPos.y);
+          if (Math.abs(d - rec.ringR) > rec.footR * .8) reason = "outOfReach";
+        }
+        if (reason) {
+          this.drop(rec, reason);
+          engine.ledger.releaseToken(rec.token);
+          dropped++;
+        }
+      }
+      if (this.records.length > 32) {
+        this.records = this.records.filter(r => r.state === "pending" || tick - r.createdTick < 6);
+      }
+      return dropped;
+    }
+    invalidateAll(reason, engine) {
+      let n = 0;
+      for (const rec of this.records) {
+        if (rec.state !== "pending") continue;
+        this.drop(rec, reason);
+        engine.ledger.releaseToken(rec.token);
+        n++;
+      }
+      return n;
+    }
+  }
+
   // ── Engine ────────────────────────────────────────────────────────────────
   class RynPlacementEngine {
     moduleName="placementEngine";
@@ -13007,7 +13355,10 @@ window.grbtp = 35;
       candidates: 0,
       planned: 0,
       sent: 0,
-      value: 0
+      value: 0,
+      booked: 0,
+      preplaced: 0,
+      dropped: 0
     };
     _threat;
     _generator;
@@ -13018,6 +13369,11 @@ window.grbtp = 35;
     _plan=[];
     _planTargetId=null;
     _planTargetPos=null;
+    motion=new TargetMotion;
+    book=new PreplaceBook;
+    _profiles=new Map;
+    _profileTick=-1;
+    _blockers=null;
     constructor(client2) {
       this.client = client2;
       this._threat = new ThreatAnalyzer(client2);
@@ -13029,9 +13385,298 @@ window.grbtp = 35;
     reset() {
       this.ledger.entries.length = 0;
       this.memory.sends.clear();
+      this.motion.tracks.clear();
+      this.book.records.length = 0;
+      this._profiles.clear();
+      this._profileTick = -1;
       this._plan = [];
       this._planTargetId = null;
       this._planTargetPos = null;
+    }
+    profileFor(type) {
+      const tick = this.client._ModuleHandler.tickCount;
+      if (this._profileTick !== tick) {
+        this._profiles.clear();
+        this._profileTick = tick;
+      }
+      if (this._profiles.has(type)) return this._profiles.get(type);
+      const profile = rpeBuildProfile(this.client.myPlayer, type);
+      this._profiles.set(type, profile);
+      return profile;
+    }
+
+    // Every object either of us is about to destroy, and how many hits it has
+    // left. A slot that is about to open is worth building into before it
+    // does. Both directions are swept — one I am about to break while
+    // gathering opens a slot just as surely as one they are about to break.
+    attrition(frame) {
+      const {ObjectManager: ObjectManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const actors = [];
+      const predictType = ModuleHandler._getPredictWeapon();
+      const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
+      if (myWeapon !== null && myWeapon !== undefined && myWeapon >= 0 && myPlayer.isReloaded && myPlayer.isReloaded(predictType, 1)) {
+        const wd = DataHandler_default?.getWeapon?.(myWeapon);
+        if (wd) actors.push({
+          x: frame.myPos.x,
+          y: frame.myPos.y,
+          range: wd.range ?? 0,
+          dmg: myPlayer.getBuildingDamage?.(myWeapon, ModuleHandler.canBuy(0, 40)) ?? 0
+        });
+      }
+      const target = frame.target;
+      for (const slot of [ 0, 1 ]) {
+        const id = slot === 0 ? target.weapon?.primary : target.weapon?.secondary;
+        if (id === null || id === undefined) continue;
+        const reload = target.reload?.[slot];
+        if (!reload || reload.current < reload.max) continue;
+        const wd = DataHandler_default?.getWeapon?.(id);
+        if (!wd) continue;
+        actors.push({
+          x: frame.targetPos.x,
+          y: frame.targetPos.y,
+          range: wd.range ?? 0,
+          dmg: target.getBuildingDamage?.(id, true) ?? 50
+        });
+      }
+      if (actors.length === 0) return [];
+      const doomed = new Map;
+      for (const actor of actors) {
+        if (actor.dmg <= 0) continue;
+        const cells = Math.ceil((actor.range + 120) / ObjectManager2.grid2D.cellSize) + 1;
+        ObjectManager2.grid2D.query(actor.x, actor.y, cells, id => {
+          const obj = ObjectManager2.objects.get(id);
+          if (!obj || !(obj instanceof PlayerObject) || !obj.isDestroyable) return false;
+          // A trap the enemy has not walked into is hidden from them, so it is
+          // not a slot they are about to open.
+          if (Items[obj.type] && Items[obj.type].hideFromEnemy) return false;
+          const pos = obj.pos.current;
+          if (Math.hypot(actor.x - pos.x, actor.y - pos.y) - obj.scale > actor.range) return false;
+          const hits = Math.ceil(obj.health / actor.dmg);
+          const prev = doomed.get(obj);
+          if (prev === undefined || hits < prev) doomed.set(obj, hits);
+          return false;
+        });
+      }
+      const out = [];
+      for (const [obj, hits] of doomed) {
+        if (hits > 2) continue;
+        out.push({
+          object: obj,
+          hits: hits,
+          urgency: hits + frame.targetPos.distance(obj.pos.current) * .002
+        });
+      }
+      out.sort((a, b) => a.urgency - b.urgency);
+      return out.slice(0, 3);
+    }
+
+    // Predictive preplace. Candidates go into the book rather than onto the
+    // wire: holding one for a tick or two is what buys the chance to drop it
+    // when the target turns, instead of paying for it and then watching it
+    // become irrelevant.
+    planPreplace(frame, profiles, ctx) {
+      const tick = frame.tick;
+      const doomed = this.attrition(frame);
+      for (const profile of profiles) {
+        if (!profile) continue;
+        const open = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, null);
+        const captureR = profile.footR + frame.targetScale;
+
+        // Interception: walk the predicted path and ask which legal angle it
+        // runs into. The path comes from measured velocity and acceleration,
+        // so a target that is slowing predicts as slowing and one holding a
+        // line predicts as holding it.
+        //
+        // With fewer than two observations there is no measured velocity, and
+        // therefore nothing to predict. Booking an interception then would mean
+        // assuming a course we have not seen — and where the target is right
+        // now is auto place's job, not preplace's.
+        const tracked = frame.motion && frame.motion.samples.length >= 2;
+        if (open.length && tracked) {
+          for (let n = 1; n <= RPE_PREPLACE_MAX_LEAD; n++) {
+            const p = this.motion.predict(frame.target, n);
+            if (p.confidence < RPE_PREPLACE_BOOK_CONFIDENCE) break;
+            const want = Math.atan2(p.y - frame.myPos.y, p.x - frame.myPos.x);
+            const angle = GeometrySolver.nearestFree(open, want);
+            if (angle === null) continue;
+            const x = frame.myPos.x + profile.ringR * Math.cos(angle);
+            const y = frame.myPos.y + profile.ringR * Math.sin(angle);
+            const hit = this.motion.intercept(frame.target, x, y, captureR, RPE_PREPLACE_MAX_LEAD);
+            if (!hit) continue;
+            if (this.book.has(profile.type, x, y, profile.footR)) continue;
+            this._offer(profile, angle, x, y, open, frame, ctx, {
+              kind: "intercept",
+              interceptTick: hit.tick,
+              confidence: hit.confidence,
+              ttl: Math.max(2, hit.tick + 2),
+              vacates: null,
+              deadlineTick: tick
+            });
+          }
+        }
+
+        // A slot about to open. The doomed object is dropped from the blocker
+        // set so the ground it stands on reads legal, and the candidate is
+        // held until the object actually dies.
+        for (const entry of doomed) {
+          const obj = entry.object;
+          const freed = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, obj);
+          if (!freed.length) continue;
+          const objPos = obj.pos.current;
+          const want = Math.atan2(objPos.y - frame.myPos.y, objPos.x - frame.myPos.x);
+          const angle = GeometrySolver.nearestFree(freed, want);
+          if (angle === null) continue;
+          const x = frame.myPos.x + profile.ringR * Math.cos(angle);
+          const y = frame.myPos.y + profile.ringR * Math.sin(angle);
+          // Only worth holding if it is ground we cannot use right now.
+          if (GeometrySolver.inAperture(open, angle)) continue;
+          if (this.book.has(profile.type, x, y, profile.footR)) continue;
+          this._offer(profile, angle, x, y, freed, frame, ctx, {
+            kind: "vacating",
+            interceptTick: entry.hits,
+            confidence: Math.max(.3, 1 - (entry.hits - 1) * .35),
+            ttl: 4,
+            vacates: obj.id,
+            deadlineTick: tick + Math.max(1, entry.hits)
+          });
+        }
+      }
+    }
+
+    // Scores a proposal through the shared scorer, then discounts it by how
+    // much the prediction behind it is worth believing, and books it.
+    _offer(profile, angle, x, y, apertures, frame, ctx, meta) {
+      const cand = {
+        profile: profile,
+        angle: angle,
+        aperture: GeometrySolver.inAperture(apertures, angle) || apertures[0],
+        source: "predict",
+        x: x,
+        y: y
+      };
+      this._scorer.weigh(cand, frame, ctx);
+      // Merit and belief are kept apart. The score says how good this ground
+      // would be; the confidence says how much the prediction behind it is
+      // worth. Firing needs both, arbitration uses their product, and mixing
+      // them at booking time would throw away every candidate more than a
+      // couple of ticks out.
+      if (cand.value < this.weights.minValue) return null;
+      const expected = cand.value * meta.confidence;
+      const token = this.ledger.reserve(x, y, profile.footR, RPE_PRIORITY.ANTICIPATION, "preplace", frame.tick, meta.ttl + 1, {
+        soft: true,
+        value: expected
+      });
+      if (!token) return null;
+      return this.book.add({
+        type: profile.type,
+        x: x,
+        y: y,
+        footR: profile.footR,
+        ringR: profile.ringR,
+        targetId: frame.targetId,
+        heading: frame.motion ? frame.motion.heading : null,
+        headingTolerance: meta.kind === "vacating" ? Math.PI : .7,
+        createdTick: frame.tick,
+        expiresTick: frame.tick + meta.ttl,
+        hardExpiry: frame.tick + RPE_PREPLACE_MAX_AGE,
+        interceptTick: meta.interceptTick,
+        deadlineTick: meta.deadlineTick,
+        confidence: meta.confidence,
+        value: cand.value,
+        expected: expected,
+        kind: meta.kind,
+        vacates: meta.vacates,
+        terms: cand.terms,
+        token: token
+      });
+    }
+
+    // Nothing leaves the book until it is due: an interception close enough to
+    // matter, or a slot whose object has run out of hits.
+    firePreplace(frame) {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      const due = [];
+      for (const rec of this.book.pending()) {
+        if (rec.confidence < RPE_PREPLACE_MIN_CONFIDENCE) continue;
+        if (rec.kind === "intercept" && rec.interceptTick > RPE_PREPLACE_FIRE_LEAD) continue;
+        if (rec.kind === "vacating" && frame.tick < rec.deadlineTick) continue;
+        due.push(rec);
+      }
+      if (due.length === 0) return 0;
+      due.sort((a, b) => b.expected - a.expected);
+      let fired = 0;
+      for (const rec of due) {
+        if (ModuleHandler.packetCount + RPE_PLACE_PACKETS > ModuleHandler.packetLimit) break;
+        if (this._send(rec, frame)) fired++;
+      }
+      return fired;
+    }
+
+    _send(rec, frame) {
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      if (!myPlayer.canPlace(rec.type)) return false;
+      const profile = this.profileFor(rec.type);
+      if (!profile) return false;
+      // The ring moves with us, so the angle that reaches this ground is
+      // recomputed rather than remembered, and the ground is re-checked
+      // against the world as it is now rather than as it was when booked.
+      const angle = Math.atan2(rec.y - frame.myPos.y, rec.x - frame.myPos.x);
+      const apertures = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) : null);
+      if (!GeometrySolver.inAperture(apertures, angle)) {
+        this.book.drop(rec, "illegal");
+        this.ledger.releaseToken(rec.token);
+        return false;
+      }
+      // Swap the soft hold for the hard one the send earns.
+      this.ledger.releaseToken(rec.token);
+      this.sending = true;
+      try {
+        ModuleHandler.place(rec.type, angle);
+      } finally {
+        this.sending = false;
+      }
+      this.ledger.reserve(rec.x, rec.y, rec.footR, RPE_PRIORITY.ANTICIPATION, "preplace", frame.tick, 2);
+      this.memory.note(profile, angle, frame.tick);
+      ModuleHandler.placedOnce = true;
+      ModuleHandler.moduleActive = true;
+      ModuleHandler.placeAngles[0] = rec.type;
+      ModuleHandler.placeAngles[1].push(angle);
+      rec.state = "fired";
+      rec.firedTick = frame.tick;
+      rec.firedAngle = angle;
+      this.stats.preplaced += 1;
+      return true;
+    }
+
+    // The deletion packet is the game telling us a slot just opened. Acting on
+    // it is exact where a timer is a guess, so a candidate waiting on that
+    // object goes out now rather than when its deadline happens to arrive.
+    onVacated(object) {
+      if (!object || !Settings_default._preplacer) return;
+      const ModuleHandler = this.client._ModuleHandler;
+      const frame = this._threat.frame;
+      if (!frame || frame.tick !== ModuleHandler.tickCount) return;
+      for (const rec of this.book.pending()) {
+        if (rec.vacates !== object.id) continue;
+        if (ModuleHandler.packetCount + RPE_PLACE_PACKETS > ModuleHandler.packetLimit) break;
+        this._send(rec, frame);
+      }
+      // With Replace on, a candidate that already went out for this object is
+      // sent once more now that the ground is provably clear — the first send
+      // may have lost the race to the server.
+      if (!Settings_default._replacer) return;
+      for (const rec of this.book.records) {
+        if (rec.state !== "fired" || rec.vacates !== object.id || rec.resent) continue;
+        if (ModuleHandler.packetCount + RPE_PLACE_PACKETS > ModuleHandler.packetLimit) break;
+        rec.resent = true;
+        const angle = Math.atan2(rec.y - frame.myPos.y, rec.x - frame.myPos.x);
+        this.sending = true;
+        try {
+          ModuleHandler.place(rec.type, angle);
+        } finally {
+          this.sending = false;
+        }
+      }
     }
     // Maps a module name onto a priority class. Anything that outranks auto
     // place takes the ground; anything below it yields.
@@ -13082,9 +13727,17 @@ window.grbtp = 35;
       if (!frame) {
         this._plan = [];
         this._planTargetId = null;
+        // No target means no prediction to hold candidates against.
+        this.book.invalidateAll("noTarget", this);
         return;
       }
       this.memory.expire(tick, frame.myPos);
+      this.motion.expire(tick);
+      // Motion is observed once per tick and read by both halves of the
+      // engine, so auto place and preplace never disagree about where the
+      // target is going.
+      frame.motion = this.motion.observe(frame.target, tick);
+      this.stats.dropped = this.book.sweep(tick, frame, this);
 
       // A target that has moved out from under the plan invalidates it before
       // anything is spent on it.
@@ -13095,7 +13748,10 @@ window.grbtp = 35;
         y: frame.targetPos.y
       };
 
-      if (frame.range > (Settings_default._autoplacerRadius ?? 350)) return;
+      if (frame.range > (Settings_default._autoplacerRadius ?? 350)) {
+        this.book.invalidateAll("outOfRange", this);
+        return;
+      }
       if (frame.budgetLeft < RPE_PLACE_PACKETS) return;
 
       const profiles = [];
@@ -13112,6 +13768,7 @@ window.grbtp = 35;
         if (p.footR > maxFoot) maxFoot = p.footR;
       }
       const blockers = this._generator.blockersAround(frame.myPos.x, frame.myPos.y, maxRing, maxFoot);
+      this._blockers = blockers;
 
       // Escape analysis is shared by every candidate, so it is computed once.
       let exits = null;
@@ -13137,6 +13794,21 @@ window.grbtp = 35;
         memory: this.memory,
         batched: false
       };
+      // Preplace runs first so its ground is booked before auto place looks
+      // for any, and fires first so an interception it has been holding is not
+      // beaten to the slot by an opportunistic placement worth less than it.
+      if (Settings_default._preplacer) {
+        this.planPreplace(frame, profiles, {
+          exits: exits,
+          memory: this.memory,
+          batched: false
+        });
+        this.stats.booked = this.book.pending().length;
+        this.firePreplace(frame);
+      } else if (this.book.records.length) {
+        this.book.invalidateAll("disabled", this);
+      }
+
       const candidates = [];
       for (const profile of profiles) {
         const apertures = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, blockers, null);
@@ -13550,293 +14222,10 @@ window.grbtp = 35;
         this._glotusCount += 1;
       }
     }
-    postTick() {
-      if (!Settings_default._autoplacer) return;
-      // وضع Glotus: منطق مختلف تماماً، ينفّذ ويخرج بدل منطق RYN
-      if (Settings_default._glotusPlacer) {
-        this._glotusPlace();
-        return;
-      }
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
-      if (!myPlayer || !myPlayer.inGame) return;
-      this._tick = this.client._ModuleHandler.tickCount;
-      for (const [angle, expiry] of this._bannedAngles) {
-        if (this._tick > expiry) this._bannedAngles.delete(angle);
-      }
-      const enemy = EnemyManager2.nearestEnemy;
-      if (!enemy) return;
-      const myPos = myPlayer.pos.current;
-      const myFut = myPlayer.pos.future;
-      const enemyPos = enemy.pos.current;
-      const enemyFut = enemy.pos.future;
-      const enemyScale = enemy.collisionScale;
-      const trapId = myPlayer.getItemByType(7);
-      const spikeId = myPlayer.getItemByType(4);
-      if (!spikeId && !trapId) return;
-      const _sm = this.client.SocketManager;
-      const pingTime = _sm?.pong ?? 0;
-      const minPingTime = _sm?.minPingTime ?? 0;
-      const spikesOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject) || obj.itemGroup !== 2) return;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return;
-        spikesOur.push(obj);
-      });
-      const trapsOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 4, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject) || obj.type !== 15) return;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return;
-        trapsOur.push(obj);
-      });
-      const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < Items[t.type].scale) || null;
-      if (enemyTrapped && !this.client._wasEnemyTrapped) {
-        this.client._focusUntilTick = this.client._ModuleHandler.tickCount + 3;
-      }
-      this.client._wasEnemyTrapped = !!enemyTrapped;
-      const imTrapped = !!myPlayer.isTrapped;
-      const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
-      const canTrapTick = () => false;
-      const canShamePlace = () => {
-        if (!Settings_default._shameGrind) return false;
-        const mySecWeapon = DataHandler_default?.getWeapon?.(myPlayer.weapon?.secondary ?? null);
-        if (!mySecWeapon?.name?.toLowerCase().includes("hammer")) return false;
-        if (enemy.spikeDamage > 0 || (enemy.shameCount ?? 0) > 6) return false;
-        if (!enemyTrapped) return false;
-        const hammerDmg = myPlayer.getBuildingDamage?.(myPlayer.weapon?.secondary, this.client._ModuleHandler.canBuy(0, 40)) ?? 0;
-        if (enemyTrapped.health > hammerDmg) return false;
-        if (Math.hypot(enemyTrapped.pos.current.x - myPos.x, enemyTrapped.pos.current.y - myPos.y) > 125) return false;
-        if (Math.hypot(enemyPos.x - myPos.x, enemyPos.y - myPos.y) > 35 * 1.8 + 75) return false;
-        const sp2 = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, enemyTrapped) : [];
-        const tr2 = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, enemyTrapped) : [];
-        return tr2.some(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 50) && sp2.some(o => o.placeable && Math.hypot(o.x - enemyPos.x, o.y - enemyPos.y) < 35 + 52);
-      };
-      const canAutoShame = () => {
-        if (!Settings_default._autoShame) return false;
-        if (!enemy) return false;
-        if ((enemy.shameCount ?? 0) >= (Settings_default._autoShameLimit ?? 6)) return false;
-        if (myPlayer.isTrapped) return false;
-        if (enemyTrapped) return false;
-        if (enemy.receivedDamage !== null && Date.now() - enemy.receivedDamage < 600) return false;
-        if (!myPlayer.isReloaded(0, 1)) return false;
-        const primaryRange = 35 * 1.8 + (DataHandler_default.getWeapon(myPlayer.weapon?.primary)?.range ?? 110);
-        const dist = myPos.distance(enemyPos);
-        if (dist <= primaryRange) return false;
-        return true;
-      };
-      const LOOKAHEAD = 222, START_OFFSET = 35;
-      const futX = myPos.x + Math.cos(predictMoveAngle) * LOOKAHEAD;
-      const futY = myPos.y + Math.sin(predictMoveAngle) * LOOKAHEAD;
-      const stX = myPos.x + Math.cos(predictMoveAngle) * START_OFFSET;
-      const stY = myPos.y + Math.sin(predictMoveAngle) * START_OFFSET;
-      const _los = cfg => {
-        const blockFuture = this._lineInRect(cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5, stX, stY, futX, futY);
-        const blockEnemy = this._lineInRect(cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5, myFut.x, myFut.y, enemyFut.x, enemyFut.y);
-        let canSpikeTick = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < cfg.scale + 35;
-        if (canSpikeTick) {
-          const kbA = Math.atan2(enemyPos.y - cfg.y, enemyPos.x - cfg.x);
-          const e2p = Math.atan2(myPos.y - enemyPos.y, myPos.x - enemyPos.x);
-          let diff = Math.abs(kbA - e2p);
-          if (diff > Math.PI) diff = 2 * Math.PI - diff;
-          canSpikeTick = diff >= Math.PI / 5;
-        }
-        const canRetrap = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < 50;
-        const willRetrap = true;
-        return {
-          blockFuture: blockFuture,
-          blockEnemy: blockEnemy,
-          canSpikeTick: canSpikeTick,
-          canRetrap: canRetrap,
-          willRetrap: willRetrap
-        };
-      };
-      const _findClosestSpikeToKb = spikeList => {
-        const validKb = spikeList.filter(a => {
-          const canHit = this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-          if (!canHit) return false;
-          const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-          const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-          for (const sp of spikesOur) {
-            const s = sp.pos.current, sc = sp.collisionScale;
-            if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-          }
-          return false;
-        }).map(a => {
-          const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-          const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-          let best = Infinity;
-          for (const sp of spikesOur) {
-            const s = sp.pos.current, sc = sp.collisionScale;
-            if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-              const a2e = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x), e2s = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-              let d = Math.abs(a2e - e2s);
-              if (d > Math.PI) d = 2 * Math.PI - d;
-              best = Math.min(best, d);
-            }
-          }
-          return {
-            angle: a,
-            alignment: best
-          };
-        });
-        if (!validKb.length) return null;
-        const bestScore = Math.min(...validKb.map(v => v.alignment));
-        return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle || null;
-      };
-      let forcedSpam = false;
-      if (this._lastPrePlaceObj) {
-        const stillExists = ObjectManager2.objects.has(this._lastPrePlaceObj.id);
-        if (!stillExists) {
-          forcedSpam = true;
-        }
-      }
-      this._predictObjects = [];
-      this._lastPrePlaceObj = null;
-      this._spamPrePlacer = false;
-      if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) {
-        return;
-      }
-      if (Settings_default._replacer) {
-        this._spamPrePlacer = true;
-      }
-      if (this._placedAngles && this._placedAngles.length > 0) {
-        const _chkS = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _chkT = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) : [];
-        const _allChk = [ ..._chkS, ..._chkT ];
-        for (const pa of this._placedAngles) {
-          const _m = _allChk.find(a => Math.abs(a.angle - pa) < 0.01);
-          if (_m && _m.placeable) {
-            this._bannedAngles.set(pa, this._tick + 18);
-          }
-        }
-      }
-      this._placedAngles = [];
-      if (Settings_default._preplacer && myPos.distance(enemyPos) < 300 && !(imTrapped && myPlayer.spikeDamage > 0)) {
-        const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2);
-        if (findObject) {
-          const spikeAngles = spikeId ? this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, findObject) : [];
-          const trapAngles = trapId ? this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, findObject) : [];
-          const placeableSpikeAngles = spikeAngles.filter(o => o.placeable);
-          const placeableTrapAngles = trapAngles.filter(o => o.placeable);
-          const closestSpikeToEnemy = placeableSpikeAngles.filter(a => this._lineInRect(a.x - (enemyScale + a.scale - 1), a.y - (enemyScale + a.scale - 1), a.x + (enemyScale + a.scale - 1), a.y + (enemyScale + a.scale - 1), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0];
-          const closestTrapToEnemy = placeableTrapAngles.filter(a => this._lineInRect(a.x - a.scale, a.y - a.scale, a.x + a.scale, a.y + a.scale, enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0];
-          const closestSpikeToKbPP = (() => {
-            const validKb = placeableSpikeAngles.filter(a => {
-              const canHit = this._lineInRect(a.x - (enemyScale + a.scale - 2), a.y - (enemyScale + a.scale - 2), a.x + (enemyScale + a.scale - 2), a.y + (enemyScale + a.scale - 2), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-              if (!canHit) return false;
-              const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-              const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-              for (const sp of spikesOur) {
-                const s = sp.pos.current, sc = sp.collisionScale;
-                if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-              }
-              return false;
-            }).map(a => {
-              const kbA = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-              const pX = enemyFut.x + 200 * Math.cos(kbA), pY = enemyFut.y + 200 * Math.sin(kbA);
-              let best = Infinity;
-              for (const sp of spikesOur) {
-                const s = sp.pos.current, sc = sp.collisionScale;
-                if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-                  const a2e = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x), e2s = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-                  let d = Math.abs(a2e - e2s);
-                  if (d > Math.PI) d = 2 * Math.PI - d;
-                  best = Math.min(best, d);
-                }
-              }
-              return {
-                angle: a,
-                alignment: best
-              };
-            });
-            if (!validKb.length) return undefined;
-            const bestScore = Math.min(...validKb.map(v => v.alignment));
-            return validKb.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle;
-          })();
-          const isPrePlaceAngle = config => {
-            if (!enemy) return false;
-            if (myPos.distance(enemyPos) > 350) return false;
-            const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-            const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
-            const {blockFuture: blockFuture, blockEnemy: blockEnemy, canSpikeTick: canSpikeTick, canRetrap: canRetrap} = _los(config);
-            if (isSpike && canSpikeTick && canTrapTick()) return true;
-            if (isTrap && canRetrap && canShamePlace()) return true;
-            if (isSpike && enemyTrapped && findObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            if (isTrap && enemy.spikeDamage > 0 && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
-            if (isSpike && closestSpikeToKbPP && config === closestSpikeToKbPP && !canShamePlace()) return true;
-            if (isSpike && enemyTrapped && !blockFuture && !blockEnemy && findObject !== enemyTrapped) return true;
-            if (isTrap) return true;
-            return false;
-          };
-          let findAngle = null;
-          const _pick = angles => angles.filter(o => o.placeable && isPrePlaceAngle(o)).sort((a, b) => Math.hypot(findObject.pos.current.x - a.x, findObject.pos.current.y - a.y) - Math.hypot(findObject.pos.current.x - b.x, findObject.pos.current.y - b.y))[0];
-          for (const _angles of [ spikeAngles, trapAngles ]) {
-            if (findAngle) break;
-            const obj = _pick(_angles);
-            if (obj) findAngle = obj;
-          }
-          if (findAngle) {
-            this._addPredictObject(findAngle.id, findAngle.angle, true, myPos);
-            this._lastPrePlaceObj = findObject;
-            // Preplace fires a tick from now, so it holds its ground from the
-            // moment it decides on it — otherwise auto place, which sends
-            // immediately, would take the slot out from under it.
-            const engine = ModuleHandler.staticModules && ModuleHandler.staticModules.placementEngine;
-            if (engine) {
-              engine.claim(findAngle.x, findAngle.y, findAngle.scale, RPE_PRIORITY.ANTICIPATION, "preplace", ModuleHandler.tickCount, 3);
-            }
-          }
-        }
-      }
-      // Auto place now runs in RynPlacementEngine, which scores and plans
-      // whole combinations under the shared packet budget. What is left here
-      // is preplace and replace, which reserve their ground in the engine's
-      // ledger so the two can never choose the same slot.
-      const preObjects = this._predictObjects.filter(o => o.preplace);
-      if (preObjects.length > 0) {
-        const _aimAngle = () => {
-          const mh = ModuleHandler;
-          if (mh._autoBreakActive && mh._lastBreakAngle != null) return mh._lastBreakAngle;
-          return mh._currentAngle ?? 0;
-        };
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              PacketManager2.updateAngle(_aimAngle());
-            }
-          } catch (_) {}
-        }, 1);
-        setTimeout(() => {
-          try {
-            for (const obj of preObjects) {
-              if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placedOnce = true;
-              ModuleHandler.placeAngles[0] = type;
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              ModuleHandler.moduleActive = true;
-              this._placedAngles.push(obj.angle);
-              PacketManager2.updateAngle(_aimAngle());
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - pingTime));
-        setTimeout(() => {
-          if (!this._spamPrePlacer) return;
-          try {
-            for (const obj of preObjects) {
-              if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;
-              const type = obj.id === trapId ? 7 : 4;
-              ModuleHandler.place(type, obj.angle);
-              ModuleHandler.placeAngles[1].push(obj.angle);
-              this._placedAngles.push(obj.angle);
-              PacketManager2.updateAngle(_aimAngle());
-            }
-          } catch (_) {}
-        }, Math.max(1, 111 - minPingTime));
-      }
-    }
+    // Auto place and preplace both moved to RynPlacementEngine, so this
+    // module no longer runs per tick. The class stays because trapRebuild
+    // still calls its angle and item-limit helpers directly.
+    postTick() {}
   }
   class TrapAnimal {
     moduleName="trapAnimal";
@@ -19262,7 +19651,7 @@ window.grbtp = 35;
         safeWalk: new SafeWalk(client2)
       };
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.movement ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.shameSpam, this.staticModules.autoHitToShame, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.autoRetrap, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTick, this.staticModules.knockbackTickTrap, this.staticModules.knockbackTickHammer, this.staticModules.kbTickHammerV2, this.staticModules.knockbackTick, this.staticModules.kbPredictInsta, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.comboApproach, this.staticModules.chatLog, this.staticModules.autoPlay, this.staticModules.lunaSafeWalk, this.staticModules.autoGatherBreak, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.trapRebuild, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.shameSpam, this.staticModules.autoHitToShame, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.autoRetrap, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTick, this.staticModules.knockbackTickTrap, this.staticModules.knockbackTickHammer, this.staticModules.kbTickHammerV2, this.staticModules.knockbackTick, this.staticModules.kbPredictInsta, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.comboApproach, this.staticModules.chatLog, this.staticModules.autoPlay, this.staticModules.lunaSafeWalk, this.staticModules.autoGatherBreak, this.staticModules.placementEngine, this.staticModules.trapRebuild, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule ];
       this.reset();
     }
     movementReset() {
