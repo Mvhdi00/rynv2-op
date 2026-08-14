@@ -3118,19 +3118,38 @@ window.grbtp = 35;
       this.handleNearest(1, animal);
       this.handleNearestDangerAnimal(animal);
     }
+    // Every module that wants a spike under the enemy right now comes through
+    // here. The sends go out via RynNetwork so that two modules asking for the
+    // same build on the same tick pay for it once — the placer, the spike
+    // ticks and the spike traps all share one dedupe.
     attemptSpikePlacement() {
-      const {_ModuleHandler: ModuleHandler} = this.client;
       const placementAngles = this.nearestSpikePlacerAngle;
       if (placementAngles === null) {
-        return;
+        return false;
       }
+      const {myPlayer: myPlayer} = this.client;
       const itemType = 4;
-      for (const angle of placementAngles) {
-        ModuleHandler.place(itemType, angle);
+      const id = myPlayer.getItemByType(itemType);
+      if (id === null) {
+        return false;
       }
-      ModuleHandler.placedOnce = true;
-      ModuleHandler.placeAngles[0] = itemType;
-      ModuleHandler.placeAngles[1] = placementAngles;
+      const network = rynPlacement(this.client).network;
+      const pos = myPlayer.pos.current;
+      let sent = false;
+      for (const angle of placementAngles) {
+        const ok = network.send({
+          type: itemType,
+          id: id,
+          angle: angle,
+          pos: myPlayer.getPlacePosition(pos, id, angle),
+          scale: Items[id].scale,
+          key: itemType + ":" + (angle * 100 | 0)
+        });
+        if (ok) {
+          sent = true;
+        }
+      }
+      return sent;
     }
     handleEnemies(enemies) {
       this.reset();
@@ -5584,13 +5603,18 @@ window.grbtp = 35;
         }
       }
     }
-    canPlaceItem(id, position, addRadius = 0) {
+    // `ignoreID` is how a preplace asks "could I build here if that object
+    // were already gone" without a second collision test of its own.
+    canPlaceItem(id, position, addRadius = 0, ignoreID = null) {
       if (id !== 18 && pointInRiver(position)) {
         return false;
       }
       const item = Items[id];
       return !this.grid2D.query(position.x, position.y, 1, id2 => {
         const object = this.objects.get(id2);
+        if (ignoreID !== null && object.id === ignoreID) {
+          return;
+        }
         const scale = item.scale + object.placementScale + addRadius;
         if (position.distance(object.pos.current) < scale) {
           return true;
@@ -8883,87 +8907,311 @@ window.grbtp = 35;
   }
   const TrapTick_default = TrapTick;
   // ==========================================================================
-  // Luna placer — autoplace, preplace and replace, ported from Luna Client 1.1
-  // (`getPredictObjects`, `updateAngles`, `getPrePlaceAngles`,
-  // `isAutoPlaceAngle`, `isPrePlaceAngle`, `getPrePlaceObject`,
-  // `addPredictObject`). It replaces the Auraro placer this client shipped.
+  // RYN PLACEMENT LAYER
   //
-  // Luna runs all three off one pass per tick. It rebuilds `predictObjects` —
-  // the builds it wants — and flags each entry `preplace` or not:
+  // One pipeline for auto place, preplace and auto replace:
   //
-  //   autoplace  angles worth a spike or trap right now, sent immediately
-  //              (`preplace: false`)
-  //   preplace   one angle aimed at the slot an object is about to vacate,
-  //              held back and sent a tick later, once the slot is free
-  //              (`preplace: true`)
-  //   replace    that same preplace entry sent a third time at min-ping, for
-  //              when the second send lost the race to the server
+  //   game state → prediction → candidates → scoring → validation
+  //              → RynArbiter → RynNetwork
   //
-  // So preplace and replace are not separate decisions — they are the second
-  // and third send of the one preplace entry, which is why this is a single
-  // module rather than three. Luna gates them on `prePlace` and
-  // `spampreplace`; here that is `Settings._prePlace` and `Settings._replace`.
+  // Four pieces, none of which owns anything a RYN subsystem already owns:
   //
-  // Only the data access is rewritten onto RYN's managers: `visibleObjects`
-  // becomes ObjectManager.grid2D queries, `myPlayer.items[2]`/`items[4]`
-  // become getItemByType(4)/(7), and Luna's `x2/y2` and `xVel/yVel` become
-  // pos.current and pos.future. The geometry is carried over unchanged — the
-  // 72-angle probe, the perfect-angle edge detection, lineInRect, the
-  // knockback alignment scoring, and both placement priority ladders.
+  //   RynRuntime          per-tick cache and invalidation. Nothing recomputes
+  //                       twice in a tick; nothing survives into the next one.
+  //   RynPlacementEngine  candidates and scoring. Delegates every angle to
+  //                       ObjectManager.getBestPlacementAngles and every
+  //                       position test to ObjectManager.canPlaceItem — it
+  //                       does not solve geometry itself.
+  //   RynArbiter          who may place this tick and at what priority. Reads
+  //                       ModuleHandler.moduleActive / activeModule; spike
+  //                       tick and the combat modules outrank it by
+  //                       construction because they run first.
+  //   RynNetwork          budget, in-tick dedupe and emission through
+  //                       ModuleHandler.place / PacketManager. No socket, no
+  //                       queue of its own.
   //
-  // Two Luna branches are kept in place but can never fire here: `canTrapTick`
-  // and `canShamePlace` both gate on Luna's `shameTick` / `shameGrind`
-  // toggles, and this client has no shame-grind feature to hang them on. They
-  // are left as explicit `false` so the ladders still read 1:1 against Luna.
+  // The previous placer carried its own 72-step angle probe and its own
+  // collision test, which made two placement solvers in one client that
+  // disagreed at the edges. That probe is gone; ObjectManager's analytic
+  // solver is the only one left. It is also the better of the two: it computes
+  // the exact tangent angle where a build first clears a blocker, where the
+  // probe could only find the nearest of 72 fixed angles and missed any gap
+  // narrower than 5°.
+  //
+  // WHAT CAME FROM WHERE — see the report for the full comparison.
+  //
+  //   Luna       the preplace/replace shape (one intent, sent on three
+  //              schedules), the knockback-alignment test that prefers a spike
+  //              whose knockback throws the enemy onto another spike, the
+  //              line-of-sight guards that stop a build walling off your own
+  //              path, and the banned-angle list for builds the server refused.
+  //   NovaStorm  ping-timed sends (`111 - ping`, then `111 - minPing` as
+  //              insurance) so the preplace lands on the server on the tick
+  //              the slot opens, and the aim being re-sent alongside every
+  //              build so a place never drags the swing off target.
+  //   Sakuna     per-angle item choice — whether an angle wants a trap or a
+  //              spike is a property of that angle, not of the decision — and
+  //              the in-tick placed-position list that stops two candidate
+  //              angles resolving to the same build.
+  //   Auraro     replace driven by hits-to-break rather than by the delete
+  //              event, so the replacement is solved before the object dies;
+  //              placement solved from the predicted self position; and
+  //              per-tick range caches keyed by (item, ignored object).
+  //
+  // What was deliberately left behind: Sakuna's circlePlace fan (up to 180
+  // sends off one decision) and Auraro's 16-angle attack spray. Both are the
+  // "random surrounding spam" this layer exists to stop.
   // ==========================================================================
-  const LUNA_SPIKE_TYPE = 4;
-  const LUNA_TRAP_TYPE = 7;
-  const LUNA_ANGLE_STEPS = 72;
-  const LUNA_ANGLE_STEP = Math.PI * 2 / LUNA_ANGLE_STEPS;
-
-  // Luna's own budget check was `packets + 5 > 119` against a counter it owned
-  // outright. RYN shares one allowance across every module, so the same guard
-  // is written against ModuleHandler's counter and limit.
-  const LUNA_PLACE_COST = 5;
-
-  // How long an angle stays banned after a build that the server dropped.
-  const LUNA_BAN_TICKS = 18;
-
+  const RYN_SPIKE_TYPE = 4;
+  const RYN_TRAP_TYPE = 7;
+  // ModuleHandler.place() is four sends; the aim that follows it is a fifth.
+  const RYN_PLACE_COST = 5;
+  // Headroom left for combat. The placer is the lowest-priority consumer of
+  // the wire, so it never spends the last of the allowance.
+  const RYN_PLACE_RESERVE = 10;
+  // How long an angle stays banned after a build the server dropped.
+  const RYN_BAN_TICKS = 18;
+  // Most builds one decision may emit. Past this it stops being placement and
+  // starts being spam.
+  const RYN_MAX_INTENTS = 3;
+  // An intent below this is not worth a packet.
+  const RYN_MIN_SCORE = 12;
+  // How far out the placer engages at all, before the user's radius setting.
+  const RYN_ENGAGE_RANGE = 350;
+  const RYN_PREPLACE_RANGE = 300;
+  // Objects within this many hits of dying are treated as already gone: the
+  // replacement is solved now, not when the delete arrives. Auraro's number.
+  const RYN_DOOMED_HITS = 4;
+  // Self line-of-sight probe: how far ahead of me a build must not wall off.
+  const RYN_LOS_LOOKAHEAD = 222;
+  const RYN_LOS_START = 35;
+  // Ring used to read which way out of the fight the enemy still has. Eight
+  // directions is enough to tell a corner from open ground and cheap enough
+  // to run every tick.
+  const RYN_ESCAPE_RAYS = 8;
+  const RYN_ESCAPE_STEP = Math.PI * 2 / RYN_ESCAPE_RAYS;
+  const RYN_ESCAPE_PROBE = 90;
+  // Knockback reach used when scoring a spike whose knockback should throw the
+  // enemy onto another one. Same number the spike tick uses.
+  const RYN_KB_REACH = 111;
   // Modules that own a spike tick or a sync. They all run before the placer,
   // and whichever claims the tick puts its name in ModuleHandler.activeModule.
-  // If one of them owns the tick the placer stays out of its way rather than
-  // spending the packets it needs. This guard is RYN's, not Luna's — Luna has
-  // no module ordering to collide with.
-  const LUNA_SPIKE_TICK_MODULES = new Set([ "spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap" ]);
-  function lunaSpikeTickBusy(ModuleHandler) {
-    return LUNA_SPIKE_TICK_MODULES.has(ModuleHandler.activeModule);
-  }
+  const RYN_COMBAT_MODULES = new Set([ "spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap" ]);
 
-  class AutoPlacer {
-    moduleName="autoPlacer";
+  // ──────────────────────────────────────────────────────────────────────────
+  // RynRuntime — per-tick memory. Every cache in the placement layer lives
+  // here so there is exactly one place that knows when to forget.
+  // ──────────────────────────────────────────────────────────────────────────
+  class RynRuntime {
     client;
-    _predictObjects=[];
-    _placedAngles=[];
-    _bannedAngles=new Map;
-    _angleCache=new Map;
-    _angleCacheTick=-1;
-    _tick=0;
-    _lastPrePlaceObj=null;
-    _spamPrePlacer=false;
+    tick=-1;
+    _angles=new Map;
+    _selfPos=null;
+    _doomed=null;
+    _escape=null;
     constructor(client2) {
       this.client = client2;
     }
+    sync() {
+      const tick = this.client._ModuleHandler.tickCount;
+      if (this.tick === tick) {
+        return false;
+      }
+      this.tick = tick;
+      this._angles.clear();
+      this._selfPos = null;
+      this._doomed = null;
+      this._escape = null;
+      return true;
+    }
+    // Candidate angles for one (item, target angle, ignored object). Keyed on
+    // all three because they are what the solver's answer depends on.
+    angles(id, targetAngle, ignoreID, solve) {
+      const key = id + "|" + (targetAngle * 100 | 0) + "|" + (ignoreID === null ? "-" : ignoreID);
+      let cached = this._angles.get(key);
+      if (cached === void 0) {
+        cached = solve();
+        this._angles.set(key, cached);
+      }
+      return cached;
+    }
+    // Where I will be when a build sent this tick actually lands. Auraro runs
+    // its movement simulator for this; RYN already has one, and already has it
+    // wired to my own move direction, so it is reused rather than rebuilt.
+    selfPos() {
+      if (this._selfPos !== null) {
+        return this._selfPos;
+      }
+      const {myPlayer: myPlayer} = this.client;
+      const simulation = myPlayer.simulation;
+      if (simulation && typeof simulation.reset === "function") {
+        try {
+          simulation.reset(this.client);
+          simulation.update(this.client, false);
+          this._selfPos = simulation.getPos();
+          return this._selfPos;
+        } catch (e) {}
+      }
+      // Same motion model everything else in the client uses, applied to me.
+      this._selfPos = myPlayer.predictPosition(1);
+      return this._selfPos;
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // RynNetwork — the only thing in this layer that sends. Budget, dedupe and
+  // emission, all through ModuleHandler and PacketManager.
+  // ──────────────────────────────────────────────────────────────────────────
+  class RynNetwork {
+    client;
+    // (type, quantised angle) pairs already sent this tick, and the resolved
+    // build positions behind them. Sakuna keeps the second list because two
+    // different angles can land the same build; without it the placer pays
+    // twice for one object.
+    _sentTick=-1;
+    _sentKeys=new Set;
+    _sentPositions=[];
+    constructor(client2) {
+      this.client = client2;
+    }
+    _roll() {
+      const tick = this.client._ModuleHandler.tickCount;
+      if (this._sentTick !== tick) {
+        this._sentTick = tick;
+        this._sentKeys.clear();
+        this._sentPositions.length = 0;
+      }
+    }
+    budgetLeft() {
+      const MH = this.client._ModuleHandler;
+      return MH.packetLimit - MH.packetCount - RYN_PLACE_RESERVE;
+    }
+    canAfford(count = 1) {
+      return this.budgetLeft() >= RYN_PLACE_COST * count;
+    }
+    // True when this exact build has already gone out this tick, by angle or
+    // by where it would land.
+    isDuplicate(intent) {
+      this._roll();
+      if (this._sentKeys.has(intent.key)) {
+        return true;
+      }
+      for (let i = 0; i < this._sentPositions.length; i++) {
+        const sent = this._sentPositions[i];
+        if (sent.scale + intent.scale > sent.pos.distance(intent.pos)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    // Emit one intent. Returns false without spending anything if the build is
+    // a duplicate, unaffordable, or no longer legal.
+    send(intent) {
+      this._roll();
+      const {_ModuleHandler: MH, myPlayer: myPlayer} = this.client;
+      if (this.isDuplicate(intent) || !this.canAfford()) {
+        return false;
+      }
+      if (!myPlayer.canPlace(intent.type)) {
+        return false;
+      }
+      this._sentKeys.add(intent.key);
+      this._sentPositions.push({
+        pos: intent.pos,
+        scale: intent.scale
+      });
+      MH.place(intent.type, intent.angle);
+      MH.placedOnce = true;
+      MH.placeAngles[0] = intent.type;
+      MH.placeAngles[1].push(intent.angle);
+      return true;
+    }
+    // NovaStorm re-sends the aim after every build so the swing does not drag
+    // onto the build angle. RYN's UpdateAngle module does this at the end of
+    // the tick, but a deferred send lands after that has already run.
+    reaim() {
+      const MH = this.client._ModuleHandler;
+      const angle = MH._autoBreakActive && MH._lastBreakAngle !== null && MH._lastBreakAngle !== undefined ? MH._lastBreakAngle : MH._currentAngle ?? 0;
+      try {
+        this.client.PacketManager.updateAngle(angle);
+      } catch (e) {}
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // RynArbiter — priority. Placement is the lowest-priority use of a tick, so
+  // this is mostly a set of reasons to stand down; the ordering that makes
+  // combat win is ModuleHandler's, not a second scheduler.
+  // ──────────────────────────────────────────────────────────────────────────
+  class RynArbiter {
+    client;
+    constructor(client2) {
+      this.client = client2;
+    }
+    // A combat module already claimed the tick. Spike tick's placement is its
+    // own to spend; the placer does not add to it.
+    combatBusy() {
+      return RYN_COMBAT_MODULES.has(this.client._ModuleHandler.activeModule);
+    }
+    // Non-combat modules that took the tick for something else.
+    moduleBusy() {
+      return this.client._ModuleHandler.moduleActive;
+    }
+    // The danger read. Same gate the combat modules use, so the placer stands
+    // down in exactly the situations they do.
+    inDanger() {
+      return this.client.EnemyManager.shouldIgnoreModule();
+    }
+    // Whether a placement of this kind may proceed. Auto place yields to
+    // anything; preplace and replace are allowed to run alongside a combat
+    // claim, because their sends are deferred past it and their whole value is
+    // the timing.
+    allows(kind) {
+      if (this.inDanger()) {
+        return false;
+      }
+      if (kind === "autoplace") {
+        return !this.moduleBusy() && !this.combatBusy();
+      }
+      return true;
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // RynPlacementEngine — candidates and scoring. Produces intents; never sends
+  // one. Every angle it returns came out of ObjectManager's solver and every
+  // position was checked by ObjectManager's validator.
+  // ──────────────────────────────────────────────────────────────────────────
+  class RynPlacementEngine {
+    client;
+    runtime;
+    network;
+    arbiter;
+    _bannedAngles=new Map;
+    _lastPlaced=[];
+    // The tick's intents, memoised. Spike tick reads this too — see claimSpike.
+    _intentTick=-1;
+    _intents=[];
+    // The best spike of the tick, kept outside the top-N cut. The placer sends
+    // the cut; spike tick asks for a spike specifically, and a good one that
+    // lost its slot to two better traps is still the right answer for it.
+    _bestSpike=null;
+    constructor(client2) {
+      this.client = client2;
+      this.runtime = new RynRuntime(client2);
+      this.network = new RynNetwork(client2);
+      this.arbiter = new RynArbiter(client2);
+    }
     reset() {
-      this._predictObjects = [];
-      this._placedAngles = [];
       this._bannedAngles.clear();
-      this._angleCache.clear();
-      this._angleCacheTick = -1;
-      this._lastPrePlaceObj = null;
-      this._spamPrePlacer = false;
+      this._lastPlaced.length = 0;
+      this._intentTick = -1;
+      this._intents.length = 0;
+      this._bestSpike = null;
     }
 
-    // UTILS.lineInRect, unchanged.
+    // ── geometry helpers ────────────────────────────────────────────────────
+    // Luna's lineInRect, unchanged. Used only for the line-of-sight guards.
     _lineInRect(x1, y1, x2, y2, ax, ay, bx, by) {
       let minX = ax, maxX = bx;
       if (ax > bx) {
@@ -8992,487 +9240,549 @@ window.grbtp = 35;
       return true;
     }
 
-    // Luna getConfig: where a build of `id` at `angle` would land. The game
-    // puts it on a circle of radius playerScale + itemScale + placeOffset.
-    _getConfig(id, myPos) {
-      const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      return angle => ({
-        id: id,
-        angle: angle,
-        x: myPos.x + dist * Math.cos(angle),
-        y: myPos.y + dist * Math.sin(angle),
-        scale: item.scale
+    // ── STAGE 1: game state ─────────────────────────────────────────────────
+    // Everything around the enemy that already shapes the fight. One grid
+    // query, cached for the tick.
+    board(enemy) {
+      const {ObjectManager: OM, PlayerManager: PM, myPlayer: myPlayer} = this.client;
+      const pos = enemy.pos.current;
+      const board = {
+        mine: [],
+        theirs: [],
+        traps: [],
+        doomed: []
+      };
+      OM.grid2D.query(pos.x, pos.y, 3, id => {
+        const object = OM.objects.get(id);
+        if (object === void 0) {
+          return;
+        }
+        const isPlayerObject = object instanceof PlayerObject;
+        const damaging = object.getDamage() > 0;
+        if (!isPlayerObject) {
+          if (damaging) {
+            board.theirs.push(object);
+          }
+          return;
+        }
+        if (PM.isEnemyByID(object.ownerID, myPlayer)) {
+          if (damaging) {
+            board.theirs.push(object);
+          }
+        } else {
+          if (damaging) {
+            board.mine.push(object);
+          }
+          if (object.type === 15) {
+            board.traps.push(object);
+          }
+        }
+        // Auraro's replace trigger: an object this close to dying is treated
+        // as gone, so the replacement is solved a few ticks early instead of
+        // reacted to after the fact.
+        if (object.isDestroyable && this.hitsToBreak(object, enemy) <= RYN_DOOMED_HITS) {
+          board.doomed.push(object);
+        }
       });
+      return board;
     }
-
-    // Luna canPlace: the landing point has to clear every object, and stay out
-    // of the river unless it is a platform.
-    _canPlace(id, angle, myPos, ObjectManager2, excludeObj) {
-      const cfg = this._getConfig(id, myPos)(angle);
-      const cx = cfg.x, cy = cfg.y, cs = cfg.scale;
-      const blocked = ObjectManager2.grid2D.query(cx, cy, 4, objId => {
-        const obj = ObjectManager2.objects.get(objId);
-        if (!obj) return false;
-        if (excludeObj && obj === excludeObj) return false;
-        return Math.hypot(cx - obj.pos.current.x, cy - obj.pos.current.y) < cs + obj.placementScale;
-      });
-      if (blocked) return false;
-      if (id !== 18) {
-        const mid = Config_default.mapScale / 2;
-        const riverHalf = Config_default.riverWidth / 2;
-        if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
+    // How many swings the enemy needs to take this object down. Uses the
+    // damage numbers RYN already computes for its own break logic.
+    hitsToBreak(object, breaker) {
+      const damage = breaker.getMaxBuildingDamage(object, false);
+      if (damage === null || damage <= 0) {
+        return Infinity;
       }
-      return true;
+      return Math.ceil(object.health / damage);
     }
-
-    // Luna isItemLimit. Luna reads `group.sandboxLimit || Math.max(...)`
-    // outside sandbox too, which caps everything at the sandbox number; RYN
-    // already resolves this correctly in ClientPlayer.getItemCount, so the
-    // limit comes from there.
-    _isItemLimit(id, myPlayer) {
-      const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
-      return !!limit && count >= limit;
-    }
-
-    // Luna getPrePlaceAngles + getPerfectAngles: probe 72 evenly spaced
-    // angles, then mark the two ends of every placeable run "perfect" — those
-    // are the angles packed against something, which is where a build is worth
-    // the most. `excludeObj` is the object Luna pretends is already gone.
-    //
-    // Luna recomputes all 72 on every call and calls it several times a tick.
-    // The result only depends on (id, excludeObj) within a tick, so it is
-    // memoised per tick — callers compare entries by identity, which needs the
-    // same objects back anyway.
-    _getPrePlaceAngles(id, myPos, myPlayer, ObjectManager2, excludeObj) {
-      if (id === null || id === undefined) return [];
-      if (this._isItemLimit(id, myPlayer)) return [];
-      const tick = this.client._ModuleHandler.tickCount;
-      if (this._angleCacheTick !== tick) {
-        this._angleCache.clear();
-        this._angleCacheTick = tick;
+    // Which way out the enemy still has. A direction is open when nothing that
+    // stops them sits within a body's length of it. This is the only reading
+    // in the layer that is about the shape of the fight rather than about one
+    // build, and it is what lets scoring prefer the build that closes a corner
+    // over the build that adds a fourth spike to an open side.
+    escapeRays(enemy, board) {
+      // Sync first rather than trusting the caller to have done it: this is
+      // the one cached read that is reachable from outside the tick pipeline.
+      this.runtime.sync();
+      if (this.runtime._escape !== null) {
+        return this.runtime._escape;
       }
-      const key = id + "_" + (excludeObj ? excludeObj.id : "n");
-      const cached = this._angleCache.get(key);
-      if (cached) return cached;
-      const getConfig = this._getConfig(id, myPos);
-      const angles = [];
-      for (let i = 0; i < LUNA_ANGLE_STEPS; i++) {
-        const angle = i * LUNA_ANGLE_STEP;
-        angles.push({
-          ...getConfig(angle),
-          placeable: this._canPlace(id, angle, myPos, ObjectManager2, excludeObj),
-          perfect: false
+      const pos = enemy.pos.current;
+      const rays = [];
+      for (let i = 0; i < RYN_ESCAPE_RAYS; i++) {
+        const angle = i * RYN_ESCAPE_STEP;
+        const probe = pos.addDirection(angle, RYN_ESCAPE_PROBE);
+        let open = true;
+        for (let j = 0; j < board.mine.length; j++) {
+          const object = board.mine[j];
+          if (probe.distance(object.pos.current) <= object.collisionScale + enemy.collisionScale) {
+            open = false;
+            break;
+          }
+        }
+        rays.push({
+          angle: angle,
+          open: open
         });
       }
-      for (let i = 1; i < angles.length; i++) {
-        if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
-        if (angles[i - 1].placeable && !angles[i].placeable) angles[i - 1].perfect = true;
-      }
-      this._angleCache.set(key, angles);
-      return angles;
+      this.runtime._escape = rays;
+      return rays;
     }
 
-    // Luna addPredictObject: queue a build, unless it would land on one this
-    // tick has already queued.
-    _addPredictObject(id, angle, preplace, myPos) {
-      const item = Items[id];
-      const dist = 35 + item.scale + (item.placeOffset || 0);
-      const x = myPos.x + dist * Math.cos(angle);
-      const y = myPos.y + dist * Math.sin(angle);
-      for (const obj of this._predictObjects) {
-        if (obj.id !== 17 && Math.hypot(x - obj.x, y - obj.y) < item.scale + obj.scale) return;
+    // ── STAGE 2: prediction ─────────────────────────────────────────────────
+    // Reads the client's one motion model (Entity.predictPosition, with the
+    // confidence and adaptive horizon it derives from acceleration and turn
+    // rate). Nothing here predicts anything itself.
+    predictEnemy(enemy, ticks) {
+      return enemy.predictPosition(ticks);
+    }
+
+    // ── STAGE 3: candidates ─────────────────────────────────────────────────
+    // The one solver, through the runtime cache. `ignoreID` is how a preplace
+    // asks "where could I build if that object were already gone".
+    candidates(type, position, targetAngle, ignoreID) {
+      const {ObjectManager: OM, myPlayer: myPlayer} = this.client;
+      const id = myPlayer.getItemByType(type);
+      if (id === null) {
+        return [];
       }
-      this._predictObjects.push({
+      const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
+      if (limit && count >= limit) {
+        return [];
+      }
+      const angles = this.runtime.angles(id, targetAngle, ignoreID, () => OM.getBestPlacementAngles({
+        position: position,
         id: id,
-        angle: angle,
-        x: x,
-        y: y,
-        scale: item.scale,
-        preplace: preplace
-      });
+        targetAngle: targetAngle,
+        ignoreID: ignoreID,
+        preplace: ignoreID !== null,
+        reduce: false,
+        fill: false
+      }));
+      const out = [];
+      for (let i = 0; i < angles.length; i++) {
+        const angle = angles[i];
+        if (this._bannedAngles.has(angle)) {
+          continue;
+        }
+        const pos = myPlayer.getPlacePosition(position, id, angle);
+        if (!OM.canPlaceItem(id, pos, 0, ignoreID)) {
+          continue;
+        }
+        out.push({
+          type: type,
+          id: id,
+          angle: angle,
+          pos: pos,
+          scale: Items[id].scale,
+          key: type + ":" + (angle * 100 | 0)
+        });
+      }
+      return out;
     }
 
-    // Luna getPrePlaceObject: the object whose slot is about to open. Either
-    // one I am about to break myself while gathering, or one the enemy is
-    // about to break with a weapon that just came off reload. Whichever it is,
-    // the closest to the enemy wins, and finding one arms the replace resend.
-    _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2) {
-      const ModuleHandler = this.client._ModuleHandler;
-      let findObject = null;
-      const autoGathering = ModuleHandler._autoBreakActive || ModuleHandler.autoattack || ModuleHandler.forceWeapon !== null;
-      if (autoGathering) {
-        const predictType = ModuleHandler._getPredictWeapon();
-        const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
-        const predictReady = myWeapon !== null && myWeapon !== undefined && myPlayer.isReloaded(predictType, 0);
-        if (predictReady) {
-          const wd = DataHandler_default?.getWeapon?.(myWeapon);
-          if (wd) {
-            const myRange = wd.range ?? 0;
-            const myDmg = myPlayer.getBuildingDamage?.(myWeapon, myPlayer.hatID === 40) ?? 0;
-            const gatherAngle = Config_default.gatherAngle;
-            const myFut = myPlayer.pos.future ?? myPos;
-            const attackAngle = ModuleHandler._autoBreakActive && ModuleHandler._lastBreakAngle !== null && ModuleHandler._lastBreakAngle !== undefined ? ModuleHandler._lastBreakAngle : ModuleHandler._currentAngle ?? myPos.angle(enemyPos);
-            const candidates = [];
-            ObjectManager2.grid2D.query(myPos.x, myPos.y, 3, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return false;
-              if (myFut.distance(obj.pos.current) - obj.scale > myRange) return false;
-              let diff = Math.abs(myFut.angle(obj.pos.current) - attackAngle);
-              if (diff > Math.PI) diff = Math.PI * 2 - diff;
-              if (diff > gatherAngle) return false;
-              if (obj.health <= myDmg) candidates.push(obj);
-              return false;
-            });
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = candidates[0];
-            }
-          }
-        }
-      }
-      if (!findObject) {
-        const secReload = enemy.reload?.[1];
-        const primReload = enemy.reload?.[0];
-        const secJustReady = secReload && secReload.previous < secReload.max && secReload.current >= secReload.max;
-        const primJustReady = primReload && primReload.previous < primReload.max && primReload.current >= primReload.max;
-        const secID = enemy.weapon?.secondary ?? null;
-        const primID = enemy.weapon?.primary ?? null;
-        let weaponToCheck = null;
-        // Luna checks the enemy's secondary only when it is the great hammer,
-        // and their primary only when it swings inside 400ms.
-        if (secID === 10 && secJustReady) {
-          weaponToCheck = secID;
-        }
-        if (weaponToCheck === null && primID !== null && primJustReady) {
-          const wd = DataHandler_default?.getWeapon?.(primID);
-          if (wd && (wd.speed ?? 999) <= 400) weaponToCheck = primID;
-        }
-        if (weaponToCheck !== null) {
-          const wd = DataHandler_default?.getWeapon?.(weaponToCheck);
-          if (wd) {
-            const weaponRange = wd.range ?? 0;
-            const dmgToBuilding = enemy.getBuildingDamage?.(weaponToCheck, true) ?? 50;
-            const candidates = [];
-            ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
-              const obj = ObjectManager2.objects.get(id);
-              if (!obj || !(obj instanceof PlayerObject)) return false;
-              // Luna skips anything the enemy cannot see yet — a pit trap they
-              // have not walked into is not a slot about to open.
-              if (Items[obj.type] && Items[obj.type].hideFromEnemy) return false;
-              if (enemyPos.distance(obj.pos.current) - obj.scale > weaponRange) return false;
-              if (obj.health <= dmgToBuilding) candidates.push(obj);
-              return false;
-            });
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
-              findObject = candidates[0];
-            }
-          }
-        }
-      }
-      if (findObject) {
-        this._spamPrePlacer = true;
-      }
-      return findObject;
-    }
-
-    // Luna's knockback pick, shared by the autoplace and preplace ladders: of
-    // the angles whose spike would catch the enemy, keep the ones whose
-    // knockback throws them onto a spike we already own, and take the one
-    // whose push lines up best with a spike — ties broken by distance.
-    _closestSpikeToKb(spikeAngles, spikesOur, enemyPos, enemyFut, enemyScale, pad) {
-      const hitsEnemy = a => this._lineInRect(a.x - (enemyScale + a.scale - pad), a.y - (enemyScale + a.scale - pad), a.x + (enemyScale + a.scale - pad), a.y + (enemyScale + a.scale - pad), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y);
-      const kbLine = a => {
-        const kbAngle = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-        return [ enemyFut.x + 200 * Math.cos(kbAngle), enemyFut.y + 200 * Math.sin(kbAngle) ];
-      };
-      const scored = spikeAngles.filter(a => {
-        if (!hitsEnemy(a)) return false;
-        const [pX, pY] = kbLine(a);
-        for (const sp of spikesOur) {
-          const s = sp.pos.current, sc = sp.collisionScale;
-          if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) return true;
-        }
-        return false;
-      }).map(a => {
-        const [pX, pY] = kbLine(a);
-        let best = Infinity;
-        for (const sp of spikesOur) {
-          const s = sp.pos.current, sc = sp.collisionScale;
-          if (this._lineInRect(s.x - sc, s.y - sc, s.x + sc, s.y + sc, enemyFut.x, enemyFut.y, pX, pY)) {
-            const angleToEnemy = Math.atan2(enemyFut.y - a.y, enemyFut.x - a.x);
-            const enemyToSpike = Math.atan2(s.y - enemyFut.y, s.x - enemyFut.x);
-            let diff = Math.abs(angleToEnemy - enemyToSpike);
-            if (diff > Math.PI) diff = Math.PI * 2 - diff;
-            best = Math.min(best, diff);
-          }
-        }
-        return {
-          angle: a,
-          alignment: best
-        };
-      });
-      if (scored.length === 0) return null;
-      const bestScore = Math.min(...scored.map(v => v.alignment));
-      return scored.filter(v => v.alignment === bestScore).sort((a, b) => Math.hypot(enemyFut.x - a.angle.x, enemyFut.y - a.angle.y) - Math.hypot(enemyFut.x - b.angle.x, enemyFut.y - b.angle.y))[0]?.angle ?? null;
-    }
-
-    // Luna's "closest angle that catches the enemy on their way": the build
-    // box has to cross the segment from where they are to where they will be.
-    _closestToEnemy(angles, enemyPos, enemyFut, pad) {
-      return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
-    }
-
-    postTick() {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, PacketManager: PacketManager2} = this.client;
-      if (!Settings_default._autoplacer) return;
-      if (!myPlayer || !myPlayer.inGame) return;
-      if (lunaSpikeTickBusy(ModuleHandler)) return;
-
-      this._tick = ModuleHandler.tickCount;
-      for (const [angle, expiry] of this._bannedAngles) {
-        if (this._tick > expiry) this._bannedAngles.delete(angle);
-      }
-
-      const enemy = EnemyManager2.nearestEnemy;
-      if (!enemy) return;
-
-      const spikeId = myPlayer.getItemByType(LUNA_SPIKE_TYPE);
-      const trapId = myPlayer.getItemByType(LUNA_TRAP_TYPE);
-      if (spikeId === null && trapId === null) return;
-
-      const myPos = myPlayer.pos.current;
-      const myFut = myPlayer.pos.future ?? myPos;
+    // ── STAGE 4: scoring ────────────────────────────────────────────────────
+    // Sakuna decides trap-or-spike per angle rather than per decision. Same
+    // idea here, but the answer falls out of the score: both item types are
+    // offered at every angle and whichever scores higher there wins.
+    score(candidate, ctx) {
+      const {enemy: enemy, board: board, myPos: myPos} = ctx;
+      const pos = candidate.pos;
       const enemyPos = enemy.pos.current;
-      const enemyFut = enemy.pos.future ?? enemyPos;
-      const enemyScale = enemy.collisionScale;
+      const predicted = ctx.predicted;
+      const reach = candidate.scale + enemy.collisionScale;
+      let score = 0;
 
-      // Luna's spikes_our / traps_our: everything around the enemy that is not
-      // an enemy's.
-      const spikesOur = [];
-      const trapsOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
-        const obj = ObjectManager2.objects.get(id);
-        if (!obj || !(obj instanceof PlayerObject)) return false;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return false;
-        if (obj.itemGroup === 2) spikesOur.push(obj);
-        if (obj.type === 15) trapsOur.push(obj);
+      // Tactical value — does this build touch the ground they are standing on
+      // or heading for? A build that touches neither is decoration.
+      const nowGap = pos.distance(enemyPos) - reach;
+      const futureGap = pos.distance(predicted) - reach;
+      const gap = Math.min(nowGap, futureGap);
+      if (gap > RYN_ESCAPE_PROBE) {
+        return 0;
+      }
+      score += Math.max(0, 60 - gap * .6);
+      // Weight the predicted half by how much the motion model trusts itself,
+      // so a target that just cut its angle is scored mostly on where it is.
+      if (futureGap < nowGap) {
+        score += (nowGap - futureGap) * .5 * enemy.predictConfidence;
+      }
+
+      // Escape routes — the build's real worth is how much it closes. A spike
+      // that seals the last open side of a corner beats three spikes added to
+      // an open one.
+      const rays = this.escapeRays(enemy, board);
+      let sealed = 0;
+      let openCount = 0;
+      for (let i = 0; i < rays.length; i++) {
+        if (!rays[i].open) {
+          continue;
+        }
+        openCount += 1;
+        const probe = enemyPos.addDirection(rays[i].angle, RYN_ESCAPE_PROBE);
+        if (probe.distance(pos) <= candidate.scale + enemy.collisionScale) {
+          sealed += 1;
+        }
+      }
+      score += sealed * 22;
+      // Closing the last way out is worth more than closing one of six.
+      if (sealed > 0 && openCount <= 2) {
+        score += 35;
+      }
+
+      // Trap opportunity — a trap on the ground they are walking onto pins
+      // them, which is worth more than any amount of chip damage.
+      if (candidate.type === RYN_TRAP_TYPE) {
+        if (!enemy.isTrapped && futureGap <= 0) {
+          score += 70;
+        }
+        // A trap under an enemy already pinned is wasted.
+        if (enemy.isTrapped) {
+          score -= 60;
+        }
+      }
+
+      if (candidate.type === RYN_SPIKE_TYPE) {
+        // A spike beside a pinned enemy is the whole point of pinning them.
+        if (enemy.isTrapped && gap <= 0) {
+          score += 55;
+        }
+        // Luna's knockback alignment: a spike whose knockback throws them onto
+        // another of my spikes is worth two hits, not one.
+        for (let i = 0; i < board.mine.length; i++) {
+          const other = board.mine[i];
+          if (other.pos.current.distance(pos) < 1) {
+            continue;
+          }
+          const kbAngle = pos.angle(enemyPos);
+          const landing = enemyPos.addDirection(kbAngle, RYN_KB_REACH);
+          if (segmentReachesCircle(enemyPos, landing, other.pos.current, other.collisionScale + enemy.collisionScale)) {
+            score += 30;
+            break;
+          }
+        }
+      }
+
+      // Self-block — Luna's two line-of-sight guards. A build that walls off
+      // where I am going, or my line to them, costs me more than it costs them.
+      const box = [ pos.x - candidate.scale - 5, pos.y - candidate.scale - 5, pos.x + candidate.scale + 5, pos.y + candidate.scale + 5 ];
+      if (ctx.moveAngle !== null) {
+        const start = myPos.addDirection(ctx.moveAngle, RYN_LOS_START);
+        const ahead = myPos.addDirection(ctx.moveAngle, RYN_LOS_LOOKAHEAD);
+        if (this._lineInRect(box[0], box[1], box[2], box[3], start.x, start.y, ahead.x, ahead.y)) {
+          score -= 45;
+        }
+      }
+      if (this._lineInRect(box[0], box[1], box[2], box[3], myPos.x, myPos.y, enemyPos.x, enemyPos.y)) {
+        score -= 30;
+      }
+
+      // Gap fill — the solver returns tangent angles, which are by definition
+      // wedged against something already standing. Those are the builds that
+      // close a wall rather than start one.
+      let neighbours = 0;
+      for (let i = 0; i < board.mine.length; i++) {
+        if (board.mine[i].pos.current.distance(pos) <= candidate.scale + board.mine[i].collisionScale + 6) {
+          neighbours += 1;
+        }
+      }
+      score += Math.min(neighbours, 2) * 14;
+
+      // Packet cost. Flat per build, so it only ever breaks ties — but it does
+      // break them, which is what stops a marginal third build going out.
+      score -= RYN_PLACE_COST;
+      return score;
+    }
+
+    // ── STAGE 5: the tick's intents ─────────────────────────────────────────
+    intents() {
+      const tick = this.client._ModuleHandler.tickCount;
+      if (this._intentTick === tick) {
+        return this._intents;
+      }
+      this.runtime.sync();
+      this._intentTick = tick;
+      this._bestSpike = null;
+      this._intents = this.build();
+      return this._intents;
+    }
+    build() {
+      const {_ModuleHandler: MH, EnemyManager: EM, myPlayer: myPlayer} = this.client;
+      if (!myPlayer || !myPlayer.inGame) {
+        return [];
+      }
+      // Age out bans from builds the server refused.
+      for (const [angle, expiry] of this._bannedAngles) {
+        if (MH.tickCount > expiry) {
+          this._bannedAngles.delete(angle);
+        }
+      }
+      this.reviewLastPlacements();
+      const enemy = EM.nearestEnemy;
+      if (enemy === null) {
+        return [];
+      }
+      const myPos = myPlayer.pos.current;
+      const enemyPos = enemy.pos.current;
+      const distance = myPos.distance(enemyPos);
+      if (distance > RYN_ENGAGE_RANGE) {
+        return [];
+      }
+      const board = this.board(enemy);
+      const ctx = {
+        enemy: enemy,
+        board: board,
+        myPos: myPos,
+        predicted: this.predictEnemy(enemy, 1),
+        moveAngle: MH.move_dir
+      };
+      const out = [];
+      const radius = Settings_default._autoplacerRadius ?? RYN_ENGAGE_RANGE;
+
+      // AUTO PLACE — both item types, every candidate angle, scored together.
+      if (Settings_default._autoplacer && distance <= radius) {
+        const targetAngle = myPos.angle(ctx.predicted);
+        const pool = [ ...this.candidates(RYN_SPIKE_TYPE, myPos, targetAngle, null), ...this.candidates(RYN_TRAP_TYPE, myPos, targetAngle, null) ];
+        for (let i = 0; i < pool.length; i++) {
+          const candidate = pool[i];
+          const score = this.score(candidate, ctx);
+          if (score < RYN_MIN_SCORE) {
+            continue;
+          }
+          out.push({
+            kind: "autoplace",
+            type: candidate.type,
+            id: candidate.id,
+            angle: candidate.angle,
+            pos: candidate.pos,
+            scale: candidate.scale,
+            key: candidate.key,
+            score: score,
+            target: null,
+            tick: MH.tickCount
+          });
+        }
+      }
+
+      // PREPLACE / REPLACE — the same intent on two schedules, aimed at the
+      // slot an object is about to vacate. Solved from where I will be when it
+      // lands, not from where I am now.
+      if ((Settings_default._prePlace || Settings_default._replace) && distance <= RYN_PREPLACE_RANGE && board.doomed.length > 0 && !(myPlayer.isTrapped && myPlayer.spikeDamage > 0)) {
+        // Urgency: dying soonest first, nearest second. Auraro's ordering.
+        board.doomed.sort((a, b) => this.hitsToBreak(a, enemy) - this.hitsToBreak(b, enemy) || enemyPos.distance(a.pos.current) - enemyPos.distance(b.pos.current));
+        const futurePos = this.runtime.selfPos();
+        const target = board.doomed[0];
+        const targetAngle = futurePos.angle(target.pos.current);
+        const pool = [ ...this.candidates(RYN_SPIKE_TYPE, futurePos, targetAngle, target.id), ...this.candidates(RYN_TRAP_TYPE, futurePos, targetAngle, target.id) ];
+        let best = null;
+        for (let i = 0; i < pool.length; i++) {
+          const candidate = pool[i];
+          // Only worth pre-solving if it lands in the slot that is opening.
+          if (candidate.pos.distance(target.pos.current) > candidate.scale + target.placementScale) {
+            continue;
+          }
+          const score = this.score(candidate, ctx) + 25;
+          if (best === null || score > best.score) {
+            best = {
+              kind: "preplace",
+              type: candidate.type,
+              id: candidate.id,
+              angle: candidate.angle,
+              pos: candidate.pos,
+              scale: candidate.scale,
+              key: candidate.key,
+              score: score,
+              target: target,
+              tick: MH.tickCount
+            };
+          }
+        }
+        if (best !== null) {
+          out.push(best);
+        }
+      }
+
+      out.sort((a, b) => b.score - a.score);
+      for (let i = 0; i < out.length; i++) {
+        if (out[i].type === RYN_SPIKE_TYPE) {
+          this._bestSpike = out[i];
+          break;
+        }
+      }
+      return out.slice(0, RYN_MAX_INTENTS);
+    }
+
+    // ── STAGE 6: validation ─────────────────────────────────────────────────
+    // Run immediately before every send, including the deferred ones, where
+    // several ticks' worth of the world can have changed since the intent was
+    // built.
+    validate(intent) {
+      const {ObjectManager: OM, myPlayer: myPlayer} = this.client;
+      if (!myPlayer.inGame || !myPlayer.canPlace(intent.type)) {
         return false;
+      }
+      if (this._bannedAngles.has(intent.angle)) {
+        return false;
+      }
+      if (!this.arbiter.allows(intent.kind)) {
+        return false;
+      }
+      if (!this.network.canAfford()) {
+        return false;
+      }
+      // A preplace is only valid while its target is actually on the way out.
+      // Once it is gone the slot is free and the position must clear on its
+      // own; while it stands, the position is checked with it ignored.
+      const target = intent.target;
+      if (target !== null) {
+        const alive = OM.objects.has(target.id);
+        return OM.canPlaceItem(intent.id, intent.pos, 0, alive ? target.id : null);
+      }
+      return OM.canPlaceItem(intent.id, intent.pos, 0, null);
+    }
+
+    // Luna's banned-angle list: an angle we built at last tick that is still
+    // free this tick is an angle the server refused. Sit it out rather than
+    // spend the tick's packets on it again.
+    reviewLastPlacements() {
+      if (this._lastPlaced.length === 0) {
+        return;
+      }
+      const {_ModuleHandler: MH, ObjectManager: OM} = this.client;
+      for (let i = 0; i < this._lastPlaced.length; i++) {
+        const placed = this._lastPlaced[i];
+        if (OM.canPlaceItem(placed.id, placed.pos, 0, null)) {
+          this._bannedAngles.set(placed.angle, MH.tickCount + RYN_BAN_TICKS);
+        }
+      }
+      this._lastPlaced.length = 0;
+    }
+    remember(intent) {
+      this._lastPlaced.push({
+        id: intent.id,
+        angle: intent.angle,
+        pos: intent.pos
       });
-      const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < t.scale) ?? null;
-      const imTrapped = !!myPlayer.isTrapped;
-      const neitherTrapped = !enemyTrapped && !imTrapped;
-      const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler.move, false) ?? 0;
+    }
 
-      // Both Luna toggles behind these are absent from this client, so both
-      // are dead — see the header note.
-      const canTrapTick = () => false;
-      const canShamePlace = () => false;
-
-      // Luna's line-of-sight and tick tests, computed per candidate angle.
-      const LOOKAHEAD = 222, START_OFFSET = 35;
-      const futX = myPos.x + Math.cos(predictMoveAngle) * LOOKAHEAD;
-      const futY = myPos.y + Math.sin(predictMoveAngle) * LOOKAHEAD;
-      const stX = myPos.x + Math.cos(predictMoveAngle) * START_OFFSET;
-      const stY = myPos.y + Math.sin(predictMoveAngle) * START_OFFSET;
-      const _los = cfg => {
-        const box = [ cfg.x - cfg.scale - 5, cfg.y - cfg.scale - 5, cfg.x + cfg.scale + 5, cfg.y + cfg.scale + 5 ];
-        const blockFuture = this._lineInRect(box[0], box[1], box[2], box[3], stX, stY, futX, futY);
-        const blockEnemy = this._lineInRect(box[0], box[1], box[2], box[3], myFut.x, myFut.y, enemyFut.x, enemyFut.y);
-        let canSpikeTick = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < cfg.scale + 35;
-        if (canSpikeTick) {
-          // A spike that knocks them back towards me is the wrong spike.
-          const kbAngle = Math.atan2(enemyPos.y - cfg.y, enemyPos.x - cfg.x);
-          const enemyToMe = Math.atan2(myPos.y - enemyPos.y, myPos.x - enemyPos.x);
-          let diff = Math.abs(kbAngle - enemyToMe);
-          if (diff > Math.PI) diff = Math.PI * 2 - diff;
-          canSpikeTick = diff >= Math.PI / 5;
-        }
-        const canRetrap = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < 50;
-        return {
-          blockFuture: blockFuture,
-          blockEnemy: blockEnemy,
-          canSpikeTick: canSpikeTick,
-          canRetrap: canRetrap
-        };
-      };
-
-      this._predictObjects = [];
-      this._lastPrePlaceObj = null;
-      this._spamPrePlacer = false;
-      if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) return;
-
-      // Luna's `spampreplace`. With Replace on, the third send always fires;
-      // with it off, only a real preplace target arms it.
-      if (Settings_default._replace) this._spamPrePlacer = true;
-
-      // Not Luna's: an angle we built at last tick that is still free this
-      // tick is an angle the server refused. Sit it out rather than spend the
-      // tick's packets on it again.
-      if (this._placedAngles.length > 0) {
-        const checked = [ ...this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null), ...this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) ];
-        for (const placed of this._placedAngles) {
-          const match = checked.find(a => Math.abs(a.angle - placed) < .01);
-          if (match && match.placeable) this._bannedAngles.set(placed, this._tick + LUNA_BAN_TICKS);
+    // ── Spike tick handoff ──────────────────────────────────────────────────
+    // Spike tick decides WHEN. When its swing wants a spike underneath it, it
+    // asks here for WHERE, and gets whichever of this tick's intents already
+    // covers the enemy. Nothing new is solved and nothing is sent twice: the
+    // send goes through the same RynNetwork dedupe as the placer's own, so
+    // whichever subsystem gets there first pays and the other one is a no-op.
+    claimSpike() {
+      this.intents();
+      return this._bestSpike;
+    }
+    // Called by SpikeTickEngine.execute in place of the old direct placement.
+    // Falls back to EnemyManager's own spike angles when the placer has nothing
+    // — spike tick must never be blocked by a placement decision.
+    placeForSpikeTick() {
+      const {EnemyManager: EM} = this.client;
+      const intent = this.claimSpike();
+      if (intent !== null && this.network.canAfford() && this.validate(intent)) {
+        if (this.network.send(intent)) {
+          this.remember(intent);
+          return true;
         }
       }
-      this._placedAngles = [];
+      return EM.attemptSpikePlacement();
+    }
+  }
+  const RYN_PLACEMENT_ENGINES = new WeakMap;
+  const rynPlacement = client2 => {
+    let engine = RYN_PLACEMENT_ENGINES.get(client2);
+    if (engine === void 0) {
+      engine = new RynPlacementEngine(client2);
+      RYN_PLACEMENT_ENGINES.set(client2, engine);
+    }
+    return engine;
+  };
 
-      // ────────────────────────────────────────────────────────────────────
-      // PRE PLACER — Luna getPredictObjects, first half
-      // ────────────────────────────────────────────────────────────────────
-      if (Settings_default._prePlace && myPos.distance(enemyPos) < 300 && !(imTrapped && myPlayer.spikeDamage > 0)) {
-        const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2);
-        if (findObject) {
-          // Luna drops the doomed object out of the collision set, so the
-          // angles it is standing on come back placeable.
-          const spikeAngles = this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, findObject);
-          const trapAngles = this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, findObject);
-          const placeableSpikes = spikeAngles.filter(a => a.placeable);
-          const placeableTraps = trapAngles.filter(a => a.placeable);
-          const closestSpikeToEnemy = this._closestToEnemy(placeableSpikes, enemyPos, enemyFut, a => enemyScale + a.scale - 1);
-          const closestTrapToEnemy = this._closestToEnemy(placeableTraps, enemyPos, enemyFut, a => a.scale);
-          const closestSpikeToKb = this._closestSpikeToKb(placeableSpikes, spikesOur, enemyPos, enemyFut, enemyScale, 2);
+  // ──────────────────────────────────────────────────────────────────────────
+  // The module. Same name and same position in ModuleHandler.modules as the
+  // placer it replaces, so every arbitration that referred to "autoPlacer"
+  // still refers to this.
+  // ──────────────────────────────────────────────────────────────────────────
+  class AutoPlacer {
+    moduleName="autoPlacer";
+    client;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      rynPlacement(this.client).reset();
+    }
+    postTick() {
+      const engine = rynPlacement(this.client);
+      const {myPlayer: myPlayer} = this.client;
+      if (!myPlayer || !myPlayer.inGame) {
+        return;
+      }
+      const intents = engine.intents();
+      if (intents.length === 0) {
+        return;
+      }
+      const network = engine.network;
 
-          const isPrePlaceAngle = config => {
-            if (myPos.distance(enemyPos) > 350) return false;
-            const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-            const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
-            const {blockFuture: blockFuture, blockEnemy: blockEnemy, canSpikeTick: canSpikeTick, canRetrap: canRetrap} = _los(config);
-            if (isSpike && canSpikeTick && canTrapTick()) return true;
-            if (isTrap && canRetrap && canShamePlace()) return true;
-            // 1: the spike that catches a trapped enemy
-            if (isSpike && enemyTrapped && findObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            // 2: retrap an enemy already taking spike damage, when the trap
-            //    holding them is the thing about to break
-            if (isTrap && enemy.spikeDamage > 0 && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
-            // 3: the spike whose knockback throws them onto another spike
-            if (isSpike && closestSpikeToKb && config === closestSpikeToKb && !canShamePlace()) return true;
-            // 4: any spike that does not wall off my own path or my view of them
-            if (isSpike && enemyTrapped && !blockFuture && !blockEnemy && findObject !== enemyTrapped) return true;
-            // 5: any trap
-            if (isTrap) return true;
-            return false;
-          };
-
-          // Spikes first, then traps; within each, the angle nearest the slot
-          // that is opening.
-          let findAngle = null;
-          for (const angles of [ spikeAngles, trapAngles ]) {
-            if (findAngle) break;
-            findAngle = angles.filter(a => a.placeable && isPrePlaceAngle(a)).sort((a, b) => Math.hypot(findObject.pos.current.x - a.x, findObject.pos.current.y - a.y) - Math.hypot(findObject.pos.current.x - b.x, findObject.pos.current.y - b.y))[0] ?? null;
-          }
-          if (findAngle) {
-            this._addPredictObject(findAngle.id, findAngle.angle, true, myPos);
-            this._lastPrePlaceObj = findObject;
-          }
+      // Immediate half — auto place, this tick, at this position.
+      let placed = 0;
+      for (let i = 0; i < intents.length; i++) {
+        const intent = intents[i];
+        if (intent.kind !== "autoplace") {
+          continue;
+        }
+        if (!engine.validate(intent)) {
+          continue;
+        }
+        if (network.send(intent)) {
+          engine.remember(intent);
+          placed += 1;
         }
       }
-
-      // ────────────────────────────────────────────────────────────────────
-      // AUTO PLACER — Luna updateAngles + isAutoPlaceAngle
-      // ────────────────────────────────────────────────────────────────────
-      {
-        const spikeAngles = this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null);
-        const trapAngles = this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null);
-        const notBanned = a => !this._bannedAngles.has(a.angle);
-        const validSpike = spikeAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
-        const validTrap = trapAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
-        const validAngles = [ ...validSpike, ...validTrap ];
-        const closestSpikeToEnemy = this._closestToEnemy(validSpike, enemyPos, enemyFut, a => enemyScale + a.scale - 1);
-        const closestTrapToEnemy = this._closestToEnemy(validTrap, enemyPos, enemyFut, a => a.scale);
-        const closestSpikeToKb = this._closestSpikeToKb(validSpike, spikesOur, enemyPos, enemyFut, enemyScale, 1);
-
-        const isAutoPlaceAngle = config => {
-          if (myPos.distance(enemyPos) > (Settings_default._autoplacerRadius ?? 350)) return false;
-          const isSpike = config.id === spikeId && !this._isItemLimit(spikeId, myPlayer);
-          const isTrap = config.id === trapId && !this._isItemLimit(trapId, myPlayer);
-          const {blockFuture: blockFuture, blockEnemy: blockEnemy} = _los(config);
-          if (isSpike) {
-            // 1: the spike that catches a trapped enemy
-            if (enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            // 2: the spike whose knockback throws them onto another spike
-            if (closestSpikeToKb && config === closestSpikeToKb) return true;
-            // 3: spikes that do not wall off my own path or my view of them
-            if (enemyTrapped && !blockFuture && !blockEnemy) return true;
-          }
-          if (isTrap) {
-            // 1: the trap that retraps them as they move
-            if (closestTrapToEnemy && config === closestTrapToEnemy && neitherTrapped) return true;
-            // 2: any trap, while neither of us is pinned
-            if (neitherTrapped) return true;
-          }
-          return false;
-        };
-
-        // Perfect angles first — Luna's two passes, in order.
-        for (const obj of validAngles.filter(a => a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
-        }
-        for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
-          if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
-        }
+      if (placed > 0) {
+        this.client._ModuleHandler.moduleActive = true;
       }
 
-      // ────────────────────────────────────────────────────────────────────
-      // SEND — autoplace now, preplace next tick, replace at min ping
-      // ────────────────────────────────────────────────────────────────────
-      const typeOf = obj => obj.id === trapId ? LUNA_TRAP_TYPE : LUNA_SPIKE_TYPE;
-      const outOfBudget = () => ModuleHandler.packetCount + LUNA_PLACE_COST > ModuleHandler.packetLimit;
-      const emit = obj => {
-        const type = typeOf(obj);
-        // Luna only checks the item cap; RYN also knows whether the resources
-        // are there, so a build it would refuse never reaches the wire.
-        if (!myPlayer.canPlace(type)) return;
-        ModuleHandler.place(type, obj.angle);
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.placeAngles[0] = type;
-        ModuleHandler.placeAngles[1].push(obj.angle);
-        ModuleHandler.moduleActive = true;
-        this._placedAngles.push(obj.angle);
-      };
-
-      for (const obj of this._predictObjects) {
-        if (obj.preplace) continue;
-        if (outOfBudget()) break;
-        emit(obj);
+      // Deferred half — preplace and replace. NovaStorm's timing: the second
+      // send is aimed to reach the server on the tick the slot opens, and the
+      // third covers the case where it lost the race. Both revalidate first,
+      // because by then the object may have died, survived, or been replaced
+      // by someone else.
+      const preplace = intents.filter(intent => intent.kind === "preplace");
+      if (preplace.length === 0) {
+        return;
       }
-
-      const preObjects = this._predictObjects.filter(o => o.preplace);
-      if (preObjects.length === 0) return;
-
       const socket = this.client.SocketManager;
-      const pingTime = socket?.pong ?? 0;
-      const minPingTime = Number.isFinite(socket?.minPingTime) ? socket.minPingTime : 0;
-      const aimAngle = () => ModuleHandler._autoBreakActive && ModuleHandler._lastBreakAngle !== null && ModuleHandler._lastBreakAngle !== undefined ? ModuleHandler._lastBreakAngle : ModuleHandler._currentAngle ?? 0;
-
-      // Luna keeps the aim pointed where it was attacking across all three
-      // sends, so a build never drags the swing off target.
-      setTimeout(() => {
-        try {
-          for (const _ of preObjects) PacketManager2.updateAngle(aimAngle());
-        } catch (_) {}
-      }, 1);
-      setTimeout(() => {
-        try {
-          for (const obj of preObjects) {
-            if (outOfBudget()) break;
-            emit(obj);
-            PacketManager2.updateAngle(aimAngle());
+      const ping = socket && Number.isFinite(socket.pong) ? socket.pong : 0;
+      const minPing = socket && Number.isFinite(socket.minPingTime) ? socket.minPingTime : 0;
+      const flush = () => {
+        for (let i = 0; i < preplace.length; i++) {
+          const intent = preplace[i];
+          if (!engine.validate(intent)) {
+            continue;
           }
-        } catch (_) {}
-      }, Math.max(1, 111 - pingTime));
-      setTimeout(() => {
-        if (!this._spamPrePlacer) return;
-        try {
-          for (const obj of preObjects) {
-            if (outOfBudget()) break;
-            emit(obj);
-            PacketManager2.updateAngle(aimAngle());
+          if (network.send(intent)) {
+            engine.remember(intent);
+            network.reaim();
           }
-        } catch (_) {}
-      }, Math.max(1, 111 - minPingTime));
+        }
+      };
+      if (Settings_default._prePlace) {
+        setTimeout(() => {
+          try {
+            flush();
+          } catch (e) {}
+        }, Math.max(1, 111 - ping));
+      }
+      if (Settings_default._replace) {
+        setTimeout(() => {
+          try {
+            flush();
+          } catch (e) {}
+        }, Math.max(1, 111 - minPing));
+      }
     }
   }
   class TrapAnimal {
@@ -10688,8 +10998,13 @@ window.grbtp = 35;
     // top of every tick, so the restore is the pipeline's, not ours.
     // ────────────────────────────────────────────────────────────────────────
     execute(enemy) {
-      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
-      EnemyManager2.attemptSpikePlacement();
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
+      // Spike tick decides WHEN; where the spike goes is the placement layer's
+      // answer, reused rather than re-derived. RynNetwork dedupes by angle and
+      // by landing position, so a build the placer already sent this tick is
+      // not paid for twice — and if the layer has nothing, it falls back to
+      // EnemyManager's own angles so the tick is never blocked on placement.
+      rynPlacement(this.client).placeForSpikeTick();
       ModuleHandler.moduleActive = true;
       ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.predictPosition(1));
       ModuleHandler.forceHat = 7;

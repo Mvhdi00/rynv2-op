@@ -27,11 +27,20 @@ const WEAPONS = { 0: { range: 65, knockback: .3 }, 5: { range: 110, knockback: .
 const DataHandler_default = { getWeapon: id => WEAPONS[id] || WEAPONS[0] };
 const Items = {};
 class PlayerObject {}
+// The spike tick asks the placement layer for WHERE. That layer is exercised by
+// its own harness; here it is a spy, so these scenarios stay about timing.
+const placementCalls = [];
+const rynPlacement = client => ({
+  placeForSpikeTick() {
+    placementCalls.push(client);
+    return client.EnemyManager.attemptSpikePlacement() !== false;
+  }
+});
 
 const exported = {};
-new Function("Settings_default", "DataHandler_default", "Items", "PlayerObject", "exported",
+new Function("Settings_default", "DataHandler_default", "Items", "PlayerObject", "rynPlacement", "exported",
   src + "\n;Object.assign(exported,{Vector,Entity,SpikeTickEngine,spikeTickEngine,segmentReachesCircle,SPIKE_TICK_ENGINES});"
-)(Settings_default, DataHandler_default, Items, PlayerObject, exported);
+)(Settings_default, DataHandler_default, Items, PlayerObject, rynPlacement, exported);
 
 const { Vector, Entity, spikeTickEngine } = exported;
 
@@ -156,4 +165,4 @@ function check(label, actual, expected) {
   if (ok) pass += 1; else fail += 1;
   console.log(`${ok ? "  ok  " : " FAIL "} ${label}${ok ? "" : `  (got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)})`}`);
 }
-module.exports = { scenario, check, Settings: Settings_default, source: src, done: () => { console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }, Vector };
+module.exports = { scenario, check, Settings: Settings_default, source: src, placementCalls, done: () => { console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }, Vector };

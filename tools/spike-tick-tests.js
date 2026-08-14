@@ -1,4 +1,4 @@
-const { scenario, check, done, Settings, source, Vector } = require("./spike-tick-harness.js");
+const { scenario, check, done, Settings, source, Vector, placementCalls } = require("./spike-tick-harness.js");
 
 const plan = ctx => ctx.engine.plan();
 const veto = ctx => { ctx.engine.plan(); return ctx.engine.lastVeto; };
@@ -303,7 +303,8 @@ scenario("placer arbitration contract", ctx => {
     check(`module name ${name} still declared`, source.includes(`moduleName="${name}"`), true);
   }
   check("no second angle solver", /getBestPlacementAngles|getPrePlaceAngles/.test(source), false);
-  check("placement goes through EnemyManager", source.includes("attemptSpikePlacement()"), true);
+  check("placement is delegated, not solved here", source.includes("rynPlacement(this.client).placeForSpikeTick()"), true);
+  check("spike tick still reaches the wire", placementCalls.length > 0, true);
   check("no direct socket use", /PacketManager\s*\.\s*send|SocketManager/.test(source), false);
 });
 
