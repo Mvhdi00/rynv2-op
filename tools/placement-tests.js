@@ -1,4 +1,9 @@
-const { scenario, check, done, Settings, source, Vector } = require("./placement-harness.js");
+const { scenario, check, done, Settings, source, Vector, PACKET_LIMIT } = require("./placement-harness.js");
+
+// One build costs 5 sends and the placer holds 10 back for combat, so the last
+// affordable packetCount is LIMIT - 15.
+const PLACE_COST = 5, PLACE_RESERVE = 10;
+const LAST_AFFORDABLE = PACKET_LIMIT - PLACE_COST - PLACE_RESERVE;
 
 const intents = ctx => ctx.engine.intents();
 const kinds = ctx => intents(ctx).map(i => i.kind);
@@ -162,7 +167,7 @@ scenario("validate rejects when the budget is gone", ctx => {
   ctx.enemy.hold(2);
   const intent = intents(ctx)[0];
   check("valid while the wire is free", ctx.engine.validate(intent), true);
-  ctx.client._ModuleHandler.packetCount = 66;   // 70 - 66 - 10 < 5
+  ctx.client._ModuleHandler.packetCount = LAST_AFFORDABLE + 1;
   check("no budget → invalid", ctx.engine.validate(intent), false);
 });
 
@@ -268,7 +273,7 @@ scenario("reserve is never spent", ctx => {
   ctx.enemy.pos.previous._setXY(100, 0);
   ctx.enemy.pos.current._setXY(100, 0);
   ctx.enemy.hold(2);
-  ctx.client._ModuleHandler.packetCount = 56;   // 70 - 56 - 10 = 4 < 5
+  ctx.client._ModuleHandler.packetCount = LAST_AFFORDABLE + 1;
   ctx.module.postTick();
   check("nothing sent inside the reserve", ctx.client.sends.length, 0);
 });
@@ -277,7 +282,7 @@ scenario("budget stops the third build, not the first", ctx => {
   ctx.enemy.pos.previous._setXY(100, 0);
   ctx.enemy.pos.current._setXY(100, 0);
   ctx.enemy.hold(2);
-  ctx.client._ModuleHandler.packetCount = 48;   // room for two bursts of four
+  ctx.client._ModuleHandler.packetCount = LAST_AFFORDABLE - PLACE_COST - 3;   // room for two builds, not three
   ctx.module.postTick();
   check("some builds went out", ctx.client.sends.length > 0, true);
   check("but not all three", ctx.client.sends.length < 3, true);

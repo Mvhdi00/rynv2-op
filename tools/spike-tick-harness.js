@@ -18,6 +18,14 @@ const src = [
   slice(at("  const SPIKE_TICK_RANGE = 170;"), at("  class SpikeSync {") - 1)
 ].join("\n");
 
+// The shipped packet allowance, read rather than hardcoded, so the budget
+// boundaries below track the client instead of drifting from it.
+const PACKET_LIMIT = (() => {
+  const m = /packetLimit=(\d+)/.exec(lines.join("\n"));
+  if (!m) throw new Error("packetLimit not found");
+  return Number(m[1]);
+})();
+
 // ── stubs ────────────────────────────────────────────────────────────────
 const Settings_default = {
   _spikeTick: true, _spikeTickBreak: true, _spikeTickNear: true,
@@ -98,7 +106,7 @@ function makeClient(opts = {}) {
     myPlayer,
     _ModuleHandler: {
       tickCount: 100, moduleActive: false, useAngle: null, forceHat: null,
-      forceWeapon: null, shouldAttack: false, packetCount: 0, packetLimit: 70,
+      forceWeapon: null, shouldAttack: false, packetCount: 0, packetLimit: PACKET_LIMIT,
       placeAngles: [ null, [] ], placedOnce: false, totalPlaces: 0,
       place() { this.totalPlaces += 1; this.packetCount += 4; },
       staticModules: {
@@ -165,4 +173,4 @@ function check(label, actual, expected) {
   if (ok) pass += 1; else fail += 1;
   console.log(`${ok ? "  ok  " : " FAIL "} ${label}${ok ? "" : `  (got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)})`}`);
 }
-module.exports = { scenario, check, Settings: Settings_default, source: src, placementCalls, done: () => { console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }, Vector };
+module.exports = { scenario, check, PACKET_LIMIT, Settings: Settings_default, source: src, placementCalls, done: () => { console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }, Vector };

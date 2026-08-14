@@ -16,6 +16,14 @@ const src = [
   slice(at("  const RYN_SPIKE_TYPE = 4;"), at("  class TrapAnimal {") - 1)
 ].join("\n");
 
+// The shipped packet allowance, read rather than hardcoded, so the budget
+// boundaries below track the client instead of drifting from it.
+const PACKET_LIMIT = (() => {
+  const m = /packetLimit=(\d+)/.exec(lines.join("\n"));
+  if (!m) throw new Error("packetLimit not found");
+  return Number(m[1]);
+})();
+
 // ── stubs ────────────────────────────────────────────────────────────────
 const Settings_default = {
   _autoplacer: true, _prePlace: true, _replace: true, _autoplacerRadius: 350
@@ -99,7 +107,7 @@ function makeClient() {
     sends,
     _ModuleHandler: {
       tickCount: 100, moduleActive: false, activeModule: null,
-      packetCount: 0, packetLimit: 70, move_dir: null,
+      packetCount: 0, packetLimit: PACKET_LIMIT, move_dir: null,
       placeAngles: [ null, [] ], placedOnce: false,
       _autoBreakActive: false, _lastBreakAngle: null, _currentAngle: 0,
       place(type, angle) { sends.push({ type, angle }); this.packetCount += 4; }
@@ -180,7 +188,7 @@ function check(label, actual, expected) {
   console.log(`${ok ? "  ok  " : " FAIL "} ${label}${ok ? "" : `  (got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)})`}`);
 }
 module.exports = {
-  scenario, check, Vector, Settings, source: src,
+  scenario, check, Vector, Settings, source: src, PACKET_LIMIT,
   ITEM_SPIKE, ITEM_TRAP,
   done: () => { console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }
 };

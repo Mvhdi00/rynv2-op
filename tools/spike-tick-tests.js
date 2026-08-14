@@ -1,4 +1,7 @@
-const { scenario, check, done, Settings, source, Vector, placementCalls } = require("./spike-tick-harness.js");
+const { scenario, check, done, Settings, source, Vector, placementCalls, PACKET_LIMIT } = require("./spike-tick-harness.js");
+
+// place(4 sends) + swing(5) + the 12 reserved for everything else.
+const SPIKE_TICK_BUDGET = 4 + 5 + 12;
 
 const plan = ctx => ctx.engine.plan();
 const veto = ctx => { ctx.engine.plan(); return ctx.engine.lastVeto; };
@@ -107,13 +110,13 @@ scenario("primary on cooldown", ctx => {
 scenario("packet starved", ctx => {
   ctx.addSpike(10, 100, 60);
   ctx.enemy.hold(2);
-  ctx.client._ModuleHandler.packetCount = 60;   // 60 + 4 + 5 + 12 > 70
+  ctx.client._ModuleHandler.packetCount = PACKET_LIMIT - SPIKE_TICK_BUDGET + 1;
   check("packet budget veto", veto(ctx), "packets");
 });
 scenario("packet budget just fits", ctx => {
   ctx.addSpike(10, 100, 60);
   ctx.enemy.hold(2);
-  ctx.client._ModuleHandler.packetCount = 49;   // 49 + 4 + 5 + 12 = 70
+  ctx.client._ModuleHandler.packetCount = PACKET_LIMIT - SPIKE_TICK_BUDGET;
   check("plan survives at the limit", plan(ctx) !== null, true);
 });
 

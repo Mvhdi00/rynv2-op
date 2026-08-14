@@ -15268,7 +15268,12 @@ window.grbtp = 35;
       return this.client.PacketManager.packetCount;
     }
     set packetCount(_v) {}
-    packetLimit=70;
+    // Sends allowed per second, shared by every module. NovaStorm's number:
+    // its budget checks read `packets + 5 > 119` against a counter reset on the
+    // same 1000ms interval PacketManager uses here, so the two are directly
+    // comparable. The reserves the individual systems hold back are absolute
+    // send counts, not fractions of this, so they keep meaning the same thing.
+    packetLimit=119;
     postTick() {
       this._flushShameHealQueue();
       if (Settings_default._circleRotation && this.move_dir === null) {
