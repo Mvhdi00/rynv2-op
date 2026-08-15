@@ -121,6 +121,14 @@ head(4, "Re-check button");
   const noClan = mkOwner(mkBots(2));
   noClan.myPlayer.clanName = null;
   check("with no clan it reports so rather than looping", M.clanRecheck(noClan).clan === null);
+
+  // Where it sits: directly under the bot name rows.
+  const iList = src.indexOf('id=\\"dynamic-bot-list\\"');
+  const iBtn = src.indexOf('id=\\"_clanRecheck\\"');
+  const iAdd = src.indexOf('id=\\"add-bot-dynamic\\"');
+  check("the button sits under the bot name rows", iList > 0 && iList < iBtn, "list@" + iList + " button@" + iBtn);
+  check("...and above Add Bots", iBtn < iAdd, "button@" + iBtn + " add@" + iAdd);
+  check("it is wired through attachButtons", /case "_clanRecheck":/.test(src) && /handleClanRecheck\(button\)/.test(src));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

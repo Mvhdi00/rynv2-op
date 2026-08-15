@@ -242,7 +242,7 @@ walk-everyone-home-on-toggle-off. What changed:
 | | was | is |
 |---|---|---|
 | **Clan join** | every bot ran its own two-tick countdown then sent `joinClan`, so forty bots all sent inside ~200ms — the server takes one and the rest are noise. Nothing ever checked whether a bot got in; the counter just reset and it fired again | one rotation over the bots that are not in yet. One sends, **1.5s** passes, its `clanName` is read back to verify, the turn moves on. A bot that failed goes to the *back* of the queue, so one stuck bot cannot block the rest. State is per owner, like the volley's, because the bots have to agree whose turn it is |
-| **Re-check button** | — | `Re-check clan joins` in the Bots menu. Restarts the rotation and reports `n/m joined`; bots already in are skipped by the turn picker so it costs them nothing |
+| **Re-check button** | — | `Re-check clan joins`, directly under the bot name rows in the Bots menu. Restarts the rotation and reports `n/m joined`; bots already in are skipped by the turn picker so it costs them nothing |
 | **HUD** | `PING · PLAYERS · FPS · …` | `PLAYERS · BOTS · PING · FPS · …`. `BOTS` is joined/total, on its own 1s timer |
 | **Be Angel vs Cowboy When Safe** | `canWearCowboy()` was checked first, so turning both on put the bots in cowboy hats and the halo never appeared | the halo is checked before cowboy in both the idle and moving paths. You get cowboy, they get the halo |
 | **Safe Soldier** | nested inside RYN's `_antienemy` block, so turning Anti Enemy off silently disabled it | entered on owning soldier alone. `_antienemy` now only gates its own two tests, which is how novastorm has it |

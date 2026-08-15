@@ -950,7 +950,6 @@ sub("menu: bot combat rows", followCursorRow,
   followCursorRow +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Auto Break</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAutoBreak\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Ranged Kiting</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botRangedKite\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
-  `            <div class=\\"content-option\\" style=\\"margin-top:6px;justify-content:center;\\">\\r\\n                <button id=\\"_clanRecheck\\" class=\\"option-button\\" style=\\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\\">Re-check clan joins</button>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Volley Fire</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botVolley\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">First wave size</span>\\r\\n                <label class=\\"slider\\">\\r\\n                    <span class=\\"slider-value\\"></span>\\r\\n                    <input id=\\"_botVolleyWave\\" type=\\"range\\" step=\\"1\\" min=\\"1\\" max=\\"20\\"></input>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Avoid Shield Bots</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAvoidShield\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
@@ -1095,6 +1094,10 @@ sub("safesoldier: anti enemy only gates its own tests",
         if (_isDanger || _isClose || _safeSoldier) {`,
 `        const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
         if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier) {`);
+
+sub("menu: re-check button under the bot name rows",
+`        <div id=\\"dynamic-bot-list\\" style=\\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\\"></div>\\r\\n`,
+`        <div id=\\"dynamic-bot-list\\" style=\\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\\"></div>\\r\\n        <div class=\\"content-option\\" style=\\"margin-top:8px;justify-content:center;\\">\\r\\n            <button id=\\"_clanRecheck\\" class=\\"option-button\\" style=\\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;letter-spacing:0.03em;cursor:pointer;\\">Re-check clan joins</button>\\r\\n        </div>\\r\\n`);
 
 sub("clan: wire the re-check button",
 `         case "resetSettings":
