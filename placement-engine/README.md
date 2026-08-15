@@ -65,3 +65,24 @@ fall back on when its own scan finds nothing.
 | builds landing >90px past contact | 32 | 3 |
 | duplicate sends while a build was in flight | 27 | 0 |
 | mean CPU per tick | 0.51ms | 0.13ms |
+
+
+---
+
+# Ported from Novastorm
+
+Five things taken from `novastorm.v1.4.js` and rewritten onto RYN's managers.
+Novastorm is a fork of the old game bundle (`myPlayer.x2`, `items.list`,
+`io.send`, `visibleObjects`), so nothing could be copied as code — the rule each
+feature implements was ported, and the original condition is quoted in a comment
+above every one of them.
+
+`node placement-engine/ports.test.js` — 31 assertions.
+
+| | was | is |
+|---|---|---|
+| **Autoheal** | eight stacked special cases (trap about to break, melee+ranged combo, reverse insta, tool hammer, ranged bow, danger flags, health < 20), each healing a hand-picked number of food | novastorm's single rule: `potentialDamage + potentialSpikeDamage`, capped at 140, `×0.75` under soldier, `+5` under scuba — heal if that reaches health, or if a tick passed without being hit. RYN's `shameActive` guard and `heal()`'s shame queue stay, novastorm has no equivalent |
+| **Anti Smart Tick** | committed the moment it saw the danger; no toggle; approximated the knockback test with a box | novastorm's stall — stop autobreak, hold whichever weapon is still reloading, and only commit when both are ready and there is nothing left to stall on. New `Anti Smart Tick` toggle. Knockback test is now segment-to-circle |
+| **Auto Mills** | sandbox only, `age < 20`, stopped once autobuy finished, and needed all three mills placeable — it could not run in a real game | novastorm's combat mill: three windmills dropped behind you, any time, `!nearestTrap`, each of the three tested on its own. Off by default, on the existing keybind. Offset stays RYN's exact solve rather than novastorm's `toRad(scale + scale/2)` approximation |
+| **Safe Soldier** | soldier went on at weapon reach + 20px, which is a tick late against anything that closes fast | novastorm's flat 300px radius, as a new `Safe Soldier` toggle, in addition to the existing reach and danger tests |
+| **Packets** | budget of 70/sec, counted only what RYN itself sent | novastorm's 119 — the whole server allowance. Safe to take because `socket.send` is now wrapped at the transport, so the game bundle's own frames count too; frames sent through `PacketManager` are skipped there to avoid double counting |
