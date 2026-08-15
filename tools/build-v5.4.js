@@ -807,6 +807,84 @@ sub("players: start the poll",
   const SaveSettings = () => {`);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// F. BE ANGEL — Halo + Angel Wings on bots instead of Booster Hat + Monkey Tail
+//
+// Bots settle on hat 12 (Booster Hat) and accessory 11 (Monkey Tail) whenever
+// nothing dangerous is happening — both are movement speed, which is what a bot
+// following you around wants. Be Angel swaps those two defaults for hat 48
+// (Halo) and accessory 13 (Angel Wings), which regenerate health instead.
+//
+// Only the two "nothing is happening" exits are touched. Every branch above
+// them — soldier, bull, turret gear, emp, flipper, winter — is a defensive or
+// insta decision and keeps priority, so a bot in trouble still wears the hat
+// that keeps it alive rather than the one that looks nice.
+// ─────────────────────────────────────────────────────────────────────────────
+
+sub("angel: hat, standing still",
+`          if (this.canWearCowboy()) return 5;
+          if (useActual && actual !== 0) return actual;`,
+`          if (this.canWearCowboy()) return 5;
+          if (beAngel) return 48;
+          if (useActual && actual !== 0) return actual;`);
+
+sub("angel: hat, moving",
+`      if (useBooster) {
+        return 12;
+      }
+      return 0;`,
+`      if (beAngel) {
+        return 48;
+      }
+      if (useBooster) {
+        return 12;
+      }
+      return 0;`);
+
+sub("angel: hat gate",
+`      const useBooster = ModuleHandler.canBuy(0, 12);`,
+`      const useBooster = ModuleHandler.canBuy(0, 12);
+      // Bots only, and only if the halo is actually owned.
+      const beAngel = !this.client.isOwner && Settings_default._botBeAngel && ModuleHandler.canBuy(0, 48);`);
+
+sub("angel: acc gate",
+`      const useTail = ModuleHandler.canBuy(1, 11);`,
+`      const useTail = ModuleHandler.canBuy(1, 11);
+      const beAngel = !this.client.isOwner && Settings_default._botBeAngel && ModuleHandler.canBuy(1, 13);`);
+
+sub("angel: acc instead of the tail on reload",
+`      if (Settings_default._tailPriority && !Settings_default._cowboyWhenSafe && useTail && this.shouldUseTail()) {
+        return 11;
+      }`,
+`      if (beAngel) {
+        return 13;
+      }
+      if (Settings_default._tailPriority && !Settings_default._cowboyWhenSafe && useTail && this.shouldUseTail()) {
+        return 11;
+      }`);
+
+sub("angel: acc, standing still",
+`      if (!ModuleHandler.isMoving && myPlayer.speed <= 5) {
+        if (useBloodWings) return 18;
+      }`,
+`      if (!ModuleHandler.isMoving && myPlayer.speed <= 5) {
+        if (beAngel) return 13;
+        if (useBloodWings) return 18;
+      }`);
+
+sub("angel: acc, moving",
+`      if (useTail) {
+        return 11;
+      }
+      return 0;`,
+`      if (beAngel) {
+        return 13;
+      }
+      if (useTail) {
+        return 11;
+      }
+      return 0;`);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS + BOTS MENU
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -815,13 +893,15 @@ sub("settings: bot combat defaults",
 `    _botsScattered: false,
     _botAutoBreak: false,
     _botRangedKite: false,
-    _botKiteDistance: 400,`);
+    _botKiteDistance: 400,
+    _botBeAngel: false,`);
 
 const followCursorRow = `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Follow cursor</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_followCursor\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`;
 sub("menu: bot combat rows", followCursorRow,
   followCursorRow +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Auto Break</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAutoBreak\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Ranged Kiting</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botRangedKite\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
+  `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Be Angel</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botBeAngel\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Kite distance</span>\\r\\n                <label class=\\"slider\\">\\r\\n                    <span class=\\"slider-value\\"></span>\\r\\n                    <input id=\\"_botKiteDistance\\" type=\\"range\\" step=\\"25\\" min=\\"150\\" max=\\"1200\\"></input>\\r\\n                </label>\\r\\n            </div>\\r\\n`);
 
 sub("header: version", `// @version         v5\n`, `// @version         v5.4\n`);

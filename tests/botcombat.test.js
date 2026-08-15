@@ -28,6 +28,8 @@ const parts = [
   // character.
   "const _F = {" + span(find("    getFormationOffset(botIndex"), find("    getActualPosition() {")) + "};\nconst getFormationOffset = _F.getFormationOffset;",
   span(find("  const TRAIN_SPACING"), find("  const TRAIN_SPACING") + 1),
+  span(find("  class DefaultAcc {"), find("  class SafeWalk {")),
+  span(find("  const COWBOY_DROP_RANGE"), find("  const COWBOY_DROP_RANGE") + 1),
 ];
 
 const prelude = `
@@ -36,17 +38,22 @@ const prelude = `
   const Settings_default = {
     _botAutoBreak: true, _botRangedKite: true, _botKiteDistance: 400,
     _botAutoAttackEnabled: false, _formation: "train", _circleRadius: 200,
+    _botBeAngel: false, _tailPriority: true, _cowboyWhenSafe: false,
+    _antienemy: true, _antispike: true, _antianimal: true, _biomehats: true,
+    _empDefense: true,
   };
   const DataHandler_default = {
     getItem: id => Items[id],
     getWeapon: id => ({ range: id === 10 ? 275 : 110, speed: 300, damage: 25 }),
     canMoveOnTop: id => "ignoreCollision" in Items[id],
+    isMelee: id => id < 9,
+    isShootable: () => false,
   };
 `;
 
 const M = vm.runInNewContext(
   "(function(){\n" + parts.join("\n") + "\n" + prelude +
-  "\nreturn { BotAutoBreak, BotRangedAttack, BOT_RANGED_SECONDARIES, TRAIN_SPACING, getFormationOffset, Vector, Items, PlayerObject, SpatialHashGrid2D, Settings_default };\n})()",
+  "\nreturn { BotAutoBreak, BotRangedAttack, BOT_RANGED_SECONDARIES, TRAIN_SPACING, getFormationOffset, Vector, Items, PlayerObject, SpatialHashGrid2D, Settings_default, DefaultHat, DefaultAcc };\n})()",
   { Math, Number, Array, Set, Map, console, Infinity, NaN, Date }
 );
 
@@ -262,7 +269,85 @@ head(5, "Server player counter");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(6, "Auto Place / Preplace / Replace still untouched");
+head(6, "Be Angel — Halo and Angel Wings instead of Booster and Monkey Tail");
+{
+  const HALO = 48, ANGEL = 13, BOOSTER = 12, TAIL = 11;
+  const mkWearer = (isOwner, over = {}) => {
+    const mh = {
+      isMoving: true, forceHat: null, shouldEquipSoldier: false,
+      useHat: null, useAcc: null,
+      canBuy: () => true,
+      getHatStore: () => ({ actual: 0 }),
+      getAccStore: () => ({ actual: 0 }),
+      staticModules: { reloading: { isReloaded: () => true } },
+    };
+    const client = {
+      isOwner: isOwner,
+      _ModuleHandler: mh,
+      ObjectManager: { grid2D: { query: () => false }, objects: new Map() },
+      EnemyManager: {
+        detectedEnemy: false, detectedDangerEnemy: false, dangerWithoutSoldier: false,
+        reverseInsta: false, toolHammerInsta: false, rangedBowInsta: false,
+        willCollideSpike: false, nearestDangerAnimal: null, nearestEnemy: null,
+        nearestEntity: null, nearestEnemyInRangeOf: () => false,
+      },
+      myPlayer: {
+        speed: 40, shameCount: 0, hatID: 0, onPlatform: false,
+        pos: { current: new M.Vector(1000, 5000), future: new M.Vector(1000, 5000) },
+        inventory: { 0: 5, 1: 10 },
+        getItemByType(t) { return this.inventory[t]; },
+        isEnemyByID: () => false,
+        collidingSimple: () => false,
+      },
+    };
+    Object.assign(mh, over.mh || {});
+    Object.assign(client.myPlayer, over.myPlayer || {});
+    return { client, mh };
+  };
+  const hatOf = (isOwner, over) => { const w = mkWearer(isOwner, over); return new M.DefaultHat(w.client).getBestCurrentHat(); };
+  const accOf = (isOwner, over) => { const w = mkWearer(isOwner, over); return new M.DefaultAcc(w.client).getBestCurrentAcc(); };
+
+  M.Settings_default._botBeAngel = false;
+  check("off: a moving bot wears the booster hat", hatOf(false) === BOOSTER, "hat " + hatOf(false));
+  check("off: and the monkey tail", accOf(false) === TAIL, "acc " + accOf(false));
+
+  M.Settings_default._botBeAngel = true;
+  check("on: a moving bot wears the halo", hatOf(false) === HALO, "hat " + hatOf(false));
+  check("on: and angel wings", accOf(false) === ANGEL, "acc " + accOf(false));
+
+  const still = { mh: { isMoving: false }, myPlayer: { speed: 0 } };
+  check("on: standing still, still the halo", hatOf(false, still) === HALO, "hat " + hatOf(false, still));
+  check("on: standing still, still angel wings", accOf(false, still) === ANGEL, "acc " + accOf(false, still));
+
+  check("the owner is never touched by it", hatOf(true) === BOOSTER && accOf(true) === TAIL,
+        "owner hat " + hatOf(true) + ", acc " + accOf(true));
+
+  // Defensive hats keep priority — a bot in trouble must not be wearing a halo.
+  const danger = { mh: {}, myPlayer: {} };
+  const w = mkWearer(false, danger);
+  w.client.EnemyManager.detectedDangerEnemy = true;
+  check("soldier still wins when in danger", new M.DefaultHat(w.client).getBestCurrentHat() === 6, "hat 6 = soldier");
+
+  const spike = mkWearer(false);
+  spike.client.EnemyManager.willCollideSpike = true;
+  check("soldier still wins against a spike", new M.DefaultHat(spike.client).getBestCurrentHat() === 6);
+
+  const animal = mkWearer(false);
+  animal.client.EnemyManager.nearestDangerAnimal = {};
+  check("soldier still wins against an animal", new M.DefaultHat(animal.client).getBestCurrentHat() === 6);
+
+  // And the halo is not worn if it is not owned.
+  const unowned = mkWearer(false);
+  unowned.mh.canBuy = (type, id) => id !== 48 && id !== 13;
+  check("not worn when the halo is not owned", new M.DefaultHat(unowned.client).getBestCurrentHat() !== HALO);
+  check("wings not worn when not owned", new M.DefaultAcc(unowned.client).getBestCurrentAcc() !== ANGEL);
+  M.Settings_default._botBeAngel = false;
+
+  check("the menu carries the toggle", /_botBeAngel\\" type=\\"checkbox/.test(src) && /Be Angel/.test(src));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+head(7, "Auto Place / Preplace / Replace still untouched");
 {
   const base = fs.readFileSync(__dirname + "/../src/RYN_Client_v5.3.js", "utf8");
   const slice = t => t.slice(t.indexOf("  const LUNA_SPIKE_TYPE"), t.indexOf("  const AutoPlacer_default = AutoPlacer;"));

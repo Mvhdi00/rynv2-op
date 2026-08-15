@@ -3,7 +3,7 @@
 ```
 node tests/ports.test.js       # 31 assertions across the five Novastorm ports
 node tests/bots.test.js        # 27 assertions across bot random movement
-node tests/botcombat.test.js   # 35 assertions: bot auto break, kiting, train, player counter
+node tests/botcombat.test.js   # 48 assertions: bot auto break, kiting, train, counter, Be Angel
 ```
 
 The suite lifts the classes under test straight out of the built userscript by
@@ -20,7 +20,7 @@ lookups throw rather than silently testing nothing.
 node tools/build-v5.4.js src/RYN_Client_v5.3.js RYN_v5.4.user.js
 ```
 
-`src/RYN_Client_v5.3.js` is the unmodified v5.3 client. The script applies 49
+`src/RYN_Client_v5.3.js` is the unmodified v5.3 client. The script applies 57
 exact-string edits, each asserted to match exactly once, so a change to the base
 file fails the build instead of quietly dropping a feature. Everything the script
 does not name is byte-identical to v5.3 — including the whole
