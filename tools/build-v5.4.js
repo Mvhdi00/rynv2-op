@@ -1126,6 +1126,24 @@ sub("clan: the re-check handler",
     }
     attachButtons() {`);
 
+sub("bots: mills while wandering",
+`          _sc_mh.move_dir = _sc_angle;
+          try {
+            _sc_bot.PacketManager.move(_sc_angle);
+          } catch (_) {}`,
+`          _sc_mh.move_dir = _sc_angle;
+          // startMovement is the only thing that keeps reverse_move_dir in step
+          // with move_dir, and the scatter loop writes move_dir directly — so
+          // while wandering it stayed null and Automill, which builds behind the
+          // bot and reads exactly that field, returned on its first line every
+          // tick. Keeping the pair in sync is what lets bots mill as they roam,
+          // which is how x18 uses wander in the first place: c.doMills is what
+          // puts a bot into that mode.
+          _sc_mh.reverse_move_dir = reverseAngle(_sc_angle);
+          try {
+            _sc_bot.PacketManager.move(_sc_angle);
+          } catch (_) {}`);
+
 sub("header: version", `// @version         v5\n`, `// @version         v5.4\n`);
 sub("header: description",
   `// @description     ! have fun\n`,

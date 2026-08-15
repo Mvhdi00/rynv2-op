@@ -222,6 +222,7 @@ walk-everyone-home-on-toggle-off. What changed:
 | **Bind check** | guarded on `!== "..."` while the default was `""`, so an untouched bind was a value the handler could not recognise | any falsy or placeholder bind counts as unset |
 | **Toggle state** | read back off `clients[0]._ModuleHandler._scatterActive` | a persisted `Settings._botsScattered`, reconciled onto every bot each frame |
 | **Late bots** | a bot spawned after the toggle kept trailing the owner while the rest wandered | joins the mode on its next frame |
+| **Milling while wandering** | Automill builds *behind* the bot and reads `reverse_move_dir` to know which way that is — but `startMovement()` is the only thing that keeps that field in step with `move_dir`, and the scatter loop writes `move_dir` directly. So while wandering it stayed `null` and Automill returned on its first line every tick. The loop now keeps the pair in sync, so with **Auto Mills** on the bots mill as they roam — which is how x18 uses wander in the first place, since `c.doMills` is what puts a bot into that mode |
 | **Coming back** | "returning" ended only on getting within 120px of the owner — a blocked bot, or a dead or distant owner, left it suppressing normal movement forever | an 8s deadline hands it back regardless |
 
 ## Bot combat, formation and HUD

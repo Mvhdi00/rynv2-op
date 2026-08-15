@@ -171,7 +171,34 @@ head(4, "x18's leg commitment, not a timer");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(5, "Auto Place / Preplace / Replace untouched");
+head(5, "Milling while wandering");
+{
+  // Automill builds behind the bot and reads reverse_move_dir to know which way
+  // that is. startMovement is the only thing that keeps it in step with
+  // move_dir, and the scatter loop writes move_dir directly.
+  check("the scatter loop keeps reverse_move_dir in step",
+        /_sc_mh\.move_dir = _sc_angle;[\s\S]{0,600}_sc_mh\.reverse_move_dir = reverseAngle\(_sc_angle\);/.test(src),
+        "without it Automill read null and returned on its first line");
+
+  // Automill's own gate must not exclude a wandering bot.
+  const auto = src.slice(src.indexOf("  class Automill {"), src.indexOf("  const Automill_default"));
+  check("Automill has no scatter exclusion", !/_scatterActive|_scatterReturning/.test(auto));
+  check("...and reads the field the loop now sets", /const angle = ModuleHandler\.reverse_move_dir;/.test(auto));
+  check("it still needs the toggle", /if \(!Settings_default\._automill \|\| !this\.active\) return false;/.test(src));
+
+  // The reverse really is the reverse.
+  const rev = a => Math.atan2(-Math.sin(a), -Math.cos(a));
+  const norm = a => Math.abs(((a % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+  let worst = 0;
+  for (let i = 0; i < 200; i++) {
+    const a = Math.random() * Math.PI * 2;
+    worst = Math.max(worst, Math.abs(norm(rev(a) - a) - Math.PI));
+  }
+  check("mills go behind the bot, not in front", worst < 1e-9, "max deviation from 180 deg: " + worst.toExponential(1));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+head(6, "Auto Place / Preplace / Replace untouched");
 {
   const base = fs.readFileSync(__dirname + "/../src/RYN_Client_v5.3.js", "utf8");
   const slice = t => {
