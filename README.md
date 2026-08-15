@@ -236,4 +236,15 @@ walk-everyone-home-on-toggle-off. What changed:
 | **Be Angel** | Bots settle on hat 12 (Booster Hat) and accessory 11 (Monkey Tail) whenever nothing dangerous is happening — both are movement speed. This swaps those two defaults for hat 48 (Halo) and accessory 13 (Angel Wings), which regenerate health instead, moving and standing still alike. Only those two "nothing is happening" exits are touched: soldier, bull, turret gear, emp, flipper and winter all keep priority, so a bot in trouble still wears the hat that keeps it alive. Bots only — the owner's hats are untouched |
 | **Server player counter** | A `PLAYERS n/m` row above FPS. The game fetches its server list exactly once at load and has no refresh loop, so `#serverBrowser`'s `[n/m]` labels are a snapshot from before you joined; this re-fetches the same endpoint every 10s and reports the entry matching this tab's `?server=region:name`. Falls back to the browser label, then to `?` |
 
+## Clan joining, HUD and fixes
+
+| | was | is |
+|---|---|---|
+| **Clan join** | every bot ran its own two-tick countdown then sent `joinClan`, so forty bots all sent inside ~200ms — the server takes one and the rest are noise. Nothing ever checked whether a bot got in; the counter just reset and it fired again | one rotation over the bots that are not in yet. One sends, **1.5s** passes, its `clanName` is read back to verify, the turn moves on. A bot that failed goes to the *back* of the queue, so one stuck bot cannot block the rest. State is per owner, like the volley's, because the bots have to agree whose turn it is |
+| **Re-check button** | — | `Re-check clan joins` in the Bots menu. Restarts the rotation and reports `n/m joined`; bots already in are skipped by the turn picker so it costs them nothing |
+| **HUD** | `PING · PLAYERS · FPS · …` | `PLAYERS · BOTS · PING · FPS · …`. `BOTS` is joined/total, on its own 1s timer |
+| **Be Angel vs Cowboy When Safe** | `canWearCowboy()` was checked first, so turning both on put the bots in cowboy hats and the halo never appeared | the halo is checked before cowboy in both the idle and moving paths. You get cowboy, they get the halo |
+| **Safe Soldier** | nested inside RYN's `_antienemy` block, so turning Anti Enemy off silently disabled it | entered on owning soldier alone. `_antienemy` now only gates its own two tests, which is how novastorm has it |
+| **Autoheal shame** | novastorm's `(tick - damageTick) > 0` taken verbatim | **that was the bug.** RYN models moomoo's shame off the wall clock: a heal landing `step <= 120` after a hit is `shameCount += 1`, later is `-= 2`. So a routine top-up inside that window *added* shame instead of clearing it. `isSaveHealTime()` (125ms, ping allowed for) is back on the routine branch; the emergency heal still does not wait, because +1 shame beats dying. Food already sent is also no longer re-sent while unacknowledged — every apple past the first landed at full health, which is the other way shame climbs |
+
 See `tests/README.md` for the build and test commands.

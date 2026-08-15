@@ -109,6 +109,7 @@ sub("autoheal: constants + blockBreak field",
     moduleName="antiInsta";
     client;
     blockBreak=false;
+    _healSent=null;
     toggleAnti=false;`);
 
 sub("antismarttick: reset hook",
@@ -116,6 +117,28 @@ sub("antismarttick: reset hook",
 `    reset() {
       this.blockBreak = false;
       this.forceHeal = false;
+      this._healSent = null;
+    }
+
+    // How many of the last batch of apples are still unacknowledged. The batch
+    // expires once the health it was sent against has moved, or once the round
+    // trip has had time to complete — whichever comes first.
+    _healsInFlight(ModuleHandler) {
+      const sent = this._healSent;
+      if (!sent) return 0;
+      const myPlayer = this.client.myPlayer;
+      if (myPlayer.tempHealth !== sent.health) {
+        this._healSent = null;
+        return 0;
+      }
+      const socket = this.client.SocketManager;
+      const pong = socket && Number.isFinite(socket.pong) ? socket.pong : 0;
+      const waitTicks = Math.ceil(pong / 111) + 1;
+      if (ModuleHandler.tickCount - sent.tick > waitTicks) {
+        this._healSent = null;
+        return 0;
+      }
+      return sent.count;
     }
     isSaveHealTime() {`);
 
@@ -927,11 +950,181 @@ sub("menu: bot combat rows", followCursorRow,
   followCursorRow +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Auto Break</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAutoBreak\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Ranged Kiting</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botRangedKite\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
+  `            <div class=\\"content-option\\" style=\\"margin-top:6px;justify-content:center;\\">\\r\\n                <button id=\\"_clanRecheck\\" class=\\"option-button\\" style=\\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\\">Re-check clan joins</button>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Volley Fire</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botVolley\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">First wave size</span>\\r\\n                <label class=\\"slider\\">\\r\\n                    <span class=\\"slider-value\\"></span>\\r\\n                    <input id=\\"_botVolleyWave\\" type=\\"range\\" step=\\"1\\" min=\\"1\\" max=\\"20\\"></input>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Avoid Shield Bots</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAvoidShield\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Be Angel</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botBeAngel\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Kite distance</span>\\r\\n                <label class=\\"slider\\">\\r\\n                    <span class=\\"slider-value\\"></span>\\r\\n                    <input id=\\"_botKiteDistance\\" type=\\"range\\" step=\\"25\\" min=\\"150\\" max=\\"1200\\"></input>\\r\\n                </label>\\r\\n            </div>\\r\\n`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G. CLAN JOIN ROTATION, HUD COUNTERS, BE ANGEL vs COWBOY, SAFE SOLDIER FIDELITY
+// ─────────────────────────────────────────────────────────────────────────────
+
+sub("clan: the rotation helpers",
+`  class ClanJoiner {`,
+fs.readFileSync(__dirname + "/clan-queue.js", "utf8") + `  class ClanJoiner {`);
+
+sub("clan: one bot at a time, verified",
+`      if (ownerClan === null || myClan === ownerClan || !PlayerManager2.clanExist(ownerClan)) {
+        return;
+      }
+      if (this.joinCount === 2) {
+        this.joinCount = 0;
+        if (myClan !== null) {
+          PacketManager2.leaveClan();
+        } else {
+          owner.pendingJoins.add(myPlayer.id);
+          PacketManager2.joinClan(ownerClan);
+        }
+        return;
+      }
+      this.joinCount += 1;`,
+`      if (ownerClan === null || myClan === ownerClan || !PlayerManager2.clanExist(ownerClan)) {
+        return;
+      }
+      // Wait for this bot's slot in the rotation. Without this every bot counted
+      // its own two ticks and they all sent inside the same ~200ms.
+      if (!clanTakeTurn(owner, this.client, ownerClan, Date.now())) {
+        return;
+      }
+      if (myClan !== null) {
+        PacketManager2.leaveClan();
+        return;
+      }
+      owner.pendingJoins.add(myPlayer.id);
+      PacketManager2.joinClan(ownerClan);`);
+
+// ── HUD ──────────────────────────────────────────────────────────────────────
+
+sub("hud: players above ping, and a bot counter",
+`            <span>PING: <span id="rynPing"></span>ms</span>\\n            <span>PLAYERS: <span id="rynPlayers">?</span></span>`,
+`            <span>PLAYERS: <span id="rynPlayers">?</span></span>\\n            <span>BOTS: <span id="rynBots">0/0</span></span>\\n            <span>PING: <span id="rynPing"></span>ms</span>`);
+
+sub("hud: bot counter updater",
+`    updatePlayers(text) {`,
+`    updateBots(text) {
+      const span = document.querySelector("#rynBots");
+      if (span !== null) {
+        span.textContent = text;
+      }
+    }
+    updatePlayers(text) {`);
+
+sub("hud: drive the bot counter",
+`  setInterval(_rynPollServerCount, RYN_SERVER_POLL_MS);`,
+`  // How many bots are in, out of how many are connected. Same cadence as the
+  // FPS counter would be overkill for something that changes on a join, so it
+  // rides a slow timer of its own.
+  setInterval(() => {
+    try {
+      const owner = client;
+      if (!owner || !owner.isOwner) return;
+      const a = clanAudit(owner);
+      GameUI_default.updateBots(a.clan === null ? a.alive + "/" + a.total : a.joined + "/" + a.total);
+    } catch (_) {}
+  }, 1e3);
+  setInterval(_rynPollServerCount, RYN_SERVER_POLL_MS);`);
+
+// ── Be Angel must outrank cowboy for bots ───────────────────────────────────
+
+sub("angel: outranks cowboy, standing still",
+`          if (this.canWearCowboy()) return 5;
+          if (beAngel) return 48;
+          if (useActual && actual !== 0) return actual;`,
+`          // Be Angel is checked before the cowboy hat, not after. Cowboy When
+          // Safe is a choice about what *you* wear when nothing is happening,
+          // and it used to drag the bots along with it — so turning both on put
+          // everyone in a cowboy hat and the halo never appeared.
+          if (beAngel) return 48;
+          if (this.canWearCowboy()) return 5;
+          if (useActual && actual !== 0) return actual;`);
+
+sub("angel: outranks cowboy, moving",
+`      if (this.canWearCowboy()) {
+        return 5;
+      }
+      if (Settings_default._cowboyWhenSafe) {
+        return 0;
+      }
+      if (beAngel) {
+        return 48;
+      }
+      if (useBooster) {
+        return 12;
+      }
+      return 0;`,
+`      if (beAngel) {
+        return 48;
+      }
+      if (this.canWearCowboy()) {
+        return 5;
+      }
+      if (Settings_default._cowboyWhenSafe) {
+        return 0;
+      }
+      if (useBooster) {
+        return 12;
+      }
+      return 0;`);
+
+// ── Safe Soldier fidelity ───────────────────────────────────────────────────
+
+sub("safesoldier: independent of anti enemy",
+`      if (_canSoldier && Settings_default._antienemy) {
+        const _nearest = _em.nearestEnemy;
+        const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
+        const _primary2 = _mp.getItemByType(0);
+        const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
+        const _dist = _nearest !== null ? _mp.pos.current.distance(_nearest.pos.current) : Infinity;
+        const _isClose = _dist <= _atkRange + 20;`,
+`      // Novastorm's Safe Soldier sits on its own toggle and is not part of its
+      // anti-enemy logic. Nesting it inside RYN's \`_antienemy\` block meant
+      // turning that off silently disabled Safe Soldier too, which is not what
+      // the switch says it does.
+      if (_canSoldier) {
+        const _nearest = _em.nearestEnemy;
+        const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
+        const _primary2 = _mp.getItemByType(0);
+        const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
+        const _dist = _nearest !== null ? _mp.pos.current.distance(_nearest.pos.current) : Infinity;
+        const _isClose = Settings_default._antienemy && _dist <= _atkRange + 20;`);
+
+sub("safesoldier: anti enemy only gates its own tests",
+`        const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
+        if (_isDanger || _isClose || _safeSoldier) {`,
+`        const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
+        if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier) {`);
+
+sub("clan: wire the re-check button",
+`         case "resetSettings":
+          this.handleResetSettings(button);
+          break;`,
+`         case "resetSettings":
+          this.handleResetSettings(button);
+          break;
+
+         case "_clanRecheck":
+          this.handleClanRecheck(button);
+          break;`);
+
+sub("clan: the re-check handler",
+`    attachButtons() {`,
+`    // Restarts the rotation and reports what it found. Bots already in the clan
+    // are skipped by the turn picker, so pressing this costs nothing for them —
+    // it only puts the ones that are still out back at the front of the queue.
+    handleClanRecheck(button) {
+      button.onclick = () => {
+        try {
+          const a = clanRecheck(client);
+          button.textContent = a.clan === null ? "You are not in a clan" : a.joined + "/" + a.total + " joined — retrying the rest";
+          setTimeout(() => {
+            button.textContent = "Re-check clan joins";
+          }, 2500);
+        } catch (_) {}
+      };
+    }
+    attachButtons() {`);
 
 sub("header: version", `// @version         v5\n`, `// @version         v5.4\n`);
 sub("header: description",

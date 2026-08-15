@@ -87,19 +87,52 @@
       }
       const healing = tempHealth <= dmgPot;
 
-      // The second half of novastorm's condition: a tick went by without being
-      // hit, so topping up costs nothing that matters.
-      const quiet = this.isSaveHealTick();
+      // The second half of novastorm's condition is `(tick - damageTick) > 0` —
+      // a tick went by without being hit. On its own that is not safe here,
+      // because RYN models moomoo's shame rule off the wall clock, not ticks:
+      //
+      //     } else if (this.receivedDamage !== null) {      // a heal landed
+      //         const step = Date.now() - this.receivedDamage;
+      //         if (step <= 120) this.shameCount += 1;      // too soon: shame UP
+      //         else             this.shameCount -= 2;      // waited: shame DOWN
+      //     }
+      //
+      // So a routine top-up inside 120ms of being hit does not merely fail to
+      // clear shame, it adds to it, while the same apple a moment later removes
+      // two. isSaveHealTime() is the guard for exactly that window — 125ms with
+      // ping allowed for — and it belongs on the routine branch. Novastorm has
+      // no equivalent because its own heal() has no shame handling at all, which
+      // is why taking its condition verbatim made shame climb instead of fall.
+      //
+      // The emergency branch deliberately does not wait: +1 shame is a better
+      // outcome than dying, which is the entire point of healing into a hit.
+      const quiet = this.isSaveHealTick() && this.isSaveHealTime();
       if (!((healing && shameCount < 7) || quiet)) {
         return;
       }
+
+      // Food already sent and not yet acknowledged. tempHealth only moves when
+      // the server echoes the new health back, so without this the same missing
+      // health is paid for once per tick for the whole round trip — and every
+      // apple past the first lands at full health, which is the other way shame
+      // goes up.
+      const inFlight = this._healsInFlight(ModuleHandler);
+      const needTimes = Math.max(0, Math.ceil((maxHealth - tempHealth) / restore) - inFlight);
+      if (needTimes === 0) {
+        return;
+      }
+
       this.forceHeal = healing;
       if (healing) {
         ModuleHandler.didAntiInsta = true;
       }
       ModuleHandler.healedOnce = true;
-      const needTimes = Math.max(1, Math.ceil((maxHealth - tempHealth) / restore));
       for (let i = 0; i < needTimes; i++) {
         ModuleHandler.heal();
       }
+      this._healSent = {
+        count: needTimes,
+        tick: ModuleHandler.tickCount,
+        health: tempHealth
+      };
     }

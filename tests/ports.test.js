@@ -70,6 +70,7 @@ function makeClient(over = {}) {
   const grid = new M.SpatialHashGrid2D(100);
   const client = {
     isOwner: true,
+    SocketManager: { pong: 40 },
     ObjectManager: {
       objects, grid2D: grid,
       canPlaceItem: () => true,
@@ -170,6 +171,33 @@ head(1, "Autoheal — novastorm's damage-potential rule");
   check("shame 7 blocks the threat heal", h.heals === 0, h.heals + " food");
   const i = runHeal({ myPlayer: { tempHealth: 50, damageTick: 11, tickCount: 10, shameActive: true } });
   check("shameActive blocks everything", i.heals === 0, i.heals + " food");
+
+  // The shame window. RYN raises shame when a heal lands within 120ms of being
+  // hit and lowers it by two after, so the routine top-up has to wait it out.
+  const fresh = runHeal({ myPlayer: { tempHealth: 60, damageTick: 5, tickCount: 10, receivedDamage: Date.now() } });
+  check("no routine top-up inside the 120ms shame window", fresh.heals === 0, fresh.heals + " food, hit just now");
+  const settled = runHeal({ myPlayer: { tempHealth: 60, damageTick: 5, tickCount: 10, receivedDamage: Date.now() - 400 } });
+  check("...and it goes out once the window has passed", settled.heals === 2, settled.heals + " food, hit 400ms ago");
+  const dying = runHeal({
+    myPlayer: { tempHealth: 60, damageTick: 5, tickCount: 10, receivedDamage: Date.now() },
+    EnemyManager: { potentialDamage: 55, potentialSpikeDamage: 20 },
+  });
+  check("but an emergency heal does not wait for it", dying.heals === 2, dying.heals + " food while lethal damage is pending");
+
+  // In-flight accounting: the same missing health must not be paid for twice
+  // while the server has not echoed the first apples back.
+  const c2 = makeClient({ myPlayer: { tempHealth: 60, damageTick: 5, tickCount: 10, receivedDamage: Date.now() - 400 } });
+  const m2 = new M.AntiInsta(c2);
+  m2.postTick();
+  const firstBatch = c2._heals.length;
+  m2.postTick();
+  m2.postTick();
+  check("food already sent is not re-sent while unacknowledged", c2._heals.length === firstBatch,
+        firstBatch + " food over three ticks at the same health");
+  c2.myPlayer.tempHealth = 80;             // the server echoes back
+  m2.postTick();
+  check("...and the next batch goes once health actually moves", c2._heals.length === firstBatch + 1,
+        (c2._heals.length - firstBatch) + " more for the last 20hp");
 
   const j = runHeal({ myPlayer: { tempHealth: 50 } });
   M.Settings_default._autoheal = false;
