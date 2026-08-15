@@ -516,6 +516,202 @@ sub("menu: name the tile after what it does",
 `                <span class=\\"option-title\\">Scatter Bots</span>`,
 `                <span class=\\"option-title\\">Bot Random Movement</span>`);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// C. BOT COMBAT — auto break, ranged kiting
+// ─────────────────────────────────────────────────────────────────────────────
+
+sub("bots: register the two combat modules",
+`  class Automill {`,
+fs.readFileSync(__dirname + "/bot-modules.js", "utf8") + `  class Automill {`);
+
+sub("bots: instantiate them",
+`        autoPlacer: new AutoPlacer_default(client2),`,
+`        botAutoBreak: new BotAutoBreak(client2),
+        botRangedAttack: new BotRangedAttack(client2),
+        autoPlacer: new AutoPlacer_default(client2),`);
+
+sub("bots: run them for bots only",
+`      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.movement ];`,
+`      // botRangedAttack claims the tick before movement so it can take over
+      // where the bot walks; botAutoBreak runs after, and only fires when the
+      // movement it just asked for did not happen.
+      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botRangedAttack, this.staticModules.movement, this.staticModules.botAutoBreak ];`);
+
+sub("bots: movement yields to ranged kiting",
+`      if (ModuleHandler._scatterActive || ModuleHandler._scatterReturning) return;
+      if (ModuleHandler._autoFarmActive) return;`,
+`      if (ModuleHandler._scatterActive || ModuleHandler._scatterReturning) return;
+      if (ModuleHandler._autoFarmActive) return;
+      // Ranged kiting already decided where this bot walks this tick.
+      if (ModuleHandler.staticModules.botRangedAttack?.active) return;`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D. TRAIN FORMATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+sub("train: register the id",
+`  const FORMATION_IDS = new Set([ "none", "circle", "heart", "triangle", "square", "column", "hline" ]);`,
+`  const FORMATION_IDS = new Set([ "none", "circle", "heart", "triangle", "square", "column", "hline", "train" ]);
+  // Gap between carriages, in px.
+  const TRAIN_SPACING = 70;`);
+
+sub("train: the offset itself",
+`       case "hline":
+        {
+          const spread = radius * 1.8;
+          return {
+            dx: (t - 0.5) * spread,
+            dy: 0
+          };
+        }`,
+`       case "hline":
+        {
+          const spread = radius * 1.8;
+          return {
+            dx: (t - 0.5) * spread,
+            dy: 0
+          };
+        }
+
+       case "train":
+        {
+          // Single file directly behind, one carriage per bot. Unlike "column",
+          // which is a fixed-length line centred on the player and squeezes as
+          // bots are added, the train is anchored at the player and grows
+          // backwards, so spacing stays constant however many bots there are.
+          const {dx: dx, dy: dy} = rotateToFacing(-(botIndex + 1) * TRAIN_SPACING, 0);
+          return {
+            dx: dx,
+            dy: dy
+          };
+        }`);
+
+sub("train: face the direction of travel",
+`      const facingAngle = ownerClient.InputHandler && ownerClient.InputHandler.mouse ? ownerClient.InputHandler.mouse.angle : 0;`,
+`      // A train trails behind where you are going, not where you are aiming, so
+      // it uses the owner's movement direction and only falls back to the mouse
+      // when standing still.
+      let facingAngle = ownerClient.InputHandler && ownerClient.InputHandler.mouse ? ownerClient.InputHandler.mouse.angle : 0;
+      if (f === "train") {
+        const ownerDir = ownerClient._ModuleHandler.move_dir;
+        if (ownerDir !== null && ownerDir !== void 0) facingAngle = ownerDir;
+      }`);
+
+sub("train: menu entry",
+`      }, {
+        id: "hline",
+        icon: "━",
+        label: "Line Side"
+      } ];`,
+`      }, {
+        id: "hline",
+        icon: "━",
+        label: "Line Side"
+      }, {
+        id: "train",
+        icon: "🚂",
+        label: "Train"
+      } ];`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// E. SERVER PLAYER COUNTER
+// ─────────────────────────────────────────────────────────────────────────────
+
+sub("players: panel row above FPS",
+`            <span>FPS: <span id="rynFPS"></span></span>`,
+`            <span>PLAYERS: <span id="rynPlayers">?</span></span>\\n            <span>FPS: <span id="rynFPS"></span></span>`);
+
+sub("players: updater + poller",
+`    updateFPS(fps) {`,
+`    updatePlayers(text) {
+      const span = document.querySelector("#rynPlayers");
+      if (span !== null) {
+        span.textContent = text;
+      }
+    }
+    updateFPS(fps) {`);
+
+sub("players: start the poll",
+`  const SaveSettings = () => {`,
+`  // Live population of the server you are actually on.
+  //
+  // The game fetches its server list exactly once, at load — \`_n()\` runs from
+  // the bootstrapper and there is no refresh loop — so #serverBrowser's
+  // "[n/m]" labels are a snapshot from before you joined and go stale
+  // immediately. The list is re-fetched here instead, from the same endpoint the
+  // game uses, and the entry matching this tab's ?server=region:name is the one
+  // reported. If the fetch fails the browser label is still better than nothing,
+  // so it is used as the fallback.
+  const RYN_SERVER_API = (location.hostname === "sandbox.moomoo.io" ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io") + "/servers?v=1.27";
+  const RYN_SERVER_POLL_MS = 1e4;
+  const _rynCurrentServer = () => {
+    try {
+      const q = new URLSearchParams(location.search).get("server");
+      if (typeof q !== "string") return null;
+      const [region, name] = q.split(":");
+      if (!region || !name) return null;
+      return {
+        region: region,
+        name: name
+      };
+    } catch (_) {
+      return null;
+    }
+  };
+  const _rynBrowserFallback = () => {
+    try {
+      const sel = document.getElementById("serverBrowser");
+      const opt = sel && sel.querySelector("select") ? sel.querySelector("select").selectedOptions[0] : null;
+      const label = opt ? opt.textContent : "";
+      const m = /\\[(\\d+)\\/(\\d+)\\]/.exec(label || "");
+      return m ? m[1] + "/" + m[2] : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  const _rynPollServerCount = async () => {
+    const here = _rynCurrentServer();
+    try {
+      const res = await fetch(RYN_SERVER_API, {
+        cache: "no-store"
+      });
+      const list = await res.json();
+      if (Array.isArray(list) && here) {
+        for (let i = 0; i < list.length; i++) {
+          const g = list[i];
+          if (g && String(g.region) === here.region && String(g.name) === here.name) {
+            GameUI_default.updatePlayers(Math.min(g.playerCount, g.playerCapacity) + "/" + g.playerCapacity);
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+    const fallback = _rynBrowserFallback();
+    GameUI_default.updatePlayers(fallback === null ? "?" : fallback);
+  };
+  setInterval(_rynPollServerCount, RYN_SERVER_POLL_MS);
+  setTimeout(_rynPollServerCount, 1500);
+
+  const SaveSettings = () => {`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS + BOTS MENU
+// ─────────────────────────────────────────────────────────────────────────────
+
+sub("settings: bot combat defaults",
+`    _botsScattered: false,`,
+`    _botsScattered: false,
+    _botAutoBreak: false,
+    _botRangedKite: false,
+    _botKiteDistance: 400,`);
+
+const followCursorRow = `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Follow cursor</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_followCursor\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`;
+sub("menu: bot combat rows", followCursorRow,
+  followCursorRow +
+  `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Auto Break</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAutoBreak\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
+  `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Ranged Kiting</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botRangedKite\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
+  `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Kite distance</span>\\r\\n                <label class=\\"slider\\">\\r\\n                    <span class=\\"slider-value\\"></span>\\r\\n                    <input id=\\"_botKiteDistance\\" type=\\"range\\" step=\\"25\\" min=\\"150\\" max=\\"1200\\"></input>\\r\\n                </label>\\r\\n            </div>\\r\\n`);
+
 sub("header: version", `// @version         v5\n`, `// @version         v5.4\n`);
 sub("header: description",
   `// @description     ! have fun\n`,

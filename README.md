@@ -221,4 +221,13 @@ normal movement. It shipped unusable. What changed:
 | **Late bots** | a bot spawned after the toggle kept trailing the owner while the rest wandered | joins the mode on its next frame |
 | **Coming back** | "returning" ended only on getting within 120px of the owner — a blocked bot, or a dead or distant owner, left it suppressing normal movement forever | an 8s deadline hands it back regardless |
 
+## Bot combat, formation and HUD
+
+| | |
+|---|---|
+| **Bot Auto Break** | Sakuna's autobreak, bot-only, in the Bots menu. Fires when a bot is *told to move and does not move* for three ticks — a bot standing still because nobody asked it to walk is not stuck, and neither is one still drifting. It then takes Sakuna's fullest-direction pick: of the destroyable things in weapon reach, the direction with the most of them within 90°, lowest health first, swinging at the mean angle of that group. Sakuna sweeps 360 one-degree steps to find that direction; the same maximum is found by testing the blockers' own directions, which is `n` candidates instead of 360 and cannot miss a cluster falling between two steps. Breaks with the great hammer when the bot has one, per Sakuna, otherwise the primary |
+| **Bot Ranged Kiting** | With a bow, crossbow, repeater or musket in the secondary, holding attack sends bots out to the distance set by the **Kite distance** slider (150–1200px) and has them shoot from there. Inside a 45px band they hold position and fire, so a volley lands together instead of trailing in one bot at a time. Holding the band costs no packets — `PacketManager.move` sends on every call, so only a real change of heading is sent |
+| **Train formation** | Single file directly behind you, one carriage per bot, oriented to your *movement* direction and falling back to your aim when you stand still. Unlike `column`, which is a fixed-length line centred on you and squeezes as bots are added, the train is anchored at you and grows backwards, so spacing stays at 70px whether there are 5 bots or 40 |
+| **Server player counter** | A `PLAYERS n/m` row above FPS. The game fetches its server list exactly once at load and has no refresh loop, so `#serverBrowser`'s `[n/m]` labels are a snapshot from before you joined; this re-fetches the same endpoint every 10s and reports the entry matching this tab's `?server=region:name`. Falls back to the browser label, then to `?` |
+
 See `tests/README.md` for the build and test commands.
