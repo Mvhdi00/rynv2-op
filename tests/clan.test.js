@@ -159,36 +159,7 @@ head(6, "Be Angel outranks Cowboy When Safe, for bots only");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(7, "Autoheal — the shame window");
-{
-  check("the routine top-up waits out the 120ms shame window",
-        /const quiet = this\.isSaveHealTick\(\) && this\.isSaveHealTime\(\);/.test(src),
-        "isSaveHealTime is 125ms with ping allowed for");
-  check("the emergency heal deliberately does not wait",
-        /\(healing && shameCount < 7\) \|\| quiet/.test(src));
-  check("food already in flight is not paid for twice",
-        /const inFlight = this\._healsInFlight\(ModuleHandler\);/.test(src));
-  check("and a tick with nothing left to send does nothing",
-        /if \(needTimes === 0\) \{\s*\n\s*return;/.test(src));
-
-  // RYN's own shame model, which is what the guard is written against.
-  const model = span(find("    updateHealth(health) {"), find("    updateHealth(health) {") + 40);
-  check("RYN raises shame under 120ms and lowers it over",
-        /if \(step <= 120\) \{[\s\S]{0,80}shameCount \+= 1/.test(model) && /shameCount -= 2/.test(model),
-        "step <= 120 → +1, else → -2");
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-head(8, "Safe Soldier no longer depends on Anti Enemy");
-{
-  check("the block is entered on owning soldier alone", /if \(_canSoldier\) \{/.test(src));
-  check("anti-enemy now only gates its own two tests",
-        /_isClose = Settings_default\._antienemy && _dist <= _atkRange/.test(src) &&
-        /if \(Settings_default\._antienemy && _isDanger \|\| _isClose \|\| _safeSoldier\)/.test(src));
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-head(9, "Auto Place / Preplace / Replace still untouched");
+head(7, "Auto Place / Preplace / Replace still untouched");
 {
   const base = fs.readFileSync(__dirname + "/../src/RYN_Client_v5.3.js", "utf8");
   const slice = t => t.slice(t.indexOf("  const LUNA_SPIKE_TYPE"), t.indexOf("  const AutoPlacer_default = AutoPlacer;"));

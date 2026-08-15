@@ -195,57 +195,13 @@ everything it calls is byte-identical to v5.3.
 
 | | was | is |
 |---|---|---|
-| **Autoheal** | eight stacked special cases (trap about to break, melee+ranged combo, reverse insta, tool hammer, ranged bow, danger flags, health < 20), each healing a hand-picked number of food | novastorm's single rule: `potentialDamage + potentialSpikeDamage`, capped at 140, `×0.75` under soldier, `+5` under scuba — heal if that reaches health, or if a tick passed without being hit. RYN's `shameActive` guard and `heal()`'s shame queue stay, novastorm has no equivalent |
-| **Anti Smart Tick** | committed the moment it saw the danger; no toggle; approximated the knockback test with a box | novastorm's stall — stop autobreak, hold whichever weapon is still reloading, and only commit when both are ready and there is nothing left to stall on. New `Anti Smart Tick` toggle. Knockback test is now segment-to-circle |
 | **Auto Mills** | sandbox only, `age < 20`, stopped once autobuy finished, and needed all three mills placeable — it could not run in a real game | novastorm's combat mill: three windmills dropped behind you, any time, not while pinned or next to a trap, each of the three tested on its own. **Off by default** now that it runs, on the existing keybind. Offset stays RYN's exact solve rather than novastorm's `toRad(scale + scale/2)` approximation |
-| **Safe Soldier** | soldier went on at weapon reach + 20px, a tick late against anything that closes fast | novastorm's flat 300px radius, as a new `Safe Soldier` toggle, alongside the existing reach and danger tests |
 | **Packets** | budget of 70/sec, counting only what RYN itself sent | novastorm's 119 — the whole server allowance. Safe to take because `socket.send` is now wrapped at the transport so the game bundle's own frames count too; frames sent through `PacketManager` are skipped there to avoid double counting |
 
-## Bot random movement
-
-x18 has no bot movement to take. Its Bots menu — "Send bots", "Close bots",
-`botcount`, `botname`, `botplatformplacer` — has no implementation behind it:
-the two buttons carry no event listener and the three settings have no readers
-anywhere in the file. `altPlayerManager` is an iframe alt player, not a fleet.
-
-The **other two x18 files do**, and their bot movement is three modes on a
-variable called `ai`: `Wander` (random), `Static` (stand still) and `Summon`
-(follow the owner). RYN already had all three — Scatter Bots, Freeze Bots and
-normal follow — so what was ported is x18's *wander algorithm*, into RYN's
-existing scatter, which otherwise keeps its obstacle steering and its
-walk-everyone-home-on-toggle-off. What changed:
-
-| | was | is |
-|---|---|---|
-| **The algorithm** | re-rolled the heading every 1200ms regardless — a bot changing its mind nine times before it has crossed its own body, which is why the movement read as jitter rather than roaming | x18's `moveRan`: commit to a heading and keep it until the bot has covered a 3300px leg or has stopped moving, then turn. The new heading is rejected and re-rolled while it lands within 2 radians of the old one, so a change of direction is always a hard turn of at least 115°, never a nudge |
-| **The key** | `_scatterBots: ""` — unbound, so `event.code === Settings._scatterBots` was never true and the feature was unreachable | bound to **`J`**. The tile is renamed `Bot Random Movement`. x18's third mode, Static, is `Freeze Bots` and shipped unbound the same way — now **`K`** |
-| **Bind check** | guarded on `!== "..."` while the default was `""`, so an untouched bind was a value the handler could not recognise | any falsy or placeholder bind counts as unset |
-| **Toggle state** | read back off `clients[0]._ModuleHandler._scatterActive` | a persisted `Settings._botsScattered`, reconciled onto every bot each frame |
-| **Late bots** | a bot spawned after the toggle kept trailing the owner while the rest wandered | joins the mode on its next frame |
-| **Milling while wandering** | Automill builds *behind* the bot and reads `reverse_move_dir` to know which way that is — but `startMovement()` is the only thing that keeps that field in step with `move_dir`, and the scatter loop writes `move_dir` directly. So while wandering it stayed `null` and Automill returned on its first line every tick. The loop now keeps the pair in sync, so with **Auto Mills** on the bots mill as they roam — which is how x18 uses wander in the first place, since `c.doMills` is what puts a bot into that mode |
-| **Coming back** | "returning" ended only on getting within 120px of the owner — a blocked bot, or a dead or distant owner, left it suppressing normal movement forever | an 8s deadline hands it back regardless |
-
-## Bot combat, formation and HUD
-
-| | |
-|---|---|
-| **Bot Auto Break** | Sakuna's autobreak, bot-only, in the Bots menu. Fires when a bot is *told to move and does not move* for three ticks — a bot standing still because nobody asked it to walk is not stuck, and neither is one still drifting. It then takes Sakuna's fullest-direction pick: of the destroyable things in weapon reach, the direction with the most of them within 90°, lowest health first, swinging at the mean angle of that group. Sakuna sweeps 360 one-degree steps to find that direction; the same maximum is found by testing the blockers' own directions, which is `n` candidates instead of 360 and cannot miss a cluster falling between two steps. Breaks with the great hammer when the bot has one, per Sakuna, otherwise the primary |
-| **Bot Ranged Kiting** | With a bow, crossbow, repeater or musket in the secondary, holding attack sends bots out to the distance set by the **Kite distance** slider (150–1200px) and has them shoot from there. Inside a 45px band they hold position and fire, so a volley lands together instead of trailing in one bot at a time. Holding the band costs no packets — `PacketManager.move` sends on every call, so only a real change of heading is sent |
-| **Train formation** | Single file directly behind you, one carriage per bot, oriented to your *movement* direction and falling back to your aim when you stand still. Unlike `column`, which is a fixed-length line centred on you and squeezes as bots are added, the train is anchored at you and grows backwards, so spacing stays at 70px whether there are 5 bots or 40 |
-| **Avoid Shield Bots** | A wooden shield blocks a 60° arc in front of its holder, and `getMaxWeaponDamage` returns **zero** against it for anything shootable and a fifth for melee — so the shield bot parked in front of a group is not a hard target, it is a target worth nothing, and every arrow spent on it is spent on nothing. Bots now take the nearest enemy that is not holding a shield *at them*, using RYN's existing `PlayerManager.lookingShield`. It is per-bot, because a shield only faces one way: the same shield bot can be blocking one of your bots and wide open to another standing off its flank. If every enemy in range is shielded, bots hold the shot and keep station rather than feeding arrows into a wall — a shield cannot be held and swung at the same time, so waiting costs nothing. Melee bots get the same target choice without the kiting. On by default: when nobody holds a shield it changes nothing. Toggle + key `I` |
-| **Volley Fire** | A shield only blocks what it faces, and an arrow into it still moves the player holding it. Firing all forty bots at once wastes the whole salvo, because every shot resolves against the frame in which the shield was still in front. So the salvo is split: the first **N** bots (slider, default 5) shoot the *shield itself* to shove it back, and 260ms later — once the shove and the arrows already in the air have resolved — everyone else fires at the people it was covering. Wave two is aimed and in position the whole time, it just does not loose. State is per owner, not per bot: a bot deciding its own phase would put wave two out before wave one on the first tick it happened to run. Toggle + key `U`, wave size on a slider |
-| **Be Angel** | Bots settle on hat 12 (Booster Hat) and accessory 11 (Monkey Tail) whenever nothing dangerous is happening — both are movement speed. This swaps those two defaults for hat 48 (Halo) and accessory 13 (Angel Wings), which regenerate health instead, moving and standing still alike. Only those two "nothing is happening" exits are touched: soldier, bull, turret gear, emp, flipper and winter all keep priority, so a bot in trouble still wears the hat that keeps it alive. Bots only — the owner's hats are untouched |
-| **Server player counter** | A `PLAYERS n/m` row above FPS. The game fetches its server list exactly once at load and has no refresh loop, so `#serverBrowser`'s `[n/m]` labels are a snapshot from before you joined; this re-fetches the same endpoint every 10s and reports the entry matching this tab's `?server=region:name`. Falls back to the browser label, then to `?` |
-
-## Clan joining, HUD and fixes
-
-| | was | is |
-|---|---|---|
-| **Clan join** | every bot ran its own two-tick countdown then sent `joinClan`, so forty bots all sent inside ~200ms — the server takes one and the rest are noise. Nothing ever checked whether a bot got in; the counter just reset and it fired again | one rotation over the bots that are not in yet. One sends, **1.5s** passes, its `clanName` is read back to verify, the turn moves on. A bot that failed goes to the *back* of the queue, so one stuck bot cannot block the rest. State is per owner, like the volley's, because the bots have to agree whose turn it is |
-| **Re-check button** | — | `Re-check clan joins`, directly under the bot name rows in the Bots menu. Restarts the rotation and reports `n/m joined`; bots already in are skipped by the turn picker so it costs them nothing |
-| **HUD** | `PING · PLAYERS · FPS · …` | `PLAYERS · BOTS · PING · FPS · …`. `BOTS` is joined/total, on its own 1s timer |
-| **Be Angel vs Cowboy When Safe** | `canWearCowboy()` was checked first, so turning both on put the bots in cowboy hats and the halo never appeared | the halo is checked before cowboy in both the idle and moving paths. You get cowboy, they get the halo |
-| **Safe Soldier** | nested inside RYN's `_antienemy` block, so turning Anti Enemy off silently disabled it | entered on owning soldier alone. `_antienemy` now only gates its own two tests, which is how novastorm has it |
-| **Autoheal shame** | novastorm's `(tick - damageTick) > 0` taken verbatim | **that was the bug.** RYN models moomoo's shame off the wall clock: a heal landing `step <= 120` after a hit is `shameCount += 1`, later is `-= 2`. So a routine top-up inside that window *added* shame instead of clearing it. `isSaveHealTime()` (125ms, ping allowed for) is back on the routine branch; the emergency heal still does not wait, because +1 shame beats dying. Food already sent is also no longer re-sent while unacknowledged — every apple past the first landed at full health, which is the other way shame climbs |
+**Reverted at the user's request**, and asserted byte-identical to stock v5.3 by
+`tests/ports.test.js`: the autoheal rule, Anti Smart Tick and Safe Soldier.
+`AntiInsta`, `Autobreak` and the soldier equip block are the original v5.3
+lines again, and no setting, constant or menu row from any of the three
+survives.
 
 See `tests/README.md` for the build and test commands.

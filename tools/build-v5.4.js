@@ -1,6 +1,6 @@
 // Builds RYN v5.4 from a pristine v5.3 client. Two sections:
 //
-//   A. the five Novastorm ports
+//   A. the Novastorm ports kept: the 119 packet budget and the combat automill
 //   B. bot random movement — binding and fixing RYN's own Scatter Bots
 //
 // Auto Place / Preplace / Replace are deliberately untouched. Every edit is an
@@ -94,167 +94,6 @@ sub("packets: budget 70 -> 119",
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. AUTOHEAL  (+ 3. ANTI SMART TICK, which shares the class)
 // ─────────────────────────────────────────────────────────────────────────────
-sub("autoheal: constants + blockBreak field",
-`  class AntiInsta {
-    moduleName="antiInsta";
-    client;
-    toggleAnti=false;`,
-`  // Novastorm caps totalDmgPot at 140 before comparing it against health, so a
-  // pile-up of five enemies does not read as more lethal than the two hits that
-  // will actually land. The +5 for hat 7 is its bias for scuba's lack of
-  // defence; the 0.75 for soldier is the hat's own dmgMult.
-  const ANTI_INSTA_DMG_CAP = 140;
-  const ANTI_INSTA_SCUBA_BIAS = 5;
-  class AntiInsta {
-    moduleName="antiInsta";
-    client;
-    blockBreak=false;
-    _healSent=null;
-    toggleAnti=false;`);
-
-sub("antismarttick: reset hook",
-`    isSaveHealTime() {`,
-`    reset() {
-      this.blockBreak = false;
-      this.forceHeal = false;
-      this._healSent = null;
-    }
-
-    // How many of the last batch of apples are still unacknowledged. The batch
-    // expires once the health it was sent against has moved, or once the round
-    // trip has had time to complete — whichever comes first.
-    _healsInFlight(ModuleHandler) {
-      const sent = this._healSent;
-      if (!sent) return 0;
-      const myPlayer = this.client.myPlayer;
-      if (myPlayer.tempHealth !== sent.health) {
-        this._healSent = null;
-        return 0;
-      }
-      const socket = this.client.SocketManager;
-      const pong = socket && Number.isFinite(socket.pong) ? socket.pong : 0;
-      const waitTicks = Math.ceil(pong / 111) + 1;
-      if (ModuleHandler.tickCount - sent.tick > waitTicks) {
-        this._healSent = null;
-        return 0;
-      }
-      return sent.count;
-    }
-    isSaveHealTime() {`);
-
-sub("antismarttick: knockback test",
-`            for (const spike of spikesEnemy) {
-              const sp = spike.pos.current;
-              const sc = spike.collisionScale;
-              const rx1 = sp.x - sc, ry1 = sp.y - sc;
-              const rx2 = sp.x + sc, ry2 = sp.y + sc;
-              const dx = projX - myPos.x, dy = projY - myPos.y;
-              const len2 = dx * dx + dy * dy;
-              let hits = false;
-              if (len2 === 0) {
-                hits = myPos.x >= rx1 && myPos.x <= rx2 && myPos.y >= ry1 && myPos.y <= ry2;
-              } else {
-                const t = Math.max(0, Math.min(1, ((rx1 + rx2) / 2 - myPos.x) * dx / len2 + ((ry1 + ry2) / 2 - myPos.y) * dy / len2));
-                const cx = myPos.x + t * dx, cy = myPos.y + t * dy;
-                hits = cx >= rx1 && cx <= rx2 && cy >= ry1 && cy <= ry2;
-              }
-              if (hits) {
-                shouldWait = true;
-                break;
-              }
-            }`,
-`            for (const spike of spikesEnemy) {
-              const sp = spike.pos.current;
-              // Would the knockback path actually put my body on that spike:
-              // distance from the spike to the segment, against both radii.
-              const dx = projX - myPos.x, dy = projY - myPos.y;
-              const len2 = dx * dx + dy * dy;
-              let t = len2 > 1e-9 ? ((sp.x - myPos.x) * dx + (sp.y - myPos.y) * dy) / len2 : 0;
-              if (t < 0) t = 0; else if (t > 1) t = 1;
-              const cx = myPos.x + t * dx, cy = myPos.y + t * dy;
-              if (Math.hypot(sp.x - cx, sp.y - cy) <= spike.collisionScale + myPlayer.scale) {
-                shouldWait = true;
-                break;
-              }
-            }`);
-
-sub("antismarttick: stall before committing",
-`      if (shouldWait && trapObj.health <= myHammerDmg) {
-        return true;
-      }
-      return false;
-    }`,
-`      // Novastorm does not spend the anti the moment it sees the danger. It
-      // stops breaking out, and then stalls on whichever weapon is still
-      // reloading — holding a weapon that cannot swing costs nothing and keeps
-      // the trap intact for another tick. Only when both weapons are ready, so
-      // there is nothing left to stall on, does it commit:
-      //
-      //     autoBreak = false;
-      //     if (secondaryReload < 1)    predictWeapon = weapons[1];
-      //     else if (primaryReload < 1) predictWeapon = weapons[0];
-      //     else return true;
-      //
-      // What was here committed on \`shouldWait\` alone, which burnt the heal on
-      // ticks where simply not swinging would have done.
-      if (shouldWait && trapObj.health <= myHammerDmg) {
-        this.blockBreak = true;
-        const {reloading: reloading} = ModuleHandler.staticModules;
-        if (!reloading.isReloaded(1)) {
-          ModuleHandler.forceWeapon = 1;
-          return false;
-        }
-        if (!reloading.isReloaded(0)) {
-          ModuleHandler.forceWeapon = 0;
-          return false;
-        }
-        return true;
-      }
-      this.blockBreak = false;
-      return false;
-    }`);
-
-sub("autobreak: honour the anti-smart-tick latch",
-`    postTick() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
-      if (!Settings_default._autobreak) {
-        return;
-      }
-      if (ModuleHandler.moduleActive && !myPlayer.isTrapped) {
-        return;
-      }`,
-`    postTick() {
-      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
-      if (!Settings_default._autobreak) {
-        return;
-      }
-      // Novastorm's Anti Smart Tick sets \`autoBreak = false\` when breaking out of
-      // the trap would fly me into their spike. This module runs before AntiInsta,
-      // so the latch it sets is read on the tick after — which is the tick that
-      // matters, because the situation it detects lasts until the trap or the
-      // spike is gone.
-      if (ModuleHandler.staticModules.antiInsta?.blockBreak) {
-        return;
-      }
-      if (ModuleHandler.moduleActive && !myPlayer.isTrapped) {
-        return;
-      }`);
-
-// The heal decision itself: replace AntiInsta.postTick wholesale.
-{
-  const marker = "  const AntiInsta_default = AntiInsta;";
-  const end = s.indexOf(marker);
-  if (end < 0) throw new Error("autoheal: AntiInsta_default not found");
-  const start = s.lastIndexOf("    postTick() {", end);
-  if (start < 0) throw new Error("autoheal: AntiInsta.postTick not found");
-  // Everything from postTick to just before the class' closing brace.
-  const tail = s.slice(start, end);
-  const closeAt = tail.lastIndexOf("  }\n");
-  if (closeAt < 0) throw new Error("autoheal: class close not found");
-  s = s.slice(0, start) + fs.readFileSync(__dirname + "/novastorm-autoheal.js", "utf8").replace(/\n$/, "\n") + tail.slice(closeAt) + s.slice(end);
-  edits.push("autoheal: novastorm's damage-potential rule");
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. AUTO MILLS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -336,63 +175,15 @@ sub("automill: place each of the three on its own",
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. SAFE SOLDIER
 // ─────────────────────────────────────────────────────────────────────────────
-sub("safesoldier: range constant",
-`  class ModuleHandler {`,
-`  // Novastorm's Safe Soldier radius.
-  const SAFE_SOLDIER_RANGE = 300;
-  class ModuleHandler {`);
-
-sub("safesoldier: equip block",
-`      if (_canSoldier && Settings_default._antienemy) {
-        const _nearest = _em.nearestEnemy;
-        const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
-        const _primary2 = _mp.getItemByType(0);
-        const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
-        const _isClose = _nearest !== null && _mp.pos.current.distance(_nearest.pos.current) <= _atkRange + 20;
-        if (_isDanger || _isClose) {`,
-`      if (_canSoldier && Settings_default._antienemy) {
-        const _nearest = _em.nearestEnemy;
-        const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
-        const _primary2 = _mp.getItemByType(0);
-        const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
-        const _dist = _nearest !== null ? _mp.pos.current.distance(_nearest.pos.current) : Infinity;
-        const _isClose = _dist <= _atkRange + 20;
-        // Novastorm's Safe Soldier:
-        //
-        //     if (isBoughtHat(6,0) && nearestEnemy
-        //         && getDistance(nearestEnemy, myPlayer) < 300
-        //         && window.vars.safeSoldier) currentHat = 6;
-        //
-        // A flat 300px, wider than the weapon-reach test above it. The reach test
-        // only puts soldier on once they are already able to hit you, which is a
-        // tick too late against anything that closes fast — a bull-hat rush or a
-        // spike push covers the gap between reach and 300 inside one tick.
-        const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
-        if (_isDanger || _isClose || _safeSoldier) {`);
-
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS + MENU
 // ─────────────────────────────────────────────────────────────────────────────
-sub("settings: new toggles",
-`    _antiSpikeTick: true,`,
-`    _antiSpikeTick: true,
-    _antiSmartTick: true,
-    _safeSoldier: true,`);
-
 sub("settings: automill off by default",
 `    _automill: true,`,
 `    // Off by default, like novastorm's \`autoMills = false\`. It is now a real
     // combat mill rather than a sandbox-only XP grinder, so leaving it on would
     // drop windmills behind every player from the first spawn.
     _automill: false,`);
-
-const antiSpikeRow = `            <div class=\\"content-option\\">\\r\\n                <label class=\\"option-title\\" for=\\"_antiSpikeTick\\">Anti Spike Tick</label>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_antiSpikeTick\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`;
-sub("menu: Anti Smart Tick row", antiSpikeRow,
-  antiSpikeRow + `            <div class=\\"content-option\\">\\r\\n                <label class=\\"option-title\\" for=\\"_antiSmartTick\\">Anti Smart Tick</label>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_antiSmartTick\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`);
-
-const soldierRow = `            <div class=\\"content-option\\">\\r\\n                <label class=\\"option-title\\" for=\\"_soldierDefault\\">Soldier default</label>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_soldierDefault\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n\\r\\n            </div>\\r\\n`;
-sub("menu: Safe Soldier row", soldierRow,
-  soldierRow + `            <div class=\\"content-option\\">\\r\\n                <label class=\\"option-title\\" for=\\"_safeSoldier\\">Safe Soldier</label>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_safeSoldier\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1068,32 +859,6 @@ sub("angel: outranks cowboy, moving",
       return 0;`);
 
 // ── Safe Soldier fidelity ───────────────────────────────────────────────────
-
-sub("safesoldier: independent of anti enemy",
-`      if (_canSoldier && Settings_default._antienemy) {
-        const _nearest = _em.nearestEnemy;
-        const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
-        const _primary2 = _mp.getItemByType(0);
-        const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
-        const _dist = _nearest !== null ? _mp.pos.current.distance(_nearest.pos.current) : Infinity;
-        const _isClose = _dist <= _atkRange + 20;`,
-`      // Novastorm's Safe Soldier sits on its own toggle and is not part of its
-      // anti-enemy logic. Nesting it inside RYN's \`_antienemy\` block meant
-      // turning that off silently disabled Safe Soldier too, which is not what
-      // the switch says it does.
-      if (_canSoldier) {
-        const _nearest = _em.nearestEnemy;
-        const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
-        const _primary2 = _mp.getItemByType(0);
-        const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
-        const _dist = _nearest !== null ? _mp.pos.current.distance(_nearest.pos.current) : Infinity;
-        const _isClose = Settings_default._antienemy && _dist <= _atkRange + 20;`);
-
-sub("safesoldier: anti enemy only gates its own tests",
-`        const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
-        if (_isDanger || _isClose || _safeSoldier) {`,
-`        const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
-        if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier) {`);
 
 sub("menu: re-check button under the bot name rows",
 `        <div id=\\"dynamic-bot-list\\" style=\\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\\"></div>\\r\\n`,

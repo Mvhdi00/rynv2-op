@@ -5,7 +5,8 @@ const fs = require("fs");
 const vm = require("vm");
 
 const FILE = process.argv[2] || __dirname + "/../RYN_v5.4.user.js";
-const lines = fs.readFileSync(FILE, "utf8").split("\n");
+const src = fs.readFileSync(FILE, "utf8");
+const lines = src.split("\n");
 const find = pfx => {
   const i = lines.findIndex(l => l.startsWith(pfx));
   if (i < 0) throw new Error("not found: " + pfx);
@@ -28,8 +29,7 @@ const parts = [
   between("  const getAngleDist = ", "  };"),
   lines.slice(find("  class ObjectItem {"), find("  const Entity_default = Entity;") + 1).join("\n"),
   lines.slice(find("  class SpatialHashGrid2D {"), find("  class ObjectManager {")).join("\n"),
-  // the units under test
-  lines.slice(find("  const ANTI_INSTA_DMG_CAP"), find("  const AntiInsta_default = AntiInsta;") + 1).join("\n"),
+  // the unit under test
   lines.slice(find("  const AUTOMILL_PLACE_COST"), find("  const Automill_default = Automill;") + 1).join("\n"),
 ];
 
@@ -38,7 +38,7 @@ const prelude = `
   const pointInDesert = p => p.y >= Config.mapScale - Config.snowBiomeTop;
   const Logger = { error(){}, warn(){}, info(){} };
   const Settings_default = {
-    _autoheal: true, _antiSmartTick: true, _safeSoldier: true, _automill: false, _autobreak: true,
+    _automill: false, _autobreak: true,
   };
   const DataHandler_default = {
     getItem: id => Items[id],
@@ -49,7 +49,7 @@ const prelude = `
 `;
 const M = vm.runInNewContext(
   "(function(){\n" + parts.join("\n") + "\n" + prelude +
-  "\nreturn { AntiInsta, Automill, Vector, Items, Hats, PlayerObject, SpatialHashGrid2D, Settings_default, ANTI_INSTA_DMG_CAP };\n})()",
+  "\nreturn { Automill, Vector, Items, Hats, PlayerObject, SpatialHashGrid2D, Settings_default };\n})()",
   { Math, Number, Array, Set, Map, WeakMap, console, Infinity, NaN, setTimeout: () => {}, performance: { now: () => 0 } }
 );
 
@@ -117,152 +117,34 @@ const runHeal = over => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(1, "Autoheal — novastorm's damage-potential rule");
+head(1, "Reverted: autoheal, anti smart tick and safe soldier are back to stock");
 {
-  // Full health, no threat, and hit this tick: nothing to do.
-  const a = runHeal({ myPlayer: { tempHealth: 100, damageTick: 10, tickCount: 10 } });
-  check("full health heals nothing", a.heals === 0, a.heals + " food");
+  const base = fs.readFileSync(__dirname + "/../src/RYN_Client_v5.3.js", "utf8");
+  const region = (t, a, b) => { const i = t.indexOf(a); return t.slice(i, t.indexOf(b, i)); };
 
-  // Damaged, quiet tick: top up the whole bar. 100-60 = 40 / 20 restore = 2.
-  const b = runHeal({ myPlayer: { tempHealth: 60, damageTick: 5, tickCount: 10 } });
-  check("quiet tick tops the bar back up", b.heals === 2, b.heals + " food for 40 missing at 20/apple");
+  // AntiInsta carries both the autoheal cascade and antiSmartTick.
+  check("AntiInsta is byte-identical to v5.3",
+        region(src, "  class AntiInsta {", "  const AntiInsta_default = AntiInsta;") ===
+        region(base, "  class AntiInsta {", "  const AntiInsta_default = AntiInsta;"),
+        region(base, "  class AntiInsta {", "  const AntiInsta_default = AntiInsta;").split("\n").length + " lines");
 
-  // Hit this tick, no damage potential: novastorm does not heal into the hit.
-  const c = runHeal({ myPlayer: { tempHealth: 60, damageTick: 11, tickCount: 10 } });
-  check("no heal on the tick damage landed, with no threat", c.heals === 0, c.heals + " food");
+  check("Autobreak is byte-identical to v5.3",
+        region(src, "  class Autobreak {", "  class AutoPush {") ===
+        region(base, "  class Autobreak {", "  class AutoPush {"),
+        "the anti-smart-tick latch guard is gone with it");
 
-  // Hit this tick, but their potential reaches my health: heal anyway.
-  const d = runHeal({
-    myPlayer: { tempHealth: 60, damageTick: 11, tickCount: 10 },
-    EnemyManager: { potentialDamage: 55, potentialSpikeDamage: 20 },
-  });
-  check("heals when potential damage reaches health", d.heals === 2, d.heals + " food (pot 75 >= hp 60)");
-  check("flagged as an anti-insta heal", d.c._ModuleHandler.didAntiInsta === true);
+  check("the soldier equip block is byte-identical to v5.3",
+        region(src, "      const _canSoldier = this.canBuy(0, 6);", "      this.attackingState = this.attacking;") ===
+        region(base, "      const _canSoldier = this.canBuy(0, 6);", "      this.attackingState = this.attacking;"));
 
-  // Soldier on: potential is multiplied by the hat's own dmgMult.
-  const e = runHeal({
-    myPlayer: { tempHealth: 60, damageTick: 11, tickCount: 10, hatID: 6 },
-    EnemyManager: { potentialDamage: 60, potentialSpikeDamage: 15 },
-  });
-  check("soldier discounts the potential (75 x 0.75 = 56 < 60)", e.heals === 0, e.heals + " food");
-  const e2 = runHeal({
-    myPlayer: { tempHealth: 40, damageTick: 11, tickCount: 10, hatID: 6 },
-    EnemyManager: { potentialDamage: 60, potentialSpikeDamage: 15 },
-  });
-  check("...but still heals when it is genuinely lethal", e2.heals === 3, e2.heals + " food");
-
-  // Scuba bias.
-  const f = runHeal({
-    myPlayer: { tempHealth: 60, damageTick: 11, tickCount: 10, hatID: 7 },
-    EnemyManager: { potentialDamage: 40, potentialSpikeDamage: 16 },
-  });
-  check("scuba adds its +5 bias (56 + 5 = 61 >= 60)", f.heals === 2, f.heals + " food");
-
-  // The cap.
-  const g = runHeal({
-    myPlayer: { tempHealth: 100, maxHealth: 100, damageTick: 11, tickCount: 10 },
-    EnemyManager: { potentialDamage: 500, potentialSpikeDamage: 200 },
-  });
-  check("potential is capped at 140, so full health never heals", g.heals === 0, "cap " + M.ANTI_INSTA_DMG_CAP);
-
-  // Shame lockout.
-  const h = runHeal({ myPlayer: { tempHealth: 50, damageTick: 11, tickCount: 10, shameCount: 7 },
-                      EnemyManager: { potentialDamage: 60, potentialSpikeDamage: 0 } });
-  check("shame 7 blocks the threat heal", h.heals === 0, h.heals + " food");
-  const i = runHeal({ myPlayer: { tempHealth: 50, damageTick: 11, tickCount: 10, shameActive: true } });
-  check("shameActive blocks everything", i.heals === 0, i.heals + " food");
-
-  // The shame window. RYN raises shame when a heal lands within 120ms of being
-  // hit and lowers it by two after, so the routine top-up has to wait it out.
-  const fresh = runHeal({ myPlayer: { tempHealth: 60, damageTick: 5, tickCount: 10, receivedDamage: Date.now() } });
-  check("no routine top-up inside the 120ms shame window", fresh.heals === 0, fresh.heals + " food, hit just now");
-  const settled = runHeal({ myPlayer: { tempHealth: 60, damageTick: 5, tickCount: 10, receivedDamage: Date.now() - 400 } });
-  check("...and it goes out once the window has passed", settled.heals === 2, settled.heals + " food, hit 400ms ago");
-  const dying = runHeal({
-    myPlayer: { tempHealth: 60, damageTick: 5, tickCount: 10, receivedDamage: Date.now() },
-    EnemyManager: { potentialDamage: 55, potentialSpikeDamage: 20 },
-  });
-  check("but an emergency heal does not wait for it", dying.heals === 2, dying.heals + " food while lethal damage is pending");
-
-  // In-flight accounting: the same missing health must not be paid for twice
-  // while the server has not echoed the first apples back.
-  const c2 = makeClient({ myPlayer: { tempHealth: 60, damageTick: 5, tickCount: 10, receivedDamage: Date.now() - 400 } });
-  const m2 = new M.AntiInsta(c2);
-  m2.postTick();
-  const firstBatch = c2._heals.length;
-  m2.postTick();
-  m2.postTick();
-  check("food already sent is not re-sent while unacknowledged", c2._heals.length === firstBatch,
-        firstBatch + " food over three ticks at the same health");
-  c2.myPlayer.tempHealth = 80;             // the server echoes back
-  m2.postTick();
-  check("...and the next batch goes once health actually moves", c2._heals.length === firstBatch + 1,
-        (c2._heals.length - firstBatch) + " more for the last 20hp");
-
-  const j = runHeal({ myPlayer: { tempHealth: 50 } });
-  M.Settings_default._autoheal = false;
-  const k = runHeal({ myPlayer: { tempHealth: 50 } });
-  M.Settings_default._autoheal = true;
-  check("the toggle still gates it", j.heals > 0 && k.heals === 0, "on " + j.heals + " / off " + k.heals);
+  for (const tok of ["_safeSoldier", "_antiSmartTick", "SAFE_SOLDIER_RANGE", "ANTI_INSTA_DMG_CAP", "ANTI_INSTA_SCUBA_BIAS", "blockBreak", "_healSent", "_healsInFlight"]) {
+    check("no trace of " + tok, src.indexOf(tok) === -1, src.split(tok).length - 1 + " occurrences");
+  }
+  check("and no Safe Soldier or Anti Smart Tick row in the menu",
+        !/Safe Soldier/.test(src) && !/Anti Smart Tick/.test(src));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-head(2, "Anti Smart Tick — stall before committing");
-{
-  // I am trapped, hammer secondary, trap is one hammer swing from breaking, and
-  // an enemy spike sits where the knockback would throw me.
-  const build = (reloaded) => {
-    const c = makeClient({
-      myPlayer: { isTrapped: true, spikeDamage: 0, tempHealth: 70, damageTick: 5, tickCount: 10 },
-    });
-    const trap = new M.PlayerObject(1, 1000, 1000, 0, M.Items[15].scale, 15, 1);
-    trap.health = 100;
-    c.myPlayer.trappedIn = trap;
-    c.myPlayer.getBuildingDamage = () => 300;      // hammer one-shots the trap
-    const enemy = {
-      id: 99, scale: 35, collisionScale: 35,
-      pos: { current: new M.Vector(1150, 1000) },
-    };
-    c.EnemyManager.nearestEnemy = enemy;
-    // Enemy spike right behind me: knockback from a spike placed on their side
-    // throws me onto it.
-    const spike = new M.PlayerObject(2, 830, 1000, 0, M.Items[7].scale, 7, 99);
-    c.ObjectManager.objects.set(spike.id, spike);
-    c.ObjectManager.grid2D.insert(830, 1000, spike.collisionScale, spike.id);
-    c._ModuleHandler.staticModules.reloading = { isReloaded: t => reloaded[t] };
-    const m = new M.AntiInsta(c);
-    m.postTick();
-    return { c, m };
-  };
-
-  const stallSec = build({ 0: true, 1: false });
-  check("stalls on the secondary while it reloads", stallSec.c._ModuleHandler.forceWeapon === 1, "forceWeapon " + stallSec.c._ModuleHandler.forceWeapon);
-  check("stops autobreak while stalling", stallSec.m.blockBreak === true);
-  check("does not burn the anti-insta heal on a stall tick", stallSec.c._ModuleHandler.didAntiInsta === false || stallSec.c._heals.length <= 3, stallSec.c._heals.length + " food");
-
-  const stallPri = build({ 0: false, 1: true });
-  check("stalls on the primary when only that is reloading", stallPri.c._ModuleHandler.forceWeapon === 0, "forceWeapon " + stallPri.c._ModuleHandler.forceWeapon);
-
-  const commit = build({ 0: true, 1: true });
-  check("commits only when both weapons are ready", commit.c._heals.length >= 3 && commit.c._ModuleHandler.shouldAttack === false, commit.c._heals.length + " food, shouldAttack " + commit.c._ModuleHandler.shouldAttack);
-  check("blockBreak is latched for the next tick", commit.m.blockBreak === true);
-
-  // Toggle off.
-  M.Settings_default._antiSmartTick = false;
-  const off = build({ 0: true, 1: true });
-  M.Settings_default._antiSmartTick = true;
-  check("the new toggle disables it", off.m.blockBreak === false && off.c._ModuleHandler.shouldAttack === true, "blockBreak " + off.m.blockBreak);
-
-  // Latch clears when the situation goes away.
-  const clear = makeClient({ myPlayer: { tempHealth: 100 } });
-  const cm = new M.AntiInsta(clear);
-  cm.blockBreak = true;
-  cm.postTick();
-  check("latch clears once the situation is gone", cm.blockBreak === false);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-head(3, "Auto Mills — combat mill, not a sandbox grinder");
+head(2, "Auto Mills — combat mill, not a sandbox grinder");
 {
   const mill = (over = {}) => {
     const c = makeClient(over);
@@ -307,10 +189,9 @@ head(3, "Auto Mills — combat mill, not a sandbox grinder");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(4, "Packet accounting");
+head(3, "Packet accounting");
 {
   // The transport wrapper: frames the client did not send itself must count.
-  const src = fs.readFileSync(FILE, "utf8");
   const hasWatch = /_watchSocket\(socket\) \{/.test(src);
   const skipsSelf = /if \(!manager\._selfSend\) manager\.packetCount \+= 1;/.test(src);
   const limit = /packetLimit=(\d+);/.exec(src);
