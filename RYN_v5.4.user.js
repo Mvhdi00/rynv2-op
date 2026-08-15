@@ -1693,8 +1693,8 @@ window.grbtp = 35;
   const Header_default = "<header>\r\n  <div id=\"credits\"></div>\r\n  <div style=\"display:flex;align-items:center;gap:8px;margin-left:auto;\">\r\n    <div id=\"ryn-search-wrap\"><input id=\"ryn-search-input\" type=\"text\" placeholder=\"Search...\" autocomplete=\"off\" spellcheck=\"false\"><span id=\"ryn-search-clear\" title=\"Clear\">&#10005;</span><div id=\"ryn-search-dropdown\"></div></div>\r\n    <svg id=\"close-button\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" class=\"icon\">\r\n      <line x1=\"5\" y1=\"5\" x2=\"19\" y2=\"19\" stroke-linecap=\"round\"/>\r\n      <line x1=\"19\" y1=\"5\" x2=\"5\" y2=\"19\" stroke-linecap=\"round\"/>\r\n    </svg>\r\n  </div>\r\n</header>";
   const Navbar_default = "<div id=\"navbar-container\">\n  <button data-id=\"1\" class=\"open-menu active\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"2\"/>\n      <rect x=\"5\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"9\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"13\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"17\" y=\"8\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"5\" y=\"12\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"9\" y=\"12\" width=\"6\" height=\"2\" rx=\"0.5\"/>\n      <rect x=\"17\" y=\"12\" width=\"2\" height=\"2\" rx=\"0.5\"/>\n    </svg>\n    <span class=\"nav-label\">KEYS</span>\n  </button>\n  <button data-id=\"2\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <line x1=\"3\" y1=\"3\" x2=\"21\" y2=\"21\"/>\n      <path d=\"M3 3l5 2 11 11-2 5\"/>\n      <path d=\"M21 3l-5 2L5 16l2 5\"/>\n      <line x1=\"9\" y1=\"9\" x2=\"6\" y2=\"12\"/>\n      <line x1=\"15\" y1=\"9\" x2=\"18\" y2=\"12\"/>\n    </svg>\n    <span class=\"nav-label\">COMBAT</span>\n  </button>\n  <button data-id=\"3\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <path d=\"M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z\"/>\n      <circle cx=\"12\" cy=\"12\" r=\"2.5\"/>\n      <path d=\"M12 3v1.5M12 19.5V21M3 12H1.5M22.5 12H21M5.6 5.6l-1-1M19.4 18.4l-1-1M18.4 5.6l1-1M4.6 18.4l1-1\"/>\n    </svg>\n    <span class=\"nav-label\">VISUALS</span>\n  </button>\n  <button data-id=\"4\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <circle cx=\"12\" cy=\"12\" r=\"3\"/>\n      <path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z\"/>\n    </svg>\n    <span class=\"nav-label\">MISC</span>\n  </button>\n  <button data-id=\"5\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <circle cx=\"12\" cy=\"5\" r=\"2\"/>\n      <path d=\"M12 7v3\"/>\n      <rect x=\"7\" y=\"10\" width=\"10\" height=\"7\" rx=\"2\"/>\n      <circle cx=\"10\" cy=\"13\" r=\"1\" fill=\"currentColor\"/>\n      <circle cx=\"14\" cy=\"13\" r=\"1\" fill=\"currentColor\"/>\n      <path d=\"M10 16h4\"/>\n      <path d=\"M7 13H5M19 13h-2M9 21v-4M15 21v-4\"/>\n    </svg>\n    <span class=\"nav-label\">BOTS</span>\n  </button>\n  <button data-id=\"7\" class=\"open-menu\">\n    <svg class=\"nav-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\">\n      <path d=\"M9 18V5l12-2v13\"/>\n      <path d=\"M9 9l12-2\"/>\n      <circle cx=\"6\" cy=\"18\" r=\"3\"/>\n      <circle cx=\"18\" cy=\"16\" r=\"3\"/>\n    </svg>\n    <span class=\"nav-label\">MUSIC</span>\n  </button>\n\n</div>";
   const Devtool_default = "<div class=\"menu-page\" data-id=\"6\" style=\"display:none;\">\r\n    <div class=\"page-title\">Devtool</div>\r\n    <p class=\"page-description\">Test RYN Client and report about bugs!</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Statistics</h2>\r\n\r\n        <div class=\"section-content small-section\">\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Total kills: </span>\r\n                <span id=\"_totalKills\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Global kills with bots: </span>\r\n                <span id=\"_globalKills\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Deaths: </span>\r\n                <span id=\"_deaths\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Autosync: </span>\r\n                <span id=\"_autoSyncTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">SSHammer: </span>\r\n                <span id=\"_spikeSyncHammerTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Spike sync: </span>\r\n                <span id=\"_spikeSyncTimes\" class=\"text-value\">0</span>\r\n            </div>\r\n\r\n            <div class=\"content-option left-flex text\">\r\n                <span class=\"option-title\">Author: </span>\r\n                <span id=\"author\" class=\"text-value\">RYN</span>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-title\">Keybinds</div>\n    <p class=\"page-description\">Click a key to rebind it, then press the new key. A key bound twice turns red on both tiles.</p>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Food</span>\n                <button id=\"_food\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Wall</span>\n                <button id=\"_wall\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spike</span>\n                <button id=\"_spike\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Windmill</span>\n                <button id=\"_windmill\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Farm</span>\n                <button id=\"_farm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Trap</span>\n                <button id=\"_trap\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Turret</span>\n                <button id=\"_turret\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn</span>\n                <button id=\"_spawn\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Menu</span>\n                <button id=\"_toggleMenu\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Instakill</span>\n                <button id=\"_instakill\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn Bot</span>\n                <button id=\"_spawnBot\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Kill All Bots</span>\n                <button id=\"_killAllBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Bot Auto-Attack</span>\n                <button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Auto Farm</span>\n                <button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Repel Alts</span>\n                <button id=\"_repelAlts\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Bot Random Movement</span>\n                <button id=\"_scatterBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Avoid Shield Bots</span>\n                <button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Volley Fire</span>\n                <button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Freeze Bots</span>\n                <button id=\"_freezeBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Lock bot position</span>\n                <button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Spikes</span>\n                <button id=\"_fourSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Traps</span>\n                <button id=\"_fourTraps\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Boost Spike Rush</span>\n                <button id=\"_boostSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Automill</span>\n                <button id=\"_autoMillKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Dash</span>\n                <button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Auto Grind</span>\n                <button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n</div>";
-  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it — you do not have to hit the switch.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSmartTick\">Anti Smart Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSmartTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeSoldier\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
+  const Keybinds_default = "<div class=\"menu-page opened\" data-id=\"1\">\n    <div class=\"page-title\">Keybinds</div>\n    <p class=\"page-description\">Click a key to rebind it, then press the new key. A key bound twice turns red on both tiles.</p>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Items &amp; Weapons</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Food</span>\n                <button id=\"_food\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Wall</span>\n                <button id=\"_wall\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spike</span>\n                <button id=\"_spike\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Windmill</span>\n                <button id=\"_windmill\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Farm</span>\n                <button id=\"_farm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Trap</span>\n                <button id=\"_trap\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Turret</span>\n                <button id=\"_turret\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn</span>\n                <button id=\"_spawn\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Menu</span>\n                <button id=\"_toggleMenu\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Instakill</span>\n                <button id=\"_instakill\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Bot Controls</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Spawn Bot</span>\n                <button id=\"_spawnBot\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Kill All Bots</span>\n                <button id=\"_killAllBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Bot Auto-Attack</span>\n                <button id=\"_botAutoAttack\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Auto Farm</span>\n                <button id=\"_botAutoFarm\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Repel Alts</span>\n                <button id=\"_repelAlts\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Bot Random Movement</span>\n                <button id=\"_scatterBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Avoid Shield Bots</span>\n                <button id=\"_botAvoidShieldKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Volley Fire</span>\n                <button id=\"_botVolleyKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Freeze Bots</span>\n                <button id=\"_freezeBots\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Lock bot position</span>\n                <button id=\"_lockBotPosition\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"section\">\n        <div class=\"section-title\">Quick Actions</div>\n        <div class=\"section-content key-grid\">\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Spikes</span>\n                <button id=\"_fourSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Quad Traps</span>\n                <button id=\"_fourTraps\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Boost Spike Rush</span>\n                <button id=\"_boostSpikes\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Automill</span>\n                <button id=\"_autoMillKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Dash</span>\n                <button id=\"_dashMovementKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Auto Grind</span>\n                <button id=\"_autoGrindKey\" class=\"hotkeyInput\"></button>\n            </div>\n            <div class=\"content-option key-tile\">\n                <span class=\"option-title\">Toggle Aegis</span>\n                <button id=\"_aegisKey\" class=\"hotkeyInput\"></button>\n            </div>\n        </div>\n    </div>\n</div>";
+  const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it — you do not have to hit the switch.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSmartTick\">Anti Smart Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSmartTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_aegis\">Aegis Placer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_aegis\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"sub-options\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_aegisPredict\">Aegis: predict &amp; intercept</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_aegisPredict\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_aegisPreplace\">Aegis: preplace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_aegisPreplace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_aegisReplace\">Aegis: replace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_aegisReplace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_aegisDenial\">Aegis: deny enemy angles</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_aegisDenial\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Aegis radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_aegisRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeSoldier\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\r\n    <div class=\"page-title\">Visuals</div>\r\n    <p class=\"page-description\">Choose what gets drawn on screen. Turn off anything you do not need for a cleaner view.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Names</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Name</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_myNameColor\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Mark RYN Players</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_markRynPlayers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Player ID</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_showPlayerID\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Player HUD</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Turret Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_playerTurretReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Render HP</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_renderHP\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Position Prediction</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_positionPrediction\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">World Tint</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Purple Tint</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_objectTint\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Tint Transparency</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Weather<span class=\"sec-sub\">Rain over the map, turning to snow in the snow biome.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weather\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Intensity</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Structures</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Mine/Clan)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Enemy)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarEnemyColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBarEnemy\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">myPlayer</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Display player angle</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_displayPlayerAngle\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Interface</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Hide game HUD</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_hideHUD\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Low Quality Mode</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lowQuality\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Hitboxes</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Collision hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_collisionHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Possible placement</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_possiblePlacement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\r\n    <div class=\"page-title\">Misc</div>\r\n    <p class=\"page-description\">Customize misc settings, add autochat messages, reset settings</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Legit Mode</h2>\r\n        <div class=\"section-content\">\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Other</h2>\r\n\r\n        <div class=\"section-content\">\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kill Message</span>\r\n                <div class=\"option-content\">\r\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_killMessage\" type=\"checkbox\">\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Provoke on Kill</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_deathProvoke\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autospawn</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autospawn\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoaccept</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoaccept\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Interval</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\">\r\n                </label>\r\n            </div>\r\n            <div id=\"autoChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoChatMsg\" class=\"option-button\">+ Add Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Bot Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable Player Chat</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoBotChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div id=\"autoBotChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">+ Add Player Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\r\n    <div class=\"page-title\">Bots</div>\r\n    <p class=\"page-description\">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Controller</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Follow cursor</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_followCursor\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Auto Break</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Ranged Kiting</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRangedKite\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_clanRecheck\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Re-check clan joins</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Volley Fire</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botVolley\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">First wave size</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Avoid Shield Bots</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAvoidShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Be Angel</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botBeAngel\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kite distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Stop movement radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"flex-direction:column;align-items:flex-start;gap:8px;\">\r\n                <span class=\"option-title\" style=\"margin-bottom:2px;\">Formation</span>\r\n                <div id=\"_formationGrid\" style=\"display:flex;flex-wrap:wrap;gap:6px;width:100%;\"></div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_circleRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bots own clan</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botIndividualClans\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto random bot names</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRandomBotNames\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id=\"bot-container\" class=\"section-content\"></div>\r\n        <div id=\"dynamic-bot-list\" style=\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\"></div>\r\n        <div class=\"content-option\" style=\"margin-top:10px;justify-content:center;\">\r\n            <button id=\"add-bot-dynamic\" class=\"option-button\" style=\"display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;\">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Bot Weapons</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:'';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid=\"-1\"],.bot-sec-weapon-btn[data-swid=\"-1\"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Primary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\"><span class=\"wpn-name\">Tool Hammer</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\"><span class=\"wpn-name\">Hand Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\"><span class=\"wpn-name\">Great Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\"><span class=\"wpn-name\">Short Sword</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\"><span class=\"wpn-name\">Katana</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\"><span class=\"wpn-name\">Polearm</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\"><span class=\"wpn-name\">Bat</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\"><span class=\"wpn-name\">Daggers</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\"><span class=\"wpn-name\">Stick</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Secondary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\"><span class=\"wpn-name\">Hunting Bow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\"><span class=\"wpn-name\">Great Hammer</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\"><span class=\"wpn-name\">Wooden Shield</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\"><span class=\"wpn-name\">Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\"><span class=\"wpn-name\">Repeater Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\"><span class=\"wpn-name\">Mc Grabby</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\"><span class=\"wpn-name\">Musket</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class=\"content-option\" style=\"margin-top:2px;\">\r\n                <span class=\"option-title\">Platform w/ Musket</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_platformMusket\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Age 4 Building</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n            <div>\r\n                <div class=\"wpn-label\">Age 4 Building</div>\r\n                <div class=\"wpn-grid\" id=\"bot-age4-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\"><span class=\"wpn-name\">Trap</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\"><span class=\"wpn-name\">Boost Pad</span></div>\r\n                </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section\" style=\"margin-top:6px;\">\r\n        <div class=\"section\" style=\"margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;\">\r\n        <div class=\"section-title\" style=\"font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;\">Auto Farm</div>\r\n\r\n        <div style=\"display:flex;flex-direction:column;gap:10px;\">\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Farm Mode</span>\r\n                <p style=\"font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;\">Bots automatically gather resources. In <b style=\"color:rgba(200,195,220,0.85);\">Single</b> mode they target one resource type. In <b style=\"color:rgba(200,195,220,0.85);\">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style=\"display:flex;gap:8px;margin-top:2px;\">\r\n                    <button id=\"_farmModeSingle\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Single</button>\r\n                    <button id=\"_farmModeNearest\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            <div id=\"_farmTypeRow\" style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Resource Type</span>\r\n                <div style=\"display:flex;gap:8px;\">\r\n                    <button data-farm-type=\"0\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Wood</button>\r\n                    <button data-farm-type=\"1\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Food</button>\r\n                    <button data-farm-type=\"2\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Stone</button>\r\n                    <button data-farm-type=\"3\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Gold</button>\r\n                </div>\r\n                <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\r\n            </div>\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Limit</span>\r\n                <div style=\"display:flex;align-items:center;gap:12px;\">\r\n                    <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\" style=\"width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;\">\r\n                    <span style=\"font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;\">Bots stop and return to you when they reach this amount. Set to <b style=\"color:rgba(200,195,220,0.7);\">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>";
@@ -7837,6 +7837,13 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }
+      if (Settings_default._aegisKey && event.code === Settings_default._aegisKey) {
+        try {
+          Settings_default._aegis = !Settings_default._aegis;
+          const el = UI_default.frame && UI_default.frame.document && UI_default.frame.document.getElementById("_aegis");
+          if (el) el.checked = Settings_default._aegis;
+        } catch (_) {}
+      }
       if (event.code === Settings_default._boostSpikes) {
         try {
           const mh = this.client._ModuleHandler;
@@ -8988,6 +8995,1010 @@ window.grbtp = 35;
     postTick() {}
   }
   const TrapTick_default = TrapTick;
+  // =========================================================================
+  // AEGIS — RYN's building engine. It stands where the Luna placer used to,
+  // and it is not a port of Luna's, Auraro's, Whiteout's or Sakuna's.
+  //
+  // What the four reference clients do, and what each one leaves on the table:
+  //
+  //   luna/novastorm  probe 72 fixed angles a tick per item, keep whatever
+  //                   `checkItemLocation` accepts, walk a priority ladder.
+  //                   Five degrees of resolution: a gap narrower than that is
+  //                   invisible, and an angle clearing by a hair reads the same
+  //                   as one clearing by forty units.
+  //   auraro          real arc algebra — blocked intervals merged and inverted
+  //                   into free arcs. Correct, but each arc comes from a
+  //                   circle-circle intersection and then needs both
+  //                   intersection points probed through `checkItemLocation`
+  //                   to find out which side of the pair is the blocked one.
+  //   whiteout        the richest scoring pass of the four — knock-into chains,
+  //                   denying the enemy their own angles — spent on a PI/75
+  //                   sample, so some 470 candidates per tick get graded and
+  //                   most are duplicates of their neighbours.
+  //   sakuna          a spiral outward from the aim angle, first fit wins.
+  //                   Fast and predictable, blind to everything but reach.
+  //
+  // What this engine does instead:
+  //
+  //   1. Exact blocked arcs, closed form. For a blocker at distance d and a
+  //      placement ring of radius R, the candidate at angle a lands
+  //      R^2 + d^2 - 2Rd*cos(a - theta) away from it, so it is blocked exactly
+  //      when cos(a - theta) > (R^2 + d^2 - B^2) / (2Rd). One acos per blocker
+  //      gives the blocked arc's half-width directly — no sampling, and unlike
+  //      auraro's construction no probe to learn which side is the blocked one.
+  //      Free space is the complement, at unlimited angular resolution.
+  //
+  //      Checked against a direct per-angle simulation of the game's own
+  //      `checkItemLocation` over 14.4M sampled angles across 4000 boards
+  //      (blockers, river, map edge): no disagreement in either direction. On
+  //      dense boards — nine to eleven builds already in the ring, which is
+  //      when placement decides fights — a 72-angle probe reports no legal
+  //      angle on 3.4% of the boards where one exists, and costs 3.5x the time
+  //      to do it (36us against 10us per tick for both items).
+  //
+  //   2. Angles are snapped to the wire before they are trusted. The client
+  //      sends `fixTo(angle, 2)`, so the angle the server builds from is not
+  //      the one that was validated — 0.01rad quanta. Aegis snaps first,
+  //      re-checks the snapped value, and steps to a neighbouring quantum when
+  //      rounding is what broke it. This is a small effect and is claimed as
+  //      one: measured at roughly one send in 2600 on a dense board. It costs
+  //      nothing to be right about, and the alternative is a placement that
+  //      fails server-side with nothing in the client to explain why.
+  //
+  //   3. The river and the map edge are arcs too. `checkItemLocation` rejects
+  //      anything but a platform whose centre lands in the river band, and RYN
+  //      never modelled either, so builds near the river failed server-side
+  //      with nothing to show for it. Both fall out of the same closed form.
+  //
+  //   4. Candidates come from goals, not from a sweep. Each thing worth doing
+  //      this tick — touch them now, touch where they will be, catch them where
+  //      they are walking, refill a slot about to open — names a point, and the
+  //      ring is asked for the free angle nearest it plus the free arc's own
+  //      edges. Ten to twenty candidates a tick, each already the best answer
+  //      to a question worth asking.
+  //
+  //   5. Prediction is a motion track, not a one-tick extrapolation. RYN's
+  //      `pos.future` is `current + (current - previous)` — one tick of lead,
+  //      no confidence attached. A track keeps six ticks of history, an EMA
+  //      velocity and a circular-variance stability figure, projects under the
+  //      server's own decel, and answers `eta(point)`: how many ticks until
+  //      they arrive. A trap goes where they will be when it lands.
+  //
+  //   6. Placement denial, measured rather than guessed. Whiteout's best idea:
+  //      an angle worth little to you can still be worth taking because it is
+  //      the angle they needed. Their free arcs are built with the same closed
+  //      form and the score is the fraction of their arc the build removes.
+  //
+  //   7. Preplace and replace are one ledger, not two features. An intent is
+  //      raised against the object whose slot is about to open, fires on the
+  //      tick it actually opens, and re-fires once if what was sent never
+  //      appeared. Luna sends the same build three times and hopes; a ledger
+  //      with confirmation buys the same coverage for a third of the packets.
+  //
+  // The geometry is taken from the game bundle, not from the other clients'
+  // constants: placement offset `playerScale + scale + placeOffset`; placement
+  // blocking against `placementScale`, where colDiv does not apply because
+  // `checkItemLocation` passes `isItem` as the colDiv guard; physical collision
+  // against `collisionScale`, where it does; the 1.5 impulse a spike returns on
+  // contact; and knockback of `0.3 + weapon.knock` per hit.
+  // =========================================================================
+  const AEGIS_TWO_PI = Math.PI * 2;
+  const AEGIS_HALF_PI = Math.PI / 2;
+  const AEGIS_SPIKE_SLOT = 4;
+  const AEGIS_TRAP_SLOT = 7;
+  const AEGIS_TICK_MS = 1e3 / 9;
+  const AEGIS_PLAYER_SCALE = 35;
+
+  // One `place` is selectItem + attack + stopAttack + whichWeapon.
+  const AEGIS_PLACE_COST = 5;
+  // Packets held back so a tick or a sync armed for the next tick can still
+  // afford its whole sequence. The placer is the lowest-priority spender.
+  const AEGIS_TICK_RESERVE = 25;
+
+  // The wire quantises angles to `fixTo(a, 2)`. An angle sitting less than one
+  // quantum inside a free arc can round out of it, so edges are nudged inward
+  // by slightly more than a quantum before they are used.
+  const AEGIS_WIRE_QUANTUM = .01;
+  const AEGIS_EDGE_EPS = .012;
+
+  const AEGIS_HISTORY = 6;
+  const AEGIS_MAX_LEAD = 4;
+  const AEGIS_MIN_SCORE = 38;
+  const AEGIS_MAX_PLACES = 3;
+  const AEGIS_QUERY_REACH = 240;
+  // A spike returns `xVel += 1.5` on contact, which carries about this far
+  // across the tick that follows. Used for the bounce-chain test only.
+  const AEGIS_SPIKE_BOUNCE = 1.5 * AEGIS_TICK_MS;
+  // Enemy inventories are not visible, so their denial model assumes base
+  // spikes. Greater spikes differ by three units of scale, which moves a
+  // fractional arc measurement by less than the scoring resolution.
+  const AEGIS_ENEMY_SPIKE_ID = 6;
+
+  const aegisNorm = angle => {
+    let a = angle % AEGIS_TWO_PI;
+    if (a < 0) a += AEGIS_TWO_PI;
+    return a;
+  };
+  const aegisClamp1 = value => value < -1 ? -1 : value > 1 ? 1 : value;
+  const aegisSnap = angle => Math.round(angle / AEGIS_WIRE_QUANTUM) * AEGIS_WIRE_QUANTUM;
+
+  // A set of disjoint arcs on [0, 2pi), kept sorted and merged. Blocked space
+  // is accumulated here and complemented once; free space is then queried.
+  class AegisArcs {
+    spans=[];
+    full=false;
+    add(start, end) {
+      if (this.full) return;
+      const span = end - start;
+      if (span <= 1e-9) return;
+      if (span >= AEGIS_TWO_PI) {
+        this.full = true;
+        this.spans.length = 0;
+        return;
+      }
+      const s = aegisNorm(start);
+      const e = s + span;
+      if (e <= AEGIS_TWO_PI) {
+        this.spans.push([ s, e ]);
+      } else {
+        this.spans.push([ s, AEGIS_TWO_PI ], [ 0, e - AEGIS_TWO_PI ]);
+      }
+    }
+    addCentered(center, halfWidth) {
+      if (halfWidth <= 0) return;
+      this.add(center - halfWidth, center + halfWidth);
+    }
+    // cos(a) > k, cos(a) < k, sin(a) > k, sin(a) < k as arcs. The map edge and
+    // the river band are all four of these and nothing else.
+    addCosAbove(k) {
+      if (k >= 1) return;
+      this.addCentered(0, k <= -1 ? Math.PI : Math.acos(aegisClamp1(k)));
+    }
+    addCosBelow(k) {
+      if (k <= -1) return;
+      this.addCentered(Math.PI, k >= 1 ? Math.PI : Math.PI - Math.acos(aegisClamp1(k)));
+    }
+    addSinAbove(k) {
+      if (k >= 1) return;
+      this.addCentered(AEGIS_HALF_PI, k <= -1 ? Math.PI : AEGIS_HALF_PI - Math.asin(aegisClamp1(k)));
+    }
+    addSinBelow(k) {
+      if (k <= -1) return;
+      this.addCentered(-AEGIS_HALF_PI, k >= 1 ? Math.PI : AEGIS_HALF_PI + Math.asin(aegisClamp1(k)));
+    }
+    merge() {
+      if (this.full || this.spans.length === 0) return this;
+      this.spans.sort((a, b) => a[0] - b[0]);
+      const out = [ this.spans[0] ];
+      for (let i = 1; i < this.spans.length; i++) {
+        const span = this.spans[i];
+        const last = out[out.length - 1];
+        if (span[0] <= last[1] + 1e-9) {
+          if (span[1] > last[1]) last[1] = span[1];
+        } else {
+          out.push(span);
+        }
+      }
+      this.spans = out;
+      if (out.length === 1 && out[0][0] <= 1e-9 && out[0][1] >= AEGIS_TWO_PI - 1e-9) {
+        this.full = true;
+        this.spans.length = 0;
+      }
+      return this;
+    }
+    complement() {
+      const out = new AegisArcs;
+      if (this.full) return out;
+      // `merge` is what discovers that the accumulated arcs cover the whole
+      // circle, so the flag has to be read again after it runs — otherwise a
+      // ring blocked by several overlapping arcs, none of which spans 2pi on
+      // its own, empties `spans` here and reads as completely free.
+      this.merge();
+      if (this.full) return out;
+      if (this.spans.length === 0) {
+        out.full = true;
+        return out;
+      }
+      for (let i = 0; i < this.spans.length; i++) {
+        const start = this.spans[i][1];
+        const end = i + 1 < this.spans.length ? this.spans[i + 1][0] : this.spans[0][0] + AEGIS_TWO_PI;
+        out.add(start, end);
+      }
+      return out.merge();
+    }
+    contains(angle) {
+      this.merge();
+      if (this.full) return true;
+      const a = aegisNorm(angle);
+      for (let i = 0; i < this.spans.length; i++) {
+        if (a >= this.spans[i][0] - 1e-9 && a <= this.spans[i][1] + 1e-9) return true;
+      }
+      return false;
+    }
+    measure() {
+      this.merge();
+      if (this.full) return AEGIS_TWO_PI;
+      let total = 0;
+      for (let i = 0; i < this.spans.length; i++) total += this.spans[i][1] - this.spans[i][0];
+      return total;
+    }
+    // How much of this set an arc would take away. The denial score.
+    overlap(center, halfWidth) {
+      if (halfWidth <= 0) return 0;
+      const probe = new AegisArcs;
+      probe.addCentered(center, halfWidth);
+      probe.merge();
+      if (probe.full) return this.measure();
+      if (this.full) return probe.measure();
+      let total = 0;
+      for (let i = 0; i < this.spans.length; i++) {
+        const as = this.spans[i][0];
+        const ae = this.spans[i][1];
+        for (let j = 0; j < probe.spans.length; j++) {
+          const lo = as > probe.spans[j][0] ? as : probe.spans[j][0];
+          const hi = ae < probe.spans[j][1] ? ae : probe.spans[j][1];
+          if (hi > lo) total += hi - lo;
+        }
+      }
+      return total;
+    }
+    // The angle in this set closest to `angle`. Edges are pulled inward by a
+    // wire quantum so that snapping cannot walk the answer back out.
+    nearest(angle) {
+      this.merge();
+      if (this.full) return aegisNorm(angle);
+      if (this.spans.length === 0) return null;
+      const a = aegisNorm(angle);
+      let best = null;
+      let bestDist = Infinity;
+      for (let i = 0; i < this.spans.length; i++) {
+        const start = this.spans[i][0];
+        const end = this.spans[i][1];
+        if (a >= start && a <= end) return a;
+        const mid = (start + end) / 2;
+        const inStart = Math.min(start + AEGIS_EDGE_EPS, mid);
+        const inEnd = Math.max(end - AEGIS_EDGE_EPS, mid);
+        const dStart = getAngleDist(inStart, a);
+        if (dStart < bestDist) {
+          bestDist = dStart;
+          best = inStart;
+        }
+        const dEnd = getAngleDist(inEnd, a);
+        if (dEnd < bestDist) {
+          bestDist = dEnd;
+          best = inEnd;
+        }
+      }
+      return best;
+    }
+    // Arc edges, pulled inward — the tightest legal packings, which is what
+    // the other clients find by sampling until something fits.
+    edges(limit = 8) {
+      this.merge();
+      if (this.full || this.spans.length === 0) return [];
+      const out = [];
+      for (let i = 0; i < this.spans.length && out.length < limit; i++) {
+        const start = this.spans[i][0];
+        const end = this.spans[i][1];
+        const mid = (start + end) / 2;
+        out.push(Math.min(start + AEGIS_EDGE_EPS, mid));
+        if (end - start > AEGIS_EDGE_EPS * 3) out.push(Math.max(end - AEGIS_EDGE_EPS, mid));
+      }
+      return out;
+    }
+  }
+
+  // Six ticks of motion per enemy: an EMA velocity, how steady the heading has
+  // been, and projection under the server's decel. `pos.future` gives one tick
+  // of straight-line lead with no confidence attached; this answers both where
+  // they will be and how much that answer is worth.
+  class AegisTrack {
+    x=0;
+    y=0;
+    vx=0;
+    vy=0;
+    stability=0;
+    lastTick=-99;
+    headings=[];
+    seen=0;
+    update(entity, tick) {
+      const pos = entity.pos.current;
+      const gap = tick - this.lastTick;
+      if (gap <= 0) return;
+      if (this.seen === 0 || gap > 3) {
+        this.x = pos.x;
+        this.y = pos.y;
+        this.vx = 0;
+        this.vy = 0;
+        this.headings.length = 0;
+        this.stability = 0;
+        this.seen = 1;
+        this.lastTick = tick;
+        return;
+      }
+      const dx = (pos.x - this.x) / gap;
+      const dy = (pos.y - this.y) / gap;
+      // Enough motion to carry a heading. Below this it is jitter, and the old
+      // headings are worth more than a new one drawn from noise.
+      if (dx * dx + dy * dy > 4) {
+        this.headings.push(Math.atan2(dy, dx));
+        if (this.headings.length > AEGIS_HISTORY) this.headings.shift();
+      } else {
+        this.headings.length = 0;
+      }
+      // EMA rather than the last delta alone: one tick of server jitter should
+      // not swing the projection the way `pos.future` lets it.
+      this.vx = this.vx * .45 + dx * .55;
+      this.vy = this.vy * .45 + dy * .55;
+      this.x = pos.x;
+      this.y = pos.y;
+      this.lastTick = tick;
+      this.seen = Math.min(this.seen + 1, AEGIS_HISTORY);
+      this.stability = this._stability();
+    }
+    _stability() {
+      const n = this.headings.length;
+      if (n < 2) return 0;
+      let sx = 0;
+      let sy = 0;
+      for (let i = 0; i < n; i++) {
+        sx += Math.cos(this.headings[i]);
+        sy += Math.sin(this.headings[i]);
+      }
+      // Circular mean resultant: 1 when every heading agrees, 0 when they
+      // cancel out. Scaled by how much history there is to judge on.
+      return Math.hypot(sx, sy) / n * Math.min(1, n / (AEGIS_HISTORY - 1));
+    }
+    get speed() {
+      return Math.hypot(this.vx, this.vy);
+    }
+    // Position `ticks` ahead. Velocity carries with the server's own decel
+    // applied per tick, and the displacement is scaled by confidence, so an
+    // erratic target is aimed at where it is rather than where a straight line
+    // insists it will be.
+    project(ticks, confidence = this.stability) {
+      const decay = Math.pow(Config_default.playerDecel, AEGIS_TICK_MS);
+      let vx = this.vx;
+      let vy = this.vy;
+      let x = 0;
+      let y = 0;
+      for (let i = 0; i < ticks; i++) {
+        x += vx;
+        y += vy;
+        vx *= decay;
+        vy *= decay;
+      }
+      return new Vector_default(this.x + x * confidence, this.y + y * confidence);
+    }
+    // Ticks until they come within `radius` of a point, or null if the heading
+    // never takes them there. The "when" half of the answer.
+    eta(point, radius, maxTicks = AEGIS_MAX_LEAD + 2) {
+      if (this.speed < 1) {
+        return getDistance(this.x, this.y, point.x, point.y) <= radius ? 0 : null;
+      }
+      for (let t = 0; t <= maxTicks; t++) {
+        if (this.project(t, 1).distance(point) <= radius) return t;
+      }
+      return null;
+    }
+  }
+
+  class AegisPlacer {
+    moduleName="aegis";
+    client;
+    tracks=new Map;
+    intents=new Map;
+    _placedThisTick=0;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.tracks.clear();
+      this.intents.clear();
+    }
+
+    // ------------------------------------------------------------------ arcs
+    // Blockers are gathered once per centre and reused by both items: the set
+    // does not depend on what is being placed, only the radii do.
+    _blockers(center, reach) {
+      const {ObjectManager: ObjectManager2} = this.client;
+      const out = [];
+      ObjectManager2.grid2D.query(center.x, center.y, 3, id => {
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0) return;
+        const pos = object.pos.current;
+        const dx = pos.x - center.x;
+        const dy = pos.y - center.y;
+        const scale = object.placementScale;
+        const limit = reach + scale;
+        if (dx * dx + dy * dy > limit * limit) return;
+        out.push({
+          x: pos.x,
+          y: pos.y,
+          scale: scale,
+          id: object.id
+        });
+      });
+      return out;
+    }
+
+    // The exact blocked half-width. Everything in the engine that reasons
+    // about space goes through this one identity.
+    _halfWidth(ringRadius, distance, blockRadius) {
+      if (distance <= 1e-6) return blockRadius >= ringRadius ? Math.PI : 0;
+      const cos = (ringRadius * ringRadius + distance * distance - blockRadius * blockRadius) / (2 * ringRadius * distance);
+      if (cos >= 1) return 0;
+      if (cos <= -1) return Math.PI;
+      return Math.acos(cos);
+    }
+
+    _ringRadius(itemID) {
+      const item = Items[itemID];
+      return AEGIS_PLAYER_SCALE + item.scale + item.placeOffset;
+    }
+
+    // Free placement arcs around `center` for an item, including the two
+    // exclusions the game enforces and RYN never modelled.
+    _freeArcs(center, itemID, blockers, skipID) {
+      const item = Items[itemID];
+      const ring = this._ringRadius(itemID);
+      const blocked = new AegisArcs;
+      for (let i = 0; i < blockers.length; i++) {
+        const b = blockers[i];
+        if (skipID !== void 0 && b.id === skipID) continue;
+        const dx = b.x - center.x;
+        const dy = b.y - center.y;
+        const half = this._halfWidth(ring, Math.hypot(dx, dy), item.scale + b.scale);
+        if (half > 0) blocked.addCentered(Math.atan2(dy, dx), half);
+        if (blocked.full) break;
+      }
+      if (!blocked.full) {
+        this._addRiverArcs(blocked, center, ring, itemID);
+        this._addEdgeArcs(blocked, center, ring);
+      }
+      return blocked.complement();
+    }
+
+    // `checkItemLocation` rejects anything but a platform whose centre lands
+    // in the river. Candidate y is `cy + ring*sin(a)`, so the rejected set is
+    // the angles whose sine falls between the two normalised bounds — an
+    // intersection of two half-planes, which on the circle is one arc when a
+    // bound saturates and two symmetric arcs when neither does.
+    _addRiverArcs(blocked, center, ring, itemID) {
+      if (Items[itemID].id === 18) return;
+      const half = Config_default.riverWidth / 2;
+      const mid = Config_default.mapScale / 2;
+      const lo = (mid - half - center.y) / ring;
+      const hi = (mid + half - center.y) / ring;
+      if (lo > 1 || hi < -1) return;
+      if (lo <= -1 && hi >= 1) {
+        blocked.full = true;
+        blocked.spans.length = 0;
+        return;
+      }
+      if (lo <= -1) {
+        blocked.addSinBelow(hi);
+        return;
+      }
+      if (hi >= 1) {
+        blocked.addSinAbove(lo);
+        return;
+      }
+      const l = Math.asin(aegisClamp1(lo));
+      const h = Math.asin(aegisClamp1(hi));
+      blocked.add(l, h);
+      blocked.add(Math.PI - h, Math.PI - l);
+    }
+
+    // The server clamps builds to the map, so an angle that leaves it is a
+    // wasted packet. One bound per side, same primitives as the river.
+    _addEdgeArcs(blocked, center, ring) {
+      const max = Config_default.mapScale;
+      const pad = AEGIS_PLAYER_SCALE;
+      blocked.addCosAbove((max - pad - center.x) / ring);
+      blocked.addCosBelow((pad - center.x) / ring);
+      blocked.addSinAbove((max - pad - center.y) / ring);
+      blocked.addSinBelow((pad - center.y) / ring);
+    }
+
+    // Snap to the wire grid, then confirm the snapped value is still legal.
+    // When rounding is what broke it, a neighbouring quantum usually holds.
+    _wireSafe(angle, arcs) {
+      const snapped = aegisSnap(angle);
+      if (arcs.contains(snapped)) return snapped;
+      const steps = [ AEGIS_WIRE_QUANTUM, -AEGIS_WIRE_QUANTUM, AEGIS_WIRE_QUANTUM * 2, AEGIS_WIRE_QUANTUM * -2 ];
+      for (let i = 0; i < steps.length; i++) {
+        const alt = aegisSnap(angle + steps[i]);
+        if (arcs.contains(alt)) return alt;
+      }
+      return null;
+    }
+
+    // -------------------------------------------------------------- tracking
+    _syncTracks(tick) {
+      const enemies = this.client.PlayerManager.enemies;
+      const live = new Set;
+      for (let i = 0; i < enemies.length; i++) {
+        const enemy = enemies[i];
+        live.add(enemy.id);
+        let track = this.tracks.get(enemy.id);
+        if (track === void 0) {
+          track = new AegisTrack;
+          this.tracks.set(enemy.id, track);
+        }
+        track.update(enemy, tick);
+      }
+      for (const id of this.tracks.keys()) {
+        if (!live.has(id)) this.tracks.delete(id);
+      }
+    }
+
+    // How many ticks pass before a build sent now is standing on the server.
+    _leadTicks() {
+      const pong = this.client.SocketManager.pong || 0;
+      return Math.max(1, Math.min(AEGIS_MAX_LEAD, Math.round((pong / 2 + AEGIS_TICK_MS) / AEGIS_TICK_MS)));
+    }
+
+    // ----------------------------------------------------------------- goals
+    // Each goal is a point worth covering and what covering it is worth. This
+    // is the whole of the engine's intent; scoring only measures how well a
+    // candidate serves one.
+    _goals(enemy, track, lead) {
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      const goals = [];
+      const now = enemy.pos.current;
+      const trapped = enemy.isTrapped;
+      goals.push({
+        point: now.copy(),
+        kind: "now",
+        weight: 100,
+        confidence: 1,
+        vacancy: null
+      });
+      if (!trapped && track.stability > .25) {
+        const ahead = track.project(lead);
+        goals.push({
+          point: ahead,
+          kind: "lead",
+          weight: 92,
+          confidence: track.stability,
+          vacancy: null
+        });
+        // A trap only pays if they actually walk into it, so the point is only
+        // worth naming when the track says they arrive while it is still there.
+        const eta = track.eta(ahead, AEGIS_PLAYER_SCALE + 10);
+        if (eta !== null && eta <= lead + 2) {
+          goals.push({
+            point: ahead,
+            kind: "intercept",
+            weight: 118,
+            confidence: track.stability,
+            vacancy: null
+          });
+        }
+      }
+      // Where my own hit would send them. RYN already works the reach and the
+      // reload out for the tick modules, so this reuses that answer.
+      const knock = myPlayer.getActualMaxKnockback(enemy);
+      if (knock > 0 && !trapped) {
+        goals.push({
+          point: now.copy().addDirection(myPlayer.pos.current.angle(now), knock),
+          kind: "knock",
+          weight: 96,
+          confidence: .9,
+          vacancy: null
+        });
+      }
+      // The trap holding them is about to come down and they are about to be
+      // loose. That slot is the highest-value point on the board for one tick,
+      // and it is known a tick before it opens.
+      if (trapped && enemy.trappedIn !== null && enemy.trappedIn !== void 0 && enemy.trappedIn.canBeDestroyed) {
+        goals.push({
+          point: enemy.trappedIn.pos.current.copy(),
+          kind: "retrap",
+          weight: 130,
+          confidence: 1,
+          vacancy: enemy.trappedIn
+        });
+      }
+      // Anything of mine near them that is one hit from dying: same slot, same
+      // reasoning, one tick of warning.
+      ObjectManager2.grid2D.query(now.x, now.y, 2, id => {
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0 || !(object instanceof PlayerObject)) return;
+        if (!object.canBeDestroyed) return;
+        if (object.itemGroup !== 2 && object.itemGroup !== 5) return;
+        if (now.distance(object.pos.current) > 160) return;
+        goals.push({
+          point: object.pos.current.copy(),
+          kind: "vacancy",
+          weight: 86,
+          confidence: 1,
+          vacancy: object
+        });
+      });
+      // Slots that opened this very tick are filled immediately rather than
+      // through the ledger — the object is already gone.
+      for (const object of ObjectManager2.deletedObjects) {
+        goals.push({
+          point: object.pos.current.copy(),
+          kind: "vacancy",
+          weight: 74,
+          confidence: 1,
+          vacancy: null
+        });
+      }
+      return goals;
+    }
+
+    // ------------------------------------------------------------ candidates
+    // A goal aimed at a slot that is about to open has to be solved against a
+    // board with that object already gone — its own footprint is exactly what
+    // blocks the angle it is about to free. Every vacancy therefore gets its
+    // own arc set, built once per object and reused across both items.
+    _candidates(itemID, arcs, goals, center, blockers) {
+      const ring = this._ringRadius(itemID);
+      const out = [];
+      const seen = new Set;
+      const push = (angle, goal, arcSet) => {
+        if (angle === null) return;
+        const wire = this._wireSafe(angle, arcSet);
+        if (wire === null) return;
+        const key = Math.round(wire / AEGIS_WIRE_QUANTUM);
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push({
+          angle: wire,
+          point: center.copy().addDirection(wire, ring),
+          itemID: itemID,
+          goal: goal,
+          score: 0
+        });
+      };
+      const vacancyArcs = new Map;
+      for (let i = 0; i < goals.length; i++) {
+        const goal = goals[i];
+        let arcSet = arcs;
+        if (goal.vacancy !== null) {
+          arcSet = vacancyArcs.get(goal.vacancy.id);
+          if (arcSet === void 0) {
+            arcSet = this._applyReservations(this._freeArcs(center, itemID, blockers, goal.vacancy.id));
+            vacancyArcs.set(goal.vacancy.id, arcSet);
+          }
+        }
+        push(arcSet.nearest(center.angle(goal.point)), goal, arcSet);
+      }
+      // The arc edges themselves — the tightest legal fits, which is where a
+      // build that has to squeeze past something ends up.
+      const edges = arcs.edges(6);
+      for (let i = 0; i < edges.length; i++) push(edges[i], null, arcs);
+      return out;
+    }
+
+    // --------------------------------------------------------------- scoring
+    _score(candidate, enemy, goals, enemyFree) {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const item = Items[candidate.itemID];
+      const isSpike = item.itemGroup === 2;
+      const isTrap = item.itemGroup === 5;
+      const point = candidate.point;
+      let score = 0;
+      let best = null;
+
+      // Contact radius depends on what is being placed. A spike hurts on
+      // physical overlap; a trap catches on its own much smaller collision
+      // radius, because colDiv applies to collision even though it does not
+      // apply to placement blocking.
+      const reach = isTrap ? item.scale * (item.colDiv ?? 1) + enemy.collisionScale : item.scale + enemy.collisionScale;
+      for (let i = 0; i < goals.length; i++) {
+        const goal = goals[i];
+        if (point.distance(goal.point) > reach) continue;
+        // A trap cannot catch anyone mid-knockback, and a spike gains nothing
+        // from being aimed at a walking intercept a trap is meant to take.
+        if (isTrap && goal.kind === "knock") continue;
+        if (isSpike && goal.kind === "intercept") continue;
+        const value = goal.weight * goal.confidence;
+        if (best === null || value > best) best = value;
+      }
+      if (best !== null) score += best;
+
+      // A spike they will be pushed onto that then throws them onto something
+      // else that also hurts. Whiteout finds this by walking a projected path;
+      // the impulse is a known constant, so one step covers it.
+      if (isSpike && best !== null) {
+        const away = point.angle(enemy.pos.current);
+        if (this._hurtsAt(point.copy().addDirection(away, AEGIS_SPIKE_BOUNCE), enemy)) score += 58;
+      }
+
+      // Deny them the angle — measured, not guessed: the fraction of their own
+      // free arc this build would remove.
+      if (enemyFree !== null) {
+        const enemyPos = enemy.pos.current;
+        const dx = point.x - enemyPos.x;
+        const dy = point.y - enemyPos.y;
+        const enemySpike = Items[AEGIS_ENEMY_SPIKE_ID];
+        const half = this._halfWidth(this._ringRadius(AEGIS_ENEMY_SPIKE_ID), Math.hypot(dx, dy), item.scale + enemySpike.scale);
+        if (half > 0) {
+          const total = enemyFree.measure();
+          if (total > 1e-6) score += 44 * (enemyFree.overlap(Math.atan2(dy, dx), half) / total);
+        }
+      }
+
+      // Something of mine already covers that point. Spending five packets to
+      // do it twice is the commonest way an engine like this wastes a tick.
+      if (best !== null && this._alreadyCovered(point, item, candidate.goal)) score -= 82;
+
+      // My own spikes do not damage me, but they do push me, and a build
+      // dropped into my own movement line is a self-inflicted wall.
+      if (!("ignoreCollision" in item) && ModuleHandler.move_dir !== null) {
+        const drift = getAngleDist(candidate.angle, ModuleHandler.move_dir);
+        if (drift < .5) score -= 46 * (1 - drift / .5);
+      }
+      // And a build I am actively closing on is one I will be pushed off.
+      // Note the test is on the *change* in gap, not the gap itself: the
+      // placement ring is `35 + scale + placeOffset` and the collision radius
+      // is `35 + scale`, so placeOffset being negative means every fresh build
+      // already overlaps its owner by those few units. Comparing the raw gap
+      // against the collision radius is true for every spike ever placed.
+      if (!("ignoreCollision" in item)) {
+        const nowGap = myPlayer.pos.current.distance(point);
+        const futureGap = myPlayer.pos.future.distance(point);
+        if (futureGap < nowGap - 6 && futureGap < item.scale + myPlayer.collisionScale - 12) score -= 90;
+      }
+      return score;
+    }
+
+    // Anything standing at `point` that damages this enemy — the bounce chain.
+    // Cactus counts; the game gives it a damage value of its own.
+    _hurtsAt(point, enemy) {
+      const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
+      let hit = false;
+      ObjectManager2.grid2D.query(point.x, point.y, 1, id => {
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0 || object.getDamage() <= 0) return;
+        if (object instanceof PlayerObject && !PlayerManager2.isEnemyByID(object.ownerID, enemy)) return;
+        if (point.distance(object.pos.current) <= object.collisionScale + enemy.collisionScale) {
+          hit = true;
+          return true;
+        }
+      });
+      return hit;
+    }
+
+    _alreadyCovered(point, item, goal) {
+      const {ObjectManager: ObjectManager2} = this.client;
+      const vacancy = goal === null || goal === void 0 ? null : goal.vacancy;
+      let covered = false;
+      ObjectManager2.grid2D.query(point.x, point.y, 1, id => {
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0 || !(object instanceof PlayerObject)) return;
+        // The object whose slot is being aimed at does not count as cover —
+        // that it is standing there is the entire reason for the shot.
+        if (vacancy !== null && object.id === vacancy.id) return;
+        if (object.itemGroup !== item.itemGroup) return;
+        if (point.distance(object.pos.current) <= item.scale * .8) {
+          covered = true;
+          return true;
+        }
+      });
+      return covered;
+    }
+
+    // ---------------------------------------------------------------- ledger
+    // Preplace and replace as one state machine. An intent is raised against
+    // the object whose slot is opening, fires on the tick it actually opens,
+    // and re-fires once if what was sent never appeared.
+    _slotOf(itemID) {
+      return Items[itemID].itemGroup === 5 ? AEGIS_TRAP_SLOT : AEGIS_SPIKE_SLOT;
+    }
+
+    _raiseIntent(candidate, tick) {
+      if (!Settings_default._aegisPreplace) return false;
+      const goal = candidate.goal;
+      if (goal === null || goal.vacancy === null) return false;
+      const key = goal.vacancy.id + ":" + candidate.itemID;
+      if (this.intents.has(key)) return true;
+      this.intents.set(key, {
+        angle: candidate.angle,
+        slot: this._slotOf(candidate.itemID),
+        itemID: candidate.itemID,
+        point: candidate.point.copy(),
+        targetID: goal.vacancy.id,
+        state: "pending",
+        raised: tick,
+        fired: -1
+      });
+      return true;
+    }
+
+    _runLedger(tick, budget) {
+      const {ObjectManager: ObjectManager2, myPlayer: myPlayer, SocketManager: SocketManager2} = this.client;
+      let spent = 0;
+      for (const [key, intent] of this.intents) {
+        if (tick - intent.raised > 12) {
+          this.intents.delete(key);
+          continue;
+        }
+        if (intent.state === "pending") {
+          // The slot is only free once the object is actually gone. A tick
+          // early is a wasted packet; a tick late is a lost slot.
+          if (ObjectManager2.objects.has(intent.targetID)) continue;
+          if (!myPlayer.canPlace(intent.slot)) {
+            this.intents.delete(key);
+            continue;
+          }
+          if (spent + AEGIS_PLACE_COST > budget) continue;
+          this._fire(intent.slot, intent.angle);
+          spent += AEGIS_PLACE_COST;
+          intent.state = "sent";
+          intent.fired = tick;
+          continue;
+        }
+        if (intent.state === "sent") {
+          if (this._landed(intent)) {
+            this.intents.delete(key);
+            continue;
+          }
+          // One re-send, and only once the round trip has had time to show the
+          // build. Luna sends a third copy unconditionally; this pays only for
+          // the case the third copy was meant to cover.
+          if (tick - intent.fired < Math.max(1, Math.round((SocketManager2.pong || 0) / AEGIS_TICK_MS))) continue;
+          if (!Settings_default._aegisReplace || !myPlayer.canPlace(intent.slot)) {
+            this.intents.delete(key);
+            continue;
+          }
+          if (spent + AEGIS_PLACE_COST > budget) continue;
+          this._fire(intent.slot, intent.angle);
+          spent += AEGIS_PLACE_COST;
+          intent.state = "replaced";
+          intent.fired = tick;
+          continue;
+        }
+        if (this._landed(intent) || tick - intent.fired > 4) this.intents.delete(key);
+      }
+      return spent;
+    }
+
+    _landed(intent) {
+      const {ObjectManager: ObjectManager2} = this.client;
+      const item = Items[intent.itemID];
+      let found = false;
+      ObjectManager2.grid2D.query(intent.point.x, intent.point.y, 1, id => {
+        const object = ObjectManager2.objects.get(id);
+        if (object === void 0 || !(object instanceof PlayerObject)) return;
+        if (object.itemGroup !== item.itemGroup) return;
+        if (intent.point.distance(object.pos.current) <= item.scale * .8) {
+          found = true;
+          return true;
+        }
+      });
+      return found;
+    }
+
+    _fire(slot, angle) {
+      const {_ModuleHandler: ModuleHandler} = this.client;
+      ModuleHandler.place(slot, angle);
+      ModuleHandler.placedOnce = true;
+      this._placedThisTick += 1;
+    }
+
+    // ----------------------------------------------------------- arbitration
+    // The placer is the lowest-priority spender on the tick. It stands down
+    // whenever a tick, a sync or an insta owns the tick or has one armed for
+    // the next, and it never spends into the reserve those sequences need.
+    _blocked() {
+      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
+      if (ModuleHandler.moduleActive) return true;
+      if (ModuleHandler.placedOnce) return true;
+      if (ModuleHandler.tickCount < ModuleHandler.placementLockTick) return true;
+      if (EnemyManager2.shouldIgnoreModule()) return true;
+      return false;
+    }
+
+    // Angles a tick or a sync has claimed for its own build are carved out of
+    // the free arcs, so the placer cannot fill the slot a sequence is waiting
+    // for even on a tick where it is otherwise free to act.
+    _applyReservations(arcs) {
+      const reserved = this.client._ModuleHandler.placementReserved;
+      if (reserved === null || reserved.length === 0) return arcs;
+      const blocked = arcs.complement();
+      for (let i = 0; i < reserved.length; i++) blocked.addCentered(reserved[i], .35);
+      return blocked.complement();
+    }
+
+    // ------------------------------------------------------------------ tick
+    postTick() {
+      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      this._placedThisTick = 0;
+      const tick = ModuleHandler.tickCount;
+      if (!Settings_default._aegis) {
+        if (this.intents.size !== 0) this.intents.clear();
+        return;
+      }
+      this._syncTracks(tick);
+      if (this._blocked()) return;
+
+      const budget = ModuleHandler.packetLimit - ModuleHandler.packetCount - AEGIS_TICK_RESERVE;
+      if (budget < AEGIS_PLACE_COST) return;
+
+      // The ledger runs first: a slot that just opened outranks anything the
+      // fresh pass will turn up, and the decision behind it was already made.
+      let spent = this._runLedger(tick, budget);
+
+      const enemy = EnemyManager2.nearestEnemy;
+      if (enemy === null) return;
+      const center = myPlayer.pos.current;
+      if (center.distance(enemy.pos.current) > (Settings_default._aegisRadius ?? 350)) return;
+      const track = this.tracks.get(enemy.id);
+      if (track === void 0) return;
+
+      const spikeID = myPlayer.getItemByType(AEGIS_SPIKE_SLOT);
+      const trapID = myPlayer.getItemByType(AEGIS_TRAP_SLOT);
+      const canSpike = spikeID !== null && spikeID !== void 0 && myPlayer.canPlace(AEGIS_SPIKE_SLOT);
+      const canTrap = trapID !== null && trapID !== void 0 && myPlayer.canPlace(AEGIS_TRAP_SLOT);
+      if (!canSpike && !canTrap) return;
+
+      const lead = Settings_default._aegisPredict ? this._leadTicks() : 1;
+      const goals = this._goals(enemy, track, lead);
+      const blockers = this._blockers(center, AEGIS_QUERY_REACH);
+      let candidates = [];
+      if (canSpike) {
+        candidates = candidates.concat(this._candidates(spikeID, this._applyReservations(this._freeArcs(center, spikeID, blockers)), goals, center, blockers));
+      }
+      if (canTrap) {
+        candidates = candidates.concat(this._candidates(trapID, this._applyReservations(this._freeArcs(center, trapID, blockers)), goals, center, blockers));
+      }
+      if (candidates.length === 0) return;
+
+      // Their free arcs, built the same way, for the denial term.
+      let enemyFree = null;
+      if (Settings_default._aegisDenial) {
+        const enemyPos = enemy.pos.current;
+        enemyFree = this._freeArcs(enemyPos, AEGIS_ENEMY_SPIKE_ID, this._blockers(enemyPos, AEGIS_QUERY_REACH));
+      }
+      for (let i = 0; i < candidates.length; i++) {
+        candidates[i].score = this._score(candidates[i], enemy, goals, enemyFree);
+      }
+      candidates.sort((a, b) => b.score - a.score);
+
+      const taken = [];
+      for (let i = 0; i < candidates.length; i++) {
+        if (this._placedThisTick >= AEGIS_MAX_PLACES) break;
+        if (spent + AEGIS_PLACE_COST > budget) break;
+        const candidate = candidates[i];
+        if (candidate.score < AEGIS_MIN_SCORE) break;
+        // Two builds that overlap cannot both stand, so the second is a wasted
+        // packet however well it scored on its own.
+        let clashes = false;
+        for (let j = 0; j < taken.length; j++) {
+          if (candidate.point.distance(taken[j].point) < Items[candidate.itemID].scale + Items[taken[j].itemID].scale) {
+            clashes = true;
+            break;
+          }
+        }
+        if (clashes) continue;
+        // A candidate aimed at a slot that has not opened yet becomes an
+        // intent rather than a build, and fires on the tick it opens. Its
+        // angle was solved against a board without that object, so sending it
+        // now would be a packet spent on a spot that is still occupied — if
+        // the intent cannot be raised, the candidate is dropped, not sent.
+        if (candidate.goal !== null && candidate.goal.vacancy !== null && this.client.ObjectManager.objects.has(candidate.goal.vacancy.id)) {
+          if (this._raiseIntent(candidate, tick)) taken.push(candidate);
+          continue;
+        }
+        const slot = this._slotOf(candidate.itemID);
+        if (!myPlayer.canPlace(slot)) continue;
+        this._fire(slot, candidate.angle);
+        spent += AEGIS_PLACE_COST;
+        taken.push(candidate);
+      }
+      if (this._placedThisTick > 0) {
+        ModuleHandler.placeAngles[0] = this._slotOf(taken[0].itemID);
+        ModuleHandler.placeAngles[1] = taken.map(entry => entry.angle);
+      }
+    }
+  }
+  const AegisPlacer_default = AegisPlacer;
   class TrapAnimal {
 
     static CLOSE_PADDING=25;
@@ -9676,6 +10687,7 @@ window.grbtp = 35;
         ModuleHandler.forceWeapon = 0;
         ModuleHandler.shouldAttack = true;
         this.client.StatsManager.spikeSyncTimes = 1;
+        ModuleHandler.reservePlacement(2, placementAngles);
         this.useTurret = true;
       }
     }
@@ -9790,6 +10802,7 @@ window.grbtp = 35;
           ModuleHandler.shouldAttack = true;
           this.targetEnemy = nearestSyncEnemy;
           this.client.StatsManager.spikeSyncHammerTimes = 1;
+          ModuleHandler.reservePlacement(3, possibleAngles);
         }
       }
     }
@@ -13188,6 +14201,21 @@ window.grbtp = 35;
       sentAngle: 0
     };
     placeAngles=[ null, [] ];
+    // Placement arbitration. A module that begins a sequence it will
+    // finish on a later tick locks the placer out for that many ticks and
+    // names the angles it has claimed, so the lowest-priority spender on
+    // the tick cannot fill the slot the sequence is waiting for. Luna's
+    // placer guessed at this with a hardcoded set of module names, which
+    // goes quietly wrong the moment a module is renamed or added.
+    placementLockTick=0;
+    placementReserved=[];
+    reservePlacement(ticks, angles = null) {
+      const until = this.tickCount + ticks;
+      if (until > this.placementLockTick) this.placementLockTick = until;
+      if (angles !== null) {
+        for (let i = 0; i < angles.length; i++) this.placementReserved.push(angles[i]);
+      }
+    }
     norecoil=false;
     moduleStart=performance.now();
     maxExecutionTime=0;
@@ -13241,6 +14269,7 @@ window.grbtp = 35;
         autoPush: new AutoPush_default(client2),
         autoPlay: new AutoPlay_default(client2),
         trapTick: new TrapTick_default(client2),
+        aegis: new AegisPlacer_default(client2),
         botAutoBreak: new BotAutoBreak(client2),
         botRangedAttack: new BotRangedAttack(client2),
         placer: new Placer_default(client2),
@@ -13259,7 +14288,7 @@ window.grbtp = 35;
       // where the bot walks; botAutoBreak runs after, and only fires when the
       // movement it just asked for did not happen.
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botRangedAttack, this.staticModules.movement, this.staticModules.botAutoBreak ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.aegis, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
       this.reset();
     }
     movementReset() {
@@ -13570,6 +14599,7 @@ window.grbtp = 35;
       const {isOwner: isOwner} = this.client;
       this.placeAngles[0] = null;
       this.placeAngles[1].length = 0;
+      this.placementReserved.length = 0;
       this.activeModule = null;
       if (!this._autoBreakActive) this._lastBreakAngle = null;
       this._autoBreakActive = false;
@@ -15372,6 +16402,12 @@ window.grbtp = 35;
     // combat mill rather than a sandbox-only XP grinder, so leaving it on would
     // drop windmills behind every player from the first spawn.
     _automill: false,
+    _aegis: true,
+    _aegisPredict: true,
+    _aegisPreplace: true,
+    _aegisReplace: true,
+    _aegisDenial: true,
+    _aegisRadius: 350,
     _antiRetrap: true,
     _trapAnimal: false,
     _placementDefense: true,
@@ -15382,6 +16418,7 @@ window.grbtp = 35;
     _dashMovement: true,
     _dashMovementKey: "KeyB",
     _autoGrindKey: "",
+    _aegisKey: "",
     _autoGrind: false,
     _botAutoAttackEnabled: false,
     _playerTurretReloadBar: true,
