@@ -208,14 +208,17 @@ x18 has no bot movement to take. Its Bots menu — "Send bots", "Close bots",
 the two buttons carry no event listener and the three settings have no readers
 anywhere in the file. `altPlayerManager` is an iframe alt player, not a fleet.
 
-RYN already had the feature, in **Scatter Bots**: each bot picks its own random
-heading on a timer, refuses to double back, steers around obstacles, repels off
-other players, and on toggle-off walks everyone home and hands them back to
-normal movement. It shipped unusable. What changed:
+The **other two x18 files do**, and their bot movement is three modes on a
+variable called `ai`: `Wander` (random), `Static` (stand still) and `Summon`
+(follow the owner). RYN already had all three — Scatter Bots, Freeze Bots and
+normal follow — so what was ported is x18's *wander algorithm*, into RYN's
+existing scatter, which otherwise keeps its obstacle steering and its
+walk-everyone-home-on-toggle-off. What changed:
 
 | | was | is |
 |---|---|---|
-| **The key** | `_scatterBots: ""` — unbound, so `event.code === Settings._scatterBots` was never true and the feature was unreachable | bound to **`J`**. The tile is renamed `Bot Random Movement` |
+| **The algorithm** | re-rolled the heading every 1200ms regardless — a bot changing its mind nine times before it has crossed its own body, which is why the movement read as jitter rather than roaming | x18's `moveRan`: commit to a heading and keep it until the bot has covered a 3300px leg or has stopped moving, then turn. The new heading is rejected and re-rolled while it lands within 2 radians of the old one, so a change of direction is always a hard turn of at least 115°, never a nudge |
+| **The key** | `_scatterBots: ""` — unbound, so `event.code === Settings._scatterBots` was never true and the feature was unreachable | bound to **`J`**. The tile is renamed `Bot Random Movement`. x18's third mode, Static, is `Freeze Bots` and shipped unbound the same way — now **`K`** |
 | **Bind check** | guarded on `!== "..."` while the default was `""`, so an untouched bind was a value the handler could not recognise | any falsy or placeholder bind counts as unset |
 | **Toggle state** | read back off `clients[0]._ModuleHandler._scatterActive` | a persisted `Settings._botsScattered`, reconciled onto every bot each frame |
 | **Late bots** | a bot spawned after the toggle kept trailing the owner while the rest wandered | joins the mode on its next frame |

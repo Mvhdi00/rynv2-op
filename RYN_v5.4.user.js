@@ -15862,7 +15862,10 @@ window.grbtp = 35;
     _botAutoBreak: false,
     _botRangedKite: false,
     _botKiteDistance: 400,
-    _freezeBots: "",
+    // x18 has three bot movement modes on keys -- Wander (O), Static (-) and
+    // Summon. Wander is Bot Random Movement on J and Summon is the default
+    // follow, so this is the third one, and it shipped unbound like the other.
+    _freezeBots: "KeyK",
     _botsFrozen: false,
     _clearTargets: "KeyT",
     _targetCooldownSec: 3,
@@ -19724,6 +19727,10 @@ window.grbtp = 35;
   const _SC_NO_BACKTRACK_ARC = Math.PI * 0.62;
   const _SC_REPEL_RADIUS = 230;
   const _SC_STUCK_DIST = 35;
+  // x18 tests `c.speed === 0`, which it can because it owns the bot's own
+  // movement integrator. RYN reads speed as the distance covered last tick off
+  // the server, so an exact zero is rarer than actually being stopped.
+  const _SC_STOPPED_SPEED = 6;
 
   function _scIsBlockedNear(om, myPlayer, x, y, buffer) {
     let hit = null;
@@ -19808,6 +19815,31 @@ window.grbtp = 35;
     return nearestAngle === null ? null : nearestAngle + Math.PI;
   }
 
+  // x18 commits to a heading and keeps it. It only picks a new one when the bot
+  // has covered a long leg, or when it has stopped moving:
+  //
+  //     if (c.doMills && Date.now() - c.moveRan.lastChange >= 1e4
+  //         || D(re(c.moveRan.y - c.y, 2) + re(c.moveRan.x - c.x, 2)) > 3300
+  //         || c.speed === 0) { c.moveRan.angle = vx(c.moveRan.angle); ... }
+  //
+  // (D/re/S are Math.sqrt/pow/abs, W is PI, so the middle term is the straight
+  // line distance from where the leg started.)
+  //
+  // What was here re-rolled on a 1200ms timer regardless, which is a bot
+  // changing its mind nine times before it has crossed its own body — the
+  // zigzag it produced is why the movement read as jitter rather than roaming.
+  const _X18_LEG_DISTANCE = 3300;
+  const _X18_LEG_TIMEOUT_MS = 1e4;
+  const _X18_MIN_TURN = 2;
+  const _X18_PICK_TRIES = 24;
+  function _x18Wander(prev) {
+    let candidate = Math.random() * Math.PI * 2;
+    if (prev === null || prev === void 0) return candidate;
+    for (let i = 0; i < _X18_PICK_TRIES && getAngleDist(prev, candidate) <= _X18_MIN_TURN; i++) {
+      candidate = Math.random() * Math.PI * 2;
+    }
+    return candidate;
+  }
   function _scDecide(sc_client, sc_bot, sc_mh, sc_pos, now) {
     const om = sc_bot.ObjectManager;
     let baseAngle;
@@ -19816,12 +19848,20 @@ window.grbtp = 35;
       const op = owner && owner.pos && owner.pos.current;
       baseAngle = op ? Math.atan2(op.y - sc_pos.y, op.x - sc_pos.x) : Math.random() * Math.PI * 2 - Math.PI;
     } else {
-      let attempt = 0, candidate;
-      do {
-        candidate = Math.random() * Math.PI * 2 - Math.PI;
-        attempt++;
-      } while (sc_mh._scatterLastMoveAngle !== null && attempt < 10 && Math.abs(Math.atan2(Math.sin(candidate - (sc_mh._scatterLastMoveAngle + Math.PI)), Math.cos(candidate - (sc_mh._scatterLastMoveAngle + Math.PI)))) < _SC_NO_BACKTRACK_ARC / 2);
-      baseAngle = candidate;
+      // x18's heading pick, its `vx`:
+      //
+      //     function vx(e, t) {
+      //         t = Math.random() * ae;                  // ae = 2*PI
+      //         if (e && Ay(e, t) <= 2) return vx(e);    // Ay = angle distance
+      //         return t;
+      //     }
+      //
+      // Uniform over the circle, rejected and re-rolled while it lands within 2
+      // radians of the heading it is replacing — so a change of direction is
+      // always a hard turn of at least 115 degrees, never a nudge. Recursion in
+      // the original; a bounded loop here, because acceptance is only about 36%
+      // per try and an unlucky run should not grow the stack.
+      baseAngle = _x18Wander(sc_mh._scatterLastMoveAngle);
       const repel = _scRepelAngle(sc_client, sc_bot, sc_pos);
       if (repel !== null) {
         const rx = Math.cos(baseAngle) * .4 + Math.cos(repel) * .6;
@@ -19896,8 +19936,20 @@ window.grbtp = 35;
             }
           }
 
-          const _sc_dueDecision = _sc_now >= (_sc_mh._scatterNextDecisionTime || 0);
+          // x18's three conditions. Returning still runs on the timer, since
+          // walking home is a fixed target rather than a leg to commit to.
+          const _sc_stopped = (_sc_bot.myPlayer.speed || 0) <= _SC_STOPPED_SPEED;
+          let _sc_legDist = Infinity;
+          if (_sc_mh._scatterLegStart) {
+            _sc_legDist = Math.sqrt((_sc_pos.x - _sc_mh._scatterLegStart.x) ** 2 + (_sc_pos.y - _sc_mh._scatterLegStart.y) ** 2);
+          }
+          const _sc_dueDecision = _sc_mh._scatterReturning ? _sc_now >= (_sc_mh._scatterNextDecisionTime || 0) : _sc_mh._scatterAngle === void 0 || _sc_mh._scatterAngle === null || _sc_stopped || _sc_legDist > _X18_LEG_DISTANCE || _sc_now - (_sc_mh._scatterLegStartedAt || 0) >= _X18_LEG_TIMEOUT_MS;
           if (_sc_dueDecision) {
+            _sc_mh._scatterLegStart = {
+              x: _sc_pos.x,
+              y: _sc_pos.y
+            };
+            _sc_mh._scatterLegStartedAt = _sc_now;
             let stuck = false;
             if (_sc_mh._scatterLastPos) {
               const moved = Math.sqrt((_sc_pos.x - _sc_mh._scatterLastPos.x) ** 2 + (_sc_pos.y - _sc_mh._scatterLastPos.y) ** 2);

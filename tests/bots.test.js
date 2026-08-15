@@ -13,14 +13,17 @@ const find = pfx => {
   return i;
 };
 
-// The scatter helpers and their constants, up to (not including) the IIFE loop.
+// The scatter helpers and their constants, up to (not including) the IIFE loop,
+// plus the angle helper they call.
 const helpers = lines
+  .slice(find("  const getAngleDist = "), find("  const getAngleDist = ") + 4).join("\n") + "\n" +
+  lines
   .slice(find("  const SCATTER_RETURN_TIMEOUT_MS"), find("  (function _scatterLoop() {"))
   .join("\n");
 
 const M = vm.runInNewContext(
-  "(function(){\n" + helpers +
-  "\nreturn { _scDecide, _scRepelAngle, SCATTER_RETURN_TIMEOUT_MS, _SC_DECISION_MS, _SC_DECISION_MS_STUCK, _SC_NO_BACKTRACK_ARC };\n})()",
+  "(function(){\nconst PI = Math.PI;\n" + helpers +
+  "\nreturn { _scDecide, _scRepelAngle, _x18Wander, SCATTER_RETURN_TIMEOUT_MS, _SC_DECISION_MS, _X18_LEG_DISTANCE, _X18_MIN_TURN, getAngleDist };\n})()",
   { Math, Number, Array, Set, Map, console, Infinity, NaN, Date }
 );
 
@@ -61,14 +64,24 @@ head(1, "The random walk itself");
   const uniq = new Set(angles.map(a => Math.round(a * 4))).size;
   check("headings are genuinely spread, not one direction", uniq >= 8, uniq + " distinct heading buckets over 200 decisions");
 
-  // Consecutive decisions should not simply reverse — that is a bot vibrating
-  // on the spot rather than wandering.
-  let backtracks = 0;
+  // x18's rule: a change of heading is always a hard turn, never a nudge.
+  let softTurns = 0, minTurn = Infinity;
   for (let i = 1; i < angles.length; i++) {
-    const d = Math.abs(Math.atan2(Math.sin(angles[i] - (angles[i - 1] + Math.PI)), Math.cos(angles[i] - (angles[i - 1] + Math.PI))));
-    if (d < M._SC_NO_BACKTRACK_ARC / 2) backtracks++;
+    const d = M.getAngleDist(angles[i], angles[i - 1]);
+    if (d < minTurn) minTurn = d;
+    if (d <= M._X18_MIN_TURN) softTurns++;
   }
-  check("consecutive headings do not double back", backtracks === 0, backtracks + " backtracks of " + (angles.length - 1));
+  check("every turn clears x18's minimum", softTurns === 0,
+        "smallest turn " + minTurn.toFixed(2) + " rad, floor " + M._X18_MIN_TURN + " rad (" + Math.round(M._X18_MIN_TURN * 180 / Math.PI) + " deg)");
+
+  // The picker on its own, including the no-previous case.
+  check("the first heading is unconstrained", Number.isFinite(M._x18Wander(null)));
+  let worst = Infinity;
+  for (let i = 0; i < 2000; i++) {
+    const prev = Math.random() * Math.PI * 2;
+    worst = Math.min(worst, M.getAngleDist(prev, M._x18Wander(prev)));
+  }
+  check("holds over 2000 picks", worst > M._X18_MIN_TURN, "worst turn " + worst.toFixed(3) + " rad");
 
   // Returning mode aims at the owner, not at random.
   const rmh = { _scatterActive: false, _scatterReturning: true, _scatterLastMoveAngle: null };
@@ -146,7 +159,19 @@ head(3, "Reconcile loop — late bots join, and everyone comes back");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(4, "Auto Place / Preplace / Replace untouched");
+head(4, "x18's leg commitment, not a timer");
+{
+  check("a leg runs to a distance, not a stopwatch", /_X18_LEG_DISTANCE/.test(src) && /_sc_legDist > _X18_LEG_DISTANCE/.test(src), "leg " + M._X18_LEG_DISTANCE + "px");
+  check("stopping re-rolls immediately", /_sc_stopped \|\| _sc_legDist/.test(src));
+  check("returning still runs on the timer", /_sc_mh\._scatterReturning \? _sc_now >= \(_sc_mh\._scatterNextDecisionTime/.test(src));
+  check("the 1200ms re-roll no longer drives wandering", !/const _sc_dueDecision = _sc_now >= \(_sc_mh\._scatterNextDecisionTime \|\| 0\);/.test(src),
+        "was: re-roll every " + M._SC_DECISION_MS + "ms regardless");
+  check("Static mode is bound too", /_freezeBots: "Key[A-Z]"/.test(src), (/_freezeBots: "([^"]*)"/.exec(src) || [])[1]);
+  check("no key is bound twice", (src.match(/: "KeyK"/g) || []).length === 1 && (src.match(/: "KeyJ"/g) || []).length === 1);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+head(5, "Auto Place / Preplace / Replace untouched");
 {
   const base = fs.readFileSync(__dirname + "/../src/RYN_Client_v5.3.js", "utf8");
   const slice = t => {
