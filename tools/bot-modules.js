@@ -154,6 +154,70 @@
     }
   }
 
+  // Target selection that ignores a raised shield.
+  //
+  // A wooden shield blocks a 60 degree arc in front of whoever holds it
+  // (Config.shieldAngle), and against it getMaxWeaponDamage returns literally
+  // zero for anything shootable and a fifth for melee. So the shield bot parked
+  // in front of a group is not a hard target, it is a target worth nothing at
+  // all, and every arrow spent on it is spent on nothing.
+  //
+  // PlayerManager.lookingShield already answers the exact question — is this
+  // player holding weapon 11 *and* facing me — so the pick is just "nearest
+  // enemy that is not doing that". A shield only faces one way, so it is
+  // per-bot: the same shield bot can be blocking one of your bots and wide open
+  // to another standing off its flank, and each bot decides for itself.
+  const BOT_TARGET_RANGE = 1500;
+  function botPickTarget(client) {
+    const {myPlayer: myPlayer, PlayerManager: PlayerManager2, EnemyManager: EnemyManager2} = client;
+    const nearest = EnemyManager2.nearestEnemy;
+    if (!Settings_default._botAvoidShield) {
+      return {
+        target: nearest,
+        blockedBy: null
+      };
+    }
+    const enemies = PlayerManager2.enemies;
+    if (!enemies || enemies.length === 0) {
+      return {
+        target: nearest,
+        blockedBy: null
+      };
+    }
+    const myPos = myPlayer.pos.current;
+    let open = null, openDist = Infinity;
+    let shielded = null, shieldedDist = Infinity;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (!e || !e.pos) continue;
+      const d = myPos.distance(e.pos.current);
+      if (d > BOT_TARGET_RANGE) continue;
+      let blocking = false;
+      try {
+        blocking = PlayerManager2.lookingShield(e, myPlayer);
+      } catch (_) {}
+      if (blocking) {
+        if (d < shieldedDist) {
+          shieldedDist = d;
+          shielded = e;
+        }
+        continue;
+      }
+      if (d < openDist) {
+        openDist = d;
+        open = e;
+      }
+    }
+    // Everyone in range has a shield up: report it rather than quietly falling
+    // back to the nearest, so the caller can hold fire instead of feeding shots
+    // into a wall. A shield cannot be held and swung at the same time, so
+    // waiting costs the bot nothing.
+    return {
+      target: open,
+      blockedBy: open === null ? shielded : null
+    };
+  }
+
   // Ranged kiting. With a bow, crossbow, repeater or musket in the secondary,
   // holding attack sends the bots out to a set distance and has them shoot the
   // enemy from there instead of walking into melee with a weapon that does not
@@ -192,10 +256,37 @@
       if (!myPlayer || !myPlayer.inGame) return;
       if (ModuleHandler.moduleActive) return;
       const secondary = myPlayer.getItemByType(1);
-      if (!BOT_RANGED_SECONDARIES.has(secondary)) return;
       if (!this._ownerAttacking()) return;
-      const enemy = EnemyManager2.nearestEnemy;
-      if (enemy === null) return;
+
+      const pick = botPickTarget(this.client);
+      const enemy = pick.target;
+
+      // Melee bots get the same target choice without the kiting: the swing is
+      // simply pointed at someone it can actually hurt.
+      if (!BOT_RANGED_SECONDARIES.has(secondary)) {
+        if (Settings_default._botAvoidShield && enemy !== null) {
+          ModuleHandler.useAngle = myPlayer.pos.current.angle(enemy.pos.future ?? enemy.pos.current);
+        }
+        return;
+      }
+
+      if (enemy === null) {
+        // Nothing worth shooting: hold the shot, but keep station off whoever is
+        // hiding behind the shield rather than drifting into them.
+        if (pick.blockedBy !== null) {
+          this.active = true;
+          const holdDist = myPlayer.pos.current.distance(pick.blockedBy.pos.current);
+          const holdWant = Math.min(BOT_KITE_MAX, Math.max(BOT_KITE_MIN, Settings_default._botKiteDistance ?? 400));
+          if (holdDist < holdWant - BOT_KITE_BAND) {
+            const away = myPlayer.pos.current.angle(pick.blockedBy.pos.current) + Math.PI;
+            if (this.lastDir === null || getAngleDist(away, this.lastDir) > .15) {
+              ModuleHandler.startMovement(away);
+              this.lastDir = away;
+            }
+          }
+        }
+        return;
+      }
 
       const myPos = myPlayer.pos.current;
       const enemyPos = enemy.pos.current;

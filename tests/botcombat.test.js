@@ -38,7 +38,7 @@ const prelude = `
   const Settings_default = {
     _botAutoBreak: true, _botRangedKite: true, _botKiteDistance: 400,
     _botAutoAttackEnabled: false, _formation: "train", _circleRadius: 200,
-    _botBeAngel: false, _tailPriority: true, _cowboyWhenSafe: false,
+    _botBeAngel: false, _botAvoidShield: true, _tailPriority: true, _cowboyWhenSafe: false,
     _antienemy: true, _antispike: true, _antianimal: true, _biomehats: true,
     _empDefense: true,
   };
@@ -53,7 +53,7 @@ const prelude = `
 
 const M = vm.runInNewContext(
   "(function(){\n" + parts.join("\n") + "\n" + prelude +
-  "\nreturn { BotAutoBreak, BotRangedAttack, BOT_RANGED_SECONDARIES, TRAIN_SPACING, getFormationOffset, Vector, Items, PlayerObject, SpatialHashGrid2D, Settings_default, DefaultHat, DefaultAcc };\n})()",
+  "\nreturn { BotAutoBreak, BotRangedAttack, BOT_RANGED_SECONDARIES, TRAIN_SPACING, getFormationOffset, Vector, Items, PlayerObject, SpatialHashGrid2D, Settings_default, DefaultHat, DefaultAcc, getAngleDist };\n})()",
   { Math, Number, Array, Set, Map, console, Infinity, NaN, Date }
 );
 
@@ -269,7 +269,81 @@ head(5, "Server player counter");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(6, "Be Angel — Halo and Angel Wings instead of Booster and Monkey Tail");
+head(6, "Avoid Shield Bots — never spend a shot on a raised shield");
+{
+  const SHIELD = 11;
+  // Config.shieldAngle is PI/3: a shield covers 60 degrees either side of the
+  // direction its holder faces.
+  const mkEnemy = (id, x, y, held, facing) => ({
+    id: id, collisionScale: 35, angle: facing,
+    weapon: { current: held, primary: 5, secondary: held },
+    pos: { current: new M.Vector(x, y), future: new M.Vector(x, y) },
+  });
+  const mkFleet = (enemies, secondary = 9) => {
+    const bot = makeBot({ myPlayer: { inventory: { 0: 5, 1: secondary } } });
+    bot.ownerClient._ModuleHandler.attacking = 1;
+    bot.PlayerManager = {
+      enemies: enemies,
+      isEnemyByID: () => true,
+      // The real PlayerManager.lookingShield, in miniature: held weapon must be
+      // the shield and the holder must be facing the target.
+      lookingShield(owner, target) {
+        if (owner.weapon.current !== SHIELD) return false;
+        const a = owner.pos.current.angle(target.pos.current);
+        return M.getAngleDist ? M.getAngleDist(a, owner.angle) <= Math.PI / 3
+                              : Math.abs(a - owner.angle) <= Math.PI / 3;
+      },
+    };
+    bot.EnemyManager.nearestEnemy = enemies[0] || null;
+    const m = new M.BotRangedAttack(bot);
+    m.postTick();
+    return { bot, m };
+  };
+
+  // A shield bot out front facing my bot, an unshielded player behind it.
+  const shieldBot = mkEnemy(1, 1200, 1000, SHIELD, Math.PI);   // due east of my bot, facing back at it
+  const softTarget = mkEnemy(2, 1000, 1400, 5, 0);             // due south, further away
+  const f = mkFleet([shieldBot, softTarget]);
+  const aimed = D(f.bot._ModuleHandler.useAngle);
+  const toShield = D(f.bot.myPlayer.pos.current.angle(shieldBot.pos.current));
+  const toSoft = D(f.bot.myPlayer.pos.current.angle(softTarget.pos.current));
+  check("shoots past the shield at the open player",
+        Math.abs(aimed - toSoft) < 1 && f.m.active === true,
+        "aimed " + aimed + " deg; shield " + toShield + ", open " + toSoft);
+
+  // Same shield bot turned away is a legitimate target again.
+  const turned = mkEnemy(1, 1200, 1000, SHIELD, 0);            // same spot, facing away
+  const f2 = mkFleet([turned, mkEnemy(2, 1000, 1400, 5, 0)]);
+  check("a shield facing away is not a shield", f2.m.active === true && Math.abs(D(f2.bot._ModuleHandler.useAngle) - D(f2.bot.myPlayer.pos.current.angle(turned.pos.current))) < 1,
+        "nearest is taken again once it turns");
+
+  // Everyone shielded: hold the shot rather than feed it into a wall.
+  const allShielded = mkFleet([mkEnemy(1, 1200, 1000, SHIELD, Math.PI)]);
+  check("holds fire when every target is shielded", allShielded.bot._ModuleHandler.shouldAttack === false,
+        "shouldAttack " + allShielded.bot._ModuleHandler.shouldAttack);
+  check("...but still keeps its distance", allShielded.m.active === true);
+
+  // Melee bots get the same target choice, without the kiting.
+  const meleeFleet = mkFleet([shieldBot, softTarget], 10);
+  check("melee bots also swing at the open player",
+        Math.abs(D(meleeFleet.bot._ModuleHandler.useAngle) - toSoft) < 1,
+        "melee aim " + D(meleeFleet.bot._ModuleHandler.useAngle) + " deg");
+  check("melee bots do not start kiting", meleeFleet.m.active === false);
+
+  // Toggle off restores plain nearest-enemy targeting.
+  M.Settings_default._botAvoidShield = false;
+  const off = mkFleet([shieldBot, softTarget]);
+  M.Settings_default._botAvoidShield = true;
+  check("the toggle restores nearest-first targeting",
+        Math.abs(D(off.bot._ModuleHandler.useAngle) - toShield) < 1,
+        "aimed " + D(off.bot._ModuleHandler.useAngle) + " deg at the shield");
+
+  check("on by default", /_botAvoidShield: true/.test(src));
+  check("the menu carries the toggle", /_botAvoidShield\\" type=\\"checkbox/.test(src) && /Avoid Shield Bots/.test(src));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+head(7, "Be Angel — Halo and Angel Wings instead of Booster and Monkey Tail");
 {
   const HALO = 48, ANGEL = 13, BOOSTER = 12, TAIL = 11;
   const mkWearer = (isOwner, over = {}) => {
@@ -347,7 +421,7 @@ head(6, "Be Angel — Halo and Angel Wings instead of Booster and Monkey Tail");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(7, "Auto Place / Preplace / Replace still untouched");
+head(8, "Auto Place / Preplace / Replace still untouched");
 {
   const base = fs.readFileSync(__dirname + "/../src/RYN_Client_v5.3.js", "utf8");
   const slice = t => t.slice(t.indexOf("  const LUNA_SPIKE_TYPE"), t.indexOf("  const AutoPlacer_default = AutoPlacer;"));

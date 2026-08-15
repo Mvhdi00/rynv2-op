@@ -894,13 +894,17 @@ sub("settings: bot combat defaults",
     _botAutoBreak: false,
     _botRangedKite: false,
     _botKiteDistance: 400,
-    _botBeAngel: false,`);
+    _botBeAngel: false,
+    // On by default: when nobody is holding a shield it changes nothing, and
+    // when someone is, the target it steers away from takes zero damage.
+    _botAvoidShield: true,`);
 
 const followCursorRow = `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Follow cursor</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_followCursor\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`;
 sub("menu: bot combat rows", followCursorRow,
   followCursorRow +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Auto Break</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAutoBreak\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Ranged Kiting</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botRangedKite\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
+  `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Avoid Shield Bots</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAvoidShield\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Be Angel</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botBeAngel\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Kite distance</span>\\r\\n                <label class=\\"slider\\">\\r\\n                    <span class=\\"slider-value\\"></span>\\r\\n                    <input id=\\"_botKiteDistance\\" type=\\"range\\" step=\\"25\\" min=\\"150\\" max=\\"1200\\"></input>\\r\\n                </label>\\r\\n            </div>\\r\\n`);
 
