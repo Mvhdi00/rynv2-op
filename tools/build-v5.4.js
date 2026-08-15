@@ -512,6 +512,10 @@ sub("bots: give up on walking home after the timeout",
             const op = owner && owner.pos && owner.pos.current;
             if (op) {`);
 
+sub("menu: keybind tiles for the combat toggles",
+`            <div class=\\"content-option key-tile\\">\\n                <span class=\\"option-title\\">Scatter Bots</span>\\n                <button id=\\"_scatterBots\\" class=\\"hotkeyInput\\"></button>\\n            </div>\\n`,
+`            <div class=\\"content-option key-tile\\">\\n                <span class=\\"option-title\\">Scatter Bots</span>\\n                <button id=\\"_scatterBots\\" class=\\"hotkeyInput\\"></button>\\n            </div>\\n            <div class=\\"content-option key-tile\\">\\n                <span class=\\"option-title\\">Avoid Shield Bots</span>\\n                <button id=\\"_botAvoidShieldKey\\" class=\\"hotkeyInput\\"></button>\\n            </div>\\n            <div class=\\"content-option key-tile\\">\\n                <span class=\\"option-title\\">Volley Fire</span>\\n                <button id=\\"_botVolleyKey\\" class=\\"hotkeyInput\\"></button>\\n            </div>\\n`);
+
 sub("menu: name the tile after what it does",
 `                <span class=\\"option-title\\">Scatter Bots</span>`,
 `                <span class=\\"option-title\\">Bot Random Movement</span>`);
@@ -620,6 +624,21 @@ sub("bots: stopped-speed threshold",
   // movement integrator. RYN reads speed as the distance covered last tick off
   // the server, so an exact zero is rarer than actually being stopped.
   const _SC_STOPPED_SPEED = 6;`);
+
+sub("bots: keys for the two combat toggles",
+`      if (event.code === Settings_default._botAutoAttack) {`,
+`      // Both of these are decisions you change mid fight, so they get a key as
+      // well as a switch — reaching for the menu with forty bots on screen is
+      // not a thing anyone does.
+      if (Settings_default._botAvoidShieldKey && event.code === Settings_default._botAvoidShieldKey) {
+        Settings_default._botAvoidShield = !Settings_default._botAvoidShield;
+        SaveSettings();
+      }
+      if (Settings_default._botVolleyKey && event.code === Settings_default._botVolleyKey) {
+        Settings_default._botVolley = !Settings_default._botVolley;
+        SaveSettings();
+      }
+      if (event.code === Settings_default._botAutoAttack) {`);
 
 sub("bots: bind Static mode too",
 `    _freezeBots: "",`,
@@ -897,13 +916,19 @@ sub("settings: bot combat defaults",
     _botBeAngel: false,
     // On by default: when nobody is holding a shield it changes nothing, and
     // when someone is, the target it steers away from takes zero damage.
-    _botAvoidShield: true,`);
+    _botAvoidShield: true,
+    _botAvoidShieldKey: "KeyI",
+    _botVolley: false,
+    _botVolleyKey: "KeyU",
+    _botVolleyWave: 5,`);
 
 const followCursorRow = `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Follow cursor</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_followCursor\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`;
 sub("menu: bot combat rows", followCursorRow,
   followCursorRow +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Auto Break</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAutoBreak\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Bot Ranged Kiting</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botRangedKite\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
+  `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Volley Fire</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botVolley\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
+  `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">First wave size</span>\\r\\n                <label class=\\"slider\\">\\r\\n                    <span class=\\"slider-value\\"></span>\\r\\n                    <input id=\\"_botVolleyWave\\" type=\\"range\\" step=\\"1\\" min=\\"1\\" max=\\"20\\"></input>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Avoid Shield Bots</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botAvoidShield\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Be Angel</span>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_botBeAngel\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n` +
   `            <div class=\\"content-option\\">\\r\\n                <span class=\\"option-title\\">Kite distance</span>\\r\\n                <label class=\\"slider\\">\\r\\n                    <span class=\\"slider-value\\"></span>\\r\\n                    <input id=\\"_botKiteDistance\\" type=\\"range\\" step=\\"25\\" min=\\"150\\" max=\\"1200\\"></input>\\r\\n                </label>\\r\\n            </div>\\r\\n`);

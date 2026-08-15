@@ -174,6 +174,7 @@
     if (!Settings_default._botAvoidShield) {
       return {
         target: nearest,
+        shielded: null,
         blockedBy: null
       };
     }
@@ -181,6 +182,7 @@
     if (!enemies || enemies.length === 0) {
       return {
         target: nearest,
+        shielded: null,
         blockedBy: null
       };
     }
@@ -208,13 +210,84 @@
         open = e;
       }
     }
-    // Everyone in range has a shield up: report it rather than quietly falling
-    // back to the nearest, so the caller can hold fire instead of feeding shots
-    // into a wall. A shield cannot be held and swung at the same time, so
-    // waiting costs the bot nothing.
+    // `shielded` is reported whether or not an open target exists, because
+    // volley fire needs to know where the shield is in order to shove it even
+    // while other people are standing in the open.
+    //
+    // `blockedBy` is the narrower question — is the shield the *only* thing
+    // left — and it is what makes the caller hold fire rather than quietly fall
+    // back to the nearest and feed shots into a wall. A shield cannot be held
+    // and swung at the same time, so waiting costs the bot nothing.
     return {
       target: open,
+      shielded: shielded,
       blockedBy: open === null ? shielded : null
+    };
+  }
+
+  // Volley fire.
+  //
+  // A shield only blocks what it faces, and an arrow into it still moves the
+  // player holding it. So against a shield wall the useful order is: a handful
+  // of bots shoot the shield and shove it backwards, and the moment it has
+  // moved, everyone else shoots the people it was covering.
+  //
+  // Firing all forty bots at once wastes the whole salvo on the shield, because
+  // every one of them resolves against the same frame in which the shield was
+  // still in front. Splitting it means only the opening wave is spent on the
+  // push, and the rest lands after the picture has changed.
+  //
+  // The state is per owner, not per bot, because the waves have to agree on
+  // which one is firing — a bot deciding its own phase would put wave two out
+  // before wave one on the first tick it happened to run.
+  const BOT_VOLLEY_STATE = new WeakMap;
+  // Gap between the waves. Long enough for the shove and the arrows already in
+  // the air to resolve, short enough that the target has not walked out of it.
+  const BOT_VOLLEY_GAP_MS = 260;
+  // After this long with no attack the sequence starts over rather than leaving
+  // wave two permanently armed.
+  const BOT_VOLLEY_RESET_MS = 700;
+
+  function botVolleyState(owner) {
+    let v = BOT_VOLLEY_STATE.get(owner);
+    if (v === void 0) {
+      v = {
+        phase: "idle",
+        startedAt: 0,
+        lastSeen: 0
+      };
+      BOT_VOLLEY_STATE.set(owner, v);
+    }
+    return v;
+  }
+
+  // Which wave this bot belongs to, and whether that wave may fire yet.
+  function botVolleyTurn(client, owner, now) {
+    if (!Settings_default._botVolley) {
+      return {
+        mayFire: true,
+        wave: 0
+      };
+    }
+    const v = botVolleyState(owner);
+    if (now - v.lastSeen > BOT_VOLLEY_RESET_MS) {
+      v.phase = "idle";
+    }
+    v.lastSeen = now;
+    if (v.phase === "idle") {
+      v.phase = "first";
+      v.startedAt = now;
+    }
+    if (v.phase === "first" && now - v.startedAt >= BOT_VOLLEY_GAP_MS) {
+      v.phase = "rest";
+    }
+    const size = Math.max(1, Settings_default._botVolleyWave ?? 5);
+    const index = owner.getClientIndex(client);
+    const inFirst = index >= 0 && index < size;
+    return {
+      mayFire: v.phase === "rest" || inFirst,
+      wave: inFirst ? 1 : 2,
+      phase: v.phase
     };
   }
 
@@ -259,7 +332,16 @@
       if (!this._ownerAttacking()) return;
 
       const pick = botPickTarget(this.client);
-      const enemy = pick.target;
+      const owner = this.client.ownerClient;
+      const now = Date.now();
+      const turn = owner && typeof owner.getClientIndex === "function" ? botVolleyTurn(this.client, owner, now) : {
+        mayFire: true,
+        wave: 0
+      };
+      // Wave one shoots the shield itself when there is one, because the point
+      // of that wave is the shove, not the damage. Wave two shoots whoever the
+      // shield was covering.
+      const enemy = turn.wave === 1 && pick.shielded !== null && pick.shielded !== void 0 ? pick.shielded : pick.target;
 
       // Melee bots get the same target choice without the kiting: the swing is
       // simply pointed at someone it can actually hurt.
@@ -317,7 +399,8 @@
       ModuleHandler.moduleActive = true;
       ModuleHandler.useAngle = myPos.angle(aimPos);
       ModuleHandler.forceWeapon = 1;
-      ModuleHandler.shouldAttack = true;
+      // Wave two is aimed and in position, it just does not loose yet.
+      ModuleHandler.shouldAttack = turn.mayFire;
       // Claims the tick's movement so the Movement module leaves it alone.
       this.active = true;
     }

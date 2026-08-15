@@ -38,7 +38,8 @@ const prelude = `
   const Settings_default = {
     _botAutoBreak: true, _botRangedKite: true, _botKiteDistance: 400,
     _botAutoAttackEnabled: false, _formation: "train", _circleRadius: 200,
-    _botBeAngel: false, _botAvoidShield: true, _tailPriority: true, _cowboyWhenSafe: false,
+    _botBeAngel: false, _botAvoidShield: true, _botVolley: false, _botVolleyWave: 5,
+    _tailPriority: true, _cowboyWhenSafe: false,
     _antienemy: true, _antispike: true, _antianimal: true, _biomehats: true,
     _empDefense: true,
   };
@@ -53,7 +54,7 @@ const prelude = `
 
 const M = vm.runInNewContext(
   "(function(){\n" + parts.join("\n") + "\n" + prelude +
-  "\nreturn { BotAutoBreak, BotRangedAttack, BOT_RANGED_SECONDARIES, TRAIN_SPACING, getFormationOffset, Vector, Items, PlayerObject, SpatialHashGrid2D, Settings_default, DefaultHat, DefaultAcc, getAngleDist };\n})()",
+  "\nreturn { botVolleyTurn, botPickTarget, BOT_VOLLEY_GAP_MS, BotAutoBreak, BotRangedAttack, BOT_RANGED_SECONDARIES, TRAIN_SPACING, getFormationOffset, Vector, Items, PlayerObject, SpatialHashGrid2D, Settings_default, DefaultHat, DefaultAcc, getAngleDist };\n})()",
   { Math, Number, Array, Set, Map, console, Infinity, NaN, Date }
 );
 
@@ -343,7 +344,93 @@ head(6, "Avoid Shield Bots — never spend a shot on a raised shield");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(7, "Be Angel — Halo and Angel Wings instead of Booster and Monkey Tail");
+head(7, "Volley Fire — first wave shoves the shield, the rest hit what it hid");
+{
+  const SHIELD = 11;
+  const mkEnemy = (id, x, y, held, facing) => ({
+    id: id, collisionScale: 35, angle: facing,
+    weapon: { current: held, primary: 5, secondary: held },
+    pos: { current: new M.Vector(x, y), future: new M.Vector(x, y) },
+  });
+  // A fleet of `n` bots sharing one owner, all shooting the same shield wall.
+  const mkSquad = (n, enemies) => {
+    const bots = [];
+    const owner = { getClientIndex: c => bots.indexOf(c), _ModuleHandler: { attacking: 1, attackingState: 1 } };
+    for (let i = 0; i < n; i++) {
+      const b = makeBot({ myPlayer: { inventory: { 0: 5, 1: 9 } } });
+      b.ownerClient = owner;
+      b.PlayerManager = {
+        enemies: enemies, isEnemyByID: () => true,
+        lookingShield(o, t) {
+          if (o.weapon.current !== SHIELD) return false;
+          return M.getAngleDist(o.pos.current.angle(t.pos.current), o.angle) <= Math.PI / 3;
+        },
+      };
+      b.EnemyManager.nearestEnemy = enemies[0] || null;
+      b._module = new M.BotRangedAttack(b);
+      bots.push(b);
+    }
+    return { bots, owner };
+  };
+  const shield = mkEnemy(1, 1200, 1000, SHIELD, Math.PI);
+  const hidden = mkEnemy(2, 1000, 1400, 5, 0);
+  // ModuleHandler.postTick clears these at the top of every real tick; the stub
+  // has to do the same or a bot that acted once never acts again.
+  const fireAll = squad => squad.bots.forEach(b => {
+    b._ModuleHandler.moduleActive = false;
+    b._ModuleHandler.shouldAttack = false;
+    b._ModuleHandler.useAngle = null;
+    b._module.postTick();
+  });
+  const firing = squad => squad.bots.filter(b => b._ModuleHandler.shouldAttack).length;
+  const aimedAtShield = squad => squad.bots.filter(b => b._ModuleHandler.shouldAttack && Math.abs(D(b._ModuleHandler.useAngle)) < 1).length;
+
+  M.Settings_default._botVolley = false;
+  const noVolley = mkSquad(20, [shield, hidden]);
+  fireAll(noVolley);
+  check("off: all twenty fire at once", firing(noVolley) === 20, firing(noVolley) + "/20 firing");
+
+  M.Settings_default._botVolley = true;
+  M.Settings_default._botVolleyWave = 5;
+  const squad = mkSquad(20, [shield, hidden]);
+  fireAll(squad);
+  check("on: only the first wave looses", firing(squad) === 5, firing(squad) + "/20 firing on the opening tick");
+  check("the first wave shoots the shield, to shove it", aimedAtShield(squad) === 5,
+        aimedAtShield(squad) + "/5 aimed at the shield rather than past it");
+  const held = squad.bots.slice(5);
+  check("the rest are aimed and in position, just holding", held.every(b => b._module.active && b._ModuleHandler.useAngle !== null),
+        "15 bots holding, aimed at " + D(held[0]._ModuleHandler.useAngle) + " deg");
+  check("...and they are aimed past the shield, not at it", held.every(b => Math.abs(D(b._ModuleHandler.useAngle) - 90) < 1));
+
+  // Nothing changes until the gap has elapsed.
+  fireAll(squad);
+  check("still held on the next tick", firing(squad) === 5, firing(squad) + "/20");
+
+  // Once the shove has had time to land, everyone fires.
+  const realNow = Date.now;
+  Date.now = () => realNow() + M.BOT_VOLLEY_GAP_MS + 50;
+  fireAll(squad);
+  const after = firing(squad);
+  Date.now = realNow;
+  check("after the gap the whole line fires", after === 20, after + "/20 firing after " + M.BOT_VOLLEY_GAP_MS + "ms");
+
+  // Wave size is the slider.
+  M.Settings_default._botVolleyWave = 8;
+  const wide = mkSquad(20, [shield, hidden]);
+  fireAll(wide);
+  check("the slider sets the first wave", firing(wide) === 8, firing(wide) + "/20 with the slider at 8");
+  M.Settings_default._botVolleyWave = 5;
+  M.Settings_default._botVolley = false;
+
+  check("both toggles have a key", /_botVolleyKey: "Key[A-Z]"/.test(src) && /_botAvoidShieldKey: "Key[A-Z]"/.test(src),
+        (/_botAvoidShieldKey: "([^"]*)"/.exec(src) || [])[1] + " and " + (/_botVolleyKey: "([^"]*)"/.exec(src) || [])[1]);
+  check("neither key collides", (src.match(/: "KeyI"/g) || []).length === 1 && (src.match(/: "KeyU"/g) || []).length === 1);
+  check("both have a keybind tile", /_botAvoidShieldKey\\" class=\\"hotkeyInput/.test(src) && /_botVolleyKey\\" class=\\"hotkeyInput/.test(src));
+  check("the menu carries the volley rows", /_botVolley\\" type=\\"checkbox/.test(src) && /_botVolleyWave\\" type=\\"range/.test(src));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+head(8, "Be Angel — Halo and Angel Wings instead of Booster and Monkey Tail");
 {
   const HALO = 48, ANGEL = 13, BOOSTER = 12, TAIL = 11;
   const mkWearer = (isOwner, over = {}) => {
@@ -421,7 +508,7 @@ head(7, "Be Angel — Halo and Angel Wings instead of Booster and Monkey Tail");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-head(8, "Auto Place / Preplace / Replace still untouched");
+head(9, "Auto Place / Preplace / Replace still untouched");
 {
   const base = fs.readFileSync(__dirname + "/../src/RYN_Client_v5.3.js", "utf8");
   const slice = t => t.slice(t.indexOf("  const LUNA_SPIKE_TYPE"), t.indexOf("  const AutoPlacer_default = AutoPlacer;"));
