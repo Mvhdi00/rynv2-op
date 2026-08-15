@@ -1,0 +1,379 @@
+// Applies the five Novastorm ports to a pristine RYN v5.3 client and nothing
+// else. Every edit is an exact-string replacement asserted to match once, so a
+// drift in the source fails the build instead of silently producing a file with
+// a feature missing.
+//
+//   node tools/apply-novastorm-ports.js <in.js> <out.js>
+const fs = require("fs");
+
+const IN = process.argv[2];
+const OUT = process.argv[3];
+if (!IN || !OUT) {
+  console.error("usage: node tools/apply-novastorm-ports.js <in.js> <out.js>");
+  process.exit(1);
+}
+let s = fs.readFileSync(IN, "utf8");
+const edits = [];
+function sub(label, old, next, expect = 1) {
+  const n = s.split(old).length - 1;
+  if (n !== expect) throw new Error(`${label}: matched ${n} times, expected ${expect}`);
+  s = s.split(old).join(next);
+  edits.push(label);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. PACKETS
+// ─────────────────────────────────────────────────────────────────────────────
+sub("packets: transport counter",
+`    send(data) {
+      const [type, ...args] = data;
+      const gameNet = this.client._gameNet;
+      if (gameNet && gameNet.socket && typeof gameNet.send === "function") {`,
+`    // Novastorm budgets against 119 packets a second, which is the real server
+    // allowance — but it is a fork of the whole bundle, so its counter sees
+    // every frame that leaves. RYN only counts what its own modules send, and
+    // the game's bundle still sends frames of its own through the same socket.
+    // Raising the limit to novastorm's number without closing that gap would be
+    // budgeting against a number that is too low.
+    //
+    // So the count is taken at the transport instead: socket.send is wrapped
+    // once, and frames this class sent itself are skipped there because they
+    // were already counted here. Every frame is counted exactly once, whoever
+    // sent it, and the 119 budget then means what it means in novastorm.
+    _watchSocket(socket) {
+      if (!socket || typeof socket.send !== "function" || socket._rynCounted) return;
+      const original = socket.send;
+      const manager = this;
+      socket.send = function(...args) {
+        if (!manager._selfSend) manager.packetCount += 1;
+        return original.apply(this, args);
+      };
+      socket._rynCounted = true;
+    }
+    _selfSend=false;
+    send(data) {
+      this._selfSend = true;
+      try {
+        this._send(data);
+      } finally {
+        this._selfSend = false;
+      }
+    }
+    _send(data) {
+      const [type, ...args] = data;
+      const gameNet = this.client._gameNet;
+      if (gameNet && gameNet.socket && typeof gameNet.send === "function") {
+        this._watchSocket(gameNet.socket);`);
+
+sub("packets: watch bot socket",
+`      const {socket: socket, socketSend: socketSend} = this.client.SocketManager;
+      if (socket === null || socket.readyState !== socket.OPEN || socketSend === null) {
+        return;
+      }
+      const botCrypto = this.client._gameCrypto;`,
+`      const {socket: socket, socketSend: socketSend} = this.client.SocketManager;
+      if (socket === null || socket.readyState !== socket.OPEN || socketSend === null) {
+        return;
+      }
+      this._watchSocket(socket);
+      const botCrypto = this.client._gameCrypto;`);
+
+sub("packets: budget 70 -> 119",
+`    packetLimit=70;`,
+`    // Novastorm's budget: \`packets + 5 > 119\`. The server's own allowance is
+    // 120 a second, so 119 is the whole of it. RYN sat at 70 and left a third of
+    // the allowance unspent, which is why a busy tick ran out of packets while
+    // the connection was nowhere near its limit. Safe to take now that
+    // PacketManager counts frames at the transport rather than only its own.
+    packetLimit=119;`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. AUTOHEAL  (+ 3. ANTI SMART TICK, which shares the class)
+// ─────────────────────────────────────────────────────────────────────────────
+sub("autoheal: constants + blockBreak field",
+`  class AntiInsta {
+    moduleName="antiInsta";
+    client;
+    toggleAnti=false;`,
+`  // Novastorm caps totalDmgPot at 140 before comparing it against health, so a
+  // pile-up of five enemies does not read as more lethal than the two hits that
+  // will actually land. The +5 for hat 7 is its bias for scuba's lack of
+  // defence; the 0.75 for soldier is the hat's own dmgMult.
+  const ANTI_INSTA_DMG_CAP = 140;
+  const ANTI_INSTA_SCUBA_BIAS = 5;
+  class AntiInsta {
+    moduleName="antiInsta";
+    client;
+    blockBreak=false;
+    toggleAnti=false;`);
+
+sub("antismarttick: reset hook",
+`    isSaveHealTime() {`,
+`    reset() {
+      this.blockBreak = false;
+      this.forceHeal = false;
+    }
+    isSaveHealTime() {`);
+
+sub("antismarttick: knockback test",
+`            for (const spike of spikesEnemy) {
+              const sp = spike.pos.current;
+              const sc = spike.collisionScale;
+              const rx1 = sp.x - sc, ry1 = sp.y - sc;
+              const rx2 = sp.x + sc, ry2 = sp.y + sc;
+              const dx = projX - myPos.x, dy = projY - myPos.y;
+              const len2 = dx * dx + dy * dy;
+              let hits = false;
+              if (len2 === 0) {
+                hits = myPos.x >= rx1 && myPos.x <= rx2 && myPos.y >= ry1 && myPos.y <= ry2;
+              } else {
+                const t = Math.max(0, Math.min(1, ((rx1 + rx2) / 2 - myPos.x) * dx / len2 + ((ry1 + ry2) / 2 - myPos.y) * dy / len2));
+                const cx = myPos.x + t * dx, cy = myPos.y + t * dy;
+                hits = cx >= rx1 && cx <= rx2 && cy >= ry1 && cy <= ry2;
+              }
+              if (hits) {
+                shouldWait = true;
+                break;
+              }
+            }`,
+`            for (const spike of spikesEnemy) {
+              const sp = spike.pos.current;
+              // Would the knockback path actually put my body on that spike:
+              // distance from the spike to the segment, against both radii.
+              const dx = projX - myPos.x, dy = projY - myPos.y;
+              const len2 = dx * dx + dy * dy;
+              let t = len2 > 1e-9 ? ((sp.x - myPos.x) * dx + (sp.y - myPos.y) * dy) / len2 : 0;
+              if (t < 0) t = 0; else if (t > 1) t = 1;
+              const cx = myPos.x + t * dx, cy = myPos.y + t * dy;
+              if (Math.hypot(sp.x - cx, sp.y - cy) <= spike.collisionScale + myPlayer.scale) {
+                shouldWait = true;
+                break;
+              }
+            }`);
+
+sub("antismarttick: stall before committing",
+`      if (shouldWait && trapObj.health <= myHammerDmg) {
+        return true;
+      }
+      return false;
+    }`,
+`      // Novastorm does not spend the anti the moment it sees the danger. It
+      // stops breaking out, and then stalls on whichever weapon is still
+      // reloading — holding a weapon that cannot swing costs nothing and keeps
+      // the trap intact for another tick. Only when both weapons are ready, so
+      // there is nothing left to stall on, does it commit:
+      //
+      //     autoBreak = false;
+      //     if (secondaryReload < 1)    predictWeapon = weapons[1];
+      //     else if (primaryReload < 1) predictWeapon = weapons[0];
+      //     else return true;
+      //
+      // What was here committed on \`shouldWait\` alone, which burnt the heal on
+      // ticks where simply not swinging would have done.
+      if (shouldWait && trapObj.health <= myHammerDmg) {
+        this.blockBreak = true;
+        const {reloading: reloading} = ModuleHandler.staticModules;
+        if (!reloading.isReloaded(1)) {
+          ModuleHandler.forceWeapon = 1;
+          return false;
+        }
+        if (!reloading.isReloaded(0)) {
+          ModuleHandler.forceWeapon = 0;
+          return false;
+        }
+        return true;
+      }
+      this.blockBreak = false;
+      return false;
+    }`);
+
+sub("autobreak: honour the anti-smart-tick latch",
+`    postTick() {
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
+      if (!Settings_default._autobreak) {
+        return;
+      }
+      if (ModuleHandler.moduleActive && !myPlayer.isTrapped) {
+        return;
+      }`,
+`    postTick() {
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ObjectManager: ObjectManager3, PlayerManager: PlayerManager3} = this.client;
+      if (!Settings_default._autobreak) {
+        return;
+      }
+      // Novastorm's Anti Smart Tick sets \`autoBreak = false\` when breaking out of
+      // the trap would fly me into their spike. This module runs before AntiInsta,
+      // so the latch it sets is read on the tick after — which is the tick that
+      // matters, because the situation it detects lasts until the trap or the
+      // spike is gone.
+      if (ModuleHandler.staticModules.antiInsta?.blockBreak) {
+        return;
+      }
+      if (ModuleHandler.moduleActive && !myPlayer.isTrapped) {
+        return;
+      }`);
+
+// The heal decision itself: replace AntiInsta.postTick wholesale.
+{
+  const marker = "  const AntiInsta_default = AntiInsta;";
+  const end = s.indexOf(marker);
+  if (end < 0) throw new Error("autoheal: AntiInsta_default not found");
+  const start = s.lastIndexOf("    postTick() {", end);
+  if (start < 0) throw new Error("autoheal: AntiInsta.postTick not found");
+  // Everything from postTick to just before the class' closing brace.
+  const tail = s.slice(start, end);
+  const closeAt = tail.lastIndexOf("  }\n");
+  if (closeAt < 0) throw new Error("autoheal: class close not found");
+  s = s.slice(0, start) + fs.readFileSync(__dirname + "/novastorm-autoheal.js", "utf8").replace(/\n$/, "\n") + tail.slice(closeAt) + s.slice(end);
+  edits.push("autoheal: novastorm's damage-potential rule");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. AUTO MILLS
+// ─────────────────────────────────────────────────────────────────────────────
+sub("automill: place cost constant",
+`  class Automill {
+    moduleName="autoMill";`,
+`  // ModuleHandler.place() spends selectItem + attack + stopAttack + whichWeapon.
+  const AUTOMILL_PLACE_COST = 5;
+  class Automill {
+    moduleName="autoMill";`);
+
+sub("automill: combat gating",
+`    get canAutomill() {
+      const isOwner = this.client.isOwner;
+      const {attacking: attacking, placedOnce: placedOnce, staticModules: staticModules} = this.client._ModuleHandler;
+      return Settings_default._automill && this.client.myPlayer.isSandbox && !placedOnce && (!isOwner || !attacking) && this.active && !staticModules.autoBuy.boughtEverything() && this.client.myPlayer.age < 20;
+    }`,
+`    // Novastorm's automill is a combat mill, not an XP mill:
+    //
+    //     if (autoMills && lastMoveAngle != null && !nearestTrap) { ... }
+    //
+    // Three windmills dropped behind you as you move, any time, on a keybind.
+    // What was here was gated on \`myPlayer.isSandbox\`, \`age < 20\` and
+    // \`!autoBuy.boughtEverything()\` — an opening-minutes XP grinder that could
+    // not run in a real game at all, which is why the toggle appeared to do
+    // nothing. Those three gates are gone. \`!nearestTrap\` is novastorm's, and it
+    // matters: milling while pinned walls you into your own trap.
+    get canAutomill() {
+      const isOwner = this.client.isOwner;
+      const {attacking: attacking, placedOnce: placedOnce} = this.client._ModuleHandler;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      if (!Settings_default._automill || !this.active) return false;
+      if (placedOnce) return false;
+      if (isOwner && attacking) return false;
+      if (myPlayer.isTrapped || EnemyManager2.nearestTrap !== null) return false;
+      return true;
+    }`);
+
+sub("automill: no permanent latch",
+`      if (!myPlayer.canPlace(5)) {
+        this.toggle = false;
+        this.active = false;
+        return;
+      }`,
+`      // Novastorm re-tests canPlace every tick rather than latching. Latching
+      // \`active = false\` on the first refusal meant hitting the windmill cap once
+      // disabled automill until the next death, which is wrong for a mill you
+      // drop and lose continuously in a fight.
+      if (!myPlayer.canPlace(5)) {
+        this.toggle = false;
+        return;
+      }`);
+
+sub("automill: place each of the three on its own",
+`      if (this.canPlaceWindmill(angle) && this.canPlaceWindmill(leftAngle) && this.canPlaceWindmill(rightAngle)) {
+        this.placeWindmill(angle);
+        this.placeWindmill(leftAngle);
+        this.placeWindmill(rightAngle);
+      }`,
+`      // Novastorm gates the trio on the centre mill being placeable, then tests
+      // each of the three on its own and places the ones that fit. Requiring all
+      // three, as this did, meant one rock behind you cancelled the whole thing.
+      // The offset stays RYN's exact solve rather than novastorm's
+      // \`toRad(scale + scale / 2)\`, which is a degrees-for-radians approximation
+      // that only lands near the right answer for a windmill's scale.
+      if (!this.canPlaceWindmill(angle)) {
+        return;
+      }
+      const budget = ModuleHandler.packetLimit - ModuleHandler.packetCount;
+      let spend = Math.floor(budget / AUTOMILL_PLACE_COST);
+      for (const a of [ angle, leftAngle, rightAngle ]) {
+        if (spend <= 0) break;
+        if (!myPlayer.canPlace(5)) break;
+        if (!this.canPlaceWindmill(a)) continue;
+        this.placeWindmill(a);
+        spend--;
+      }`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. SAFE SOLDIER
+// ─────────────────────────────────────────────────────────────────────────────
+sub("safesoldier: range constant",
+`  class ModuleHandler {`,
+`  // Novastorm's Safe Soldier radius.
+  const SAFE_SOLDIER_RANGE = 300;
+  class ModuleHandler {`);
+
+sub("safesoldier: equip block",
+`      if (_canSoldier && Settings_default._antienemy) {
+        const _nearest = _em.nearestEnemy;
+        const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
+        const _primary2 = _mp.getItemByType(0);
+        const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
+        const _isClose = _nearest !== null && _mp.pos.current.distance(_nearest.pos.current) <= _atkRange + 20;
+        if (_isDanger || _isClose) {`,
+`      if (_canSoldier && Settings_default._antienemy) {
+        const _nearest = _em.nearestEnemy;
+        const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
+        const _primary2 = _mp.getItemByType(0);
+        const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
+        const _dist = _nearest !== null ? _mp.pos.current.distance(_nearest.pos.current) : Infinity;
+        const _isClose = _dist <= _atkRange + 20;
+        // Novastorm's Safe Soldier:
+        //
+        //     if (isBoughtHat(6,0) && nearestEnemy
+        //         && getDistance(nearestEnemy, myPlayer) < 300
+        //         && window.vars.safeSoldier) currentHat = 6;
+        //
+        // A flat 300px, wider than the weapon-reach test above it. The reach test
+        // only puts soldier on once they are already able to hit you, which is a
+        // tick too late against anything that closes fast — a bull-hat rush or a
+        // spike push covers the gap between reach and 300 inside one tick.
+        const _safeSoldier = Settings_default._safeSoldier && _dist < SAFE_SOLDIER_RANGE;
+        if (_isDanger || _isClose || _safeSoldier) {`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS + MENU
+// ─────────────────────────────────────────────────────────────────────────────
+sub("settings: new toggles",
+`    _antiSpikeTick: true,`,
+`    _antiSpikeTick: true,
+    _antiSmartTick: true,
+    _safeSoldier: true,`);
+
+sub("settings: automill off by default",
+`    _automill: true,`,
+`    // Off by default, like novastorm's \`autoMills = false\`. It is now a real
+    // combat mill rather than a sandbox-only XP grinder, so leaving it on would
+    // drop windmills behind every player from the first spawn.
+    _automill: false,`);
+
+const antiSpikeRow = `            <div class=\\"content-option\\">\\r\\n                <label class=\\"option-title\\" for=\\"_antiSpikeTick\\">Anti Spike Tick</label>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_antiSpikeTick\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`;
+sub("menu: Anti Smart Tick row", antiSpikeRow,
+  antiSpikeRow + `            <div class=\\"content-option\\">\\r\\n                <label class=\\"option-title\\" for=\\"_antiSmartTick\\">Anti Smart Tick</label>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_antiSmartTick\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`);
+
+const soldierRow = `            <div class=\\"content-option\\">\\r\\n                <label class=\\"option-title\\" for=\\"_soldierDefault\\">Soldier default</label>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_soldierDefault\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n\\r\\n            </div>\\r\\n`;
+sub("menu: Safe Soldier row", soldierRow,
+  soldierRow + `            <div class=\\"content-option\\">\\r\\n                <label class=\\"option-title\\" for=\\"_safeSoldier\\">Safe Soldier</label>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_safeSoldier\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`);
+
+// ─────────────────────────────────────────────────────────────────────────────
+sub("header: version", `// @version         v5\n`, `// @version         v5.4\n`);
+sub("header: description",
+  `// @description     ! have fun\n`,
+  `// @description     ! have fun — v5.4 ports autoheal, automill, anti smart tick, safe soldier and the packet budget from Novastorm\n`);
+
+fs.writeFileSync(OUT, s);
+console.log("applied " + edits.length + " edits:");
+for (const e of edits) console.log("  · " + e);
+console.log("wrote " + OUT);

@@ -4,7 +4,7 @@
 const fs = require("fs");
 const vm = require("vm");
 
-const FILE = process.argv[2] || __dirname + "/../RYN_v5.4_Placement.user.js";
+const FILE = process.argv[2] || __dirname + "/../RYN_v5.4.user.js";
 const lines = fs.readFileSync(FILE, "utf8").split("\n");
 const find = pfx => {
   const i = lines.findIndex(l => l.startsWith(pfx));
