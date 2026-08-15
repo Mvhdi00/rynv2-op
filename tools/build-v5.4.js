@@ -1,15 +1,19 @@
-// Applies the five Novastorm ports to a pristine RYN v5.3 client and nothing
-// else. Every edit is an exact-string replacement asserted to match once, so a
-// drift in the source fails the build instead of silently producing a file with
-// a feature missing.
+// Builds RYN v5.4 from a pristine v5.3 client. Two sections:
 //
-//   node tools/apply-novastorm-ports.js <in.js> <out.js>
+//   A. the five Novastorm ports
+//   B. bot random movement — binding and fixing RYN's own Scatter Bots
+//
+// Auto Place / Preplace / Replace are deliberately untouched. Every edit is an
+// exact-string replacement asserted to match once, so a drift in the source
+// fails the build instead of silently producing a file with a feature missing.
+//
+//   node tools/build-v5.4.js <in.js> <out.js>
 const fs = require("fs");
 
 const IN = process.argv[2];
 const OUT = process.argv[3];
 if (!IN || !OUT) {
-  console.error("usage: node tools/apply-novastorm-ports.js <in.js> <out.js>");
+  console.error("usage: node tools/build-v5.4.js <in.js> <out.js>");
   process.exit(1);
 }
 let s = fs.readFileSync(IN, "utf8");
@@ -368,6 +372,150 @@ sub("menu: Safe Soldier row", soldierRow,
   soldierRow + `            <div class=\\"content-option\\">\\r\\n                <label class=\\"option-title\\" for=\\"_safeSoldier\\">Safe Soldier</label>\\r\\n                <label class=\\"switch-checkbox\\">\\r\\n                    <input id=\\"_safeSoldier\\" type=\\"checkbox\\"></input>\\r\\n                    <span></span>\\r\\n                </label>\\r\\n            </div>\\r\\n`);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// B. BOT RANDOM MOVEMENT
+//
+// x18 has no bot movement to port. Its Bots menu — "Send bots", "Close bots",
+// `botcount`, `botname`, `botplatformplacer` — has no implementation behind it:
+// the two buttons carry no event listener and the three settings have no
+// readers anywhere in the file. `altPlayerManager` is an iframe alt player, not
+// a bot fleet.
+//
+// RYN already has exactly the feature being asked for, in Scatter Bots: each bot
+// picks its own random heading on a timer, refuses to backtrack, steers around
+// obstacles, repels off other players, and on toggle-off walks everyone home and
+// hands them back to normal movement. It ships unusable, and these edits are
+// what make it work as described.
+// ─────────────────────────────────────────────────────────────────────────────
+
+sub("bots: bind the toggle and make the state global",
+`    _scatterBots: "",`,
+`    // Was "" — unbound, so \`event.code === Settings._scatterBots\` could never
+    // be true and the whole Scatter Bots feature was unreachable. KeyJ is free.
+    _scatterBots: "KeyJ",
+    // The on/off state lives here rather than being read back off the first
+    // bot's ModuleHandler, so a bot spawned while random movement is on joins in
+    // instead of standing still, and killing every bot does not lose the state.
+    _botsScattered: false,`);
+
+sub("bots: toggle drives the flag, not the first bot",
+`      if (event.code === Settings_default._scatterBots && Settings_default._scatterBots !== "...") {
+        try {
+          const {isOwner: _sbIsOwner, clients: _sbClients} = this.client;
+          if (_sbIsOwner) {
+            const _sbFirst = [ ..._sbClients ][0];
+            const _sbCurrentlyActive = _sbFirst && _sbFirst._ModuleHandler && _sbFirst._ModuleHandler._scatterActive;
+            if (_sbCurrentlyActive) {
+              for (const _sbBot of _sbClients) {
+                const _sbMH = _sbBot._ModuleHandler;
+                if (!_sbMH) continue;
+                _sbMH._scatterActive = false;
+                _sbMH._scatterDest = null;
+                _sbMH._scatterReturning = true;
+                _sbMH._scatterBreaking = false;
+                _sbMH._scatterBreakTarget = null;
+                _sbMH._scatterNextDecisionTime = 0;
+              }
+            } else {
+              for (const _sbBot of _sbClients) {
+                const _sbMH = _sbBot._ModuleHandler;
+                if (!_sbMH) continue;
+                _sbMH._scatterActive = true;
+                _sbMH._scatterReturning = false;
+                _sbMH._scatterBreaking = false;
+                _sbMH._scatterBreakTarget = null;
+                _sbMH._scatterLastMoveAngle = null;
+                _sbMH._scatterNextDecisionTime = 0;
+                _sbMH._scatterLastPos = null;
+                _sbMH._scatterStuckStrikes = 0;
+              }
+            }
+          }
+        } catch (_) {}
+      }`,
+`      // The guard used to compare against "..." while the default was "", so
+      // even a user who never touched the tile had a bind the handler could not
+      // recognise. An unset bind is now anything falsy or a placeholder.
+      if (Settings_default._scatterBots && Settings_default._scatterBots !== "..." && event.code === Settings_default._scatterBots) {
+        try {
+          const {isOwner: _sbIsOwner, clients: _sbClients} = this.client;
+          if (_sbIsOwner) {
+            // Flipping one flag is the whole toggle. The loop below reconciles
+            // every bot to it each frame, which is what lets a bot spawned mid
+            // session pick the mode up, and what stops the state going stale
+            // when the bot the old code sampled happens to be dead.
+            Settings_default._botsScattered = !Settings_default._botsScattered;
+            SaveSettings();
+            if (!Settings_default._botsScattered) {
+              for (const _sbBot of _sbClients) {
+                const _sbMH = _sbBot._ModuleHandler;
+                if (!_sbMH || !_sbMH._scatterActive) continue;
+                _sbMH._scatterActive = false;
+                _sbMH._scatterDest = null;
+                _sbMH._scatterReturning = true;
+                _sbMH._scatterReturnDeadline = Date.now() + SCATTER_RETURN_TIMEOUT_MS;
+                _sbMH._scatterBreaking = false;
+                _sbMH._scatterBreakTarget = null;
+                _sbMH._scatterNextDecisionTime = 0;
+              }
+            }
+          }
+        } catch (_) {}
+      }`);
+
+sub("bots: return timeout constant",
+`  const _SC_DECISION_MS = 1200;`,
+`  // A bot walking home can be blocked, or the owner can be dead or across the
+  // map, and "returning" is a state that suppresses normal movement. Without a
+  // deadline a bot that never reaches the owner never moves normally again.
+  const SCATTER_RETURN_TIMEOUT_MS = 8e3;
+  const _SC_DECISION_MS = 1200;`);
+
+sub("bots: reconcile every bot to the flag each frame",
+`        for (const _sc_bot of _sc_client.clients) {
+          const _sc_mh = _sc_bot._ModuleHandler;
+          if (!_sc_mh || (!_sc_mh._scatterActive && !_sc_mh._scatterReturning)) continue;`,
+`        for (const _sc_bot of _sc_client.clients) {
+          const _sc_mh = _sc_bot._ModuleHandler;
+          if (!_sc_mh) continue;
+          // Bring this bot in line with the toggle. A bot that connected after
+          // random movement was switched on starts wandering here rather than
+          // trailing the owner on its own.
+          if (Settings_default._botsScattered && !_sc_mh._scatterActive) {
+            _sc_mh._scatterActive = true;
+            _sc_mh._scatterReturning = false;
+            _sc_mh._scatterBreaking = false;
+            _sc_mh._scatterBreakTarget = null;
+            _sc_mh._scatterLastMoveAngle = null;
+            _sc_mh._scatterNextDecisionTime = 0;
+            _sc_mh._scatterLastPos = null;
+            _sc_mh._scatterStuckStrikes = 0;
+          }
+          if (!_sc_mh._scatterActive && !_sc_mh._scatterReturning) continue;`);
+
+sub("bots: give up on walking home after the timeout",
+`          if (_sc_mh._scatterReturning) {
+            const owner = _sc_client.myPlayer;
+            const op = owner && owner.pos && owner.pos.current;
+            if (op) {`,
+`          if (_sc_mh._scatterReturning) {
+            if (_sc_now >= (_sc_mh._scatterReturnDeadline || 0)) {
+              // Home or not, hand it back to normal movement — Movement.postTick
+              // only steps aside while one of these two flags is set.
+              _sc_mh._scatterReturning = false;
+              _sc_mh._scatterBreaking = false;
+              _sc_mh._scatterBreakTarget = null;
+              _sc_mh.startMovement(null);
+              continue;
+            }
+            const owner = _sc_client.myPlayer;
+            const op = owner && owner.pos && owner.pos.current;
+            if (op) {`);
+
+sub("menu: name the tile after what it does",
+`                <span class=\\"option-title\\">Scatter Bots</span>`,
+`                <span class=\\"option-title\\">Bot Random Movement</span>`);
+
 sub("header: version", `// @version         v5\n`, `// @version         v5.4\n`);
 sub("header: description",
   `// @description     ! have fun\n`,

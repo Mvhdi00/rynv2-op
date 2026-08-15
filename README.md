@@ -201,4 +201,24 @@ everything it calls is byte-identical to v5.3.
 | **Safe Soldier** | soldier went on at weapon reach + 20px, a tick late against anything that closes fast | novastorm's flat 300px radius, as a new `Safe Soldier` toggle, alongside the existing reach and danger tests |
 | **Packets** | budget of 70/sec, counting only what RYN itself sent | novastorm's 119 — the whole server allowance. Safe to take because `socket.send` is now wrapped at the transport so the game bundle's own frames count too; frames sent through `PacketManager` are skipped there to avoid double counting |
 
+## Bot random movement
+
+x18 has no bot movement to take. Its Bots menu — "Send bots", "Close bots",
+`botcount`, `botname`, `botplatformplacer` — has no implementation behind it:
+the two buttons carry no event listener and the three settings have no readers
+anywhere in the file. `altPlayerManager` is an iframe alt player, not a fleet.
+
+RYN already had the feature, in **Scatter Bots**: each bot picks its own random
+heading on a timer, refuses to double back, steers around obstacles, repels off
+other players, and on toggle-off walks everyone home and hands them back to
+normal movement. It shipped unusable. What changed:
+
+| | was | is |
+|---|---|---|
+| **The key** | `_scatterBots: ""` — unbound, so `event.code === Settings._scatterBots` was never true and the feature was unreachable | bound to **`J`**. The tile is renamed `Bot Random Movement` |
+| **Bind check** | guarded on `!== "..."` while the default was `""`, so an untouched bind was a value the handler could not recognise | any falsy or placeholder bind counts as unset |
+| **Toggle state** | read back off `clients[0]._ModuleHandler._scatterActive` | a persisted `Settings._botsScattered`, reconciled onto every bot each frame |
+| **Late bots** | a bot spawned after the toggle kept trailing the owner while the rest wandered | joins the mode on its next frame |
+| **Coming back** | "returning" ended only on getting within 120px of the owner — a blocked bot, or a dead or distant owner, left it suppressing normal movement forever | an 8s deadline hands it back regardless |
+
 See `tests/README.md` for the build and test commands.
