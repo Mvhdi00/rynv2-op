@@ -81,6 +81,45 @@ how the cost of a change gets compared against the build before it.
 
 ---
 
+## The autoheal (RYN v5.4)
+
+Replaced with **auraro 5.5's**, which is the strongest of the four clients on
+this one, ported the same way the placer was: auraro's decisions and constants
+kept as written, only the data access rewired onto RYN's managers.
+
+The rule everything here is built around is in the game bundle
+(`src/game_index.js:2461`): food eaten **within 120ms** of the last hit is
+`shameCount + 1`, later is `-2`, and **eight of them is a 30-second lockout** —
+no food at all, which is a death sentence. So the question is never how fast you
+eat, it is when the packet lands.
+
+| | |
+|---|---|
+| **The delay** | `setTimeout(heal, max(50, 140 - ping))`, started from the health packet rather than from the next tick. The server measures from the hit it dealt to the food arriving, which is your wait plus the whole round trip — so taking the ping out of the wait puts the food a fixed ~140ms after the hit at any ping, past the window, where it takes 2 shame off instead of adding 1. |
+| **The two-hand rule** | Their primary and their secondary-plus-turret cannot both land in the same tick, so the threat is the sum minus the smaller of the two, not the sum. Counting both reads an ordinary trade as lethal and spends food and shame on it. |
+| **The shame ceiling** | Not a constant: 6 against a polearm with a ranged off-hand, 3 against the bow classes, 5 otherwise — and **7 when a spike is on you while pinned**, the one case where the 30-second lockout is further away than the death is. |
+| **Emergency vs top-up** | If the burst on the board would take the whole bar, it eats immediately and accepts the +1. The delayed timer still runs afterwards and tops up in the safe window. |
+| **Kept from RYN** | `shameActive` (do not spend food the server is refusing), the in-flight batch count (`tempHealth` only moves when the server echoes, so without it the same missing health is paid for once per tick for a whole round trip and every apple past the first lands at full health — which is the other way shame goes up), and Anti Smart Tick, which auraro has no equivalent for. |
+
+**Bug this replaced.** The old code timed the same idea twice and let the wrong
+one win: `AntiInsta` measured a ping-compensated 125ms while
+`ModuleHandler.heal()` queued anything inside a flat 130ms. The emergency heal
+that is supposed to trade +1 shame for a life went into that queue and came out
+a tick or two later. `heal()` now compensates for ping like everything else, and
+the ported path sends through `healNow()`, which does not queue.
+
+**What none of them can do.** Pressed against a spike you take a hit every
+server tick (~111ms), and the safe window needs 120ms of quiet — so it does not
+exist, and every heal shames. No client out-heals a spike; the only real answers
+are to stop touching it and to not walk into the lockout. That is why the
+ceiling goes to 7 there and no further.
+
+```sh
+node tools/test-heal.js         # 36 checks, on a faked clock
+```
+
+---
+
 ## ReUp Mix (Luna × Ryn)
 
 A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client
@@ -211,6 +250,7 @@ tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/test-placer.js      runs RYN v5.4's placer against a mocked world
+tools/test-heal.js        runs RYN v5.4's autoheal against a faked clock
 ```
 
 ## Build

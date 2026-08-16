@@ -2612,6 +2612,9 @@ window.grbtp = 35;
     potentialSpikeKnockbackDamage=0;
     potentialSpikeDamage=0;
     potentialDamage=0;
+    potentialPrimary=0;
+    potentialSecondary=0;
+    potentialTurret=0;
     primaryDamage=0;
     detectedDanger=false;
     reverseInsta=false;
@@ -2676,6 +2679,9 @@ window.grbtp = 35;
       this.potentialSpikeKnockbackDamage = 0;
       this.potentialSpikeDamage = 0;
       this.potentialDamage = 0;
+      this.potentialPrimary = 0;
+      this.potentialSecondary = 0;
+      this.potentialTurret = 0;
       this.detectedDanger = false;
       this.reverseInsta = false;
       this.rangedBowInsta = false;
@@ -2770,6 +2776,9 @@ window.grbtp = 35;
         this.potentialSpikeDamage = Math.max(this.potentialSpikeDamage, enemy.spikeDamage);
       }
       this.potentialDamage += enemy.potentialDamage;
+      this.potentialPrimary += enemy.potentialPrimary;
+      this.potentialSecondary += enemy.potentialSecondary;
+      this.potentialTurret += enemy.potentialTurret;
       this.primaryDamage = Math.max(enemy.primaryDamage, this.primaryDamage);
       if (enemy.prevDanger !== enemy.danger && enemy.danger >= 2) {
         this.detectedDanger = true;
@@ -3254,6 +3263,11 @@ window.grbtp = 35;
     trappedInPrev=null;
     isFullyUpgraded=false;
     potentialDamage=0;
+    // auraro's damageSources, split out so the heal can subtract the smaller of
+    // the two hands rather than adding both — see AntiInsta._damageSources.
+    potentialPrimary=0;
+    potentialSecondary=0;
+    potentialTurret=0;
     primaryDamage=0;
     spikeDamage=0;
     dangerList=[];
@@ -3265,6 +3279,7 @@ window.grbtp = 35;
     shameTimer=0;
     shameCount=0;
     receivedDamage=null;
+    lastDamage=0;
     bullTick=0;
     poisonCount=0;
     isDmgOverTime=false;
@@ -3389,6 +3404,9 @@ window.grbtp = 35;
       this.storeData[1] = accessoryID;
       this.newlyCreated = false;
       this.potentialDamage = 0;
+      this.potentialPrimary = 0;
+      this.potentialSecondary = 0;
+      this.potentialTurret = 0;
       this.primaryDamage = 0;
       this.spikeDamage = 0;
       this.canPlaceSpikePrev = this.canPlaceSpike;
@@ -3441,6 +3459,7 @@ window.grbtp = 35;
       const difference = Math.abs(currentHealth - previousHealth);
       if (this.currentHealth < this.previousHealth) {
         this.receivedDamage = Date.now();
+        this.lastDamage = difference;
         if (this.damageTick !== this.tickCount + 1) {
           this.tickDamage = 0;
           this.stackedDamage = 0;
@@ -3865,6 +3884,7 @@ window.grbtp = 35;
       if (collidingPrimary) {
         if (primaryReloaded) {
           this.potentialDamage += primaryDamage;
+          this.potentialPrimary += primaryDamage;
           this.primaryDamage = primaryDamage;
           spikeSyncDamage += primaryDamage;
         }
@@ -3873,6 +3893,7 @@ window.grbtp = 35;
       if (collidingSecondary) {
         if (this.isReloaded(1, 1)) {
           this.potentialDamage += secondaryDamage;
+          this.potentialSecondary += secondaryDamage;
         }
         if (DataHandler_default.isMelee(secondary)) {
           includeTurret = true;
@@ -3880,6 +3901,7 @@ window.grbtp = 35;
       }
       if (this.isReloaded(2, 1) && includeTurret && !lookingShield) {
         this.potentialDamage += 25;
+        this.potentialTurret += 25;
       }
       if (collidingPrimary && collidingSecondary && collidingTurret && this.isEmptyReload(1) && this.isEmptyReload(2) && primaryReloaded) {
         this.reverseInsta = true;
@@ -6305,12 +6327,21 @@ window.grbtp = 35;
       if (!this.inGame) {
         return;
       }
+      const before = this.currentHealth;
       super.updateHealth(health);
       if (this.shameActive) {
         return;
       }
+      const {_ModuleHandler: ModuleHandler} = this.client;
+      // auraro hangs its heal off updateHealth rather than off the tick,
+      // because the delay it wants is measured from the hit itself. A tick
+      // boundary is up to 111ms of that budget spent before the timer starts.
+      if (health < before) {
+        try {
+          ModuleHandler.staticModules.antiInsta.onDamage(before - health);
+        } catch (_) {}
+      }
       if (health < 100) {
-        const {_ModuleHandler: ModuleHandler} = this.client;
         ModuleHandler.staticModules.shameReset.healthUpdate();
       }
     }
@@ -12287,6 +12318,185 @@ window.grbtp = 35;
     isSaveHeal() {
       return this.isSaveHealTime() && this.isSaveHealTick();
     }
+
+    // ── auraro's heal, ported ─────────────────────────────────────────────
+    //
+    // The pieces below are auraro 5.5's, kept as they are written there. What
+    // is rewired is only where the numbers come from: `player.health` becomes
+    // myPlayer.tempHealth, `damageSources` is rebuilt from what EnemyManager
+    // already computes per enemy, `near.primaryIndex` becomes the nearest
+    // enemy's weapon slots, `window.ping` becomes SocketManager.pong, and
+    // `healer()` becomes ModuleHandler heal presses.
+    //
+    // Why this and not what was here: the game shames a heal that lands inside
+    // 120ms of the last hit (+1, and eight of those is a 30 second lockout) and
+    // rewards one that lands after it (-2). auraro is the only one of the four
+    // clients that times the send against that window with the round trip taken
+    // out of it, and the only one that raises its own shame ceiling in the case
+    // where the shame is worth eating — pinned, with a spike on you.
+    //
+    //     healTimeout = setTimeout(() => {
+    //         if (player.health < player.maxHealth && !my.healed) {
+    //             my.healed = true; healer();
+    //         }
+    //     }, Math.max(50, 140 - (window.ping || 0)));
+    //
+    // The old code timed the same idea two different ways and let the more
+    // conservative one win: AntiInsta measured a ping-compensated 125ms while
+    // ModuleHandler.heal() queued anything inside a flat 130ms, so the
+    // emergency heal that is supposed to trade +1 shame for a life was going
+    // into a queue and coming out a tick or two later. Both are gone.
+    HEAL_DELAY_BASE=140;
+    HEAL_DELAY_FLOOR=50;
+    _advHeal=[];
+    _healed=false;
+    _healTimer=null;
+    _bullTickTick=-1;
+
+    // auraro: damageSources.totalNoSoldier / totalSoldier. The sum of every
+    // source minus the smaller of "their primary" and "their secondary plus
+    // turret" — both hands cannot land in the same tick, so counting both
+    // reads a trade as lethal when it is not.
+    _damageSources() {
+      const EnemyManager2 = this.client.EnemyManager;
+      const sum = EnemyManager2.potentialDamage + EnemyManager2.potentialSpikeDamage;
+      const primary = EnemyManager2.potentialPrimary;
+      const otherHand = EnemyManager2.potentialSecondary + EnemyManager2.potentialTurret;
+      const totalNoSoldier = Math.max(0, sum - Math.min(primary, otherHand));
+      return {
+        totalNoSoldier: totalNoSoldier,
+        totalSoldier: totalNoSoldier * Hats[6].dmgMult
+      };
+    }
+
+    // auraro's shame ceiling. It is not a constant: how much shame is worth
+    // eating depends on what is pointed at you, and being pinned with a spike
+    // on you is the case where dying is the certain outcome and shame is not.
+    //
+    //     shame = near.primaryIndex == 5 && [undefined,9,12,13,15].includes(near.secondaryIndex) ? 6
+    //           : [7,8].includes(near.primaryIndex) ? 3 : 5;
+    //     if (hitSpike && (inTrap || lastTrap)) shame = 7;
+    _shameCeiling(myPlayer, nearestEnemy, hitSpike) {
+      let shame = 5;
+      if (nearestEnemy) {
+        const primary = nearestEnemy.weapon?.primary;
+        const secondary = nearestEnemy.weapon?.secondary;
+        if (primary === 5 && [ void 0, null, 9, 12, 13, 15 ].includes(secondary)) {
+          shame = 6;
+        } else if (primary === 7 || primary === 8) {
+          shame = 3;
+        }
+      }
+      if (hitSpike && (myPlayer.isTrapped || myPlayer.trappedInPrev)) {
+        shame = 7;
+      }
+      return shame;
+    }
+
+    // auraro's healthBased(): enough food to close the gap, no more. The
+    // in-flight count is RYN's and stays — tempHealth only moves when the
+    // server echoes, so without it the same missing health is paid for once per
+    // tick for the whole round trip, and every apple past the first lands at
+    // full health, which is the other way shame goes up.
+    _healer(extra = 0) {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (myPlayer.shameActive) return;
+      const foodID = myPlayer.getItemByType(2);
+      if (foodID === null || foodID === void 0 || !Items[foodID]) return;
+      const restore = Items[foodID].restore;
+      const inFlight = this._healsInFlight(ModuleHandler);
+      const needTimes = Math.max(0, Math.ceil((myPlayer.maxHealth - myPlayer.tempHealth) / restore) - inFlight) + extra;
+      if (needTimes <= 0) return;
+      for (let i = 0; i < needTimes; i++) ModuleHandler.healNow();
+      ModuleHandler.healedOnce = true;
+      this._healSent = {
+        count: needTimes,
+        tick: ModuleHandler.tickCount,
+        health: myPlayer.tempHealth
+      };
+    }
+
+    // auraro's updateHealth hook. Every point of damage restarts one timer, and
+    // when it fires the heal lands `HEAL_DELAY_BASE` after the hit whatever the
+    // ping is — past the 120ms window, so it takes 2 shame off instead of
+    // adding 1. If an emergency heal already went out this window the timer
+    // stands down.
+    onDamage(damaged) {
+      if (!Settings_default._autoheal) return;
+      this._advHeal.push(damaged);
+      const socket = this.client.SocketManager;
+      const pong = socket && Number.isFinite(socket.pong) ? socket.pong : 0;
+      const delay = Math.max(this.HEAL_DELAY_FLOOR, this.HEAL_DELAY_BASE - pong);
+      if (this._healTimer !== null) clearTimeout(this._healTimer);
+      this._healTimer = setTimeout(() => {
+        this._healTimer = null;
+        try {
+          const myPlayer = this.client.myPlayer;
+          if (!myPlayer || !myPlayer.inGame) return;
+          if (myPlayer.tempHealth >= myPlayer.maxHealth) return;
+          if (this._healed) return;
+          this._healed = true;
+          this._healer();
+        } catch (_) {}
+      }, delay);
+    }
+
+    // auraro's advHeal loop, run once a tick over the damage that arrived since
+    // the last one.
+    _runAdvHeal(myPlayer, ModuleHandler, nearestEnemy) {
+      if (this._advHeal.length === 0) return;
+      const EnemyManager2 = this.client.EnemyManager;
+      const maxHealth = myPlayer.maxHealth;
+      const soldier = myPlayer.hatID === 6;
+      // auraro's hitSpike: the damage taken matches what a spike we are
+      // touching deals, soldier's reduction included.
+      const spikeDamage = EnemyManager2.potentialSpikeDamage || 35;
+      let hitSpike = 0;
+      for (const damaged of this._advHeal) {
+        if (EnemyManager2.collidingSpike && Math.abs(damaged - spikeDamage * (soldier ? Hats[6].dmgMult : 1)) < 1e-6) {
+          hitSpike = spikeDamage;
+        }
+      }
+      const shame = this._shameCeiling(myPlayer, nearestEnemy, hitSpike);
+      const sources = this._damageSources();
+      const damageIfSoldier = sources.totalSoldier;
+      const missing = maxHealth - myPlayer.tempHealth;
+      const bullTickDmg = 5;
+      // auraro reads the enemy's off-hand to decide whether the damage it just
+      // took can be attributed to a known melee value; the ranged slots below
+      // are the ones it lists.
+      const rangedOffHand = nearestEnemy ? [ void 0, null, 9, 12, 13, 15 ].includes(nearestEnemy.weapon?.secondary) : true;
+
+      for (const damaged of this._advHeal) {
+        if (this._healed) break;
+        if (missing + damageIfSoldier < maxHealth) continue;
+        if (myPlayer.shameCount >= shame) continue;
+        const known = [ 18.75, 22.5, 25, 26.25, 30, 35, 37.5, 50 ].includes(damaged);
+        if (rangedOffHand && known) {
+          this._healed = true;
+          this._healer();
+        } else if (rangedOffHand && damaged > 39 && damaged < 80) {
+          if (missing + (EnemyManager2.potentialTurret > 0 ? sources.totalNoSoldier : sources.totalSoldier) >= maxHealth) {
+            this._healed = true;
+            this._healer();
+          }
+        } else if (damaged > bullTickDmg) {
+          this._healed = true;
+          this._healer();
+        }
+      }
+
+      // auraro's shame-decay top-up: at exactly four shames it eats late on
+      // purpose, two ticks out, which is past the window and takes two off.
+      if (!this._healed && myPlayer.shameCount === 4 && myPlayer.tempHealth < maxHealth) {
+        const dueTick = ModuleHandler.tickCount + 2;
+        this._healed = true;
+        this._decayHealTick = dueTick;
+      }
+      this._advHeal.length = 0;
+    }
+    _decayHealTick=-1;
+
     antiSmartTick(myPlayer, nearestEnemy, ModuleHandler, ObjectManager2, PlayerManager2) {
       if (!nearestEnemy) return false;
       const mySecondary = myPlayer.getItemByType(1);
@@ -12418,106 +12628,52 @@ window.grbtp = 35;
       // situation that raised it — autoBreak reads it on the following tick.
       this.blockBreak = false;
       if (!Settings_default._autoheal) {
+        this._advHeal.length = 0;
+        this._healed = false;
         return;
       }
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
-      if (myPlayer.shameActive) {
+      if (!myPlayer || !myPlayer.inGame || myPlayer.shameActive) {
+        this._advHeal.length = 0;
+        this._healed = false;
         return;
       }
-      const foodID = myPlayer.getItemByType(2);
-      if (foodID === null || foodID === void 0 || !Items[foodID]) {
-        return;
-      }
-      const restore = Items[foodID].restore;
-      const tempHealth = myPlayer.tempHealth;
-      const maxHealth = myPlayer.maxHealth;
-      const shameCount = myPlayer.shameCount;
       const nearestEnemy = EnemyManager2.nearestEnemy;
 
       // Anti Smart Tick keeps its own branch ahead of the rule: it is not a heal
       // decision, it is a refusal to break out of a trap into a spike, and the
-      // heal is what it does with the tick instead.
+      // heal is what it does with the tick instead. auraro has no equivalent —
+      // this is RYN's and stays.
       if (Settings_default._antiSmartTick && myPlayer.isTrapped && nearestEnemy) {
         const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
         if (this.antiSmartTick(myPlayer, nearestEnemy, ModuleHandler, ObjectManager2, PlayerManager2)) {
           ModuleHandler.healedOnce = true;
           ModuleHandler.didAntiInsta = true;
           ModuleHandler.shouldAttack = false;
-          const needTimes = Math.max(1, Math.ceil((maxHealth - tempHealth) / restore));
-          const hits = Math.max(needTimes + 1, 3);
-          for (let i = 0; i < hits; i++) ModuleHandler.heal();
+          this._healed = true;
+          this.forceHeal = true;
+          this._healer(1);
+          this._advHeal.length = 0;
+          this._healed = false;
           return;
         }
       }
 
-      if (tempHealth >= maxHealth) {
-        return;
+      // The shame-decay top-up auraro schedules two ticks out when it is
+      // sitting on exactly four shames.
+      if (this._decayHealTick >= 0 && ModuleHandler.tickCount >= this._decayHealTick) {
+        this._decayHealTick = -1;
+        if (myPlayer.tempHealth < myPlayer.maxHealth) this._healer();
       }
 
-      // Novastorm's totalDmgPot. EnemyManager has already summed weapon,
-      // turret, secondary and projectile damage into potentialDamage and
-      // resolved the spike term into potentialSpikeDamage this tick.
-      let dmgPot = EnemyManager2.potentialDamage + EnemyManager2.potentialSpikeDamage;
-      if (dmgPot > ANTI_INSTA_DMG_CAP) {
-        dmgPot = ANTI_INSTA_DMG_CAP;
-      }
-      const hatID = myPlayer.hatID;
-      if (hatID === 6) {
-        dmgPot *= Hats[6].dmgMult;
-      }
-      if (hatID === 7) {
-        dmgPot += ANTI_INSTA_SCUBA_BIAS;
-      }
-      const healing = tempHealth <= dmgPot;
-
-      // The second half of novastorm's condition is `(tick - damageTick) > 0` —
-      // a tick went by without being hit. On its own that is not safe here,
-      // because RYN models moomoo's shame rule off the wall clock, not ticks:
-      //
-      //     } else if (this.receivedDamage !== null) {      // a heal landed
-      //         const step = Date.now() - this.receivedDamage;
-      //         if (step <= 120) this.shameCount += 1;      // too soon: shame UP
-      //         else             this.shameCount -= 2;      // waited: shame DOWN
-      //     }
-      //
-      // So a routine top-up inside 120ms of being hit does not merely fail to
-      // clear shame, it adds to it, while the same apple a moment later removes
-      // two. isSaveHealTime() is the guard for exactly that window — 125ms with
-      // ping allowed for — and it belongs on the routine branch. Novastorm has
-      // no equivalent because its own heal() has no shame handling at all, which
-      // is why taking its condition verbatim made shame climb instead of fall.
-      //
-      // The emergency branch deliberately does not wait: +1 shame is a better
-      // outcome than dying, which is the entire point of healing into a hit.
-      const quiet = this.isSaveHealTick() && this.isSaveHealTime();
-      if (!((healing && shameCount < 7) || quiet)) {
-        return;
-      }
-
-      // Food already sent and not yet acknowledged. tempHealth only moves when
-      // the server echoes the new health back, so without this the same missing
-      // health is paid for once per tick for the whole round trip — and every
-      // apple past the first lands at full health, which is the other way shame
-      // goes up.
-      const inFlight = this._healsInFlight(ModuleHandler);
-      const needTimes = Math.max(0, Math.ceil((maxHealth - tempHealth) / restore) - inFlight);
-      if (needTimes === 0) {
-        return;
-      }
-
-      this.forceHeal = healing;
-      if (healing) {
+      this._runAdvHeal(myPlayer, ModuleHandler, nearestEnemy);
+      if (this._healed) {
+        this.forceHeal = true;
         ModuleHandler.didAntiInsta = true;
       }
-      ModuleHandler.healedOnce = true;
-      for (let i = 0; i < needTimes; i++) {
-        ModuleHandler.heal();
-      }
-      this._healSent = {
-        count: needTimes,
-        tick: ModuleHandler.tickCount,
-        health: tempHealth
-      };
+      // auraro clears `my.healed` at the end of its tick, which is what lets the
+      // delayed timer top up after an emergency heal has already gone out.
+      this._healed = false;
     }
   }
   const AntiInsta_default = AntiInsta;
@@ -15334,14 +15490,28 @@ window.grbtp = 35;
     _healBudgetLeft() {
       return this.packetLimit - this.packetCount;
     }
+    // For callers that have already decided when the food should land — the
+    // ported auraro heal times its own sends against the shame window, so a
+    // second queue underneath it would only push them back out of it.
+    healNow() {
+      if (this._healBudgetLeft() < 3) return;
+      this._rawHeal();
+    }
     heal() {
       if (this._healBudgetLeft() < 3) return;
       const myPlayer = this.client.myPlayer;
       if (myPlayer && !myPlayer.isSandbox && myPlayer.receivedDamage) {
+        // The window the server judges is between the hit it dealt and the
+        // heal arriving back, so the wait owed locally is the window less the
+        // round trip. A flat margin here waited a whole ping longer than it
+        // had to, and disagreed with the number AntiInsta was using.
+        const socket = this.client.SocketManager;
+        const pong = socket && Number.isFinite(socket.pong) ? socket.pong : 0;
+        const margin = Math.max(0, this._SHAME_GUARD_MARGIN - pong);
         const sinceHit = Date.now() - myPlayer.receivedDamage;
-        if (sinceHit <= this._SHAME_GUARD_MARGIN) {
+        if (sinceHit <= margin) {
           this._shameHealQueue = Math.min(this._shameHealQueue + 1, 12);
-          this._shameHealDeadline = myPlayer.receivedDamage + this._SHAME_GUARD_MARGIN;
+          this._shameHealDeadline = myPlayer.receivedDamage + margin;
           return;
         }
       }
