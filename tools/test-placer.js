@@ -784,6 +784,38 @@ section("an aimed angle that is blocked");
   check("the candidate set already holds the nearest free angle", Math.abs(nearest - trueNearest) < 0.02, `candidate ${nearest.toFixed(3)} vs best possible ${trueNearest.toFixed(3)}`);
 }
 
+// ── scenario: a build that is still on the wire ───────────────────────────
+// An angle we built at and that is still free afterwards is a refusal — but
+// only once the build has had time to reach the server and the object to come
+// back. Judging it on the next tick bans every successful build at any ping
+// over one tick, and eighteen ticks of that closes the ring and stops the
+// placer entirely.
+section("a build still in flight is not a refusal");
+{
+  const world = makeWorld({ enemy: { x: 5130, y: 5000, vx: -14 }, ping: 240 });
+  const placer = new AutoPlacer(world.client);
+  const run = () => {
+    world.moduleHandler.tickCount += 1;
+    world.moduleHandler.packetCount = 0;
+    world.moduleHandler.sent.length = 0;
+    context.__timers.length = 0;
+    placer.postTick();
+    return world.moduleHandler.sent.length;
+  };
+  const first = run();
+  check("it builds", first > 0, `${first}`);
+  run();
+  check("the next tick bans nothing", placer._bannedAngles.size === 0, `${placer._bannedAngles.size} banned`);
+  const later = run();
+  check("and it is still building", later > 0, `${later}`);
+
+  // Twenty ticks at a slow ping with every build refused: the ring must not
+  // silently close.
+  let stillPlacing = 0;
+  for (let i = 0; i < 20; i++) if (run() > 0) stillPlacing += 1;
+  check("twenty ticks later it has not shut itself down", stillPlacing > 0, `built on ${stillPlacing}/20 ticks`);
+}
+
 // ── scenario: the recorder ────────────────────────────────────────────────
 section("recorder");
 {

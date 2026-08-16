@@ -9578,21 +9578,43 @@ window.grbtp = 35;
     // is how a placer stalls against ground it cannot see. Enemy pit traps are
     // hidden by the game and still deny placement, so this is the only signal
     // there is for that ground.
-    sweep(tick, apertureLookup) {
+    // novastorm compares against the angles it built at *last* tick, because in
+    // its client the object is back by then. That is only true at a low ping:
+    // the build has to reach the server and the object has to come back, and
+    // until it does the ring still reads as free. Banning on the next tick
+    // therefore bans every successful build made at a ping over one tick — and
+    // eighteen ticks of that, accumulating every tick, closes the whole ring
+    // and the placer stops placing anything at all.
+    //
+    // So a send is only evidence of refusal once it has had a full round trip
+    // plus a tick to come back, and only auto place's own sends are judged this
+    // way: a preplace aims at ground that is deliberately still occupied, and a
+    // replacement is sent into ground that has only just opened.
+    sweep(tick, pingTicks, apertureLookup) {
       for (const [angle, expiry] of this.banned) {
         if (tick > expiry) this.banned.delete(angle);
       }
+      const wait = Math.max(1, pingTicks) + 1;
+      const keep = [];
       for (const entry of this.placed) {
+        const age = tick - entry.tick;
+        if (age < wait) {
+          keep.push(entry);
+          continue;
+        }
+        if (age > wait + 2) continue;
         if (apertureLookup(entry)) this.banned.set(entry.key, tick + NOVA_BAN_TICKS);
       }
-      this.placed.length = 0;
+      this.placed = keep;
     }
-    note(profile, angle) {
+    note(profile, angle, tick) {
       this.placed.push({
         profile: profile,
         angle: angle,
+        tick: tick,
         key: profile.type + ":" + angle.toFixed(4)
       });
+      if (this.placed.length > 40) this.placed.splice(0, this.placed.length - 40);
     }
     isBanned(profile, angle) {
       return this.banned.has(profile.type + ":" + angle.toFixed(4));
@@ -10161,7 +10183,7 @@ window.grbtp = 35;
       const ModuleHandler = this.client._ModuleHandler;
       engine._conflicts.take(cand, cand.mode || "placement", frame.tick, 2, false);
       engine.memory.note(cand.profile, cand.angle, frame.tick);
-      engine._nova.note(cand.profile, cand.angle);
+      if (cand.mode === RPE_MODE.AUTO) engine._nova.note(cand.profile, cand.angle, frame.tick);
       ModuleHandler.placeAngles[0] = type;
       ModuleHandler.placeAngles[1].push(cand.angle);
     }
@@ -10634,6 +10656,22 @@ window.grbtp = 35;
     }
   }
 
+  // Modules that own the tick they fire on: an instakill, a sync, a spike tick,
+  // or one of the anti-trap protections. They all run before the engine and put
+  // their name in ModuleHandler.activeModule when they claim it. Each of them
+  // is a timed sequence of packets, and a build dropped into the middle of one
+  // costs it the packets it was counting on and the aim it had set — so the
+  // engine stands down for that tick rather than competing with it.
+  //
+  // Without this the engine had no idea the rest of the client existed: it read
+  // the ledger, which only knows about ground, and ground is not the thing two
+  // modules fight over on the same tick. Packets are.
+  const RPE_TICK_OWNERS = /nsta|ync|ickBreak|ickNear|ickTrap|spikeTrap|teammateSpikeTrap|antiTrap|placementDefense/;
+  function rpeTickOwned(ModuleHandler) {
+    const active = ModuleHandler.activeModule;
+    return !!active && active !== "placementEngine" && RPE_TICK_OWNERS.test(active);
+  }
+
   // ── Engine ────────────────────────────────────────────────────────────────
   // One pipeline, run from two triggers. The tick runs it for AUTO and
   // PREPLACE; an object deletion runs it for REPLACE, plus any PREPLACE
@@ -10816,7 +10854,8 @@ window.grbtp = 35;
       // eighteen ticks. Enemy pit traps are hidden from us and still deny
       // placement, so a refusal we cannot explain is the only evidence that
       // ground is not ours to take.
-      this._nova.sweep(tick, entry => {
+      const pong = Number.isFinite(this.client.SocketManager?.pong) ? this.client.SocketManager.pong : 0;
+      this._nova.sweep(tick, Math.ceil(pong / RPE_TICK_MS), entry => {
         const apertures = this._generator.apertures(entry.profile, frame.myPos.x, frame.myPos.y, this._blockers, null);
         return apertures.length > 0 && !!GeometrySolver.inAperture(apertures, entry.angle);
       });
@@ -11476,8 +11515,9 @@ window.grbtp = 35;
 
     // ── triggers ────────────────────────────────────────────────────────────
     postTick() {
-      const {myPlayer: myPlayer} = this.client;
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
+      if (rpeTickOwned(ModuleHandler)) return;
       const modes = [];
       if (Settings_default._autoplacer) modes.push(RPE_MODE.AUTO);
       if (Settings_default._prePlace) modes.push(RPE_MODE.PREPLACE);
@@ -11503,6 +11543,7 @@ window.grbtp = 35;
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (!Settings_default._prePlace && !Settings_default._replace) return;
       if (!myPlayer || !myPlayer.inGame) return;
+      if (rpeTickOwned(ModuleHandler)) return;
       if (this._scheduler.budget() < RPE_PLACE_PACKETS) return;
       const frame = this._threat.build();
       if (!frame) return;
@@ -16293,7 +16334,20 @@ window.grbtp = 35;
       }
       for (const module of this.modules) {
         const prevg = this.moduleActive;
-        module.postTick();
+        // A module that throws used to take every module after it in this list
+        // with it — and the list ends with updateAttack and updateAngle, so a
+        // single bad tick anywhere above them stopped the client attacking or
+        // aiming at all. One failure is now one feature, reported once so it is
+        // findable rather than silent.
+        try {
+          module.postTick();
+        } catch (error) {
+          if (!this._moduleFaults) this._moduleFaults = new Set;
+          if (!this._moduleFaults.has(module.moduleName)) {
+            this._moduleFaults.add(module.moduleName);
+            Logger.error(`module "${module.moduleName}" threw and was skipped:`, error);
+          }
+        }
         if (!prevg && this.moduleActive) {
           this.activeModule = module.moduleName;
         }

@@ -56,8 +56,31 @@ game**, and every scoring term keyed on it (contact, rebound, exposure, the
 trap-and-spike pairing in the planner) was dead. Auto place could not tell a
 spike from a wall. Fixed, with both spellings accepted.
 
+**Three faults found while it was not placing at all.**
+
+- *The ban was firing before a build could possibly have arrived.* novastorm
+  compares against the angles it built at **last** tick, because in its client
+  the object is back by then. That only holds at a low ping: the build has to
+  reach the server and the object has to come back, and until it does the ring
+  still reads as free — so every *successful* build at a ping over one tick was
+  being banned, eighteen ticks at a time, accumulating every tick until the ring
+  was closed and the placer had silently stopped. A send is now only evidence of
+  refusal once it has had a full round trip plus a tick, and only auto place's
+  own sends are judged that way. The same assumption was in `RYN_v5.4.user.js`
+  and is fixed there too.
+- *The engine never yielded the tick.* An instakill, a sync or a spike tick is a
+  timed sequence of packets; a build dropped into the middle of one costs it the
+  packets it was counting on and the aim it had set. The ledger could not see
+  that, because what two modules fight over on the same tick is packets, not
+  ground. The engine now stands down when one of them has claimed the tick.
+- *One module could take down the client.* `module.postTick()` ran unguarded in
+  a loop that ends with `updateAttack` and `updateAngle`, so a single throw
+  anywhere above them stopped the client attacking or aiming at all — which
+  looks exactly like "nothing works" rather than like one broken feature. Each
+  module is now isolated, and a fault is reported once by name.
+
 ```sh
-node tools/test-engine.js       # 30 checks
+node tools/test-engine.js       # 39 checks
 ```
 
 ---
@@ -122,7 +145,7 @@ Three switches in **Combat → Spikes & Traps**, all on by default:
   delay and the angle bans. Off pins the resend to Luna's fixed `111 - ping`.
 
 ```sh
-node tools/test-placer.js       # 70 checks, and prints the per-tick cost
+node tools/test-placer.js       # 74 checks, and prints the per-tick cost
 node tools/verify-drivers.js RYN_v5.4.user.js
 node --check RYN_v5.4.user.js
 ```

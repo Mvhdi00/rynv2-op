@@ -10120,7 +10120,10 @@ window.grbtp = 35;
         if (!this._spamOk(config.angle)) continue;
         ModuleHandler.place(type, config.angle);
         ModuleHandler.placedOnce = true;
-        this._placedAngles.push(config.angle);
+        this._placedAngles.push({
+          angle: config.angle,
+          tick: this._tick
+        });
         this.recorder.record({
           kind: "replace",
           itemId: config.id,
@@ -10329,18 +10332,33 @@ window.grbtp = 35;
       // with it off, only a real preplace target arms it.
       if (Settings_default._replace) this._spamPrePlacer = true;
 
-      // Not Luna's: an angle we built at last tick that is still free this tick
-      // is an angle the server refused. Sit it out rather than spend the tick's
-      // packets on it again. The recorder bans the ones that came back with no
-      // object at all; this catches the ones that were refused outright.
+      // Not Luna's: an angle we built at and that is still free afterwards is an
+      // angle the server refused. Sit it out rather than spend the tick's
+      // packets on it again.
+      //
+      // "Afterwards" is the whole of it. Checking on the next tick assumes the
+      // object is back by then, and it is not: the build has to reach the
+      // server and the object has to come back, so at any ping over one tick
+      // the ring still reads as free and every *successful* build gets banned.
+      // Eighteen ticks of that, accumulating every tick, closes the ring and
+      // the placer stops placing at all. So a send is only evidence once it has
+      // had a full round trip plus a tick.
       if (this._placedAngles.length > 0) {
+        const waitTicks = Math.max(1, Math.ceil(pingTime / PLACER_TICK_MS)) + 1;
         const checked = [ ...this._probeAngles(spikeId, myPlayer, ObjectManager2, null, null), ...this._probeAngles(trapId, myPlayer, ObjectManager2, null, null) ];
+        const held = [];
         for (const placed of this._placedAngles) {
-          const match = checked.find(a => Math.abs(a.angle - placed) < .01);
-          if (match && match.placeable) this._banAngle(placed, this.recorder.angleFails.get(Math.round(placed * 32)) || 1);
+          const age = this._tick - placed.tick;
+          if (age < waitTicks) {
+            held.push(placed);
+            continue;
+          }
+          if (age > waitTicks + 2) continue;
+          const match = checked.find(a => Math.abs(a.angle - placed.angle) < .01);
+          if (match && match.placeable) this._banAngle(placed.angle, this.recorder.angleFails.get(Math.round(placed.angle * 32)) || 1);
         }
+        this._placedAngles = held;
       }
-      this._placedAngles = [];
 
       const spikeScale = spikeId !== null && spikeId !== undefined ? Items[spikeId].scale : 0;
       const trapScale = trapId !== null ? Items[trapId].scale : 0;
@@ -10668,7 +10686,10 @@ window.grbtp = 35;
         ModuleHandler.placeAngles[0] = type;
         ModuleHandler.placeAngles[1].push(obj.angle);
         ModuleHandler.moduleActive = true;
-        this._placedAngles.push(obj.angle);
+        this._placedAngles.push({
+          angle: obj.angle,
+          tick: this._tick
+        });
         this.recorder.record({
           kind: kind,
           itemId: myPlayer.getItemByType(type),

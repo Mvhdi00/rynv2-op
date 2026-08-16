@@ -275,26 +275,100 @@ section("the angle set");
 }
 
 // ── the ban ───────────────────────────────────────────────────────────────
-section("novastorm's 18-tick ban");
+// novastorm compares against the angles it built at *last* tick, because in its
+// client the object is back by then. Taken literally that bans every successful
+// build made at a ping over one tick — the ring still reads free until the
+// object arrives — and eighteen ticks of that, accumulating every tick, closes
+// the ring and the placer stops placing anything at all. So the wait is a full
+// round trip plus a tick.
+section("novastorm's ban, waiting for the round trip");
 {
-  const world = makeWorld({ enemy: { x: 5150, y: 5000 } });
+  const world = makeWorld({ enemy: { x: 5150, y: 5000 }, ping: 60 });
   const engine = new RynPlacementEngine(world.client);
   engine.postTick();
-  const firstSent = world.sent.length;
-  check("a first tick builds", firstSent > 0, `${firstSent}`);
+  check("a first tick builds", world.sent.length > 0, `${world.sent.length}`);
   check("the sends are remembered", engine._nova.placed.length > 0, `${engine._nova.placed.length}`);
 
-  // Nothing actually appeared in the world, so the ring still offers the same
-  // ground: the server refused, and novastorm bans it.
+  // One tick later the build may still be on the wire. Banning here is what
+  // shut the placer down.
   world.moduleHandler.tickCount += 1;
   world.moduleHandler.packetCount = 0;
   engine.postTick();
-  check("the refused angles are banned", engine._nova.banned.size > 0, `${engine._nova.banned.size}`);
-  const banned = [...engine._nova.banned.values()][0];
-  check("for eighteen ticks", banned === world.moduleHandler.tickCount + 18, `${banned} vs ${world.moduleHandler.tickCount + 18}`);
+  check("a build still in flight is not banned", engine._nova.banned.size === 0, `${engine._nova.banned.size} banned`);
+
+  // Past the round trip with the ground still free: the server refused it.
+  world.moduleHandler.tickCount += 2;
+  world.moduleHandler.packetCount = 0;
+  engine.postTick();
+  check("once the round trip is up, a refusal is banned", engine._nova.banned.size > 0, `${engine._nova.banned.size}`);
+  const expiry = [...engine._nova.banned.values()][0];
+  check("for eighteen ticks", expiry === world.moduleHandler.tickCount + 18, `${expiry} vs ${world.moduleHandler.tickCount + 18}`);
   const auto = engine._pool.filter(c => c.mode === "auto");
-  const reoffered = auto.filter(c => engine._nova.isBanned(c.profile, c.angle));
-  check("and never offered again while banned", reoffered.length === 0, `${reoffered.length}`);
+  check("and never offered again while banned", auto.every(c => !engine._nova.isBanned(c.profile, c.angle)));
+
+  // At a ping of three ticks the wait is three ticks, not one.
+  const laggy = makeWorld({ enemy: { x: 5150, y: 5000 }, ping: 333 });
+  const laggyEngine = new RynPlacementEngine(laggy.client);
+  laggyEngine.postTick();
+  for (let i = 0; i < 3; i++) {
+    laggy.moduleHandler.tickCount += 1;
+    laggy.moduleHandler.packetCount = 0;
+    laggyEngine.postTick();
+  }
+  check("a slow connection is given the time its builds need", laggyEngine._nova.banned.size === 0, `${laggyEngine._nova.banned.size} banned`);
+}
+
+// ── the tick belongs to whoever claimed it ────────────────────────────────
+// An instakill or a spike tick is a timed sequence of packets. A build dropped
+// into the middle of one costs it the packets it was counting on and the aim it
+// had set, and the ledger cannot see that, because what the two are fighting
+// over is packets and not ground.
+section("yielding the tick");
+{
+  for (const owner of ["instakill", "spikeSync", "spikeTickBreak", "antiTrapProtect"]) {
+    const world = makeWorld({ enemy: { x: 5150, y: 5000 } });
+    world.moduleHandler.activeModule = owner;
+    const engine = new RynPlacementEngine(world.client);
+    engine.postTick();
+    check(`stands down for ${owner}`, world.sent.length === 0, `${world.sent.length} sent`);
+  }
+  const free = makeWorld({ enemy: { x: 5150, y: 5000 } });
+  free.moduleHandler.activeModule = "autoBreak";
+  const freeEngine = new RynPlacementEngine(free.client);
+  freeEngine.postTick();
+  check("but not for a module that only swings", free.sent.length > 0, `${free.sent.length} sent`);
+}
+
+// ── it keeps going ────────────────────────────────────────────────────────
+// The symptom of the ban bug was not a wrong build, it was no builds: a couple
+// of seconds in, the ring was closed and the placer had quietly stopped. This
+// is the shape of that failure, so it is the shape of the test.
+section("sixty ticks");
+{
+  const world = makeWorld({ enemy: { x: 5140, y: 5000, vx: -8 }, ping: 250 });
+  const engine = new RynPlacementEngine(world.client);
+  const thirds = [0, 0, 0];
+  let placingTicks = 0;
+  for (let t = 0; t < 60; t++) {
+    world.moduleHandler.tickCount += 1;
+    world.moduleHandler.packetCount = 0;
+    world.sent.length = 0;
+    // Drift, the way a fight does.
+    world.enemy.pos.current.x -= 1;
+    world.enemy.pos.previous.x -= 1;
+    world.enemy.pos.future.x -= 1;
+    engine.postTick();
+    if (world.sent.length > 0) {
+      placingTicks += 1;
+      thirds[Math.floor(t / 20)] += 1;
+    }
+  }
+  // Ground it has just claimed is held for a couple of ticks, so building on
+  // roughly one tick in three is the healthy shape. What matters is that the
+  // last third looks like the first — a placer that has closed its own ring
+  // starts fine and then goes quiet.
+  check("it is still placing in the last third, as in the first", thirds[2] > 0 && thirds[2] >= thirds[0] * 0.5, `thirds ${thirds.join("/")}`);
+  check("and has not banned the whole ring", engine._nova.banned.size < 40, `${engine._nova.banned.size} banned`);
 }
 
 // ── the packet budget ─────────────────────────────────────────────────────
