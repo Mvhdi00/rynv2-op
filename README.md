@@ -1,10 +1,64 @@
 # RYN / ReUp
 
-Two moomoo.io userscripts in one repo, both built against the game bundles in
+Three moomoo.io userscripts in one repo, all built against the game bundles in
 `src/` and verified against them:
 
-- **`RYN_v5.4.user.js`** — RYN Client v5.4, where the placer work lives.
-- **`ReUp_Mix.user.js`** — the earlier Luna × RYN v4 merge, described further down.
+- **`RYN_v5.user.js`** — the placement-engine build. One engine, three planning
+  modes, with **novastorm's auto placer** ported into it. This is the current
+  one.
+- **`RYN_v5.4.user.js`** — the earlier single-module placer, kept for reference.
+- **`ReUp_Mix.user.js`** — the Luna × RYN v4 merge, described at the bottom.
+
+---
+
+## novastorm's auto placer, on the engine (RYN v5)
+
+`RYN_v5.user.js` already had the stronger preplace and replace: one engine with
+three planning modes (AUTO, PREPLACE, REPLACE) sharing one geometry solver, one
+scorer, one reservation ledger and one beam search, with replace running off the
+object-deletion packet. What it did not have was novastorm's auto placer. It
+does now, whole.
+
+**What came across, unchanged.** The 72-angle sweep of the ring, the
+perfect-first ordering, the three picks — `closestSpikeToEnemy`,
+`closestTrapToEnemy`, `closestSpikeToKb` with its knockback-alignment
+tie-break — the five-rung `isAutoPlaceAngle` ladder in its own order, the 350px
+gate, the 222/35 line-of-sight probe, the `addPredictObject` overlap dedup, and
+the 18-tick ban on an angle that was built at and is still free (the only
+evidence there is for enemy pit traps, which the game hides from you while they
+still deny placement).
+
+**What is this client's instead.** Two things, and they are why this is a
+proposer rather than a copy:
+
+- *The angle set.* novastorm's 72 probes approximate the free ring: a gap
+  narrower than 5° is invisible to it and a build packed against a neighbour
+  lands up to 2.5° off the tightest angle. The engine solves the ring exactly,
+  so "placeable" is "inside an aperture" and "perfect" is an aperture edge. The
+  72-grid is still walked, restricted to what is legal — the coverage the ladder
+  was written against is unchanged, only its error is gone.
+- *The ranking.* novastorm's ladder is boolean and its rung order is the whole
+  of its priority. Here the ladder decides which candidates exist and the rung
+  travels with them as a scoring term, but what gets built is the engine's beam
+  search over the scored set — so a rung-3 spike that pairs with a trap can beat
+  a rung-1 spike that stands alone, which novastorm has no way to express.
+
+**Packet spending.** novastorm's allowance came with it: the limit is now 119,
+the server's own 120-a-second minus one, where this build sat at 70 and left a
+third of it unspent. A build costs five packets; the engine's own batching —
+one item select shared across a run of the same type, two packets per extra
+build — sits on top of that and is strictly cheaper than novastorm's five each.
+
+**A bug this turned up.** `rpeBuildProfile` read `item.dmg` for whether a build
+deals damage. The game bundle spells it `dmg`, but this client's own item table
+renames it to `damage` — so `isDamage` was **false for every spike in the
+game**, and every scoring term keyed on it (contact, rebound, exposure, the
+trap-and-spike pairing in the planner) was dead. Auto place could not tell a
+spike from a wall. Fixed, with both spellings accepted.
+
+```sh
+node tools/test-engine.js       # 30 checks
+```
 
 ---
 
@@ -254,6 +308,7 @@ tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 tools/test-placer.js      runs RYN v5.4's placer against a mocked world
 tools/test-heal.js        runs RYN v5.4's autoheal against a faked clock
+tools/test-engine.js      runs RYN v5's placement engine against a mocked world
 ```
 
 ## Build
