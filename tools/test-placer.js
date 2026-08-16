@@ -603,6 +603,50 @@ section("packing against a blocker");
   check("no candidate overlaps an object", wrong.length === 0, `${wrong.length} bad`);
 }
 
+// ── scenario: an aimed angle that is blocked ──────────────────────────────
+// Auraro's placer solves for one angle and then snaps it into the nearest free
+// arc, because a single blocked angle would otherwise be nothing at all. This
+// one enumerates every free angle and scores them, so the nearest free angle to
+// a blocked aim is already a candidate — worth proving rather than assuming,
+// since if it were not true the aimed angles would silently vanish.
+section("an aimed angle that is blocked");
+{
+  const world = makeWorld({ enemy: { x: 5120, y: 5000 } });
+  // Park a spike exactly where the angle straight at the enemy would land.
+  world.addObject(5000 + (35 + Items[SPIKE_ID].scale + Items[SPIKE_ID].placeOffset), 5000, SPIKE_ID, 1);
+  const placer = new AutoPlacer(world.client);
+  placer._tick = 1;
+  placer._originX = 5000;
+  placer._originY = 5000;
+  const candidates = placer._probeAngles(SPIKE_ID, world.myPlayer, world.objectManager, null, [0]);
+  const aimed = candidates.filter(a => a.aimed);
+  check("the blocked aim itself is dropped", aimed.length === 0, `${aimed.length} kept`);
+  const off = angle => {
+    const d = Math.abs(angle) % (Math.PI * 2);
+    return d > Math.PI ? Math.PI * 2 - d : d;
+  };
+  const nearest = Math.min(...candidates.map(a => off(a.angle)));
+
+  // What the snap would have returned: the closest angle to the aim that the
+  // server would actually accept, found the slow way.
+  const R = 35 + Items[SPIKE_ID].scale + Items[SPIKE_ID].placeOffset;
+  let trueNearest = Infinity;
+  for (let angle = -Math.PI; angle < Math.PI; angle += Math.PI / 3600) {
+    const x = 5000 + R * Math.cos(angle);
+    const y = 5000 + R * Math.sin(angle);
+    let free = true;
+    for (const object of world.objectManager.objects.values()) {
+      const reach = Items[SPIKE_ID].scale + object.placementScale;
+      if (Math.hypot(x - object.pos.current.x, y - object.pos.current.y) < reach) {
+        free = false;
+        break;
+      }
+    }
+    if (free) trueNearest = Math.min(trueNearest, off(angle));
+  }
+  check("the candidate set already holds the nearest free angle", Math.abs(nearest - trueNearest) < 0.02, `candidate ${nearest.toFixed(3)} vs best possible ${trueNearest.toFixed(3)}`);
+}
+
 // ── scenario: the recorder ────────────────────────────────────────────────
 section("recorder");
 {

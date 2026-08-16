@@ -34,6 +34,29 @@ What v5.4 adds on top of Luna's version:
 | **Speed** | A full tick costs **~29µs** with 14 objects in range, against ~95µs for the previous build and far more than that for Luna's sampling: no collision scan per probed angle, one grid query a tick instead of 144, squared distances throughout, and a smaller sweep for the spikes around the enemy. A preplace resend re-checks the slot first, so a slot someone else filled costs a query instead of five packets. |
 | **Correctness** | `getItemByType(7)` is the whole trap/boost/teleport slot; only a real trap now gets the trap ladder. The item-limit check reads the real group limit rather than the sandbox one. |
 
+### Where this sits against the other clients
+
+The v5.4 placer arrived as a port of Luna Client 1.1's, and says so in its own
+comments — the function names in the module (`getPredictObjects`,
+`isAutoPlaceAngle`, `getPrePlaceObject`) are Luna's. Checking that against the
+other clients in the same family:
+
+| Client | Placer | Notes |
+|---|---|---|
+| **Luna Client 1.1** | `getPrePlaceAngles` / `isAutoPlaceAngle` / `addPredictObject` | The lineage RYN's module was ported from. 72 fixed probes, boolean ladders. |
+| **novastorm v1.4** | the same code | Byte-identical to Luna's after whitespace, one constant apart: `canSpikeTick` reaches `scale + 55` where Luna uses `scale + 35`. Not a second implementation to choose between. |
+| **Whiteout v4** | `checkPlace` / `placerCheck` / `preplace` / `checkPerfAngle` | A different lineage. Fixed ±offsets around the aim with random jitter, plus one good idea: with the enemy pinned it solves for the spike position that touches them along the trap axis, and places into that slot as the trap breaks. |
+| **Auraro 5.5** | `AutoPlacer.angleRanges` / `closestPossibleAngles` / `closeToAngle` | The strongest of the peers, and it reaches for the same idea this build now uses: solve for the arc each blocker forbids and keep the complement. It finds arc ends by circle-circle intersection and then validates each end through the game's own `checkItemLocation`; the law-of-cosines half-angle here needs neither. |
+
+Two things came back from that reading. `canSpikeTick` now tests the exact
+reach — the spike's scale plus theirs — against both where they are and where
+they are going, which is the reason novastorm padded its constant, without the
+padding. And Whiteout's trap-axis spike and Auraro's `closeToAngle` snap both
+turn out to be covered already: enumerating every free angle and scoring them
+produces the same answer as solving for one angle and snapping it to the
+nearest free one, which the suite checks against a brute-force sweep rather
+than assuming.
+
 Three switches in **Combat → Spikes & Traps**, all on by default:
 
 - **Smart Placer** — the scorer. Off leaves Luna's boolean ladders alone.
@@ -42,7 +65,7 @@ Three switches in **Combat → Spikes & Traps**, all on by default:
   delay and the angle bans. Off pins the resend to Luna's fixed `111 - ping`.
 
 ```sh
-node tools/test-placer.js       # 56 checks, and prints the per-tick cost
+node tools/test-placer.js       # 58 checks, and prints the per-tick cost
 node tools/verify-drivers.js RYN_v5.4.user.js
 node --check RYN_v5.4.user.js
 ```

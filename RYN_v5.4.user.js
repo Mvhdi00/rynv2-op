@@ -10009,7 +10009,15 @@ window.grbtp = 35;
         // A pinned player has no path to wall off.
         const blockFuture = imTrapped ? false : this._lineInRect(box[0], box[1], box[2], box[3], stX, stY, futX, futY);
         const blockEnemy = this._lineInRect(box[0], box[1], box[2], box[3], myFut.x, myFut.y, enemyFut.x, enemyFut.y);
-        let canSpikeTick = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < cfg.scale + 35;
+        // A spike hits when the two circles overlap, so the reach is the spike's
+        // scale plus theirs. Luna measures that against where they are standing
+        // now; novastorm's build of the same placer pads it out to `scale + 55`
+        // instead, which is a fudge for the fact that they will have moved by
+        // the time the build exists. The reason is worth keeping and the fudge
+        // is not: the exact radius is tested against both where they are and
+        // where they are going.
+        const hitReach = cfg.scale + enemyScale;
+        let canSpikeTick = Math.hypot(cfg.x - enemyPos.x, cfg.y - enemyPos.y) < hitReach || Math.hypot(cfg.x - reachX, cfg.y - reachY) < hitReach;
         if (canSpikeTick) {
           // A spike that knocks them back towards me is the wrong spike.
           const kbAngle = Math.atan2(enemyPos.y - cfg.y, enemyPos.x - cfg.x);
