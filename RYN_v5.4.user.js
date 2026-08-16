@@ -9021,23 +9021,32 @@ window.grbtp = 35;
   // `getPrePlaceObject`, `addPredictObject`), rewritten onto RYN's managers and
   // then extended. What is not Luna's:
   //
+  //   free arcs       Luna asks "is this angle free?" 72 times and works off the
+  //                   samples, so a build packed against a neighbour lands up
+  //                   to 2.5° off the tightest angle and a gap narrower than
+  //                   the grid is invisible. Each blocker forbids exactly one
+  //                   arc and it has a closed form, so the angles that are free
+  //                   are solved for instead — all of them, off one pass over
+  //                   the neighbours. See _blockedArcs.
   //   origin lead     the server builds at the position it has for me when the
   //                   packet lands, not the position I had when I sent it. The
   //                   recorder measures that offset from objects as they come
   //                   back and the probe origin is shifted by it.
-  //   edge refinement Luna probes 72 fixed angles, so a build packed against a
-  //                   neighbour lands up to 2.5° off the tightest angle. Every
-  //                   placeable/blocked boundary is bisected to ~0.1°, and the
-  //                   angle just inside it is probed as its own candidate.
   //   aimed angles    the tangents that put a build exactly on the edge of the
   //                   enemy's hitbox, and the angle into a slot that is opening,
-  //                   are added as candidates instead of being approximated by
-  //                   whichever of the 72 lands nearest.
+  //                   are candidates in their own right rather than whichever
+  //                   probed angle happened to land nearest.
   //   scoring         Luna's ladders are boolean and ordered; ties inside a rung
   //                   fall back to distance. Every candidate the ladders allow
   //                   is scored, and the packet budget is spent best-first.
   //   trapped play    Luna stops placing when I am pinned. See
   //                   isTrappedPlaceAngle.
+  //   retrapping      a pin is only worth what happens when it ends. An enemy
+  //                   standing in one of our traps is written down, and the
+  //                   note outlives the trap, so the tick it breaks a fresh one
+  //                   goes back into the slot — as a trap, ahead of any spike.
+  //                   Luna would only do that if they were already taking spike
+  //                   damage, and never once the object was gone.
   //   recording       every send is logged and matched against the object that
   //                   comes back, which is where the origin lead, the resend
   //                   delay and the dead-angle bans come from.
@@ -9070,14 +9079,9 @@ window.grbtp = 35;
   // tick rather than once per probed angle.
   const PLACER_GRID_SEARCH = 3;
 
-  // Bisection depth for a placeable/blocked boundary. 2pi/72 halved seven times
-  // is 0.0007 rad — under a tenth of a degree, which at an 82px place radius is
-  // a sixteenth of a pixel. Two more iterations would be free and pointless.
-  const PLACER_EDGE_ITERATIONS = 7;
-
-  // How far back inside the placeable side of a boundary the refined angle
-  // sits. Small enough to stay packed, large enough that a server that rounds
-  // differently still accepts it.
+  // How far inside a free arc its two ends sit. Small enough that the build is
+  // still packed against whatever closes the arc, large enough that a server
+  // rounding differently still accepts it.
   const PLACER_EDGE_INSET = .004;
 
   // Most builds one tick may emit, whatever the packet budget allows. Spending
@@ -9093,6 +9097,12 @@ window.grbtp = 35;
 
   // While pinned, heal and anti-insta matter more than the sixth spike.
   const PLACER_MAX_SENDS_TRAPPED = 4;
+
+  // How long the placer remembers that an enemy was standing in one of our
+  // traps. The memory has to outlive the trap itself: the tick it breaks is the
+  // tick a fresh one has to go back down, and by then the object is gone from
+  // the world and the enemy reads as untrapped. Three seconds of ticks.
+  const PLACER_RETRAP_MEMORY_TICKS = 27;
 
   // Score a candidate has to clear before the smart pass will send it. The
   // ladders below are boolean and bypass this; this is the bar for everything
@@ -9324,6 +9334,8 @@ window.grbtp = 35;
     _placedAngles=[];
     _bannedAngles=new Map;
     _angleCache=new Map;
+    _arcCache=new Map;
+    _retrapMemory=new Map;
     _neighbors=[];
     _neighborTick=-1;
     _neighborX=0;
@@ -9344,6 +9356,8 @@ window.grbtp = 35;
       this._placedAngles = [];
       this._bannedAngles.clear();
       this._angleCache.clear();
+      this._arcCache.clear();
+      this._retrapMemory.clear();
       this._neighbors = [];
       this._neighborTick = -1;
       this._lastPrePlaceObj = null;
@@ -9408,25 +9422,6 @@ window.grbtp = 35;
       this._neighbors = list;
     }
 
-    // Luna canPlace: the landing point has to clear every object, and stay out
-    // of the river unless it is a platform.
-    _canPlaceAt(cx, cy, scale, isPlatform, excludeObj) {
-      const neighbors = this._neighbors;
-      for (let i = 0; i < neighbors.length; i++) {
-        const n = neighbors[i];
-        if (excludeObj !== null && n.object === excludeObj) continue;
-        const dx = cx - n.x, dy = cy - n.y;
-        const reach = scale + n.radius;
-        if (dx * dx + dy * dy < reach * reach) return false;
-      }
-      if (!isPlatform) {
-        const mid = Config_default.mapScale / 2;
-        const riverHalf = Config_default.riverWidth / 2;
-        if (cy >= mid - riverHalf && cy <= mid + riverHalf) return false;
-      }
-      return true;
-    }
-
     // Luna isItemLimit. Luna reads `group.sandboxLimit || Math.max(...)` outside
     // sandbox too, which caps everything at the sandbox number; RYN already
     // resolves this correctly in ClientPlayer.getItemCount, so the limit comes
@@ -9435,6 +9430,14 @@ window.grbtp = 35;
       if (id === null || id === undefined) return true;
       const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
       return !!limit && count >= limit;
+    }
+
+    // How close a trap has to land to hold someone. The game collides a trap by
+    // its collision scale — scale * colDiv, 10px for a pit trap, not its 50px
+    // placement scale — against the player's own, so this is 45px, not 85.
+    _trapHoldRadius(trapId, target) {
+      const item = Items[trapId];
+      return item.scale * (item.colDiv ?? 1) + (target?.collisionScale ?? 35);
     }
 
     // The angle a build has to be sent at for it to land on (tx, ty). Inverts
@@ -9464,20 +9467,133 @@ window.grbtp = 35;
       out.push(base - offset * .985);
     }
 
-    // Luna getPrePlaceAngles + getPerfectAngles: probe 72 evenly spaced angles,
-    // then mark the two ends of every placeable run "perfect" — those are the
-    // angles packed against something, which is where a build is worth the most.
-    // `excludeObj` is the object we pretend is already gone.
+    // Every angle a blocker forbids, as one arc.
     //
-    // Three things on top of Luna:
-    //   - the wrap between angle 71 and angle 0 is compared too. Luna starts its
-    //     scan at index 1 and never closes the circle, so a run that straddles
-    //     0 rad loses both of its perfect ends.
-    //   - every boundary is bisected and the angle just inside it is added as
-    //     its own candidate, so a packed build is packed to a tenth of a degree
-    //     instead of to the 5° probe grid.
-    //   - `aimed` angles (at the enemy, at a slot that is opening) are probed
-    //     alongside the grid rather than being rounded onto it.
+    // Luna asks "is this one angle free?" 72 times and reads the answer off the
+    // samples. The question has a closed form: a build of scale `s` sent at
+    // angle t lands at O + R*(cos t, sin t), and a blocker of radius `r` at
+    // distance b and bearing p forbids it exactly while
+    //
+    //     R² + b² - 2Rb·cos(t - p) < (s + r)²
+    //
+    // which is |t - p| < acos((R² + b² - (s+r)²) / 2Rb). So each blocker
+    // forbids one contiguous arc, and the free angles are the complement of
+    // their union — every angle, exactly, off one pass over the neighbours
+    // instead of 72 collision scans plus a bisection per boundary. It is the
+    // same construction ObjectManager.getBestPlacementAngles uses to step
+    // around an object; this one keeps the whole set rather than the nearest.
+    _blockedArcs(id, myPlayer, ObjectManager2) {
+      const cached = this._arcCache.get(id);
+      if (cached) return cached;
+      const item = Items[id];
+      const placeDist = myPlayer.getItemPlaceScale(id);
+      const scale = item.scale;
+      const ox = this._originX, oy = this._originY;
+      this._loadNeighbors(ObjectManager2, ox, oy, placeDist + scale);
+      const arcs = [];
+      for (const neighbor of this._neighbors) {
+        const dx = neighbor.x - ox, dy = neighbor.y - oy;
+        const b = Math.sqrt(dx * dx + dy * dy);
+        const a = scale + neighbor.radius;
+        if (b < 1e-6) {
+          // Standing dead centre on it: it forbids the whole ring or none of it.
+          if (a > placeDist) arcs.push({
+            object: neighbor.object,
+            lo: -Math.PI,
+            hi: Math.PI
+          });
+          continue;
+        }
+        const cosArg = (placeDist * placeDist + b * b - a * a) / (2 * placeDist * b);
+        if (cosArg >= 1) continue;
+        const bearing = Math.atan2(dy, dx);
+        if (cosArg <= -1) {
+          arcs.push({
+            object: neighbor.object,
+            lo: bearing - Math.PI,
+            hi: bearing + Math.PI
+          });
+          continue;
+        }
+        const half = Math.acos(cosArg);
+        arcs.push({
+          object: neighbor.object,
+          lo: bearing - half,
+          hi: bearing + half
+        });
+      }
+      const result = {
+        arcs: arcs,
+        placeDist: placeDist,
+        scale: scale
+      };
+      this._arcCache.set(id, result);
+      return result;
+    }
+
+    // Union of the blocked arcs, complemented — the angles left over. Dropping
+    // one object from the union is what "pretend this is already gone" costs
+    // here: a filter, not a second pass over the world.
+    _freeArcs(blocked, excludeObj) {
+      const TAU = Math.PI * 2;
+      const spans = [];
+      for (const arc of blocked.arcs) {
+        if (excludeObj !== null && arc.object === excludeObj) continue;
+        const width = arc.hi - arc.lo;
+        if (width >= TAU) return [];
+        let lo = (arc.lo % TAU + TAU) % TAU;
+        const hi = lo + width;
+        if (hi > TAU) {
+          spans.push({ lo: lo, hi: TAU });
+          spans.push({ lo: 0, hi: hi - TAU });
+        } else {
+          spans.push({ lo: lo, hi: hi });
+        }
+      }
+      if (spans.length === 0) return [ { lo: 0, hi: TAU, open: true } ];
+      spans.sort((a, b) => a.lo - b.lo);
+      const merged = [];
+      for (const span of spans) {
+        const last = merged[merged.length - 1];
+        if (last && span.lo <= last.hi + 1e-9) {
+          if (span.hi > last.hi) last.hi = span.hi;
+        } else {
+          merged.push({ lo: span.lo, hi: span.hi });
+        }
+      }
+      const free = [];
+      let cursor = 0;
+      for (const span of merged) {
+        if (span.lo > cursor + 1e-9) free.push({ lo: cursor, hi: span.lo, open: false });
+        if (span.hi > cursor) cursor = span.hi;
+      }
+      if (cursor < TAU - 1e-9) free.push({ lo: cursor, hi: TAU, open: false });
+      // Close the seam: a run that straddles 0 rad is one arc, not two. Luna
+      // never did this, so a build packed against the blocker either side of
+      // 0 rad was invisible to it.
+      if (free.length > 1 && free[0].lo <= 1e-9 && free[free.length - 1].hi >= TAU - 1e-9) {
+        const first = free.shift();
+        free[free.length - 1].hi += first.hi - first.lo;
+      }
+      return free;
+    }
+
+    _inFreeArcs(free, angle) {
+      const TAU = Math.PI * 2;
+      const a = (angle % TAU + TAU) % TAU;
+      for (const arc of free) {
+        if (a >= arc.lo && a <= arc.hi) return true;
+        if (arc.hi > TAU && a + TAU <= arc.hi) return true;
+      }
+      return false;
+    }
+
+    // The candidate set for one item: both ends of every free arc — those are
+    // the angles packed exactly against a blocker, which is where a build is
+    // worth the most — the grid inside each arc for coverage, and the aimed
+    // angles that fall in one. Everything returned is placeable by
+    // construction; the river is the only thing left to test, and it is tested
+    // per candidate because it is a straight line rather than an arc.
     //
     // The result only depends on (id, excludeObj, extras) within a tick, so it
     // is memoised per tick — callers compare entries by identity, which needs
@@ -9489,78 +9605,63 @@ window.grbtp = 35;
       const cached = this._angleCache.get(key);
       if (cached) return cached;
 
-      const item = Items[id];
-      const placeDist = myPlayer.getItemPlaceScale(id);
-      const scale = item.scale;
+      const blocked = this._blockedArcs(id, myPlayer, ObjectManager2);
+      const free = this._freeArcs(blocked, excludeObj || null);
+      const placeDist = blocked.placeDist;
+      const scale = blocked.scale;
       const isPlatform = id === 18;
       const ox = this._originX, oy = this._originY;
-      this._loadNeighbors(ObjectManager2, ox, oy, placeDist + scale);
+      const mid = Config_default.mapScale / 2;
+      const riverHalf = Config_default.riverWidth / 2;
+      const TAU = Math.PI * 2;
+      const result = [];
 
-      const make = raw => {
-        const angle = (raw % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-        const x = ox + placeDist * Math.cos(angle);
+      const make = (raw, perfect, aimed) => {
+        const angle = (raw % TAU + TAU) % TAU;
         const y = oy + placeDist * Math.sin(angle);
-        return {
+        if (!isPlatform && y >= mid - riverHalf && y <= mid + riverHalf) return null;
+        const candidate = {
           id: id,
           angle: angle,
-          x: x,
+          x: ox + placeDist * Math.cos(angle),
           y: y,
           scale: scale,
-          placeable: this._canPlaceAt(x, y, scale, isPlatform, excludeObj),
-          perfect: false,
-          refined: false,
-          aimed: false
+          placeable: true,
+          perfect: perfect,
+          refined: perfect,
+          aimed: aimed
         };
+        result.push(candidate);
+        return candidate;
       };
 
-      const angles = [];
-      for (let i = 0; i < PLACER_ANGLE_STEPS; i++) angles.push(make(i * PLACER_ANGLE_STEP));
-
-      // Perfect ends of each placeable run, closing the circle.
-      for (let i = 0; i < PLACER_ANGLE_STEPS; i++) {
-        const prev = angles[(i + PLACER_ANGLE_STEPS - 1) % PLACER_ANGLE_STEPS];
-        if (angles[i].placeable && !prev.placeable) angles[i].perfect = true;
-        if (prev.placeable && !angles[i].placeable) prev.perfect = true;
-      }
-
-      // Refine every boundary: bisect between the placeable side and the
-      // blocked side, then step back inside by the inset.
-      const refined = [];
-      for (let i = 0; i < PLACER_ANGLE_STEPS; i++) {
-        const next = angles[(i + 1) % PLACER_ANGLE_STEPS];
-        if (angles[i].placeable === next.placeable) continue;
-        const open = angles[i].placeable ? angles[i] : next;
-        let lo = open.angle;
-        let hi = (angles[i].placeable ? next : angles[i]).angle;
-        // Cross the seam the short way, whichever direction the boundary sits.
-        if (Math.abs(hi - lo) > Math.PI) hi += hi < lo ? Math.PI * 2 : -Math.PI * 2;
-        for (let step = 0; step < PLACER_EDGE_ITERATIONS; step++) {
-          const mid = (lo + hi) / 2;
-          const x = ox + placeDist * Math.cos(mid);
-          const y = oy + placeDist * Math.sin(mid);
-          if (this._canPlaceAt(x, y, scale, isPlatform, excludeObj)) lo = mid; else hi = mid;
+      for (const arc of free) {
+        const width = arc.hi - arc.lo;
+        if (width <= 0) continue;
+        if (width <= PLACER_EDGE_INSET * 2) {
+          // A sliver: there is one angle in it and no room to inset.
+          make((arc.lo + arc.hi) / 2, !arc.open, false);
+          continue;
         }
-        const edge = make(lo - Math.sign(hi - lo) * PLACER_EDGE_INSET);
-        if (!edge.placeable) continue;
-        edge.perfect = true;
-        edge.refined = true;
-        refined.push(edge);
+        if (!arc.open) {
+          make(arc.lo + PLACER_EDGE_INSET, true, false);
+          make(arc.hi - PLACER_EDGE_INSET, true, false);
+        }
+        const from = arc.lo + PLACER_EDGE_INSET;
+        const to = arc.hi - PLACER_EDGE_INSET;
+        for (let step = Math.ceil(from / PLACER_ANGLE_STEP); step * PLACER_ANGLE_STEP <= to; step++) {
+          make(step * PLACER_ANGLE_STEP, false, false);
+        }
       }
 
-      // Aimed candidates. Duplicates of the grid are harmless — they score the
-      // same and _addPredictObject drops the second one — but an aimed angle
-      // that is already covered by a refined edge is not worth probing twice.
       if (extras) {
         for (const angle of extras) {
           if (!Number.isFinite(angle)) continue;
-          const candidate = make(angle);
-          if (!candidate.placeable) continue;
-          candidate.aimed = true;
-          refined.push(candidate);
+          if (!this._inFreeArcs(free, angle)) continue;
+          make(angle, false, true);
         }
       }
 
-      const result = angles.concat(refined);
       this._angleCache.set(key, result);
       return result;
     }
@@ -9596,7 +9697,7 @@ window.grbtp = 35;
     // Extended for the trap I am standing in: when that is the thing about to
     // break, its slot is the one worth owning, because it is the slot the enemy
     // is about to drop a fresh trap into.
-    _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2) {
+    _getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped) {
       const ModuleHandler = this.client._ModuleHandler;
       let findObject = null;
       const autoGathering = ModuleHandler._autoBreakActive || ModuleHandler.autoattack || ModuleHandler.forceWeapon !== null;
@@ -9665,8 +9766,12 @@ window.grbtp = 35;
               const obj = ObjectManager2.objects.get(id);
               if (!obj || !(obj instanceof PlayerObject)) return false;
               // Luna skips anything the enemy cannot see yet — a pit trap they
-              // have not walked into is not a slot about to open.
-              if (Items[obj.type] && Items[obj.type].hideFromEnemy) return false;
+              // have not walked into is not a slot about to open. The one they
+              // are standing in is the exception: the game clears its
+              // hideFromEnemy the moment it closes on them, and it is the slot
+              // that matters most, because whatever goes in it next decides
+              // whether they get away.
+              if (obj !== enemyTrapped && Items[obj.type] && Items[obj.type].hideFromEnemy) return false;
               if (enemyPos.distance(obj.pos.current) - obj.scale > weaponRange) return false;
               if (obj.health <= dmgToBuilding) candidates.push(obj);
               return false;
@@ -9776,6 +9881,7 @@ window.grbtp = 35;
       }
       this._tick = ModuleHandler.tickCount;
       this._angleCache.clear();
+      this._arcCache.clear();
       this.recorder.sweep(Settings_default._placerLearn === false ? null : (entry, fails) => this._banAngle(entry.angle, fails));
 
       if (placerTickBusy(ModuleHandler)) return;
@@ -9839,7 +9945,10 @@ window.grbtp = 35;
       // an enemy's.
       const spikesOur = [];
       const trapsOur = [];
-      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 5, id => {
+      // Three cells reaches 300px past the enemy's own cell, which covers the
+      // 200px knockback line the pick below traces. Five reached 500px and read
+      // 121 cells to do it.
+      ObjectManager2.grid2D.query(enemyPos.x, enemyPos.y, 3, id => {
         const obj = ObjectManager2.objects.get(id);
         if (!obj || !(obj instanceof PlayerObject)) return false;
         if (PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return false;
@@ -9849,6 +9958,33 @@ window.grbtp = 35;
       });
       const enemyTrapped = trapsOur.find(t => t.pos.current.distance(enemyPos) < t.scale) ?? null;
       const neitherTrapped = !enemyTrapped && !imTrapped;
+
+      // ── retrap memory ─────────────────────────────────────────────────────
+      // An enemy standing in one of our traps is written down, and the note
+      // outlives the trap. When it breaks, the object is gone from the world
+      // and the enemy reads as free again — by then there is nothing left to
+      // work out where the retrap goes from except the note. So the note is
+      // what a retrap is placed off, which also means it survives being boxed
+      // in: the moment an angle opens, the trap goes back down.
+      if (enemyTrapped) {
+        this._retrapMemory.set(enemy.id, {
+          objectID: enemyTrapped.id,
+          x: enemyTrapped.pos.current.x,
+          y: enemyTrapped.pos.current.y,
+          tick: this._tick
+        });
+      }
+      let retrapNote = this._retrapMemory.get(enemy.id) ?? null;
+      if (retrapNote && this._tick - retrapNote.tick > PLACER_RETRAP_MEMORY_TICKS) {
+        this._retrapMemory.delete(enemy.id);
+        retrapNote = null;
+      }
+      for (const [id, note] of this._retrapMemory) {
+        if (this._tick - note.tick > PLACER_RETRAP_MEMORY_TICKS) this._retrapMemory.delete(id);
+      }
+      // The trap it names is gone and they are not held by anything else: this
+      // is the tick to put one back.
+      const retrapDue = !!retrapNote && !enemyTrapped && !enemy.isTrapped && !ObjectManager2.objects.has(retrapNote.objectID);
       const predictMoveAngle = getAngleFromBitmask(this.client.InputHandler?.move, false) ?? 0;
       const angleToEnemy = myPos.angle(enemyPos);
       const distToEnemy = myPos.distance(enemyPos);
@@ -9953,6 +10089,9 @@ window.grbtp = 35;
       // same unit: roughly "points of a spike that lands on them".
       const scoreOf = (config, ctx) => {
         const isSpike = config.id === spikeId;
+        // A preplace aimed at the trap that is holding them is aimed at the
+        // tick after it breaks, so for that pass they are not trapped.
+        const heldNow = ctx.enemyTrapped === undefined ? enemyTrapped : ctx.enemyTrapped;
         const {blockFuture: blockFuture, blockEnemy: blockEnemy, canSpikeTick: canSpikeTick, canRetrap: canRetrap} = _los(config);
         const dx = config.x - reachX, dy = config.y - reachY;
         const distToTarget = Math.sqrt(dx * dx + dy * dy);
@@ -9965,7 +10104,7 @@ window.grbtp = 35;
           if (canSpikeTick) score += 120;
           const align = kbAlign.get(config);
           if (align !== undefined && Number.isFinite(align)) score += 90 * (1 - align / Math.PI);
-          if (enemyTrapped) score += 55;
+          if (heldNow) score += 55;
           if (blockFuture) score -= 45;
           if (blockEnemy) score -= imTrapped ? 8 : 25;
           if (imTrapped) {
@@ -9984,7 +10123,7 @@ window.grbtp = 35;
             if (facing < -.85 && !ctx.catches.has(config) && !canSpikeTick) score -= 60;
           }
         } else {
-          if (enemyTrapped) score -= 40; else score += 60;
+          if (heldNow) score -= 40; else score += 60;
           if (canRetrap) score += 70;
           if (blockFuture) score -= 30;
           if (imTrapped) {
@@ -10003,7 +10142,7 @@ window.grbtp = 35;
       // breaking out of, which is the one slot worth owning.
       const prePlaceReady = Settings_default._prePlace && distToEnemy < 300 && !(imTrapped && myPlayer.spikeDamage > 0);
       if (prePlaceReady) {
-        const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2);
+        const findObject = this._getPrePlaceObject(myPlayer, enemy, myPos, enemyPos, ObjectManager2, enemyTrapped);
         if (findObject) {
           const slot = findObject.pos.current;
           // Luna drops the doomed object out of the collision set, so the angles
@@ -10035,9 +10174,13 @@ window.grbtp = 35;
             if (isTrap && canRetrap && canShamePlace()) return true;
             // 1: the spike that catches a trapped enemy
             if (isSpike && enemyTrapped && findObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) return true;
-            // 2: retrap an enemy already taking spike damage, when the trap
-            //    holding them is the thing about to break
-            if (isTrap && enemy.spikeDamage > 0 && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
+            // 2: the trap that puts them straight back in, when the trap
+            //    holding them is the thing about to break. Luna wanted them to
+            //    be taking spike damage first, which meant it only ever
+            //    retrapped inside a spike box and let every other pin end with
+            //    the enemy walking off. The retrap is the point of the pin, so
+            //    it is not conditional on anything else being set up.
+            if (isTrap && enemyTrapped && findObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) return true;
             // 3: the spike whose knockback throws them onto another spike
             if (isSpike && closestSpikeToKb && config === closestSpikeToKb && !canShamePlace()) return true;
             // 4: any spike that does not wall off my own path or my view of them
@@ -10050,16 +10193,23 @@ window.grbtp = 35;
             return false;
           };
 
-          // Spikes first, then traps; within each, the best-scoring angle,
-          // tie-broken the way Luna does it — nearest the slot that is opening.
+          // Luna always tries spikes first. When the slot opening is our own
+          // trap with the enemy in it, that is the wrong way round: what that
+          // slot is for is another trap, and a spike in it hands them the tick
+          // they need to walk out. Traps lead in that one case.
+          const freeingOurTrap = findObject === enemyTrapped;
+          const ladder = freeingOurTrap ? [ trapAngles, spikeAngles ] : [ spikeAngles, trapAngles ];
+          const ctx = {
+            catches: new Set([ closestSpikeToEnemy, closestTrapToEnemy ].filter(Boolean)),
+            // The slot is about to be empty, so score it as the fight it will
+            // be a tick from now, not the one it is.
+            enemyTrapped: freeingOurTrap ? null : enemyTrapped
+          };
           let findAngle = null;
-          for (const angles of [ spikeAngles, trapAngles ]) {
+          for (const angles of ladder) {
             if (findAngle) break;
             const allowed = angles.filter(a => a.placeable && isPrePlaceAngle(a));
             if (allowed.length === 0) continue;
-            const ctx = {
-              catches: new Set([ closestSpikeToEnemy, closestTrapToEnemy ].filter(Boolean))
-            };
             findAngle = allowed.map(a => ({
               a: a,
               s: scoreOf(a, ctx) - Math.hypot(slot.x - a.x, slot.y - a.y) * .25
@@ -10070,6 +10220,31 @@ window.grbtp = 35;
             this._lastPrePlaceObj = findObject;
           }
         }
+      }
+
+      // ── RETRAP — not Luna's ───────────────────────────────────────────────
+      // The trap that was holding them has gone and nothing else has them. This
+      // is the one tick where a trap is worth more than anything else on the
+      // board, and it is also the tick where every other test in this module
+      // says "no enemy trapped, place normally". The note taken above is what
+      // makes it visible at all.
+      if (retrapDue && trapId !== null && !this._isItemLimit(trapId, myPlayer) && myPlayer.canPlace(PLACER_TRAP_TYPE)) {
+        const hold = this._trapHoldRadius(trapId, enemy);
+        const trapAngles = this._probeAngles(trapId, myPlayer, ObjectManager2, null, trapExtras);
+        let best = null, bestDist = Infinity;
+        for (const config of trapAngles) {
+          if (!config.placeable) continue;
+          // It only counts if the trap would actually close on them where they
+          // are going to be, not merely land near where they were.
+          const dx = config.x - reachX, dy = config.y - reachY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > hold) continue;
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = config;
+          }
+        }
+        if (best) this._addPredictObject(best, false, null, 1e4);
       }
 
       // ── AUTO PLACER — Luna updateAngles + isAutoPlaceAngle ────────────────

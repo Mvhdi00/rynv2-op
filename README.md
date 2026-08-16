@@ -24,13 +24,14 @@ What v5.4 adds on top of Luna's version:
 | **Placing while pinned** | Luna places nothing at all when you are in a trap: every spike rung of its ladder needs the *enemy* trapped, and both trap rungs need neither of you trapped. `isTrappedPlaceAngle` is the ladder for being pinned — spikes that can already reach them, spikes on the line they are closing along, the arc they have to come through, and a trap under the only ground they can hit you from. It keeps the lane directly behind you clear so breaking out is not into your own wall. |
 | **The slot you are breaking out of** | `_getPrePlaceObject` now prefers the trap holding you over anything else you are swinging at, and the preplace ladder will take that slot with a **spike**. The freed slot is the one the enemy is about to drop a fresh trap into; a spike in it denies the retrap and damages the push. |
 | **Origin lead** | The server builds at the position it holds for you when the packet lands, not the one you had when you sent it. The recorder measures that offset from the objects coming back and the probe origin is shifted by it. Pinned, the lead is exactly zero, which is why placement while trapped is the most accurate placement there is. |
-| **Edge refinement** | Luna probes 72 fixed angles, so a build packed against a neighbour lands up to 2.5° off the tightest angle. Every placeable/blocked boundary is bisected to under a tenth of a degree and the angle just inside it is probed as its own candidate. Luna also never closes the circle when marking those ends, so a run straddling 0 rad lost both of them; that is fixed. |
+| **Retrapping** | A pin is only worth what happens when it ends. An enemy standing in one of your traps is written down, and the note outlives the trap: the tick it breaks, the object is gone and the enemy reads as free, so the note is the only thing that knows a retrap is owed. A fresh trap goes straight back into the slot — a **trap**, ahead of any spike. Luna would only retrap if they were already taking spike damage, and never once the object was gone. The game also clears a trap's `hideFromEnemy` the moment it closes on someone, which Luna's preplace scan did not account for, so the trap holding the enemy was the one object it could never see as a slot about to open. |
+| **Free arcs** | Luna asks "is this angle free?" 72 times and works off the samples: a build packed against a neighbour lands up to 2.5° off the tightest angle, and a gap narrower than the grid is invisible. Each blocker forbids exactly one arc of placement angles and it has a closed form, so the free angles are solved for instead — all of them, off one pass over the neighbours. Arc ends are exactly packed, and "pretend this object is gone" becomes a filter rather than a second pass over the world. Luna also never closed the circle, so a run straddling 0 rad lost both its ends; that is fixed. |
 | **Aimed angles** | The tangents that put a build exactly on the edge of the enemy's hitbox — now and where they are heading — and the angle into a slot that is opening, are probed as real candidates instead of being rounded onto the 5° grid. |
 | **Enemy prediction** | Luna reaches one tick ahead (`pos.future`). The reach segment now runs to where they will be when the build actually exists (ping/2 + a tick), so a spike goes in front of a rush instead of behind it. |
 | **Scoring** | Luna's ladders are boolean and ordered, with distance as the tie-break inside a rung. Everything the ladders allow is scored — catches, packing, spike-tick reach, knockback alignment onto spikes you own, what it walls off — and the packet budget is spent best-first. |
 | **Recording** | Every send is logged and matched against the object that comes back, which is where the origin lead, the resend delay and the dead-angle bans come from. `RYN_PLACER.recorder.stats` in the console reads back ack latency, jitter, the learned lead, origin error and per-kind success rates. |
 | **Budget** | Luna spent to the hard limit. The per-tick cap is 6 builds (4 while pinned), and the placer stops queueing with 20 packets of the per-second allowance still unspent, so heal and anti-insta are never starved by a spike wall. |
-| **Speed** | Blockers are pulled from the spatial grid once a tick instead of once per probed angle, and matched with squared distances — 1 grid query per tick where there were 144. A preplace resend re-checks the slot first, so a slot someone else filled costs a query instead of five packets. |
+| **Speed** | A full tick costs **~29µs** with 14 objects in range, against ~95µs for the previous build and far more than that for Luna's sampling: no collision scan per probed angle, one grid query a tick instead of 144, squared distances throughout, and a smaller sweep for the spikes around the enemy. A preplace resend re-checks the slot first, so a slot someone else filled costs a query instead of five packets. |
 | **Correctness** | `getItemByType(7)` is the whole trap/boost/teleport slot; only a real trap now gets the trap ladder. The item-limit check reads the real group limit rather than the sandbox one. |
 
 Three switches in **Combat → Spikes & Traps**, all on by default:
@@ -41,7 +42,7 @@ Three switches in **Combat → Spikes & Traps**, all on by default:
   delay and the angle bans. Off pins the resend to Luna's fixed `111 - ping`.
 
 ```sh
-node tools/test-placer.js       # 43 checks
+node tools/test-placer.js       # 56 checks, and prints the per-tick cost
 node tools/verify-drivers.js RYN_v5.4.user.js
 node --check RYN_v5.4.user.js
 ```
@@ -49,7 +50,11 @@ node --check RYN_v5.4.user.js
 `tools/test-placer.js` lifts `Items`, `ItemGroups`, `Config`, the spatial grid
 and the placer itself straight out of the userscript by source anchors and runs
 them against a mocked world, so the scenarios exercise the shipped code rather
-than a copy of it.
+than a copy of it. Among them: the free arcs are checked against a
+quarter-degree brute-force sweep over 60 randomly built worlds, in both
+directions — no candidate may land on an object, and no genuinely free angle
+may be missed. `RYN_PLACER_SCRIPT=<path>` points it at another build, which is
+how the cost of a change gets compared against the build before it.
 
 ---
 

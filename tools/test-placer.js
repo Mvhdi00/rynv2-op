@@ -14,7 +14,9 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const SCRIPT = path.join(__dirname, "..", "RYN_v5.4.user.js");
+// RYN_PLACER_SCRIPT points the harness at another build of the script, which is
+// how the cost of a change gets compared against the build before it.
+const SCRIPT = process.env.RYN_PLACER_SCRIPT || path.join(__dirname, "..", "RYN_v5.4.user.js");
 const source = fs.readFileSync(SCRIPT, "utf8");
 
 function cut(startAnchor, endAnchor, { includeEnd = false } = {}) {
@@ -133,6 +135,10 @@ function makeWorld(options = {}) {
     insertObject(object) {
       this.grid2D.insert(object.pos.current.x, object.pos.current.y, object.collisionScale, object.id);
       this.objects.set(object.id, object);
+    },
+    removeObject(object) {
+      this.grid2D.remove(object.pos.current.x, object.pos.current.y, object.collisionScale, object.id);
+      this.objects.delete(object.id);
     }
   };
 
@@ -330,7 +336,7 @@ section("pinned by a trap sitting on top of me");
   placer._originX = 5000;
   placer._originY = 5000;
   const sealed = placer._probeAngles(SPIKE_ID, world.myPlayer, world.objectManager, null, null);
-  check("the ring really is sealed", sealed.every(a => !a.placeable));
+  check("the ring really is sealed", sealed.length === 0, `${sealed.length} candidates`);
   const open = placer._probeAngles(SPIKE_ID, world.myPlayer, world.objectManager, trap, null);
   check("and opens again once that trap is discounted", open.some(a => a.placeable));
 }
@@ -381,6 +387,164 @@ section("pinned, breaking out");
   check("a slot that filled up is not resent into", world.moduleHandler.sent.length === afterSteal, `sent ${world.moduleHandler.sent.length - afterSteal}`);
 }
 
+// ── scenario: the enemy is in my trap and it is about to break ────────────
+section("enemy in my trap, breaking");
+{
+  const world = makeWorld({ enemy: { x: 5080, y: 5000 } });
+  const trap = world.addObject(5080, 5000, TRAP_ID, 1); // mine, holding them
+  trap.health = 10;
+  // Their great hammer just came off reload, which is what makes the trap a
+  // slot that is about to open.
+  world.enemy.weapon = { primary: 0, secondary: 10 };
+  world.enemy.reload[1] = { previous: 0, current: 1, max: 1 };
+  const placer = new AutoPlacer(world.client);
+  placer.postTick();
+
+  check("the trap is seen as the slot about to open", placer._lastPrePlaceObj === trap, String(placer._lastPrePlaceObj && placer._lastPrePlaceObj.id));
+  const pre = placer._predictObjects.filter(o => o.preplace);
+  check("a preplace is queued", pre.length === 1, `queued ${pre.length}`);
+  if (pre.length === 1) {
+    check("it is a trap, not a spike", pre[0].id === TRAP_ID, `id ${pre[0].id}`);
+    const hold = placer._trapHoldRadius(TRAP_ID, world.enemy);
+    const d = Math.hypot(pre[0].x - 5080, pre[0].y - 5000);
+    check("and it lands where it closes on them again", d <= hold, `distance ${d.toFixed(1)} vs hold ${hold}`);
+  }
+}
+
+// ── scenario: the retrap memory ───────────────────────────────────────────
+section("retrap memory");
+{
+  const world = makeWorld({ enemy: { x: 5080, y: 5000 } });
+  const trap = world.addObject(5080, 5000, TRAP_ID, 1);
+  const placer = new AutoPlacer(world.client);
+  placer.postTick();
+  check("the pin is written down", placer._retrapMemory.has(world.enemy.id));
+
+  // The trap breaks. The object is gone and the enemy reads as free — the note
+  // is the only thing left that knows a retrap is owed.
+  world.objectManager.removeObject(trap);
+  world.moduleHandler.tickCount += 1;
+  world.moduleHandler.sent.length = 0;
+  world.moduleHandler.packetCount = 0;
+  placer.postTick();
+  const sent = world.moduleHandler.sent;
+  check("a trap goes straight back down", sent.length > 0 && sent[0].type === 7, sent.map(s => s.type).join(" "));
+  if (sent.length > 0) {
+    const p = landing(world, sent[0].angle, TRAP_ID);
+    const hold = placer._trapHoldRadius(TRAP_ID, world.enemy);
+    check("landing where it catches them", Math.hypot(p.x - 5080, p.y - 5000) <= hold, `distance ${Math.hypot(p.x - 5080, p.y - 5000).toFixed(1)}`);
+  }
+
+  // And it is not a standing order: the note ages out.
+  world.moduleHandler.tickCount += 40;
+  world.moduleHandler.sent.length = 0;
+  world.moduleHandler.packetCount = 0;
+  placer.postTick();
+  check("the note expires", !placer._retrapMemory.has(world.enemy.id));
+  const traps = world.moduleHandler.sent.filter(s => s.type === 7);
+  const covering = traps.filter(s => {
+    const p = landing(world, s.angle, TRAP_ID);
+    return Math.hypot(p.x - 5080, p.y - 5000) <= placer._trapHoldRadius(TRAP_ID, world.enemy);
+  });
+  check("without one it is back to ordinary placing", covering.length === 0 || traps.length > covering.length);
+}
+
+// ── scenario: free arcs against brute force ───────────────────────────────
+// The probe no longer samples angles and tests each one; it solves for the arc
+// each blocker forbids and keeps the complement. That is only worth anything if
+// it agrees with the collision test the server actually runs, so it is checked
+// against a quarter-degree sweep over randomly built worlds.
+section("free arcs vs a brute-force sweep");
+{
+  let seed = 20240816;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  let falsePositives = 0;
+  let falseNegatives = 0;
+  let generated = 0;
+
+  for (let round = 0; round < 60; round++) {
+    const world = makeWorld({ enemy: { x: 5200, y: 5000 } });
+    const objects = [];
+    const count = 1 + Math.floor(random() * 7);
+    for (let i = 0; i < count; i++) {
+      const angle = random() * Math.PI * 2;
+      const dist = 40 + random() * 160;
+      const type = random() < 0.5 ? SPIKE_ID : TRAP_ID;
+      objects.push(world.addObject(5000 + Math.cos(angle) * dist, 5000 + Math.sin(angle) * dist, type, 1));
+    }
+    const placer = new AutoPlacer(world.client);
+    placer._tick = round;
+    placer._originX = 5000;
+    placer._originY = 5000;
+
+    const truth = (angle, id) => {
+      const R = 35 + Items[id].scale + Items[id].placeOffset;
+      const x = 5000 + R * Math.cos(angle);
+      const y = 5000 + R * Math.sin(angle);
+      for (const object of objects) {
+        const reach = Items[id].scale + object.placementScale;
+        if (Math.hypot(x - object.pos.current.x, y - object.pos.current.y) < reach) return false;
+      }
+      return true;
+    };
+
+    for (const id of [SPIKE_ID, TRAP_ID]) {
+      const candidates = placer._probeAngles(id, world.myPlayer, world.objectManager, null, null);
+      generated += candidates.length;
+      for (const candidate of candidates) {
+        // A candidate sits one inset inside its arc, so the truth test has to
+        // hold at the angle itself.
+        if (!truth(candidate.angle, id)) falsePositives += 1;
+      }
+      const blocked = placer._blockedArcs(id, world.myPlayer, world.objectManager);
+      const free = placer._freeArcs(blocked, null);
+      const step = Math.PI / 720; // a quarter of a degree
+      for (let angle = 0; angle < Math.PI * 2; angle += step) {
+        const open = truth(angle, id);
+        const claimed = placer._inFreeArcs(free, angle);
+        // Disagreement is only real away from a boundary, where the inset and
+        // floating point put the two within a hair of each other.
+        if (open === claimed) continue;
+        const margin = step * 2;
+        if (truth(angle - margin, id) === open && truth(angle + margin, id) === open) {
+          if (claimed) falsePositives += 1; else falseNegatives += 1;
+        }
+      }
+    }
+  }
+  check("no candidate lands on an object", falsePositives === 0, `${falsePositives} bad`);
+  check("no free angle is missed", falseNegatives === 0, `${falseNegatives} missed`);
+  check("candidates were actually produced", generated > 2000, `${generated} candidates`);
+}
+
+// ── scenario: cost ────────────────────────────────────────────────────────
+section("cost");
+{
+  const world = makeWorld({ enemy: { x: 5150, y: 5000, vx: -14 } });
+  for (let i = 0; i < 14; i++) {
+    const angle = i / 14 * Math.PI * 2;
+    world.addObject(5000 + Math.cos(angle) * (120 + (i % 3) * 40), 5000 + Math.sin(angle) * (120 + (i % 3) * 40), i % 2 ? SPIKE_ID : TRAP_ID, i % 2 ? 1 : 2);
+  }
+  const placer = new AutoPlacer(world.client);
+  const rounds = 3000;
+  const started = process.hrtime.bigint();
+  for (let i = 0; i < rounds; i++) {
+    world.moduleHandler.tickCount += 1;
+    world.moduleHandler.packetCount = 0;
+    world.moduleHandler.sent.length = 0;
+    context.__timers.length = 0;
+    placer.postTick();
+  }
+  const perTick = Number(process.hrtime.bigint() - started) / rounds / 1000;
+  console.log(`  info a full tick costs ${perTick.toFixed(1)}us with 14 objects in range`);
+  // The client has 111ms a tick and shares it with forty other modules. A
+  // placer that needs a whole millisecond of it is a placer with a bug.
+  check("a tick stays well under a millisecond", perTick < 1000, `${perTick.toFixed(1)}us`);
+}
+
 // ── scenario: item limits ─────────────────────────────────────────────────
 section("item limits");
 {
@@ -397,45 +561,46 @@ section("another module owns the tick");
   check("placer stands down", world.moduleHandler.sent.length === 0, `sent ${world.moduleHandler.sent.length}`);
 }
 
-// ── scenario: edge refinement ─────────────────────────────────────────────
-section("edge refinement");
+// ── scenario: packing against a blocker ───────────────────────────────────
+section("packing against a blocker");
 {
   const world = makeWorld({ enemy: { x: 5200, y: 5000 } });
-  // A wall of spikes with one gap, so there are boundaries to refine.
-  world.addObject(5000, 5082, SPIKE_ID, 1);
-  world.addObject(5058, 5058, SPIKE_ID, 1);
+  // Two spikes of my own, so the free ring has real ends to pack against.
+  const first = world.addObject(5000, 5082, SPIKE_ID, 1);
+  const second = world.addObject(5058, 5058, SPIKE_ID, 1);
   const placer = new AutoPlacer(world.client);
   placer._tick = 1;
   placer._originX = world.myPlayer.pos.current.x;
   placer._originY = world.myPlayer.pos.current.y;
   const angles = placer._probeAngles(SPIKE_ID, world.myPlayer, world.objectManager, null, null);
-  const refined = angles.filter(a => a.refined);
-  check("boundaries produce refined candidates", refined.length > 0, `refined ${refined.length}`);
-  check("every refined candidate is placeable", refined.every(a => a.placeable));
+  const packed = angles.filter(a => a.perfect);
+  check("free arcs have packed ends", packed.length > 0, `packed ${packed.length}`);
 
-  // Each refined angle should sit closer to its blocked neighbour than the
-  // nearest 5° grid angle does — that is the whole point of the bisection.
-  const grid = angles.filter(a => !a.refined && !a.aimed);
-  let tighter = 0;
-  for (const edge of refined) {
+  // Packed means packed: each one has to sit within a whisker of touching the
+  // blocker that closes its arc, which the 5° probe grid could only manage by
+  // luck.
+  const gapTo = (candidate) => Math.min(...[first, second].map(object => {
+    const reach = candidate.scale + object.placementScale;
+    return Math.hypot(candidate.x - object.pos.current.x, candidate.y - object.pos.current.y) - reach;
+  }));
+  const tight = packed.filter(a => gapTo(a) < 1);
+  check("each sits against the blocker that closes it", tight.length === packed.length, `${tight.length}/${packed.length}`);
+  const offGrid = packed.filter(a => {
     const step = Math.PI * 2 / 72;
-    const gridGap = Math.min(...grid.filter(g => g.placeable).map(g => {
-      const d = Math.abs(g.angle - edge.angle) % (Math.PI * 2);
-      return d > Math.PI ? Math.PI * 2 - d : d;
-    }));
-    if (gridGap > 0 && gridGap < step) tighter += 1;
-  }
-  check("refined angles land off the probe grid", tighter === refined.length, `${tighter}/${refined.length}`);
+    const rem = a.angle % step;
+    return Math.min(rem, step - rem) > 1e-6;
+  });
+  check("and off the probe grid, where the exact angle is", offGrid.length === packed.length, `${offGrid.length}/${packed.length}`);
 
   // Nothing may be proposed on top of an existing object.
-  const wrong = angles.filter(a => a.placeable).filter(a => {
+  const wrong = angles.filter(a => {
     for (const object of world.objectManager.objects.values()) {
       const reach = a.scale + object.placementScale;
       if (Math.hypot(a.x - object.pos.current.x, a.y - object.pos.current.y) < reach - 1e-6) return true;
     }
     return false;
   });
-  check("no placeable angle overlaps an object", wrong.length === 0, `${wrong.length} bad`);
+  check("no candidate overlaps an object", wrong.length === 0, `${wrong.length} bad`);
 }
 
 // ── scenario: the recorder ────────────────────────────────────────────────
