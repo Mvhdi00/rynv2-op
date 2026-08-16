@@ -365,16 +365,14 @@ section("pinned, breaking out");
     check("aimed at the slot the trap vacates", d < trap.scale + pre[0].scale, `distance ${d.toFixed(1)}`);
     check("the slot is taken with a spike, not another trap", pre[0].id === SPIKE_ID, String(pre[0].id));
   }
-  check("replace resend is scheduled", context.__timers.length >= 3, String(context.__timers.length));
+  check("two sends are scheduled, aim and preplace", context.__timers.length === 2, String(context.__timers.length));
 
-  // The resends. The second one fires once the slot is free; the third is the
-  // replace leg, which only fires while the spam flag is armed.
+  // The resend. The blind third send is gone — replace runs off the death
+  // packet now, not off a timer.
   const before = world.moduleHandler.sent.length;
-  const timers = context.__timers.slice();
-  const ordered = timers.slice().sort((a, b) => a.ms - b.ms);
-  check("resends are ordered aim, preplace, replace", ordered.length === 3 && ordered[0].ms === 1);
+  const ordered = context.__timers.slice().sort((a, b) => a.ms - b.ms);
+  check("the aim goes first", ordered[0].ms === 1);
   check("the preplace resend is aimed before the tick boundary", ordered[1].ms > 0 && ordered[1].ms < 111, String(ordered[1].ms));
-  check("the replace resend follows it", ordered[2].ms >= ordered[1].ms, `${ordered[1].ms} then ${ordered[2].ms}`);
   ordered[1].fn();
   check("the slot is taken on the resend", world.moduleHandler.sent.length > before, `sent ${world.moduleHandler.sent.length - before}`);
 
@@ -383,8 +381,8 @@ section("pinned, breaking out");
   const queued = placer._predictObjects.find(o => o.preplace);
   world.addObject(queued.x, queued.y, SPIKE_ID, 2);
   const afterSteal = world.moduleHandler.sent.length;
-  ordered[2].fn();
-  check("a slot that filled up is not resent into", world.moduleHandler.sent.length === afterSteal, `sent ${world.moduleHandler.sent.length - afterSteal}`);
+  ordered[1].fn();
+    check("a slot that filled up is not resent into", world.moduleHandler.sent.length === afterSteal, `sent ${world.moduleHandler.sent.length - afterSteal}`);
 }
 
 // ── scenario: the enemy is in my trap and it is about to break ────────────
@@ -543,6 +541,145 @@ section("cost");
   // The client has 111ms a tick and shares it with forty other modules. A
   // placer that needs a whole millisecond of it is a placer with a bug.
   check("a tick stays well under a millisecond", perTick < 1000, `${perTick.toFixed(1)}us`);
+}
+
+// ── scenario: replace fires off the death packet ──────────────────────────
+// The server names the object that died in a packet of its own, before any
+// tick. Replace runs from there, so the slot is known empty at the instant the
+// build is sent instead of assumed empty a tick later.
+section("replace on the death packet");
+{
+  const world = makeWorld({ enemy: { x: 5080, y: 5000 } });
+  const trap = world.addObject(5080, 5000, TRAP_ID, 1); // mine, holding them
+  const placer = new AutoPlacer(world.client);
+  placer.postTick();                       // installs the hook
+  world.moduleHandler.sent.length = 0;
+  world.moduleHandler.packetCount = 0;
+  context.__timers.length = 0;
+
+  world.objectManager.removeObject(trap);  // the "Q" packet
+  const sent = world.moduleHandler.sent;
+  check("the replace is immediate, with no timer", sent.length > 0 && context.__timers.length === 0, `${sent.length} sent, ${context.__timers.length} timers`);
+  check("a trap goes in first", sent[0] && sent[0].type === 7, sent.map(s => s.type).join(" "));
+  if (sent.length) {
+    const p = landing(world, sent[0].angle, TRAP_ID);
+    const hold = placer._trapHoldRadius(TRAP_ID, world.enemy);
+    check("landing where it closes on them again", Math.hypot(p.x - 5080, p.y - 5000) <= hold, `${Math.hypot(p.x - 5080, p.y - 5000).toFixed(1)} vs ${hold}`);
+  }
+  // A trap on them fills the ring for 102px either side, so nothing else fits
+  // near the hole — one build is the honest answer to this geometry.
+  check("and never more than the cap", sent.length <= 4, `${sent.length} sent`);
+
+  // Nothing overlaps anything else it just sent.
+  let overlap = false;
+  for (let i = 0; i < sent.length; i++) {
+    for (let j = i + 1; j < sent.length; j++) {
+      const a = landing(world, sent[i].angle, sent[i].type === 7 ? TRAP_ID : SPIKE_ID);
+      const b = landing(world, sent[j].angle, sent[j].type === 7 ? TRAP_ID : SPIKE_ID);
+      const gap = Items[sent[i].type === 7 ? TRAP_ID : SPIKE_ID].scale + Items[sent[j].type === 7 ? TRAP_ID : SPIKE_ID].scale;
+      if (Math.hypot(a.x - b.x, a.y - b.y) < gap) overlap = true;
+    }
+  }
+  check("the builds do not land on each other", !overlap);
+}
+
+section("replace fills more than one slot when they fit");
+{
+  // The hole is east, they are north: the retrap and the build that takes the
+  // hole are 90 degrees apart, so both fit.
+  const world = makeWorld({ enemy: { x: 5000, y: 5075 } });
+  const trap = world.addObject(5080, 5000, TRAP_ID, 1);
+  const placer = new AutoPlacer(world.client);
+  placer.postTick();
+  world.moduleHandler.sent.length = 0;
+  world.moduleHandler.packetCount = 0;
+  world.objectManager.removeObject(trap);
+  const sent = world.moduleHandler.sent;
+  check("both go down", sent.length >= 2, `${sent.length} sent`);
+  const covers = sent.some(s => {
+    const p = landing(world, s.angle, s.type === 7 ? TRAP_ID : SPIKE_ID);
+    return Math.hypot(p.x - 5080, p.y - 5000) < 102;
+  });
+  const holds = sent.some(s => {
+    if (s.type !== 7) return false;
+    const p = landing(world, s.angle, TRAP_ID);
+    return Math.hypot(p.x - 5000, p.y - 5075) <= placer._trapHoldRadius(TRAP_ID, world.enemy);
+  });
+  check("one takes the hole", covers);
+  check("the other closes on them", holds);
+}
+
+section("replace holds its fire");
+{
+  // Nobody near the break: not worth the packets.
+  const far = makeWorld({ enemy: { x: 5000 + 600, y: 5000 } });
+  const farTrap = far.addObject(5080, 5000, TRAP_ID, 1);
+  const farPlacer = new AutoPlacer(far.client);
+  farPlacer.postTick();
+  far.moduleHandler.sent.length = 0;
+  far.objectManager.removeObject(farTrap);
+  check("a break with the fight far away is left alone", far.moduleHandler.sent.length === 0, `${far.moduleHandler.sent.length} sent`);
+
+  // Out of packets.
+  const broke = makeWorld({ enemy: { x: 5080, y: 5000 } });
+  const brokeTrap = broke.addObject(5080, 5000, TRAP_ID, 1);
+  const brokePlacer = new AutoPlacer(broke.client);
+  brokePlacer.postTick();
+  broke.moduleHandler.sent.length = 0;
+  broke.moduleHandler.packetCount = 118;
+  broke.objectManager.removeObject(brokeTrap);
+  check("a spent budget sends nothing", broke.moduleHandler.sent.length === 0, `${broke.moduleHandler.sent.length} sent`);
+
+  // Replace switched off.
+  const off = makeWorld({ enemy: { x: 5080, y: 5000 } });
+  const offTrap = off.addObject(5080, 5000, TRAP_ID, 1);
+  const offPlacer = new AutoPlacer(off.client);
+  offPlacer.postTick();
+  off.moduleHandler.sent.length = 0;
+  off.moduleHandler.packetCount = 0;
+  SETTINGS._replace = false;
+  off.objectManager.removeObject(offTrap);
+  check("the replace switch holds", off.moduleHandler.sent.length === 0, `${off.moduleHandler.sent.length} sent`);
+  SETTINGS._replace = true;
+}
+
+// ── scenario: stability ───────────────────────────────────────────────────
+// Two candidates a point apart otherwise swap places every tick, and the
+// placer spends its budget re-deciding rather than building.
+section("stability across ticks");
+{
+  const world = makeWorld({ enemy: { x: 5130, y: 5000, vx: -6 } });
+  const placer = new AutoPlacer(world.client);
+  const rounds = [];
+  for (let i = 0; i < 6; i++) {
+    world.moduleHandler.tickCount += 1;
+    world.moduleHandler.packetCount = 0;
+    world.moduleHandler.sent.length = 0;
+    context.__timers.length = 0;
+    // The enemy drifts a little each tick, the way a real one does.
+    world.enemy.pos.current.x -= 3;
+    world.enemy.pos.previous.x -= 3;
+    world.enemy.pos.future.x -= 3;
+    placer.postTick();
+    rounds.push(world.moduleHandler.sent.map(s => s.angle));
+  }
+  // Stability is not "the same number every tick" — the fight moves, so the
+  // angle that means the same build moves with it. It is that each tick's
+  // choices are the previous tick's choices, nudged.
+  let worstJump = 0;
+  for (let i = 1; i < rounds.length; i++) {
+    const previous = rounds[i - 1], current = rounds[i];
+    if (previous.length === 0 || current.length === 0) continue;
+    for (const angle of current) {
+      const nearest = Math.min(...previous.map(p => {
+        const d = Math.abs(p - angle) % (Math.PI * 2);
+        return d > Math.PI ? Math.PI * 2 - d : d;
+      }));
+      worstJump = Math.max(worstJump, nearest);
+    }
+  }
+  check("each tick's builds are the last tick's, nudged", worstJump < 0.35, `worst jump ${worstJump.toFixed(3)} rad`);
+  check("something was chosen at all", rounds.some(r => r.length > 0));
 }
 
 // ── scenario: item limits ─────────────────────────────────────────────────

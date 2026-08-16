@@ -31,7 +31,10 @@ What v5.4 adds on top of Luna's version:
 | **Scoring** | Luna's ladders are boolean and ordered, with distance as the tie-break inside a rung. Everything the ladders allow is scored — catches, packing, spike-tick reach, knockback alignment onto spikes you own, what it walls off — and the packet budget is spent best-first. |
 | **Recording** | Every send is logged and matched against the object that comes back, which is where the origin lead, the resend delay and the dead-angle bans come from. `RYN_PLACER.recorder.stats` in the console reads back ack latency, jitter, the learned lead, origin error and per-kind success rates. |
 | **Budget** | Luna spent to the hard limit. The per-tick cap is 6 builds (4 while pinned), and the placer stops queueing with 20 packets of the per-second allowance still unspent, so heal and anti-insta are never starved by a spike wall. |
-| **Speed** | A full tick costs **~29µs** with 14 objects in range, against ~95µs for the previous build and far more than that for Luna's sampling: no collision scan per probed angle, one grid query a tick instead of 144, squared distances throughout, and a smaller sweep for the spikes around the enemy. A preplace resend re-checks the slot first, so a slot someone else filled costs a query instead of five packets. |
+| **Replace is an event, not a timer** | The server names the object that just died in a packet of its own, which arrives before any tick. Replace runs from `ObjectManager.removeObject` off that packet, so the slot is known empty at the instant the build is sent instead of assumed empty a tick later — the difference between a replace that lands and one that bounces off the object it was racing. Luna's blind third send at `111 - minPing` is gone with it. Up to four builds go into a break, graded and non-overlapping, the retrap first; whiteout does the same thing in `killObject()`. |
+| **Stability** | Two candidates a point apart used to swap places every tick, so the placer spent its budget re-deciding rather than building and the same two slots were alternately filled and abandoned. A choice now carries a bonus for three ticks, matched by proximity rather than by exact angle — the tangent onto a closing enemy widens several degrees a tick on its own — and exact ties break deterministically. |
+| **Slot reservation** | A preplace claims its landing spot, so the autoplace pass and a replace firing mid-tick do not spend packets fighting it for the same hole. whiteout calls these `prioLoc`. |
+| **Speed** | A full tick costs **~32µs** with 14 objects in range, against ~95µs for the build before the arcs and far more than that for Luna's sampling: no collision scan per probed angle, one grid query a tick instead of 144, squared distances throughout, and a smaller sweep for the spikes around the enemy. A preplace resend re-checks the slot first, so a slot someone else filled costs a query instead of five packets. |
 | **Correctness** | `getItemByType(7)` is the whole trap/boost/teleport slot; only a real trap now gets the trap ladder. The item-limit check reads the real group limit rather than the sandbox one. |
 
 ### Where this sits against the other clients
@@ -65,7 +68,7 @@ Three switches in **Combat → Spikes & Traps**, all on by default:
   delay and the angle bans. Off pins the resend to Luna's fixed `111 - ping`.
 
 ```sh
-node tools/test-placer.js       # 58 checks, and prints the per-tick cost
+node tools/test-placer.js       # 70 checks, and prints the per-tick cost
 node tools/verify-drivers.js RYN_v5.4.user.js
 node --check RYN_v5.4.user.js
 ```

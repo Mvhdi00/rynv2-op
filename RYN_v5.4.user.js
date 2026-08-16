@@ -9129,6 +9129,29 @@ window.grbtp = 35;
   // While pinned, heal and anti-insta matter more than the sixth spike.
   const PLACER_MAX_SENDS_TRAPPED = 4;
 
+  // Most builds one break may draw. whiteout places up to four into a slot the
+  // moment it opens; past that they stop fitting anywhere useful anyway.
+  const PLACER_REPLACE_MAX = 4;
+
+  // How close the fight has to be for a break to be worth replacing into.
+  const PLACER_REPLACE_ENEMY_RANGE = 320;
+
+  // What last tick's choice is worth when this tick is deciding again. Without
+  // it two candidates a point apart swap places every tick and the placer
+  // spends its budget re-deciding instead of building.
+  const PLACER_COMMIT_BONUS = 30;
+
+  // How long a commitment lasts, and how far the angle may drift and still be
+  // the same build. The tangent onto a closing enemy widens as they close, so
+  // "the same build" moves several degrees a tick on its own.
+  const PLACER_COMMIT_TICKS = 3;
+  const PLACER_COMMIT_ARC = .16;
+
+  // How many times one angle may be sent inside a tick. auraro caps this at
+  // four in tryPlaceAngle; past that the server has either taken it or it was
+  // never going to.
+  const PLACER_ANGLE_SPAM_MAX = 4;
+
   // How long the placer remembers that an enemy was standing in one of our
   // traps. The memory has to outlive the trap itself: the tick it breaks is the
   // tick a fresh one has to go back down, and by then the object is gone from
@@ -9367,6 +9390,11 @@ window.grbtp = 35;
     _angleCache=new Map;
     _arcCache=new Map;
     _retrapMemory=new Map;
+    _reserved=[];
+    _committed=[];
+    _angleSends=new Map;
+    _angleSendTick=-1;
+    _removalHooked=false;
     _neighbors=[];
     _neighborTick=-1;
     _neighborX=0;
@@ -9389,6 +9417,9 @@ window.grbtp = 35;
       this._angleCache.clear();
       this._arcCache.clear();
       this._retrapMemory.clear();
+      this._reserved = [];
+      this._committed.length = 0;
+      this._angleSends.clear();
       this._neighbors = [];
       this._neighborTick = -1;
       this._lastPrePlaceObj = null;
@@ -9891,6 +9922,225 @@ window.grbtp = 35;
       return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
     }
 
+    // Everything the world knows changed under us — the caches are per tick and
+    // a removal happens between them.
+    _invalidate() {
+      this._angleCache.clear();
+      this._arcCache.clear();
+      this._neighborTick = -1;
+    }
+
+    // A slot this tick has already claimed. Preplace claims its landing spot so
+    // the autoplace pass and a replace firing mid-tick do not spend packets
+    // fighting it for the same hole — whiteout calls these prioLoc.
+    _reserve(config) {
+      this._reserved.push({
+        x: config.x,
+        y: config.y,
+        scale: config.scale
+      });
+    }
+    _isReserved(config) {
+      for (const slot of this._reserved) {
+        const dx = config.x - slot.x, dy = config.y - slot.y;
+        const reach = config.scale + slot.scale;
+        if (dx * dx + dy * dy < reach * reach) return true;
+      }
+      return false;
+    }
+
+    // Last tick's choice, matched by proximity rather than by exact value. The
+    // enemy moves a few pixels a tick, so the angle that means "the same build"
+    // drifts with them; keying on the number itself would expire the commitment
+    // on the first tick it was needed.
+    _commit(config) {
+      this._committed.push({
+        angle: config.angle,
+        id: config.id,
+        tick: this._tick
+      });
+      if (this._committed.length > 16) this._committed.splice(0, this._committed.length - 16);
+    }
+    // Full weight while it is the choice we just made, half once it is a tick
+    // or two old. Two builds that cannot both fit otherwise trade places every
+    // tick as their scores cross, and neither ever gets built twice running.
+    _commitBonus(config) {
+      let best = -1;
+      for (const held of this._committed) {
+        if (held.id !== config.id) continue;
+        const age = this._tick - held.tick;
+        if (age < 0 || age > PLACER_COMMIT_TICKS) continue;
+        if (getAngleDist(held.angle, config.angle) > PLACER_COMMIT_ARC) continue;
+        if (best === -1 || age < best) best = age;
+      }
+      if (best === -1) return 0;
+      return best <= 1 ? PLACER_COMMIT_BONUS : PLACER_COMMIT_BONUS / 2;
+    }
+
+    // auraro's tryPlaceAngle cap, per tick.
+    _spamOk(angle) {
+      if (this._angleSendTick !== this._tick) {
+        this._angleSends.clear();
+        this._angleSendTick = this._tick;
+      }
+      const key = angle * 1e3 | 0;
+      const count = this._angleSends.get(key) || 0;
+      if (count >= PLACER_ANGLE_SPAM_MAX) return false;
+      this._angleSends.set(key, count + 1);
+      return true;
+    }
+
+    // ObjectManager.removeObject runs straight off the "Q" packet, before any
+    // tick. Wrapping it is what turns replace from a guess into an event.
+    _hookRemovals() {
+      if (this._removalHooked) return;
+      const ObjectManager2 = this.client.ObjectManager;
+      if (!ObjectManager2 || typeof ObjectManager2.removeObject !== "function") return;
+      const original = ObjectManager2.removeObject.bind(ObjectManager2);
+      const self = this;
+      ObjectManager2.removeObject = function(object) {
+        const result = original(object);
+        try {
+          self.onObjectRemoved(object);
+        } catch (_) {}
+        return result;
+      };
+      this._removalHooked = true;
+    }
+
+    // ── REPLACE ───────────────────────────────────────────────────────────
+    // The old third send was a `setTimeout(111 - minPing)` fired blind, on the
+    // hope that the object had died by the time it landed. It is a guess about
+    // the one thing the server tells us outright: the "Q" packet naming the
+    // object that just died. Replace runs from that packet instead, so the slot
+    // is known empty at the instant the build is sent rather than assumed empty
+    // a tick later — that is the whole of the difference between a replace that
+    // lands and one that bounces off the object it was racing.
+    //
+    // whiteout does the same thing in killObject() and puts up to four builds
+    // into the hole. This grades them the way the rest of the module grades
+    // angles, with the retrap first: a trap that closes on them again is worth
+    // more than any spike, because it is the thing that keeps them there.
+    onObjectRemoved(object) {
+      if (!Settings_default._autoplacer || !Settings_default._replace) return;
+      if (!(object instanceof PlayerObject)) return;
+      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler, SocketManager: SocketManager2} = this.client;
+      if (!myPlayer || !myPlayer.inGame || myPlayer.shameActive) return;
+      if (placerTickBusy(ModuleHandler)) return;
+      const enemy = EnemyManager2.nearestEnemy;
+      if (!enemy) return;
+
+      const myPos = myPlayer.pos.current;
+      const enemyPos = enemy.pos.current;
+      if (myPos.distance(enemyPos) > PLACER_REPLACE_ENEMY_RANGE) return;
+
+      const slot = object.pos.current;
+      const spikeId = myPlayer.getItemByType(PLACER_SPIKE_TYPE);
+      const rawTrapId = myPlayer.getItemByType(PLACER_TRAP_TYPE);
+      const trapId = rawTrapId !== null && rawTrapId !== undefined && Items[rawTrapId]?.trap ? rawTrapId : null;
+      const reachOf = id => id === null || id === undefined ? 0 : myPlayer.getItemPlaceScale(id) + Items[id].scale;
+      const reach = Math.max(reachOf(spikeId), reachOf(trapId));
+      if (reach === 0 || myPos.distance(slot) > reach + object.placementScale) return;
+
+      this._tick = ModuleHandler.tickCount;
+      this._invalidate();
+      this._originX = myPos.x;
+      this._originY = myPos.y;
+
+      const ping = Number.isFinite(SocketManager2?.pong) ? SocketManager2.pong : 0;
+      const target = this._project(enemy, Math.min(250, ping / 2), {
+        x: 0,
+        y: 0
+      });
+      const enemyScale = enemy.collisionScale;
+      const hold = trapId !== null ? this._trapHoldRadius(trapId, enemy) : 0;
+
+      const extras = [];
+      for (const id of [ spikeId, trapId ]) {
+        if (id === null || id === undefined) continue;
+        const placeDist = myPlayer.getItemPlaceScale(id);
+        this._tangentAngles(placeDist, myPos.x, myPos.y, target.x, target.y, enemyScale + Items[id].scale, extras);
+        const onto = this._angleOnto(placeDist, myPos.x, myPos.y, slot.x, slot.y);
+        if (onto !== null) extras.push(onto);
+      }
+
+      const candidates = [ ...this._probeAngles(spikeId, myPlayer, ObjectManager2, null, extras), ...this._probeAngles(trapId, myPlayer, ObjectManager2, null, extras) ];
+      if (candidates.length === 0) return;
+
+      const scored = [];
+      for (const config of candidates) {
+        if (this._isReserved(config)) continue;
+        const isTrap = config.id === trapId;
+        const dx = config.x - target.x, dy = config.y - target.y;
+        const toEnemy = Math.sqrt(dx * dx + dy * dy);
+        const sdx = config.x - slot.x, sdy = config.y - slot.y;
+        const toSlot = Math.sqrt(sdx * sdx + sdy * sdy);
+        let score = 0;
+        // The hole itself: whatever the enemy was about to walk through.
+        if (toSlot < config.scale + object.placementScale) score += 120;
+        if (isTrap) {
+          // A trap that closes on them again ends the fight; nothing else here
+          // is worth as much.
+          if (toEnemy <= hold) score += 220;
+          if (enemy.isTrapped) score -= 90;
+        } else {
+          if (toEnemy < config.scale + enemyScale) score += 140;
+          if (myPlayer.isTrapped) score += 40 * Math.max(0, Math.cos(config.angle - myPos.angle(enemyPos)));
+        }
+        if (config.perfect) score += 20;
+        score -= toEnemy * .1;
+        if (score <= 0) continue;
+        scored.push({
+          config: config,
+          score: score
+        });
+      }
+      if (scored.length === 0) return;
+      scored.sort((a, b) => b.score - a.score);
+
+      const taken = [];
+      let placed = 0;
+      for (const pick of scored) {
+        if (placed >= PLACER_REPLACE_MAX) break;
+        if (ModuleHandler.packetCount + PLACER_PLACE_COST > ModuleHandler.packetLimit) break;
+        const config = pick.config;
+        let overlaps = false;
+        for (const other of taken) {
+          const dx = config.x - other.x, dy = config.y - other.y;
+          const gap = config.scale + other.scale;
+          if (dx * dx + dy * dy < gap * gap) {
+            overlaps = true;
+            break;
+          }
+        }
+        if (overlaps) continue;
+        const type = config.id === trapId ? PLACER_TRAP_TYPE : PLACER_SPIKE_TYPE;
+        if (!myPlayer.canPlace(type)) continue;
+        if (this._isItemLimit(config.id, myPlayer)) continue;
+        if (!this._spamOk(config.angle)) continue;
+        ModuleHandler.place(type, config.angle);
+        ModuleHandler.placedOnce = true;
+        this._placedAngles.push(config.angle);
+        this.recorder.record({
+          kind: "replace",
+          itemId: config.id,
+          angle: config.angle,
+          x: config.x,
+          y: config.y,
+          originX: myPos.x,
+          originY: myPos.y,
+          speed: myPlayer.speed || 0,
+          moveDir: myPlayer.move_dir || 0,
+          bucket: Math.round(config.angle * 32)
+        });
+        taken.push(config);
+        this._reserve(config);
+        placed += 1;
+      }
+      // The world moved; whatever the tick had cached about it is stale.
+      if (placed > 0) this._invalidate();
+    }
+
     _banAngle(angle, fails) {
       const ticks = Math.min(PLACER_BAN_TICKS * (fails || 1), PLACER_BAN_TICKS_MAX);
       this._bannedAngles.set(angle, this._tick + ticks);
@@ -9902,6 +10152,8 @@ window.grbtp = 35;
       if (!myPlayer || !myPlayer.inGame) return;
 
       this.recorder.attach();
+      this._hookRemovals();
+      this._reserved.length = 0;
       if (!this._exposed && this.client.isOwner) {
         this._exposed = true;
         // The recording is the point of half of this module; leave a handle on
@@ -10256,6 +10508,7 @@ window.grbtp = 35;
           }
           if (findAngle) {
             this._addPredictObject(findAngle, true, findObject, 1e3);
+            this._reserve(findAngle);
             this._lastPrePlaceObj = findObject;
           }
         }
@@ -10376,21 +10629,29 @@ window.grbtp = 35;
         const picks = [];
         for (const config of validAngles) {
           if (!config.placeable) continue;
+          if (this._isReserved(config)) continue;
           const allowed = isAutoPlaceAngle(config) || isTrappedPlaceAngle(config);
           if (!allowed && !smart) continue;
-          const score = scoreOf(config, ctx);
+          let score = scoreOf(config, ctx);
           if (!allowed && !(inRange && score >= PLACER_SMART_THRESHOLD)) continue;
+          // Stability. Two candidates a point apart otherwise swap places every
+          // tick, and the placer spends the budget re-deciding rather than
+          // building — the same angle wins, loses and wins again while the
+          // enemy walks through the gap none of them ever filled. Last tick's
+          // choice carries a bonus so it stays chosen while it is still worth
+          // choosing.
+          score += this._commitBonus(config);
           picks.push({
             config: config,
             score: score + (config.perfect ? 12 : 0)
           });
         }
-        picks.sort((a, b) => b.score - a.score);
+        picks.sort((a, b) => b.score - a.score || a.config.angle - b.config.angle);
         const affordable = Math.floor((ModuleHandler.packetLimit - ModuleHandler.packetCount - PLACER_BUDGET_RESERVE) / PLACER_PLACE_COST);
         const maxSends = Math.min(imTrapped ? PLACER_MAX_SENDS_TRAPPED : PLACER_MAX_SENDS, Math.max(0, affordable));
         for (const pick of picks) {
           if (this._predictObjects.length >= maxSends) break;
-          this._addPredictObject(pick.config, false, null, pick.score);
+          if (this._addPredictObject(pick.config, false, null, pick.score)) this._commit(pick.config);
         }
       }
 
@@ -10461,7 +10722,6 @@ window.grbtp = 35;
       const measured = learning && this.recorder.confirmed >= 4 ? this.recorder.ackMs : PLACER_TICK_MS;
       const guard = learning ? Math.min(20, this.recorder.ackJitter) : 0;
       const secondDelay = Math.max(1, Math.round(Math.min(PLACER_TICK_MS, measured) - pingTime - guard));
-      const thirdDelay = Math.max(1, Math.round(PLACER_TICK_MS - minPingTime));
 
       // Luna keeps the aim pointed where it was attacking across all three
       // sends, so a build never drags the swing off target.
@@ -10480,17 +10740,11 @@ window.grbtp = 35;
           }
         } catch (_) {}
       }, secondDelay);
-      setTimeout(() => {
-        if (!this._spamPrePlacer) return;
-        try {
-          for (const obj of preObjects) {
-            if (outOfBudget()) break;
-            if (!stillOpen(obj)) continue;
-            emit(obj, "replace");
-            PacketManager2.updateAngle(aimAngle());
-          }
-        } catch (_) {}
-      }, thirdDelay);
+      // Luna's third send went out at `111 - minPing` on the hope that the
+      // object had died by the time it landed. That hope is now a fact we are
+      // told: onObjectRemoved fires off the packet naming the object that died
+      // and puts the build in then, so the blind send is gone rather than
+      // spending five packets on a slot that is usually still occupied.
     }
   }
   class TrapAnimal {
