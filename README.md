@@ -1,4 +1,59 @@
-# ReUp Mix (Luna × Ryn)
+# RYN / ReUp
+
+Two moomoo.io userscripts in one repo, both built against the game bundles in
+`src/` and verified against them:
+
+- **`RYN_v5.4.user.js`** — RYN Client v5.4, where the placer work lives.
+- **`ReUp_Mix.user.js`** — the earlier Luna × RYN v4 merge, described further down.
+
+---
+
+## The placer (RYN v5.4)
+
+Autoplace, preplace and replace are one module, `AutoPlacer`, and one pass per
+tick: it rebuilds the set of builds it wants and flags each one `preplace` or
+not. Autoplace goes out immediately; a preplace entry is held and sent again
+when the slot it is aimed at frees; replace is that same entry sent a third
+time at min-ping, for when the second send lost the race. The decision set is
+Luna Client 1.1's, rewritten onto RYN's managers.
+
+What v5.4 adds on top of Luna's version:
+
+| | |
+|---|---|
+| **Placing while pinned** | Luna places nothing at all when you are in a trap: every spike rung of its ladder needs the *enemy* trapped, and both trap rungs need neither of you trapped. `isTrappedPlaceAngle` is the ladder for being pinned — spikes that can already reach them, spikes on the line they are closing along, the arc they have to come through, and a trap under the only ground they can hit you from. It keeps the lane directly behind you clear so breaking out is not into your own wall. |
+| **The slot you are breaking out of** | `_getPrePlaceObject` now prefers the trap holding you over anything else you are swinging at, and the preplace ladder will take that slot with a **spike**. The freed slot is the one the enemy is about to drop a fresh trap into; a spike in it denies the retrap and damages the push. |
+| **Origin lead** | The server builds at the position it holds for you when the packet lands, not the one you had when you sent it. The recorder measures that offset from the objects coming back and the probe origin is shifted by it. Pinned, the lead is exactly zero, which is why placement while trapped is the most accurate placement there is. |
+| **Edge refinement** | Luna probes 72 fixed angles, so a build packed against a neighbour lands up to 2.5° off the tightest angle. Every placeable/blocked boundary is bisected to under a tenth of a degree and the angle just inside it is probed as its own candidate. Luna also never closes the circle when marking those ends, so a run straddling 0 rad lost both of them; that is fixed. |
+| **Aimed angles** | The tangents that put a build exactly on the edge of the enemy's hitbox — now and where they are heading — and the angle into a slot that is opening, are probed as real candidates instead of being rounded onto the 5° grid. |
+| **Enemy prediction** | Luna reaches one tick ahead (`pos.future`). The reach segment now runs to where they will be when the build actually exists (ping/2 + a tick), so a spike goes in front of a rush instead of behind it. |
+| **Scoring** | Luna's ladders are boolean and ordered, with distance as the tie-break inside a rung. Everything the ladders allow is scored — catches, packing, spike-tick reach, knockback alignment onto spikes you own, what it walls off — and the packet budget is spent best-first. |
+| **Recording** | Every send is logged and matched against the object that comes back, which is where the origin lead, the resend delay and the dead-angle bans come from. `RYN_PLACER.recorder.stats` in the console reads back ack latency, jitter, the learned lead, origin error and per-kind success rates. |
+| **Budget** | Luna spent to the hard limit. The per-tick cap is 6 builds (4 while pinned), and the placer stops queueing with 20 packets of the per-second allowance still unspent, so heal and anti-insta are never starved by a spike wall. |
+| **Speed** | Blockers are pulled from the spatial grid once a tick instead of once per probed angle, and matched with squared distances — 1 grid query per tick where there were 144. A preplace resend re-checks the slot first, so a slot someone else filled costs a query instead of five packets. |
+| **Correctness** | `getItemByType(7)` is the whole trap/boost/teleport slot; only a real trap now gets the trap ladder. The item-limit check reads the real group limit rather than the sandbox one. |
+
+Three switches in **Combat → Spikes & Traps**, all on by default:
+
+- **Smart Placer** — the scorer. Off leaves Luna's boolean ladders alone.
+- **Trapped Placer** — the pinned ladder. Off restores Luna's silence while trapped.
+- **Placer Learning** — the recorder feeding back the origin lead, the resend
+  delay and the angle bans. Off pins the resend to Luna's fixed `111 - ping`.
+
+```sh
+node tools/test-placer.js       # 43 checks
+node tools/verify-drivers.js RYN_v5.4.user.js
+node --check RYN_v5.4.user.js
+```
+
+`tools/test-placer.js` lifts `Items`, `ItemGroups`, `Config`, the spatial grid
+and the placer itself straight out of the userscript by source anchors and runs
+them against a mocked world, so the scenarios exercise the shipped code rather
+than a copy of it.
+
+---
+
+## ReUp Mix (Luna × Ryn)
 
 A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client
 features RYN never had, built against the game bundles in `src/` and verified
@@ -116,6 +171,7 @@ but nothing in the client needs it. It is stripped from the build.
 ## Layout
 
 ```
+RYN_v5.4.user.js          RYN Client v5.4 — the placer work lives here
 ReUp_Mix.user.js          the build output — this is the script to install
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
@@ -126,6 +182,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/test-placer.js      runs RYN v5.4's placer against a mocked world
 ```
 
 ## Build
