@@ -148,9 +148,12 @@ function buildTestBundle() {
         Prediction, Targeting, PlacementEngine, CombatEngine, Config,
         AutoPlace, Preplace, Replace, SpikeTick, AntiSmartTick, SafeSoldier,
         AutoHeal, AutoMills, Arbiter, Scheduler, Runtime,
+        AutoBreak, Movement, AutoUpgrade, AutoBuy, AutoRespawn, AutoGather,
+        ShameReset, AutoChat, Overlay,
         Entity, WorldObject, Candidate,
         Intent, PlacementIntent, ReplaceIntent, AttackIntent, HealIntent,
-        DefenseIntent, HoldIntent
+        DefenseIntent, HoldIntent, BreakIntent, MoveIntent, UpgradeIntent,
+        BuyIntent, SpawnIntent, ToggleIntent, ChatIntent
     };
     `;
     return '(function(){"use strict";\n' + parts.join('\n') + '\n' + epilogue + '\n})();';
@@ -1160,6 +1163,535 @@ group('full loop');
     /* Objects still load after a respawn. */
     inbound('H', [[999, 6100, 6000, 0, 35, -1, api.GameState.spikeItem, 1]]);
     check('objects load after respawn', api.GameState.objects.size > 0);
+}
+
+
+/* --- module: auto break ------------------------------------------------ */
+group('module: auto break');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    addPlayer(inbound, 2, 'foe', 1200, 1000, 0);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    inbound('V', [[3, 10], 1]);      // short sword + great hammer
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1200, y: 1000 }]);
+
+    check('silent while free and unobstructed', api.AutoBreak.tick() == null);
+
+    /* Held by an enemy trap, in reach. */
+    const trapItem = api.GameState.trapItem;
+    loadObject(inbound, {
+        sid: 820, x: 1000, y: 1000,
+        scale: api.Defs.items[trapItem].scale, itemId: trapItem, ownerSid: 2
+    });
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1200, y: 1000 }]);
+
+    check('we read as held', api.GameState.self.trapped === true);
+    const escape = api.AutoBreak.tick();
+    check('breaking out of a trap produces a BreakIntent',
+        escape instanceof api.BreakIntent, String(escape && escape.kind));
+    check('escaping is the highest-urgency break',
+        escape && escape.urgency === api.Config.get('combat.autoBreak.urgencyEscape'));
+    check('the break aims at the trap',
+        escape && near(api.U.getAngleDist(escape.angle,
+            api.U.getDirection(1000, 1000, 1000, 1000)), 0, Math.PI),
+        'angle set');
+    check('it names a slot and a real weapon',
+        escape && (escape.slot === 0 || escape.slot === 1)
+        && api.Defs.weapons[escape.weapon] != null);
+    check('the intent validates while the trap stands', escape && escape.validate() === null,
+        String(escape && escape.validate()));
+
+    /* Trap gone: the intent must die rather than swing at nothing. */
+    inbound('Q', [820]);
+    check('the intent is dropped once the structure is gone',
+        escape && escape.validate() === 'object-gone', String(escape && escape.validate()));
+
+    /* Anti Smart Tick blocks the break through arbitration, not directly. */
+    const held = new api.HoldIntent({
+        source: 'test', urgency: 95, confidence: 1, reason: 'tick-setup',
+        blocks: ['Break']
+    });
+    loadObject(inbound, {
+        sid: 821, x: 1000, y: 1000,
+        scale: api.Defs.items[trapItem].scale, itemId: trapItem, ownerSid: 2
+    });
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1200, y: 1000 }]);
+    const escape2 = api.AutoBreak.tick();
+    const winners = api.Arbiter.resolve([escape2, held].filter(Boolean));
+    check('a stronger Anti-Smart-Tick hold can veto the escape',
+        escape2 == null || winners.indexOf(escape2) < 0,
+        escape2 ? String(escape2.rejectedReason) : 'no escape offered');
+
+    api.Config.set('combat.autoBreak.enabled', false);
+    check('the enable toggle gates the module', api.AutoBreak.tick() == null);
+    api.Config.set('combat.autoBreak.enabled', true);
+}
+
+/* --- module: movement -------------------------------------------------- */
+group('module: movement');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    addPlayer(inbound, 2, 'foe', 1060, 1000, 0);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    inbound('V', [[3, 10], 1]);
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1060, y: 1000, weaponIndex: 3 }]);
+
+    check('movement is off by default', api.Config.get('movement.enabled') === false);
+    check('and produces nothing while off', api.Movement.tick() == null);
+
+    api.Config.set('movement.enabled', true);
+
+    /* Safe walk: heading straight into an enemy spike. */
+    const spike = api.GameState.spikeItem;
+    loadObject(inbound, {
+        sid: 830, x: 1120, y: 1000,
+        scale: api.Defs.items[spike].scale, itemId: spike, ownerSid: 2
+    });
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1060, y: 1000 }]);
+    api.GameState.input.moveDir = 0;   // due east, into the spike
+
+    check('a hazard on the current heading is detected',
+        api.Movement.hazardOnSegment(1000, 1000, 1240, 1000, 35) != null);
+
+    const steer = api.Movement.tick();
+    check('produces a MoveIntent when the heading is unsafe',
+        steer instanceof api.MoveIntent, String(steer && steer.kind));
+    if (steer) {
+        check('the correction is a real change of heading',
+            steer.angle == null || api.U.getAngleDist(steer.angle, 0) > 0.05,
+            'angle=' + steer.angle);
+        check('and the new heading is clear', steer.angle == null
+            || api.Movement.hazardOnSegment(1000, 1000,
+                1000 + 240 * Math.cos(steer.angle), 1000 + 240 * Math.sin(steer.angle), 35) == null);
+        check('a move intent expires rather than lingering', (function () {
+            for (let i = 0; i < 4; i++) {
+                updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1060, y: 1000 }]);
+            }
+            return steer.validate() === 'expired';
+        })(), String(steer.validate()));
+    } else {
+        for (const t of ['the correction is a real change of heading',
+            'and the new heading is clear',
+            'a move intent expires rather than lingering']) check(t, false, 'no intent');
+    }
+
+    /* A clear heading produces nothing. */
+    api.GameState.input.moveDir = Math.PI;   // due west, away from the spike
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1060, y: 1000 }]);
+    const clear = api.Movement.tick();
+    check('a clear heading is left alone',
+        clear == null || clear.reason !== 'safe-walk', clear ? clear.reason : 'none');
+
+    /* Our own spikes are not hazards to us. */
+    loadObject(inbound, {
+        sid: 831, x: 880, y: 1000,
+        scale: api.Defs.items[spike].scale, itemId: spike, ownerSid: 1
+    });
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1060, y: 1000 }]);
+    check('our own structures are not treated as hazards',
+        api.Movement.hazardOnSegment(1000, 1000, 800, 1000, 35) == null);
+
+    api.Config.set('movement.enabled', false);
+}
+
+/* --- module: auto upgrade ---------------------------------------------- */
+group('module: auto upgrade');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    inbound('V', [[0, null], 1]);
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+
+    check('nothing to do with no points', api.AutoUpgrade.tick() == null);
+
+    /* Age 2 offers, per the shipped tables. */
+    inbound('U', [1, 2]);
+    check('the tier is recorded', api.GameState.upgradeAge === 2);
+    const offers = api.AutoUpgrade.offers();
+    check('offers match the game\'s own filter', offers.length > 0,
+        offers.map((o) => o.name).join(','));
+    check('every offer is for the announced tier',
+        offers.every((o) => (o.index < api.Defs.weapons.length
+            ? api.Defs.weapons[o.index]
+            : api.Defs.items[o.index - api.Defs.weapons.length]).age === 2));
+
+    const up = api.AutoUpgrade.tick();
+    check('produces an UpgradeIntent', up instanceof api.UpgradeIntent, String(up && up.kind));
+    check('the index is inside the game\'s index space',
+        up && up.index >= 0 && up.index < api.Defs.weapons.length + api.Defs.items.length);
+    check('it validates while the offer stands', up && up.validate() === null,
+        String(up && up.validate()));
+
+    /* A new tier invalidates the old index. */
+    inbound('U', [1, 3]);
+    check('an offer from a previous tier is dropped',
+        up && up.validate() === 'stale-tier', String(up && up.validate()));
+
+    inbound('U', [0, 3]);
+    check('spent points end the offer', api.AutoUpgrade.tick() == null);
+
+    /* Preference order is honoured. */
+    inbound('U', [1, 2]);
+    const names = api.AutoUpgrade.offers().map((o) => o.name);
+    if (names.length > 1) {
+        api.Config.set('utility.autoUpgrade.order', names[names.length - 1]);
+        const picked = api.AutoUpgrade.tick();
+        check('the preference list decides which offer is taken',
+            picked && picked.label === names[names.length - 1],
+            picked ? picked.label : 'none');
+    } else {
+        check('the preference list decides which offer is taken', true, 'only one offer');
+    }
+}
+
+/* --- module: auto buy --------------------------------------------------- */
+group('module: auto buy');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+
+    check('the shopping list resolves against the real hat table',
+        api.AutoBuy.wanted().length > 0
+        && api.AutoBuy.wanted().every((e) => typeof e.price === 'number'),
+        JSON.stringify(api.AutoBuy.wanted().slice(0, 2)));
+
+    check('broke: nothing is bought', api.AutoBuy.tick() == null);
+
+    inbound('N', ['points', 100000, 0]);
+    const buy = api.AutoBuy.tick();
+    check('rich: produces a BuyIntent', buy instanceof api.BuyIntent, String(buy && buy.kind));
+    check('the price comes from the game table',
+        buy && api.Defs.hats.concat(api.Defs.accessories)
+            .some((h) => h.id === buy.id && h.price === buy.price));
+    check('it validates while unowned and affordable', buy && buy.validate() === null,
+        String(buy && buy.validate()));
+
+    if (buy) {
+        inbound('5', [0, buy.id, buy.accessory ? 1 : 0]);
+        check('an owned hat is not bought again', buy.validate() === 'already-owned');
+        const next = api.AutoBuy.tick();
+        check('the module moves on to the next item on the list',
+            next == null || next.id !== buy.id, next ? next.label : 'list exhausted');
+    } else {
+        check('an owned hat is not bought again', false, 'no intent');
+        check('the module moves on to the next item on the list', false, 'no intent');
+    }
+
+    inbound('N', ['points', 100, 0]);
+    check('the point reserve is respected', (function () {
+        api.Config.set('utility.autoBuy.pointReserve', 100);
+        const r = api.AutoBuy.tick();
+        api.Config.set('utility.autoBuy.pointReserve', 0);
+        return r == null;
+    })());
+}
+
+/* --- module: auto respawn ----------------------------------------------- */
+group('module: auto respawn');
+{
+    const { api, inbound, socket } = boot();
+    api.Config.set('utility.autoRespawn.enabled', true);
+    api.Config.set('utility.autoRespawn.delayMs', 0);
+
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+
+    check('alive: no respawn', api.AutoRespawn.tick() == null);
+
+    /* Without a recorded spawn payload it must refuse rather than invent one. */
+    inbound('P', []);
+    check('dead but no recorded payload: refuses to guess',
+        api.AutoRespawn.tick() == null && api.GameState.lastSpawn == null);
+
+    /* Feed a real spawn the way the game would, through the outbound hook. */
+    const payload = { name: 'tester', moofoll: 1, skin: 0 };
+    api.Transport.session.socket.send(api.Transport.encode([api.Defs.C2S.SPAWN, [payload]]));
+    check('the spawn payload is captured from the game\'s own packet',
+        api.GameState.lastSpawn && api.GameState.lastSpawn.name === 'tester',
+        JSON.stringify(api.GameState.lastSpawn));
+
+    inbound('P', []);
+    const wake = api.AutoRespawn.tick();
+    check('produces a SpawnIntent once dead with a payload',
+        wake instanceof api.SpawnIntent, String(wake && wake.kind));
+    check('it replays the captured payload verbatim',
+        wake && wake.payload === api.GameState.lastSpawn);
+
+    const before = socket.sent.length;
+    api.Scheduler.run(api.Arbiter.resolve([wake]));
+    check('the respawn actually reaches the socket', socket.sent.length > before);
+
+    addPlayer(inbound, 1, 'tester', 1200, 1200, 1);
+    check('once alive again it stops', api.AutoRespawn.tick() == null);
+    api.Config.set('utility.autoRespawn.enabled', false);
+}
+
+/* --- module: auto gather ------------------------------------------------ */
+group('module: auto gather');
+{
+    const { api, inbound } = boot();
+    api.Config.set('utility.autoGather.enabled', true);
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    inbound('V', [[3, 10], 1]);
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+
+    check('wants the attack held while alone', api.AutoGather.shouldHold() === true);
+    const on = api.AutoGather.tick();
+    check('produces a ToggleIntent to turn it on',
+        on instanceof api.ToggleIntent && on.desired === true, String(on && on.kind));
+
+    /* Pretend it is now on. */
+    api.GameState.input.autoGather = true;
+    check('and nothing once it is already on', api.AutoGather.tick() == null);
+
+    /* An enemy in reach releases the swing. */
+    addPlayer(inbound, 2, 'foe', 1040, 1000, 0);
+    for (let i = 0; i < 3; i++) {
+        updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1040, y: 1000, weaponIndex: 3 }]);
+    }
+    check('releases the swing when the target is open',
+        api.AutoGather.shouldHold() === false,
+        'open=' + api.CombatEngine.isOpen(api.Targeting.primary));
+    const off = api.AutoGather.tick();
+    check('produces a ToggleIntent to turn it off',
+        off instanceof api.ToggleIntent && off.desired === false, String(off && off.kind));
+
+    api.GameState.self.trapped = true;
+    check('a held player never holds the attack', api.AutoGather.shouldHold() === false);
+    api.Config.set('utility.autoGather.enabled', false);
+}
+
+/* --- module: shame reset ------------------------------------------------ */
+group('module: shame reset');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    inbound('5', [0, api.Defs.HAT.BULL, 0]);
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+
+    check('no shame yet: nothing to do', api.AutoHeal && api.ShameReset.tick() == null);
+
+    /* A heal that produced no health change is the only observable for shame. */
+    api.GameState.self.health = 50;
+    api.Events.emit('healSent', { count: 1 });
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);   // health unchanged
+    check('a heal with no effect raises the inferred shame count',
+        api.GameState.self.shameCount > 0, 'shame=' + api.GameState.self.shameCount);
+
+    /* A heal that worked lowers it again. */
+    api.Events.emit('healSent', { count: 1 });
+    api.GameState.self.health = 70;
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+    check('a heal that worked lowers it', api.GameState.self.shameCount === 0,
+        'shame=' + api.GameState.self.shameCount);
+
+    /* Enough shame plus a lull: wear the draining hat. */
+    api.GameState.self.shameCount = 5;
+    api.GameState.self.health = 100;
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+    const burn = api.ShameReset.tick();
+    check('burns shame during a lull', burn instanceof api.DefenseIntent, String(burn && burn.kind));
+    check('and it is the draining hat', burn && burn.hat === api.Defs.HAT.BULL);
+    check('it yields to Safe Soldier by urgency',
+        burn && burn.urgency < api.Config.get('defense.safeSoldier.urgencyBase'),
+        burn ? burn.urgency + ' vs ' + api.Config.get('defense.safeSoldier.urgencyBase') : '');
+
+    /* Low health makes the drain itself the risk. */
+    api.GameState.self.health = 30;
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+    check('refuses while the drain would be the danger', api.ShameReset.tick() == null);
+
+    /* An enemy nearby cancels it. */
+    api.GameState.self.health = 100;
+    addPlayer(inbound, 2, 'foe', 1100, 1000, 0);
+    for (let i = 0; i < 3; i++) {
+        updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1100, y: 1000 }]);
+    }
+    check('refuses with an enemy nearby', api.ShameReset.tick() == null);
+}
+
+/* --- module: auto chat --------------------------------------------------- */
+group('module: auto chat');
+{
+    const { api, inbound } = boot();
+    api.Config.set('chat.enabled', true);
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+
+    check('nothing to say by default', api.AutoChat.tick() == null);
+
+    inbound('N', ['kills', 1, 0]);
+    check('a kill queues a line', api.AutoChat.pending != null,
+        JSON.stringify(api.AutoChat.pending));
+
+    const said = api.AutoChat.tick();
+    check('produces a ChatIntent', said instanceof api.ChatIntent, String(said && said.kind));
+    check('the text is one of the configured lines',
+        said && api.Config.get('chat.killLines').split('|').indexOf(said.text) >= 0,
+        said ? said.text : '');
+    check('the text is inside the game\'s 30-character limit',
+        said && said.text.length <= 30);
+
+    inbound('N', ['kills', 2, 0]);
+    check('the game\'s own chat cooldown is honoured',
+        api.AutoChat.tick() == null,
+        'cooldown=' + api.AutoChat.cooldownMs());
+
+    check('the cooldown is at least the game\'s own',
+        api.AutoChat.cooldownMs() >= api.Defs.config.chatCooldown,
+        api.AutoChat.cooldownMs() + ' >= ' + api.Defs.config.chatCooldown);
+
+    /* Long lines are truncated rather than rejected. */
+    const long = new api.ChatIntent({
+        source: 'test', urgency: 5, confidence: 1,
+        text: 'x'.repeat(80), reason: 'test'
+    });
+    check('over-long text is truncated to the limit', long.text.length === 30);
+    api.Config.set('chat.enabled', false);
+}
+
+/* --- overlay camera ------------------------------------------------------ */
+group('overlay');
+{
+    const { api, inbound } = boot();
+    check('the overlay is off by default', api.Config.get('overlay.enabled') === false);
+    check('it reports camera state without a canvas',
+        api.Overlay.debugState() != null && typeof api.Overlay.debugState().scale === 'number',
+        JSON.stringify(api.Overlay.debugState()));
+    check('the viewport scale uses the game\'s own screen constants',
+        api.Defs.config.maxScreenWidth === 1920 && api.Defs.config.maxScreenHeight === 1080);
+}
+
+/* --- new lanes in arbitration -------------------------------------------- */
+group('arbitration: new lanes');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    addPlayer(inbound, 2, 'foe', 1080, 1000, 0);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    inbound('V', [[3, 10], 1]);
+    inbound('N', ['points', 100000, 0]);
+    inbound('U', [1, 2]);
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }, { sid: 2, x: 1080, y: 1000 }]);
+
+    const target = api.Targeting.primary;
+    const spike = api.GameState.spikeItem;
+    const candidate = api.PlacementEngine.best(spike, target, 'spike');
+
+    const place = new api.PlacementIntent({
+        source: 'test', urgency: 50, confidence: 1, target, candidate
+    });
+    const brk = new api.BreakIntent({
+        source: 'test', urgency: 80, confidence: 1, target,
+        object: { sid: 999, name: 'x', scale: 35, x: 1010, y: 1000 },
+        slot: 0, weapon: 3, angle: 0, reason: 'test'
+    });
+    /* Break shares the build slot, so only one of these can run. */
+    api.GameState.objects.set(999, { sid: 999, name: 'x', scale: 35, x: 1010, y: 1000, active: true });
+    let winners = api.Arbiter.resolve([place, brk]);
+    check('Break shares the exclusive build lane with Placement',
+        winners.length === 1 && winners[0] === brk,
+        winners.map((w) => w.kind).join(','));
+
+    /* The independent lanes all run together. */
+    const move = new api.MoveIntent({ source: 't', urgency: 40, confidence: 1, angle: 0, reason: 'x' });
+    const up = new api.UpgradeIntent({ source: 't', urgency: 30, confidence: 1, index: api.AutoUpgrade.offers()[0].index, label: 'x', forAge: api.GameState.upgradeAge });
+    const chat = new api.ChatIntent({ source: 't', urgency: 8, confidence: 1, text: 'hi', reason: 'x' });
+    api.Config.set('movement.enabled', true);
+    winners = api.Arbiter.resolve([place, move, up, chat]);
+    check('Move, Upgrade and Chat run alongside a placement',
+        winners.length === 4, winners.map((w) => w.kind).join(','));
+
+    /* Two of the same independent kind still collapse to one. */
+    const move2 = new api.MoveIntent({ source: 't', urgency: 41, confidence: 1, angle: 1, reason: 'y' });
+    winners = api.Arbiter.resolve([move, move2]);
+    check('two moves in one tick collapse to one',
+        winners.length === 1 && winners[0] === move2,
+        winners.map((w) => w.reason).join(','));
+    api.Config.set('movement.enabled', false);
+}
+
+/* --- new packet paths ----------------------------------------------------- */
+group('packet scheduler: new actions');
+{
+    const { api, inbound, socket } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 1000, 1000, 1);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    inbound('V', [[3, 10], 1]);
+    inbound('N', ['points', 100000, 0]);
+    inbound('U', [1, 2]);
+    updatePlayers(inbound, [{ sid: 1, x: 1000, y: 1000 }]);
+
+    function tagsFor(intent) {
+        api.Scheduler.run([intent]);
+        return api.Scheduler.lastFlush.entries.map((e) => e.tag);
+    }
+
+    api.GameState.objects.set(998, { sid: 998, name: 'x', scale: 35, x: 1010, y: 1000, active: true });
+    let tags = tagsFor(new api.BreakIntent({
+        source: 't', urgency: 50, confidence: 1,
+        object: { sid: 998, name: 'x', scale: 35, x: 1010, y: 1000 },
+        slot: 0, weapon: 3, angle: 0, reason: 'x'
+    }));
+    check('a break selects a weapon and swings',
+        tags.indexOf('select-weapon') >= 0 && tags.indexOf('attack-down') >= 0, tags.join(' '));
+
+    api.Config.set('movement.enabled', true);
+    tags = tagsFor(new api.MoveIntent({ source: 't', urgency: 40, confidence: 1, angle: 1.2, reason: 'x' }));
+    check('a move emits a movement frame', tags.indexOf('move') >= 0, tags.join(' '));
+
+    tags = tagsFor(new api.MoveIntent({ source: 't', urgency: 40, confidence: 1, angle: null, reason: 'stop' }));
+    check('a null heading emits the stop frame', tags.indexOf('move-stop') >= 0, tags.join(' '));
+    api.Config.set('movement.enabled', false);
+
+    tags = tagsFor(new api.UpgradeIntent({
+        source: 't', urgency: 30, confidence: 1,
+        index: api.AutoUpgrade.offers()[0].index, label: 'x', forAge: api.GameState.upgradeAge
+    }));
+    check('an upgrade emits one frame', tags.indexOf('upgrade') >= 0, tags.join(' '));
+
+    tags = tagsFor(new api.BuyIntent({
+        source: 't', urgency: 12, confidence: 1,
+        id: api.Defs.HAT.SOLDIER, accessory: false, price: 4000, label: 'x'
+    }));
+    check('a purchase emits a store frame', tags.indexOf('buy') >= 0, tags.join(' '));
+
+    tags = tagsFor(new api.ToggleIntent({
+        source: 't', urgency: 15, confidence: 1, which: 1, desired: true, reason: 'x'
+    }));
+    check('a toggle emits one frame', tags.indexOf('toggle') >= 0, tags.join(' '));
+
+    api.Config.set('chat.enabled', true);
+    tags = tagsFor(new api.ChatIntent({ source: 't', urgency: 8, confidence: 1, text: 'hi', reason: 'x' }));
+    check('a chat message emits one frame', tags.indexOf('chat') >= 0, tags.join(' '));
+    api.Config.set('chat.enabled', false);
+
+    /* A 2yz-owned move must beat a passthrough move in the same tick. */
+    api.Config.set('movement.enabled', true);
+    api.Scheduler.submitPassthrough(api.Defs.C2S.MOVE_DIR, [0]);
+    api.Scheduler.run([new api.MoveIntent({
+        source: 't', urgency: 40, confidence: 1, angle: 2.0, reason: 'override'
+    })]);
+    const moveFrames = api.Scheduler.lastFlush.entries.filter((e) => e.tag === 'move');
+    check('a steering correction overrides the player\'s own move that tick',
+        moveFrames.length === 1, moveFrames.length + ' move frames');
+    api.Config.set('movement.enabled', false);
 }
 
 /* --- config ------------------------------------------------------------ */

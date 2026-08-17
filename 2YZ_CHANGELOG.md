@@ -1,5 +1,69 @@
 # 2YZ Changelog
 
+## 1.1.0 — completeness pass
+
+The 1.0 build implemented the nine systems the brief named and nothing else. This
+release adds every remaining capability the reference clients have, so 2yz is a
+complete client rather than a decision engine with gaps around it.
+
+### The gap this closes
+
+1.0 sent exactly four kinds of packet: aim, attack, select, and hat-equip. It
+never moved, never upgraded, never bought, never respawned, never chatted, and —
+the one real architectural inconsistency — **never broke the trap it was held
+in**. Anti Smart Tick decided when *not* to break out of a trap while nothing in
+the client ever broke out, so the hold guarded a decision that was never made.
+Combat only ever targeted players; a structure is a different kind of target and
+had no module.
+
+### Systems added
+
+| Module | What it does | Source concept |
+|---|---|---|
+| **AutoBreak** | Swing at structures: escape a trap, clear a blocked line, remove a hazard. Closes the Anti-Smart-Tick gap — the hold now vetoes a real action. | NovaStorm `selectWeaponAndBreak` (novastorm_1.4.txt:14021) |
+| **Movement** | Anti-knockback, safe walk around hazards, body-block push. The only part of 2yz that steers; off by default. | NovaStorm `canAutoPush` / `isNearestEnemyPushPlayer` (13757, 13780) |
+| **AutoUpgrade** | Spend age points, filtered exactly as the game filters its own offer row. | game_index.js:4734 |
+| **AutoBuy** | Buy the hats the defensive modules want, so `hat-not-owned` stops being a permanent refusal. | shipped hat/accessory price tables |
+| **AutoRespawn** | Rejoin by replaying the game's own spawn payload rather than reconstructing one. | game_index.js:4612 |
+| **AutoGather** | Hold the attack for farming, release it when the swing is needed. | NovaStorm `needAutoGather` (15316) |
+| **ShameReset** | Burn the anti-heal-spam counter with the draining hat during a lull. | NovaStorm `shouldResetShame` / `hatFc` (15208, 16188) |
+| **AutoChat** | Kill lines and idle lines, rate-limited by the game's own `chatCooldown`. | game_index.js:4451 |
+| **Overlay** | Targets, prediction, placement candidates, hazards and weapon ranges, drawn on 2yz's own canvas. | game camera maths (4466, 4831) |
+
+### Infrastructure changes
+
+- **Seven new intent types** — `BreakIntent`, `MoveIntent`, `UpgradeIntent`,
+  `BuyIntent`, `SpawnIntent`, `ToggleIntent`, `ChatIntent` — each with its own
+  `validate()`, so the new actions get the same "never execute stale" guarantee
+  as the old ones.
+- **Two arbitration lanes instead of one.** `Break` joins the exclusive
+  build/attack lane. `Move`, `Upgrade`, `Buy`, `Spawn`, `Toggle`, `Chat` and
+  `Defense` are singletons: at most one of each per tick, but they run alongside
+  an attack rather than competing with it.
+- **Movement dedup rule.** A 2yz steering correction overrides a passthrough
+  move in the same tick; without that an anti-knockback correction would be
+  undone by the player's own movement packet arriving after it.
+- **Runtime runs while dead.** `EntityTracker` now emits `trackerReady` with no
+  local player so AutoRespawn gets a turn; the dead path arbitrates only that
+  one module.
+- **Shame is inferred, not received.** The protocol never transmits the local
+  shame count. `ShameReset` watches heals: one that moved the health bar lowers
+  the count, one that did not raises it. Documented as inference, not fact.
+- **Config gains a `text` leaf type** for the upgrade order, shopping list and
+  chat lines, with a matching input in the generated menu.
+
+### Verification after the change
+
+- **211 assertions** (up from 131), all passing. Eleven new groups cover each new
+  module, the new arbitration lanes and every new packet path.
+- **156 settings** (up from 101), every one read by the code — the fake-setting
+  check still fails the build on an unread key.
+- Static sweep clean: no unused declarations beyond the `Runtime` entry point,
+  18 events emitted and 18 listened, no duplicate declarations.
+- `verify-drivers.js ReUp_Mix.user.js` still passes.
+
+---
+
 ## 1.0.0 — initial build
 
 2yz built from scratch against `src/game_index.js` / `src/game_vendor.js`, with
@@ -16,9 +80,9 @@ it fits together.
 | `src/2yz/02-utils.js` | 111 | Geometry transcribed from the game |
 | `src/2yz/10-transport.js` | 502 | msgpack, opcode permutation, HMAC, socket hook |
 | `src/2yz/11-net.js` | 68 | RTT and frame accounting |
-| `src/2yz/20-gamestate.js` | 286 | World model + event bus |
-| `src/2yz/21-router.js` | 271 | Wire → state |
-| `src/2yz/22-tracker.js` | 250 | Derived per-tick state |
+| `src/2yz/20-gamestate.js` | 298 | World model + event bus |
+| `src/2yz/21-router.js` | 286 | Wire → state |
+| `src/2yz/22-tracker.js` | 251 | Derived per-tick state |
 | `src/2yz/30-prediction.js` | 250 | The one movement model |
 | `src/2yz/31-targeting.js` | 182 | The one target system |
 | `src/2yz/40-placement.js` | 353 | The placement engine (WHERE) |
@@ -31,16 +95,25 @@ it fits together.
 | `src/2yz/55-mod-safesoldier.js` | 181 | Safe Soldier |
 | `src/2yz/56-mod-autoheal.js` | 112 | Auto Heal |
 | `src/2yz/57-mod-automills.js` | 124 | Auto Mills |
-| `src/2yz/60-intent.js` | 180 | Intent types |
-| `src/2yz/61-arbiter.js` | 124 | Arbitration |
-| `src/2yz/62-scheduler.js` | 259 | The one packet scheduler |
-| `src/2yz/70-config.js` | 469 | Config schema (101 settings) |
-| `src/2yz/71-ui.js` | 214 | Menu, generated from the schema |
-| `src/2yz/72-debug.js` | 125 | Debug panel and journal |
-| `src/2yz/80-runtime.js` | 128 | Wiring and tick loop |
+| `src/2yz/58-mod-autobreak.js` | 198 | Auto Break |
+| `src/2yz/59-mod-movement.js` | 205 | Movement: anti-knockback, safe walk, push |
+| `src/2yz/5a-mod-autoupgrade.js` | 88 | Auto Upgrade |
+| `src/2yz/5b-mod-autobuy.js` | 77 | Auto Buy |
+| `src/2yz/5c-mod-autorespawn.js` | 52 | Auto Respawn |
+| `src/2yz/5d-mod-autogather.js` | 67 | Auto Gather |
+| `src/2yz/5e-mod-shamereset.js` | 98 | Shame Reset |
+| `src/2yz/5f-mod-autochat.js` | 82 | Auto Chat |
+| `src/2yz/73-overlay.js` | 234 | Visual overlay |
+| `src/2yz/60-intent.js` | 323 | Intent types |
+| `src/2yz/61-arbiter.js` | 136 | Arbitration |
+| `src/2yz/62-scheduler.js` | 319 | The one packet scheduler |
+| `src/2yz/70-config.js` | 621 | Config schema (101 settings) |
+| `src/2yz/71-ui.js` | 223 | Menu, generated from the schema |
+| `src/2yz/72-debug.js` | 134 | Debug panel and journal |
+| `src/2yz/80-runtime.js` | 147 | Wiring and tick loop |
 | `tools/build-2yz.js` | 77 | Build |
 | `tools/verify-2yz.js` | 235 | Static audit |
-| `tools/test-2yz.js` | 1207 | Headless behavioural suite |
+| `tools/test-2yz.js` | 1739 | Headless behavioural suite |
 | `2yz.user.js` | — | Build output |
 | `2YZ_SOURCE_MAP.md`, `2YZ_ARCHITECTURE.md`, `2YZ_CHANGELOG.md` | — | Docs |
 

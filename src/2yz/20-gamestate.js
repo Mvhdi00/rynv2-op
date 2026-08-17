@@ -139,6 +139,17 @@ const GameState = {
     tails: {},
     age: 1,
     upgradePoints: 0,
+    /* The age tier the pending upgrade choices belong to. UPDATE_UPGRADES
+     * carries it, and the upgrade index space is only meaningful against it
+     * (game_index.js:4734). */
+    upgradeAge: 0,
+
+    /* The spawn payload the game itself last sent. Respawn replays it verbatim
+     * rather than reconstructing a name and skin, which would be guessing. */
+    lastSpawn: null,
+
+    /* Kills seen this life, for kill-chat. */
+    killsThisLife: 0,
 
     /* What the human is doing, observed from the outbound stream. */
     input: {
@@ -152,6 +163,7 @@ const GameState = {
 
     reset() {
         this.inGame = false;
+        this.killsThisLife = 0;
         this.players.clear();
         this.animals.clear();
         this.objects.clear();

@@ -75,6 +75,25 @@ const Config = (function () {
             urgencySwing: {
                 label: 'Urgency: Single Swing', type: 'number', def: 55, min: 0, max: 100, step: 1,
                 desc: 'How strongly one swing competes for the tick.'
+            },
+
+            autoBreak: {
+                _label: 'Auto Break',
+                _desc: 'Swing at structures: escape traps, clear the line to the target, remove hazards.',
+                enabled: { label: 'Enable', type: 'bool', def: true, desc: 'Break structures automatically. Without this, Anti Smart Tick guards an escape the client never attempts.' },
+                clearLine: { label: 'Clear Blocked Line', type: 'bool', def: true, desc: 'Break an enemy structure standing between you and the target.' },
+                clearHazards: { label: 'Clear Hazards', type: 'bool', def: true, desc: 'Break an enemy spike close enough to hurt you where you stand.' },
+                hazardMargin: {
+                    label: 'Hazard Margin', type: 'number', def: 25, min: 0, max: 120, step: 5,
+                    desc: 'Extra distance past contact at which an enemy spike still counts as worth removing.'
+                },
+                fastPrimarySpeed: {
+                    label: 'Fast Primary Threshold', type: 'number', def: 400, min: 100, max: 800, step: 50,
+                    desc: 'Milliseconds. A primary quicker than this is preferred over the hammer when it can break the structure in one hit, because it recovers sooner.'
+                },
+                urgencyEscape: { label: 'Urgency: Escape Trap', type: 'number', def: 80, min: 0, max: 100, step: 1, desc: 'Very high: nothing else matters while you cannot move.' },
+                urgencyClear: { label: 'Urgency: Clear Line', type: 'number', def: 45, min: 0, max: 100, step: 1, desc: 'How strongly clearing a blocked swing competes for the tick.' },
+                urgencyHazard: { label: 'Urgency: Clear Hazard', type: 'number', def: 40, min: 0, max: 100, step: 1, desc: 'How strongly removing a nearby enemy spike competes for the tick.' }
             }
         },
 
@@ -294,6 +313,16 @@ const Config = (function () {
                 urgencyLethal: { label: 'Urgency: Lethal', type: 'number', def: 95, min: 0, max: 100, step: 1, desc: 'Urgency when the projected hit would kill you.' },
                 urgencyDanger: { label: 'Urgency: Danger', type: 'number', def: 62, min: 0, max: 100, step: 1, desc: 'Urgency when the projected hit would leave you below the floor.' },
                 urgencyTopUp: { label: 'Urgency: Top Up', type: 'number', def: 25, min: 0, max: 100, step: 1, desc: 'Urgency for a routine heal between fights.' }
+            },
+
+            shameReset: {
+                _label: 'Shame Reset',
+                _desc: 'Burn down the anti-heal-spam counter during a lull by wearing the draining hat.',
+                enabled: { label: 'Enable', type: 'bool', def: true, desc: 'Wear Bull Helmet while safe so its health drain clears accumulated shame.' },
+                minShame: { label: 'Minimum Shame', type: 'number', def: 3, min: 1, max: 12, step: 1, desc: 'Inferred shame level at which burning it down is worth the drain.' },
+                safeRadius: { label: 'Safe Radius', type: 'number', def: 450, min: 100, max: 900, step: 25, desc: 'Refuse if any enemy is within this distance.' },
+                minHealthFraction: { label: 'Minimum Health', type: 'number', def: 0.75, min: 0.2, max: 1, step: 0.05, desc: 'Fraction of full health below which the hat\'s drain is itself the risk.' },
+                urgency: { label: 'Urgency', type: 'number', def: 20, min: 0, max: 100, step: 1, desc: 'Deliberately below Safe Soldier, so any real threat takes the hat slot instead.' }
             }
         },
 
@@ -314,7 +343,128 @@ const Config = (function () {
                 resourceReserve: { label: 'Resource Reserve', type: 'number', def: 200, min: 0, max: 2000, step: 50, desc: 'Never spend a resource below this. Keeps material back for spikes and traps.' },
                 frameFloor: { label: 'Frame Floor', type: 'number', def: 40, min: 0, max: 100, step: 5, desc: 'Packets that must remain in the allowance before a mill may be offered.' },
                 urgency: { label: 'Urgency', type: 'number', def: 5, min: 0, max: 100, step: 1, desc: 'Lowest in the client by design: a mill never wins a contested tick.' }
+            },
+
+            autoUpgrade: {
+                _label: 'Auto Upgrade',
+                _desc: 'Spend age upgrade points automatically.',
+                enabled: { label: 'Enable', type: 'bool', def: true, desc: 'Take an upgrade as soon as points are offered.' },
+                order: {
+                    label: 'Preference Order', type: 'text',
+                    def: 'katana,polearm,great hammer,pit trap,greater spikes,spikes,windmill,mine,turret,castle wall,stone wall',
+                    desc: 'Comma-separated item and weapon names, best first. Names are resolved against the game\'s own tables, so a renumbering upstream cannot repoint a choice.'
+                },
+                takeAnything: {
+                    label: 'Take Anything Offered', type: 'bool', def: true,
+                    desc: 'If nothing in the preference list is on offer, take the first available rather than sitting on unspent points.'
+                },
+                urgency: { label: 'Urgency', type: 'number', def: 30, min: 0, max: 100, step: 1, desc: 'How strongly an upgrade competes for the tick.' }
+            },
+
+            autoBuy: {
+                _label: 'Auto Buy',
+                _desc: 'Buy the hats the defensive and offensive modules want to wear.',
+                enabled: { label: 'Enable', type: 'bool', def: true, desc: 'Buy hats when affordable. Without it, Safe Soldier and the damage hat are permanent no-ops on a fresh account.' },
+                wanted: {
+                    label: 'Shopping List', type: 'text',
+                    def: 'Soldier Helmet,Bull Helmet,Booster Hat,Tank Gear,Turret Gear',
+                    desc: 'Comma-separated hat and accessory names, in buying order. Prices come from the game\'s own tables.'
+                },
+                pointReserve: {
+                    label: 'Point Reserve', type: 'number', def: 0, min: 0, max: 20000, step: 500,
+                    desc: 'Never spend below this many points.'
+                },
+                urgency: { label: 'Urgency', type: 'number', def: 12, min: 0, max: 100, step: 1, desc: 'Low: a purchase never displaces a fight.' }
+            },
+
+            autoRespawn: {
+                _label: 'Auto Respawn',
+                _desc: 'Rejoin after death by replaying the game\'s own spawn packet.',
+                enabled: { label: 'Enable', type: 'bool', def: false, desc: 'Respawn automatically. Off by default so death stays a decision you make.' },
+                delayMs: { label: 'Delay', type: 'number', def: 1200, min: 0, max: 10000, step: 100, desc: 'Milliseconds to wait after death before rejoining.' },
+                urgency: { label: 'Urgency', type: 'number', def: 90, min: 0, max: 100, step: 1, desc: 'High, but it only ever competes with other intents while dead.' }
+            },
+
+            autoGather: {
+                _label: 'Auto Gather',
+                _desc: 'Hold the attack for farming, and release it when the swing is needed.',
+                enabled: { label: 'Enable', type: 'bool', def: false, desc: 'Toggle the game\'s auto-gather to match the situation. Off by default: it moves your hands for you.' },
+                combatRadius: { label: 'Combat Radius', type: 'number', def: 400, min: 100, max: 900, step: 25, desc: 'An enemy inside this distance counts as combat for the purpose of releasing the held attack.' },
+                urgency: { label: 'Urgency', type: 'number', def: 15, min: 0, max: 100, step: 1, desc: 'Low: the toggle is cheap and never urgent.' }
             }
+        },
+
+        movement: {
+            _label: 'Movement',
+            _desc: 'The only part of 2yz that steers for you. Off by default; your own movement passes through untouched.',
+            enabled: { label: 'Enable Movement', type: 'bool', def: false, desc: 'Master switch. While off, 2yz never sends a movement packet.' },
+            antiKnockback: {
+                label: 'Anti Knockback', type: 'bool', def: true,
+                desc: 'When an incoming hit would throw you onto a structure, lean into the push so the displacement lands short of it.'
+            },
+            safeWalk: {
+                label: 'Safe Walk', type: 'bool', def: true,
+                desc: 'Steer around enemy spikes, traps, boost pads and teleporters on the heading you are already using.'
+            },
+            autoPush: {
+                label: 'Auto Push', type: 'bool', def: false,
+                desc: 'Body-block the target toward one of your spikes, but only when the lane is clear of hazards for you.'
+            },
+            lookaheadDistance: {
+                label: 'Lookahead Distance', type: 'number', def: 240, min: 60, max: 600, step: 20,
+                desc: 'How far ahead the current heading is projected when checking for hazards.'
+            },
+            avoidSteps: {
+                label: 'Avoidance Resolution', type: 'number', def: 6, min: 2, max: 16, step: 1,
+                desc: 'How many headings either side are tried when steering around a hazard. The smallest correction that works is chosen.'
+            },
+            pushRange: {
+                label: 'Push Range', type: 'number', def: 120, min: 40, max: 300, step: 10,
+                desc: 'Stop trying to body-block beyond this distance.'
+            },
+            pushDistance: {
+                label: 'Push Projection', type: 'number', def: 160, min: 50, max: 400, step: 10,
+                desc: 'How far a shove is assumed to carry the target when checking whether it lands them on a spike.'
+            },
+            urgencyAntiKnockback: { label: 'Urgency: Anti Knockback', type: 'number', def: 72, min: 0, max: 100, step: 1, desc: 'How strongly the knockback correction competes for the tick.' },
+            urgencySafeWalk: { label: 'Urgency: Safe Walk', type: 'number', def: 50, min: 0, max: 100, step: 1, desc: 'How strongly hazard avoidance competes for the tick.' },
+            urgencyPush: { label: 'Urgency: Push', type: 'number', def: 35, min: 0, max: 100, step: 1, desc: 'How strongly body-blocking competes for the tick.' }
+        },
+
+        chat: {
+            _label: 'Chat',
+            _desc: 'Automatic messages, rate-limited by the game\'s own chat cooldown.',
+            enabled: { label: 'Enable Chat', type: 'bool', def: false, desc: 'Master switch for automatic messages. Off by default.' },
+            killChat: { label: 'Kill Messages', type: 'bool', def: true, desc: 'Say a line after a kill.' },
+            killLines: {
+                label: 'Kill Lines', type: 'text', def: 'gg|nice try|too easy|sit down',
+                desc: 'Pipe-separated lines, used in rotation. Truncated to 30 characters, which is the game\'s own limit.'
+            },
+            idleChat: { label: 'Idle Messages', type: 'bool', def: false, desc: 'Say a line periodically while no enemy is nearby.' },
+            idleLines: {
+                label: 'Idle Lines', type: 'text', def: '2yz|.|..',
+                desc: 'Pipe-separated lines, used in rotation while idle.'
+            },
+            idleGapMs: { label: 'Idle Gap', type: 'number', def: 20000, min: 3000, max: 120000, step: 1000, desc: 'Milliseconds between idle messages.' },
+            minGapMs: {
+                label: 'Minimum Gap', type: 'number', def: 900, min: 500, max: 10000, step: 100,
+                desc: 'Floor on the gap between messages. The larger of this and the game\'s own chat cooldown is used, so 2yz cannot outrun the server\'s limiter.'
+            },
+            urgency: { label: 'Urgency', type: 'number', def: 8, min: 0, max: 100, step: 1, desc: 'Low: a message never displaces an action.' }
+        },
+
+        overlay: {
+            _label: 'Overlay',
+            _desc: 'Drawing. 2yz renders on its own canvas over the game, reproducing the game\'s camera; nothing it draws feeds a decision.',
+            enabled: { label: 'Enable Overlay', type: 'bool', def: false, desc: 'Master switch for all drawing.' },
+            showTargets: { label: 'Targets', type: 'bool', def: true, desc: 'Ring every candidate; highlight the current target and draw the line to it.' },
+            showHealth: { label: 'Health Numbers', type: 'bool', def: true, desc: 'Print each candidate\'s health above them.' },
+            showPrediction: { label: 'Prediction', type: 'bool', def: true, desc: 'Draw where each candidate is predicted to be.' },
+            predictionTicks: { label: 'Prediction Horizon', type: 'number', def: 3, min: 1, max: 8, step: 1, desc: 'How many ticks ahead the prediction marker is drawn.' },
+            showPlacement: { label: 'Placement Candidates', type: 'bool', def: true, desc: 'Draw the top-ranked spike positions the placement engine picked.' },
+            placementCount: { label: 'Candidates Shown', type: 'number', def: 3, min: 1, max: 10, step: 1, desc: 'How many ranked positions to draw.' },
+            showHazards: { label: 'Hazards', type: 'bool', def: true, desc: 'Ring enemy spikes and traps, and your own spikes faintly.' },
+            showRanges: { label: 'Weapon Ranges', type: 'bool', def: false, desc: 'Draw your weapon reach, dimmed while on cooldown.' }
         },
 
         prediction: {
@@ -428,6 +578,8 @@ const Config = (function () {
                 if (leaf.max != null) v = Math.min(leaf.max, v);
             } else if (leaf.type === 'bool') {
                 v = !!v;
+            } else if (leaf.type === 'text') {
+                v = String(v);
             }
             values[path] = v;
             save();

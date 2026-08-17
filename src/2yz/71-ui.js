@@ -44,6 +44,10 @@ const Menu = (function () {
     .tyz-ctl{flex:0 0 132px;display:flex;align-items:center;gap:6px;justify-content:flex-end}
     .tyz-ctl input[type=range]{width:92px;accent-color:#6f7dff}
     .tyz-ctl input[type=checkbox]{width:15px;height:15px;accent-color:#6f7dff}
+    .tyz-ctl input.tyz-text{width:130px;background:#0e0e14;color:#e8e8ee;border:1px solid #3a3a4a;
+      border-radius:5px;padding:3px 6px;font:inherit}
+    .tyz-row:has(input.tyz-text){align-items:flex-start}
+    .tyz-ctl:has(input.tyz-text){flex:0 0 140px}
     .tyz-val{min-width:38px;text-align:right;color:#a9a9c0;font-variant-numeric:tabular-nums}
     #tyz-foot{display:flex;gap:8px;padding:9px 12px;background:#1c1c25;border-top:1px solid #33333f}
     #tyz-foot button{background:#2a2a38;color:#d8d8e6;border:1px solid #3a3a4a;border-radius:6px;
@@ -81,6 +85,11 @@ const Menu = (function () {
             const input = el('input', { type: 'checkbox' });
             input.checked = !!Config.get(path);
             input.addEventListener('change', () => Config.set(path, input.checked));
+            ctl.appendChild(input);
+        } else if (leaf.type === 'text') {
+            const input = el('input', { type: 'text', class: 'tyz-text' });
+            input.value = String(Config.get(path));
+            input.addEventListener('change', () => Config.set(path, input.value));
             ctl.appendChild(input);
         } else {
             const readout = el('span', { class: 'tyz-val', text: String(Config.get(path)) });

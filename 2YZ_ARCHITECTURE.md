@@ -125,7 +125,12 @@ another module exists.
 
 `50-mod-autoplace.js` · `51-mod-preplace.js` · `52-mod-replace.js` ·
 `53-mod-spiketick.js` · `54-mod-antismarttick.js` · `55-mod-safesoldier.js` ·
-`56-mod-autoheal.js` · `57-mod-automills.js`
+`56-mod-autoheal.js` · `57-mod-automills.js` · `58-mod-autobreak.js` ·
+`59-mod-movement.js` · `5a-mod-autoupgrade.js` · `5b-mod-autobuy.js` ·
+`5c-mod-autorespawn.js` · `5d-mod-autogather.js` · `5e-mod-shamereset.js` ·
+`5f-mod-autochat.js`
+
+Plus `73-overlay.js`, which draws and never decides.
 
 Two hold state between ticks, and both clear it on the events that invalidate it:
 `Preplace.armed` (killed by `targetSwitched`, `death`, direction change, drift or
@@ -233,8 +238,12 @@ intents ──► validate()  ──► drop anything the world has moved past
         ──► holds       ──► a hold removes the kinds it blocks, but only
                             if it outranks the best intent of that kind
         ──► rank         ──► priority = urgency × (0.5 + 0.5 × confidence)
-        ──► lanes        ──► Attack / Placement / Replace / Heal are exclusive;
-                            at most one runs per tick. Defense rides along
+        ──► lanes        ──► exclusive:  Attack / Placement / Replace / Heal /
+                                         Break — one per tick, they all drive
+                                         the same build-and-attack slot
+                            singleton:  Move / Upgrade / Buy / Spawn / Toggle /
+                                         Chat / Defense — one of each per tick,
+                                         but they run alongside an exclusive
         ──► budget       ──► an intent that cannot afford its frames is refused,
                             never truncated
 ```
@@ -255,8 +264,13 @@ intents are the counts actually emitted:
 |---|---|
 | Build one item | 4 — aim, select item, attack down, attack up (+ restore weapon) |
 | One swing | 3 — aim, select weapon, attack down/up |
+| Break a structure | 4 — aim, select weapon, attack down, attack up |
 | Heal | 4 per item |
-| Hat swap | 1 |
+| Hat swap, buy, upgrade, spawn, toggle, chat, move | 1 each |
+
+Movement has one extra rule: a 2yz steering correction overrides a passthrough
+move in the same tick. Without it, an anti-knockback correction would be undone
+by the player's own movement packet arriving behind it.
 
 Dedupe collapses repeated aims within a tick and applies the game's own 0.3 rad
 gate; a select of the same item twice becomes one; an attack invalidates the
@@ -276,6 +290,25 @@ Place, Preplace, Replace, Spike Tick) · Defense (Anti Smart Tick, Safe Soldier,
 Auto Heal) · Utility (Auto Mills) · Prediction · Network · Debug.
 
 Menu toggles with Shift+T, and never steals a key while an input has focus.
+
+## Movement, and why it is off by default
+
+2yz is a decision layer over human movement. It normally never sends a movement
+packet at all — the player's own `MOVE_DIR` passes straight through. The
+`Movement` module is the single exception and only speaks when it has a specific
+reason: an incoming hit that would throw us onto a structure, a heading that runs
+into a hazard, or a body-block that would carry the target onto one of our
+spikes. Its master switch defaults to off.
+
+## Overlay, and what it cannot promise
+
+Because 2yz does not fork the renderer, the overlay draws on its own canvas and
+reproduces the game's camera from `game_index.js` — the viewport scale at
+4466-4472 and the camera lerp at 4831-4836, plus the per-entity interpolation
+between the last two snapshots. It tracks closely but is not pixel-identical,
+because the game's frame delta and ours are different clocks. That is why
+nothing the overlay draws feeds a decision: every range check and every
+placement is computed in world coordinates.
 
 ## Debug
 

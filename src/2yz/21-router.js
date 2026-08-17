@@ -164,6 +164,10 @@ const Router = (function () {
 
         /* Kl -- game_index.js:5543. Generic "set one field on the local player". */
         [S.UPDATE_VALUE](key, value) {
+            if (key === 'kills' && value > GameState.resources.kills) {
+                GameState.killsThisLife += value - GameState.resources.kills;
+                Events.emit('kill', value);
+            }
             if (key in GameState.resources) GameState.resources[key] = value;
             else if (key === 'points') GameState.resources.points = value;
             if (GameState.self && (key === 'health' || key === 'maxHealth')) {
@@ -177,6 +181,8 @@ const Router = (function () {
             if (GameState.self) GameState.self.alive = false;
             Events.emit('death');
         },
+
+
 
         /* Pl -- game_index.js:5038, startAnim(didHit, weaponIndex). This is how
          * 2yz sees every swing in the world, including enemies', which is what
@@ -192,8 +198,12 @@ const Router = (function () {
             if (age != null) GameState.age = age;
         },
 
-        /* Un -- upgrade points available. */
-        [S.UPDATE_UPGRADES](points) { GameState.upgradePoints = points; },
+        /* Un -- game_index.js:4734. (points, ageTier). Both are needed: the
+         * upgrade index space is only valid for the tier it was offered for. */
+        [S.UPDATE_UPGRADES](points, ageTier) {
+            GameState.upgradePoints = points;
+            if (ageTier != null) GameState.upgradeAge = ageTier;
+        },
 
         /* al -- game_index.js:4220.
          *   isEquip truthy -> the item is now worn  (skinIndex / tailIndex)
@@ -251,6 +261,11 @@ const Router = (function () {
                 break;
             case C.TOGGLE:
                 if (args[0] === 1) input.autoGather = !input.autoGather;
+                break;
+            case C.SPAWN:
+                /* Keep the exact payload so respawn can replay it. */
+                GameState.lastSpawn = args[0];
+                GameState.killsThisLife = 0;
                 break;
             default:
                 break;

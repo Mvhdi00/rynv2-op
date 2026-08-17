@@ -24,10 +24,18 @@ const Runtime = (function () {
         Preplace,
         Replace,
         SpikeTick,
+        AutoBreak,
         AntiSmartTick,
         SafeSoldier,
+        ShameReset,
         AutoHeal,
-        AutoMills
+        Movement,
+        AutoGather,
+        AutoMills,
+        AutoUpgrade,
+        AutoBuy,
+        AutoRespawn,
+        AutoChat
     ];
 
     function collect() {
@@ -61,9 +69,16 @@ const Runtime = (function () {
 
     function onTick() {
         if (!GameState.inGame || !GameState.self) {
-            /* Still flush, so the game's own frames (menu, spawn, store) reach
-             * the socket while 2yz has nothing to say. */
-            Scheduler.run([]);
+            /* Dead or not yet spawned. Only the modules that are meaningful in
+             * that state get a turn -- respawn being the whole point of it. */
+            let revive = [];
+            try {
+                const wake = AutoRespawn.tick();
+                if (wake) revive = Arbiter.resolve([wake]);
+            } catch (err) {
+                Log.error('AutoRespawn.tick', err);
+            }
+            Scheduler.run(revive);
             return;
         }
 
@@ -101,6 +116,9 @@ const Runtime = (function () {
             Scheduler.install();
             Preplace.install();
             Replace.install();
+            AutoRespawn.install();
+            ShameReset.install();
+            AutoChat.install();
 
             /* The decision pass runs after tracking, prediction and targeting
              * have all had the tick. */
@@ -112,6 +130,7 @@ const Runtime = (function () {
                 try {
                     Menu.install();
                     Debug.install();
+                    Overlay.install();
                 } catch (err) {
                     Log.error('ui', err);
                 }

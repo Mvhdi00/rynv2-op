@@ -88,6 +88,15 @@ const Debug = (function () {
             out += section('safeSoldier', SafeSoldier.debugState());
             out += section('autoHeal', AutoHeal.debugState());
             out += section('autoMills', AutoMills.debugState());
+            out += section('autoBreak', AutoBreak.debugState());
+            out += section('movement', Movement.debugState());
+            out += section('autoUpgrade', AutoUpgrade.debugState());
+            out += section('autoBuy', AutoBuy.debugState());
+            out += section('autoRespawn', AutoRespawn.debugState());
+            out += section('autoGather', AutoGather.debugState());
+            out += section('shameReset', ShameReset.debugState());
+            out += section('autoChat', AutoChat.debugState());
+            out += section('overlay', Overlay.debugState());
         }
 
         const errors = Log.entries();

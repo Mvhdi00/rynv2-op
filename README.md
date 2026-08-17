@@ -30,16 +30,25 @@ Modules never act. Each produces an intent describing what it would like to
 happen; one Arbiter decides which wins the tick; one PacketScheduler is the only
 writer to the socket, carrying the game's own frames as well as 2yz's.
 
-**Features.** Auto Place, Preplace, Replace, Spike Tick, Anti Smart Tick, Safe
-Soldier, Auto Heal, Auto Mills, and a combat engine with multi-tick burst
-sequences. Behaviour was extracted from four reference clients and rebuilt;
+**Features.**
+
+| | |
+|---|---|
+| Placement | Auto Place · Preplace · Replace · Spike Tick · Auto Mills |
+| Combat | Combat engine with multi-tick bursts · Auto Break · Auto Gather |
+| Defence | Anti Smart Tick · Safe Soldier · Auto Heal · Shame Reset |
+| Movement | Anti-knockback · Safe walk · Auto push *(off by default)* |
+| Economy | Auto Upgrade · Auto Buy · Auto Respawn |
+| Other | Auto Chat · Visual overlay *(both off by default)* |
+
+Behaviour was extracted from four reference clients and rebuilt;
 [`2YZ_SOURCE_MAP.md`](2YZ_SOURCE_MAP.md) records what came from where and why,
 including what was deliberately left behind.
 
-**Menu.** Shift+T. Generated from `Config.schema`, so every one of the 101
+**Menu.** Shift+T. Generated from `Config.schema`, so every one of the 156
 settings is read by the code — `tools/verify-2yz.js` fails the build on a setting
-nothing reads, and on a read with no setting behind it. Debug is off by default,
-with seven independent sections.
+nothing reads, and on a read with no setting behind it. Debug and the overlay are
+off by default.
 
 **Game definitions.** Every id, range, cooldown, damage figure, packet layout and
 protocol constant comes from `drivers/game-drivers.json`, extracted from the
@@ -52,7 +61,7 @@ is typed in by hand.
 node tools/extract-drivers.js    # game bundles -> drivers/game-drivers.json
 node tools/build-2yz.js          # src/2yz/*.js  -> 2yz.user.js
 node tools/verify-2yz.js         # static audit: settings, opcodes, independence
-node tools/test-2yz.js           # 131 behavioural assertions, headless
+node tools/test-2yz.js           # 211 behavioural assertions, headless
 node --check 2yz.user.js
 ```
 
@@ -71,9 +80,9 @@ src/2yz/                  modules; the numeric prefixes are the dependency order
   20-gamestate  21-router  22-tracker
   30-prediction  31-targeting
   40-placement  41-combat
-  50..57-mod-*            the eight feature modules
+  50..5f-mod-*            the sixteen feature modules
   60-intent  61-arbiter  62-scheduler
-  70-config  71-ui  72-debug
+  70-config  71-ui  72-debug  73-overlay
   80-runtime
 tools/build-2yz.js        src/2yz/*.js -> 2yz.user.js
 tools/verify-2yz.js       static audit

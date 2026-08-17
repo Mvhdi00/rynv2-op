@@ -26,7 +26,12 @@
 const Arbiter = (function () {
     /* Lanes that cannot run together, because they all drive the same build and
      * attack packets. */
-    const EXCLUSIVE = ['Attack', 'Placement', 'Replace', 'Heal'];
+    const EXCLUSIVE = ['Attack', 'Placement', 'Replace', 'Heal', 'Break'];
+
+    /* Kinds that may run at most once per tick even though they do not compete
+     * for the build slot -- two upgrades or two moves in one tick is always a
+     * mistake, but they can coexist with an attack. */
+    const SINGLETON = ['Move', 'Upgrade', 'Buy', 'Spawn', 'Toggle', 'Chat', 'Defense'];
 
     let lastDecision = null;
 
@@ -76,10 +81,16 @@ const Arbiter = (function () {
         const winners = [];
         let budget = Net.budgetRemaining();
         let exclusiveTaken = false;
+        const singletonTaken = new Set();
 
         for (const intent of pool) {
             const isExclusive = EXCLUSIVE.indexOf(intent.kind) >= 0;
             if (isExclusive && exclusiveTaken) {
+                intent.rejectedReason = 'lane-taken';
+                suppressed.add(intent);
+                continue;
+            }
+            if (SINGLETON.indexOf(intent.kind) >= 0 && singletonTaken.has(intent.kind)) {
                 intent.rejectedReason = 'lane-taken';
                 suppressed.add(intent);
                 continue;
@@ -92,6 +103,7 @@ const Arbiter = (function () {
             }
             budget -= cost;
             if (isExclusive) exclusiveTaken = true;
+            if (SINGLETON.indexOf(intent.kind) >= 0) singletonTaken.add(intent.kind);
             winners.push(intent);
         }
 

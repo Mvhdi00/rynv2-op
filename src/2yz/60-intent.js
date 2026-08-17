@@ -178,3 +178,146 @@ class HoldIntent extends Intent {
 
     describe() { return 'Hold[' + this.reason + ']<' + this.source + '>'; }
 }
+
+/* Swing at a structure rather than a player. Breaking is what frees us from a
+ * trap and what opens a wall, and it is a different decision from attacking a
+ * player: the target does not move, the damage figure is the structure one, and
+ * the weapon choice is driven by which slot can finish it in a single hit. */
+class BreakIntent extends Intent {
+    constructor(opts) {
+        /* aim, select weapon, attack down, attack up. */
+        super('Break', Object.assign({ cost: 4 }, opts));
+        this.object = opts.object;
+        this.objectSid = opts.object ? opts.object.sid : null;
+        this.slot = opts.slot;
+        this.weapon = opts.weapon;
+        this.angle = opts.angle;
+        this.reason = opts.reason;
+    }
+
+    validate() {
+        if (!GameState.inGame || !GameState.self || !GameState.self.alive) return 'not-in-game';
+        if (this.objectSid == null || !GameState.objects.has(this.objectSid)) return 'object-gone';
+        const me = GameState.self;
+        const reach = EntityTracker.rangeOf(me, this.slot) + me.scale + this.object.scale;
+        if (U.getDistance(me.x2, me.y2, this.object.x, this.object.y) > reach) return 'out-of-reach';
+        return null;
+    }
+
+    describe() { return 'Break[' + (this.object ? this.object.name : '?') + ']<' + this.source + '>'; }
+}
+
+/* Steer. 2yz only ever sends a movement direction when it has a reason to
+ * override the player's; the rest of the time the player's own MOVE_DIR passes
+ * through untouched. */
+class MoveIntent extends Intent {
+    constructor(opts) {
+        super('Move', Object.assign({ cost: 1 }, opts));
+        /* null means "stop", which is a distinct packet (C2S MOVE_STOP). */
+        this.angle = opts.angle;
+        this.reason = opts.reason;
+        this.holdTicks = opts.holdTicks != null ? opts.holdTicks : 1;
+    }
+
+    validate() {
+        if (!GameState.inGame || !GameState.self || !GameState.self.alive) return 'not-in-game';
+        if (GameState.tick - this.createdTick > this.holdTicks) return 'expired';
+        return null;
+    }
+
+    describe() { return 'Move[' + this.reason + ']<' + this.source + '>'; }
+}
+
+/* Take one age upgrade. The index space is the game's own: weapon indices
+ * first, then items offset by weapons.length (game_index.js:4734). */
+class UpgradeIntent extends Intent {
+    constructor(opts) {
+        super('Upgrade', Object.assign({ cost: 1 }, opts));
+        this.index = opts.index;
+        this.label = opts.label;
+        this.forAge = opts.forAge;
+    }
+
+    validate() {
+        if (!GameState.inGame) return 'not-in-game';
+        if (GameState.upgradePoints <= 0) return 'no-points';
+        /* The offer is only valid for the tier it was made for; taking a stale
+         * index would pick whatever now sits at that slot. */
+        if (this.forAge !== GameState.upgradeAge) return 'stale-tier';
+        return null;
+    }
+
+    describe() { return 'Upgrade[' + this.label + ']<' + this.source + '>'; }
+}
+
+/* Buy a hat or an accessory. */
+class BuyIntent extends Intent {
+    constructor(opts) {
+        super('Buy', Object.assign({ cost: 1 }, opts));
+        this.id = opts.id;
+        this.accessory = !!opts.accessory;
+        this.price = opts.price;
+        this.label = opts.label;
+    }
+
+    validate() {
+        if (!GameState.inGame) return 'not-in-game';
+        const owned = this.accessory ? GameState.tails : GameState.skins;
+        if (owned[this.id]) return 'already-owned';
+        if (GameState.resources.points < this.price) return 'too-expensive';
+        return null;
+    }
+
+    describe() { return 'Buy[' + this.label + ']<' + this.source + '>'; }
+}
+
+/* Respawn, replaying the payload the game itself sent. */
+class SpawnIntent extends Intent {
+    constructor(opts) {
+        super('Spawn', Object.assign({ cost: 1 }, opts));
+        this.payload = opts.payload;
+    }
+
+    validate() {
+        if (GameState.inGame) return 'already-alive';
+        if (!this.payload) return 'no-payload';
+        if (!Transport.isReady()) return 'socket-not-ready';
+        return null;
+    }
+}
+
+/* Flip one of the game's own toggles (auto-gather, direction lock). */
+class ToggleIntent extends Intent {
+    constructor(opts) {
+        super('Toggle', Object.assign({ cost: 1 }, opts));
+        this.which = opts.which;   // 0 = lock direction, 1 = auto gather
+        this.desired = opts.desired;
+        this.reason = opts.reason;
+    }
+
+    validate() {
+        if (!GameState.inGame || !GameState.self || !GameState.self.alive) return 'not-in-game';
+        if (this.which === 1 && GameState.input.autoGather === this.desired) return 'already-set';
+        return null;
+    }
+
+    describe() { return 'Toggle[' + this.reason + ']<' + this.source + '>'; }
+}
+
+/* Say something. The game truncates at 30 characters (game_index.js:4451), so
+ * so does this. */
+class ChatIntent extends Intent {
+    constructor(opts) {
+        super('Chat', Object.assign({ cost: 1 }, opts));
+        this.text = String(opts.text).slice(0, 30);
+        this.reason = opts.reason;
+    }
+
+    validate() {
+        if (!GameState.inGame) return 'not-in-game';
+        if (!this.text) return 'empty';
+        return null;
+    }
+
+    describe() { return 'Chat[' + this.reason + ']<' + this.source + '>'; }
+}

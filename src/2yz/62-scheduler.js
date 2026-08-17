@@ -62,6 +62,15 @@ const Scheduler = (function () {
         push(Defs.C2S.STORE, [1, id, type], intent, 'equip');
     }
 
+    function emitBuy(id, type, intent) {
+        push(Defs.C2S.STORE, [0, id, type], intent, 'buy');
+    }
+
+    function emitMove(angle, intent) {
+        if (angle == null) push(Defs.C2S.MOVE_STOP, [], intent, 'move-stop');
+        else push(Defs.C2S.MOVE_DIR, [U.fixTo(angle, 2)], intent, 'move');
+    }
+
     /* --- intent execution ------------------------------------------------ */
 
     /* Build one item, then put the weapon back. This is the sequence the game
@@ -88,6 +97,7 @@ const Scheduler = (function () {
     }
 
     function executeHeal(intent) {
+        Events.emit('healSent', intent);
         for (let i = 0; i < intent.count; i++) {
             emitSelectItem(intent.itemId, intent);
             emitAttack(null, intent);
@@ -99,6 +109,38 @@ const Scheduler = (function () {
         if (intent.hat != null) emitEquip(intent.hat, 0, intent);
     }
 
+    /* Breaking is a swing like any other, but aimed at a fixed point. */
+    function executeBreak(intent) {
+        emitAim(intent.angle, intent);
+        if (intent.weapon != null) {
+            emitSelectWeapon(intent.weapon, intent);
+            heldWeapon = intent.weapon;
+        }
+        emitAttack(intent.angle, intent);
+    }
+
+    function executeMove(intent) { emitMove(intent.angle, intent); }
+
+    function executeUpgrade(intent) {
+        push(Defs.C2S.UPGRADE, [intent.index], intent, 'upgrade');
+    }
+
+    function executeBuy(intent) {
+        emitBuy(intent.id, intent.accessory ? 1 : 0, intent);
+    }
+
+    function executeSpawn(intent) {
+        push(Defs.C2S.SPAWN, [intent.payload], intent, 'spawn');
+    }
+
+    function executeToggle(intent) {
+        push(Defs.C2S.TOGGLE, [intent.which], intent, 'toggle');
+    }
+
+    function executeChat(intent) {
+        push(Defs.C2S.CHAT, [intent.text], intent, 'chat');
+    }
+
     function execute(intent) {
         switch (intent.kind) {
             case 'Placement':
@@ -106,6 +148,13 @@ const Scheduler = (function () {
             case 'Attack': return executeAttack(intent);
             case 'Heal': return executeHeal(intent);
             case 'Defense': return executeDefense(intent);
+            case 'Break': return executeBreak(intent);
+            case 'Move': return executeMove(intent);
+            case 'Upgrade': return executeUpgrade(intent);
+            case 'Buy': return executeBuy(intent);
+            case 'Spawn': return executeSpawn(intent);
+            case 'Toggle': return executeToggle(intent);
+            case 'Chat': return executeChat(intent);
             case 'Hold': return undefined;
             default: return undefined;
         }
@@ -136,10 +185,21 @@ const Scheduler = (function () {
                 lastAimSent = angle;
             }
 
-            if (e.name === Defs.C2S.MOVE_DIR) {
-                const dir = e.args[0];
-                if (lastMoveSent === dir) continue;
-                lastMoveSent = dir;
+            if (e.name === Defs.C2S.MOVE_DIR || e.name === Defs.C2S.MOVE_STOP) {
+                /* When 2yz steers, its direction is the one that counts: a
+                 * passthrough move from the game would immediately undo an
+                 * anti-knockback correction. Only the last move of the tick
+                 * survives, and a 2yz-owned one beats a passthrough. */
+                let overridden = false;
+                for (let j = i + 1; j < entries.length; j++) {
+                    const later = entries[j];
+                    if (later.name !== Defs.C2S.MOVE_DIR && later.name !== Defs.C2S.MOVE_STOP) continue;
+                    if (e.intent == null || later.intent != null) { overridden = true; break; }
+                }
+                if (overridden) continue;
+                const key = e.name + ':' + e.args[0];
+                if (lastMoveSent === key) continue;
+                lastMoveSent = key;
             }
 
             if (e.tag === 'select-item' || e.tag === 'select-weapon') {

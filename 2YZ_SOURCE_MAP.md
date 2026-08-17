@@ -172,6 +172,38 @@ client would have to guess. `tools/extract-drivers.js` now runs each item's own
 authoritative. NovaStorm reads `items.list[id].heal` — a field that exists in the
 older bundle it forked, not in the current one.
 
+---
+
+## Systems added in 1.1
+
+The brief named nine systems. These are the rest of what the reference clients
+carry, extracted the same way.
+
+| Feature | Source | Original implementation | Extracted concept | 2yz module | Why selected |
+|---|---|---|---|---|---|
+| **Auto Break** | NovaStorm | `selectWeaponAndBreak` and the autoBreak block (novastorm_1.4.txt:14008-14040) | The weapon ladder: a fast primary that one-shots the structure beats the hammer because it recovers sooner; else the hammer if in reach; else the primary; and while trapped, a fast primary regardless, because being free a tick earlier outweighs the damage difference | `58-mod-autobreak.js` | The ladder is genuinely good reasoning about swing recovery, not just damage. 2yz adds the priority NovaStorm leaves implicit — what to break first when several qualify. |
+| **Movement** | NovaStorm | `canAutoPush` (13757), `isNearestEnemyPushPlayer` (13780) | Before committing to a push, sweep every object on the lane and refuse if the lane costs us more than it costs them | `59-mod-movement.js` | `canAutoPush` is the piece that stops a body-block from being mutual suicide. Its hazard classes come from the shipped item table (`dmg`, `trap`, `boostSpeed`, `teleport`) rather than the id literals NovaStorm uses. |
+| **Auto Gather** | NovaStorm | `needAutoGather` (15316) | The held attack should be on while engaged or farming and off while a defensive situation is live | `5d-mod-autogather.js` | Correct rule. 2yz states the conflict NovaStorm leaves implicit: a held attack and a scheduled burst cannot both own the swing. |
+| **Shame Reset** | NovaStorm | `shouldResetShame` (15208) and the `hatFc` branch acting on it (16188) | Wear the draining hat during a genuine lull — no projected damage, no structure contact — so the counter burns down without wasting food | `5e-mod-shamereset.js` | The lull condition is right. 2yz adds a health floor (the drain is itself a risk) and a lower urgency than Safe Soldier, so any real threat takes the hat slot. |
+| **Auto Upgrade** | Game files | The offer builder at `game_index.js:4734` | Weapons occupy indices `0..weapons.length-1`, items follow at `weapons.length + i`; an entry is offered only when its `age` matches the announced tier and its `pre` prerequisite is owned | `5a-mod-autoupgrade.js` | Taken from the game rather than a client, because every client hard-codes an index sequence that breaks the moment the offered tier differs. 2yz reproduces the filter and resolves preferences by name. |
+| **Auto Buy** | Game files | `hats` / `accessories` price fields; `O.send("c", 0, id, type)` (4292) | — | `5b-mod-autobuy.js` | No reference client's version was worth extracting; the prices are in the tables and the packet is one line. It exists because `DefenseIntent.validate` returns `hat-not-owned`, which without this is a permanent refusal. |
+| **Auto Respawn** | Game files | `O.send("M", {name, moofoll, skin})` (4612) | — | `5c-mod-autorespawn.js` | Replays the payload the game itself sent, captured from the outbound stream. Reconstructing one would mean guessing the player's name and skin. |
+| **Auto Chat** | Game files | `O.send("6", text.slice(0, 30))` (4451); `chatCooldown` / `chatCountdown` in config | — | `5f-mod-autochat.js` | The 30-character truncation and the cooldown are the game's, read from config rather than chosen, so 2yz cannot mute itself by outrunning the server's limiter. |
+| **Overlay** | Game files | Context transform (4466-4472); camera lerp (4831-4836) | `scale = max(innerWidth/maxScreenWidth, innerHeight/maxScreenHeight)`, camera stepped toward the player's render position by `min(dist * 0.01 * delta, dist)` | `73-overlay.js` | 2yz does not fork the renderer, so it cannot hook draw calls the way the reference clients do. It reproduces the camera on its own canvas instead. Close, not pixel-identical — the game's delta and ours are different clocks — which is why nothing it draws feeds a decision. |
+
+### What is no longer missing
+
+The 1.0 build sent four kinds of packet. It now sends fourteen: aim, move,
+move-stop, attack, select, store (buy and equip), upgrade, spawn, toggle and
+chat. Every c2s opcode in `Defs.C2S` that has a use now has one, and
+`tools/verify-2yz.js` still matches each against an `O.send` site in the bundle.
+
+The one architectural inconsistency in 1.0 is fixed: Anti Smart Tick's
+`HoldIntent` blocked `Placement` and `Replace` because there was no break action
+to block. It now blocks `Break` as well, and `AutoBreak` is the module that
+would otherwise perform it — the veto and the action it vetoes both exist, and a
+test asserts that a stronger hold actually suppresses a real escape intent.
+
 ## Marked UNKNOWN
 
 Nothing 2yz depends on is unknown. Two things were looked for and are genuinely
@@ -181,8 +213,11 @@ not available, and each is handled explicitly rather than guessed:
   to the owning client, so 2yz cannot know which spike or trap an enemy has
   slotted. `AntiSmartTick.findTrap` models the threat with our own spike and says
   so in a comment; erring toward the larger item makes the defence conservative.
-- **Enemy shame count.** Tracked server-side (`shameTimer`/`shameCount` on
-  `PlayerObject`, 2308) and never transmitted. `Entity.shameCount` exists and is
-  populated only for the local player. No module branches on an enemy's shame;
-  NovaStorm's `nearestEnemy.shameCount > 6` checks read a field its fork
-  maintained locally, which the current protocol does not support.
+- **Shame count, for anyone.** Tracked server-side (`shameTimer`/`shameCount` on
+  `PlayerObject`, 2308) and never transmitted. For the local player, `ShameReset`
+  *infers* it: a heal that moved the health bar lowers the count, one that did
+  not raises it. That is an inference from the only observable the protocol
+  offers, and it is labelled as such in the module. For enemies there is no
+  observable at all, so no module branches on an enemy's shame; NovaStorm's
+  `nearestEnemy.shameCount > 6` checks read a field its fork maintained locally,
+  which the current protocol does not support.

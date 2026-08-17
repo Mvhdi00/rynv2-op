@@ -2808,6 +2808,17 @@ const GameState = {
     tails: {},
     age: 1,
     upgradePoints: 0,
+    /* The age tier the pending upgrade choices belong to. UPDATE_UPGRADES
+     * carries it, and the upgrade index space is only meaningful against it
+     * (game_index.js:4734). */
+    upgradeAge: 0,
+
+    /* The spawn payload the game itself last sent. Respawn replays it verbatim
+     * rather than reconstructing a name and skin, which would be guessing. */
+    lastSpawn: null,
+
+    /* Kills seen this life, for kill-chat. */
+    killsThisLife: 0,
 
     /* What the human is doing, observed from the outbound stream. */
     input: {
@@ -2821,6 +2832,7 @@ const GameState = {
 
     reset() {
         this.inGame = false;
+        this.killsThisLife = 0;
         this.players.clear();
         this.animals.clear();
         this.objects.clear();
@@ -3122,6 +3134,10 @@ const Router = (function () {
 
         /* Kl -- game_index.js:5543. Generic "set one field on the local player". */
         [S.UPDATE_VALUE](key, value) {
+            if (key === 'kills' && value > GameState.resources.kills) {
+                GameState.killsThisLife += value - GameState.resources.kills;
+                Events.emit('kill', value);
+            }
             if (key in GameState.resources) GameState.resources[key] = value;
             else if (key === 'points') GameState.resources.points = value;
             if (GameState.self && (key === 'health' || key === 'maxHealth')) {
@@ -3135,6 +3151,8 @@ const Router = (function () {
             if (GameState.self) GameState.self.alive = false;
             Events.emit('death');
         },
+
+
 
         /* Pl -- game_index.js:5038, startAnim(didHit, weaponIndex). This is how
          * 2yz sees every swing in the world, including enemies', which is what
@@ -3150,8 +3168,12 @@ const Router = (function () {
             if (age != null) GameState.age = age;
         },
 
-        /* Un -- upgrade points available. */
-        [S.UPDATE_UPGRADES](points) { GameState.upgradePoints = points; },
+        /* Un -- game_index.js:4734. (points, ageTier). Both are needed: the
+         * upgrade index space is only valid for the tier it was offered for. */
+        [S.UPDATE_UPGRADES](points, ageTier) {
+            GameState.upgradePoints = points;
+            if (ageTier != null) GameState.upgradeAge = ageTier;
+        },
 
         /* al -- game_index.js:4220.
          *   isEquip truthy -> the item is now worn  (skinIndex / tailIndex)
@@ -3209,6 +3231,11 @@ const Router = (function () {
                 break;
             case C.TOGGLE:
                 if (args[0] === 1) input.autoGather = !input.autoGather;
+                break;
+            case C.SPAWN:
+                /* Keep the exact payload so respawn can replay it. */
+                GameState.lastSpawn = args[0];
+                GameState.killsThisLife = 0;
                 break;
             default:
                 break;
@@ -3366,6 +3393,7 @@ const EntityTracker = (function () {
 
     function onTick() {
         const dt = GameState.lastTickDelta;
+        if (!GameState.self) { Events.emit('trackerReady'); return; }
         tickReloads(dt);
         rebuildNearObjects();
 
@@ -5754,6 +5782,897 @@ const AutoMills = {
 };
 
 
+/* ---- 58-mod-autobreak.js ---- */
+/* ===========================================================================
+ * 2yz / AutoBreak
+ * ---------------------------------------------------------------------------
+ * Source concept: NovaStorm's autoBreak block and its selectWeaponAndBreak
+ * helper (novastorm_1.4.txt:14008-14040).
+ *
+ * This module closes the one architectural gap the first build shipped with.
+ * Anti Smart Tick decides when NOT to break out of a trap -- but nothing in
+ * 2yz actually broke out, so the hold guarded a decision the client never made.
+ * Combat only ever targets players; a structure is a different kind of target
+ * and gets its own module.
+ *
+ * NovaStorm's weapon-selection ladder is the part worth keeping, and it is a
+ * genuinely good piece of reasoning:
+ *
+ *   - a fast primary that can one-shot the structure beats the hammer, because
+ *     the swing recovers sooner and the follow-up lands earlier;
+ *   - otherwise the hammer, if the structure is in its reach;
+ *   - otherwise the primary;
+ *   - and while trapped, a fast primary in range regardless, because being
+ *     free one tick sooner outweighs the damage difference.
+ *
+ * 2yz keeps that order, reads every damage and range figure from the shipped
+ * tables, and adds the priority NovaStorm leaves implicit: what to break first
+ * when several things qualify.
+ * =========================================================================== */
+
+const AutoBreak = {
+    name: 'AutoBreak',
+
+    tick() {
+        if (!Config.get('combat.autoBreak.enabled')) return null;
+        const me = GameState.self;
+        if (!me || !me.alive || !GameState.inGame) return null;
+
+        const target = this.pick();
+        if (!target) return null;
+
+        const choice = this.chooseWeapon(target.object);
+        if (!choice) return null;
+
+        return new BreakIntent({
+            source: this.name,
+            urgency: target.urgency,
+            confidence: 1,
+            target: Targeting.primary,
+            object: target.object,
+            slot: choice.slot,
+            weapon: choice.weapon,
+            angle: U.getDirection(target.object.x, target.object.y, me.x2, me.y2),
+            reason: target.reason
+        });
+    },
+
+    /* What to break, in descending order of how much it matters. */
+    pick() {
+        const me = GameState.self;
+        const enemy = Targeting.primary;
+
+        /* 1. The trap holding us. Nothing else matters while we cannot move.
+         *    Anti Smart Tick may veto this through its HoldIntent -- that is
+         *    exactly the interaction it exists for. */
+        if (me.trapped && me.trapObject && this.reachable(me.trapObject)) {
+            return {
+                object: me.trapObject,
+                urgency: Config.get('combat.autoBreak.urgencyEscape'),
+                reason: 'escape-trap'
+            };
+        }
+
+        /* 2. An enemy structure standing between us and the target. Breaking it
+         *    is what re-opens the swing. */
+        if (enemy && Config.get('combat.autoBreak.clearLine')) {
+            const blocker = this.lineBlocker(enemy);
+            if (blocker) {
+                return {
+                    object: blocker,
+                    urgency: Config.get('combat.autoBreak.urgencyClear'),
+                    reason: 'clear-line'
+                };
+            }
+        }
+
+        /* 3. An enemy spike close enough to hurt us where we stand. */
+        if (Config.get('combat.autoBreak.clearHazards')) {
+            const hazard = this.nearestHazard();
+            if (hazard) {
+                return {
+                    object: hazard,
+                    urgency: Config.get('combat.autoBreak.urgencyHazard'),
+                    reason: 'clear-hazard'
+                };
+            }
+        }
+
+        return null;
+    },
+
+    reachable(obj) {
+        const me = GameState.self;
+        const reach = Math.max(
+            EntityTracker.rangeOf(me, 0),
+            GameState.weapons[1] != null ? EntityTracker.rangeOf(me, 1) : 0
+        );
+        return U.getDistance(me.x2, me.y2, obj.x, obj.y) <= reach + me.scale + obj.scale;
+    },
+
+    /* An enemy structure sitting on the line from us to the target. */
+    lineBlocker(enemy) {
+        const me = GameState.self;
+        let best = null;
+        let bestDist = Infinity;
+        for (const obj of GameState.enemyObjects) {
+            if (!obj.active || !obj.isItem) continue;
+            if (!this.reachable(obj)) continue;
+            const pad = obj.scale;
+            const onLine = U.lineInRect(
+                obj.x - pad, obj.y - pad, obj.x + pad, obj.y + pad,
+                me.x2, me.y2, enemy.x2, enemy.y2
+            );
+            if (!onLine) continue;
+            const d = U.getDistance(me.x2, me.y2, obj.x, obj.y);
+            if (d < bestDist) { bestDist = d; best = obj; }
+        }
+        return best;
+    },
+
+    /* The enemy spike we are standing on or about to be pushed into. */
+    nearestHazard() {
+        const me = GameState.self;
+        if (me.onSpike && me.onSpike.ownerSid != null
+            && !GameState.isAlly(me.onSpike.ownerSid)
+            && this.reachable(me.onSpike)) {
+            return me.onSpike;
+        }
+        let best = null;
+        let bestDist = Infinity;
+        for (const obj of GameState.enemyObjects) {
+            if (!obj.active || obj.damage <= 0) continue;
+            if (!this.reachable(obj)) continue;
+            const d = U.getDistance(me.x2, me.y2, obj.x, obj.y);
+            if (d > obj.scale + me.scale + Config.get('combat.autoBreak.hazardMargin')) continue;
+            if (d < bestDist) { bestDist = d; best = obj; }
+        }
+        return best;
+    },
+
+    /* NovaStorm's ladder, with the figures read from the tables. */
+    chooseWeapon(obj) {
+        const me = GameState.self;
+        const primary = GameState.weapons[0];
+        const secondary = GameState.weapons[1];
+
+        const inRange = (slot) => {
+            const idx = slot === 0 ? primary : secondary;
+            if (idx == null) return false;
+            const w = Defs.weapons[idx];
+            if (!w || w.range == null) return false;
+            return U.getDistance(me.x2, me.y2, obj.x, obj.y) <= w.range + me.scale + obj.scale;
+        };
+
+        const primaryFast = Defs.weapons[primary]
+            && Defs.weapons[primary].speed < Config.get('combat.autoBreak.fastPrimarySpeed');
+        const primaryOneShot = EntityTracker.structureDamage(me, 0) >= obj.health;
+        const secondaryIsHammer = secondary != null
+            && Defs.weapons[secondary] && Defs.weapons[secondary].sDmg > 1;
+
+        /* A slot that is still on cooldown cannot break anything this tick. */
+        const ready = (slot) => (slot === 0
+            ? EntityTracker.primaryReady(me.sid)
+            : EntityTracker.secondaryReady(me.sid));
+
+        if (primaryFast && primaryOneShot && inRange(0) && ready(0)) {
+            return { slot: 0, weapon: primary };
+        }
+        if (secondaryIsHammer && inRange(1) && ready(1)) {
+            return { slot: 1, weapon: secondary };
+        }
+        if (!secondaryIsHammer && inRange(0) && ready(0)) {
+            return { slot: 0, weapon: primary };
+        }
+        if (me.trapped && primaryFast && inRange(0) && ready(0)) {
+            return { slot: 0, weapon: primary };
+        }
+        return null;
+    },
+
+    debugState() {
+        const me = GameState.self;
+        if (!me) return null;
+        const t = this.pick();
+        return {
+            trapped: me.trapped,
+            breaking: t ? t.object.name + ' (' + t.reason + ')' : null,
+            weapon: t ? this.chooseWeapon(t.object) : null
+        };
+    }
+};
+
+
+/* ---- 59-mod-movement.js ---- */
+/* ===========================================================================
+ * 2yz / Movement
+ * ---------------------------------------------------------------------------
+ * Source concepts: NovaStorm's canAutoPush and isNearestEnemyPushPlayer
+ * (novastorm_1.4.txt:13757 and 13780).
+ *
+ * This is the module that most needs restraint, so its default is off. 2yz
+ * normally never sends a movement packet at all -- the player's own MOVE_DIR
+ * passes through untouched and the client is a decision layer on top of human
+ * movement. This module is the exception, and it only speaks when it has a
+ * specific reason:
+ *
+ *   anti-knockback  a hit is about to throw us onto a structure; lean into the
+ *                   push so the displacement lands short of it
+ *   safe walk       the direction we are already going runs into an enemy spike
+ *                   inside the next second; steer to the nearest clear heading
+ *   push            walking into the target would carry them onto one of our
+ *                   spikes, and the lane is clear of hazards for us
+ *
+ * NovaStorm's canAutoPush is the good idea here: before committing to a push,
+ * sweep every object on the lane and refuse if the lane costs us more than it
+ * costs them. Its hazard classes -- enemy spikes, boost pads, teleporters --
+ * come from the shipped item table rather than the id literals NovaStorm uses.
+ * =========================================================================== */
+
+const Movement = {
+    name: 'Movement',
+
+    tick() {
+        if (!Config.get('movement.enabled')) return null;
+        const me = GameState.self;
+        if (!me || !me.alive || !GameState.inGame) return null;
+
+        /* Order matters: surviving beats positioning beats aggression. */
+        return this.antiKnockback(me)
+            || this.safeWalk(me)
+            || this.push(me)
+            || null;
+    },
+
+    /* --------------------------------------------------------- anti-knockback
+     * A hit coming from the enemy pushes us along enemy->us. If that push lands
+     * us on a damaging structure, moving INTO the incoming direction shortens
+     * the displacement enough to stop short of it. */
+    antiKnockback(me) {
+        if (!Config.get('movement.antiKnockback')) return null;
+        const enemy = Targeting.primary;
+        if (!enemy) return null;
+
+        /* Only worth it when a hit is actually imminent. */
+        if (!EntityTracker.primaryReady(enemy.sid) && !EntityTracker.secondaryReady(enemy.sid)) {
+            return null;
+        }
+        const reach = Math.max(
+            EntityTracker.rangeOf(enemy, 0),
+            enemy.secondaryIndex != null ? EntityTracker.rangeOf(enemy, 1) : 0
+        ) + me.scale + enemy.scale;
+        if (Targeting.distanceTo(enemy) > reach) return null;
+
+        const kb = Prediction.knockbackTo(me, enemy.x2, enemy.y2);
+        const hazard = this.hazardOnSegment(me.x2, me.y2, kb.x, kb.y, me.scale);
+        if (!hazard) return null;
+
+        /* Lean toward the attacker: the push and our movement partly cancel. */
+        const into = U.getDirection(enemy.x2, enemy.y2, me.x2, me.y2);
+        return new MoveIntent({
+            source: this.name,
+            urgency: Config.get('movement.urgencyAntiKnockback'),
+            confidence: Prediction.confidence(enemy),
+            target: enemy,
+            angle: into,
+            reason: 'anti-kb',
+            holdTicks: 1
+        });
+    },
+
+    /* ------------------------------------------------------------- safe walk
+     * The heading the player is already using, projected forward. If it runs
+     * into a hazard, pick the nearest heading that does not. */
+    safeWalk(me) {
+        if (!Config.get('movement.safeWalk')) return null;
+        const heading = GameState.input.moveDir;
+        if (heading == null) return null;
+
+        const reach = Config.get('movement.lookaheadDistance');
+        const endX = me.x2 + reach * Math.cos(heading);
+        const endY = me.y2 + reach * Math.sin(heading);
+        if (!this.hazardOnSegment(me.x2, me.y2, endX, endY, me.scale)) return null;
+
+        /* Sweep outward from the intended heading so the correction is the
+         * smallest one that works, rather than the first one found. */
+        const steps = Config.get('movement.avoidSteps');
+        for (let i = 1; i <= steps; i++) {
+            const offset = (i / steps) * (Math.PI * 0.75);
+            for (const sign of [1, -1]) {
+                const candidate = heading + sign * offset;
+                const cx = me.x2 + reach * Math.cos(candidate);
+                const cy = me.y2 + reach * Math.sin(candidate);
+                if (this.hazardOnSegment(me.x2, me.y2, cx, cy, me.scale)) continue;
+                return new MoveIntent({
+                    source: this.name,
+                    urgency: Config.get('movement.urgencySafeWalk'),
+                    confidence: 1,
+                    target: Targeting.primary,
+                    angle: candidate,
+                    reason: 'safe-walk',
+                    holdTicks: 1
+                });
+            }
+        }
+        /* Every direction is blocked -- stopping beats walking into it. */
+        return new MoveIntent({
+            source: this.name,
+            urgency: Config.get('movement.urgencySafeWalk'),
+            confidence: 1,
+            target: Targeting.primary,
+            angle: null,
+            reason: 'boxed-in',
+            holdTicks: 1
+        });
+    },
+
+    /* ------------------------------------------------------------------ push
+     * Walk into the target when body-blocking would carry them onto one of our
+     * spikes. NovaStorm gates this on the lane being clear for US, which is the
+     * part that stops a push from being a mutual suicide. */
+    push(me) {
+        if (!Config.get('movement.autoPush')) return null;
+        const enemy = Targeting.primary;
+        if (!enemy) return null;
+        if (me.trapped) return null;
+
+        const gap = Targeting.distanceTo(enemy);
+        if (gap > Config.get('movement.pushRange')) return null;
+
+        /* Where would shoving them take them? */
+        const shove = U.getDirection(enemy.x2, enemy.y2, me.x2, me.y2);
+        const dist = Config.get('movement.pushDistance');
+        const endX = enemy.x2 + dist * Math.cos(shove);
+        const endY = enemy.y2 + dist * Math.sin(shove);
+
+        let lands = null;
+        for (const obj of GameState.myObjects) {
+            if (!obj.active || obj.damage <= 0) continue;
+            const pad = obj.scale + enemy.scale;
+            if (U.lineInRect(obj.x - pad, obj.y - pad, obj.x + pad, obj.y + pad,
+                enemy.x2, enemy.y2, endX, endY)) { lands = obj; break; }
+        }
+        if (!lands) return null;
+
+        /* NovaStorm's guard: the lane we would walk down must be clear for us. */
+        if (this.hazardOnSegment(me.x2, me.y2, enemy.x2, enemy.y2, me.scale)) return null;
+
+        return new MoveIntent({
+            source: this.name,
+            urgency: Config.get('movement.urgencyPush'),
+            confidence: Prediction.confidence(enemy),
+            target: enemy,
+            angle: U.getDirection(enemy.x2, enemy.y2, me.x2, me.y2),
+            reason: 'push-into-spike',
+            holdTicks: 1
+        });
+    },
+
+    /* ---------------------------------------------------------------- shared
+     * Anything on this segment that would hurt or displace us. Hazard classes
+     * come from the item table: dmg for spikes, boostSpeed for pads, teleport
+     * for teleporters, trap for pit traps we do not own. */
+    hazardOnSegment(x1, y1, x2, y2, radius) {
+        const objects = GameState.nearObjects;
+        for (let i = 0; i < objects.length; i++) {
+            const obj = objects[i];
+            if (!obj.active || !obj.isItem) continue;
+
+            const ours = obj.ownerSid != null
+                && (obj.ownerSid === GameState.mySid || GameState.isAlly(obj.ownerSid));
+
+            const item = obj.item || {};
+            const hurts = obj.damage > 0 && !ours;
+            const holds = obj.trap && !ours;
+            const shoves = !!item.boostSpeed;
+            const ports = !!item.teleport;
+            if (!hurts && !holds && !shoves && !ports) continue;
+
+            if (U.pointToSegment(obj.x, obj.y, x1, y1, x2, y2) < obj.scale + radius) return obj;
+        }
+        return null;
+    },
+
+    debugState() {
+        const me = GameState.self;
+        if (!me) return null;
+        const heading = GameState.input.moveDir;
+        return {
+            enabled: Config.get('movement.enabled'),
+            heading: heading == null ? null : Math.round(U.toDeg(heading)),
+            hazardAhead: heading == null ? null : !!this.hazardOnSegment(
+                me.x2, me.y2,
+                me.x2 + Config.get('movement.lookaheadDistance') * Math.cos(heading),
+                me.y2 + Config.get('movement.lookaheadDistance') * Math.sin(heading),
+                me.scale
+            )
+        };
+    }
+};
+
+
+/* ---- 5a-mod-autoupgrade.js ---- */
+/* ===========================================================================
+ * 2yz / AutoUpgrade
+ * ---------------------------------------------------------------------------
+ * Take age upgrades automatically.
+ *
+ * The index space is the game's own, read off the offer builder at
+ * game_index.js:4734: weapons occupy indices 0..weapons.length-1, items follow
+ * at weapons.length + itemIndex. An entry is only offered when its `age`
+ * matches the tier the server just announced AND its `pre` prerequisite is
+ * already owned. 2yz reproduces exactly that filter rather than sending a
+ * hard-coded sequence of indices, which is what breaks the moment a build order
+ * diverges or the server offers a different tier.
+ *
+ * The preference order is a config list of item and weapon NAMES, resolved
+ * against the shipped tables. Names rather than ids, so a table renumbering
+ * upstream cannot silently repoint a choice at something else.
+ * =========================================================================== */
+
+const AutoUpgrade = {
+    name: 'AutoUpgrade',
+
+    tick() {
+        if (!Config.get('utility.autoUpgrade.enabled')) return null;
+        if (!GameState.inGame) return null;
+        if (GameState.upgradePoints <= 0) return null;
+
+        const offers = this.offers();
+        if (!offers.length) return null;
+
+        const pick = this.choose(offers);
+        if (!pick) return null;
+
+        return new UpgradeIntent({
+            source: this.name,
+            urgency: Config.get('utility.autoUpgrade.urgency'),
+            confidence: 1,
+            index: pick.index,
+            label: pick.name,
+            forAge: GameState.upgradeAge
+        });
+    },
+
+    /* Exactly the filter the game applies when it builds the upgrade row. */
+    offers() {
+        const tier = GameState.upgradeAge;
+        const out = [];
+
+        for (let i = 0; i < Defs.weapons.length; i++) {
+            const w = Defs.weapons[i];
+            if (w.age !== tier) continue;
+            if (w.pre != null && GameState.weapons.indexOf(w.pre) < 0) continue;
+            out.push({ index: i, name: w.name, kind: 'weapon' });
+        }
+        for (let i = 0; i < Defs.items.length; i++) {
+            const it = Defs.items[i];
+            if (it.age !== tier) continue;
+            if (it.pre != null && GameState.items.indexOf(it.pre) < 0) continue;
+            out.push({ index: Defs.weapons.length + i, name: it.name, kind: 'item' });
+        }
+        return out;
+    },
+
+    /* First match in the preference list wins; anything unlisted is taken only
+     * if the list produced nothing and the fallback is on, so an unattended
+     * client still ages up rather than sitting on unspent points. */
+    choose(offers) {
+        const order = Config.get('utility.autoUpgrade.order')
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean);
+
+        for (const wanted of order) {
+            const hit = offers.find((o) => o.name.toLowerCase() === wanted);
+            if (hit) return hit;
+        }
+        if (Config.get('utility.autoUpgrade.takeAnything')) return offers[0];
+        return null;
+    },
+
+    debugState() {
+        if (!GameState.inGame) return null;
+        return {
+            points: GameState.upgradePoints,
+            tier: GameState.upgradeAge,
+            offers: this.offers().map((o) => o.name)
+        };
+    }
+};
+
+
+/* ---- 5b-mod-autobuy.js ---- */
+/* ===========================================================================
+ * 2yz / AutoBuy
+ * ---------------------------------------------------------------------------
+ * Buy the hats and accessories the defensive and offensive modules want to
+ * wear, so they stop being no-ops on a fresh account.
+ *
+ * Safe Soldier and Combat's damage hat both refuse to act on a hat that is not
+ * owned (DefenseIntent.validate returns 'hat-not-owned'). Without this module
+ * that is a permanent refusal rather than a temporary one.
+ *
+ * Prices come from the shipped hat and accessory tables. The wanted list is
+ * config, by NAME, resolved against those tables -- so it cannot point at an id
+ * that no longer means what it did.
+ * =========================================================================== */
+
+const AutoBuy = {
+    name: 'AutoBuy',
+
+    tick() {
+        if (!Config.get('utility.autoBuy.enabled')) return null;
+        if (!GameState.inGame) return null;
+
+        const reserve = Config.get('utility.autoBuy.pointReserve');
+        const budget = GameState.resources.points - reserve;
+        if (budget <= 0) return null;
+
+        const want = this.wanted();
+        for (const entry of want) {
+            const owned = entry.accessory ? GameState.tails : GameState.skins;
+            if (owned[entry.id]) continue;
+            if (entry.price > budget) continue;
+            return new BuyIntent({
+                source: this.name,
+                urgency: Config.get('utility.autoBuy.urgency'),
+                confidence: 1,
+                id: entry.id,
+                accessory: entry.accessory,
+                price: entry.price,
+                label: entry.name
+            });
+        }
+        return null;
+    },
+
+    /* The configured names, resolved to real table entries. Anything that does
+     * not resolve is dropped rather than guessed at. */
+    wanted() {
+        const names = Config.get('utility.autoBuy.wanted')
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean);
+
+        const out = [];
+        for (const name of names) {
+            const hat = Defs.hats.find((h) => h.name.toLowerCase() === name);
+            if (hat && hat.price != null) {
+                out.push({ id: hat.id, name: hat.name, price: hat.price, accessory: false });
+                continue;
+            }
+            const acc = Defs.accessories.find((a) => a.name.toLowerCase() === name);
+            if (acc && acc.price != null) {
+                out.push({ id: acc.id, name: acc.name, price: acc.price, accessory: true });
+            }
+        }
+        return out;
+    },
+
+    debugState() {
+        if (!GameState.inGame) return null;
+        return {
+            points: GameState.resources.points,
+            missing: this.wanted()
+                .filter((e) => !(e.accessory ? GameState.tails : GameState.skins)[e.id])
+                .map((e) => e.name + '(' + e.price + ')')
+        };
+    }
+};
+
+
+/* ---- 5c-mod-autorespawn.js ---- */
+/* ===========================================================================
+ * 2yz / AutoRespawn
+ * ---------------------------------------------------------------------------
+ * Respawn after death by replaying the exact payload the game itself sent.
+ *
+ * The spawn packet carries {name, moofoll, skin} (game_index.js:4612). 2yz
+ * records that payload when the game sends it (Router.handleOutbound) and plays
+ * it back rather than reconstructing one, because a reconstructed payload would
+ * mean guessing the player's name and skin choice.
+ *
+ * The delay exists because respawning on the same frame as the death packet is
+ * both suspicious and useless -- the death screen has not finished processing.
+ * =========================================================================== */
+
+const AutoRespawn = {
+    name: 'AutoRespawn',
+
+    deadSinceTick: -1,
+    deadAt: 0,
+
+    install() {
+        Events.on('death', () => {
+            this.deadSinceTick = GameState.tick;
+            this.deadAt = Date.now();
+        });
+        Events.on('spawn', () => { this.deadSinceTick = -1; });
+    },
+
+    tick() {
+        if (!Config.get('utility.autoRespawn.enabled')) return null;
+        if (GameState.inGame) return null;
+        if (this.deadSinceTick < 0) return null;
+        if (!GameState.lastSpawn) return null;
+
+        if (Date.now() - this.deadAt < Config.get('utility.autoRespawn.delayMs')) return null;
+
+        return new SpawnIntent({
+            source: this.name,
+            urgency: Config.get('utility.autoRespawn.urgency'),
+            confidence: 1,
+            payload: GameState.lastSpawn
+        });
+    },
+
+    debugState() {
+        return {
+            dead: !GameState.inGame,
+            haveSpawnPayload: !!GameState.lastSpawn,
+            waitedMs: this.deadSinceTick < 0 ? 0 : Date.now() - this.deadAt
+        };
+    }
+};
+
+
+/* ---- 5d-mod-autogather.js ---- */
+/* ===========================================================================
+ * 2yz / AutoGather
+ * ---------------------------------------------------------------------------
+ * Source concept: NovaStorm's needAutoGather (novastorm_1.4.txt:15316).
+ *
+ * The game's auto-gather toggle (C2S TOGGLE with 1) holds the attack down, so
+ * it both farms resources and keeps a weapon swinging. NovaStorm's rule is that
+ * it should be ON while the player is actually engaged or gathering, and OFF
+ * while a defensive situation is live -- because a held attack fights the
+ * client's own swing timing and burns the cooldown a burst needs.
+ *
+ * 2yz keeps that shape and states the conflict explicitly: the toggle is turned
+ * off whenever Combat has a sequence in flight, because a held attack makes
+ * per-tick swing scheduling meaningless.
+ * =========================================================================== */
+
+const AutoGather = {
+    name: 'AutoGather',
+
+    tick() {
+        if (!Config.get('utility.autoGather.enabled')) return null;
+        const me = GameState.self;
+        if (!me || !me.alive || !GameState.inGame) return null;
+
+        const desired = this.shouldHold();
+        if (GameState.input.autoGather === desired) return null;
+
+        return new ToggleIntent({
+            source: this.name,
+            urgency: Config.get('utility.autoGather.urgency'),
+            confidence: 1,
+            which: 1,
+            desired,
+            reason: desired ? 'gather-on' : 'gather-off'
+        });
+    },
+
+    shouldHold() {
+        const me = GameState.self;
+
+        /* A held attack and a scheduled burst cannot both own the swing. */
+        if (CombatEngine.activeSequence) return false;
+
+        /* Defensive situations want the swing free. */
+        if (me.trapped || me.onSpike) return false;
+        if (SafeSoldier.lastProjection
+            && SafeSoldier.lastProjection.total >= Config.get('defense.safeSoldier.threshold')) {
+            return false;
+        }
+
+        /* No enemy nearby: farming is the whole point. */
+        const enemies = Targeting.within(Config.get('utility.autoGather.combatRadius'));
+        if (!enemies.length) return true;
+
+        /* Enemy nearby but out of reach and we are not committed -- keep
+         * gathering, it is free value. */
+        const target = Targeting.primary;
+        return !!target && !CombatEngine.isOpen(target);
+    },
+
+    debugState() {
+        return {
+            on: GameState.input.autoGather,
+            wants: GameState.self ? this.shouldHold() : null
+        };
+    }
+};
+
+
+/* ---- 5e-mod-shamereset.js ---- */
+/* ===========================================================================
+ * 2yz / ShameReset
+ * ---------------------------------------------------------------------------
+ * Source concept: NovaStorm's shouldResetShame flag and the hatFc branch that
+ * acts on it (novastorm_1.4.txt:15208 and 16188).
+ *
+ * Shame is the game's anti-heal-spam counter: past a threshold, eating stops
+ * restoring health. The counter decays on its own, and the Bull Helmet's
+ * healthRegen of -5 (from the shipped hat table) drains health continuously,
+ * which is what makes wearing it during a lull the standard way to burn the
+ * counter down without wasting food.
+ *
+ * NovaStorm sets its flag when nothing is happening -- no projected damage, no
+ * structure contact, no poison -- and clears it the same tick. 2yz keeps that
+ * condition, and adds the two things NovaStorm's version does not check: it
+ * refuses while health is low enough that the drain itself is a risk, and it
+ * yields to Safe Soldier by carrying a lower urgency, so an incoming hit always
+ * wins the hat slot.
+ *
+ * Note on what 2yz can and cannot see: the local player's shame count is not
+ * transmitted as a field. It is inferred from heals that produced no health
+ * change, which is the only observable the protocol offers.
+ * =========================================================================== */
+
+const ShameReset = {
+    name: 'ShameReset',
+
+    /* Inferred, not received. A heal that moved the health bar means the
+     * counter is not blocking yet; one that did not means it is. */
+    pendingHeal: null,
+
+    install() {
+        Events.on('healSent', () => {
+            const me = GameState.self;
+            if (!me) return;
+            this.pendingHeal = { tick: GameState.tick, health: me.health };
+        });
+
+        Events.on('trackerReady', () => {
+            const me = GameState.self;
+            const p = this.pendingHeal;
+            if (!me || !p) return;
+            /* Give the server a tick to apply it. */
+            if (GameState.tick <= p.tick) return;
+            this.pendingHeal = null;
+            if (me.health > p.health) me.shameCount = Math.max(0, me.shameCount - 1);
+            else if (me.health === p.health && me.health < me.maxHealth) me.shameCount++;
+        });
+
+        Events.on('spawn', () => {
+            this.pendingHeal = null;
+            if (GameState.self) GameState.self.shameCount = 0;
+        });
+    },
+
+    tick() {
+        if (!Config.get('defense.shameReset.enabled')) return null;
+        const me = GameState.self;
+        if (!me || !me.alive || !GameState.inGame) return null;
+
+        const bull = Defs.HAT.BULL;
+        if (bull == null || !GameState.skins[bull]) return null;
+        if (me.skinIndex === bull) return null;
+
+        if (me.shameCount < Config.get('defense.shameReset.minShame')) return null;
+
+        /* Only during a genuine lull -- the drain is a cost, and wearing a
+         * damage hat while something is incoming is Safe Soldier's problem. */
+        if (me.trapped || me.onSpike) return null;
+        if (Targeting.incomingDamage() > 0) return null;
+        if (Targeting.within(Config.get('defense.shameReset.safeRadius')).length) return null;
+
+        /* The hat drains health; do not wear it into a hole. */
+        const floor = Config.get('defense.shameReset.minHealthFraction');
+        if (me.health < me.maxHealth * floor) return null;
+
+        return new DefenseIntent({
+            source: this.name,
+            /* Deliberately below Safe Soldier's base, so any real threat
+             * takes the hat slot instead. */
+            urgency: Config.get('defense.shameReset.urgency'),
+            confidence: 1,
+            target: null,
+            hat: bull,
+            reason: 'burn-shame-' + me.shameCount
+        });
+    },
+
+    debugState() {
+        const me = GameState.self;
+        if (!me) return null;
+        return {
+            shame: me.shameCount,
+            ceiling: Config.get('defense.shameCeiling'),
+            wearing: me.skinIndex
+        };
+    }
+};
+
+
+/* ---- 5f-mod-autochat.js ---- */
+/* ===========================================================================
+ * 2yz / AutoChat
+ * ---------------------------------------------------------------------------
+ * Kill messages and a rotating idle line.
+ *
+ * The game truncates chat at 30 characters and rate-limits it with
+ * chatCooldown (500ms) and chatCountdown (3000ms), both from the shipped
+ * config. 2yz honours the longer of the two rather than picking a delay, so it
+ * cannot get itself muted by outrunning the server's own limiter.
+ *
+ * Every message is a ChatIntent, so it competes for the packet budget like
+ * anything else and is dropped rather than queued when the budget is spent.
+ * =========================================================================== */
+
+const AutoChat = {
+    name: 'AutoChat',
+
+    pending: null,
+    lastSentAt: 0,
+    rotation: 0,
+
+    install() {
+        Events.on('kill', () => {
+            if (!Config.get('chat.killChat')) return;
+            const lines = this.lines(Config.get('chat.killLines'));
+            if (!lines.length) return;
+            this.pending = {
+                text: lines[GameState.killsThisLife % lines.length],
+                reason: 'kill'
+            };
+        });
+        Events.on('death', () => { this.pending = null; });
+    },
+
+    lines(raw) {
+        return String(raw).split('|').map((s) => s.trim()).filter(Boolean);
+    },
+
+    /* The game's own limiter, from config rather than a chosen number. */
+    cooldownMs() {
+        return Math.max(Defs.config.chatCooldown, Config.get('chat.minGapMs'));
+    },
+
+    tick() {
+        if (!Config.get('chat.enabled')) return null;
+        if (!GameState.inGame) return null;
+        if (Date.now() - this.lastSentAt < this.cooldownMs()) return null;
+
+        let message = this.pending;
+        this.pending = null;
+
+        if (!message && Config.get('chat.idleChat')) {
+            const gap = Config.get('chat.idleGapMs');
+            if (Date.now() - this.lastSentAt >= gap) {
+                const lines = this.lines(Config.get('chat.idleLines'));
+                if (lines.length && !Targeting.primary) {
+                    message = { text: lines[this.rotation % lines.length], reason: 'idle' };
+                    this.rotation++;
+                }
+            }
+        }
+
+        if (!message) return null;
+        this.lastSentAt = Date.now();
+
+        return new ChatIntent({
+            source: this.name,
+            urgency: Config.get('chat.urgency'),
+            confidence: 1,
+            text: message.text,
+            reason: message.reason
+        });
+    },
+
+    debugState() {
+        return {
+            pending: this.pending ? this.pending.text : null,
+            sinceLastMs: Date.now() - this.lastSentAt,
+            kills: GameState.killsThisLife
+        };
+    }
+};
+
+
 /* ---- 60-intent.js ---- */
 /* ===========================================================================
  * 2yz / Intents
@@ -5936,6 +6855,149 @@ class HoldIntent extends Intent {
     describe() { return 'Hold[' + this.reason + ']<' + this.source + '>'; }
 }
 
+/* Swing at a structure rather than a player. Breaking is what frees us from a
+ * trap and what opens a wall, and it is a different decision from attacking a
+ * player: the target does not move, the damage figure is the structure one, and
+ * the weapon choice is driven by which slot can finish it in a single hit. */
+class BreakIntent extends Intent {
+    constructor(opts) {
+        /* aim, select weapon, attack down, attack up. */
+        super('Break', Object.assign({ cost: 4 }, opts));
+        this.object = opts.object;
+        this.objectSid = opts.object ? opts.object.sid : null;
+        this.slot = opts.slot;
+        this.weapon = opts.weapon;
+        this.angle = opts.angle;
+        this.reason = opts.reason;
+    }
+
+    validate() {
+        if (!GameState.inGame || !GameState.self || !GameState.self.alive) return 'not-in-game';
+        if (this.objectSid == null || !GameState.objects.has(this.objectSid)) return 'object-gone';
+        const me = GameState.self;
+        const reach = EntityTracker.rangeOf(me, this.slot) + me.scale + this.object.scale;
+        if (U.getDistance(me.x2, me.y2, this.object.x, this.object.y) > reach) return 'out-of-reach';
+        return null;
+    }
+
+    describe() { return 'Break[' + (this.object ? this.object.name : '?') + ']<' + this.source + '>'; }
+}
+
+/* Steer. 2yz only ever sends a movement direction when it has a reason to
+ * override the player's; the rest of the time the player's own MOVE_DIR passes
+ * through untouched. */
+class MoveIntent extends Intent {
+    constructor(opts) {
+        super('Move', Object.assign({ cost: 1 }, opts));
+        /* null means "stop", which is a distinct packet (C2S MOVE_STOP). */
+        this.angle = opts.angle;
+        this.reason = opts.reason;
+        this.holdTicks = opts.holdTicks != null ? opts.holdTicks : 1;
+    }
+
+    validate() {
+        if (!GameState.inGame || !GameState.self || !GameState.self.alive) return 'not-in-game';
+        if (GameState.tick - this.createdTick > this.holdTicks) return 'expired';
+        return null;
+    }
+
+    describe() { return 'Move[' + this.reason + ']<' + this.source + '>'; }
+}
+
+/* Take one age upgrade. The index space is the game's own: weapon indices
+ * first, then items offset by weapons.length (game_index.js:4734). */
+class UpgradeIntent extends Intent {
+    constructor(opts) {
+        super('Upgrade', Object.assign({ cost: 1 }, opts));
+        this.index = opts.index;
+        this.label = opts.label;
+        this.forAge = opts.forAge;
+    }
+
+    validate() {
+        if (!GameState.inGame) return 'not-in-game';
+        if (GameState.upgradePoints <= 0) return 'no-points';
+        /* The offer is only valid for the tier it was made for; taking a stale
+         * index would pick whatever now sits at that slot. */
+        if (this.forAge !== GameState.upgradeAge) return 'stale-tier';
+        return null;
+    }
+
+    describe() { return 'Upgrade[' + this.label + ']<' + this.source + '>'; }
+}
+
+/* Buy a hat or an accessory. */
+class BuyIntent extends Intent {
+    constructor(opts) {
+        super('Buy', Object.assign({ cost: 1 }, opts));
+        this.id = opts.id;
+        this.accessory = !!opts.accessory;
+        this.price = opts.price;
+        this.label = opts.label;
+    }
+
+    validate() {
+        if (!GameState.inGame) return 'not-in-game';
+        const owned = this.accessory ? GameState.tails : GameState.skins;
+        if (owned[this.id]) return 'already-owned';
+        if (GameState.resources.points < this.price) return 'too-expensive';
+        return null;
+    }
+
+    describe() { return 'Buy[' + this.label + ']<' + this.source + '>'; }
+}
+
+/* Respawn, replaying the payload the game itself sent. */
+class SpawnIntent extends Intent {
+    constructor(opts) {
+        super('Spawn', Object.assign({ cost: 1 }, opts));
+        this.payload = opts.payload;
+    }
+
+    validate() {
+        if (GameState.inGame) return 'already-alive';
+        if (!this.payload) return 'no-payload';
+        if (!Transport.isReady()) return 'socket-not-ready';
+        return null;
+    }
+}
+
+/* Flip one of the game's own toggles (auto-gather, direction lock). */
+class ToggleIntent extends Intent {
+    constructor(opts) {
+        super('Toggle', Object.assign({ cost: 1 }, opts));
+        this.which = opts.which;   // 0 = lock direction, 1 = auto gather
+        this.desired = opts.desired;
+        this.reason = opts.reason;
+    }
+
+    validate() {
+        if (!GameState.inGame || !GameState.self || !GameState.self.alive) return 'not-in-game';
+        if (this.which === 1 && GameState.input.autoGather === this.desired) return 'already-set';
+        return null;
+    }
+
+    describe() { return 'Toggle[' + this.reason + ']<' + this.source + '>'; }
+}
+
+/* Say something. The game truncates at 30 characters (game_index.js:4451), so
+ * so does this. */
+class ChatIntent extends Intent {
+    constructor(opts) {
+        super('Chat', Object.assign({ cost: 1 }, opts));
+        this.text = String(opts.text).slice(0, 30);
+        this.reason = opts.reason;
+    }
+
+    validate() {
+        if (!GameState.inGame) return 'not-in-game';
+        if (!this.text) return 'empty';
+        return null;
+    }
+
+    describe() { return 'Chat[' + this.reason + ']<' + this.source + '>'; }
+}
+
 
 /* ---- 61-arbiter.js ---- */
 /* ===========================================================================
@@ -5966,7 +7028,12 @@ class HoldIntent extends Intent {
 const Arbiter = (function () {
     /* Lanes that cannot run together, because they all drive the same build and
      * attack packets. */
-    const EXCLUSIVE = ['Attack', 'Placement', 'Replace', 'Heal'];
+    const EXCLUSIVE = ['Attack', 'Placement', 'Replace', 'Heal', 'Break'];
+
+    /* Kinds that may run at most once per tick even though they do not compete
+     * for the build slot -- two upgrades or two moves in one tick is always a
+     * mistake, but they can coexist with an attack. */
+    const SINGLETON = ['Move', 'Upgrade', 'Buy', 'Spawn', 'Toggle', 'Chat', 'Defense'];
 
     let lastDecision = null;
 
@@ -6016,10 +7083,16 @@ const Arbiter = (function () {
         const winners = [];
         let budget = Net.budgetRemaining();
         let exclusiveTaken = false;
+        const singletonTaken = new Set();
 
         for (const intent of pool) {
             const isExclusive = EXCLUSIVE.indexOf(intent.kind) >= 0;
             if (isExclusive && exclusiveTaken) {
+                intent.rejectedReason = 'lane-taken';
+                suppressed.add(intent);
+                continue;
+            }
+            if (SINGLETON.indexOf(intent.kind) >= 0 && singletonTaken.has(intent.kind)) {
                 intent.rejectedReason = 'lane-taken';
                 suppressed.add(intent);
                 continue;
@@ -6032,6 +7105,7 @@ const Arbiter = (function () {
             }
             budget -= cost;
             if (isExclusive) exclusiveTaken = true;
+            if (SINGLETON.indexOf(intent.kind) >= 0) singletonTaken.add(intent.kind);
             winners.push(intent);
         }
 
@@ -6129,6 +7203,15 @@ const Scheduler = (function () {
         push(Defs.C2S.STORE, [1, id, type], intent, 'equip');
     }
 
+    function emitBuy(id, type, intent) {
+        push(Defs.C2S.STORE, [0, id, type], intent, 'buy');
+    }
+
+    function emitMove(angle, intent) {
+        if (angle == null) push(Defs.C2S.MOVE_STOP, [], intent, 'move-stop');
+        else push(Defs.C2S.MOVE_DIR, [U.fixTo(angle, 2)], intent, 'move');
+    }
+
     /* --- intent execution ------------------------------------------------ */
 
     /* Build one item, then put the weapon back. This is the sequence the game
@@ -6155,6 +7238,7 @@ const Scheduler = (function () {
     }
 
     function executeHeal(intent) {
+        Events.emit('healSent', intent);
         for (let i = 0; i < intent.count; i++) {
             emitSelectItem(intent.itemId, intent);
             emitAttack(null, intent);
@@ -6166,6 +7250,38 @@ const Scheduler = (function () {
         if (intent.hat != null) emitEquip(intent.hat, 0, intent);
     }
 
+    /* Breaking is a swing like any other, but aimed at a fixed point. */
+    function executeBreak(intent) {
+        emitAim(intent.angle, intent);
+        if (intent.weapon != null) {
+            emitSelectWeapon(intent.weapon, intent);
+            heldWeapon = intent.weapon;
+        }
+        emitAttack(intent.angle, intent);
+    }
+
+    function executeMove(intent) { emitMove(intent.angle, intent); }
+
+    function executeUpgrade(intent) {
+        push(Defs.C2S.UPGRADE, [intent.index], intent, 'upgrade');
+    }
+
+    function executeBuy(intent) {
+        emitBuy(intent.id, intent.accessory ? 1 : 0, intent);
+    }
+
+    function executeSpawn(intent) {
+        push(Defs.C2S.SPAWN, [intent.payload], intent, 'spawn');
+    }
+
+    function executeToggle(intent) {
+        push(Defs.C2S.TOGGLE, [intent.which], intent, 'toggle');
+    }
+
+    function executeChat(intent) {
+        push(Defs.C2S.CHAT, [intent.text], intent, 'chat');
+    }
+
     function execute(intent) {
         switch (intent.kind) {
             case 'Placement':
@@ -6173,6 +7289,13 @@ const Scheduler = (function () {
             case 'Attack': return executeAttack(intent);
             case 'Heal': return executeHeal(intent);
             case 'Defense': return executeDefense(intent);
+            case 'Break': return executeBreak(intent);
+            case 'Move': return executeMove(intent);
+            case 'Upgrade': return executeUpgrade(intent);
+            case 'Buy': return executeBuy(intent);
+            case 'Spawn': return executeSpawn(intent);
+            case 'Toggle': return executeToggle(intent);
+            case 'Chat': return executeChat(intent);
             case 'Hold': return undefined;
             default: return undefined;
         }
@@ -6203,10 +7326,21 @@ const Scheduler = (function () {
                 lastAimSent = angle;
             }
 
-            if (e.name === Defs.C2S.MOVE_DIR) {
-                const dir = e.args[0];
-                if (lastMoveSent === dir) continue;
-                lastMoveSent = dir;
+            if (e.name === Defs.C2S.MOVE_DIR || e.name === Defs.C2S.MOVE_STOP) {
+                /* When 2yz steers, its direction is the one that counts: a
+                 * passthrough move from the game would immediately undo an
+                 * anti-knockback correction. Only the last move of the tick
+                 * survives, and a 2yz-owned one beats a passthrough. */
+                let overridden = false;
+                for (let j = i + 1; j < entries.length; j++) {
+                    const later = entries[j];
+                    if (later.name !== Defs.C2S.MOVE_DIR && later.name !== Defs.C2S.MOVE_STOP) continue;
+                    if (e.intent == null || later.intent != null) { overridden = true; break; }
+                }
+                if (overridden) continue;
+                const key = e.name + ':' + e.args[0];
+                if (lastMoveSent === key) continue;
+                lastMoveSent = key;
             }
 
             if (e.tag === 'select-item' || e.tag === 'select-weapon') {
@@ -6404,6 +7538,25 @@ const Config = (function () {
             urgencySwing: {
                 label: 'Urgency: Single Swing', type: 'number', def: 55, min: 0, max: 100, step: 1,
                 desc: 'How strongly one swing competes for the tick.'
+            },
+
+            autoBreak: {
+                _label: 'Auto Break',
+                _desc: 'Swing at structures: escape traps, clear the line to the target, remove hazards.',
+                enabled: { label: 'Enable', type: 'bool', def: true, desc: 'Break structures automatically. Without this, Anti Smart Tick guards an escape the client never attempts.' },
+                clearLine: { label: 'Clear Blocked Line', type: 'bool', def: true, desc: 'Break an enemy structure standing between you and the target.' },
+                clearHazards: { label: 'Clear Hazards', type: 'bool', def: true, desc: 'Break an enemy spike close enough to hurt you where you stand.' },
+                hazardMargin: {
+                    label: 'Hazard Margin', type: 'number', def: 25, min: 0, max: 120, step: 5,
+                    desc: 'Extra distance past contact at which an enemy spike still counts as worth removing.'
+                },
+                fastPrimarySpeed: {
+                    label: 'Fast Primary Threshold', type: 'number', def: 400, min: 100, max: 800, step: 50,
+                    desc: 'Milliseconds. A primary quicker than this is preferred over the hammer when it can break the structure in one hit, because it recovers sooner.'
+                },
+                urgencyEscape: { label: 'Urgency: Escape Trap', type: 'number', def: 80, min: 0, max: 100, step: 1, desc: 'Very high: nothing else matters while you cannot move.' },
+                urgencyClear: { label: 'Urgency: Clear Line', type: 'number', def: 45, min: 0, max: 100, step: 1, desc: 'How strongly clearing a blocked swing competes for the tick.' },
+                urgencyHazard: { label: 'Urgency: Clear Hazard', type: 'number', def: 40, min: 0, max: 100, step: 1, desc: 'How strongly removing a nearby enemy spike competes for the tick.' }
             }
         },
 
@@ -6623,6 +7776,16 @@ const Config = (function () {
                 urgencyLethal: { label: 'Urgency: Lethal', type: 'number', def: 95, min: 0, max: 100, step: 1, desc: 'Urgency when the projected hit would kill you.' },
                 urgencyDanger: { label: 'Urgency: Danger', type: 'number', def: 62, min: 0, max: 100, step: 1, desc: 'Urgency when the projected hit would leave you below the floor.' },
                 urgencyTopUp: { label: 'Urgency: Top Up', type: 'number', def: 25, min: 0, max: 100, step: 1, desc: 'Urgency for a routine heal between fights.' }
+            },
+
+            shameReset: {
+                _label: 'Shame Reset',
+                _desc: 'Burn down the anti-heal-spam counter during a lull by wearing the draining hat.',
+                enabled: { label: 'Enable', type: 'bool', def: true, desc: 'Wear Bull Helmet while safe so its health drain clears accumulated shame.' },
+                minShame: { label: 'Minimum Shame', type: 'number', def: 3, min: 1, max: 12, step: 1, desc: 'Inferred shame level at which burning it down is worth the drain.' },
+                safeRadius: { label: 'Safe Radius', type: 'number', def: 450, min: 100, max: 900, step: 25, desc: 'Refuse if any enemy is within this distance.' },
+                minHealthFraction: { label: 'Minimum Health', type: 'number', def: 0.75, min: 0.2, max: 1, step: 0.05, desc: 'Fraction of full health below which the hat\'s drain is itself the risk.' },
+                urgency: { label: 'Urgency', type: 'number', def: 20, min: 0, max: 100, step: 1, desc: 'Deliberately below Safe Soldier, so any real threat takes the hat slot instead.' }
             }
         },
 
@@ -6643,7 +7806,128 @@ const Config = (function () {
                 resourceReserve: { label: 'Resource Reserve', type: 'number', def: 200, min: 0, max: 2000, step: 50, desc: 'Never spend a resource below this. Keeps material back for spikes and traps.' },
                 frameFloor: { label: 'Frame Floor', type: 'number', def: 40, min: 0, max: 100, step: 5, desc: 'Packets that must remain in the allowance before a mill may be offered.' },
                 urgency: { label: 'Urgency', type: 'number', def: 5, min: 0, max: 100, step: 1, desc: 'Lowest in the client by design: a mill never wins a contested tick.' }
+            },
+
+            autoUpgrade: {
+                _label: 'Auto Upgrade',
+                _desc: 'Spend age upgrade points automatically.',
+                enabled: { label: 'Enable', type: 'bool', def: true, desc: 'Take an upgrade as soon as points are offered.' },
+                order: {
+                    label: 'Preference Order', type: 'text',
+                    def: 'katana,polearm,great hammer,pit trap,greater spikes,spikes,windmill,mine,turret,castle wall,stone wall',
+                    desc: 'Comma-separated item and weapon names, best first. Names are resolved against the game\'s own tables, so a renumbering upstream cannot repoint a choice.'
+                },
+                takeAnything: {
+                    label: 'Take Anything Offered', type: 'bool', def: true,
+                    desc: 'If nothing in the preference list is on offer, take the first available rather than sitting on unspent points.'
+                },
+                urgency: { label: 'Urgency', type: 'number', def: 30, min: 0, max: 100, step: 1, desc: 'How strongly an upgrade competes for the tick.' }
+            },
+
+            autoBuy: {
+                _label: 'Auto Buy',
+                _desc: 'Buy the hats the defensive and offensive modules want to wear.',
+                enabled: { label: 'Enable', type: 'bool', def: true, desc: 'Buy hats when affordable. Without it, Safe Soldier and the damage hat are permanent no-ops on a fresh account.' },
+                wanted: {
+                    label: 'Shopping List', type: 'text',
+                    def: 'Soldier Helmet,Bull Helmet,Booster Hat,Tank Gear,Turret Gear',
+                    desc: 'Comma-separated hat and accessory names, in buying order. Prices come from the game\'s own tables.'
+                },
+                pointReserve: {
+                    label: 'Point Reserve', type: 'number', def: 0, min: 0, max: 20000, step: 500,
+                    desc: 'Never spend below this many points.'
+                },
+                urgency: { label: 'Urgency', type: 'number', def: 12, min: 0, max: 100, step: 1, desc: 'Low: a purchase never displaces a fight.' }
+            },
+
+            autoRespawn: {
+                _label: 'Auto Respawn',
+                _desc: 'Rejoin after death by replaying the game\'s own spawn packet.',
+                enabled: { label: 'Enable', type: 'bool', def: false, desc: 'Respawn automatically. Off by default so death stays a decision you make.' },
+                delayMs: { label: 'Delay', type: 'number', def: 1200, min: 0, max: 10000, step: 100, desc: 'Milliseconds to wait after death before rejoining.' },
+                urgency: { label: 'Urgency', type: 'number', def: 90, min: 0, max: 100, step: 1, desc: 'High, but it only ever competes with other intents while dead.' }
+            },
+
+            autoGather: {
+                _label: 'Auto Gather',
+                _desc: 'Hold the attack for farming, and release it when the swing is needed.',
+                enabled: { label: 'Enable', type: 'bool', def: false, desc: 'Toggle the game\'s auto-gather to match the situation. Off by default: it moves your hands for you.' },
+                combatRadius: { label: 'Combat Radius', type: 'number', def: 400, min: 100, max: 900, step: 25, desc: 'An enemy inside this distance counts as combat for the purpose of releasing the held attack.' },
+                urgency: { label: 'Urgency', type: 'number', def: 15, min: 0, max: 100, step: 1, desc: 'Low: the toggle is cheap and never urgent.' }
             }
+        },
+
+        movement: {
+            _label: 'Movement',
+            _desc: 'The only part of 2yz that steers for you. Off by default; your own movement passes through untouched.',
+            enabled: { label: 'Enable Movement', type: 'bool', def: false, desc: 'Master switch. While off, 2yz never sends a movement packet.' },
+            antiKnockback: {
+                label: 'Anti Knockback', type: 'bool', def: true,
+                desc: 'When an incoming hit would throw you onto a structure, lean into the push so the displacement lands short of it.'
+            },
+            safeWalk: {
+                label: 'Safe Walk', type: 'bool', def: true,
+                desc: 'Steer around enemy spikes, traps, boost pads and teleporters on the heading you are already using.'
+            },
+            autoPush: {
+                label: 'Auto Push', type: 'bool', def: false,
+                desc: 'Body-block the target toward one of your spikes, but only when the lane is clear of hazards for you.'
+            },
+            lookaheadDistance: {
+                label: 'Lookahead Distance', type: 'number', def: 240, min: 60, max: 600, step: 20,
+                desc: 'How far ahead the current heading is projected when checking for hazards.'
+            },
+            avoidSteps: {
+                label: 'Avoidance Resolution', type: 'number', def: 6, min: 2, max: 16, step: 1,
+                desc: 'How many headings either side are tried when steering around a hazard. The smallest correction that works is chosen.'
+            },
+            pushRange: {
+                label: 'Push Range', type: 'number', def: 120, min: 40, max: 300, step: 10,
+                desc: 'Stop trying to body-block beyond this distance.'
+            },
+            pushDistance: {
+                label: 'Push Projection', type: 'number', def: 160, min: 50, max: 400, step: 10,
+                desc: 'How far a shove is assumed to carry the target when checking whether it lands them on a spike.'
+            },
+            urgencyAntiKnockback: { label: 'Urgency: Anti Knockback', type: 'number', def: 72, min: 0, max: 100, step: 1, desc: 'How strongly the knockback correction competes for the tick.' },
+            urgencySafeWalk: { label: 'Urgency: Safe Walk', type: 'number', def: 50, min: 0, max: 100, step: 1, desc: 'How strongly hazard avoidance competes for the tick.' },
+            urgencyPush: { label: 'Urgency: Push', type: 'number', def: 35, min: 0, max: 100, step: 1, desc: 'How strongly body-blocking competes for the tick.' }
+        },
+
+        chat: {
+            _label: 'Chat',
+            _desc: 'Automatic messages, rate-limited by the game\'s own chat cooldown.',
+            enabled: { label: 'Enable Chat', type: 'bool', def: false, desc: 'Master switch for automatic messages. Off by default.' },
+            killChat: { label: 'Kill Messages', type: 'bool', def: true, desc: 'Say a line after a kill.' },
+            killLines: {
+                label: 'Kill Lines', type: 'text', def: 'gg|nice try|too easy|sit down',
+                desc: 'Pipe-separated lines, used in rotation. Truncated to 30 characters, which is the game\'s own limit.'
+            },
+            idleChat: { label: 'Idle Messages', type: 'bool', def: false, desc: 'Say a line periodically while no enemy is nearby.' },
+            idleLines: {
+                label: 'Idle Lines', type: 'text', def: '2yz|.|..',
+                desc: 'Pipe-separated lines, used in rotation while idle.'
+            },
+            idleGapMs: { label: 'Idle Gap', type: 'number', def: 20000, min: 3000, max: 120000, step: 1000, desc: 'Milliseconds between idle messages.' },
+            minGapMs: {
+                label: 'Minimum Gap', type: 'number', def: 900, min: 500, max: 10000, step: 100,
+                desc: 'Floor on the gap between messages. The larger of this and the game\'s own chat cooldown is used, so 2yz cannot outrun the server\'s limiter.'
+            },
+            urgency: { label: 'Urgency', type: 'number', def: 8, min: 0, max: 100, step: 1, desc: 'Low: a message never displaces an action.' }
+        },
+
+        overlay: {
+            _label: 'Overlay',
+            _desc: 'Drawing. 2yz renders on its own canvas over the game, reproducing the game\'s camera; nothing it draws feeds a decision.',
+            enabled: { label: 'Enable Overlay', type: 'bool', def: false, desc: 'Master switch for all drawing.' },
+            showTargets: { label: 'Targets', type: 'bool', def: true, desc: 'Ring every candidate; highlight the current target and draw the line to it.' },
+            showHealth: { label: 'Health Numbers', type: 'bool', def: true, desc: 'Print each candidate\'s health above them.' },
+            showPrediction: { label: 'Prediction', type: 'bool', def: true, desc: 'Draw where each candidate is predicted to be.' },
+            predictionTicks: { label: 'Prediction Horizon', type: 'number', def: 3, min: 1, max: 8, step: 1, desc: 'How many ticks ahead the prediction marker is drawn.' },
+            showPlacement: { label: 'Placement Candidates', type: 'bool', def: true, desc: 'Draw the top-ranked spike positions the placement engine picked.' },
+            placementCount: { label: 'Candidates Shown', type: 'number', def: 3, min: 1, max: 10, step: 1, desc: 'How many ranked positions to draw.' },
+            showHazards: { label: 'Hazards', type: 'bool', def: true, desc: 'Ring enemy spikes and traps, and your own spikes faintly.' },
+            showRanges: { label: 'Weapon Ranges', type: 'bool', def: false, desc: 'Draw your weapon reach, dimmed while on cooldown.' }
         },
 
         prediction: {
@@ -6757,6 +8041,8 @@ const Config = (function () {
                 if (leaf.max != null) v = Math.min(leaf.max, v);
             } else if (leaf.type === 'bool') {
                 v = !!v;
+            } else if (leaf.type === 'text') {
+                v = String(v);
             }
             values[path] = v;
             save();
@@ -6845,6 +8131,10 @@ const Menu = (function () {
     .tyz-ctl{flex:0 0 132px;display:flex;align-items:center;gap:6px;justify-content:flex-end}
     .tyz-ctl input[type=range]{width:92px;accent-color:#6f7dff}
     .tyz-ctl input[type=checkbox]{width:15px;height:15px;accent-color:#6f7dff}
+    .tyz-ctl input.tyz-text{width:130px;background:#0e0e14;color:#e8e8ee;border:1px solid #3a3a4a;
+      border-radius:5px;padding:3px 6px;font:inherit}
+    .tyz-row:has(input.tyz-text){align-items:flex-start}
+    .tyz-ctl:has(input.tyz-text){flex:0 0 140px}
     .tyz-val{min-width:38px;text-align:right;color:#a9a9c0;font-variant-numeric:tabular-nums}
     #tyz-foot{display:flex;gap:8px;padding:9px 12px;background:#1c1c25;border-top:1px solid #33333f}
     #tyz-foot button{background:#2a2a38;color:#d8d8e6;border:1px solid #3a3a4a;border-radius:6px;
@@ -6882,6 +8172,11 @@ const Menu = (function () {
             const input = el('input', { type: 'checkbox' });
             input.checked = !!Config.get(path);
             input.addEventListener('change', () => Config.set(path, input.checked));
+            ctl.appendChild(input);
+        } else if (leaf.type === 'text') {
+            const input = el('input', { type: 'text', class: 'tyz-text' });
+            input.value = String(Config.get(path));
+            input.addEventListener('change', () => Config.set(path, input.value));
             ctl.appendChild(input);
         } else {
             const readout = el('span', { class: 'tyz-val', text: String(Config.get(path)) });
@@ -7106,6 +8401,15 @@ const Debug = (function () {
             out += section('safeSoldier', SafeSoldier.debugState());
             out += section('autoHeal', AutoHeal.debugState());
             out += section('autoMills', AutoMills.debugState());
+            out += section('autoBreak', AutoBreak.debugState());
+            out += section('movement', Movement.debugState());
+            out += section('autoUpgrade', AutoUpgrade.debugState());
+            out += section('autoBuy', AutoBuy.debugState());
+            out += section('autoRespawn', AutoRespawn.debugState());
+            out += section('autoGather', AutoGather.debugState());
+            out += section('shameReset', ShameReset.debugState());
+            out += section('autoChat', AutoChat.debugState());
+            out += section('overlay', Overlay.debugState());
         }
 
         const errors = Log.entries();
@@ -7143,6 +8447,243 @@ const Debug = (function () {
 })();
 
 
+/* ---- 73-overlay.js ---- */
+/* ===========================================================================
+ * 2yz / Overlay
+ * ---------------------------------------------------------------------------
+ * Visuals. Because 2yz does not fork the game's renderer, it cannot hook the
+ * draw calls the way the reference clients do -- it draws on its own canvas
+ * stacked over the game's, and has to reproduce the camera itself.
+ *
+ * The camera maths is the game's, from src/game_index.js:
+ *
+ *   scale  = max(innerWidth / maxScreenWidth, innerHeight / maxScreenHeight)
+ *            and the context transform (4466-4472)
+ *   camera = lerped toward the player's render position each frame with
+ *            step = min(distance * 0.01 * delta, distance)   (4831-4836)
+ *
+ * The player's own render position is itself interpolated between the last two
+ * server snapshots, so this reproduces both stages. The result tracks the game
+ * closely; it is not pixel-identical, because the game's delta and ours are
+ * different clocks. Anything that must be exact -- a decision, a range check --
+ * is made against world coordinates, never against what this draws.
+ *
+ * Everything here is off by default and none of it feeds a decision. It reads
+ * GameState and draws; nothing reads back.
+ * =========================================================================== */
+
+const Overlay = (function () {
+    let canvas = null;
+    let ctx = null;
+    let raf = null;
+
+    /* Camera state, lerped the way the game lerps it. */
+    let camX = 0;
+    let camY = 0;
+    let lastFrame = 0;
+
+    function viewportScale() {
+        return Math.max(
+            window.innerWidth / Defs.config.maxScreenWidth,
+            window.innerHeight / Defs.config.maxScreenHeight
+        );
+    }
+
+    /* Interpolate an entity between its last two snapshots, as the game does
+     * between t1 and t2. */
+    function renderPos(entity) {
+        const span = entity.t2 - entity.t1;
+        if (!span || span <= 0) return { x: entity.x2, y: entity.y2 };
+        let t = (Date.now() - entity.t2) / span;
+        t = U.clamp(t, 0, 1.4);
+        return {
+            x: entity.x1 + (entity.x2 - entity.x1) * (1 + t),
+            y: entity.y1 + (entity.y2 - entity.y1) * (1 + t)
+        };
+    }
+
+    function updateCamera(delta) {
+        const me = GameState.self;
+        if (!me) {
+            camX = Defs.config.mapScale / 2;
+            camY = Defs.config.mapScale / 2;
+            return;
+        }
+        const p = renderPos(me);
+        const dist = U.getDistance(camX, camY, p.x, p.y);
+        if (dist > 0.05) {
+            const dir = U.getDirection(p.x, p.y, camX, camY);
+            const step = Math.min(dist * 0.01 * delta, dist);
+            camX += step * Math.cos(dir);
+            camY += step * Math.sin(dir);
+        } else {
+            camX = p.x;
+            camY = p.y;
+        }
+    }
+
+    /* World -> CSS pixels, matching the game's context transform. */
+    function toScreen(worldX, worldY) {
+        const scale = viewportScale();
+        const originX = (window.innerWidth - Defs.config.maxScreenWidth * scale) / 2;
+        const originY = (window.innerHeight - Defs.config.maxScreenHeight * scale) / 2;
+        return {
+            x: originX + (worldX - camX + Defs.config.maxScreenWidth / 2) * scale,
+            y: originY + (worldY - camY + Defs.config.maxScreenHeight / 2) * scale,
+            scale
+        };
+    }
+
+    function circle(worldX, worldY, radius, colour, width) {
+        const p = toScreen(worldX, worldY);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius * p.scale, 0, U.PI2);
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = (width || 2) * p.scale;
+        ctx.stroke();
+    }
+
+    function line(x1, y1, x2, y2, colour, width) {
+        const a = toScreen(x1, y1);
+        const b = toScreen(x2, y2);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = (width || 2) * a.scale;
+        ctx.stroke();
+    }
+
+    function label(worldX, worldY, text, colour) {
+        const p = toScreen(worldX, worldY);
+        ctx.font = Math.round(13 * p.scale) + 'px system-ui, sans-serif';
+        ctx.fillStyle = colour;
+        ctx.textAlign = 'center';
+        ctx.fillText(text, p.x, p.y);
+    }
+
+    /* --------------------------------------------------------------- layers */
+
+    function drawTargets() {
+        const me = GameState.self;
+        const primary = Targeting.primary;
+        for (const p of Targeting.all) {
+            const isPrimary = p === primary;
+            const colour = isPrimary ? '#ff5470' : '#ffb454';
+            circle(p.x2, p.y2, p.scale + 8, colour, isPrimary ? 3 : 2);
+            if (isPrimary && me) line(me.x2, me.y2, p.x2, p.y2, 'rgba(255,84,112,0.45)', 2);
+            if (Config.get('overlay.showHealth')) {
+                label(p.x2, p.y2 - p.scale - 14, Math.round(p.health) + 'hp', colour);
+            }
+        }
+    }
+
+    function drawPrediction() {
+        for (const p of Targeting.all) {
+            const horizon = Config.get('overlay.predictionTicks');
+            const future = Prediction.at(p, horizon);
+            line(p.x2, p.y2, future.x, future.y, 'rgba(111,125,255,0.8)', 2);
+            circle(future.x, future.y, p.scale, 'rgba(111,125,255,0.55)', 2);
+        }
+    }
+
+    function drawPlacement() {
+        const target = Targeting.primary;
+        const spike = GameState.spikeItem;
+        if (!target || spike == null) return;
+        const ranked = PlacementEngine.bestN(spike, target, 'spike',
+            Config.get('overlay.placementCount'));
+        for (let i = 0; i < ranked.length; i++) {
+            const c = ranked[i];
+            const alpha = 0.85 - i * 0.2;
+            circle(c.x, c.y, c.scale, 'rgba(127,216,164,' + Math.max(0.2, alpha) + ')', i === 0 ? 3 : 2);
+        }
+    }
+
+    function drawHazards() {
+        for (const obj of GameState.enemyObjects) {
+            if (!obj.active) continue;
+            if (obj.damage > 0) circle(obj.x, obj.y, obj.scale, 'rgba(255,84,112,0.55)', 2);
+            else if (obj.trap) circle(obj.x, obj.y, obj.scale, 'rgba(255,180,84,0.55)', 2);
+        }
+        for (const obj of GameState.myObjects) {
+            if (!obj.active || obj.damage <= 0) continue;
+            circle(obj.x, obj.y, obj.scale, 'rgba(127,216,164,0.35)', 1);
+        }
+    }
+
+    function drawRanges() {
+        const me = GameState.self;
+        if (!me) return;
+        for (let slot = 0; slot < 2; slot++) {
+            const idx = GameState.weapons[slot];
+            if (idx == null) continue;
+            const w = Defs.weapons[idx];
+            if (!w || w.range == null) continue;
+            const ready = slot === 0
+                ? EntityTracker.primaryReady(me.sid)
+                : EntityTracker.secondaryReady(me.sid);
+            circle(me.x2, me.y2, w.range + me.scale,
+                ready ? 'rgba(127,216,164,0.5)' : 'rgba(120,120,140,0.35)', 2);
+        }
+    }
+
+    function frame() {
+        raf = window.requestAnimationFrame(frame);
+        if (!Config.get('overlay.enabled')) {
+            if (canvas.style.display !== 'none') canvas.style.display = 'none';
+            return;
+        }
+        if (canvas.style.display === 'none') canvas.style.display = 'block';
+
+        const now = Date.now();
+        const delta = lastFrame ? now - lastFrame : 16;
+        lastFrame = now;
+
+        if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (!GameState.inGame || !GameState.self) return;
+        updateCamera(delta);
+
+        try {
+            if (Config.get('overlay.showHazards')) drawHazards();
+            if (Config.get('overlay.showRanges')) drawRanges();
+            if (Config.get('overlay.showPlacement')) drawPlacement();
+            if (Config.get('overlay.showPrediction')) drawPrediction();
+            if (Config.get('overlay.showTargets')) drawTargets();
+        } catch (err) {
+            Log.error('overlay', err);
+        }
+    }
+
+    return {
+        install() {
+            canvas = document.createElement('canvas');
+            canvas.id = 'tyz-overlay';
+            canvas.style.cssText = 'position:fixed;top:0;left:0;pointer-events:none;'
+                + 'z-index:2147482000;display:none';
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            document.body.appendChild(canvas);
+            ctx = canvas.getContext('2d');
+            raf = window.requestAnimationFrame(frame);
+        },
+
+        debugState() {
+            return {
+                enabled: Config.get('overlay.enabled'),
+                camera: { x: Math.round(camX), y: Math.round(camY) },
+                scale: Math.round(viewportScale() * 100) / 100
+            };
+        }
+    };
+})();
+
+
 /* ---- 80-runtime.js ---- */
 /* ===========================================================================
  * 2yz / Runtime
@@ -7170,10 +8711,18 @@ const Runtime = (function () {
         Preplace,
         Replace,
         SpikeTick,
+        AutoBreak,
         AntiSmartTick,
         SafeSoldier,
+        ShameReset,
         AutoHeal,
-        AutoMills
+        Movement,
+        AutoGather,
+        AutoMills,
+        AutoUpgrade,
+        AutoBuy,
+        AutoRespawn,
+        AutoChat
     ];
 
     function collect() {
@@ -7207,9 +8756,16 @@ const Runtime = (function () {
 
     function onTick() {
         if (!GameState.inGame || !GameState.self) {
-            /* Still flush, so the game's own frames (menu, spawn, store) reach
-             * the socket while 2yz has nothing to say. */
-            Scheduler.run([]);
+            /* Dead or not yet spawned. Only the modules that are meaningful in
+             * that state get a turn -- respawn being the whole point of it. */
+            let revive = [];
+            try {
+                const wake = AutoRespawn.tick();
+                if (wake) revive = Arbiter.resolve([wake]);
+            } catch (err) {
+                Log.error('AutoRespawn.tick', err);
+            }
+            Scheduler.run(revive);
             return;
         }
 
@@ -7247,6 +8803,9 @@ const Runtime = (function () {
             Scheduler.install();
             Preplace.install();
             Replace.install();
+            AutoRespawn.install();
+            ShameReset.install();
+            AutoChat.install();
 
             /* The decision pass runs after tracking, prediction and targeting
              * have all had the tick. */
@@ -7258,6 +8817,7 @@ const Runtime = (function () {
                 try {
                     Menu.install();
                     Debug.install();
+                    Overlay.install();
                 } catch (err) {
                     Log.error('ui', err);
                 }

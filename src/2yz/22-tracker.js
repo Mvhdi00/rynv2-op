@@ -134,6 +134,7 @@ const EntityTracker = (function () {
 
     function onTick() {
         const dt = GameState.lastTickDelta;
+        if (!GameState.self) { Events.emit('trackerReady'); return; }
         tickReloads(dt);
         rebuildNearObjects();
 
