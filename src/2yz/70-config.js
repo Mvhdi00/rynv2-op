@@ -64,6 +64,18 @@ const Config = (function () {
                 label: 'Long-Reach Threshold', type: 'number', def: 115, min: 60, max: 160, step: 1,
                 desc: 'A primary with more reach than this swings second in a burst, after a knockback secondary. At the default this is the katana and the polearm.'
             },
+            targetAnimals: {
+                label: 'Target Animals', type: 'bool', def: true,
+                desc: 'Include animals in the target system. Their damage, reach and cooldown come from the game\'s own animal table, which the first build did not extract at all.'
+            },
+            targetPassiveAnimals: {
+                label: 'Target Passive Animals', type: 'bool', def: false,
+                desc: 'Also target cows and chickens, not just hostile animals. Fast XP, but it pulls attention off players.'
+            },
+            animalScoreScale: {
+                label: 'Animal Score Scale', type: 'number', def: 0.45, min: 0, max: 1.5, step: 0.05,
+                desc: 'Multiplier on an animal\'s target score, so a bull never outranks a player who is actively fighting you.'
+            },
             leadTarget: {
                 label: 'Lead Moving Targets', type: 'bool', def: true,
                 desc: 'Aim at where the target will be when the packet lands rather than where it is now.'
@@ -294,6 +306,22 @@ const Config = (function () {
                     desc: 'Upper bound on the projection, so a crowd cannot inflate it past what one tick can deliver.'
                 },
                 scanRange: { label: 'Scan Range', type: 'number', def: 400, min: 100, max: 800, step: 20, desc: 'How far out to look for sources of incoming damage.' },
+                countAnimals: {
+                    label: 'Count Animals', type: 'bool', def: true,
+                    desc: 'Include hostile animals in the projection. A charging bull hits for more than most players, and `colDmg` lands on contact regardless of cooldown.'
+                },
+                animalMargin: {
+                    label: 'Animal Margin', type: 'number', def: 40, min: 0, max: 200, step: 10,
+                    desc: 'Extra distance past an animal\'s reach at which it still counts as a threat, to cover it closing during the tick.'
+                },
+                countProjectiles: {
+                    label: 'Count Projectiles', type: 'bool', def: true,
+                    desc: 'Include arrows and bullets already in flight. Their damage comes from the shipped projectile table and their path is dead reckoned.'
+                },
+                projectileHorizonMs: {
+                    label: 'Projectile Horizon', type: 'number', def: 400, min: 50, max: 1500, step: 50,
+                    desc: 'Milliseconds ahead a projectile\'s path is projected when testing whether it will reach you.'
+                },
                 urgencyBase: { label: 'Urgency: Base', type: 'number', def: 45, min: 0, max: 100, step: 1, desc: 'Urgency for a survivable projected hit.' },
                 urgencyScale: { label: 'Urgency: Lethality Scale', type: 'number', def: 45, min: 0, max: 100, step: 1, desc: 'Added urgency in proportion to how close the projection comes to killing you.' }
             },
@@ -464,6 +492,8 @@ const Config = (function () {
             showPlacement: { label: 'Placement Candidates', type: 'bool', def: true, desc: 'Draw the top-ranked spike positions the placement engine picked.' },
             placementCount: { label: 'Candidates Shown', type: 'number', def: 3, min: 1, max: 10, step: 1, desc: 'How many ranked positions to draw.' },
             showHazards: { label: 'Hazards', type: 'bool', def: true, desc: 'Ring enemy spikes and traps, and your own spikes faintly.' },
+            showAnimals: { label: 'Animals', type: 'bool', def: true, desc: 'Ring animals, hostile ones in warning colour, with their health.' },
+            showProjectiles: { label: 'Projectiles', type: 'bool', def: true, desc: 'Draw arrows and bullets in flight along their remaining path.' },
             showRanges: { label: 'Weapon Ranges', type: 'bool', def: false, desc: 'Draw your weapon reach, dimmed while on cooldown.' }
         },
 

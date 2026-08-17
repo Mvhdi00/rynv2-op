@@ -45,6 +45,40 @@ const Replace = {
         Events.on('swing', (player, weaponIndex) => this.projectBreak(player, weaponIndex));
         Events.on('objectRemoved', (obj) => this.doomed.delete(obj.sid));
         Events.on('trackerReady', () => this.expire());
+
+        /* WIGGLE_OBJECT says a structure was actually struck, which is stronger
+         * evidence than a swing that may have missed. Anything already flagged
+         * from a swing is confirmed; anything not flagged and now low enough to
+         * die to the next hit from the same direction is flagged here. */
+        Events.on('objectHit', (obj, dir) => this.confirmHit(obj, dir));
+    },
+
+    confirmHit(obj) {
+        if (!Config.get('placement.replace.enabled')) return;
+        const existing = this.doomed.get(obj.sid);
+        if (existing) {
+            /* Seen the swing and now the hit: the break is as certain as it
+             * gets, so give it a fresh lease. */
+            existing.breaksAtTick = GameState.tick + 1;
+            existing.confirmed = true;
+            return;
+        }
+        /* Not predicted from a swing -- someone we cannot see attacking is
+         * hitting it. Flag it if one more hit of the same size would finish it. */
+        if (!obj.isItem || obj.health === Infinity) return;
+        const swinger = Targeting.primary;
+        if (!swinger) return;
+        const damage = Math.max(
+            EntityTracker.structureDamage(swinger, 0),
+            swinger.secondaryIndex != null ? EntityTracker.structureDamage(swinger, 1) : 0
+        );
+        if (damage <= 0 || obj.health > damage) return;
+        this.doomed.set(obj.sid, {
+            object: obj,
+            breaksAtTick: GameState.tick + 1,
+            byWhom: swinger.sid,
+            confirmed: true
+        });
     },
 
     expire() {
@@ -188,7 +222,8 @@ const Replace = {
             doomed: Array.from(this.doomed.values()).map((e) => ({
                 sid: e.object.sid,
                 name: e.object.name,
-                breaksAt: e.breaksAtTick
+                breaksAt: e.breaksAtTick,
+                confirmed: !!e.confirmed
             }))
         };
     }

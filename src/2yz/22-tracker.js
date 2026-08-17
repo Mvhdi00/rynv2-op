@@ -144,6 +144,29 @@ const EntityTracker = (function () {
             updateContacts(p);
         }
 
+        /* Animals move and get trapped exactly like players do, and the
+         * placement and threat layers read the same fields off them. */
+        for (const a of GameState.animals.values()) {
+            if (!a.visible) continue;
+            updateMotion(a, dt);
+            updateContacts(a);
+        }
+
+        /* Projectiles are dead reckoned: the server only tells us about them
+         * once, plus a range update. Advance and retire them here so nothing
+         * downstream has to. */
+        for (const [sid, proj] of GameState.projectiles) {
+            const travel = proj.speed * dt;
+            if (travel >= proj.range) {
+                proj.active = false;
+                GameState.projectiles.delete(sid);
+                continue;
+            }
+            proj.x += travel * Math.cos(proj.dir);
+            proj.y += travel * Math.sin(proj.dir);
+            proj.range -= travel;
+        }
+
         /* spikeDamage is a one-tick flag, cleared after everyone downstream has
          * had the tick to read it. */
         Events.emit('trackerReady');
@@ -159,6 +182,7 @@ const EntityTracker = (function () {
             });
             Events.on('tick', onTick);
             Events.on('playerLeft', (p) => reloads.delete(p.sid));
+            Events.on('animalSwing', (a) => { reloadOf(a.sid).primary = a.hitDelay || 0; });
         },
 
         /* --- reload queries, used by Combat and the tick modules ----------- */
@@ -242,6 +266,7 @@ const EntityTracker = (function () {
          * shield an arc of config.shieldAngle centred on the holder's facing;
          * an attack arriving inside that arc is blocked. */
         shieldBypass(attacker, victim) {
+            if (victim.isAI) return true;
             const shield = Defs.weapons[victim.weaponIndex];
             if (!shield || !shield.shield) return true;
             const incoming = U.getDirection(attacker.x2, attacker.y2, victim.x2, victim.y2);

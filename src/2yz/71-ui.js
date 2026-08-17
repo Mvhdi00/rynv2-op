@@ -173,7 +173,7 @@ const Menu = (function () {
 
             const head = el('div', { id: 'tyz-head' }, [
                 el('b', { text: '2yz' }),
-                el('span', { class: 'tyz-sub', text: 'ShiftT to toggle' })
+                el('span', { class: 'tyz-sub', text: 'Esc to toggle' })
             ]);
 
             const tabs = el('div', { id: 'tyz-tabs' });
@@ -201,16 +201,24 @@ const Menu = (function () {
             makeDraggable(head, root);
             renderTab(activeTab);
 
+            /* Escape opens the menu. The game itself binds no handler to it
+             * (nothing in src/game_index.js reads keyCode 27), so this takes a
+             * key that was otherwise unused rather than shadowing a game
+             * control.
+             *
+             * Capture phase, because the chat box and the name field close
+             * themselves on Escape and would otherwise swallow it. When one of
+             * those has focus the key is left alone: closing the box the player
+             * is typing in is what they meant by pressing it. */
             window.addEventListener('keydown', function (e) {
-                /* Never steal a key while the player is typing in chat or the
-                 * name box. */
-                const tag = document.activeElement && document.activeElement.tagName;
+                if (e.key !== 'Escape' && e.keyCode !== 27) return;
+                const active = document.activeElement;
+                const tag = active && active.tagName;
                 if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-                if (e.shiftKey && (e.key === 'T' || e.key === 't')) {
-                    e.preventDefault();
-                    Menu.toggle();
-                }
-            });
+                e.preventDefault();
+                e.stopPropagation();
+                Menu.toggle();
+            }, true);
         },
 
         toggle() {

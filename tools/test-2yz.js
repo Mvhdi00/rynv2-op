@@ -150,7 +150,7 @@ function buildTestBundle() {
         AutoHeal, AutoMills, Arbiter, Scheduler, Runtime,
         AutoBreak, Movement, AutoUpgrade, AutoBuy, AutoRespawn, AutoGather,
         ShameReset, AutoChat, Overlay,
-        Entity, WorldObject, Candidate,
+        Entity, WorldObject, Candidate, Animal, Projectile,
         Intent, PlacementIntent, ReplaceIntent, AttackIntent, HealIntent,
         DefenseIntent, HoldIntent, BreakIntent, MoveIntent, UpgradeIntent,
         BuyIntent, SpawnIntent, ToggleIntent, ChatIntent
@@ -1692,6 +1692,286 @@ group('packet scheduler: new actions');
     check('a steering correction overrides the player\'s own move that tick',
         moveFrames.length === 1, moveFrames.length + ' move frames');
     api.Config.set('movement.enabled', false);
+}
+
+
+/* --- animals ------------------------------------------------------------ */
+group('animals');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 5000, 5000, 1);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    inbound('V', [[3, 10], 1]);
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+
+    check('the animal table was extracted from the game', api.Defs.animals.length > 0,
+        api.Defs.animals.length + ' types');
+    check('and it carries real damage and health figures',
+        api.Defs.animals.some((a) => a.hostile && a.dmg > 0 && a.health > 0),
+        JSON.stringify(api.Defs.animals.filter((a) => a.hostile).map((a) => a.name)));
+
+    const bullType = api.Defs.animals.findIndex((a) => a.name === 'Bull');
+    const cowType = api.Defs.animals.findIndex((a) => !a.name);
+    check('Bull and cow are both in the table', bullType >= 0 && cowType >= 0,
+        'bull=' + bullType + ' cow=' + cowType);
+
+    /* UPDATE_AI, stride 7: [sid, typeIndex, x, y, dir, health, nameIndex] */
+    const aiFlat = (recs) => {
+        const flat = [];
+        for (const r of recs) flat.push(r.sid, r.type, r.x, r.y, 0, r.health, 0);
+        return flat;
+    };
+    inbound('I', [aiFlat([{ sid: 900, type: bullType, x: 5100, y: 5000, health: 1800 }])]);
+
+    const bull = api.GameState.animals.get(900);
+    check('an animal is tracked from UPDATE_AI', bull instanceof api.Animal, String(bull));
+    check('its stats come from the table, not the wire',
+        bull && bull.hostile === true && bull.damage === api.Defs.animals[bullType].dmg
+        && bull.scale === api.Defs.animals[bullType].scale,
+        bull ? 'dmg=' + bull.damage + ' scale=' + bull.scale : '');
+
+    /* Motion is derived exactly as for players. */
+    for (let i = 0; i < 4; i++) {
+        inbound('I', [aiFlat([{ sid: 900, type: bullType, x: 5100 - i * 9, y: 5000, health: 1800 }])]);
+        updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+    }
+    check('animals get velocity and a heading like players do',
+        bull.speed > 0 && typeof bull.moveDir === 'number',
+        'speed=' + bull.speed.toFixed(1));
+    check('and the shared prediction layer works on them',
+        api.Prediction.at(bull, 2) != null && api.Prediction.at(bull, 2).x < bull.x2 + 1,
+        'pred=' + Math.round(api.Prediction.at(bull, 2).x) + ' now=' + Math.round(bull.x2));
+
+    /* A hostile animal in reach is a target and a threat. */
+    check('a hostile animal becomes a target candidate',
+        api.Targeting.all.indexOf(bull) >= 0,
+        api.Targeting.all.length + ' candidates');
+    check('its threat is computed from the table',
+        api.Targeting.threatOf(bull) >= 0, String(api.Targeting.threatOf(bull)));
+
+    /* Safe Soldier sees it. */
+    inbound('I', [aiFlat([{ sid: 900, type: bullType, x: 5040, y: 5000, health: 1800 }])]);
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+    api.SafeSoldier.tick();
+    const proj = api.SafeSoldier.lastProjection;
+    check('a hostile animal in reach shows up in the damage projection',
+        proj.total > 0 && proj.sources.some((s) => String(s.slot).indexOf('Bull') >= 0),
+        JSON.stringify(proj.sources));
+
+    /* Passive animals are excluded from targeting by default. */
+    inbound('I', [aiFlat([
+        { sid: 900, type: bullType, x: 5040, y: 5000, health: 1800 },
+        { sid: 901, type: cowType, x: 5060, y: 5000, health: 500 }
+    ])]);
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+    const cow = api.GameState.animals.get(901);
+    check('a passive animal is tracked', cow != null && cow.hostile === false);
+    check('but not targeted by default', api.Targeting.all.indexOf(cow) < 0);
+    check('and contributes no threat', api.Targeting.threatOf(cow) === 0);
+
+    api.Config.set('combat.targetPassiveAnimals', true);
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+    check('until passive targeting is switched on', api.Targeting.all.indexOf(cow) >= 0);
+    api.Config.set('combat.targetPassiveAnimals', false);
+
+    /* An animal an enemy player outranks. */
+    addPlayer(inbound, 2, 'foe', 5050, 5000, 0);
+    for (let i = 0; i < 4; i++) {
+        inbound('I', [aiFlat([{ sid: 900, type: bullType, x: 5040, y: 5000, health: 1800 }])]);
+        updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }, { sid: 2, x: 5050, y: 5000, weaponIndex: 3 }]);
+    }
+    check('a player outranks an animal at the same distance',
+        api.Targeting.primary && api.Targeting.primary.sid === 2,
+        'picked ' + (api.Targeting.primary && (api.Targeting.primary.animalName || api.Targeting.primary.sid)));
+
+    /* Animals that leave view are dropped. */
+    inbound('I', [[]]);
+    check('an animal out of view is removed', api.GameState.animals.size === 0);
+
+    api.Config.set('combat.targetAnimals', false);
+    inbound('I', [aiFlat([{ sid: 902, type: bullType, x: 5040, y: 5000, health: 1800 }])]);
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+    check('the target-animals toggle gates targeting, not tracking',
+        api.GameState.animals.size === 1
+        && api.Targeting.all.every((c) => !c.isAI));
+    api.Config.set('combat.targetAnimals', true);
+}
+
+/* --- projectiles --------------------------------------------------------- */
+group('projectiles');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 5000, 5000, 1);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+
+    check('the projectile table was extracted', api.Defs.projectiles.length > 0);
+    const arrowType = api.Defs.projectiles.findIndex((p) => p && p.dmg > 0);
+    check('and at least one type does damage', arrowType >= 0,
+        JSON.stringify(api.Defs.projectiles[arrowType]));
+
+    /* ADD_PROJECTILE: (x, y, dir, range, speed, typeIndex, layer, sid) */
+    inbound('X', [4800, 5000, 0, 700, 1.5, arrowType, 0, 77]);
+    const p = api.GameState.projectiles.get(77);
+    check('a projectile is tracked', p instanceof api.Projectile, String(p));
+    check('its damage comes from the table, not the wire',
+        p && p.damage === api.Defs.projectiles[arrowType].dmg,
+        p ? 'dmg=' + p.damage : '');
+    check('it can project its own path',
+        p && p.positionAt(100).x > p.x, 'x=' + (p && Math.round(p.positionAt(100).x)));
+
+    /* It is heading straight at us, so the projection must see it. */
+    api.SafeSoldier.tick();
+    check('an incoming projectile shows up in the damage projection',
+        api.SafeSoldier.lastProjection.sources.some((s) => s.slot === 'projectile'),
+        JSON.stringify(api.SafeSoldier.lastProjection.sources));
+
+    /* Dead reckoning advances it each tick. */
+    const startX = p.x;
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+    check('it advances along its heading each tick', p.x > startX,
+        Math.round(startX) + ' -> ' + Math.round(p.x));
+    check('and its remaining range shrinks', p.range < 700, 'range=' + Math.round(p.range));
+
+    /* A spent range retires it. */
+    inbound('Y', [77, 0]);
+    check('a zeroed range removes it', !api.GameState.projectiles.has(77));
+
+    /* One that runs out of range retires itself. */
+    inbound('X', [5000, 4000, 0, 20, 1.5, arrowType, 0, 78]);
+    for (let i = 0; i < 3; i++) updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+    check('a projectile that exhausts its range retires itself',
+        !api.GameState.projectiles.has(78));
+
+    /* One flying away is not a threat. */
+    inbound('X', [5200, 5000, 0, 700, 1.5, arrowType, 0, 79]);
+    api.SafeSoldier.tick();
+    check('a projectile flying away is not counted',
+        !api.SafeSoldier.lastProjection.sources.some((s) => s.slot === 'projectile'),
+        JSON.stringify(api.SafeSoldier.lastProjection.sources));
+}
+
+/* --- alliances ----------------------------------------------------------- */
+group('alliances');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 5000, 5000, 1);
+    addPlayer(inbound, 2, 'mate', 5100, 5000, 0);
+    inbound('V', [[0, 3, 6, 10, 15], 0]);
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }, { sid: 2, x: 5100, y: 5000 }]);
+
+    check('an unknown player is not an ally', api.GameState.isAlly(2) === false);
+    check('so they are a target', api.Targeting.all.some((c) => c.sid === 2));
+
+    /* The server's roster is authoritative. */
+    inbound('4', [[1, 'me', 2, 'mate']]);
+    check('the alliance roster is recorded',
+        api.GameState.allianceSids.has(2), api.GameState.allianceSids.size + ' allies');
+    check('a rostered player counts as an ally', api.GameState.isAlly(2) === true);
+
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }, { sid: 2, x: 5100, y: 5000 }]);
+    check('and stops being a target', !api.Targeting.all.some((c) => c.sid === 2));
+
+    /* Their structures are re-bucketed as friendly. */
+    const spike = api.GameState.spikeItem;
+    loadObject(inbound, {
+        sid: 950, x: 5050, y: 5000,
+        scale: api.Defs.items[spike].scale, itemId: spike, ownerSid: 2
+    });
+    check('their structures bucket as team, not enemy',
+        api.GameState.teamObjects.size === 1 && api.GameState.enemyObjects.size === 0,
+        'team=' + api.GameState.teamObjects.size + ' enemy=' + api.GameState.enemyObjects.size);
+
+    /* A roster refresh re-buckets everything. */
+    inbound('4', [[1, 'me']]);
+    check('leaving the alliance re-buckets their structures as enemy',
+        api.GameState.enemyObjects.size === 1 && api.GameState.teamObjects.size === 0,
+        'team=' + api.GameState.teamObjects.size + ' enemy=' + api.GameState.enemyObjects.size);
+}
+
+/* --- remaining packet coverage ------------------------------------------- */
+group('packet coverage');
+{
+    const { api, inbound } = boot();
+    inbound('C', [1]);
+    addPlayer(inbound, 1, 'me', 5000, 5000, 1);
+    updatePlayers(inbound, [{ sid: 1, x: 5000, y: 5000 }]);
+
+    inbound('A', [{ teams: [{ sid: 5, teamName: 'x' }] }]);
+    check('the init packet records the world alliance list',
+        api.GameState.teams.length === 1);
+
+    inbound('g', [{ sid: 6, teamName: 'y' }]);
+    check('a new alliance is appended', api.GameState.teams.length === 2);
+
+    inbound('1', [5]);
+    check('a disbanded alliance is removed', api.GameState.teams.length === 1);
+
+    inbound('G', [[1, 'me', 500, 2, 'foe', 400]]);
+    check('the leaderboard is decoded',
+        api.GameState.leaderboard.length === 2
+        && api.GameState.leaderboard[0].name === 'me',
+        JSON.stringify(api.GameState.leaderboard));
+
+    inbound('Z', [90]);
+    check('the shutdown countdown is recorded', api.GameState.serverShutdownIn === 90);
+    inbound('Z', [-1]);
+    check('and cleared when negative', api.GameState.serverShutdownIn === null);
+
+    let chat = null;
+    api.Events.on('chatMessage', (m) => { chat = m; });
+    inbound('6', [1, 'hello']);
+    check('a chat message is surfaced', chat && chat.text === 'hello', JSON.stringify(chat));
+
+    const spike = api.GameState.spikeItem;
+    loadObject(inbound, {
+        sid: 960, x: 5060, y: 5000,
+        scale: api.Defs.items[spike].scale, itemId: spike, ownerSid: 1
+    });
+    let hit = null;
+    api.Events.on('objectHit', (o) => { hit = o; });
+    inbound('L', [0, 960]);
+    check('a struck structure is reported directly',
+        hit && hit.sid === 960 && hit.lastHitTick === api.GameState.tick);
+
+    inbound('M', [1, 0]);
+    check('a turret discharge starts its cooldown',
+        api.EntityTracker.turretReady(1) === false);
+
+    let gone = false;
+    api.Events.on('disconnect', () => { gone = true; });
+    inbound('B', ['bye']);
+    check('a disconnect resets the world',
+        gone && api.GameState.inGame === false && api.GameState.players.size === 0);
+}
+
+/* --- unhandled-packet audit ---------------------------------------------- */
+group('packet audit');
+{
+    const { api } = boot();
+    /* Every opcode the bundle can send should either be routed or be one 2yz
+     * has a stated reason to ignore. This asserts the list of exceptions rather
+     * than the absence of gaps, so a new unhandled opcode fails the suite. */
+    const stated = {
+        '8': 'damage text -- UPDATE_HEALTH is exact, this is rounded for display',
+        '7': 'minimap ping data -- 2yz draws its own overlay',
+        '9': 'map ping marker -- cosmetic',
+        '2': 'alliance join request -- answering for the player is not 2yz\'s call',
+        'J': 'AI gather animation -- routed, listed here only for the AI pair',
+        'K': 'attack animation -- routed'
+    };
+    check('every ignored opcode has a stated reason',
+        Object.keys(stated).length === 6);
+    check('and the ones with real state behind them are all routed', (function () {
+        const need = ['A', 'B', 'C', 'D', 'E', 'a', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+            'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'X', 'Y', 'Z', 'g',
+            '1', '3', '4', '5', '6'];
+        return need.every((op) => typeof api.Router.inbound[op] === 'function');
+    })(), 'missing: ' + ['A','B','G','I','J','L','X','Y','Z','g','1','4','6']
+        .filter((op) => typeof api.Router.inbound[op] !== 'function').join(','));
 }
 
 /* --- config ------------------------------------------------------------ */

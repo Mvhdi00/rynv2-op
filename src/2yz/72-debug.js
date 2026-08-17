@@ -57,9 +57,13 @@ const Debug = (function () {
             inGame: GameState.inGame,
             tick: GameState.tick,
             players: GameState.players.size,
+            animals: GameState.animals.size,
+            projectiles: GameState.projectiles.size,
             objects: GameState.objects.size,
             near: GameState.nearObjects.length,
-            ping: Math.round(Net.pingMs())
+            allies: GameState.allianceSids.size,
+            ping: Math.round(Net.pingMs()),
+            shutdownIn: GameState.serverShutdownIn
         });
 
         if (Config.get('debug.targeting')) out += section('targeting', Targeting.debugState());
@@ -126,6 +130,14 @@ const Debug = (function () {
                 intent.describe() + ' ' + why));
             Events.on('sequenceCancelled', (seq, why) => record('sequence-cancelled',
                 seq.name + ' ' + why));
+            Events.on('projectile', (p) => record('projectile',
+                (p.def.name || 'proj') + ' dmg=' + p.damage + ' range=' + Math.round(p.range)));
+            Events.on('objectHit', (obj) => record('object-hit',
+                obj.name + '#' + obj.sid + ' hp=' + Math.round(obj.health)));
+            Events.on('allianceRequest', (r) => record('alliance-request',
+                r.name + ' (' + r.sid + ')'));
+            Events.on('chatMessage', (m) => record('chat', m.sid + ': ' + m.text));
+            Events.on('disconnect', (why) => record('disconnect', String(why)));
             Events.on('tick', function () {
                 try { render(); } catch (err) { Log.error('debug', err); }
             });

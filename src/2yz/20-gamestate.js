@@ -68,8 +68,71 @@ class Entity {
     isEnemyOf(other) {
         if (!other) return false;
         if (this.sid === other.sid) return false;
+        /* The server's alliance roster is authoritative and does not require a
+         * team string to be visible on either player, so it is checked first.
+         * Comparing team strings alone is what let a rostered ally still read
+         * as an enemy. */
+        if (GameState.allianceSids.has(this.sid) && GameState.allianceSids.has(other.sid)) {
+            return false;
+        }
         if (this.team != null && other.team != null && this.team === other.team) return false;
         return true;
+    }
+}
+
+/* An animal. Its stats are not on the wire -- only a type index is -- so
+ * everything that matters comes from Defs.animals, which the extractor pulls
+ * out of the game's own aiTypes table. */
+class Animal extends Entity {
+    constructor(sid, typeIndex) {
+        super(sid);
+        this.isAI = true;
+        this.typeIndex = typeIndex;
+        const def = Defs.animals[typeIndex] || {};
+        this.def = def;
+        this.animalName = def.name || 'cow';
+        this.scale = def.scale != null ? def.scale : Defs.config.playerScale;
+        this.maxHealth = def.health != null ? def.health : 100;
+        this.health = this.maxHealth;
+        this.hostile = !!def.hostile;
+        /* Contact damage and swing damage are different fields in the table. */
+        this.damage = def.dmg || 0;
+        this.collisionDamage = def.colDmg || 0;
+        this.hitRange = def.hitRange || null;
+        this.hitDelay = def.hitDelay || null;
+        this.viewRange = def.viewRange || 0;
+        this.chargesPlayers = !!def.chargePlayer;
+    }
+}
+
+/* A projectile in flight. The server tells us where it started, which way it is
+ * going, how fast, and how far it has left to travel; damage and scale come from
+ * the shipped projectile table. */
+class Projectile {
+    constructor(sid, x, y, dir, range, speed, typeIndex, layer) {
+        this.sid = sid;
+        this.x = x;
+        this.y = y;
+        this.dir = dir;
+        this.range = range;
+        this.speed = speed;
+        this.typeIndex = typeIndex;
+        this.layer = layer;
+        const def = Defs.projectiles[typeIndex] || {};
+        this.def = def;
+        this.damage = def.dmg || 0;
+        this.scale = def.scale || 0;
+        this.active = true;
+        this.bornTick = GameState.tick;
+    }
+
+    /* Where it will be `ms` from now, clamped to its remaining range. */
+    positionAt(ms) {
+        const travel = Math.min(this.speed * ms, this.range);
+        return {
+            x: this.x + travel * Math.cos(this.dir),
+            y: this.y + travel * Math.sin(this.dir)
+        };
     }
 }
 
@@ -116,9 +179,10 @@ const GameState = {
     mySid: -1,
     self: null,
 
-    players: new Map(),     // sid -> Entity
-    animals: new Map(),     // sid -> Entity
-    objects: new Map(),     // sid -> WorldObject
+    players: new Map(),      // sid -> Entity
+    animals: new Map(),      // sid -> Animal
+    projectiles: new Map(),  // sid -> Projectile
+    objects: new Map(),      // sid -> WorldObject
 
     /* Object buckets, maintained incrementally on add/remove instead of being
      * refiltered every tick. */
@@ -139,6 +203,15 @@ const GameState = {
     tails: {},
     age: 1,
     upgradePoints: 0,
+
+    /* Alliance roster, from the server rather than inferred from team strings.
+     * ALLY_LIST carries [sid, name, sid, name, ...]. */
+    allianceSids: new Set(),
+    allianceName: null,
+    isAllianceOwner: false,
+    teams: [],
+    serverShutdownIn: null,
+    leaderboard: [],
     /* The age tier the pending upgrade choices belong to. UPDATE_UPGRADES
      * carries it, and the upgrade index space is only meaningful against it
      * (game_index.js:4734). */
@@ -166,6 +239,7 @@ const GameState = {
         this.killsThisLife = 0;
         this.players.clear();
         this.animals.clear();
+        this.projectiles.clear();
         this.objects.clear();
         this.myObjects.clear();
         this.teamObjects.clear();
@@ -178,6 +252,10 @@ const GameState = {
 
     isAlly(sid) {
         if (sid === this.mySid) return true;
+        /* The server's own roster is authoritative when we have it; the team
+         * string is the fallback for objects whose owner we have never seen as
+         * a visible player. */
+        if (this.allianceSids.has(sid)) return true;
         const me = this.self;
         const other = this.players.get(sid);
         if (!me || !other || me.team == null) return false;

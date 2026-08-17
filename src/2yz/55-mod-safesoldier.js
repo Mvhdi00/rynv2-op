@@ -114,6 +114,51 @@ const SafeSoldier = {
             }
         }
 
+        /* Hostile animals. Their damage figures come from the aiTypes table:
+         * `dmg` is the swing, `colDmg` the contact damage, `hitRange` the reach
+         * and `hitDelay` the cooldown. A charging bull is a bigger threat than
+         * most players and the first build could not see it at all. */
+        if (Config.get('defense.safeSoldier.countAnimals')) {
+            for (const a of GameState.animals.values()) {
+                if (!a.visible || !a.hostile) continue;
+                const d = U.getDistance(me.x2, me.y2, a.x2, a.y2);
+                const reach = (a.hitRange || a.scale) + me.scale;
+                if (d > reach + Config.get('defense.safeSoldier.animalMargin')) continue;
+
+                /* A swing that is still on cooldown cannot land this tick. */
+                const ready = EntityTracker.primaryReady(a.sid);
+                if (a.damage > 0 && ready) {
+                    out.hits += a.damage;
+                    out.sources.push({ sid: a.sid, slot: a.animalName, dmg: a.damage });
+                    certainty += 0.3;
+                }
+                /* Contact damage lands on touch, cooldown or not. */
+                if (a.collisionDamage > 0 && d <= a.scale + me.scale) {
+                    out.spike += a.collisionDamage;
+                    out.sources.push({ sid: a.sid, slot: a.animalName + '-contact', dmg: a.collisionDamage });
+                    certainty += 0.4;
+                }
+            }
+        }
+
+        /* Projectiles already in the air. Damage and scale come from the shipped
+         * projectile table; the path is dead reckoned by EntityTracker. */
+        if (Config.get('defense.safeSoldier.countProjectiles')) {
+            for (const proj of GameState.projectiles.values()) {
+                if (!proj.active || proj.damage <= 0) continue;
+                const end = proj.positionAt(Config.get('defense.safeSoldier.projectileHorizonMs'));
+                const pad = proj.scale + me.scale;
+                const willHit = U.lineInRect(
+                    me.x2 - pad, me.y2 - pad, me.x2 + pad, me.y2 + pad,
+                    proj.x, proj.y, end.x, end.y
+                );
+                if (!willHit) continue;
+                out.turret += proj.damage;
+                out.sources.push({ slot: 'projectile', dmg: proj.damage });
+                certainty += 0.5;
+            }
+        }
+
         /* Structure contact, now or after a knockback we can already see coming. */
         if (me.onSpike) {
             out.spike += me.onSpike.damage;

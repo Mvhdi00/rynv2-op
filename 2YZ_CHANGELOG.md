@@ -1,5 +1,77 @@
 # 2YZ Changelog
 
+## 1.2.0 — game-file audit
+
+Triggered by a direct question: had everything actually been taken from the game
+files? A systematic audit against `src/game_index.js` said no. Three whole
+classes of game data were missing, and the audit is now part of the test suite so
+the answer cannot quietly change again.
+
+### What the audit found
+
+Of the 35 s2c handlers the bundle registers, 1.1 routed **17**. The gaps were not
+all cosmetic:
+
+| Missing | Why it mattered |
+|---|---|
+| **The animal table** | `this.aiTypes` is assigned inside the AI-manager constructor, not to a top-level binding, so the extractor never saw it. Nine animal types with real `dmg`, `colDmg`, `health`, `hitRange`, `hitDelay`, `viewRange` and `hostile` flags — a Bull hits for 20 and MOOSTAFA for 40 with 100 contact damage, and none of it was in the client. |
+| **Animals themselves** (`I`, `J`) | `GameState.animals` was declared and never populated. Hostile animals were invisible to the threat model and to targeting. |
+| **Projectiles** (`X`, `Y`) | Arrows and bullets in flight were untracked, so Safe Soldier could not see anything ranged coming — it projected turret damage from the hat but not the actual shot. |
+| **The alliance roster** (`A`, `4`, `g`, `1`, `2`) | Ownership was inferred from team strings alone, which fails for a structure whose owner has never been a visible player. |
+| **Struck structures** (`L`) | A direct "this was hit" signal, stronger than inferring a break from a swing that may have missed. |
+| **Leaderboard, shutdown, chat, disconnect** (`G`, `Z`, `6`, `B`) | Smaller, but each is state a complete client keeps. |
+
+Coverage is now **32 of 35**. The three left are cosmetic and the test suite
+asserts the list of exceptions rather than the absence of gaps, so a newly
+unhandled opcode fails the build: `8` damage text (UPDATE_HEALTH is exact, that
+is rounded for display), `7` minimap data, `9` map-ping marker.
+
+### Added
+
+- **`Animal` entity class.** Every stat from `Defs.animals`; motion, trap
+  containment and spike contact derived by the same `EntityTracker` pass players
+  get, so the shared prediction and placement layers work on animals unchanged.
+- **`Projectile` class with dead reckoning.** The server describes a shot once
+  plus a range update; `EntityTracker` advances and retires it.
+- **Animals in targeting**, score-scaled so a bull never outranks a player who is
+  actively fighting you. Passive animals off by default.
+- **Animals and projectiles in the damage projection.** Swing damage gated on the
+  animal's own `hitDelay`, contact damage applied on touch regardless of cooldown.
+- **Alliance roster as the authoritative ally test**, with structure ownership
+  re-bucketed whenever it changes.
+- **`objectHit` feeds Replace**: a confirmed strike upgrades a predicted break,
+  and a structure being hit by an attacker we cannot see gets flagged on its own.
+- **Overlay layers** for animals and projectiles.
+
+### Bugs found and fixed
+
+1. **`isEnemyOf` ignored the alliance roster.** It compared team strings only, so
+   a player on the server's own roster with no visible team string still read as
+   an enemy — and was targeted. Found by the alliance test.
+2. **A zero inter-packet delta made every per-tick integration a no-op.**
+   `lastTickDelta` came straight from wall-clock gaps, so two packets in the same
+   millisecond advanced nothing and a stalled connection advanced everything at
+   once. The server steps at a fixed rate, so the observed gap is now clamped to
+   [0.5×, 2×] of `config.serverUpdateRate`. Found because a projectile refused to
+   expire in the suite.
+
+### Also in this release
+
+- **The menu opens on Escape** instead of Shift+T. Nothing in the bundle reads
+  keyCode 27, so this takes a key the game leaves unused. Bound in the capture
+  phase, and skipped while an input has focus, because closing the chat box is
+  what Escape means when you are typing in it.
+
+### Verification
+
+- **258 assertions** (up from 211), all passing. Four new groups: animals,
+  projectiles, alliances, and a packet-coverage audit.
+- **165 settings**, every one read.
+- 24 events emitted, 24 listened. No unused declarations beyond the `Runtime`
+  entry point.
+
+---
+
 ## 1.1.0 — completeness pass
 
 The 1.0 build implemented the nine systems the brief named and nothing else. This

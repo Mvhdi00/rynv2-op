@@ -40,12 +40,13 @@ writer to the socket, carrying the game's own frames as well as 2yz's.
 | Movement | Anti-knockback · Safe walk · Auto push *(off by default)* |
 | Economy | Auto Upgrade · Auto Buy · Auto Respawn |
 | Other | Auto Chat · Visual overlay *(both off by default)* |
+| World model | Players · animals · projectiles · structures · alliance roster |
 
 Behaviour was extracted from four reference clients and rebuilt;
 [`2YZ_SOURCE_MAP.md`](2YZ_SOURCE_MAP.md) records what came from where and why,
 including what was deliberately left behind.
 
-**Menu.** Shift+T. Generated from `Config.schema`, so every one of the 156
+**Menu.** Escape. Generated from `Config.schema`, so every one of the 165
 settings is read by the code — `tools/verify-2yz.js` fails the build on a setting
 nothing reads, and on a read with no setting behind it. Debug and the overlay are
 off by default.
@@ -61,7 +62,7 @@ is typed in by hand.
 node tools/extract-drivers.js    # game bundles -> drivers/game-drivers.json
 node tools/build-2yz.js          # src/2yz/*.js  -> 2yz.user.js
 node tools/verify-2yz.js         # static audit: settings, opcodes, independence
-node tools/test-2yz.js           # 211 behavioural assertions, headless
+node tools/test-2yz.js           # 258 behavioural assertions, headless
 node --check 2yz.user.js
 ```
 

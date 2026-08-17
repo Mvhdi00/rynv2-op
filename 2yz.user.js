@@ -66,7 +66,7 @@ const Log = (function () {
  * =========================================================================== */
 
 const DRIVERS = {
-  "extractedAt": "2026-08-17T03:21:39.563Z",
+  "extractedAt": "2026-08-17T08:32:33.969Z",
   "source": {
     "index": "src/game_index.js",
     "vendor": "src/game_vendor.js"
@@ -396,6 +396,182 @@ const DRIVERS = {
       "limit": 2,
       "sandboxLimit": 299,
       "layer": -1
+    }
+  ],
+  "animals": [
+    {
+      "id": 0,
+      "src": "cow_1",
+      "killScore": 150,
+      "health": 500,
+      "weightM": 0.8,
+      "speed": 0.00095,
+      "turnSpeed": 0.001,
+      "scale": 72,
+      "drop": [
+        "food",
+        50
+      ]
+    },
+    {
+      "id": 1,
+      "src": "pig_1",
+      "killScore": 200,
+      "health": 800,
+      "weightM": 0.6,
+      "speed": 0.00085,
+      "turnSpeed": 0.001,
+      "scale": 72,
+      "drop": [
+        "food",
+        80
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Bull",
+      "src": "bull_2",
+      "hostile": true,
+      "dmg": 20,
+      "killScore": 1000,
+      "health": 1800,
+      "weightM": 0.5,
+      "speed": 0.00094,
+      "turnSpeed": 0.00074,
+      "scale": 78,
+      "viewRange": 800,
+      "chargePlayer": true,
+      "drop": [
+        "food",
+        100
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Bully",
+      "src": "bull_1",
+      "hostile": true,
+      "dmg": 20,
+      "killScore": 2000,
+      "health": 2800,
+      "weightM": 0.45,
+      "speed": 0.001,
+      "turnSpeed": 0.0008,
+      "scale": 90,
+      "viewRange": 900,
+      "chargePlayer": true,
+      "drop": [
+        "food",
+        400
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Wolf",
+      "src": "wolf_1",
+      "hostile": true,
+      "dmg": 8,
+      "killScore": 500,
+      "health": 300,
+      "weightM": 0.45,
+      "speed": 0.001,
+      "turnSpeed": 0.002,
+      "scale": 84,
+      "viewRange": 800,
+      "chargePlayer": true,
+      "drop": [
+        "food",
+        200
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Quack",
+      "src": "chicken_1",
+      "dmg": 8,
+      "killScore": 2000,
+      "noTrap": true,
+      "health": 300,
+      "weightM": 0.2,
+      "speed": 0.0018,
+      "turnSpeed": 0.006,
+      "scale": 70,
+      "drop": [
+        "food",
+        100
+      ]
+    },
+    {
+      "id": 6,
+      "name": "MOOSTAFA",
+      "nameScale": 50,
+      "src": "enemy",
+      "hostile": true,
+      "dontRun": true,
+      "fixedSpawn": true,
+      "spawnDelay": 60000,
+      "noTrap": true,
+      "colDmg": 100,
+      "dmg": 40,
+      "killScore": 8000,
+      "health": 18000,
+      "weightM": 0.4,
+      "speed": 0.0007,
+      "turnSpeed": 0.01,
+      "scale": 80,
+      "spriteMlt": 1.8,
+      "leapForce": 0.9,
+      "viewRange": 1000,
+      "hitRange": 210,
+      "hitDelay": 1000,
+      "chargePlayer": true,
+      "drop": [
+        "food",
+        100
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Treasure",
+      "hostile": true,
+      "nameScale": 35,
+      "src": "crate_1",
+      "fixedSpawn": true,
+      "spawnDelay": 120000,
+      "colDmg": 200,
+      "killScore": 5000,
+      "health": 20000,
+      "weightM": 0.1,
+      "speed": 0,
+      "turnSpeed": 0,
+      "scale": 70,
+      "spriteMlt": 1
+    },
+    {
+      "id": 8,
+      "name": "MOOFIE",
+      "src": "wolf_2",
+      "hostile": true,
+      "fixedSpawn": true,
+      "dontRun": true,
+      "hitScare": 4,
+      "spawnDelay": 30000,
+      "noTrap": true,
+      "nameScale": 35,
+      "dmg": 10,
+      "colDmg": 100,
+      "killScore": 3000,
+      "health": 7000,
+      "weightM": 0.45,
+      "speed": 0.0015,
+      "turnSpeed": 0.002,
+      "scale": 90,
+      "viewRange": 800,
+      "chargePlayer": true,
+      "drop": [
+        "food",
+        1000
+      ]
     }
   ],
   "projectiles": [
@@ -1836,6 +2012,11 @@ const Defs = {
     weapons: DRIVERS.weapons,
     items: DRIVERS.items,
     itemGroups: DRIVERS.itemGroups,
+    /* Animal types. Assigned to `this.aiTypes` inside the AI manager rather
+     * than a top-level binding, which is why the extractor slices it by
+     * assignment site. Carries dmg, colDmg, health, hitRange, hitDelay,
+     * viewRange, hostile and chargePlayer -- none of it derivable elsewhere. */
+    animals: DRIVERS.animals,
     hats: DRIVERS.hats,
     accessories: DRIVERS.accessories,
     projectiles: DRIVERS.projectiles,
@@ -1892,6 +2073,9 @@ const Defs = {
         REMOVE_PROJECTILE: 'Y', // ql   (sid, range)
         SERVER_SHUTDOWN: 'Z',   // Ul
         ADD_ALLIANCE: 'g',      // $a
+        ALLY_LIST: '4',         // Qa   full alliance roster
+        ALLY_REMOVE: '1',       // Za   (sid)
+        ALLY_REQUEST: '2',      // Ka   (sid, name)
         SET_TEAM: '3',          // Ja   (team, isOwner)
         UPDATE_STORE: '5',      // al   (isEquip, id, isAccessory)
         CHAT_MESSAGE: '6',      // dl   (sid, text)
@@ -1905,7 +2089,8 @@ const Defs = {
     /* --- flat-packet strides, from the decode loops in game_index.js ----- */
     STRIDE: {
         UPDATE_PLAYERS: 13,   // Jl  5551
-        LOAD_OBJECTS: 8       // Vl  5432
+        LOAD_OBJECTS: 8,      // Vl  5432
+        UPDATE_AI: 7          // Xl  5457
     },
 
     /* Field order inside one UPDATE_PLAYERS record (game_index.js:5556-5576). */
@@ -1913,6 +2098,9 @@ const Defs = {
         'sid', 'x', 'y', 'dir', 'buildIndex', 'weaponIndex', 'weaponVariant',
         'team', 'isLeader', 'skinIndex', 'tailIndex', 'iconIndex', 'zIndex'
     ],
+
+    /* Field order inside one UPDATE_AI record (Xl, game_index.js:5457-5461). */
+    AI_FIELDS: ['sid', 'index', 'x', 'y', 'dir', 'health', 'nameIndex'],
 
     /* Field order inside one LOAD_OBJECTS record (game_index.js:5433-5437). */
     OBJECT_FIELDS: [
@@ -2737,8 +2925,71 @@ class Entity {
     isEnemyOf(other) {
         if (!other) return false;
         if (this.sid === other.sid) return false;
+        /* The server's alliance roster is authoritative and does not require a
+         * team string to be visible on either player, so it is checked first.
+         * Comparing team strings alone is what let a rostered ally still read
+         * as an enemy. */
+        if (GameState.allianceSids.has(this.sid) && GameState.allianceSids.has(other.sid)) {
+            return false;
+        }
         if (this.team != null && other.team != null && this.team === other.team) return false;
         return true;
+    }
+}
+
+/* An animal. Its stats are not on the wire -- only a type index is -- so
+ * everything that matters comes from Defs.animals, which the extractor pulls
+ * out of the game's own aiTypes table. */
+class Animal extends Entity {
+    constructor(sid, typeIndex) {
+        super(sid);
+        this.isAI = true;
+        this.typeIndex = typeIndex;
+        const def = Defs.animals[typeIndex] || {};
+        this.def = def;
+        this.animalName = def.name || 'cow';
+        this.scale = def.scale != null ? def.scale : Defs.config.playerScale;
+        this.maxHealth = def.health != null ? def.health : 100;
+        this.health = this.maxHealth;
+        this.hostile = !!def.hostile;
+        /* Contact damage and swing damage are different fields in the table. */
+        this.damage = def.dmg || 0;
+        this.collisionDamage = def.colDmg || 0;
+        this.hitRange = def.hitRange || null;
+        this.hitDelay = def.hitDelay || null;
+        this.viewRange = def.viewRange || 0;
+        this.chargesPlayers = !!def.chargePlayer;
+    }
+}
+
+/* A projectile in flight. The server tells us where it started, which way it is
+ * going, how fast, and how far it has left to travel; damage and scale come from
+ * the shipped projectile table. */
+class Projectile {
+    constructor(sid, x, y, dir, range, speed, typeIndex, layer) {
+        this.sid = sid;
+        this.x = x;
+        this.y = y;
+        this.dir = dir;
+        this.range = range;
+        this.speed = speed;
+        this.typeIndex = typeIndex;
+        this.layer = layer;
+        const def = Defs.projectiles[typeIndex] || {};
+        this.def = def;
+        this.damage = def.dmg || 0;
+        this.scale = def.scale || 0;
+        this.active = true;
+        this.bornTick = GameState.tick;
+    }
+
+    /* Where it will be `ms` from now, clamped to its remaining range. */
+    positionAt(ms) {
+        const travel = Math.min(this.speed * ms, this.range);
+        return {
+            x: this.x + travel * Math.cos(this.dir),
+            y: this.y + travel * Math.sin(this.dir)
+        };
     }
 }
 
@@ -2785,9 +3036,10 @@ const GameState = {
     mySid: -1,
     self: null,
 
-    players: new Map(),     // sid -> Entity
-    animals: new Map(),     // sid -> Entity
-    objects: new Map(),     // sid -> WorldObject
+    players: new Map(),      // sid -> Entity
+    animals: new Map(),      // sid -> Animal
+    projectiles: new Map(),  // sid -> Projectile
+    objects: new Map(),      // sid -> WorldObject
 
     /* Object buckets, maintained incrementally on add/remove instead of being
      * refiltered every tick. */
@@ -2808,6 +3060,15 @@ const GameState = {
     tails: {},
     age: 1,
     upgradePoints: 0,
+
+    /* Alliance roster, from the server rather than inferred from team strings.
+     * ALLY_LIST carries [sid, name, sid, name, ...]. */
+    allianceSids: new Set(),
+    allianceName: null,
+    isAllianceOwner: false,
+    teams: [],
+    serverShutdownIn: null,
+    leaderboard: [],
     /* The age tier the pending upgrade choices belong to. UPDATE_UPGRADES
      * carries it, and the upgrade index space is only meaningful against it
      * (game_index.js:4734). */
@@ -2835,6 +3096,7 @@ const GameState = {
         this.killsThisLife = 0;
         this.players.clear();
         this.animals.clear();
+        this.projectiles.clear();
         this.objects.clear();
         this.myObjects.clear();
         this.teamObjects.clear();
@@ -2847,6 +3109,10 @@ const GameState = {
 
     isAlly(sid) {
         if (sid === this.mySid) return true;
+        /* The server's own roster is authoritative when we have it; the team
+         * string is the fallback for objects whose owner we have never seen as
+         * a visible player. */
+        if (this.allianceSids.has(sid)) return true;
         const me = this.self;
         const other = this.players.get(sid);
         if (!me || !other || me.team == null) return false;
@@ -3082,7 +3348,14 @@ const Router = (function () {
             }
 
             GameState.tick++;
-            GameState.lastTickDelta = GameState.tickTime ? now - GameState.tickTime : Defs.TICK_MS;
+            /* The server steps at a fixed rate (config.serverUpdateRate), so the
+             * wall-clock gap between two packets is network jitter, not a change
+             * in how far the world moved. Clamping it around the known tick keeps
+             * projectile dead reckoning and the reload clocks honest: two packets
+             * in the same millisecond would otherwise advance nothing, and a
+             * stalled connection would advance everything at once. */
+            const observed = GameState.tickTime ? now - GameState.tickTime : Defs.TICK_MS;
+            GameState.lastTickDelta = U.clamp(observed, Defs.TICK_MS * 0.5, Defs.TICK_MS * 2);
             GameState.tickTime = now;
             Events.emit('tick');
         },
@@ -3098,6 +3371,153 @@ const Router = (function () {
                     flat[i + 7] >= 0 ? flat[i + 7] : null
                 );
             }
+        },
+
+        /* Xl -- game_index.js:5457. Flat, stride 7, fields in Defs.AI_FIELDS.
+         * Animals are a whole entity class the first build ignored: hostile ones
+         * deal contact and swing damage, and every stat they have comes from the
+         * aiTypes table rather than the wire. */
+        [S.UPDATE_AI](flat) {
+            const now = Date.now();
+            for (const a of GameState.animals.values()) a.visible = false;
+            if (!flat) return;
+
+            const stride = Defs.STRIDE.UPDATE_AI;
+            for (let i = 0; i + stride <= flat.length; i += stride) {
+                const sid = flat[i];
+                const typeIndex = flat[i + 1];
+                let a = GameState.animals.get(sid);
+                if (!a || a.typeIndex !== typeIndex) {
+                    a = new Animal(sid, typeIndex);
+                    a.x1 = a.x2 = flat[i + 2];
+                    a.y1 = a.y2 = flat[i + 3];
+                    GameState.animals.set(sid, a);
+                }
+                a.t1 = a.t2 === 0 ? now : a.t2;
+                a.t2 = now;
+                a.x1 = a.x2;
+                a.y1 = a.y2;
+                a.x2 = flat[i + 2];
+                a.y2 = flat[i + 3];
+                a.d1 = a.d2;
+                a.d2 = flat[i + 4];
+                a.health = flat[i + 5];
+                a.visible = true;
+                a.alive = a.health > 0;
+            }
+            /* Anything the packet did not mention has left our view. */
+            for (const [sid, a] of GameState.animals) {
+                if (!a.visible) GameState.animals.delete(sid);
+            }
+        },
+
+        /* Fl -- game_index.js:5457-ish. An animal swung. Same use as a player's
+         * ATTACK_ANIM: it starts the swing clock the threat model reads. */
+        [S.GATHER_ANIM_AI](sid) {
+            const a = GameState.animals.get(sid);
+            if (a) {
+                a.lastSwingTick = GameState.tick;
+                Events.emit('animalSwing', a);
+            }
+        },
+
+        /* Ll -- game_index.js:5443. (x, y, dir, range, speed, typeIndex, layer, sid).
+         * An arrow or bullet in flight. Damage and scale come from the shipped
+         * projectile table; without this the threat model cannot see anything
+         * ranged coming. */
+        [S.ADD_PROJECTILE](x, y, dir, range, speed, typeIndex, layer, sid) {
+            const p = new Projectile(sid, x, y, dir, range, speed, typeIndex, layer);
+            GameState.projectiles.set(sid, p);
+            Events.emit('projectile', p);
+        },
+
+        /* ql -- game_index.js:5451. (sid, range). The server updates a
+         * projectile's remaining range; zero or less means it is spent. */
+        [S.REMOVE_PROJECTILE](sid, range) {
+            const p = GameState.projectiles.get(sid);
+            if (!p) return;
+            p.range = range;
+            if (range <= 0) {
+                p.active = false;
+                GameState.projectiles.delete(sid);
+            }
+        },
+
+        /* Wa -- game_index.js:3675. The alliance list at join time. */
+        [S.INIT](data) {
+            if (data && data.teams) GameState.teams = data.teams;
+        },
+
+        /* Qa -- game_index.js:4011. The authoritative alliance roster,
+         * [sid, name, sid, name, ...]. Ownership of every structure is keyed off
+         * this; before it existed 2yz inferred allies from the team string
+         * alone, which fails for an owner never seen as a visible player. */
+        [S.ALLY_LIST](flat) {
+            GameState.allianceSids.clear();
+            if (Array.isArray(flat)) {
+                for (let i = 0; i < flat.length; i += 2) GameState.allianceSids.add(flat[i]);
+            }
+            GameState.myObjects.clear();
+            GameState.teamObjects.clear();
+            GameState.enemyObjects.clear();
+            for (const obj of GameState.objects.values()) GameState.indexObject(obj);
+        },
+
+        /* $a -- game_index.js:3958. A new alliance appeared in the world list. */
+        [S.ADD_ALLIANCE](team) {
+            if (team) GameState.teams.push(team);
+        },
+
+        /* Za -- game_index.js:4015. An alliance disbanded. */
+        [S.ALLY_REMOVE](sid) {
+            GameState.teams = GameState.teams.filter((t) => t && t.sid !== sid);
+            GameState.allianceSids.delete(sid);
+        },
+
+        /* Ka -- game_index.js:3964. Someone asked to join ours. Recorded, not
+         * answered: accepting on the player's behalf is not 2yz's call. */
+        [S.ALLY_REQUEST](sid, name) {
+            Events.emit('allianceRequest', { sid, name });
+        },
+
+        /* Tl -- game_index.js:4798. Flat, stride 3: [sid, name, score]. */
+        [S.LEADERBOARD](flat) {
+            const out = [];
+            if (Array.isArray(flat)) {
+                for (let i = 0; i + 3 <= flat.length; i += 3) {
+                    out.push({ sid: flat[i], name: flat[i + 1], score: flat[i + 2] });
+                }
+            }
+            GameState.leaderboard = out;
+        },
+
+        /* Ul -- game_index.js:5616. Seconds until the server restarts. Worth
+         * knowing: there is no point investing resources into a map that is
+         * about to be recycled. */
+        [S.SERVER_SHUTDOWN](seconds) {
+            GameState.serverShutdownIn = seconds >= 0 ? seconds : null;
+        },
+
+        /* dl -- game_index.js:4457. (sid, text). */
+        [S.CHAT_MESSAGE](sid, text) {
+            Events.emit('chatMessage', { sid, text });
+        },
+
+        /* Wl -- game_index.js:5439. (dir, sid). A structure was struck. This is
+         * a direct signal that something took a hit, which is stronger than
+         * inferring it from a swing that may have missed. */
+        [S.WIGGLE_OBJECT](dir, sid) {
+            const obj = GameState.objects.get(sid);
+            if (obj) {
+                obj.lastHitTick = GameState.tick;
+                Events.emit('objectHit', obj, dir);
+            }
+        },
+
+        /* zt -- the socket is going away. */
+        [S.DISCONNECT](reason) {
+            Events.emit('disconnect', reason);
+            GameState.reset();
         },
 
         /* Il -- game_index.js:4710 */
@@ -3403,6 +3823,29 @@ const EntityTracker = (function () {
             updateContacts(p);
         }
 
+        /* Animals move and get trapped exactly like players do, and the
+         * placement and threat layers read the same fields off them. */
+        for (const a of GameState.animals.values()) {
+            if (!a.visible) continue;
+            updateMotion(a, dt);
+            updateContacts(a);
+        }
+
+        /* Projectiles are dead reckoned: the server only tells us about them
+         * once, plus a range update. Advance and retire them here so nothing
+         * downstream has to. */
+        for (const [sid, proj] of GameState.projectiles) {
+            const travel = proj.speed * dt;
+            if (travel >= proj.range) {
+                proj.active = false;
+                GameState.projectiles.delete(sid);
+                continue;
+            }
+            proj.x += travel * Math.cos(proj.dir);
+            proj.y += travel * Math.sin(proj.dir);
+            proj.range -= travel;
+        }
+
         /* spikeDamage is a one-tick flag, cleared after everyone downstream has
          * had the tick to read it. */
         Events.emit('trackerReady');
@@ -3418,6 +3861,7 @@ const EntityTracker = (function () {
             });
             Events.on('tick', onTick);
             Events.on('playerLeft', (p) => reloads.delete(p.sid));
+            Events.on('animalSwing', (a) => { reloadOf(a.sid).primary = a.hitDelay || 0; });
         },
 
         /* --- reload queries, used by Combat and the tick modules ----------- */
@@ -3501,6 +3945,7 @@ const EntityTracker = (function () {
          * shield an arc of config.shieldAngle centred on the holder's facing;
          * an attack arriving inside that arc is blocked. */
         shieldBypass(attacker, victim) {
+            if (victim.isAI) return true;
             const shield = Defs.weapons[victim.weaponIndex];
             if (!shield || !shield.shield) return true;
             const incoming = U.getDirection(attacker.x2, attacker.y2, victim.x2, victim.y2);
@@ -3783,8 +4228,11 @@ const Targeting = (function () {
 
     function isValid(p) {
         if (!p || !p.visible || !p.alive) return false;
-        if (p.sid === GameState.mySid) return false;
         if (!GameState.self) return false;
+        /* An animal is always a valid target when animal targeting is on; it has
+         * no team and cannot be us. */
+        if (p.isAI) return Config.get('combat.targetAnimals');
+        if (p.sid === GameState.mySid) return false;
         if (!p.isEnemyOf(GameState.self)) return false;
         return true;
     }
@@ -3796,6 +4244,15 @@ const Targeting = (function () {
         const me = GameState.self;
         if (!me) return 0;
         const dist = U.getDistance(me.x2, me.y2, p.x2, p.y2);
+
+        /* Animals have no weapon slots; their damage is a table field. */
+        if (p.isAI) {
+            if (!p.hostile) return 0;
+            const reach = (p.hitRange || p.scale) + me.scale;
+            if (dist > reach * 1.6) return 0;
+            const readiness = EntityTracker.primaryReady(p.sid) ? 1 : 0.3;
+            return (p.damage + (dist <= p.scale + me.scale ? p.collisionDamage : 0)) * readiness;
+        }
 
         let threat = 0;
         for (let slot = 0; slot < 2; slot++) {
@@ -3852,7 +4309,8 @@ const Targeting = (function () {
         if (p.trapped) vulnerable += 0.5;
         if (p.onSpike) vulnerable += 0.2;
         vulnerable += U.clamp(1 - p.health / p.maxHealth, 0, 1) * 0.3;
-        if (GameState.self && EntityTracker.shieldBypass(GameState.self, p)) vulnerable += 0.1;
+        /* Animals carry no shield, so the arc test does not apply to them. */
+        if (!p.isAI && GameState.self && EntityTracker.shieldBypass(GameState.self, p)) vulnerable += 0.1;
 
         const threat = U.clamp(threatOf(p) / 100, 0, 1);
         return near * w.distance + threat * w.threat + vulnerable * w.vulnerable;
@@ -3871,6 +4329,23 @@ const Targeting = (function () {
             p.threat = threatOf(p);
             candidates.push(p);
         }
+        /* Animals, when enabled. A hostile animal in reach is a genuine threat
+         * and a passive one is the fastest XP in the game, but neither should
+         * ever outrank a player who is actively fighting us -- so their score is
+         * scaled down rather than competing on equal terms. */
+        if (Config.get('combat.targetAnimals')) {
+            const scale = Config.get('combat.animalScoreScale');
+            for (const a of GameState.animals.values()) {
+                if (!a.visible || !a.alive) continue;
+                const d = U.getDistance(me.x2, me.y2, a.x2, a.y2);
+                if (d > radius) continue;
+                if (!a.hostile && !Config.get('combat.targetPassiveAnimals')) continue;
+                a.targetScore = score(a) * scale;
+                a.threat = a.hostile ? threatOf(a) : 0;
+                candidates.push(a);
+            }
+        }
+
         candidates.sort((a, b) => b.targetScore - a.targetScore);
 
         const best = candidates[0] || null;
@@ -4932,6 +5407,40 @@ const Replace = {
         Events.on('swing', (player, weaponIndex) => this.projectBreak(player, weaponIndex));
         Events.on('objectRemoved', (obj) => this.doomed.delete(obj.sid));
         Events.on('trackerReady', () => this.expire());
+
+        /* WIGGLE_OBJECT says a structure was actually struck, which is stronger
+         * evidence than a swing that may have missed. Anything already flagged
+         * from a swing is confirmed; anything not flagged and now low enough to
+         * die to the next hit from the same direction is flagged here. */
+        Events.on('objectHit', (obj, dir) => this.confirmHit(obj, dir));
+    },
+
+    confirmHit(obj) {
+        if (!Config.get('placement.replace.enabled')) return;
+        const existing = this.doomed.get(obj.sid);
+        if (existing) {
+            /* Seen the swing and now the hit: the break is as certain as it
+             * gets, so give it a fresh lease. */
+            existing.breaksAtTick = GameState.tick + 1;
+            existing.confirmed = true;
+            return;
+        }
+        /* Not predicted from a swing -- someone we cannot see attacking is
+         * hitting it. Flag it if one more hit of the same size would finish it. */
+        if (!obj.isItem || obj.health === Infinity) return;
+        const swinger = Targeting.primary;
+        if (!swinger) return;
+        const damage = Math.max(
+            EntityTracker.structureDamage(swinger, 0),
+            swinger.secondaryIndex != null ? EntityTracker.structureDamage(swinger, 1) : 0
+        );
+        if (damage <= 0 || obj.health > damage) return;
+        this.doomed.set(obj.sid, {
+            object: obj,
+            breaksAtTick: GameState.tick + 1,
+            byWhom: swinger.sid,
+            confirmed: true
+        });
     },
 
     expire() {
@@ -5075,7 +5584,8 @@ const Replace = {
             doomed: Array.from(this.doomed.values()).map((e) => ({
                 sid: e.object.sid,
                 name: e.object.name,
-                breaksAt: e.breaksAtTick
+                breaksAt: e.breaksAtTick,
+                confirmed: !!e.confirmed
             }))
         };
     }
@@ -5470,6 +5980,51 @@ const SafeSoldier = {
                     out.sources.push({ sid: enemy.sid, slot: 'turret', dmg: proj.dmg });
                     certainty += 0.2;
                 }
+            }
+        }
+
+        /* Hostile animals. Their damage figures come from the aiTypes table:
+         * `dmg` is the swing, `colDmg` the contact damage, `hitRange` the reach
+         * and `hitDelay` the cooldown. A charging bull is a bigger threat than
+         * most players and the first build could not see it at all. */
+        if (Config.get('defense.safeSoldier.countAnimals')) {
+            for (const a of GameState.animals.values()) {
+                if (!a.visible || !a.hostile) continue;
+                const d = U.getDistance(me.x2, me.y2, a.x2, a.y2);
+                const reach = (a.hitRange || a.scale) + me.scale;
+                if (d > reach + Config.get('defense.safeSoldier.animalMargin')) continue;
+
+                /* A swing that is still on cooldown cannot land this tick. */
+                const ready = EntityTracker.primaryReady(a.sid);
+                if (a.damage > 0 && ready) {
+                    out.hits += a.damage;
+                    out.sources.push({ sid: a.sid, slot: a.animalName, dmg: a.damage });
+                    certainty += 0.3;
+                }
+                /* Contact damage lands on touch, cooldown or not. */
+                if (a.collisionDamage > 0 && d <= a.scale + me.scale) {
+                    out.spike += a.collisionDamage;
+                    out.sources.push({ sid: a.sid, slot: a.animalName + '-contact', dmg: a.collisionDamage });
+                    certainty += 0.4;
+                }
+            }
+        }
+
+        /* Projectiles already in the air. Damage and scale come from the shipped
+         * projectile table; the path is dead reckoned by EntityTracker. */
+        if (Config.get('defense.safeSoldier.countProjectiles')) {
+            for (const proj of GameState.projectiles.values()) {
+                if (!proj.active || proj.damage <= 0) continue;
+                const end = proj.positionAt(Config.get('defense.safeSoldier.projectileHorizonMs'));
+                const pad = proj.scale + me.scale;
+                const willHit = U.lineInRect(
+                    me.x2 - pad, me.y2 - pad, me.x2 + pad, me.y2 + pad,
+                    proj.x, proj.y, end.x, end.y
+                );
+                if (!willHit) continue;
+                out.turret += proj.damage;
+                out.sources.push({ slot: 'projectile', dmg: proj.damage });
+                certainty += 0.5;
             }
         }
 
@@ -7527,6 +8082,18 @@ const Config = (function () {
                 label: 'Long-Reach Threshold', type: 'number', def: 115, min: 60, max: 160, step: 1,
                 desc: 'A primary with more reach than this swings second in a burst, after a knockback secondary. At the default this is the katana and the polearm.'
             },
+            targetAnimals: {
+                label: 'Target Animals', type: 'bool', def: true,
+                desc: 'Include animals in the target system. Their damage, reach and cooldown come from the game\'s own animal table, which the first build did not extract at all.'
+            },
+            targetPassiveAnimals: {
+                label: 'Target Passive Animals', type: 'bool', def: false,
+                desc: 'Also target cows and chickens, not just hostile animals. Fast XP, but it pulls attention off players.'
+            },
+            animalScoreScale: {
+                label: 'Animal Score Scale', type: 'number', def: 0.45, min: 0, max: 1.5, step: 0.05,
+                desc: 'Multiplier on an animal\'s target score, so a bull never outranks a player who is actively fighting you.'
+            },
             leadTarget: {
                 label: 'Lead Moving Targets', type: 'bool', def: true,
                 desc: 'Aim at where the target will be when the packet lands rather than where it is now.'
@@ -7757,6 +8324,22 @@ const Config = (function () {
                     desc: 'Upper bound on the projection, so a crowd cannot inflate it past what one tick can deliver.'
                 },
                 scanRange: { label: 'Scan Range', type: 'number', def: 400, min: 100, max: 800, step: 20, desc: 'How far out to look for sources of incoming damage.' },
+                countAnimals: {
+                    label: 'Count Animals', type: 'bool', def: true,
+                    desc: 'Include hostile animals in the projection. A charging bull hits for more than most players, and `colDmg` lands on contact regardless of cooldown.'
+                },
+                animalMargin: {
+                    label: 'Animal Margin', type: 'number', def: 40, min: 0, max: 200, step: 10,
+                    desc: 'Extra distance past an animal\'s reach at which it still counts as a threat, to cover it closing during the tick.'
+                },
+                countProjectiles: {
+                    label: 'Count Projectiles', type: 'bool', def: true,
+                    desc: 'Include arrows and bullets already in flight. Their damage comes from the shipped projectile table and their path is dead reckoned.'
+                },
+                projectileHorizonMs: {
+                    label: 'Projectile Horizon', type: 'number', def: 400, min: 50, max: 1500, step: 50,
+                    desc: 'Milliseconds ahead a projectile\'s path is projected when testing whether it will reach you.'
+                },
                 urgencyBase: { label: 'Urgency: Base', type: 'number', def: 45, min: 0, max: 100, step: 1, desc: 'Urgency for a survivable projected hit.' },
                 urgencyScale: { label: 'Urgency: Lethality Scale', type: 'number', def: 45, min: 0, max: 100, step: 1, desc: 'Added urgency in proportion to how close the projection comes to killing you.' }
             },
@@ -7927,6 +8510,8 @@ const Config = (function () {
             showPlacement: { label: 'Placement Candidates', type: 'bool', def: true, desc: 'Draw the top-ranked spike positions the placement engine picked.' },
             placementCount: { label: 'Candidates Shown', type: 'number', def: 3, min: 1, max: 10, step: 1, desc: 'How many ranked positions to draw.' },
             showHazards: { label: 'Hazards', type: 'bool', def: true, desc: 'Ring enemy spikes and traps, and your own spikes faintly.' },
+            showAnimals: { label: 'Animals', type: 'bool', def: true, desc: 'Ring animals, hostile ones in warning colour, with their health.' },
+            showProjectiles: { label: 'Projectiles', type: 'bool', def: true, desc: 'Draw arrows and bullets in flight along their remaining path.' },
             showRanges: { label: 'Weapon Ranges', type: 'bool', def: false, desc: 'Draw your weapon reach, dimmed while on cooldown.' }
         },
 
@@ -8260,7 +8845,7 @@ const Menu = (function () {
 
             const head = el('div', { id: 'tyz-head' }, [
                 el('b', { text: '2yz' }),
-                el('span', { class: 'tyz-sub', text: 'ShiftT to toggle' })
+                el('span', { class: 'tyz-sub', text: 'Esc to toggle' })
             ]);
 
             const tabs = el('div', { id: 'tyz-tabs' });
@@ -8288,16 +8873,24 @@ const Menu = (function () {
             makeDraggable(head, root);
             renderTab(activeTab);
 
+            /* Escape opens the menu. The game itself binds no handler to it
+             * (nothing in src/game_index.js reads keyCode 27), so this takes a
+             * key that was otherwise unused rather than shadowing a game
+             * control.
+             *
+             * Capture phase, because the chat box and the name field close
+             * themselves on Escape and would otherwise swallow it. When one of
+             * those has focus the key is left alone: closing the box the player
+             * is typing in is what they meant by pressing it. */
             window.addEventListener('keydown', function (e) {
-                /* Never steal a key while the player is typing in chat or the
-                 * name box. */
-                const tag = document.activeElement && document.activeElement.tagName;
+                if (e.key !== 'Escape' && e.keyCode !== 27) return;
+                const active = document.activeElement;
+                const tag = active && active.tagName;
                 if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-                if (e.shiftKey && (e.key === 'T' || e.key === 't')) {
-                    e.preventDefault();
-                    Menu.toggle();
-                }
-            });
+                e.preventDefault();
+                e.stopPropagation();
+                Menu.toggle();
+            }, true);
         },
 
         toggle() {
@@ -8370,9 +8963,13 @@ const Debug = (function () {
             inGame: GameState.inGame,
             tick: GameState.tick,
             players: GameState.players.size,
+            animals: GameState.animals.size,
+            projectiles: GameState.projectiles.size,
             objects: GameState.objects.size,
             near: GameState.nearObjects.length,
-            ping: Math.round(Net.pingMs())
+            allies: GameState.allianceSids.size,
+            ping: Math.round(Net.pingMs()),
+            shutdownIn: GameState.serverShutdownIn
         });
 
         if (Config.get('debug.targeting')) out += section('targeting', Targeting.debugState());
@@ -8439,6 +9036,14 @@ const Debug = (function () {
                 intent.describe() + ' ' + why));
             Events.on('sequenceCancelled', (seq, why) => record('sequence-cancelled',
                 seq.name + ' ' + why));
+            Events.on('projectile', (p) => record('projectile',
+                (p.def.name || 'proj') + ' dmg=' + p.damage + ' range=' + Math.round(p.range)));
+            Events.on('objectHit', (obj) => record('object-hit',
+                obj.name + '#' + obj.sid + ' hp=' + Math.round(obj.health)));
+            Events.on('allianceRequest', (r) => record('alliance-request',
+                r.name + ' (' + r.sid + ')'));
+            Events.on('chatMessage', (m) => record('chat', m.sid + ': ' + m.text));
+            Events.on('disconnect', (why) => record('disconnect', String(why)));
             Events.on('tick', function () {
                 try { render(); } catch (err) { Log.error('debug', err); }
             });
@@ -8612,6 +9217,27 @@ const Overlay = (function () {
         }
     }
 
+    function drawAnimals() {
+        for (const a of GameState.animals.values()) {
+            if (!a.visible) continue;
+            const colour = a.hostile ? 'rgba(255,140,84,0.75)' : 'rgba(160,160,180,0.5)';
+            circle(a.x2, a.y2, a.scale, colour, a.hostile ? 2 : 1);
+            if (Config.get('overlay.showHealth')) {
+                label(a.x2, a.y2 - a.scale - 12,
+                    a.animalName + ' ' + Math.round(a.health), colour);
+            }
+        }
+    }
+
+    function drawProjectiles() {
+        for (const proj of GameState.projectiles.values()) {
+            if (!proj.active) continue;
+            const end = proj.positionAt(proj.range / Math.max(proj.speed, 1e-6));
+            line(proj.x, proj.y, end.x, end.y, 'rgba(255,84,112,0.7)', 2);
+            circle(proj.x, proj.y, Math.max(proj.scale, 6), 'rgba(255,84,112,0.9)', 2);
+        }
+    }
+
     function drawRanges() {
         const me = GameState.self;
         if (!me) return;
@@ -8651,6 +9277,8 @@ const Overlay = (function () {
 
         try {
             if (Config.get('overlay.showHazards')) drawHazards();
+            if (Config.get('overlay.showAnimals')) drawAnimals();
+            if (Config.get('overlay.showProjectiles')) drawProjectiles();
             if (Config.get('overlay.showRanges')) drawRanges();
             if (Config.get('overlay.showPlacement')) drawPlacement();
             if (Config.get('overlay.showPrediction')) drawPrediction();

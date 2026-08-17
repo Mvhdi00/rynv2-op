@@ -162,6 +162,27 @@ const Overlay = (function () {
         }
     }
 
+    function drawAnimals() {
+        for (const a of GameState.animals.values()) {
+            if (!a.visible) continue;
+            const colour = a.hostile ? 'rgba(255,140,84,0.75)' : 'rgba(160,160,180,0.5)';
+            circle(a.x2, a.y2, a.scale, colour, a.hostile ? 2 : 1);
+            if (Config.get('overlay.showHealth')) {
+                label(a.x2, a.y2 - a.scale - 12,
+                    a.animalName + ' ' + Math.round(a.health), colour);
+            }
+        }
+    }
+
+    function drawProjectiles() {
+        for (const proj of GameState.projectiles.values()) {
+            if (!proj.active) continue;
+            const end = proj.positionAt(proj.range / Math.max(proj.speed, 1e-6));
+            line(proj.x, proj.y, end.x, end.y, 'rgba(255,84,112,0.7)', 2);
+            circle(proj.x, proj.y, Math.max(proj.scale, 6), 'rgba(255,84,112,0.9)', 2);
+        }
+    }
+
     function drawRanges() {
         const me = GameState.self;
         if (!me) return;
@@ -201,6 +222,8 @@ const Overlay = (function () {
 
         try {
             if (Config.get('overlay.showHazards')) drawHazards();
+            if (Config.get('overlay.showAnimals')) drawAnimals();
+            if (Config.get('overlay.showProjectiles')) drawProjectiles();
             if (Config.get('overlay.showRanges')) drawRanges();
             if (Config.get('overlay.showPlacement')) drawPlacement();
             if (Config.get('overlay.showPrediction')) drawPrediction();

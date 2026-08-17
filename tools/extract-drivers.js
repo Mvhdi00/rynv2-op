@@ -116,6 +116,34 @@ function extractProtocol() {
   };
 }
 
+/* The animal table is assigned to `this.aiTypes` inside the AI-manager
+ * constructor rather than to a top-level binding, so `literal()` cannot find it
+ * by name. Slice it by its assignment site instead.
+ *
+ * It carries everything a client needs to reason about animals -- dmg, colDmg,
+ * health, hitRange, hitDelay, viewRange, hostile, chargePlayer, killScore, drop
+ * -- and none of it is derivable from anywhere else. */
+function aiTypes() {
+  const at = INDEX.indexOf("this.aiTypes = [");
+  if (at < 0) throw new Error("aiTypes table not found in game bundle");
+  const open = INDEX.indexOf("[", at);
+
+  let depth = 0, quote = null, end = -1;
+  for (let i = open; i < INDEX.length; i++) {
+    const c = INDEX[i];
+    if (quote) {
+      if (c === "\\") { i++; continue; }
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") { quote = c; continue; }
+    if (c === "[") depth++;
+    else if (c === "]") { depth--; if (depth === 0) { end = i + 1; break; } }
+  }
+  if (end < 0) throw new Error("aiTypes literal did not close");
+  return vm.runInNewContext("(" + INDEX.slice(open, end) + ")", {});
+}
+
 // Item entries carry `group: B[n]`, so the group table has to exist first.
 const itemGroups = literal("B");
 
@@ -170,6 +198,7 @@ const drivers = {
   protocol: extractProtocol(),
   config: extractConfig(),
   itemGroups,
+  animals: aiTypes(),
   projectiles: literal("ca"),
   weapons: literal("ha"),
   items: probeConsumables(literal("Ce", { B: itemGroups })),
@@ -182,7 +211,7 @@ fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, JSON.stringify(drivers, null, 2));
 
 console.log("wrote", path.relative(ROOT, outPath));
-for (const k of ["itemGroups", "projectiles", "weapons", "items", "hats", "accessories"]) {
+for (const k of ["itemGroups", "animals", "projectiles", "weapons", "items", "hats", "accessories"]) {
   console.log(`  ${k.padEnd(12)} ${drivers[k].length} entries`);
 }
 console.log("  config       " + Object.keys(drivers.config).length + " keys");

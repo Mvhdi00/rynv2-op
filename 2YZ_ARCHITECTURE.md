@@ -102,7 +102,7 @@ scores before Targeting ranks, Targeting settles before the modules read it, and
 | `02-utils.js` | `U` | Geometry transcribed from the game, so range and collision match the server |
 | `10-transport.js` | `Transport` | msgpack, opcode permutation, HMAC, WebSocket hook. Owns the sequence counter |
 | `11-net.js` | `Net` | RTT from the game's own ping exchange; outbound frame accounting |
-| `20-gamestate.js` | `GameState`, `Entity`, `WorldObject`, `Events` | The single world model, plus the event bus |
+| `20-gamestate.js` | `GameState`, `Entity`, `Animal`, `Projectile`, `WorldObject`, `Events` | The single world model, plus the event bus |
 | `21-router.js` | `Router` | Wire → state. The only packet interpreter |
 | `22-tracker.js` | `EntityTracker` | Derived state, once per tick |
 | `30-prediction.js` | `Prediction` | The one movement model |
@@ -148,6 +148,22 @@ only when ownership semantics change (`SETUP_GAME`, `SET_TEAM`).
 `nearObjects` is rebuilt once per tick at a radius derived from the widest range
 in the shipped tables (turret, 700, plus margin). Every collision and placement
 query in the client walks that list, not the full object map.
+
+Four entity classes are tracked, not one. `players` and `animals` both carry the
+full derived set (velocity, heading, trap containment, spike contact) and are
+therefore interchangeable to Prediction, Targeting and PlacementEngine.
+`projectiles` are dead reckoned from a single server description plus range
+updates. `objects` are structures and resources.
+
+`lastTickDelta` is clamped to [0.5×, 2×] of the server's own step. The server
+advances at a fixed rate, so the wall-clock gap between two packets is network
+jitter rather than a change in how far the world moved — clamping keeps the
+reload clocks and projectile reckoning honest across both a stalled connection
+and two packets in the same millisecond.
+
+Allies come from the server's alliance roster (`ALLY_LIST`) when it is known and
+from the team string otherwise. The roster is authoritative because a structure's
+owner may never have been a visible player.
 
 ## Prediction
 
@@ -289,7 +305,10 @@ Categories mirror the architecture: Combat · Placement (Scoring Weights, Auto
 Place, Preplace, Replace, Spike Tick) · Defense (Anti Smart Tick, Safe Soldier,
 Auto Heal) · Utility (Auto Mills) · Prediction · Network · Debug.
 
-Menu toggles with Shift+T, and never steals a key while an input has focus.
+Menu toggles with Escape, bound in the capture phase. Nothing in the shipped
+bundle reads keyCode 27, so it takes a key the game leaves unused; it is skipped
+while an input has focus, because closing the chat box is what Escape means when
+you are typing in it.
 
 ## Movement, and why it is off by default
 

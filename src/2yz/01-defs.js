@@ -20,6 +20,11 @@ const Defs = {
     weapons: DRIVERS.weapons,
     items: DRIVERS.items,
     itemGroups: DRIVERS.itemGroups,
+    /* Animal types. Assigned to `this.aiTypes` inside the AI manager rather
+     * than a top-level binding, which is why the extractor slices it by
+     * assignment site. Carries dmg, colDmg, health, hitRange, hitDelay,
+     * viewRange, hostile and chargePlayer -- none of it derivable elsewhere. */
+    animals: DRIVERS.animals,
     hats: DRIVERS.hats,
     accessories: DRIVERS.accessories,
     projectiles: DRIVERS.projectiles,
@@ -76,6 +81,9 @@ const Defs = {
         REMOVE_PROJECTILE: 'Y', // ql   (sid, range)
         SERVER_SHUTDOWN: 'Z',   // Ul
         ADD_ALLIANCE: 'g',      // $a
+        ALLY_LIST: '4',         // Qa   full alliance roster
+        ALLY_REMOVE: '1',       // Za   (sid)
+        ALLY_REQUEST: '2',      // Ka   (sid, name)
         SET_TEAM: '3',          // Ja   (team, isOwner)
         UPDATE_STORE: '5',      // al   (isEquip, id, isAccessory)
         CHAT_MESSAGE: '6',      // dl   (sid, text)
@@ -89,7 +97,8 @@ const Defs = {
     /* --- flat-packet strides, from the decode loops in game_index.js ----- */
     STRIDE: {
         UPDATE_PLAYERS: 13,   // Jl  5551
-        LOAD_OBJECTS: 8       // Vl  5432
+        LOAD_OBJECTS: 8,      // Vl  5432
+        UPDATE_AI: 7          // Xl  5457
     },
 
     /* Field order inside one UPDATE_PLAYERS record (game_index.js:5556-5576). */
@@ -97,6 +106,9 @@ const Defs = {
         'sid', 'x', 'y', 'dir', 'buildIndex', 'weaponIndex', 'weaponVariant',
         'team', 'isLeader', 'skinIndex', 'tailIndex', 'iconIndex', 'zIndex'
     ],
+
+    /* Field order inside one UPDATE_AI record (Xl, game_index.js:5457-5461). */
+    AI_FIELDS: ['sid', 'index', 'x', 'y', 'dir', 'health', 'nameIndex'],
 
     /* Field order inside one LOAD_OBJECTS record (game_index.js:5433-5437). */
     OBJECT_FIELDS: [

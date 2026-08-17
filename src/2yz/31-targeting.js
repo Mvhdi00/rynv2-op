@@ -17,8 +17,11 @@ const Targeting = (function () {
 
     function isValid(p) {
         if (!p || !p.visible || !p.alive) return false;
-        if (p.sid === GameState.mySid) return false;
         if (!GameState.self) return false;
+        /* An animal is always a valid target when animal targeting is on; it has
+         * no team and cannot be us. */
+        if (p.isAI) return Config.get('combat.targetAnimals');
+        if (p.sid === GameState.mySid) return false;
         if (!p.isEnemyOf(GameState.self)) return false;
         return true;
     }
@@ -30,6 +33,15 @@ const Targeting = (function () {
         const me = GameState.self;
         if (!me) return 0;
         const dist = U.getDistance(me.x2, me.y2, p.x2, p.y2);
+
+        /* Animals have no weapon slots; their damage is a table field. */
+        if (p.isAI) {
+            if (!p.hostile) return 0;
+            const reach = (p.hitRange || p.scale) + me.scale;
+            if (dist > reach * 1.6) return 0;
+            const readiness = EntityTracker.primaryReady(p.sid) ? 1 : 0.3;
+            return (p.damage + (dist <= p.scale + me.scale ? p.collisionDamage : 0)) * readiness;
+        }
 
         let threat = 0;
         for (let slot = 0; slot < 2; slot++) {
@@ -86,7 +98,8 @@ const Targeting = (function () {
         if (p.trapped) vulnerable += 0.5;
         if (p.onSpike) vulnerable += 0.2;
         vulnerable += U.clamp(1 - p.health / p.maxHealth, 0, 1) * 0.3;
-        if (GameState.self && EntityTracker.shieldBypass(GameState.self, p)) vulnerable += 0.1;
+        /* Animals carry no shield, so the arc test does not apply to them. */
+        if (!p.isAI && GameState.self && EntityTracker.shieldBypass(GameState.self, p)) vulnerable += 0.1;
 
         const threat = U.clamp(threatOf(p) / 100, 0, 1);
         return near * w.distance + threat * w.threat + vulnerable * w.vulnerable;
@@ -105,6 +118,23 @@ const Targeting = (function () {
             p.threat = threatOf(p);
             candidates.push(p);
         }
+        /* Animals, when enabled. A hostile animal in reach is a genuine threat
+         * and a passive one is the fastest XP in the game, but neither should
+         * ever outrank a player who is actively fighting us -- so their score is
+         * scaled down rather than competing on equal terms. */
+        if (Config.get('combat.targetAnimals')) {
+            const scale = Config.get('combat.animalScoreScale');
+            for (const a of GameState.animals.values()) {
+                if (!a.visible || !a.alive) continue;
+                const d = U.getDistance(me.x2, me.y2, a.x2, a.y2);
+                if (d > radius) continue;
+                if (!a.hostile && !Config.get('combat.targetPassiveAnimals')) continue;
+                a.targetScore = score(a) * scale;
+                a.threat = a.hostile ? threatOf(a) : 0;
+                candidates.push(a);
+            }
+        }
+
         candidates.sort((a, b) => b.targetScore - a.targetScore);
 
         const best = candidates[0] || null;

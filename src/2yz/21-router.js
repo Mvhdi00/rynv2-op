@@ -112,7 +112,14 @@ const Router = (function () {
             }
 
             GameState.tick++;
-            GameState.lastTickDelta = GameState.tickTime ? now - GameState.tickTime : Defs.TICK_MS;
+            /* The server steps at a fixed rate (config.serverUpdateRate), so the
+             * wall-clock gap between two packets is network jitter, not a change
+             * in how far the world moved. Clamping it around the known tick keeps
+             * projectile dead reckoning and the reload clocks honest: two packets
+             * in the same millisecond would otherwise advance nothing, and a
+             * stalled connection would advance everything at once. */
+            const observed = GameState.tickTime ? now - GameState.tickTime : Defs.TICK_MS;
+            GameState.lastTickDelta = U.clamp(observed, Defs.TICK_MS * 0.5, Defs.TICK_MS * 2);
             GameState.tickTime = now;
             Events.emit('tick');
         },
@@ -128,6 +135,153 @@ const Router = (function () {
                     flat[i + 7] >= 0 ? flat[i + 7] : null
                 );
             }
+        },
+
+        /* Xl -- game_index.js:5457. Flat, stride 7, fields in Defs.AI_FIELDS.
+         * Animals are a whole entity class the first build ignored: hostile ones
+         * deal contact and swing damage, and every stat they have comes from the
+         * aiTypes table rather than the wire. */
+        [S.UPDATE_AI](flat) {
+            const now = Date.now();
+            for (const a of GameState.animals.values()) a.visible = false;
+            if (!flat) return;
+
+            const stride = Defs.STRIDE.UPDATE_AI;
+            for (let i = 0; i + stride <= flat.length; i += stride) {
+                const sid = flat[i];
+                const typeIndex = flat[i + 1];
+                let a = GameState.animals.get(sid);
+                if (!a || a.typeIndex !== typeIndex) {
+                    a = new Animal(sid, typeIndex);
+                    a.x1 = a.x2 = flat[i + 2];
+                    a.y1 = a.y2 = flat[i + 3];
+                    GameState.animals.set(sid, a);
+                }
+                a.t1 = a.t2 === 0 ? now : a.t2;
+                a.t2 = now;
+                a.x1 = a.x2;
+                a.y1 = a.y2;
+                a.x2 = flat[i + 2];
+                a.y2 = flat[i + 3];
+                a.d1 = a.d2;
+                a.d2 = flat[i + 4];
+                a.health = flat[i + 5];
+                a.visible = true;
+                a.alive = a.health > 0;
+            }
+            /* Anything the packet did not mention has left our view. */
+            for (const [sid, a] of GameState.animals) {
+                if (!a.visible) GameState.animals.delete(sid);
+            }
+        },
+
+        /* Fl -- game_index.js:5457-ish. An animal swung. Same use as a player's
+         * ATTACK_ANIM: it starts the swing clock the threat model reads. */
+        [S.GATHER_ANIM_AI](sid) {
+            const a = GameState.animals.get(sid);
+            if (a) {
+                a.lastSwingTick = GameState.tick;
+                Events.emit('animalSwing', a);
+            }
+        },
+
+        /* Ll -- game_index.js:5443. (x, y, dir, range, speed, typeIndex, layer, sid).
+         * An arrow or bullet in flight. Damage and scale come from the shipped
+         * projectile table; without this the threat model cannot see anything
+         * ranged coming. */
+        [S.ADD_PROJECTILE](x, y, dir, range, speed, typeIndex, layer, sid) {
+            const p = new Projectile(sid, x, y, dir, range, speed, typeIndex, layer);
+            GameState.projectiles.set(sid, p);
+            Events.emit('projectile', p);
+        },
+
+        /* ql -- game_index.js:5451. (sid, range). The server updates a
+         * projectile's remaining range; zero or less means it is spent. */
+        [S.REMOVE_PROJECTILE](sid, range) {
+            const p = GameState.projectiles.get(sid);
+            if (!p) return;
+            p.range = range;
+            if (range <= 0) {
+                p.active = false;
+                GameState.projectiles.delete(sid);
+            }
+        },
+
+        /* Wa -- game_index.js:3675. The alliance list at join time. */
+        [S.INIT](data) {
+            if (data && data.teams) GameState.teams = data.teams;
+        },
+
+        /* Qa -- game_index.js:4011. The authoritative alliance roster,
+         * [sid, name, sid, name, ...]. Ownership of every structure is keyed off
+         * this; before it existed 2yz inferred allies from the team string
+         * alone, which fails for an owner never seen as a visible player. */
+        [S.ALLY_LIST](flat) {
+            GameState.allianceSids.clear();
+            if (Array.isArray(flat)) {
+                for (let i = 0; i < flat.length; i += 2) GameState.allianceSids.add(flat[i]);
+            }
+            GameState.myObjects.clear();
+            GameState.teamObjects.clear();
+            GameState.enemyObjects.clear();
+            for (const obj of GameState.objects.values()) GameState.indexObject(obj);
+        },
+
+        /* $a -- game_index.js:3958. A new alliance appeared in the world list. */
+        [S.ADD_ALLIANCE](team) {
+            if (team) GameState.teams.push(team);
+        },
+
+        /* Za -- game_index.js:4015. An alliance disbanded. */
+        [S.ALLY_REMOVE](sid) {
+            GameState.teams = GameState.teams.filter((t) => t && t.sid !== sid);
+            GameState.allianceSids.delete(sid);
+        },
+
+        /* Ka -- game_index.js:3964. Someone asked to join ours. Recorded, not
+         * answered: accepting on the player's behalf is not 2yz's call. */
+        [S.ALLY_REQUEST](sid, name) {
+            Events.emit('allianceRequest', { sid, name });
+        },
+
+        /* Tl -- game_index.js:4798. Flat, stride 3: [sid, name, score]. */
+        [S.LEADERBOARD](flat) {
+            const out = [];
+            if (Array.isArray(flat)) {
+                for (let i = 0; i + 3 <= flat.length; i += 3) {
+                    out.push({ sid: flat[i], name: flat[i + 1], score: flat[i + 2] });
+                }
+            }
+            GameState.leaderboard = out;
+        },
+
+        /* Ul -- game_index.js:5616. Seconds until the server restarts. Worth
+         * knowing: there is no point investing resources into a map that is
+         * about to be recycled. */
+        [S.SERVER_SHUTDOWN](seconds) {
+            GameState.serverShutdownIn = seconds >= 0 ? seconds : null;
+        },
+
+        /* dl -- game_index.js:4457. (sid, text). */
+        [S.CHAT_MESSAGE](sid, text) {
+            Events.emit('chatMessage', { sid, text });
+        },
+
+        /* Wl -- game_index.js:5439. (dir, sid). A structure was struck. This is
+         * a direct signal that something took a hit, which is stronger than
+         * inferring it from a swing that may have missed. */
+        [S.WIGGLE_OBJECT](dir, sid) {
+            const obj = GameState.objects.get(sid);
+            if (obj) {
+                obj.lastHitTick = GameState.tick;
+                Events.emit('objectHit', obj, dir);
+            }
+        },
+
+        /* zt -- the socket is going away. */
+        [S.DISCONNECT](reason) {
+            Events.emit('disconnect', reason);
+            GameState.reset();
         },
 
         /* Il -- game_index.js:4710 */
