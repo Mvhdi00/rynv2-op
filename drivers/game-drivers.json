@@ -1,5 +1,5 @@
 {
-  "extractedAt": "2026-07-31T23:50:43.068Z",
+  "extractedAt": "2026-08-17T03:21:39.563Z",
   "source": {
     "index": "src/game_index.js",
     "vendor": "src/game_vendor.js"
@@ -698,7 +698,8 @@
         10
       ],
       "scale": 22,
-      "holdOffset": 15
+      "holdOffset": 15,
+      "heal": 20
     },
     {
       "age": 3,
@@ -714,7 +715,8 @@
         15
       ],
       "scale": 27,
-      "holdOffset": 15
+      "holdOffset": 15,
+      "heal": 40
     },
     {
       "age": 7,
@@ -730,7 +732,12 @@
         25
       ],
       "scale": 27,
-      "holdOffset": 15
+      "holdOffset": 15,
+      "heal": 30,
+      "healOverTime": {
+        "perTick": 10,
+        "ticks": 5
+      }
     },
     {
       "group": {

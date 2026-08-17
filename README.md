@@ -1,3 +1,87 @@
+# rynv2-op
+
+Two independent moomoo.io clients built against the game bundles in `src/`, and
+the tooling that verifies both against them.
+
+| Build output | What it is |
+|---|---|
+| **`2yz.user.js`** | A decision-engine client written from scratch. One world model, one prediction layer, one target system, one arbiter, one packet scheduler. See [`2YZ_ARCHITECTURE.md`](2YZ_ARCHITECTURE.md). |
+| **`ReUp_Mix.user.js`** | The RYN v4 core with the Luna features RYN never had, described below. |
+
+They share nothing but `src/game_index.js`, `src/game_vendor.js` and
+`drivers/game-drivers.json`.
+
+---
+
+# 2yz
+
+A client with its own architecture rather than a fork of the game bundle. It
+attaches at the socket, decodes the protocol itself, and rebuilds its own view
+of the world from the wire — so there is no minified identifier anywhere in it
+and no hook to come unbound when the bundle is rebuilt.
+
+```
+GAME STATE → ENTITY TRACKING → PREDICTION → TARGETING
+           → COMBAT / PLACEMENT / DEFENCE / UTILITY ANALYSIS
+           → INTENTS → ARBITRATION → PACKET SCHEDULER → SOCKET
+```
+
+Modules never act. Each produces an intent describing what it would like to
+happen; one Arbiter decides which wins the tick; one PacketScheduler is the only
+writer to the socket, carrying the game's own frames as well as 2yz's.
+
+**Features.** Auto Place, Preplace, Replace, Spike Tick, Anti Smart Tick, Safe
+Soldier, Auto Heal, Auto Mills, and a combat engine with multi-tick burst
+sequences. Behaviour was extracted from four reference clients and rebuilt;
+[`2YZ_SOURCE_MAP.md`](2YZ_SOURCE_MAP.md) records what came from where and why,
+including what was deliberately left behind.
+
+**Menu.** Shift+T. Generated from `Config.schema`, so every one of the 101
+settings is read by the code — `tools/verify-2yz.js` fails the build on a setting
+nothing reads, and on a read with no setting behind it. Debug is off by default,
+with seven independent sections.
+
+**Game definitions.** Every id, range, cooldown, damage figure, packet layout and
+protocol constant comes from `drivers/game-drivers.json`, extracted from the
+shipped bundles by `tools/extract-drivers.js` and injected at build time. Nothing
+is typed in by hand.
+
+## Build and check
+
+```sh
+node tools/extract-drivers.js    # game bundles -> drivers/game-drivers.json
+node tools/build-2yz.js          # src/2yz/*.js  -> 2yz.user.js
+node tools/verify-2yz.js         # static audit: settings, opcodes, independence
+node tools/test-2yz.js           # 131 behavioural assertions, headless
+node --check 2yz.user.js
+```
+
+`test-2yz.js` builds the client exactly as shipped and runs it in a vm sandbox
+against a fake socket. Nothing inside the client is stubbed: the prediction,
+targeting, placement, arbitration and scheduling paths under test are the real
+ones.
+
+## Layout
+
+```
+2yz.user.js               build output — this is the script to install
+src/2yz/                  modules; the numeric prefixes are the dependency order
+  00-log  01-defs  02-utils
+  10-transport  11-net
+  20-gamestate  21-router  22-tracker
+  30-prediction  31-targeting
+  40-placement  41-combat
+  50..57-mod-*            the eight feature modules
+  60-intent  61-arbiter  62-scheduler
+  70-config  71-ui  72-debug
+  80-runtime
+tools/build-2yz.js        src/2yz/*.js -> 2yz.user.js
+tools/verify-2yz.js       static audit
+tools/test-2yz.js         behavioural suite
+```
+
+---
+
 # ReUp Mix (Luna × Ryn)
 
 A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client

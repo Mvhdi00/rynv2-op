@@ -119,6 +119,48 @@ function extractProtocol() {
 // Item entries carry `group: B[n]`, so the group table has to exist first.
 const itemGroups = literal("B");
 
+/* Food healing is not a field in the shipped table. Each food item carries a
+ * `consume(player)` function that calls player.changeHealth directly, e.g.
+ *
+ *   consume: function(e) { return e.changeHealth(20, e) }          (apple)
+ *   consume: function(e) { return e.changeHealth(30, e) || ...     (cheese)
+ *                          (e.dmgOverTime.dmg = -10, ... time = 5) }
+ *
+ * A JSON dump drops the function, so anything reading `item.heal` would find
+ * nothing and a client would have to guess the number. Instead of guessing,
+ * run the game's own function against a recording stub and record what it did.
+ * That keeps the figure authoritative even if the game retunes it. */
+function probeConsumables(items) {
+  for (const item of items) {
+    if (typeof item.consume !== "function") continue;
+
+    let healed = 0;
+    const probe = {
+      health: 1,
+      maxHealth: 100,
+      changeHealth(amount) { healed += amount; return true; },
+      dmgOverTime: { dmg: 0, doer: null, time: 0 },
+    };
+
+    try {
+      item.consume(probe);
+    } catch (e) {
+      console.warn("  ! consume probe failed for " + item.name + ": " + e.message);
+      continue;
+    }
+
+    if (healed > 0) item.heal = healed;
+    // A negative dmgOverTime is healing spread over `time` ticks.
+    if (probe.dmgOverTime.dmg < 0 && probe.dmgOverTime.time > 0) {
+      item.healOverTime = {
+        perTick: -probe.dmgOverTime.dmg,
+        ticks: probe.dmgOverTime.time,
+      };
+    }
+  }
+  return items;
+}
+
 const drivers = {
   extractedAt: new Date().toISOString(),
   source: {
@@ -130,7 +172,7 @@ const drivers = {
   itemGroups,
   projectiles: literal("ca"),
   weapons: literal("ha"),
-  items: literal("Ce", { B: itemGroups }),
+  items: probeConsumables(literal("Ce", { B: itemGroups })),
   hats: literal("ma"),
   accessories: literal("pa"),
 };
