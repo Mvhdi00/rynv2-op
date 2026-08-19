@@ -310,6 +310,57 @@ break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
 console, Scan and Kill and possession.
 
+## Lite Mode (performance)
+
+**Visuals → Performance**, or the `L` key.
+
+The frame loop is `requestAnimationFrame(doUpdate)`, so the browser caps it at
+your display's refresh rate. 120 FPS is a 120 Hz screen, and nothing in the
+script can print a bigger number. What Lite Mode buys is headroom: staying
+pinned at the cap through fights and big bases instead of dipping, and far less
+GPU and CPU load.
+
+| Knob | Effect |
+|---|---|
+| **Render Scale** (50–100%) | Shrinks the canvas backing store while the CSS size stays the full window, so the renderer fills fewer pixels and the browser upscales. Measured 25% less frame time at 70%, 43% at 50%. Mouse aim is unaffected — input is in CSS pixels. |
+| **Lite Mode** | Drops the day/night vignette (a full-screen alpha composite every frame), freezes the water wave, skips the trap-prediction and placer-ghost overlays, drops the dark backing stroke on building health rings, and skips the crown/skull icons. Also switches the canvas to nearest-neighbour scaling, which is cheaper than bilinear and loses nothing on flat art. |
+
+Building health rings stay on — they are the one overlay you actually fight
+with — they just draw one stroked arc per building instead of two. Chat bubbles
+stay too: they only cost anything while somebody is actually talking.
+
+Two fixes apply whether or not Lite Mode is on:
+
+- The vignette gradient was rebuilt with `createRadialGradient` and three colour
+  stops **every frame** for a gradient that never changes. It is now built once
+  per viewport.
+- The HUD wrote `statsDiv.innerHTML` every frame — a string rebuild, HTML
+  re-parse and relayout 120 times a second to show a number that updates once a
+  second. Now five times a second.
+
+Measured with `tools/bench/run-render-bench.js` on the exact draw calls
+involved. That harness runs on software GL in a container, so read the ratios
+rather than the milliseconds:
+
+```
+  vignette per frame     6.600 ms    vignette cached    6.500 ms
+  40 buildings, 2 arcs   1.400 ms    1 arc              0.600 ms
+  15 names + measureText 0.200 ms    no icons           0.100 ms
+
+  render scale 100%      4.400 ms/frame
+               70%       3.300 ms/frame   (25% less)
+               50%       2.500 ms/frame   (43% less)
+```
+
+Caching the gradient saves little on its own — the full-screen `fillRect`
+dominates, not the gradient object — which is why Lite Mode skips the whole
+pass rather than just caching it.
+
+**If you want the counter itself above 120**, that is a display and browser
+setting, not a script one: raise the refresh rate in your OS display settings
+if the monitor supports more, or launch Chrome with `--disable-frame-rate-limit
+--disable-gpu-vsync`, which uncaps `requestAnimationFrame`.
+
 ## Fixes to the 1.4 code
 
 - **`addChatLog` was called but never defined.** The two calls in the
