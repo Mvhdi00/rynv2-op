@@ -177,3 +177,59 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Novastorm 1.5 — bot system
+
+Build output: **`novastorm_1.5.user.js`** (Novastorm 1.4 with the bots rewritten).
+
+The 1.4 bots connected, entered the game and did nothing else. In 1.5 every bot
+parses its own packet stream into a private world model — players, objects,
+loadout, age, store — and acts on it on its own server tick. The engine lives in
+one block (`RynBots`) next to `updatePlayers`, and everything it does goes out
+through Novastorm's own EXP framing, so bots speak exactly the protocol the
+master connection speaks.
+
+## Features
+
+| Feature | Where | What it does |
+|---|---|---|
+| **Auto Spawn** | Bots → Join / Leave | The instant a bot dies it re-sends the spawn packet. No menu, no wait; a dropped spawn is retried once a second. |
+| **Auto Break** | Bots → Behaviour | Three stalled ticks while trying to walk means something is in the way: the bot finds the closest destroyable building within reach and within 90° of its heading, swaps to its breaking weapon and swings. Walls, mills, spikes, traps, turrets, blockers. |
+| **Sync** | Bots → Sync & Freeze | On: the squad swings on the same tick you do — one wrapper on `io.send` catches every swing the client makes, and `place()` flags its own use of the attack packet so putting a building down is not read as a swing. Off: they swing while the **Bot Attack** key is held. |
+| **Loadout** | Bots → Loadout | You pick the primary (age 2) and the secondary (age 6); the bots take exactly that on upgrade. |
+| **Auto Buy** | Bots → Behaviour | Bots buy and equip whatever hat and accessory you are wearing, and follow you when you change. |
+| **Circle Radius** | Bots → Formation | 50–800. Bots take evenly spaced slots on a ring around the follow target. |
+| **Stop Movement Radius** | Bots → Formation | 25–300. Deadzone: inside it a bot stops walking instead of jittering on its spot. |
+| **Trap / Boost Pad** | Bots → Age Picks | Two toggles for one choice — switching one on closes the other. |
+| **Age picks** | Bots → Age Picks | age 2 chosen primary · 3 cookie · 4 trap **or** boost pad · 5 greater spikes · 6 chosen secondary · 7 platform · 8 crossbow when the bot holds a bow, otherwise power mill · 9 spinning spikes. |
+| **Freeze Bot** | Keybinds → Bot Keys | One key nails every bot to the ground; press again to release. |
+| **Random Move** | Bots → Behaviour | Roams the whole map. Includes Auto Break and Safe Walk (never steps into an enemy's spikes or pit trap — it fans the heading out 25° at a time until the way ahead is clean). Blocked by something it cannot break — a tree, a rock — and it turns. Two bots walking the same line and the later one picks a new destination. While roaming a bot holds the fastest weapon it can break with. |
+| **Auto Random Bots name** | Bots → Bot Setup | A random word plus a running number: `raven1`, `flux2`, `onyx3` … |
+| **Follow Cursor** | Bots → Behaviour | The ring forms around the mouse in world space instead of around you. Off, they form around you. |
+
+Bots never target each other and never target you: your SID and every bot SID
+are filtered out of target selection, so only real players are ever hit.
+
+## The breaking weapon
+
+"The fastest weapon they can break with" is read off the live weapon table as
+structure damage per millisecond, `dmg * (sDmg || 1) / speed`, over the two
+weapons the bot actually owns. Every bow (9, 12, 13), the musket (15), the
+shield (11) and mc grabby (14) are struck off the list first — they shoot,
+block or steal and none of them puts real damage into a building.
+
+## Defaults
+
+Auto Spawn, Auto Break, Auto Attack, Sync and Auto Buy start **on**; Follow
+Cursor and Random Move start **off**. Keys: `N` freeze, `M` bot attack, on top
+of the existing `P` spawn / `U` release / `O` kill.
+
+## Caveats
+
+- Bots are the most server-dependent part of the client and could not be tested
+  against a live server here. Cloudflare Turnstile may refuse the connections,
+  and a server-side handshake change breaks spawning.
+- Spawning stays sequential: one Turnstile widget has to recycle a fresh token
+  per bot.
