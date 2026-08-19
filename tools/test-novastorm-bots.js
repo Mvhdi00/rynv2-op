@@ -38,7 +38,7 @@ const items = {
     list: []
 };
 const ITEM_DEFS = [
-    ['apple'], ['cookie'], ['cheese'],
+    ['apple', 20, { heal: 20 }], ['cookie', 22, { heal: 40 }], ['cheese', 27, { heal: 30 }],
     ['wood wall', 27], ['stone wall', 50], ['castle wall', 50],
     ['spikes', 52, { dmg: 20 }], ['greater spikes', 49, { dmg: 35 }],
     ['poison spikes', 52, { dmg: 30 }], ['spinning spikes', 52, { dmg: 45 }],
@@ -53,6 +53,9 @@ ITEM_DEFS.forEach(([name, scale, extra]) => items.list.push(Object.assign({ name
 
 const config = { mapScale: 14400 };
 const UTILS = {
+    getDistance(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); },
+    getDirection(x1, y1, x2, y2) { return Math.atan2(y1 - y2, x1 - x2); },
+    fixTo(n, d) { return parseFloat(n.toFixed(d)); },
     getAngleDist(a, b) {
         const p = Math.abs(b - a) % (Math.PI * 2);
         return p > Math.PI ? (Math.PI * 2) - p : p;
@@ -60,6 +63,13 @@ const UTILS = {
 };
 const io = { send() {} };
 let myPlayer = { sid: 1, alive: true, x2: 5000, y2: 5000, skinIndex: 0, tailIndex: 0 };
+let players = [ myPlayer ];
+let nearestEnemy = null;
+let attackState = 0, leftClick = false, ePress = false;
+const keys = {};
+const moveKeys = { 87: [0,-1], 38: [0,-1], 83: [0,1], 40: [0,1], 65: [-1,0], 37: [-1,0], 68: [1,0], 39: [1,0] };
+const pings = [];
+function pingMap(x, y) { pings.push({ x, y }); }
 let camX = 5000, camY = 5000, mouseX = 800, mouseY = 400;
 let screenWidth = 1600, screenHeight = 900, maxScreenWidth = 1920, maxScreenHeight = 1080;
 let wsAddress = 'wss://example.test';
@@ -87,7 +97,10 @@ function defaults() {
         botAutoSpawn: true, botAutoBreak: true, botAutoAttack: true, botSync: true,
         botFreeze: false, botFollowCursor: false, botRandomMove: false, botAutoBuyHats: true,
         botCircleRadius: 150, botStopRadius: 60,
-        botPrimary: 5, botSecondary: 9, botAgeTrap: true, botAgeBoost: false, botAge8: 'auto'
+        botPrimary: 5, botSecondary: 9, botAgeTrap: true, botAgeBoost: false, botAge8: 'auto',
+        botAutoHeal: true, botAutoPlace: true,
+        botScanKeep: 350, botGuardRadius: 300, botPossessKeys: true,
+        autoPlay: false
     };
 }
 function mkBot(tag) {
@@ -102,7 +115,17 @@ function reset() {
     RynBots._nameSeq = 0;
     RynBots._syncUntil = 0;
     RynBots._manualAttack = false;
+    RynBots.hunt = null;
+    RynBots.ceasefire = false;
+    RynBots.possessed = null;
+    RynBots._autoPlayForced = false;
+    RynBots._log.length = 0;
     sent.length = 0;
+    pings.length = 0;
+    players = [ myPlayer ];
+    nearestEnemy = null;
+    attackState = 0; leftClick = false; ePress = false;
+    for (const k in keys) delete keys[k];
     window.vars = defaults();
 }
 let pass = 0, fail = 0;
@@ -433,6 +456,323 @@ t('attack state flips once per change', () => {
     const b = mkBot(121); sent.length = 0;
     RynBots._sendAttack(b, true); RynBots._sendAttack(b, true); RynBots._sendAttack(b, false);
     eq(sent.filter(p => p.type === 'F').length, 2);
+});
+
+console.log('auto heal');
+reset();
+t('a hurt bot eats, then puts its weapon back', () => {
+    const b = mkBot(130); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    b.health = 40;
+    sent.length = 0;
+    ok(RynBots._autoHeal(b), 'did not heal');
+    const z = sent.filter(p => p.type === 'z');
+    const f = sent.filter(p => p.type === 'F');
+    eq(z[0].args[0], 0, 'food slot');   eq(z[0].args[1], false);
+    eq(f.length % 2, 0, 'swings come in pairs');
+    eq(z[z.length - 1].args[0], 5, 'weapon back');
+    eq(z[z.length - 1].args[1], true);
+});
+t('a full bot never eats', () => {
+    const b = mkBot(131); b.health = 100; sent.length = 0;
+    eq(RynBots._autoHeal(b), false);
+    eq(sent.length, 0);
+});
+t('the burst is capped at three units', () => {
+    const b = mkBot(132); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    b.health = 1; sent.length = 0;
+    RynBots._autoHeal(b);
+    eq(sent.filter(p => p.type === 'F' && p.args[0] === 1).length, 3);
+});
+t('auto heal off means no food', () => {
+    const b = mkBot(133); b.health = 20; window.vars.botAutoHeal = false;
+    sent.length = 0;
+    eq(RynBots._autoHeal(b), false);
+});
+t('healing takes the whole tick', () => {
+    reset();
+    const b = mkBot(134); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    b.health = 30; b.x = 0; b.y = 5000;
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(sent.filter(p => p.type === '9').length, 0, 'should not have re-steered');
+});
+
+console.log('auto place');
+reset();
+t('a spike goes down on whoever closes in', () => {
+    const b = mkBot(140); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    b.x = 0; b.y = 0;
+    sent.length = 0;
+    ok(RynBots._autoPlaceSpike(b, { p: { x: 120, y: 0 }, d: 120 }));
+    const z = sent.filter(p => p.type === 'z');
+    eq(z[0].args[0], 6);  eq(z[0].args[1], false);
+    eq(z[z.length - 1].args[0], 5);
+});
+t('the hardest spike owned wins', () => {
+    const b = mkBot(141); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 9, 10];
+    b.x = 0; b.y = 0; sent.length = 0;
+    RynBots._autoPlaceSpike(b, { p: { x: 120, y: 0 }, d: 120 });
+    eq(sent.filter(p => p.type === 'z')[0].args[0], 9);
+});
+t('nothing is stacked on a spike already there', () => {
+    const b = mkBot(142); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    b.x = 0; b.y = 0;
+    b.objects.set(1, { sid: 1, x: 87, y: 0, scale: 52, type: -1, id: 6, owner: 142 });
+    sent.length = 0;
+    eq(RynBots._autoPlaceSpike(b, { p: { x: 150, y: 0 }, d: 150 }), false);
+});
+t('an enemy out of range is not worth a spike', () => {
+    const b = mkBot(143); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    eq(RynBots._autoPlaceSpike(b, { p: { x: 900, y: 0 }, d: 900 }), false);
+});
+
+console.log('bot console');
+reset();
+t('!find resolves a name off the master player list', () => {
+    players = [ myPlayer, { sid: 77, name: 'Sw1ft', x2: 100, y2: 100 } ];
+    ok(RynBots.command('!find sw1ft'));
+    eq(RynBots.hunt.sid, 77);
+    eq(RynBots.hunt.name, 'Sw1ft');
+});
+t('!find takes a raw sid for someone not on the list yet', () => {
+    reset();
+    ok(RynBots.command('!find 4242'));
+    eq(RynBots.hunt.sid, 4242);
+});
+t('!find never resolves to you or to a bot', () => {
+    reset();
+    const b = mkBot(55); b.sid = 55;
+    players = [ myPlayer, { sid: 55, name: 'nova1' }, { sid: 88, name: 'novaX' } ];
+    RynBots.command('!find nova');
+    eq(RynBots.hunt.sid, 88);
+});
+t('!cf cancels the hunt and silences everyone', () => {
+    reset();
+    RynBots.command('!find 5');
+    ok(RynBots.command('!cf'));
+    eq(RynBots.hunt, null);
+    eq(RynBots.ceasefire, true);
+});
+t('!fire lifts the ceasefire', () => {
+    ok(RynBots.command('!fire'));
+    eq(RynBots.ceasefire, false);
+});
+t('!find lifts a standing ceasefire', () => {
+    reset();
+    RynBots.command('!cf');
+    RynBots.command('!find 9');
+    eq(RynBots.ceasefire, false);
+});
+t('!c cancels the hunt but keeps them free to fight', () => {
+    reset();
+    RynBots.command('!find 9');
+    ok(RynBots.command('!c'));
+    eq(RynBots.hunt, null);
+    eq(RynBots.ceasefire, false);
+});
+t('plain chat is not a command', () => {
+    eq(RynBots.command('hello there'), false);
+    eq(RynBots.command('!nonsense'), false);
+});
+t('every command writes a line to the console log', () => {
+    reset();
+    RynBots.command('!bots');
+    ok(RynBots._log.length > 0);
+});
+
+console.log('scan and kill');
+reset();
+t('a ceasefire stops the swinging', () => {
+    const b = mkBot(150); b.x = 0; b.y = 5000; b.attacking = true;
+    b.players.set(99, { sid: 99, x: 40, y: 5000, visible: true });
+    RynBots.ceasefire = true;
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(last('F').args[0], 0);
+});
+t('the spotter holds its distance and does not swing', () => {
+    reset();
+    const b = mkBot(151); b.weapons = [5, 10];
+    b.x = 0; b.y = 0; b.attacking = true;
+    window.vars.botScanKeep = 350;
+    RynBots.command('!find 99');
+    b.players.set(99, { sid: 99, name: 'prey', x: 100, y: 0, visible: true });
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(RynBots.hunt.foundBy, b, 'should be the spotter');
+    eq(last('F').args[0], 0, 'the spotter swung');
+    // 100 units away with a 350 ring: it must be backing off, i.e. heading -x
+    const mv = last('9').args[0];
+    ok(mv !== null && Math.abs(Math.abs(mv) - Math.PI) < 0.6, 'not retreating: ' + mv);
+});
+t('the rest of the squad regroups on you', () => {
+    reset();
+    const spotter = mkBot(160), other = mkBot(161);
+    RynBots.command('!find 99');
+    spotter.players.set(99, { sid: 99, x: 100, y: 0, visible: true });
+    spotter.x = 0; spotter.y = 0;
+    RynBots._botTick(spotter);
+    eq(RynBots.hunt.foundBy, spotter);
+    other.x = 0; other.y = 0;       // far from you (5000,5000)
+    sent.length = 0;
+    RynBots._botTick(other);
+    const mv = last('9').args[0];
+    ok(mv !== null && mv > 0.5 && mv < 1.1, 'not heading for you: ' + mv);
+});
+t('regrouping beats Random Move', () => {
+    reset();
+    window.vars.botRandomMove = true;
+    const spotter = mkBot(165), other = mkBot(166);
+    RynBots.command('!find 99');
+    spotter.x = 0; spotter.y = 0;
+    spotter.players.set(99, { sid: 99, x: 100, y: 0, visible: true });
+    RynBots._botTick(spotter);
+    other.x = 0; other.y = 0;
+    sent.length = 0;
+    RynBots._botTick(other);
+    const mv = last('9').args[0];
+    ok(mv !== null && mv > 0.5 && mv < 1.1, 'roamed off instead of regrouping: ' + mv);
+});
+t('bots sweep their own slice of the map while searching', () => {
+    reset();
+    const a = mkBot(170), b = mkBot(171), c = mkBot(172), d = mkBot(173);
+    RynBots.command('!find ghost');
+    const pts = [a, b, c, d].map((bt, i) => RynBots._searchPoint(bt, i, 4));
+    // 4 bots over a 14400 map is a 2x2 grid: two on each half, in both axes
+    eq(pts.filter(p => p.x < 7200).length, 2);
+    eq(pts.filter(p => p.y < 7200).length, 2);
+});
+t('a stale sighting hands the hunt back to the sweep', () => {
+    reset();
+    const b = mkBot(180);
+    RynBots.command('!find 99');
+    RynBots.hunt.foundBy = b;
+    RynBots.hunt.foundAt = Date.now() - 9000;
+    RynBots.tick();
+    eq(RynBots.hunt.foundBy, null);
+});
+t('the spotter pings your minimap on a beat', () => {
+    reset();
+    const b = mkBot(181);
+    RynBots.command('!find 99');
+    RynBots.hunt.foundBy = b;
+    RynBots.hunt.foundAt = Date.now();
+    RynBots.hunt.x = 1234; RynBots.hunt.y = 5678;
+    pings.length = 0;
+    RynBots.tick();
+    eq(pings.length, 1);
+    eq(pings[0].x, 1234);
+    RynBots.tick();              // too soon for a second
+    eq(pings.length, 1);
+});
+
+console.log('possession');
+reset();
+t('left steps forward through the bots, up gives you back', () => {
+    const a = mkBot(190), b = mkBot(191);
+    RynBots.possess(1); eq(RynBots.possessed, a);
+    RynBots.possess(1); eq(RynBots.possessed, b);
+    RynBots.possess(1); eq(RynBots.possessed, a, 'should wrap');
+    RynBots.release();  eq(RynBots.possessed, null);
+});
+t('right steps backwards', () => {
+    reset();
+    const a = mkBot(192), b = mkBot(193);
+    RynBots.possess(-1); eq(RynBots.possessed, b);
+    RynBots.possess(-1); eq(RynBots.possessed, a);
+});
+t('nothing to possess is not a crash', () => {
+    reset();
+    RynBots.possess(1);
+    eq(RynBots.possessed, null);
+});
+t('your mouse and keys drive the possessed bot', () => {
+    reset();
+    const b = mkBot(200); b.x = 0; b.y = 0;
+    RynBots._enter(b);
+    keys[68] = 1;              // D -> east
+    attackState = 1;
+    sent.length = 0;
+    RynBots._possessTick();
+    eq(last('9').args[0], 0, 'should walk east');
+    eq(last('F').args[0], 1, 'should swing');
+    ok(last('D') !== undefined, 'no aim sent');
+    keys[68] = 0; attackState = 0;
+});
+t('the AI keeps its hands off a bot you are driving', () => {
+    reset();
+    const b = mkBot(201); b.x = 0; b.y = 5000;
+    RynBots._enter(b);
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(sent.length, 0);
+});
+t('releasing stops the swing it was holding', () => {
+    reset();
+    const b = mkBot(202);
+    RynBots._enter(b);
+    b.attacking = true;
+    sent.length = 0;
+    RynBots.release();
+    eq(last('F').args[0], 0);
+});
+t('number keys are the bot action bar: weapon then building', () => {
+    reset();
+    const b = mkBot(203); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    RynBots._enter(b);
+    sent.length = 0;
+    ok(RynBots.possessSlot(1));
+    eq(last('z').args[0], 10, 'slot 2 is the secondary');
+    sent.length = 0;
+    ok(RynBots.possessSlot(2));                 // first building
+    eq(sent.filter(p => p.type === 'z')[0].args[0], 0);
+    eq(sent.filter(p => p.type === 'F').length, 2, 'place = one swing');
+});
+t('Autoplay guards your frozen body and then lets go', () => {
+    reset();
+    const b = mkBot(210);
+    RynBots._enter(b);
+    nearestEnemy = { x2: 5100, y2: 5000 };      // 100 away from you
+    RynBots.tick();
+    eq(window.vars.autoPlay, true);
+    nearestEnemy = { x2: 9000, y2: 9000 };      // gone
+    RynBots.tick();
+    eq(window.vars.autoPlay, false);
+});
+t('releasing hands Autoplay back the way it was', () => {
+    reset();
+    const b = mkBot(211);
+    RynBots._enter(b);
+    nearestEnemy = { x2: 5100, y2: 5000 };
+    RynBots.tick();
+    eq(window.vars.autoPlay, true);
+    RynBots.release();
+    eq(window.vars.autoPlay, false);
+    nearestEnemy = null;
+});
+t('a death does not kick you out while Auto Spawn is on', () => {
+    reset();
+    const b = mkBot(214);
+    RynBots._enter(b);
+    RynBots._onPacket(b, 'P', []);       // it died; auto spawn re-sends
+    RynBots._possessTick();
+    eq(RynBots.possessed, b, 'lost the seat');
+});
+t('a bot that drops out is not left possessed', () => {
+    reset();
+    const b = mkBot(212);
+    RynBots._enter(b);
+    RynBots._remove(b);
+    eq(RynBots.possessed, null);
+});
+t('killAll clears the hunt and the possession', () => {
+    reset();
+    const b = mkBot(213);
+    RynBots.command('!find 5');
+    RynBots._enter(b);
+    RynBots.killAll();
+    eq(RynBots.hunt, null);
+    eq(RynBots.possessed, null);
 });
 
 console.log('');

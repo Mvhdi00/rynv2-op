@@ -1434,6 +1434,17 @@ function updateStats() {
             botStr = ` <span style="color:#FFF;">|</span> Bots: <span style="color:#00e5ff;">${c.waiting} ready</span>`;
             if (c.ingame) botStr += ` / ${c.ingame} in`;
             if (c.connecting) botStr += ` / ${c.connecting}…`;
+            // Scan and Kill / possession state, so you never have to guess what
+            // the swarm is currently doing.
+            const h = window.RynBots.hunt;
+            if (h) {
+                botStr += h.foundBy
+                    ? ` <span style="color:#FFF;">|</span> <span style="color:#ff3b30;">SPOTTED ${h.name || h.raw}</span>`
+                    : ` <span style="color:#FFF;">|</span> <span style="color:#ffcc00;">hunting ${h.name || h.raw}…</span>`;
+            }
+            if (window.RynBots.ceasefire) botStr += ` <span style="color:#FFF;">|</span> <span style="color:#9aa0a6;">ceasefire</span>`;
+            const pb = window.RynBots.possessed;
+            if (pb) botStr += ` <span style="color:#FFF;">|</span> <span style="color:#00e5ff;">▶ ${pb.name}</span>`;
         }
     } catch (e) {}
     statsDiv.innerHTML = `FPS: ${currentFps} <span style="color:#FFF;">|</span> Ping: ${ping}ms${botStr}`;
@@ -9655,6 +9666,86 @@ let pps = 0;
         function updateMinimap(data) {
             minimapData = data;
         }
+
+        // POSSESSION OVERLAY:
+        // Draws the possessed bot's own view of the world for everything your
+        // client has not been sent. Plain shapes, no sprites — this exists so
+        // you can see what you are walking into and aim at it, not to look like
+        // the real render.
+        function renderPossessedWorld(xOffset, yOffset) {
+            let bot;
+            try { bot = RynBots.possessed; } catch (e) { return; }
+            if (!bot || !bot.alive) return;
+            const ctx = mainContext;
+            ctx.save();
+            ctx.lineWidth = 4;
+
+            // Buildings and resources the master has never heard of.
+            for (const o of bot.objects.values()) {
+                if (findObjectBySid(o.sid)) continue;
+                const x = o.x - xOffset, y = o.y - yOffset;
+                if (x < -200 || y < -200 || x > maxScreenWidth + 200 || y > maxScreenHeight + 200) continue;
+                const item = (o.id === null || o.id === undefined) ? null : items.list[o.id];
+                const r = o.scale || (item && item.scale) || 40;
+                const mine = RynBots._isFriendly(bot, o.owner);
+                ctx.globalAlpha = 0.55;
+                ctx.fillStyle = !item ? "#7d9e5c" : (mine ? "#5aa0ff" : "#ff6a5a");
+                ctx.strokeStyle = "rgba(0,0,0,0.35)";
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            // Players the master cannot see.
+            ctx.font = "26px Hammersmith One";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            for (const p of bot.players.values()) {
+                if (!p.visible || p.sid === bot.sid) continue;
+                if (findPlayerBySID(p.sid)) continue;
+                const x = p.x - xOffset, y = p.y - yOffset;
+                if (x < -120 || y < -120 || x > maxScreenWidth + 120 || y > maxScreenHeight + 120) continue;
+                const friend = RynBots._isFriendly(bot, p.sid);
+                ctx.globalAlpha = 0.9;
+                ctx.fillStyle = friend ? "#8ecc51" : "#cc5151";
+                ctx.strokeStyle = "rgba(0,0,0,0.45)";
+                ctx.beginPath();
+                ctx.arc(x, y, 35, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                if (p.name) {
+                    ctx.fillStyle = "#fff";
+                    ctx.fillText(p.name, x, y - 58);
+                }
+            }
+
+            // The bot you are driving.
+            const bx = bot.x - xOffset, by = bot.y - yOffset;
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = "#00e5ff";
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.arc(bx, by, 44, 0, Math.PI * 2);
+            ctx.stroke();
+            if (!findPlayerBySID(bot.sid)) {
+                ctx.globalAlpha = 0.9;
+                ctx.fillStyle = "#f2f2f2";
+                ctx.beginPath();
+                ctx.arc(bx, by, 35, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "#fff";
+                ctx.fillText(bot.name, bx, by - 58);
+            }
+            // Health, because you cannot read the normal bar from out here.
+            const hw = 100, hh = 12;
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = "rgba(0,0,0,0.45)";
+            ctx.fillRect(bx - hw / 2, by + 55, hw, hh);
+            ctx.fillStyle = "#8ecc51";
+            ctx.fillRect(bx - hw / 2, by + 55, hw * Math.max(0, Math.min(1, (bot.health || 0) / 100)), hh);
+            ctx.restore();
+        }
         function renderMinimap(delta) {
             if (myPlayer && myPlayer.alive) {
                 mapContext.clearRect(0, 0, mapDisplay.width, mapDisplay.height);
@@ -9690,6 +9781,34 @@ let pps = 0;
                     mapContext.fillText("x", (lastDeath.x / config.mapScale) * mapDisplay.width,
                                         (lastDeath.y / config.mapScale) * mapDisplay.height);
                 }
+
+                // SCAN AND KILL: a standing marker on the spotted target, under
+                // the pings the spotter keeps firing at the same spot.
+                try {
+                    const h = RynBots.hunt;
+                    if (h && h.foundBy) {
+                        const hx = (h.x / config.mapScale) * mapDisplay.width;
+                        const hy = (h.y / config.mapScale) * mapDisplay.height;
+                        mapContext.fillStyle = "#ff3b30";
+                        mapContext.beginPath();
+                        mapContext.arc(hx, hy, 8, 0, 2 * Math.PI);
+                        mapContext.fill();
+                        mapContext.fillStyle = "#fff";
+                        mapContext.font = "26px Hammersmith One";
+                        mapContext.textBaseline = "middle";
+                        mapContext.textAlign = "center";
+                        mapContext.fillText(h.name || h.raw || "target", hx, hy - 22);
+                    }
+                    // Where the bot you are driving is standing.
+                    const pb = RynBots.possessed;
+                    if (pb && pb.alive) {
+                        mapContext.fillStyle = "#00e5ff";
+                        mapContext.beginPath();
+                        mapContext.arc((pb.x / config.mapScale) * mapDisplay.width,
+                                       (pb.y / config.mapScale) * mapDisplay.height, 7, 0, 2 * Math.PI);
+                        mapContext.fill();
+                    }
+                } catch (e) {}
 
                 // MAP MARKER:
                 if (mapMarker) {
@@ -10015,11 +10134,14 @@ let pps = 0;
         // Local bot commands (never sent to the server). Returns true if it was a
         // command and was handled. Used by both the game chat and the mod-menu
         // command box.
-        //   !f <id>       follow a player
-        //   !find <id>    ALL bots spread the map hunting <id>; whoever finds them
-        //                 pings and the swarm converges to kill, then resumes the
-        //                 search until cancelled
-        //   !c            cancel the hunt
+        //   !f <id>            YOU walk toward that player
+        //   !find <id|name>    every bot sweeps its own slice of the map hunting
+        //                      them; whoever spots them shadows and pings while
+        //                      the rest regroup on you
+        //   !c                 cancel the hunt
+        //   !cf                ceasefire — hunt off, no bot targets anyone
+        //   !fire              lift the ceasefire
+        //   !bots / !help      status / command list
         function handleBotCommand(message) {
             const msg = String(message);
             const say = (t) => { try { if (typeof addChatLog === "function") addChatLog("Mod: " + t, "#00e5ff"); } catch (e) {} try { console.log("[NovaBot]", t); } catch (e) {} };
@@ -10030,6 +10152,8 @@ let pps = 0;
                 else { followTarget = null; say("Follow stopped"); }
                 return true;
             }
+            // Everything else the bot console understands works here too.
+            try { if (RynBots.command(msg)) return true; } catch (e) {}
             return false;
         }
         try { window._novaBotCmd = handleBotCommand; } catch (e) {}
@@ -10291,6 +10415,11 @@ let pps = 0;
                 }
 
 
+                // While you are inside a bot the mouse belongs to the bot. Your
+                // own body keeps the angle it had, so it stays put instead of
+                // spinning to follow a cursor that is no longer aiming it.
+                if (RynBots.possessed) return UTILS.fixTo(lastDir || 0, 2);
+
                 if (!myPlayer.lockDir && !usingTouch) {
                     lastDir = Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2));
                     return UTILS.fixTo(lastDir || 0, 2);
@@ -10366,6 +10495,9 @@ let pps = 0;
             }, 2500);
         }
 
+        // Repeat guard for the bot-control arrows, kept apart from `keys` so a
+        // held arrow never doubles as a movement key.
+        const possessKeys = {};
         function keyDown(event) {
             let keyStr = event.code;
             if (keyStr.startsWith("Key")) keyStr = keyStr.slice(3);
@@ -10381,8 +10513,32 @@ let pps = 0;
                     }
                 }
             } else if (myPlayer && myPlayer.alive && keysActive()) {
+                // Bot control: left steps to the next bot, right to the one
+                // before it, up hands you back your own character. The arrows
+                // stop steering you while this is on — that is the trade, and
+                // the toggle in Bots -> Control turns it off.
+                // The repeat guard lives in its own map, never in `keys` — an
+                // arrow parked in `keys` is an arrow the movement code reads as
+                // "walking that way".
+                if (window.vars.botPossessKeys && (keyNum == 37 || keyNum == 39 || keyNum == 38)) {
+                    event.preventDefault();
+                    if (!possessKeys[keyNum]) {
+                        possessKeys[keyNum] = 1;
+                        try {
+                            if (keyNum == 38) RynBots.release();
+                            else RynBots.possess(keyNum == 37 ? 1 : -1);
+                        } catch (e) {}
+                    }
+                    return;
+                }
                 if (!keys[keyNum]) {
                     keys[keyNum] = 1;
+                    // While you are inside a bot the number row is the bot's
+                    // action bar, not yours.
+                    if (RynBots.possessed && keyNum >= 49 && keyNum <= 57
+                        && RynBots.possessSlot(keyNum - 49)) {
+                        return;
+                    }
                     if (keyNum == 69) {
                         ePress = !ePress;
                     } else if (keyNum == 67) {
@@ -10455,6 +10611,7 @@ let pps = 0;
             keyStr = keyStr.toUpperCase();
             if (myPlayer && myPlayer.alive) {
                 var keyNum = event.which || event.keyCode || 0;
+                if (possessKeys[keyNum]) possessKeys[keyNum] = 0;
                 if (keyNum == 13) {
                     toggleChat();
                 } else if (keysActive()) {
@@ -10483,6 +10640,12 @@ let pps = 0;
             }
         }
         window.addEventListener('keyup', UTILS.checkTrusted(keyUp));
+        // While you are inside a bot, push the new input straight down its
+        // socket instead of waiting for the next server tick to notice.
+        window.addEventListener('keydown', function () { try { if (RynBots.possessed) RynBots._possessTick(); } catch (e) {} });
+        window.addEventListener('keyup', function () { try { if (RynBots.possessed) RynBots._possessTick(); } catch (e) {} });
+        window.addEventListener('mousedown', function () { try { if (RynBots.possessed) RynBots._possessTick(); } catch (e) {} }, true);
+        window.addEventListener('mouseup', function () { try { if (RynBots.possessed) RynBots._possessTick(); } catch (e) {} }, true);
         // The bot-attack key must let go even if the release lands while the
         // menu, the chat box or the death screen has focus — otherwise the
         // squad keeps swinging with nothing holding the key down.
@@ -10766,7 +10929,25 @@ let pps = 0;
                 }
 
                 // MOVE CAMERA:
-                if (myPlayer) {
+                // While you are possessing a bot the camera rides the bot. Its
+                // position comes off its own socket, so it is exact even when
+                // the bot is far outside anything your own client can see.
+                let camBot = null;
+                try { if (RynBots.possessed && RynBots.possessed.alive) camBot = RynBots.possessed; } catch (e) {}
+                if (camBot) {
+                    let tmpDist = UTILS.getDistance(camX, camY, camBot.x, camBot.y);
+                    let tmpDir = UTILS.getDirection(camBot.x, camBot.y, camX, camY);
+                    // Snap rather than glide when the jump is a whole screen or
+                    // more — that is a bot switch, not a walk.
+                    if (tmpDist > 1200) {
+                        camX = camBot.x;
+                        camY = camBot.y;
+                    } else if (tmpDist > 0.05) {
+                        let camSpd = Math.min(tmpDist * 0.0093 * delta, tmpDist);
+                        camX += camSpd * Math.cos(tmpDir);
+                        camY += camSpd * Math.sin(tmpDir);
+                    }
+                } else if (myPlayer) {
                     let tmpDist = UTILS.getDistance(camX, camY, myPlayer.x, myPlayer.y);
                     let tmpDir = UTILS.getDirection(myPlayer.x, myPlayer.y, camX, camY);
                     let camSpd = Math.min(tmpDist * 0.0093 * delta, tmpDist);
@@ -11094,6 +11275,14 @@ let pps = 0;
 
 
                 // TO HERE
+
+                // RENDER THE POSSESSED BOT'S WORLD:
+                // Your client is only sent what is near YOUR player, so a bot
+                // across the map would be standing in an empty screen. The bot
+                // keeps its own world model, so draw from that — but only the
+                // entities your own client does not already have, otherwise
+                // every tree you can see gets a flat circle stamped over it.
+                renderPossessedWorld(xOffset, yOffset);
 
                 // RENDER ANIM TEXTS:
                 textManager.update(delta, mainContext, xOffset, yOffset);
@@ -14110,6 +14299,17 @@ for (let tree of trees) {
             _hooked: false,
             _lastBuyCheck: 0,
 
+            // Scan and Kill
+            hunt: null,             // { raw, needle, sid, name, x, y, foundBy, foundAt, lastPing }
+            ceasefire: false,       // !cf — nobody targets anybody
+            _log: [],               // the bot console, replayed into the Bots tab
+
+            // Possession
+            possessed: null,        // the bot you are currently playing as
+            _autoPlayForced: false, // we turned Autoplay on to guard your body
+            _possessAim: null,
+            _possessAttack: false,
+
             // Stack captcha widgets up the bottom-right edge so several can show
             // at once without overlapping.
             _takeSlot() { let i = 0; while (this._slots[i]) i++; this._slots[i] = true; return i; },
@@ -14312,6 +14512,8 @@ for (let tree of trees) {
                     wantWeapon: null, weaponSentAt: 0,
                     stuckTicks: 0, freeTicks: 0, breakAim: null,
                     wander: null, wanderUntil: 0,
+                    search: null, searchUntil: 0,
+                    healAt: 0, placeAt: 0,
                     detourUntil: 0, detourSign: 1,
                     forceAttackUntil: 0, buyAt: 0
                 };
@@ -14362,9 +14564,14 @@ for (let tree of trees) {
                 this.list = [];
                 this.lockPos = null;
                 this._nameSeq = 0;
+                this.hunt = null;
+                this.possessed = null;
+                if (this._autoPlayForced) { window.vars.autoPlay = false; this._autoPlayForced = false; }
             },
             _remove(bot) {
                 if (bot && bot._pingIv) { try { clearInterval(bot._pingIv); } catch (e) {} bot._pingIv = null; }
+                if (this.possessed === bot) { this.possessed = null; if (this._autoPlayForced) { window.vars.autoPlay = false; this._autoPlayForced = false; } }
+                if (this.hunt && this.hunt.foundBy === bot) this.hunt.foundBy = null;
                 const i = this.list.indexOf(bot);
                 if (i >= 0) this.list.splice(i, 1);
             },
@@ -14689,8 +14896,14 @@ for (let tree of trees) {
             // everything; otherwise it is a slot on a circle around the mouse
             // (Follow Cursor) or around you.
             _spot(bot, idx, total) {
+                if (window.vars.botRandomMove) return this._wander(bot);
+                return this._ring(bot, idx, total);
+            },
+            // The formation ring itself, with no Random Move override — the
+            // regroup half of Scan and Kill calls this directly, because "come
+            // back to me, we are going in" has to beat "keep roaming".
+            _ring(bot, idx, total) {
                 const V = window.vars;
-                if (V.botRandomMove) return this._wander(bot);
                 let tx, ty;
                 if (V.botFollowCursor) {
                     const c = this._cursorWorld();
@@ -14753,26 +14966,394 @@ for (let tree of trees) {
             },
 
             // =================================================================
+            // AUTO HEAL  —  the same reflex you have
+            // =================================================================
+            // Healing in moomoo is placing food on yourself: select the food
+            // slot, swing once per unit, then put the weapon back. Bots read
+            // their own health off the "O" packets they receive, so they know
+            // they were hit on the same tick you would.
+            //
+            // The burst is capped at three units a tick. A bot that spams food
+            // as fast as the loop allows just burns its packet budget — the
+            // server applies one consume per tick anyway.
+            _autoHeal(bot) {
+                if (!window.vars.botAutoHeal) return false;
+                const food = bot.itemsOwned && bot.itemsOwned[0];
+                if (food === undefined || food === null) return false;
+                const item = items.list[food];
+                if (!item || !item.heal) return false;
+                const missing = 100 - (bot.health === undefined ? 100 : bot.health);
+                if (missing < Math.min(item.heal, 15)) return false;
+                const now = Date.now();
+                if (now - bot.healAt < 100) return false;
+                bot.healAt = now;
+                const n = Math.max(1, Math.min(3, Math.ceil(missing / item.heal)));
+                try {
+                    for (let i = 0; i < n; i++) {
+                        EXP.send(bot.ws, "z", [food, false]);
+                        EXP.send(bot.ws, "F", [1, null]);
+                        EXP.send(bot.ws, "F", [0, null]);
+                    }
+                    const back = (bot.weapons && bot.weapons[0] !== undefined) ? bot.weapons[0] : 0;
+                    EXP.send(bot.ws, "z", [back, true]);
+                    bot.wantWeapon = back;
+                } catch (e) {}
+                bot.attacking = false;   // the swings above left the state at 0
+                return true;
+            },
+
+            // =================================================================
+            // AUTO PLACE  —  a spike between the bot and whoever is on it
+            // =================================================================
+            // The master's placer is a whole prediction engine; this is the part
+            // of it a bot can run off its own world model: when an enemy is
+            // inside placing range, drop the best spike the bot owns in their
+            // direction, at the offset the game itself uses.
+            _autoPlaceSpike(bot, enemy) {
+                if (!window.vars.botAutoPlace || !enemy) return false;
+                if (enemy.d > 250) return false;
+                const now = Date.now();
+                if (now - bot.placeAt < 400) return false;
+                // Best spike the bot actually owns, hardest first.
+                let pick = null;
+                for (const id of [BOT_ITEM.SPINNING_SPIKES, BOT_ITEM.POISON_SPIKES,
+                                  BOT_ITEM.GREATER_SPIKES, BOT_ITEM.SPIKES]) {
+                    if (bot.itemsOwned && bot.itemsOwned.indexOf(id) >= 0) { pick = id; break; }
+                }
+                if (pick === null) return false;
+                const item = items.list[pick];
+                const angle = Math.atan2(enemy.p.y - bot.y, enemy.p.x - bot.x);
+                // Don't stack one on top of another — the server would reject it
+                // and the packets would be wasted every single tick.
+                const px = bot.x + Math.cos(angle) * (35 + item.scale);
+                const py = bot.y + Math.sin(angle) * (35 + item.scale);
+                for (const o of bot.objects.values()) {
+                    if (o.id === null || o.id === undefined) continue;
+                    const dx = o.x - px, dy = o.y - py;
+                    const r = (o.scale || 40) + item.scale * 0.5;
+                    if (dx * dx + dy * dy < r * r) return false;
+                }
+                bot.placeAt = now;
+                try {
+                    EXP.send(bot.ws, "z", [pick, false]);
+                    EXP.send(bot.ws, "F", [1, angle]);
+                    EXP.send(bot.ws, "F", [0, angle]);
+                    const back = (bot.weapons && bot.weapons[0] !== undefined) ? bot.weapons[0] : 0;
+                    EXP.send(bot.ws, "z", [back, true]);
+                    bot.wantWeapon = back;
+                } catch (e) {}
+                bot.attacking = false;
+                return true;
+            },
+
+            // =================================================================
+            // THE BOT CONSOLE  —  !find / !cf / !fire / !c / !bots
+            // =================================================================
+            // The same parser backs the box in the Bots tab and the game chat,
+            // so a command typed in either place does the same thing and never
+            // reaches the server.
+            log(text) {
+                const line = { t: Date.now(), text: String(text) };
+                this._log.push(line);
+                if (this._log.length > 60) this._log.shift();
+                try { if (window._novaBotLogSink) window._novaBotLogSink(line); } catch (e) {}
+                try { if (typeof addChatLog === "function") addChatLog("Bots: " + line.text, "#00e5ff"); } catch (e) {}
+                try { console.log("[NovaBot]", line.text); } catch (e) {}
+            },
+            // Resolve "<sid or name>" against the master's own player list first
+            // -- it holds every player on the server, with names -- and fall back
+            // to per-bot name matching for anyone it does not have.
+            _resolveTarget(raw) {
+                const needle = String(raw).trim().toLowerCase();
+                let sid = null, name = null;
+                const asNum = /^\d+$/.test(needle) ? parseInt(needle, 10) : null;
+                try {
+                    for (const p of players) {
+                        if (!p || (myPlayer && p.sid === myPlayer.sid)) continue;
+                        if (this._isBotSid(p.sid)) continue;
+                        if (asNum !== null && (p.sid === asNum || p.id === asNum)) { sid = p.sid; name = p.name; break; }
+                        if (p.name && p.name.toLowerCase().indexOf(needle) >= 0) { sid = p.sid; name = p.name; break; }
+                    }
+                } catch (e) {}
+                if (sid === null && asNum !== null) sid = asNum;   // not on our list yet, trust the number
+                return { needle: needle, sid: sid, name: name };
+            },
+            _isBotSid(sid) {
+                for (let i = 0; i < this.list.length; i++) if (this.list[i].sid === sid) return true;
+                return false;
+            },
+            command(text) {
+                const msg = String(text || "").trim();
+                if (!msg.startsWith("!")) return false;
+
+                let m = msg.match(/^!find\s+(.+)$/i);
+                if (m) {
+                    const r = this._resolveTarget(m[1]);
+                    this.ceasefire = false;
+                    this.hunt = {
+                        raw: m[1].trim(), needle: r.needle, sid: r.sid, name: r.name,
+                        x: 0, y: 0, foundBy: null, foundAt: 0, lastPing: 0
+                    };
+                    for (const b of this.list) { b.wander = null; b.wanderUntil = 0; }
+                    this.log("hunting " + (r.name ? r.name + " (sid " + r.sid + ")" : m[1].trim())
+                             + " — " + this.list.length + " bot(s) sweeping the map");
+                    return true;
+                }
+                if (/^!cf\s*$/i.test(msg)) {
+                    this.hunt = null;
+                    this.ceasefire = true;
+                    this.log("ceasefire — hunt cancelled, no bot targets anyone");
+                    return true;
+                }
+                if (/^!fire\s*$/i.test(msg)) {
+                    this.ceasefire = false;
+                    this.log("ceasefire lifted");
+                    return true;
+                }
+                if (/^!c\s*$/i.test(msg)) {
+                    this.hunt = null;
+                    this.log("hunt cancelled");
+                    return true;
+                }
+                if (/^!bots\s*$/i.test(msg)) {
+                    const c = this.counts();
+                    const h = this.hunt;
+                    this.log(c.ingame + " in / " + c.waiting + " ready / " + c.connecting + " connecting"
+                             + (this.ceasefire ? " | CEASEFIRE" : "")
+                             + (h ? " | hunting " + (h.name || h.raw) + (h.foundBy ? " — SPOTTED by " + h.foundBy.name : " — searching") : "")
+                             + (this.possessed ? " | controlling " + this.possessed.name : ""));
+                    return true;
+                }
+                if (/^!help\s*$/i.test(msg)) {
+                    this.log("!find <id|name> · !c cancel · !cf ceasefire · !fire · !bots");
+                    return true;
+                }
+                return false;
+            },
+
+            // =================================================================
+            // SCAN AND KILL
+            // =================================================================
+            // Does this bot have eyes on the target right now?
+            _huntSeen(bot) {
+                const h = this.hunt;
+                if (!h) return null;
+                for (const p of bot.players.values()) {
+                    if (!p.visible) continue;
+                    if (this._isFriendly(bot, p.sid)) continue;
+                    if (h.sid !== null && p.sid === h.sid) return p;
+                    if (h.sid === null && h.needle && p.name && p.name.toLowerCase().indexOf(h.needle) >= 0) return p;
+                }
+                return null;
+            },
+            // Search pattern: the map is cut into one cell per bot and each bot
+            // works its own cell, so the swarm covers the whole map instead of
+            // all piling into the middle.
+            _searchPoint(bot, idx, total) {
+                const now = Date.now();
+                const M = (config && config.mapScale) || 14400;
+                const cols = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, total))));
+                const rows = Math.max(1, Math.ceil(Math.max(1, total) / cols));
+                const cw = M / cols, ch = M / rows;
+                const cx = (idx % cols) * cw, cy = Math.floor(idx / cols) * ch;
+                let need = !bot.search || now > bot.searchUntil;
+                if (!need) {
+                    const dx = bot.search.x - bot.x, dy = bot.search.y - bot.y;
+                    if (dx * dx + dy * dy < 200 * 200) need = true;
+                }
+                if (need) {
+                    bot.search = {
+                        x: cx + 150 + Math.random() * Math.max(1, cw - 300),
+                        y: cy + 150 + Math.random() * Math.max(1, ch - 300)
+                    };
+                    bot.searchUntil = now + 12000 + Math.random() * 8000;
+                }
+                return bot.search;
+            },
+            // The spotter shadows the target from a set distance so it is seen
+            // but not engaged: hold the ring, and if the target closes in, back
+            // straight off.
+            _shadowPoint(bot, tx, ty) {
+                const keep = botClamp(window.vars.botScanKeep, 150, 800);
+                const dx = bot.x - tx, dy = bot.y - ty;
+                const d = Math.sqrt(dx * dx + dy * dy) || 1;
+                const a = Math.atan2(dy, dx);
+                return { x: tx + Math.cos(a) * keep, y: ty + Math.sin(a) * keep, dist: d, keep: keep };
+            },
+
+            // =================================================================
+            // POSSESSION  —  play as one of your bots
+            // =================================================================
+            // Arrow keys: left = next bot, right = previous bot, up = back to
+            // your own character. While you are inside a bot, your own body
+            // stops walking and Autoplay takes over only if something comes
+            // close enough to be a threat.
+            possess(dir) {
+                const alive = this.list.filter(b => b.alive && b.ws.readyState === 1);
+                if (!alive.length) { this.log("no bot in game to control"); return; }
+                let i = this.possessed ? alive.indexOf(this.possessed) : -1;
+                if (i < 0) i = (dir < 0) ? alive.length - 1 : 0;
+                else i = (i + (dir < 0 ? -1 : 1) + alive.length) % alive.length;
+                this._enter(alive[i]);
+            },
+            _enter(bot) {
+                if (this.possessed && this.possessed !== bot) this._stopControls(this.possessed);
+                this.possessed = bot;
+                this._possessAim = null;
+                this._possessAttack = false;
+                this.log("controlling " + bot.name + "  (Up arrow returns to you)");
+            },
+            release() {
+                if (!this.possessed) return;
+                this._stopControls(this.possessed);
+                this.log("released " + this.possessed.name);
+                this.possessed = null;
+                if (this._autoPlayForced) { window.vars.autoPlay = false; this._autoPlayForced = false; }
+            },
+            // Hand the bot back to the AI cleanly: stop the swing, drop the
+            // manual heading, and let _botTick re-take it on the next packet.
+            _stopControls(bot) {
+                try { this._sendAttack(bot, false); } catch (e) {}
+                try { this._sendMove(bot, null); } catch (e) {}
+                bot.aimSent = undefined;
+                bot.wantWeapon = null;
+            },
+            // The raw WASD heading, read the same way the game reads it.
+            _keyMoveAngle() {
+                let dx = 0, dy = 0;
+                for (const k in moveKeys) {
+                    if (!keys[k]) continue;
+                    dx += moveKeys[k][0];
+                    dy += moveKeys[k][1];
+                }
+                if (dx === 0 && dy === 0) return null;
+                return Math.atan2(dy, dx);
+            },
+            // Runs every master frame while you are inside a bot: your mouse is
+            // its aim, your movement keys are its legs, your attack is its swing.
+            _possessTick() {
+                const bot = this.possessed;
+                if (!bot) return;
+                if (!bot.alive) {
+                    // Dead but still connected: Auto Spawn is about to put it
+                    // back in, so hold the seat instead of throwing you out of
+                    // it for half a second.
+                    if (bot.ws.readyState === 1 && window.vars.botAutoSpawn) return;
+                    this.possessed = null;
+                    this.possess(1);
+                    return;
+                }
+                if (bot.ws.readyState !== 1) {
+                    this.possessed = null;
+                    this.possess(1);
+                    return;
+                }
+                // You still get the auto-heal reflex while driving — losing a bot
+                // because you were busy aiming is not a feature.
+                if (this._autoHeal(bot)) return;
+                const aim = Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2));
+                this._sendAim(bot, aim);
+                this._possessAim = aim;
+                this._sendMove(bot, this._keyMoveAngle());
+                const want = !!(attackState === 1 || leftClick || ePress);
+                this._sendAttack(bot, want);
+                this._possessAttack = want;
+            },
+            // Number keys while possessing: 1..2 are the bot's weapons, the rest
+            // are its buildings, and a building is placed at your cursor.
+            possessSlot(slot) {
+                const bot = this.possessed;
+                if (!bot || !bot.alive) return false;
+                const wep = bot.weapons || [];
+                const own = bot.itemsOwned || [];
+                const nW = wep.filter(w => w !== null && w !== undefined).length;
+                if (slot < nW) {
+                    try { EXP.send(bot.ws, "z", [wep[slot], true]); } catch (e) {}
+                    bot.wantWeapon = wep[slot];
+                    return true;
+                }
+                const id = own[slot - nW];
+                if (id === undefined) return false;
+                const angle = this._possessAim !== null ? this._possessAim : bot.dir;
+                try {
+                    EXP.send(bot.ws, "z", [id, false]);
+                    EXP.send(bot.ws, "F", [1, angle]);
+                    EXP.send(bot.ws, "F", [0, angle]);
+                    EXP.send(bot.ws, "z", [bot.weapons[0], true]);
+                } catch (e) {}
+                bot.wantWeapon = bot.weapons[0];
+                bot.attacking = false;
+                return true;
+            },
+
+            // =================================================================
             // THE BRAIN — one call per server tick, per bot
             // =================================================================
             _botTick(bot) {
                 if (!bot.alive || bot.ws.readyState !== 1) return;
+                // You are driving this one by hand — the AI keeps its hands off.
+                if (this.possessed === bot) return;
                 const V = window.vars;
                 const now = Date.now();
                 const idx = this.list.indexOf(bot);
                 const total = this.list.length;
 
+                // --- eat first ----------------------------------------------------
+                // Food beats everything else this tick: the swings it costs have
+                // already left the attack state at 0, so falling through to the
+                // combat code below would fight it.
+                // The bot keeps whatever heading it already had while it eats.
+                if (this._autoHeal(bot)) return;
+
+                // --- Scan and Kill: has this bot got eyes on the target? ---------
+                // The spotter is whoever last saw them; it keeps its distance and
+                // pings, and every other bot falls back on you so the squad goes
+                // in together.
+                const h = this.hunt;
+                let role = null;
+                if (h) {
+                    const seen = this._huntSeen(bot);
+                    if (seen) {
+                        h.sid = seen.sid;
+                        if (seen.name) h.name = seen.name;
+                        h.x = seen.x; h.y = seen.y;
+                        h.foundBy = bot; h.foundAt = now;
+                        role = "spot";
+                    } else if (h.foundBy === bot) {
+                        // Lost them. Hand the hunt back to the sweep.
+                        h.foundBy = null;
+                        role = "search";
+                    } else {
+                        role = h.foundBy ? "regroup" : "search";
+                    }
+                }
+
                 // --- where to go -------------------------------------------------
                 let moveAngle = null;
                 if (!V.botFreeze) {
-                    const spot = this._spot(bot, idx < 0 ? 0 : idx, total);
+                    let spot = null, stop;
+                    if (role === "spot") {
+                        const s = this._shadowPoint(bot, h.x, h.y);
+                        spot = s;
+                        // Tight ring: react as soon as the gap is off by 60, so
+                        // the bot is never dragged into weapon range.
+                        stop = 60;
+                    } else if (role === "search") {
+                        spot = this._searchPoint(bot, idx < 0 ? 0 : idx, total);
+                        stop = 120;
+                    } else if (role === "regroup") {
+                        spot = this._ring(bot, idx < 0 ? 0 : idx, total);
+                        stop = botClamp(V.botStopRadius, 25, 300);
+                    } else {
+                        spot = this._spot(bot, idx < 0 ? 0 : idx, total);
+                        stop = V.botRandomMove ? 100 : botClamp(V.botStopRadius, 25, 300);
+                    }
                     if (spot) {
                         const dx = spot.x - bot.x, dy = spot.y - bot.y;
                         const d = Math.sqrt(dx * dx + dy * dy);
-                        const stop = V.botRandomMove ? 100 : botClamp(V.botStopRadius, 25, 300);
                         if (d > stop) {
                             moveAngle = Math.atan2(dy, dx);
-                            if (V.botRandomMove) moveAngle = this._safeWalk(bot, moveAngle);
+                            if (V.botRandomMove || role) moveAngle = this._safeWalk(bot, moveAngle);
                             if (now < bot.detourUntil) moveAngle += bot.detourSign * (Math.PI / 3);
                         }
                     }
@@ -14787,7 +15368,7 @@ for (let tree of trees) {
                 // when the target is out of melee range and it can shoot).
                 const enemy = this._nearestEnemy(bot);
                 let weapon;
-                if (breakAim !== null || V.botRandomMove) {
+                if (breakAim !== null || V.botRandomMove || role === "search") {
                     weapon = this._breakWeapon(bot);
                 } else {
                     weapon = bot.weapons && bot.weapons[0] !== undefined ? bot.weapons[0] : 0;
@@ -14802,6 +15383,7 @@ for (let tree of trees) {
                 // --- where to look ------------------------------------------------
                 let aim;
                 if (breakAim !== null) aim = breakAim;
+                else if (role === "spot") aim = Math.atan2(h.y - bot.y, h.x - bot.x);
                 else if (enemy && enemy.d <= 900) aim = Math.atan2(enemy.p.y - bot.y, enemy.p.x - bot.x);
                 else if (moveAngle !== null) aim = moveAngle;
                 else aim = bot.dir;
@@ -14811,9 +15393,22 @@ for (let tree of trees) {
                 // Sync ON  -> the bots swing on the same tick you do.
                 // Sync OFF -> they swing while the bot-attack key is held.
                 // Either way Auto Break and Auto Attack can swing on their own.
-                const synced = V.botSync && now < this._syncUntil;
-                const manual = !V.botSync && this._manualAttack;
-                const engaged = V.botAutoAttack && enemy && enemy.d <= this._reach(bot);
+                //
+                // Two things silence a bot completely: a ceasefire (!cf), and
+                // being the spotter -- a spotter that swings is a spotter that
+                // has started the fight on its own, which is the one thing the
+                // shadowing distance exists to prevent. Auto Break still runs,
+                // because that is a wall in the way, not a target.
+                // A spike dropped on whoever is standing on the bot, same as the
+                // placer does for you. It borrows the attack packet, so it only
+                // runs on a tick the bot is not already breaking something.
+                if (breakAim === null && role !== "spot" && !this.ceasefire
+                    && this._autoPlaceSpike(bot, enemy)) return;
+
+                const silent = this.ceasefire || role === "spot";
+                const synced = !silent && V.botSync && now < this._syncUntil;
+                const manual = !silent && !V.botSync && this._manualAttack;
+                const engaged = !silent && V.botAutoAttack && enemy && enemy.d <= this._reach(bot);
                 this._sendAttack(bot, !!(synced || manual || engaged || breakAim !== null));
 
                 // --- walk ----------------------------------------------------------
@@ -14826,6 +15421,36 @@ for (let tree of trees) {
             tick() {
                 const V = window.vars;
                 const now = Date.now();
+
+                // Scan and Kill: the spotter pings the target's position onto
+                // your minimap over and over. The ping is drawn locally from the
+                // spotter's own world model rather than sent as a game ping,
+                // because a game ping only reaches your own clan and the bots
+                // are not in it.
+                const h = this.hunt;
+                if (h && h.foundBy) {
+                    if (now - h.foundAt > 4000) {
+                        h.foundBy = null;           // stale sighting, back to sweeping
+                    } else if (now - h.lastPing > 1100) {
+                        h.lastPing = now;
+                        try { pingMap(h.x, h.y); } catch (e) {}
+                    }
+                }
+
+                // Possession: your mouse and keys drive the bot, and your own
+                // body only starts fighting back if something gets close to it.
+                if (this.possessed) {
+                    this._possessTick();
+                    let threat = false;
+                    try {
+                        if (myPlayer && nearestEnemy) {
+                            const d = UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2);
+                            threat = d <= botClamp(V.botGuardRadius, 100, 600);
+                        }
+                    } catch (e) {}
+                    if (threat && !V.autoPlay) { V.autoPlay = true; this._autoPlayForced = true; }
+                    else if (!threat && this._autoPlayForced) { V.autoPlay = false; this._autoPlayForced = false; }
+                }
 
                 // Auto Spawn — a bot that died and did not come back (the spawn
                 // packet can be dropped while the round is still ending) retries
@@ -15458,6 +16083,11 @@ for (let tree of trees) {
                         predictMoveAngle = Math.atan2(moveY, moveX);
                     }
                 }
+
+                // Possession: your keys are steering the bot, so your own body
+                // stops here. Autoplay and autopush run further down and can
+                // still take it over — that is the guard on your frozen body.
+                if (RynBots.possessed) predictMoveAngle = null;
 
                 // Reset variables each tick for our movememnt combat
                 shouldntPathfind = false;
@@ -21416,6 +22046,8 @@ for (let tree of trees) {
         botAutoSpawn: true,      // dead -> straight back in, no menu
         botAutoBreak: true,      // swing through whatever blocks the walk
         botAutoAttack: true,     // hit enemy players that come into reach
+        botAutoHeal: true,       // eat the moment they take damage
+        botAutoPlace: true,      // drop a spike on whoever closes in
         botSync: true,           // swing on the same tick you do
         botFreeze: false,        // toggled by the Freeze key
         botFollowCursor: false,  // walk to the mouse instead of to you
@@ -21423,6 +22055,12 @@ for (let tree of trees) {
         botAutoBuyHats: true,    // wear whatever hat / accessory you wear
         botCircleRadius: 150,    // 50 .. 800  — formation ring around the target
         botStopRadius: 60,       // 25 .. 300  — deadzone before they stop walking
+
+        // Bots — Scan and Kill / possession
+        botScanKeep: 350,        // 150 .. 800 — how far the spotter shadows from
+        botGuardRadius: 300,     // 100 .. 600 — enemy this close to your frozen
+                                 //              body and Autoplay takes over
+        botPossessKeys: true,    // arrows switch bots (they stop moving you)
 
         // Bots — loadout and age path
         botPrimary: 5,           // age 2 pick (5 = polearm)
@@ -21617,7 +22255,23 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Auto Break", id: "botAutoBreak" },
                     { type: 'toggle', name: "Random Move (roam the map)", id: "botRandomMove" },
                     { type: 'toggle', name: "Auto Attack Players", id: "botAutoAttack" },
+                    { type: 'toggle', name: "Auto Heal (eat when hit)", id: "botAutoHeal" },
+                    { type: 'toggle', name: "Auto Place (spike on contact)", id: "botAutoPlace" },
                     { type: 'toggle', name: "Auto Buy Hats (copy mine)", id: "botAutoBuyHats" }
+                ]
+            },
+            {
+                title: "Scan & Kill",
+                items: [
+                    { type: 'botchat', name: "Bot console" },
+                    { type: 'slider', name: "Spotter Keep Distance", id: "botScanKeep", min: 150, max: 800 }
+                ]
+            },
+            {
+                title: "Control (possession)",
+                items: [
+                    { type: 'toggle', name: "Arrow keys switch bots", id: "botPossessKeys" },
+                    { type: 'slider', name: "Guard Radius (my body)", id: "botGuardRadius", min: 100, max: 600 }
                 ]
             },
             {
@@ -21968,6 +22622,22 @@ for (let tree of trees) {
     }
     .text-input-styled:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
 
+    /* BOT CONSOLE */
+    .bot-console-log {
+        width: 100%; height: 132px; overflow-y: auto;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px; margin-bottom: 8px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px; line-height: 1.7;
+        color: var(--text-main);
+        white-space: pre-wrap; word-break: break-word;
+    }
+    .bot-console-log .bc-time { color: var(--text-dimmer); margin-right: 6px; }
+    .bot-console-log::-webkit-scrollbar { width: 6px; }
+    .bot-console-log::-webkit-scrollbar-thumb { background: var(--accent-dim); border-radius: 3px; }
+
     /* KEYBIND BUTTON */
     .keybind-btn {
         background: rgba(255,255,255,0.05);
@@ -22052,6 +22722,8 @@ for (let tree of trees) {
 
     function render(tab, searchResults = null) {
         content.innerHTML = '';
+        // Whatever the last render wired up is gone with that innerHTML.
+        window._novaBotLogSink = null;
 
         if (searchResults) {
             headerTitle.innerText = `Search Results`;
@@ -22239,6 +22911,59 @@ for (let tree of trees) {
                     };
 
                     wrap.appendChild(sel);
+                    row.appendChild(wrap);
+                    itemsContainer.appendChild(row);
+                }
+                // BOT CONSOLE — a log plus a command line, wired to the same
+                // parser the game chat uses.
+                else if (item.type === 'botchat') {
+                    const row = document.createElement('div');
+                    row.className = 'feature-row stacked';
+                    row.innerHTML = `<span class="feat-label">${item.name || 'Bot console'}</span>`;
+
+                    const logEl = document.createElement('div');
+                    logEl.className = 'bot-console-log';
+
+                    const paint = () => {
+                        const lines = (window.RynBots && window.RynBots._log) || [];
+                        logEl.innerHTML = lines.map(l => {
+                            const d = new Date(l.t);
+                            const hh = String(d.getHours()).padStart(2, '0');
+                            const mm = String(d.getMinutes()).padStart(2, '0');
+                            const safe = String(l.text)
+                                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                            return `<div><span class="bc-time">${hh}:${mm}</span> ${safe}</div>`;
+                        }).join('');
+                        logEl.scrollTop = logEl.scrollHeight;
+                    };
+                    paint();
+                    // Live-update while the tab is open; dropped as soon as the
+                    // page is re-rendered onto another tab.
+                    window._novaBotLogSink = paint;
+
+                    const wrap = document.createElement('div');
+                    wrap.className = 'input-wrapper';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'text-input-styled';
+                    input.placeholder = '!find <id or name>   ·   !cf   ·   !fire   ·   !c   ·   !bots';
+                    input.onkeydown = (e) => {
+                        e.stopPropagation();
+                        if (e.key !== 'Enter') return;
+                        const v = input.value.trim();
+                        input.value = '';
+                        if (!v) return;
+                        try {
+                            if (!window.RynBots.command(v)) window.RynBots.log('unknown command — try !help');
+                        } catch (err) { try { window.RynBots.log('error: ' + err.message); } catch (_) {} }
+                    };
+                    // The menu lives over the game; typing here must not also
+                    // drive the player.
+                    input.onkeyup = (e) => e.stopPropagation();
+                    input.onkeypress = (e) => e.stopPropagation();
+
+                    wrap.appendChild(input);
+                    row.appendChild(logEl);
                     row.appendChild(wrap);
                     itemsContainer.appendChild(row);
                 }

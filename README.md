@@ -197,6 +197,8 @@ master connection speaks.
 |---|---|---|
 | **Auto Spawn** | Bots → Join / Leave | The instant a bot dies it re-sends the spawn packet. No menu, no wait; a dropped spawn is retried once a second. |
 | **Auto Break** | Bots → Behaviour | Three stalled ticks while trying to walk means something is in the way: the bot finds the closest destroyable building within reach and within 90° of its heading, swaps to its breaking weapon and swings. Walls, mills, spikes, traps, turrets, blockers. |
+| **Auto Heal** | Bots → Behaviour | Bots read their own health off the packets they receive, so they know they were hit on the same tick you would, and eat the moment they drop — up to three units in one burst, then the weapon goes straight back in hand. Runs while you are driving a bot too. |
+| **Auto Place** | Bots → Behaviour | An enemy inside 250 gets a spike dropped between them and the bot, hardest one owned first, and never stacked on a spike already there. |
 | **Sync** | Bots → Sync & Freeze | On: the squad swings on the same tick you do — one wrapper on `io.send` catches every swing the client makes, and `place()` flags its own use of the attack packet so putting a building down is not read as a swing. Off: they swing while the **Bot Attack** key is held. |
 | **Loadout** | Bots → Loadout | You pick the primary (age 2) and the secondary (age 6); the bots take exactly that on upgrade. |
 | **Auto Buy** | Bots → Behaviour | Bots buy and equip whatever hat and accessory you are wearing, and follow you when you change. |
@@ -222,9 +224,91 @@ block or steal and none of them puts real damage into a building.
 
 ## Defaults
 
-Auto Spawn, Auto Break, Auto Attack, Sync and Auto Buy start **on**; Follow
-Cursor and Random Move start **off**. Keys: `N` freeze, `M` bot attack, on top
-of the existing `P` spawn / `U` release / `O` kill.
+Auto Spawn, Auto Break, Auto Attack, Auto Heal, Auto Place, Sync and Auto Buy
+start **on**; Follow Cursor and Random Move start **off**. Keys: `N` freeze,
+`M` bot attack, arrows for bot control, on top of the existing `P` spawn /
+`U` release / `O` kill.
+
+## Scan and Kill
+
+A bot console sits in **Bots → Scan & Kill**. The same parser also reads the
+game chat, so a command works from either box and never reaches the server.
+
+| Command | What it does |
+|---|---|
+| `!find <id or name>` | Starts the hunt. |
+| `!c` | Cancels the hunt; bots go back to normal. |
+| `!cf` | Ceasefire — cancels the hunt *and* silences every bot: nobody targets anybody. |
+| `!fire` | Lifts the ceasefire. |
+| `!bots` | Squad status: in game / ready / connecting, hunt state, who you are driving. |
+| `!help` | The list above. |
+
+`!find` resolves the name or ID against your own client's player list first —
+it holds every player on the server, with names — and falls back to per-bot
+name matching for anyone it does not have yet. Your SID and the bots' SIDs are
+never a match.
+
+Then the map is cut into one cell per bot and each bot works its own cell, so
+the swarm covers the whole map instead of piling into the middle. The moment
+one of them has the target in view it becomes the **spotter**:
+
+- it shadows from **Spotter Keep Distance** (150–800, default 350) and backs
+  straight off if the target closes in;
+- it does not swing, at all — a spotter that starts the fight is the one thing
+  the shadowing distance exists to prevent (Auto Break still runs: that is a
+  wall in the way, not a target);
+- your minimap gets a ping on the target roughly once a second, plus a standing
+  red marker with their name.
+
+Every other bot drops what it was doing — Random Move included — and regroups
+on your formation ring, so the squad walks in with you. Lose sight of them for
+four seconds and the hunt falls back to the sweep on its own.
+
+The ping is drawn locally from the spotter's own world model rather than sent
+as a game ping: a real map ping only reaches your own clan, and the bots are
+not in it.
+
+## Bot control (possession)
+
+| Key | What it does |
+|---|---|
+| **←** | Step to the next bot |
+| **→** | Step to the previous bot |
+| **↑** | Back to your own character |
+
+Inside a bot, the camera rides it, your mouse is its aim, WASD are its legs,
+space / left click / E are its swing, and the number row is its action bar —
+slots 1–2 are its weapons, the rest are its buildings, placed at your cursor.
+Auto Heal still runs for you.
+
+The camera position comes off the bot's own socket, so it is exact even when
+the bot is on the far side of the map. Your client is only *sent* what is near
+your own player, though, so at that range the screen would be empty: the
+possessed bot's own world model is drawn as an overlay — buildings, resources,
+players, names, and its health bar — but only for entities your client does not
+already have, so nothing gets a flat circle stamped over its sprite.
+
+Your own character freezes: your keys and mouse are steering the bot, so it
+stops walking and stops turning. If an enemy comes within **Guard Radius**
+(100–600, default 300) of it, Autoplay switches itself on and fights for you,
+and switches back off once they leave. Releasing the bot hands Autoplay back
+the way it was.
+
+The arrows stop steering you while this is on — that is the trade, and
+**Bots → Control → Arrow keys switch bots** turns it off. WASD is unaffected.
+
+## Verification
+
+```sh
+node --check novastorm_1.5.user.js
+node tools/test-novastorm-bots.js
+```
+
+The test evaluates the `RynBots` block straight out of the shipped userscript
+against stubs and asserts the packets it emits — 84 checks over the age path,
+break-weapon pick, targeting, world model, formation, auto break, safe walk,
+sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
+console, Scan and Kill and possession.
 
 ## Caveats
 
@@ -233,3 +317,6 @@ of the existing `P` spawn / `U` release / `O` kill.
   and a server-side handshake change breaks spawning.
 - Spawning stays sequential: one Turnstile widget has to recycle a fresh token
   per bot.
+- Possession routes *manual* input only. The mod's own automation — the placer,
+  the insta-kills, the pathfinder — is computed against your own player and
+  keeps running on it; it is not re-aimed at the bot.
