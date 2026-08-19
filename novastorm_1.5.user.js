@@ -12292,6 +12292,11 @@ for (let tree of trees) {
                 */
 
             shoots.push({ projectile: projectile, x: x, y: y, range: range, speed: speed });
+
+            // Anti Bow Insta reacts HERE, on the packet, not on the next tick.
+            // Waiting for updatePlayers costs up to a full 111 ms server tick,
+            // and a musket from 150 units is in the air for 42.
+            try { onProjectileSpawned(projectile); } catch (e) {}
         }
 
         // REMOVE PROJECTILE:
@@ -12955,6 +12960,48 @@ for (let tree of trees) {
             if (chosen === null) return;
             bowDodgeAngle = chosen;
             bowDodgeUntil = Date.now() + 220;   // about two ticks of sidestep
+        }
+
+        // =====================================================================
+        // THE INSTANT PATH — react on the packet, not on the next tick
+        // =====================================================================
+        // Everything else here runs inside updatePlayers' tick callback, which
+        // fires once per server tick. The projectile packet ("X") does not: it
+        // arrives on its own, whenever the shot was fired. So a response that
+        // waits for the next tick has already burned up to 111 ms before it
+        // starts — and a musket only flies for 42 ms from 150 units. That is
+        // the lateness: not the logic, the place it was being run from.
+        //
+        // addProjectile calls this the moment the packet lands, so the helmet,
+        // the blocker and the dodge all go out on the same millisecond the shot
+        // appears rather than a tick later.
+        //
+        // The window here is wider than the tick path's (450 ms, about four
+        // ticks, against 260 ms) because acting early is free — a blocker put
+        // up too soon still blocks — while acting late is worth nothing.
+        const BOW_SPAWN_WINDOW = 450;
+        function onProjectileSpawned(p) {
+            if (!window.vars || !window.vars.antiBowInsta) return;
+            if (!p || !myPlayer || !myPlayer.alive) return;
+            const dx = myPlayer.x2 - p.x, dy = myPlayer.y2 - p.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 1 || dist > (p.range || 0)) return;
+            const off = UTILS.getAngleDist(Math.atan2(dy, dx), p.dir);
+            if (off > Math.PI / 2) return;
+            if (dist * Math.sin(off) > (myPlayer.scale || 35) + 20) return;   // it misses
+            if (p.speed > 0 && (dist / p.speed) > BOW_SPAWN_WINDOW) return;   // still far off
+
+            // The helmet, now. soldierAnti alone would not equip it until
+            // hatFc() runs on the next tick, which is the delay we are here to
+            // remove — so send the equip directly as well.
+            soldierAnti = true;
+            try { if (isBoughtHat(6, 0)) hat(6); } catch (e) {}
+
+            // Then take the shot off the board entirely if we can, and step out
+            // of its line if we cannot.
+            const src = { x: p.x, y: p.y, dir: p.dir, dist: dist,
+                          turret: ((p.layer || 0) >= 1 || p.indx === 1) };
+            if (!tryBowBlock(src)) startBowDodge(src);
         }
 
         function updateBowInstaThreat() {

@@ -432,6 +432,43 @@ had a path.
 **Pre-Soldier** is the same idea for the helmet: keep it on while someone who can
 shoot has an open line, instead of waiting for the swap tell.
 
+### Reacting on the packet, not the next tick
+
+The rest of the feature runs inside `updatePlayers`' tick callback, which fires
+once per server tick. The projectile packet (`"X"`) does not — it arrives on its
+own, whenever the shot was fired. A response that waits for the next tick has
+already burned up to **111 ms** before it starts, and a musket from 150 units
+flies for **42 ms**. That was the lateness: not the logic, the place it ran from.
+
+`addProjectile` now calls the response the moment the packet lands, so the
+helmet, the blocker and the dodge all go out on the same millisecond the shot
+appears. The helmet is sent directly with `hat(6)` rather than only setting
+`soldierAnti`, because that flag is not read until `hatFc()` runs on the next
+tick — which is the delay being removed.
+
+The spawn path's window is wider than the tick path's (450 ms, about four
+ticks, against 260 ms): acting early is free, since a blocker put up too soon
+still blocks, while acting late is worth nothing.
+
+### Can soldier alone survive the four-piece? No.
+
+`dmgMult` appears on exactly one item in the entire game — the Soldier Helmet,
+at `0.75`. `changeHealth` applies both `skin.dmgMult` and `tail.dmgMult`
+(`game_index.js:2420-2421`), but no accessory carries one, so 0.75 is the floor.
+135 × 0.75 = 101.25, and no gear closes that.
+
+What does close it is removing **any one** projectile from the volley:
+
+| blocked | left | in soldier |
+|---|---|---|
+| bow (25) | 110 | 82.5 — live |
+| turret (25) | 110 | 82.5 — live |
+| crossbow (35) | 100 | 75 — live |
+| musket (50) | 85 | 63.75 — live |
+
+That is the whole design in one line: **one blocked shot is the difference**,
+which is why the blocker and Pre-Block matter more than the helmet does.
+
 This is the honest answer to "how do I stop dying to it". The reactive layer
 handles the shots you get warning of; Pre-Block handles the ones you do not.
 
@@ -453,7 +490,8 @@ you and the one where it provably cannot, the mill-over-wall choice and the
 turret-shot case that only a mill answers, the limit / budget / cooldown
 guards, the dodge's perpendicular, its side choice and its expiry, the blocker
 bearing across all eight directions, and the pre-block's arming check, line-of-
-sight test, range gate and upkeep pace — 68 in all.
+sight test, range gate and upkeep pace, and the instant path that runs off the
+projectile packet — 79 in all.
 
 ## Lite Mode (performance)
 

@@ -56,6 +56,9 @@ function obj(x, y, scale = 50, layer = 0, ignoreCollision = false) {
     return { active: true, x, y, layer, ignoreCollision, getScale: () => scale };
 }
 let placeableAngles = true, limitReached = {};
+let soldierAnti = false, equippedHat = 0, ownedHats = { 6: true };
+function isBoughtHat(id) { return !!ownedHats[id]; }
+function hat(id) { equippedHat = id; }
 function isItemLimit(id) { return !!limitReached[id]; }
 function canPlace(id, angle) { return placeableAngles; }
 function place(id, angle) { placed.push({ id, angle }); }
@@ -73,6 +76,7 @@ const api = eval(block + '\n; ({ updateBowInstaThreat, bowSwitchTell, bowIncomin
     + ' bowThreatSource, tryBowBlock, startBowDodge, ownedItemInGroup,'
     + ' get dodgeAngle() { return bowDodgeAngle; }, get dodgeUntil() { return bowDodgeUntil; },'
     + ' tryPreBlock, rangedEnemyWithLineOnMe, lineIsCovered, placeBlockerToward,'
+    + ' onProjectileSpawned, get soldier() { return soldierAnti; },'
     + ' resetBlock() { bowDodgeAngle = null; bowDodgeUntil = 0; bowLastBlock = 0; preBlockAt = 0; } })');
 
 // ---- helpers ---------------------------------------------------------------
@@ -99,6 +103,7 @@ function reset() {
     enemiesNear = []; projectiles = []; tick = 100;
     visibleObjects = []; packets = 0; placed.length = 0;
     placeableAngles = true; limitReached = {};
+    soldierAnti = false; equippedHat = 0; ownedHats = { 6: true };
     me(); api.reset(); api.resetBlock();
 }
 
@@ -599,6 +604,93 @@ t('a trap on the ground is not cover', () => {
     reset();
     visibleObjects = [obj(5200, 5000, 50, -1, false)];   // layer -1
     no(api.lineIsCovered(5000, 5000, 5400, 5000));
+});
+
+
+// ---- the instant path -------------------------------------------------------
+console.log('\nreacting on the packet, not the next tick');
+reset();
+t('a musket spawning gets helmet + blocker on the spot', () => {
+    myPlayer.items = [0, 3, 6, 10];
+    const p = shot(5, 5000 - 300, 5000);
+    api.onProjectileSpawned(p);
+    ok(api.soldier, 'soldierAnti not raised');
+    eq(equippedHat, 6, 'the helmet was not sent directly');
+    eq(placed.length, 1, 'no blocker went down');
+});
+t('it dodges when nothing can be built', () => {
+    reset();
+    myPlayer.items = [0, 6];                      // no wall, no mill
+    api.onProjectileSpawned(shot(5, 5000 - 300, 5000));
+    ok(api.dodgeAngle !== null, 'should have stepped out of the line');
+});
+t('a shot that misses is left alone', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    api.onProjectileSpawned(shot(0, 5000 - 200, 5000, 0.6));
+    eq(placed.length, 0);
+    no(api.soldier);
+});
+t('a shot going the other way is left alone', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    api.onProjectileSpawned(shot(0, 5000 - 200, 5000, Math.PI));
+    eq(placed.length, 0);
+});
+t('the spawn window is wider than the tick window', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    // 600 units of bow flight is 375 ms: past the tick path's 260, inside 450
+    const far = shot(0, 5000 - 600, 5000);
+    projectiles = [far];
+    eq(api.bowIncomingProjectileDamage(), 0, 'the tick path should ignore it');
+    api.onProjectileSpawned(far);
+    eq(placed.length, 1, 'the spawn path should act on it early');
+});
+t('a shot too far out is still ignored', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    api.onProjectileSpawned(shot(0, 5000 - 1000, 5000));   // 625 ms
+    eq(placed.length, 0);
+});
+t('a turret shot on spawn is answered with a mill, never a wall', () => {
+    reset();
+    myPlayer.items = [0, 5, 6];                   // wall only
+    const p = shot(1, 5000 - 300, 5000); p.layer = 1;
+    api.onProjectileSpawned(p);
+    eq(placed.length, 0, 'a wall cannot stop it, so nothing should be placed');
+    ok(api.dodgeAngle !== null, 'it should dodge instead');
+});
+t('the toggle silences the instant path', () => {
+    reset();
+    window.vars.antiBowInsta = false;
+    myPlayer.items = [0, 3, 6, 10];
+    api.onProjectileSpawned(shot(5, 5000 - 300, 5000));
+    eq(placed.length, 0);
+    no(api.soldier);
+});
+t('being dead silences it', () => {
+    reset();
+    myPlayer.alive = false;
+    myPlayer.items = [0, 3, 6, 10];
+    api.onProjectileSpawned(shot(5, 5000 - 300, 5000));
+    eq(placed.length, 0);
+});
+
+console.log('\nwhat one blocked projectile is worth');
+t('removing ANY single shot from the four-piece makes it survivable', () => {
+    const P = { bow: 25, crossbow: 35, musket: 50, turret: 25 };
+    const all = P.bow + P.crossbow + P.musket + P.turret;
+    ok(all * 0.75 > 100, 'the full four-piece should still be lethal in soldier');
+    for (const k of Object.keys(P)) {
+        const left = (all - P[k]) * 0.75;
+        ok(left < 100, 'blocking the ' + k + ' should save you, got ' + left);
+    }
+});
+t('soldier is the only damage reduction that exists', () => {
+    // game_index.js: changeHealth applies skin.dmgMult and tail.dmgMult, and
+    // dmgMult appears on exactly one item in the whole game.
+    ok(0.75 * 135 > 100, 'so 135 raw cannot be survived by gear alone');
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
