@@ -407,6 +407,34 @@ walking somewhere, because the alternative is taking the shot.
 
 Both are toggles under **Defense → Ranged**.
 
+### Pre-Block — the half that actually works up close
+
+Everything above is reactive, and reaction has a floor. A musket from 150 units
+lands in **42 ms**; the server tick is **111 ms**. The packet that would save
+you leaves after the shot has already landed. No amount of tuning fixes that —
+at close range there is no reacting, only having been covered already.
+
+So Pre-Block runs whether or not anything is happening yet: while an enemy who
+owns a ranged weapon has a **clear line** to you, it keeps something standing on
+that line. When they pull the bow, the cover is already there and the shot never
+had a path.
+
+- "Owns a ranged weapon" is what they have shown they carry — `weapons[1]` is
+  filled in from their own updates the first time they hold one — or what they
+  are holding right now.
+- "Clear line" uses the same rule the projectile does: any object on the segment
+  with layer ≥ 0 that is not walk-over. A tree, a rock or someone else's wall
+  already on the line is cover you did not have to pay for, and nothing is built.
+- Only inside **Pre-Block Range** (200–1400, default 900), so it is not building
+  across the whole map.
+- Upkeep pace: one placement per 700 ms, against the reactive block's 250 ms.
+
+**Pre-Soldier** is the same idea for the helmet: keep it on while someone who can
+shoot has an open line, instead of waiting for the swap tell.
+
+This is the honest answer to "how do I stop dying to it". The reactive layer
+handles the shots you get warning of; Pre-Block handles the ones you do not.
+
 Flat projectile damage, from `game_index.js:1552`:
 
 | index | source | damage |
@@ -423,7 +451,9 @@ against these numbers — 50 checks over the projectile maths, the tell, the
 range gate, the freshness and hold windows, the cases where the helmet saves
 you and the one where it provably cannot, the mill-over-wall choice and the
 turret-shot case that only a mill answers, the limit / budget / cooldown
-guards, and the dodge's perpendicular, its side choice and its expiry.
+guards, the dodge's perpendicular, its side choice and its expiry, the blocker
+bearing across all eight directions, and the pre-block's arming check, line-of-
+sight test, range gate and upkeep pace — 68 in all.
 
 ## Lite Mode (performance)
 

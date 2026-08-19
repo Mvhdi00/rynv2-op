@@ -12829,20 +12829,14 @@ for (let tree of trees) {
             return best ? { x: best.x, y: best.y, dir: best.dir, dist: bestD, turret: false } : null;
         }
 
-        // Put a wall or a mill in the way. Returns true if something went down.
-        function tryBowBlock(src) {
-            if (!window.vars.antiBowBlock || !src) return false;
-            const now = Date.now();
-            if (now - bowLastBlock < 250) return false;      // one blocker per shot, not a wall spam
-            if (packets + 5 > 119) return false;             // the placer's own budget
-
+        // Put a wall or a mill on a bearing. Shared by the reactive block and
+        // the pre-block, because "get something onto that line" is the same job
+        // either way.
+        function placeBlockerToward(tx, ty, millOnly) {
             const wall = ownedItemInGroup(1);
             const mill = ownedItemInGroup(3);
-            // A turret shot goes over a wall, so the mill is not a preference
-            // there, it is the only option.
-            const order = src.turret ? [mill] : [mill, wall];
-            const angle = Math.atan2(src.y - myPlayer.y2, src.x - myPlayer.x2);
-
+            const order = millOnly ? [mill] : [mill, wall];
+            const angle = Math.atan2(ty - myPlayer.y2, tx - myPlayer.x2);
             for (const id of order) {
                 if (id === null || id === undefined) continue;
                 if (isItemLimit(id)) continue;
@@ -12852,11 +12846,91 @@ for (let tree of trees) {
                     const a = angle + off;
                     if (!canPlace(id, a)) continue;
                     place(id, a);
-                    bowLastBlock = now;
                     return true;
                 }
             }
             return false;
+        }
+
+        // Put a wall or a mill in the way. Returns true if something went down.
+        function tryBowBlock(src) {
+            if (!window.vars.antiBowBlock || !src) return false;
+            const now = Date.now();
+            if (now - bowLastBlock < 250) return false;      // one blocker per shot, not a wall spam
+            if (packets + 5 > 119) return false;             // the placer's own budget
+            // A turret shot goes over a wall, so the mill is not a preference
+            // there, it is the only option.
+            if (!placeBlockerToward(src.x, src.y, !!src.turret)) return false;
+            bowLastBlock = now;
+            return true;
+        }
+
+        // =====================================================================
+        // PRE-BLOCK — cover before the shot, not after it
+        // =====================================================================
+        // Everything above is reactive: the tell, the arrow, the helmet, the
+        // dodge. Reaction has a floor. A musket from 150 units lands in 42 ms
+        // and the server tick is 111 ms, so at close range there is nothing to
+        // react with — the packet that would save you leaves after the shot has
+        // already landed.
+        //
+        // The only thing that beats that is to have been covered before they
+        // decided to shoot. So: while an enemy who owns a ranged weapon has a
+        // clear line to you, keep something standing on that line. When they
+        // pull the bow the cover is already there and the shot never had a path.
+        //
+        // It only builds when the line is actually clear — a tree, a rock or
+        // someone else's wall already on it is cover you did not have to pay
+        // for — and only inside real firing range, so it is not building across
+        // the whole map.
+        const BOW_RANGED_WEAPONS = [9, 12, 13, 15];
+        let preBlockAt = 0;
+
+        // Does anything already stand between these two points? Uses the same
+        // rule the projectile does: layer >= 0 for an arrow, and never anything
+        // you walk over.
+        function lineIsCovered(x1, y1, x2, y2) {
+            for (const o of visibleObjects) {
+                if (!o.active || o.ignoreCollision) continue;
+                if ((o.layer === undefined ? 2 : o.layer) < 0) continue;
+                if (lineInCircle(x1, y1, x2, y2, o.x, o.y, o.getScale())) return true;
+            }
+            return false;
+        }
+
+        // The nearest enemy who could shoot you right now and has the line to
+        // do it. "Could shoot" is what they have shown they carry — weapons[1]
+        // is filled in from their own updates as soon as they hold it once.
+        function rangedEnemyWithLineOnMe() {
+            let best = null, bestD = Infinity;
+            for (const e of enemiesNear) {
+                if (!e || !e.visible) continue;
+                const sec = e.weapons ? e.weapons[1] : undefined;
+                const armed = BOW_RANGED_WEAPONS.indexOf(sec) >= 0
+                           || BOW_RANGED_WEAPONS.indexOf(e.weaponIndex) >= 0;
+                if (!armed) continue;
+                const d = UTILS.getDistance(myPlayer.x2, myPlayer.y2, e.x2, e.y2);
+                if (d > botClamp(window.vars.preBlockRange, 200, 1400)) continue;
+                if (d >= bestD) continue;
+                if (lineIsCovered(myPlayer.x2, myPlayer.y2, e.x2, e.y2)) continue;  // already safe
+                bestD = d; best = e;
+            }
+            return best;
+        }
+
+        function tryPreBlock() {
+            if (!window.vars.antiBowPreBlock) return false;
+            if (!myPlayer || !myPlayer.alive) return false;
+            const now = Date.now();
+            if (now - preBlockAt < 700) return false;    // this is upkeep, not a panic
+            if (packets + 5 > 119) return false;
+            const e = rangedEnemyWithLineOnMe();
+            if (!e) return false;
+            // A mill covers the turret shot as well as arrows, so it is the one
+            // worth spending here — but a wall is far better than nothing.
+            if (!placeBlockerToward(e.x2, e.y2, false)) return false;
+            preBlockAt = now;
+            return true;
         }
 
         // Nothing could be placed: step out of the line instead. Perpendicular
@@ -17301,6 +17375,18 @@ for (let tree of trees) {
                         // down, step out of the line instead.
                         const src = bowThreatSource();
                         if (src && !tryBowBlock(src)) startBowDodge(src);
+                    }
+
+                    // PRE-BLOCK — runs whether or not anything is happening
+                    // yet. This is the half that actually saves you at close
+                    // range, where there is no time to react to anything.
+                    if (window.vars.antiBowInsta) {
+                        tryPreBlock();
+                        // And keep the helmet on while someone who can shoot
+                        // has an open line, rather than waiting for the swap.
+                        if (window.vars.antiBowPreSoldier && rangedEnemyWithLineOnMe()) {
+                            soldierAnti = true;
+                        }
                     }
 
 
@@ -22438,6 +22524,9 @@ for (let tree of trees) {
         antiBowMinDist: 0,    // 0 = react at any range; raise it to ignore close swaps
         antiBowBlock: true,   // put a mill or a wall in the path of the shot
         antiBowDodge: true,   // if nothing can be placed, step out of the line
+        antiBowPreBlock: true,  // keep cover on the line BEFORE they draw
+        antiBowPreSoldier: true,// and keep the helmet on while they have a line
+        preBlockRange: 900,     // only bother inside real firing range
 
         // Placers
         autoPlace: false,
@@ -22609,7 +22698,10 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Anti Bow Insta", id: "antiBowInsta" },
                     { type: 'slider', name: "Ignore Swaps Closer Than", id: "antiBowMinDist", min: 0, max: 600 },
                     { type: 'toggle', name: "Block Shot (mill / wall)", id: "antiBowBlock" },
-                    { type: 'toggle', name: "Dodge If Cannot Block", id: "antiBowDodge" }
+                    { type: 'toggle', name: "Dodge If Cannot Block", id: "antiBowDodge" },
+                    { type: 'toggle', name: "Pre-Block (cover before the shot)", id: "antiBowPreBlock" },
+                    { type: 'toggle', name: "Pre-Soldier (helmet on their line)", id: "antiBowPreSoldier" },
+                    { type: 'slider', name: "Pre-Block Range", id: "preBlockRange", min: 200, max: 1400 }
                 ]
             }
         ],

@@ -38,6 +38,23 @@ items.list[5]  = { name: 'castle wall',     scale: 52, group: GROUPS[1] };
 items.list[10] = { name: 'windmill',        scale: 45, group: GROUPS[3] };
 items.list[11] = { name: 'faster windmill', scale: 47, group: GROUPS[3] };
 items.list[12] = { name: 'power mill',      scale: 47, group: GROUPS[3] };
+// The real helpers the block leans on, copied in.
+function botClamp(v, lo, hi) { v = Number(v); if (!isFinite(v)) return lo; return v < lo ? lo : (v > hi ? hi : v); }
+function lineInCircle(x, y, x2, y2, cx, cy, scale) {
+    const lv = { x: x2 - x, y: y2 - y };
+    const tc = { x: cx - x, y: cy - y };
+    const proj = (tc.x * lv.x + tc.y * lv.y) / (lv.x * lv.x + lv.y * lv.y);
+    const cp = { x: x + proj * lv.x, y: y + proj * lv.y };
+    if (cp.x >= Math.min(x, x2) && cp.x <= Math.max(x, x2) &&
+        cp.y >= Math.min(y, y2) && cp.y <= Math.max(y, y2)) {
+        return UTILS.getDistance(cp.x, cp.y, cx, cy) < scale;
+    }
+    return false;
+}
+// A structure standing in the world, for line-of-sight tests.
+function obj(x, y, scale = 50, layer = 0, ignoreCollision = false) {
+    return { active: true, x, y, layer, ignoreCollision, getScale: () => scale };
+}
 let placeableAngles = true, limitReached = {};
 function isItemLimit(id) { return !!limitReached[id]; }
 function canPlace(id, angle) { return placeableAngles; }
@@ -55,7 +72,8 @@ const api = eval(block + '\n; ({ updateBowInstaThreat, bowSwitchTell, bowIncomin
     + ' get tellUntil() { return bowTellUntil; }, reset() { bowTellUntil = 0; },'
     + ' bowThreatSource, tryBowBlock, startBowDodge, ownedItemInGroup,'
     + ' get dodgeAngle() { return bowDodgeAngle; }, get dodgeUntil() { return bowDodgeUntil; },'
-    + ' resetBlock() { bowDodgeAngle = null; bowDodgeUntil = 0; bowLastBlock = 0; } })');
+    + ' tryPreBlock, rangedEnemyWithLineOnMe, lineIsCovered, placeBlockerToward,'
+    + ' resetBlock() { bowDodgeAngle = null; bowDodgeUntil = 0; bowLastBlock = 0; preBlockAt = 0; } })');
 
 // ---- helpers ---------------------------------------------------------------
 function me(x = 5000, y = 5000, health = 100) {
@@ -76,7 +94,8 @@ function enemy(sid, x, y, cur, old, aimOff = 0, swapTick = tick) {
              weaponIndex: cur, oldWeaponIndex: old, weaponSwapTick: swapTick };
 }
 function reset() {
-    window.vars = { antiBowInsta: true, antiBowMinDist: 0, antiBowBlock: true, antiBowDodge: true };
+    window.vars = { antiBowInsta: true, antiBowMinDist: 0, antiBowBlock: true, antiBowDodge: true,
+                    antiBowPreBlock: true, antiBowPreSoldier: true, preBlockRange: 900 };
     enemiesNear = []; projectiles = []; tick = 100;
     visibleObjects = []; packets = 0; placed.length = 0;
     placeableAngles = true; limitReached = {};
@@ -471,6 +490,115 @@ t('with no arrow yet it falls back to the enemy that told', () => {
 t('nothing happening, no source', () => {
     reset();
     eq(api.bowThreatSource(), null);
+});
+
+
+// ---- pre-block: cover before the shot ---------------------------------------
+console.log('\npre-block, before anything is fired');
+reset();
+function armed(sid, x, y, sec = 9) {
+    const e = enemy(sid, x, y, 5, 0);
+    e.weapons = [5, sec];          // they have shown they carry a bow
+    return e;
+}
+t('an armed enemy with an open line gets cover built on it', () => {
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(2, 5000 - 400, 5000)];
+    ok(api.tryPreBlock(), 'nothing was placed');
+    ok(UTILS.getAngleDist(placed[0].angle, Math.PI) < 0.3, 'cover should face them');
+});
+t('it prefers the mill, which also stops turret shots', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(2, 5000 - 400, 5000)];
+    api.tryPreBlock();
+    eq(placed[0].id, 10);
+});
+t('nobody armed, nothing built', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [enemy(2, 5000 - 400, 5000, 5, 0)];   // pure melee
+    no(api.tryPreBlock());
+});
+t('a line that is already covered is left alone', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(2, 5000 - 400, 5000)];
+    visibleObjects = [obj(5000 - 200, 5000)];           // a wall already between us
+    no(api.tryPreBlock(), 'should not spend a mill on a line that is already blocked');
+});
+t('walk-over pads are not cover', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(2, 5000 - 400, 5000)];
+    visibleObjects = [obj(5000 - 200, 5000, 50, -1, true)];   // boost pad
+    ok(api.tryPreBlock(), 'a boost pad should not count as cover');
+});
+t('out of firing range is not worth a mill', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    window.vars.preBlockRange = 400;
+    enemiesNear = [armed(2, 5000 - 900, 5000)];
+    no(api.tryPreBlock());
+});
+t('it covers the nearest open line when several are armed', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(2, 5000 - 800, 5000), armed(3, 5000 + 250, 5000)];
+    ok(api.tryPreBlock());
+    ok(Math.abs(placed[0].angle) < 0.3, 'should cover the closer one to the east, got ' + placed[0].angle.toFixed(2));
+});
+t('an enemy currently holding a bow counts even with no history', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    const e = enemy(2, 5000 - 400, 5000, 9, 9);
+    e.weapons = [5, undefined];
+    enemiesNear = [e];
+    ok(api.tryPreBlock());
+});
+t('upkeep has a slower beat than the panic block', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(2, 5000 - 400, 5000)];
+    ok(api.tryPreBlock());
+    no(api.tryPreBlock(), 'should not build again immediately');
+    eq(placed.length, 1);
+});
+t('the toggle turns pre-block off', () => {
+    reset();
+    window.vars.antiBowPreBlock = false;
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(2, 5000 - 400, 5000)];
+    no(api.tryPreBlock());
+});
+t('the packet budget is respected here too', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    packets = 118;
+    enemiesNear = [armed(2, 5000 - 400, 5000)];
+    no(api.tryPreBlock());
+});
+
+console.log('\nline of sight');
+reset();
+t('a wall on the segment counts', () => {
+    visibleObjects = [obj(5200, 5000)];
+    ok(api.lineIsCovered(5000, 5000, 5400, 5000));
+});
+t('a wall off to the side does not', () => {
+    reset();
+    visibleObjects = [obj(5200, 5300)];
+    no(api.lineIsCovered(5000, 5000, 5400, 5000));
+});
+t('a wall past the far end does not', () => {
+    reset();
+    visibleObjects = [obj(5800, 5000)];
+    no(api.lineIsCovered(5000, 5000, 5400, 5000));
+});
+t('a trap on the ground is not cover', () => {
+    reset();
+    visibleObjects = [obj(5200, 5000, 50, -1, false)];   // layer -1
+    no(api.lineIsCovered(5000, 5000, 5400, 5000));
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
