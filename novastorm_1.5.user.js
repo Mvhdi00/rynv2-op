@@ -9854,9 +9854,42 @@ let pps = 0;
                 }
                 break;
             }
+            case "K": {                                 // gatherAnimation — the swing
+                // Without this the bot's arms never move: you would be killing
+                // people with a body that just slides around. startAnim is what
+                // the real client calls for its own player too.
+                const p = botViewFindPlayer(args[0]);
+                if (p) p.startAnim(args[1], args[2]);
+                break;
+            }
+            case "J": {                                 // animateAI
+                const a = botViewAis.find(x => x.sid === args[0]);
+                if (a) a.startAnim();
+                break;
+            }
+            case "M": {                                 // shootTurret
+                for (const o of botViewObjects) {
+                    if (o.sid !== args[0]) continue;
+                    o.dir = args[1];
+                    o.xWiggle += config.gatherWiggle * Math.cos(args[1] + Math.PI);
+                    o.yWiggle += config.gatherWiggle * Math.sin(args[1] + Math.PI);
+                    break;
+                }
+                break;
+            }
             case "O": {                                 // updateHealth
                 const p = botViewFindPlayer(args[0]);
-                if (p) p.health = args[1];
+                if (!p) break;
+                const dmg = p.health - args[1];
+                p.health = args[1];
+                // hitTime is what makes a body flash when it is struck, and the
+                // floating number is the rest of the feedback — without both,
+                // fighting through a bot is silent and you cannot tell whether
+                // anything is landing.
+                if (dmg > 0) {
+                    p.hitTime = Date.now();
+                    try { showText(p.x, p.y - p.scale, -Math.round(dmg)); } catch (e) {}
+                }
                 break;
             }
             case "I": {                                 // loadAI — the animals
@@ -9906,6 +9939,67 @@ let pps = 0;
 
         // The render passes read these while you are inside a bot, and your own
         // arrays every other frame.
+        // =====================================================================
+        // THE HUD FOLLOWS YOU INTO THE BOT
+        // =====================================================================
+        // The score, resource counters, kill count, age bar and action bar are
+        // DOM, driven from myPlayer. Stepping into a bot without moving them
+        // leaves you looking at your own numbers while playing someone else's
+        // body — the age bar in particular reads as a bug, because it is the
+        // one thing on screen that visibly does not match what you are doing.
+        //
+        // These write the possessed bot's numbers into the same elements, and
+        // releasing hands them back by calling the game's own updaters.
+        function botHudPush(bot) {
+            if (!bot) return;
+            try {
+                scoreDisplay.innerText = bot.stats.points || 0;
+                foodDisplay.innerText = bot.stats.food || 0;
+                woodDisplay.innerText = bot.stats.wood || 0;
+                stoneDisplay.innerText = bot.stats.stone || 0;
+                killCounter.innerText = bot.stats.kills || 0;
+            } catch (e) {}
+            try {
+                if (bot.age === config.maxAge) {
+                    ageText.innerHTML = "MAX AGE";
+                    ageBarBody.style.width = "100%";
+                } else {
+                    ageText.innerHTML = "AGE " + (bot.age || 1);
+                    ageBarBody.style.width = ((bot.XP / (bot.maxXP || 300)) * 100) + "%";
+                }
+            } catch (e) {}
+            botActionBarPush(bot);
+        }
+
+        // The strip along the bottom: which weapons and buildings the body you
+        // are driving actually owns, and how many of each it has placed.
+        function botActionBarPush(bot) {
+            try {
+                const own = bot.itemsOwned || [];
+                const wep = bot.weapons || [];
+                for (let i = 0; i < items.list.length; ++i) {
+                    const el = document.getElementById("actionBarItem" + (items.weapons.length + i));
+                    if (el) el.style.display = own.indexOf(items.list[i].id) >= 0 ? "inline-block" : "none";
+                }
+                for (let i = 0; i < items.weapons.length; ++i) {
+                    const el = document.getElementById("actionBarItem" + i);
+                    if (el) el.style.display = (wep[items.weapons[i].type] === items.weapons[i].id) ? "inline-block" : "none";
+                }
+                // Placed counts, the little number on each building tile.
+                for (let i = 3; i < items.list.length; ++i) {
+                    const gid = items.list[i].group.id;
+                    const el = document.getElementById("itemCount" + (items.weapons.length + i));
+                    if (el) el.innerHTML = bot.itemCounts[gid] || 0;
+                }
+            } catch (e) {}
+        }
+
+        // Put your own numbers back on release, straight from the game's own
+        // updaters so nothing can drift.
+        function botHudRestore() {
+            try { if (myPlayer) { updateStatusDisplay(); updateAge(); updateItems(); updateItemCountDisplay(); } } catch (e) {}
+        }
+
         function inBotView() {
             try { return !!(RynBots.possessed && botViewFor === RynBots.possessed); }
             catch (e) { return false; }
@@ -15151,6 +15245,10 @@ for (let tree of trees) {
                     weapons: [0, null], itemsOwned: [0, 3, 6, 10],
                     skins: {}, tails: {}, skinIndex: 0, tailIndex: 0,
                     upgradePoints: 0, upgrAge: 0,
+                    // Everything the on-screen HUD reads, so stepping into a
+                    // bot can show its numbers instead of yours.
+                    stats: { points: 0, food: 0, wood: 0, stone: 0, kills: 0 },
+                    XP: 0, maxXP: 300, itemCounts: {},
                     // behaviour state
                     moveSent: undefined, aimSent: undefined, attacking: false,
                     wantWeapon: null, weaponSentAt: 0,
@@ -15322,7 +15420,23 @@ for (let tree of trees) {
                     if (window.vars.botAutoSpawn && bot.ws.readyState === 1) this._spawnBot(bot);
                     break;
                 }
-                case "T": if (args[2] !== undefined) bot.age = args[2]; break;    // updateAge
+                case "T": {                                        // updateAge
+                    if (args[0] !== undefined) bot.XP = args[0];
+                    if (args[1] !== undefined) bot.maxXP = args[1];
+                    if (args[2] !== undefined) bot.age = args[2];
+                    if (this.possessed === bot) botHudPush(bot);
+                    break;
+                }
+                case "N": {                                        // updatePlayerValue
+                    if (typeof args[0] === "string") bot.stats[args[0]] = args[1];
+                    if (this.possessed === bot) botHudPush(bot);
+                    break;
+                }
+                case "S": {                                        // updateItemCounts
+                    bot.itemCounts[args[0]] = args[1];
+                    if (this.possessed === bot) botHudPush(bot);
+                    break;
+                }
                 case "U": this._chooseUpgrade(bot, args[0], args[1]); break;      // updateUpgrades
                 case "V": {                                            // updateItems(data, wpn)
                     if (args[0]) {
@@ -15330,6 +15444,7 @@ for (let tree of trees) {
                         else bot.itemsOwned = args[0].slice();
                         bot.wantWeapon = null; // re-pick with the new loadout
                     }
+                    if (this.possessed === bot) botHudPush(bot);
                     break;
                 }
                 case "5": {                                            // updateStoreItems(type,id,index)
@@ -15854,6 +15969,7 @@ for (let tree of trees) {
                 // only sends objects when they enter view and everything around
                 // the bot entered view long ago.
                 try { botViewSeed(bot); } catch (e) {}
+                try { botHudPush(bot); } catch (e) {}
                 this._possessAim = null;
                 this._possessAttack = false;
                 this.log("controlling " + bot.name + "  (Up arrow returns to you)");
@@ -15866,6 +15982,7 @@ for (let tree of trees) {
                 // Your own world was never touched, so there is nothing to
                 // resync — just stop reading the view.
                 try { botViewReset(null); } catch (e) {}
+                try { botHudRestore(); } catch (e) {}
                 if (this._autoPlayForced) { window.vars.autoPlay = false; this._autoPlayForced = false; }
             },
             // Hand the bot back to the AI cleanly: stop the swing, drop the

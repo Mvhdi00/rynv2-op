@@ -313,11 +313,19 @@ stops reading the view; your own state was never touched, so there is nothing
 to resync. The packets mirrored into it are `C`, `D`, `E`, `a`, `H`, `I`, `L`,
 `O`, `P`, `Q` and `R` — the same set the master client handles for rendering.
 
-Still yours rather than the bot's while possessing: the action bar, the item
-counts and the age bar at the bottom of the screen, which are DOM driven from
-your own player. The number keys are already mapped to the *bot's* weapons and
-buildings, so the controls are right even where the strip below still shows
-your own.
+**The HUD comes with you.** Score, food, wood, stone, kills, the age bar, the
+action bar and the placed-item counts are DOM driven from `myPlayer`, so
+without moving them you would be playing someone else's body while reading your
+own numbers — the age bar worst of all, since it is the one thing on screen
+that visibly contradicts what you are doing. The bot tracks all of it from its
+own `N`, `T`, `S` and `V` packets and writes it into the same elements;
+releasing hands it back by calling the game's own updaters, so nothing drifts.
+
+**And you can see it fight.** `K` (gatherAnimation) drives `startAnim` on the
+view's player, which is the same call the real client makes for its own body —
+without it you would be killing people with a body that just slides around. `J`
+animates animals, `M` turns turrets, and `O` sets `hitTime` and throws the
+floating damage number, so hits read the way they do on your own player.
 
 Your own character freezes: your keys and mouse are steering the bot, so it
 stops walking and stops turning. If an enemy comes within **Guard Radius**

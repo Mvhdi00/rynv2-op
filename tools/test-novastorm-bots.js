@@ -291,6 +291,34 @@ t('updateItems refreshes the weapon pair', () => {
     RynBots._onPacket(b, 'V', [[4, 10], true]);
     eq(b.weapons[0], 4); eq(b.weapons[1], 10);
 });
+t('the HUD numbers a possessed bot shows are tracked', () => {
+    const b = mkBot(58);
+    RynBots._onPacket(b, 'N', ['food', 137]);
+    RynBots._onPacket(b, 'N', ['wood', 42]);
+    RynBots._onPacket(b, 'N', ['stone', 9]);
+    RynBots._onPacket(b, 'N', ['points', 5100]);
+    RynBots._onPacket(b, 'N', ['kills', 3]);
+    eq(b.stats.food, 137); eq(b.stats.wood, 42); eq(b.stats.stone, 9);
+    eq(b.stats.points, 5100); eq(b.stats.kills, 3);
+});
+t('the age bar has XP and maxXP to draw from, not just the age', () => {
+    const b = mkBot(59);
+    RynBots._onPacket(b, 'T', [180, 900, 4]);
+    eq(b.XP, 180); eq(b.maxXP, 900); eq(b.age, 4);
+});
+t('placed-item counts are tracked per group', () => {
+    const b = mkBot(60);
+    RynBots._onPacket(b, 'S', [2, 11]);     // 11 spikes down
+    RynBots._onPacket(b, 'S', [3, 4]);      // 4 mills
+    eq(b.itemCounts[2], 11);
+    eq(b.itemCounts[3], 4);
+});
+t('a non-string player value is ignored rather than making a junk key', () => {
+    const b = mkBot(61);
+    const before = Object.keys(b.stats).length;
+    RynBots._onPacket(b, 'N', [7, 123]);
+    eq(Object.keys(b.stats).length, before);
+});
 t('store packets track owned + equipped hats', () => {
     const b = mkBot(55);
     RynBots._onPacket(b, '5', [0, 7, 0]);   // bought hat 7
