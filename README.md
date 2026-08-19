@@ -283,10 +283,31 @@ Auto Heal still runs for you.
 
 The camera position comes off the bot's own socket, so it is exact even when
 the bot is on the far side of the map. Your client is only *sent* what is near
-your own player, though, so at that range the screen would be empty: the
-possessed bot's own world model is drawn as an overlay — buildings, resources,
-players, names, and its health bar — but only for entities your client does not
-already have, so nothing gets a flat circle stamped over its sprite.
+your own player, though, so at that range there is nothing on screen to draw.
+
+**It is drawn by the game's own renderer, not an overlay.** The first version
+drew circles — it showed you where things were and looked nothing like moomoo.
+The bot receives exactly the packets a real client receives, so the fix is not
+to draw its world differently, it is to build a *second world* out of the
+game's own classes and point the game's own renderer at it. `GameObject`,
+`Player` and `AI` do not care which socket fed them, and `getResSprite`,
+`getItemSprite`, `renderPlayer` and `renderSkin` work on any instance.
+
+So possession looks like a second browser on that account: real sprites, real
+trees and rocks, real player bodies with their hats and skins, animals, names,
+health bars and chat bubbles.
+
+Two worlds are kept side by side and never mixed — yours, fed by your socket,
+and the view, fed by whichever bot you are driving. Releasing possession just
+stops reading the view; your own state was never touched, so there is nothing
+to resync. The packets mirrored into it are `C`, `D`, `E`, `a`, `H`, `I`, `L`,
+`O`, `P`, `Q` and `R` — the same set the master client handles for rendering.
+
+Still yours rather than the bot's while possessing: the action bar, the item
+counts and the age bar at the bottom of the screen, which are DOM driven from
+your own player. The number keys are already mapped to the *bot's* weapons and
+buildings, so the controls are right even where the strip below still shows
+your own.
 
 Your own character freezes: your keys and mouse are steering the bot, so it
 stops walking and stops turning. If an enemy comes within **Guard Radius**

@@ -9677,85 +9677,187 @@ let pps = 0;
             minimapData = data;
         }
 
-        // POSSESSION OVERLAY:
-        // Draws the possessed bot's own view of the world for everything your
-        // client has not been sent. Plain shapes, no sprites — this exists so
-        // you can see what you are walking into and aim at it, not to look like
-        // the real render.
-        function renderPossessedWorld(xOffset, yOffset) {
-            let bot;
-            try { bot = RynBots.possessed; } catch (e) { return; }
-            if (!bot || !bot.alive) return;
-            const ctx = mainContext;
-            ctx.save();
-            ctx.lineWidth = 4;
+        // =====================================================================
+        // THE POSSESSED BOT'S WORLD, DRAWN BY THE GAME ITSELF
+        // =====================================================================
+        // The first version of this drew circles: it could show you where things
+        // were but it looked nothing like moomoo. What you actually want when
+        // you step into a bot is the game — same sprites, same trees, same
+        // players — as if you had opened a second browser on that account.
+        //
+        // The bot already receives exactly the packets a real client receives,
+        // so the fix is not to draw its world differently, it is to build a
+        // SECOND world out of the game's own classes and point the game's own
+        // renderer at it. GameObject and Player do not care which socket fed
+        // them; getResSprite / getItemSprite / renderPlayer / renderSkin all
+        // work on any instance.
+        //
+        // Two worlds are kept side by side and never mixed: yours, fed by your
+        // socket, and the view, fed by whichever bot you are driving. Releasing
+        // possession just stops reading the view — your own state was never
+        // touched, so there is nothing to resync.
+        const botViewObjects = [];
+        const botViewAis = [];
+        const botViewPlayers = [];
+        const botViewObjectManager = new ObjectManager(GameObject, botViewObjects, UTILS, config);
+        const botViewAiManager = new AiManager(botViewAis, AI, botViewPlayers, items, null, config, UTILS);
+        let botViewSelf = null;      // the Player instance for the bot you are driving
+        let botViewFor = null;       // which bot the view currently holds
 
-            // Buildings and resources the master has never heard of.
-            for (const o of bot.objects.values()) {
-                if (findObjectBySid(o.sid)) continue;
-                const x = o.x - xOffset, y = o.y - yOffset;
-                if (x < -200 || y < -200 || x > maxScreenWidth + 200 || y > maxScreenHeight + 200) continue;
-                const item = (o.id === null || o.id === undefined) ? null : items.list[o.id];
-                const r = o.scale || (item && item.scale) || 40;
-                const mine = RynBots._isFriendly(bot, o.owner);
-                ctx.globalAlpha = 0.55;
-                ctx.fillStyle = !item ? "#7d9e5c" : (mine ? "#5aa0ff" : "#ff6a5a");
-                ctx.strokeStyle = "rgba(0,0,0,0.35)";
-                ctx.beginPath();
-                ctx.arc(x, y, r, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-            }
-
-            // Players the master cannot see.
-            ctx.font = "26px Hammersmith One";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            for (const p of bot.players.values()) {
-                if (!p.visible || p.sid === bot.sid) continue;
-                if (findPlayerBySID(p.sid)) continue;
-                const x = p.x - xOffset, y = p.y - yOffset;
-                if (x < -120 || y < -120 || x > maxScreenWidth + 120 || y > maxScreenHeight + 120) continue;
-                const friend = RynBots._isFriendly(bot, p.sid);
-                ctx.globalAlpha = 0.9;
-                ctx.fillStyle = friend ? "#8ecc51" : "#cc5151";
-                ctx.strokeStyle = "rgba(0,0,0,0.45)";
-                ctx.beginPath();
-                ctx.arc(x, y, 35, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-                if (p.name) {
-                    ctx.fillStyle = "#fff";
-                    ctx.fillText(p.name, x, y - 58);
-                }
-            }
-
-            // The bot you are driving.
-            const bx = bot.x - xOffset, by = bot.y - yOffset;
-            ctx.globalAlpha = 1;
-            ctx.strokeStyle = "#00e5ff";
-            ctx.lineWidth = 5;
-            ctx.beginPath();
-            ctx.arc(bx, by, 44, 0, Math.PI * 2);
-            ctx.stroke();
-            if (!findPlayerBySID(bot.sid)) {
-                ctx.globalAlpha = 0.9;
-                ctx.fillStyle = "#f2f2f2";
-                ctx.beginPath();
-                ctx.arc(bx, by, 35, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = "#fff";
-                ctx.fillText(bot.name, bx, by - 58);
-            }
-            // Health, because you cannot read the normal bar from out here.
-            const hw = 100, hh = 12;
-            ctx.globalAlpha = 1;
-            ctx.fillStyle = "rgba(0,0,0,0.45)";
-            ctx.fillRect(bx - hw / 2, by + 55, hw, hh);
-            ctx.fillStyle = "#8ecc51";
-            ctx.fillRect(bx - hw / 2, by + 55, hw * Math.max(0, Math.min(1, (bot.health || 0) / 100)), hh);
-            ctx.restore();
+        function botViewReset(bot) {
+            botViewObjects.length = 0;
+            botViewPlayers.length = 0;
+            botViewAis.length = 0;
+            botViewSelf = null;
+            botViewFor = bot || null;
         }
+
+        function botViewFindPlayer(sid) {
+            for (let i = 0; i < botViewPlayers.length; i++)
+                if (botViewPlayers[i].sid === sid) return botViewPlayers[i];
+            return null;
+        }
+
+        // Mirror one of the bot's packets into the view. Called from the bot's
+        // own message handler, and only for the bot being driven.
+        function botViewFeed(bot, type, args) {
+            if (botViewFor !== bot) botViewReset(bot);
+            args = args || [];
+            switch (type) {
+            case "C":                                   // setupGame — fresh world
+                botViewReset(bot);
+                break;
+            case "D": {                                 // addPlayer
+                const d = args[0];
+                if (!d) break;
+                let p = botViewPlayers.find(x => x.id === d[0]);
+                if (!p) {
+                    p = new Player(d[0], d[1], config, UTILS, projectileManager,
+                                   botViewObjectManager, botViewPlayers, botViewAis,
+                                   items, hats, accessories);
+                    botViewPlayers.push(p);
+                }
+                p.spawn(args[1] ? 1 : null);
+                p.visible = false;
+                p.y2 = undefined;
+                p.setData(d);
+                if (args[1]) botViewSelf = p;
+                break;
+            }
+            case "E": {                                 // removePlayer
+                const i = botViewPlayers.findIndex(x => x.id === args[0]);
+                if (i >= 0) botViewPlayers.splice(i, 1);
+                break;
+            }
+            case "a": {                                 // updatePlayers
+                const d = args[0] || [];
+                const now = Date.now();
+                for (const p of botViewPlayers) { p.forcePos = !p.visible; p.visible = false; }
+                for (let i = 0; i + 12 < d.length; i += 13) {
+                    const p = botViewFindPlayer(d[i]);
+                    if (!p) continue;
+                    // Same interpolation bookkeeping the master's updatePlayers
+                    // does, so the render loop can lerp these exactly the same.
+                    p.t1 = (p.t2 === undefined) ? now : p.t2;
+                    p.t2 = now;
+                    p.x1 = p.x; p.y1 = p.y;
+                    p.x2 = d[i + 1]; p.y2 = d[i + 2];
+                    p.d1 = (p.d2 === undefined) ? d[i + 3] : p.d2;
+                    p.d2 = d[i + 3];
+                    p.dt = 0;
+                    p.buildIndex = d[i + 4];
+                    p.weaponIndex = d[i + 5];
+                    p.weaponVariant = d[i + 6];
+                    p.team = d[i + 7];
+                    p.isLeader = d[i + 8];
+                    p.skinIndex = d[i + 9];
+                    p.tailIndex = d[i + 10];
+                    p.iconIndex = d[i + 11];
+                    p.zIndex = d[i + 12];
+                    p.visible = true;
+                    if (p.buildIndex < 0) p.weaponVariants[p.weaponIndex] = p.weaponVariant;
+                }
+                break;
+            }
+            case "H": {                                 // loadGameObject
+                const d = args[0] || [];
+                for (let i = 0; i + 7 < d.length; i += 8) {
+                    botViewObjectManager.add(d[i], d[i + 1], d[i + 2], d[i + 3], d[i + 4],
+                                             d[i + 5], items.list[d[i + 6]], true,
+                                             (d[i + 7] >= 0 ? { sid: d[i + 7] } : null));
+                }
+                break;
+            }
+            case "Q": botViewObjectManager.disableBySid(args[0]); break;
+            case "R": botViewObjectManager.removeAllItems(args[0]); break;
+            case "L": {                                 // wiggleGameObject
+                for (const o of botViewObjects) {
+                    if (o.sid !== args[1]) continue;
+                    o.xWiggle += config.gatherWiggle * Math.cos(args[0]);
+                    o.yWiggle += config.gatherWiggle * Math.sin(args[0]);
+                    break;
+                }
+                break;
+            }
+            case "O": {                                 // updateHealth
+                const p = botViewFindPlayer(args[0]);
+                if (p) p.health = args[1];
+                break;
+            }
+            case "I": {                                 // loadAI — the animals
+                const d = args[0];
+                for (const a of botViewAis) { a.forcePos = !a.visible; a.visible = false; }
+                if (!d) break;
+                const now = Date.now();
+                for (let i = 0; i + 6 < d.length; i += 7) {
+                    let a = botViewAis.find(x => x.sid === d[i]);
+                    if (a) {
+                        a.index = d[i + 1];
+                        a.t1 = (a.t2 === undefined) ? now : a.t2;
+                        a.t2 = now;
+                        a.x1 = a.x; a.y1 = a.y;
+                        a.x2 = d[i + 2]; a.y2 = d[i + 3];
+                        a.d1 = (a.d2 === undefined) ? d[i + 4] : a.d2;
+                        a.d2 = d[i + 4];
+                        a.health = d[i + 5];
+                        a.dt = 0;
+                        a.visible = true;
+                    } else {
+                        a = botViewAiManager.spawn(d[i + 2], d[i + 3], d[i + 4], d[i + 1]);
+                        a.x2 = a.x; a.y2 = a.y; a.d2 = a.dir;
+                        a.health = d[i + 5];
+                        if (!botViewAiManager.aiTypes[d[i + 1]].name) a.name = config.cowNames[d[i + 6]];
+                        a.forcePos = true;
+                        a.sid = d[i];
+                        a.visible = true;
+                    }
+                }
+                break;
+            }
+            case "P": botViewReset(bot); break;         // died
+            }
+        }
+
+        // The body your mouse is aiming turns to the cursor rather than to the
+        // last angle the server sent, so it feels like you are holding it —
+        // which is exactly what getAttackDir does for your own player. Inside a
+        // bot the same cursor angle drives the bot's body.
+        function getPossessAimDir(obj) {
+            if (obj && obj === botViewSelf && inBotView()) {
+                return Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2));
+            }
+            return getAttackDir();
+        }
+
+        // The render passes read these while you are inside a bot, and your own
+        // arrays every other frame.
+        function inBotView() {
+            try { return !!(RynBots.possessed && botViewFor === RynBots.possessed); }
+            catch (e) { return false; }
+        }
+        function renderObjectSource() { return inBotView() ? botViewObjects : gameObjects; }
+        function renderPlayerSource() { return inBotView() ? botViewPlayers : players; }
+        function renderAiSource() { return inBotView() ? botViewAis : ais; }
         function renderMinimap(delta) {
             if (myPlayer && myPlayer.alive) {
                 mapContext.clearRect(0, 0, mapDisplay.width, mapDisplay.height);
@@ -11042,8 +11144,12 @@ let pps = 0;
                 // INTERPOLATE PLAYERS AND AI:
                 let lastTime = now - (1000 / config.serverUpdateRate);
                 let tmpDiff;
-                for (let i = 0; i < players.length + ais.length; ++i) {
-                    tmpObj = players[i] || ais[i - players.length];
+                // Interpolate whichever world is on screen — without this the
+                // bot's view would jump a whole server tick at a time.
+                const interpPlayers = renderPlayerSource();
+                const interpAis = renderAiSource();
+                for (let i = 0; i < interpPlayers.length + interpAis.length; ++i) {
+                    tmpObj = interpPlayers[i] || interpAis[i - interpPlayers.length];
                     if (tmpObj && tmpObj.visible) {
                         if (tmpObj.forcePos) {
                             tmpObj.x = tmpObj.x2;
@@ -11173,8 +11279,9 @@ let pps = 0;
 
                 // RENDER AI:
                 mainContext.globalAlpha = 1;
-                for (var i = 0; i < ais.length; ++i) {
-                    tmpObj = ais[i];
+                const aiList = renderAiSource();
+                for (var i = 0; i < aiList.length; ++i) {
+                    tmpObj = aiList[i];
                     if (tmpObj.active && tmpObj.visible) {
                         tmpObj.animate(delta);
                         mainContext.save();
@@ -11274,9 +11381,12 @@ let pps = 0;
                 // FROM HERE
 
                 // RENDER PLAYER AND AI UI / PLAYERINFOS:
+                // Names, health bars and crowns follow whichever world is on
+                // screen, so the bot's view is labelled like the real thing.
                 mainContext.strokeStyle = darkOutlineColor;
-                for (var i = 0; i < players.length + ais.length; ++i) {
-                    tmpObj = players[i] || ais[i - players.length];
+                const uiPlayers = renderPlayerSource(), uiAis = renderAiSource();
+                for (var i = 0; i < uiPlayers.length + uiAis.length; ++i) {
+                    tmpObj = uiPlayers[i] || uiAis[i - uiPlayers.length];
                     if (tmpObj.visible) {
 
                         // NAME AND HEALTH:
@@ -11375,20 +11485,13 @@ let pps = 0;
 
                 // TO HERE
 
-                // RENDER THE POSSESSED BOT'S WORLD:
-                // Your client is only sent what is near YOUR player, so a bot
-                // across the map would be standing in an empty screen. The bot
-                // keeps its own world model, so draw from that — but only the
-                // entities your own client does not already have, otherwise
-                // every tree you can see gets a flat circle stamped over it.
-                renderPossessedWorld(xOffset, yOffset);
-
                 // RENDER ANIM TEXTS:
                 textManager.update(delta, mainContext, xOffset, yOffset);
 
                 // RENDER CHAT MESSAGES:
-                for (var i = 0; i < players.length; ++i) {
-                    tmpObj = players[i];
+                const chatPlayers = renderPlayerSource();
+                for (var i = 0; i < chatPlayers.length; ++i) {
+                    tmpObj = chatPlayers[i];
                     if (tmpObj.visible && tmpObj.chatCountdown > 0) {
                         tmpObj.chatCountdown -= delta;
                         if (tmpObj.chatCountdown <= 0)
@@ -11537,8 +11640,9 @@ let pps = 0;
         function buildRenderFrame(xOffset, yOffset) {
             for (let b = 0; b < layerBuckets.length; b++) layerBuckets[b].length = 0;
             spikeDots.length = 0;
-            for (let i = 0; i < gameObjects.length; ++i) {
-                const o = gameObjects[i];
+            const source = renderObjectSource();
+            for (let i = 0; i < source.length; ++i) {
+                const o = source[i];
                 if (!o.active) continue;
                 // Every active object still animates, on screen or not — that is
                 // what the old layer-0 pass did and rotation must not stall.
@@ -11638,13 +11742,17 @@ let pps = 0;
         // RENDER PLAYERS:
         function renderPlayers(xOffset, yOffset, zIndex) {
             mainContext.globalAlpha = 1;
-            for (var i = 0; i < players.length; ++i) {
-                tmpObj = players[i];
+            const list = renderPlayerSource();
+            // Whichever body your mouse is actually aiming: yours normally, the
+            // bot's while you are driving it.
+            const aimed = (list === players) ? myPlayer : botViewSelf;
+            for (var i = 0; i < list.length; ++i) {
+                tmpObj = list[i];
                 if (tmpObj.zIndex == zIndex) {
                     tmpObj.animate(delta);
                     if (tmpObj.visible) {
                         tmpObj.skinRot += (0.002 * delta);
-                        tmpDir = ((tmpObj == myPlayer) ? getAttackDir() : tmpObj.dir) + tmpObj.dirPlus;
+                        tmpDir = ((tmpObj == aimed) ? getPossessAimDir(tmpObj) : tmpObj.dir) + tmpObj.dirPlus;
                         mainContext.save();
                         mainContext.translate(tmpObj.x - xOffset, tmpObj.y - yOffset);
                         // RENDER PLAYER:
@@ -14953,6 +15061,12 @@ for (let tree of trees) {
                         return;
                     }
                     try { RynBots._onPacket(bot, msg.type, msg.args); } catch (e) {}
+                    // While you are driving this bot, its packets also build a
+                    // second world out of the game's own classes, so the real
+                    // renderer can draw it — sprites, skins, trees and all.
+                    try {
+                        if (RynBots.possessed === bot) botViewFeed(bot, msg.type, msg.args);
+                    } catch (e) {}
                 });
                 ws.addEventListener("close", (e) => { try { console.warn("[NovaBot] socket closed", e && e.code, e && e.reason); } catch (_) {} this._remove(bot); });
                 ws.addEventListener("error", () => { try { console.warn("[NovaBot] socket error"); } catch (e) {} });
@@ -15680,6 +15794,9 @@ for (let tree of trees) {
             _enter(bot) {
                 if (this.possessed && this.possessed !== bot) this._stopControls(this.possessed);
                 this.possessed = bot;
+                // Start its view from nothing — the bot's own packet stream
+                // fills it in, exactly the way a fresh client would be filled.
+                try { botViewReset(bot); } catch (e) {}
                 this._possessAim = null;
                 this._possessAttack = false;
                 this.log("controlling " + bot.name + "  (Up arrow returns to you)");
@@ -15689,6 +15806,9 @@ for (let tree of trees) {
                 this._stopControls(this.possessed);
                 this.log("released " + this.possessed.name);
                 this.possessed = null;
+                // Your own world was never touched, so there is nothing to
+                // resync — just stop reading the view.
+                try { botViewReset(null); } catch (e) {}
                 if (this._autoPlayForced) { window.vars.autoPlay = false; this._autoPlayForced = false; }
             },
             // Hand the bot back to the AI cleanly: stop the swing, drop the
