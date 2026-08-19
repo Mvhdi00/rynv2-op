@@ -310,6 +310,57 @@ break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
 console, Scan and Kill and possession.
 
+## Anti Bow Insta
+
+**Defense → Ranged.** On by default.
+
+A bow insta is a shot fired from outside melee range and timed to land on the
+same tick as everything else. The existing damage prediction never saw it:
+`spikeDmgPot`, `hitDmgPot`, `turretDmgPot` and `secDmgPot` are all melee, spike
+and turret, so an arrow already in the air counted for nothing until it hit.
+
+The answer is the Soldier Helmet. `changeHealth` applies the wearer's
+`skin.dmgMult` to *every* incoming damage, projectiles included
+(`src/game_index.js:2420`), and the soldier's is `0.75` — so a shot that kills
+on the nose often does not through the helmet.
+
+Two signals feed it:
+
+1. **The arrow that already exists.** Novastorm is sent every projectile
+   (`"X"` → `addProjectile`), so incoming shots are added up for real rather
+   than guessed at. A projectile counts when its path clears the player's body,
+   it still has the range to arrive, and it lands within about two server ticks
+   — further out than that and you move rather than change hats. Damage comes
+   straight off the projectile table and is never scaled by weapon variant or
+   shooter hat: the server hands the flat value to the projectile
+   (`game_index.js:990`), and the ranged-hat `aMlt` scales only range and speed.
+2. **The switch tell**, ported from RYN's `rangedBowInsta`: an enemy beyond 300
+   units, aimed at you, changing *into* a bow, or bow → crossbow, or crossbow →
+   musket. That is the queue for a multi-projectile insta and it fires a tick
+   before any arrow exists, which is the tick where you still have a choice.
+   "Aimed at you" is the half-angle your body subtends from where they stand,
+   so the cone tightens with distance — the same construction RYN uses.
+
+The tell holds the helmet for 1.2 s and only fires on a *fresh* swap: the
+tracked previous weapon is sticky, so without a freshness window one swap would
+tell forever. Projectile damage is added into `totalDmgPot`, and the helmet
+goes on when the total would kill or while a tell is live.
+
+Flat projectile damage, from `game_index.js:1552`:
+
+| index | source | damage |
+|---|---|---|
+| 0 | hunting bow | 25 |
+| 1 | turret | 25 |
+| 2 | crossbow | 35 |
+| 3 | repeater crossbow | 30 |
+| 4 | mine | 16 |
+| 5 | musket | 50 |
+
+`tools/test-anti-bow-insta.js` runs the detection out of the shipped script
+against these numbers — 27 checks over the projectile maths, the tell, the
+freshness and hold windows, and the cases where the helmet actually saves you.
+
 ## Lite Mode (performance)
 
 **Visuals → Performance**, or the `L` key.

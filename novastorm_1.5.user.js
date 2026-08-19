@@ -12669,6 +12669,108 @@ for (let tree of trees) {
             }
         }
 
+        // =====================================================================
+        // ANTI BOW INSTA
+        // =====================================================================
+        // A bow insta is a shot from outside melee range timed to land on the
+        // same tick as everything else, and the existing damage prediction
+        // never saw it: spikeDmgPot / hitDmgPot / turretDmgPot / secDmgPot are
+        // all melee, spike and turret. An arrow already in the air counted for
+        // nothing until it hit.
+        //
+        // The answer is the Soldier Helmet. changeHealth applies the wearer's
+        // skin.dmgMult to EVERY incoming damage, projectiles included
+        // (game_index.js:2420), and the soldier's is 0.75 — so a shot that
+        // would kill on the nose often does not through the helmet.
+        //
+        // Two signals feed it:
+        //
+        //  1. The arrow that already exists. Novastorm is sent every projectile
+        //     ("X" -> addProjectile), so incoming shots are added up for real
+        //     rather than guessed at. Damage comes straight off the projectile
+        //     table and is never scaled by weapon variant or shooter hat — the
+        //     server hands the flat value to the projectile
+        //     (game_index.js:990, `w.init(..., f.dmg, ...)`), and aMlt scales
+        //     only range and speed.
+        //
+        //  2. The switch tell, ported from RYN's rangedBowInsta: an enemy
+        //     beyond melee range, aimed at you, changing INTO a bow, or
+        //     bow -> crossbow, or crossbow -> musket. That is the queue for a
+        //     multi-projectile insta and it fires a tick before any arrow
+        //     exists, which is the tick that matters.
+        //
+        // Flat projectile damage, for reference (game_index.js:1552):
+        //   0 hunting bow 25 · 1 turret 25 · 2 crossbow 35
+        //   3 repeater 30   · 4 mine 16   · 5 musket 50
+        const BOW_TELL_MIN_DIST = 300;   // RYN's threshold: a bow insta is a ranged play
+        const BOW_TELL_HOLD = 1200;      // ms to keep the helmet on after a tell
+        let bowTellUntil = 0;
+        let bowIncomingDmg = 0;
+        let bowThreatActive = false;
+
+        // Is the enemy's aim actually covering my hitbox? Same construction RYN
+        // uses: the half-angle my body subtends from where they stand.
+        function bowLookingAtMe(enemy, dist) {
+            if (!dist) return false;
+            const toMe = Math.atan2(myPlayer.y2 - enemy.y2, myPlayer.x2 - enemy.x2);
+            const half = Math.asin(Math.min(1, (2 * (myPlayer.scale || 35)) / (2 * dist)));
+            return UTILS.getAngleDist(toMe, enemy.d2 === undefined ? enemy.dir : enemy.d2) <= half;
+        }
+
+        // Signal 2 — the swap into a ranged weapon.
+        function bowSwitchTell() {
+            for (const enemy of enemiesNear) {
+                if (!enemy || !enemy.visible) continue;
+                const cur = enemy.weaponIndex, old = enemy.oldWeaponIndex;
+                const tell = (cur === 9 && old !== 9)
+                          || (cur === 12 && old === 9)
+                          || (cur === 15 && old === 12);
+                if (!tell) continue;
+                // Only count the swap while it is fresh — oldWeaponIndex is
+                // sticky, so without this a single swap would tell forever.
+                if (tick - (enemy.weaponSwapTick || 0) > 2) continue;
+                const dist = UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2);
+                if (dist <= BOW_TELL_MIN_DIST) continue;
+                if (!bowLookingAtMe(enemy, dist)) continue;
+                return true;
+            }
+            return false;
+        }
+
+        // Signal 1 — what is already in the air and going to land on me.
+        // A projectile is a threat when it is pointed close enough at me that
+        // its path clears my body, and it still has the range to get here.
+        function bowIncomingProjectileDamage() {
+            let total = 0;
+            for (const p of projectiles) {
+                if (!p || !p.active) continue;
+                const dx = myPlayer.x2 - p.x, dy = myPlayer.y2 - p.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 1 || dist > (p.range || 0)) continue;      // cannot reach me
+                const off = UTILS.getAngleDist(Math.atan2(dy, dx), p.dir);
+                if (off > Math.PI / 2) continue;                      // travelling away
+                // Perpendicular miss distance at my range.
+                if (dist * Math.sin(off) > (myPlayer.scale || 35) + (p.scale ? 20 : 20)) continue;
+                // Only shots landing within about two server ticks are worth
+                // changing a hat for; anything further out, you move first.
+                if (p.speed > 0 && (dist / p.speed) > 260) continue;
+                total += p.dmg || 0;
+            }
+            return total;
+        }
+
+        function updateBowInstaThreat() {
+            bowIncomingDmg = 0;
+            bowThreatActive = false;
+            if (!window.vars.antiBowInsta) { bowTellUntil = 0; return; }
+            if (!myPlayer || !myPlayer.alive) { bowTellUntil = 0; return; }
+
+            bowIncomingDmg = bowIncomingProjectileDamage();
+            const now = Date.now();
+            if (bowSwitchTell()) bowTellUntil = now + BOW_TELL_HOLD;
+            bowThreatActive = bowIncomingDmg > 0 || now < bowTellUntil;
+        }
+
         function doSmartTickAnti() {
             if (!nearestEnemy) return false;
             if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
@@ -15705,6 +15807,14 @@ for (let tree of trees) {
                     tmpObj.dt = 0;
 
                     tmpObj.buildIndex = data[i + 4];
+                    // Anti Bow Insta reads the *change* of weapon, not the
+                    // weapon: swapping into a bow is the tell, holding one is
+                    // not. Keep the last different value, so a weapon held for
+                    // several ticks does not erase what it was swapped from.
+                    if (data[i + 5] !== tmpObj.weaponIndex) {
+                        tmpObj.oldWeaponIndex = tmpObj.weaponIndex;
+                        tmpObj.weaponSwapTick = tick;
+                    }
                     tmpObj.weaponIndex = data[i + 5];
                     tmpObj.weaponVariant = data[i + 6];
 
@@ -17027,14 +17137,33 @@ for (let tree of trees) {
                     iWasTrapped = imTrapped;
                     lastPredicted = predicted;
 
+                    // ANTI BOW INSTA — the arrow in the air and the swap tell.
+                    // Everything above this line is melee, spike and turret, so
+                    // a shot from range contributed nothing to the total until
+                    // the moment it landed.
+                    updateBowInstaThreat();
+
                     // Total dmg pot combine of all dmgs
-                    totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot;
+                    totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot
+                                + bowIncomingDmg;
 
                     if (totalDmgPot > 140)
                         totalDmgPot = 140;
 
                     if (totalDmgPot >= 100)
                         soldierAnti = true;
+
+                    // The helmet is worth wearing whenever the shot would kill
+                    // and the 0.75 would carry you through it — and on the bare
+                    // tell too, before any arrow exists, because that is the
+                    // tick you still have a choice.
+                    if (window.vars.antiBowInsta && bowThreatActive) {
+                        if (Date.now() < bowTellUntil) {
+                            soldierAnti = true;
+                        } else if (totalDmgPot >= myPlayer.health) {
+                            soldierAnti = true;
+                        }
+                    }
 
 
 
@@ -22167,6 +22296,7 @@ for (let tree of trees) {
         // Defense
         safeSoldier: true,
         antiSmart: false,
+        antiBowInsta: true,   // soldier helmet against an incoming bow insta
 
         // Placers
         autoPlace: false,
@@ -22330,6 +22460,12 @@ for (let tree of trees) {
                 title: "Knockbacks",
                 items: [
                     { type: 'toggle', name: "Anti Smart-Tick", id: "antiSmart" }
+                ]
+            },
+            {
+                title: "Ranged",
+                items: [
+                    { type: 'toggle', name: "Anti Bow Insta", id: "antiBowInsta" }
                 ]
             }
         ],
