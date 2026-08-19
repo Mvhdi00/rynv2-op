@@ -305,10 +305,23 @@ node tools/test-novastorm-bots.js
 ```
 
 The test evaluates the `RynBots` block straight out of the shipped userscript
-against stubs and asserts the packets it emits — 84 checks over the age path,
+against stubs and asserts the packets it emits — 87 checks over the age path,
 break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
 console, Scan and Kill and possession.
+
+## Fixes to the 1.4 code
+
+- **`addChatLog` was called but never defined.** The two calls in the
+  death-damage debug path threw a `ReferenceError` from inside the tick
+  promise's `then()`, which rejects the promise rather than surfacing —
+  silently skipping the rest of that callback (the `spikeDamage` reset
+  included) on every tick after a death that recorded damage. It is now
+  defined once, and writes to the bot console in the Bots tab as well as
+  devtools, so the mod's `Mod:` lines have somewhere on screen to land.
+- **`updateAngles2()` removed.** It was never called, and it could not have
+  been: its only distinguishing line calls `checkEnemyTraps()`, which is not
+  defined anywhere in the file, so the first call would have thrown.
 
 ## Caveats
 

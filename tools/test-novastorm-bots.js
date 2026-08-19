@@ -574,6 +574,27 @@ t('plain chat is not a command', () => {
     eq(RynBots.command('hello there'), false);
     eq(RynBots.command('!nonsense'), false);
 });
+t('log appends exactly one line, and the sink sees it', () => {
+    reset();
+    let seen = 0;
+    window._novaBotLogSink = () => seen++;
+    RynBots.log('hello');
+    eq(RynBots._log.length, 1);
+    eq(seen, 1);
+    window._novaBotLogSink = null;
+});
+t('_push feeds the same buffer without going through log', () => {
+    reset();
+    RynBots._push('Mod: from addChatLog');
+    eq(RynBots._log.length, 1);
+    eq(RynBots._log[0].text, 'Mod: from addChatLog');
+});
+t('the console buffer is capped', () => {
+    reset();
+    for (let i = 0; i < 90; i++) RynBots._push('line ' + i);
+    eq(RynBots._log.length, 60);
+    eq(RynBots._log[59].text, 'line 89');
+});
 t('every command writes a line to the console log', () => {
     reset();
     RynBots.command('!bots');

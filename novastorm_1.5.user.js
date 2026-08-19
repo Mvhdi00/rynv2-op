@@ -10158,6 +10158,20 @@ let pps = 0;
         }
         try { window._novaBotCmd = handleBotCommand; } catch (e) {}
 
+        // addChatLog was CALLED in this build but never DEFINED. The two calls
+        // in the death-damage debug path (`Mod: Predict Damages before death`)
+        // therefore threw a ReferenceError from inside the tick promise's then()
+        // — which rejects the promise instead of surfacing, silently skipping
+        // the rest of that callback, the spikeDamage reset included, on every
+        // tick after a death that recorded damage.
+        //
+        // One definition fixes the crash and gives every "Mod:" line somewhere
+        // to land: the bot console in the Bots tab, which is already on screen.
+        function addChatLog(text, color) {
+            try { console.log("%c" + text, "color:" + (color || "#ffffff")); } catch (e) {}
+            try { if (window.RynBots) window.RynBots._push(text); } catch (e) {}
+        }
+
         // ── Chat send (translation removed — uses zero network) ─────────────
         // Sends your text as-is; local "!f / !find / !c" commands are intercepted.
         function sendChat(message) {
@@ -13081,17 +13095,6 @@ for (let tree of trees) {
             checkPredictObjects(angles);
         }
 
-        function updateAngles2(id) {
-            const angles = [];
-            for (let i = 0; i < 36; i++) {
-                const angle = UTILS.toRad(i * (360 / 36));
-                angles.push({ id: id, angle: angle, placeable: canPlace(id, angle) && checkEnemyTraps(id, angle), ...getConfig(id, angle) });
-            }
-
-            getPerfectAngles(angles);
-            checkPredictObjects(angles);
-        }
-
         function checkPredictObjects(angles) {
             // Filter placeable angles that are not banned
             const validAngles = angles.filter(obj => {
@@ -15071,12 +15074,18 @@ for (let tree of trees) {
             // so a command typed in either place does the same thing and never
             // reaches the server.
             log(text) {
+                this._push(String(text));
+                try { console.log("[NovaBot]", text); } catch (e) {}
+            },
+            // The buffer behind the console box. addChatLog() writes here too,
+            // so the mod's own "Mod:" lines and the bots' lines share one
+            // scrollback instead of only reaching devtools. Kept separate from
+            // log() so addChatLog can feed it without calling back into log().
+            _push(text) {
                 const line = { t: Date.now(), text: String(text) };
                 this._log.push(line);
                 if (this._log.length > 60) this._log.shift();
                 try { if (window._novaBotLogSink) window._novaBotLogSink(line); } catch (e) {}
-                try { if (typeof addChatLog === "function") addChatLog("Bots: " + line.text, "#00e5ff"); } catch (e) {}
-                try { console.log("[NovaBot]", line.text); } catch (e) {}
             },
             // Resolve "<sid or name>" against the master's own player list first
             // -- it holds every player on the server, with names -- and fall back
