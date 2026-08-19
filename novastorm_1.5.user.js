@@ -13043,10 +13043,28 @@ for (let tree of trees) {
         let lastPrePlaceObject = null;
         let removedObjects = [];
 
+        // How many directions the placer tests around you. Both placer sweeps
+        // read it, so the resolution is one number instead of two literals.
+        //
+        // 144 is 2.5 degrees a step: at the radius a spike is placed from you
+        // (35 + 52 = 87) that puts neighbouring candidates 3.8 units apart, so
+        // the edge of a gap is found twice as precisely as the old 72 did.
+        //
+        // Do not push this much higher without fixing the ban first. A placed
+        // angle is banned by exact key (`bannedAngles.has(obj.angle)`) and
+        // matched with a 0.01 rad tolerance, so the step has to stay well above
+        // 0.01 rad or the ban stops covering the angles either side of it —
+        // at 629 steps the step is 0.00999 and three grid angles fall inside
+        // the tolerance, which means the placer keeps re-picking a neighbour
+        // that drops the spike in the same spot and burns the packet budget on
+        // placements the server rejects. 144 steps is 0.0436 rad, four times
+        // clear of that.
+        const PLACE_ANGLES = 144;
+
         function updateAngles(id) {
             const angles = [];
-            for (let i = 0; i < 72; i++) {
-                const angle = UTILS.toRad(i * (360 / 72));
+            for (let i = 0; i < PLACE_ANGLES; i++) {
+                const angle = UTILS.toRad(i * (360 / PLACE_ANGLES));
                 angles.push({ id: id, angle: angle, placeable: canPlace(id, angle), ...getConfig(id, angle) });
             }
 
@@ -13214,8 +13232,8 @@ for (let tree of trees) {
 
         function getPrePlaceAngles(id, customObjects) {
             const angles = [];
-            for (let i = 0; i < 72; i++) {
-                const angle = UTILS.toRad(i * (360 / 72));
+            for (let i = 0; i < PLACE_ANGLES; i++) {
+                const angle = UTILS.toRad(i * (360 / PLACE_ANGLES));
                 angles.push({ id: id, angle: angle, placeable: canPlace(id, angle, customObjects), ...getConfig(id, angle) });
             }
 
