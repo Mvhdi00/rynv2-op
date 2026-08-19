@@ -254,6 +254,27 @@ t('loadGameObject / killObject / killObjects', () => {
     RynBots._onPacket(b, 'R', [99]);
     eq(b.objects.size, 0);
 });
+t('the object model keeps every field the renderer seeds from', () => {
+    // The bot view rebuilds real GameObjects out of this model when you step
+    // into a bot, passing them to objectManager.add in the same order
+    // loadGameObject does:
+    //   add(sid, x, y, dir, scale, type, items.list[id], true, owner)
+    // so the field names and the packet order have to stay lined up. An
+    // off-by-one here renders nothing and looks like an empty green screen.
+    const b = mkBot(56);
+    RynBots._onPacket(b, 'H', [[7, 1200, 3400, 1.25, 55, 2, 4, 99]]);
+    const o = b.objects.get(7);
+    eq(o.sid, 7);      eq(o.x, 1200);   eq(o.y, 3400);
+    eq(o.dir, 1.25);   eq(o.scale, 55); eq(o.type, 2);
+    eq(o.id, 4);       eq(o.owner, 99);
+});
+t('a natural resource keeps a null id so it seeds as a resource, not an item', () => {
+    const b = mkBot(57);
+    RynBots._onPacket(b, 'H', [[8, 500, 500, 0, 70, 3, null, -1]]);
+    const o = b.objects.get(8);
+    eq(o.id, null, 'items.list[null] is undefined, which is what makes it a resource');
+    eq(o.owner, -1, 'and a negative owner seeds as unowned');
+});
 t('death marks the bot dead and re-sends spawn', () => {
     const b = mkBot(52); sent.length = 0;
     RynBots._onPacket(b, 'P', []);

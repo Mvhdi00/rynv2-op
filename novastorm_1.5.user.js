@@ -9712,6 +9712,61 @@ let pps = 0;
             botViewFor = bot || null;
         }
 
+        // SEED THE VIEW FROM WHAT THE BOT ALREADY KNOWS.
+        //
+        // Starting the view empty and waiting for packets does not work, and the
+        // reason is worth writing down: the server sends loadGameObject ("H")
+        // only when something ENTERS a client's view. Everything already
+        // standing around the bot was sent minutes ago and is never repeated.
+        // updatePlayers ("a") is sent every tick, so players kept appearing —
+        // which is exactly what a bare green screen with the odd player walking
+        // through looks like.
+        //
+        // The bot has kept every object it was ever sent in its own world model,
+        // so entering one seeds the view from that and the live packets carry on
+        // from there.
+        function botViewSeed(bot) {
+            botViewReset(bot);
+            if (!bot) return;
+            try {
+                for (const o of bot.objects.values()) {
+                    botViewObjectManager.add(o.sid, o.x, o.y, o.dir, o.scale, o.type,
+                                             items.list[o.id], true,
+                                             (o.owner >= 0 ? { sid: o.owner } : null));
+                }
+            } catch (e) {}
+            try {
+                const now = Date.now();
+                for (const p of bot.players.values()) {
+                    if (p.x === undefined || p.y === undefined) continue;
+                    // The bot tracks players by sid and never needed an id, so
+                    // the sid doubles as one — it is only used for identity
+                    // inside this view.
+                    const v = new Player(p.sid, p.sid, config, UTILS, projectileManager,
+                                         botViewObjectManager, botViewPlayers, botViewAis,
+                                         items, hats, accessories);
+                    v.spawn(null);
+                    v.setData([p.sid, p.sid, p.name || "", p.x, p.y, p.dir || 0, 100, 100, 35, 0]);
+                    v.x1 = v.x2 = p.x; v.y1 = v.y2 = p.y;
+                    v.d1 = v.d2 = p.dir || 0;
+                    v.t1 = v.t2 = now;
+                    v.dt = 0;
+                    v.buildIndex = (p.buildIndex === undefined) ? -1 : p.buildIndex;
+                    v.weaponIndex = p.weaponIndex || 0;
+                    v.weaponVariant = p.weaponVariant || 0;
+                    v.team = p.team === undefined ? null : p.team;
+                    v.isLeader = p.isLeader;
+                    v.skinIndex = p.skinIndex || 0;
+                    v.tailIndex = p.tailIndex || 0;
+                    v.zIndex = 0;
+                    v.forcePos = true;
+                    v.visible = !!p.visible;
+                    botViewPlayers.push(v);
+                    if (p.sid === bot.sid) botViewSelf = v;
+                }
+            } catch (e) {}
+        }
+
         function botViewFindPlayer(sid) {
             for (let i = 0; i < botViewPlayers.length; i++)
                 if (botViewPlayers[i].sid === sid) return botViewPlayers[i];
@@ -9721,11 +9776,11 @@ let pps = 0;
         // Mirror one of the bot's packets into the view. Called from the bot's
         // own message handler, and only for the bot being driven.
         function botViewFeed(bot, type, args) {
-            if (botViewFor !== bot) botViewReset(bot);
+            if (botViewFor !== bot) botViewSeed(bot);
             args = args || [];
             switch (type) {
             case "C":                                   // setupGame — fresh world
-                botViewReset(bot);
+                botViewSeed(bot);
                 break;
             case "D": {                                 // addPlayer
                 const d = args[0];
@@ -9834,7 +9889,7 @@ let pps = 0;
                 }
                 break;
             }
-            case "P": botViewReset(bot); break;         // died
+            case "P": botViewSeed(bot); break;          // died — rebuild from scratch
             }
         }
 
@@ -15794,9 +15849,11 @@ for (let tree of trees) {
             _enter(bot) {
                 if (this.possessed && this.possessed !== bot) this._stopControls(this.possessed);
                 this.possessed = bot;
-                // Start its view from nothing — the bot's own packet stream
-                // fills it in, exactly the way a fresh client would be filled.
-                try { botViewReset(bot); } catch (e) {}
+                // Seed the view from what this bot already knows. Starting
+                // empty leaves you on a bare green screen, because the server
+                // only sends objects when they enter view and everything around
+                // the bot entered view long ago.
+                try { botViewSeed(bot); } catch (e) {}
                 this._possessAim = null;
                 this._possessAttack = false;
                 this.log("controlling " + bot.name + "  (Up arrow returns to you)");

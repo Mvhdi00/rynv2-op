@@ -297,6 +297,16 @@ So possession looks like a second browser on that account: real sprites, real
 trees and rocks, real player bodies with their hats and skins, animals, names,
 health bars and chat bubbles.
 
+**Entering a bot seeds the view from what that bot already knows**, rather than
+starting empty and waiting for packets. This matters more than it sounds: the
+server sends `loadGameObject` only when something *enters* a client's view, and
+everything already standing around the bot entered view long ago and is never
+repeated. `updatePlayers` is sent every tick, so with an empty start players
+kept appearing and nothing else did — a bare green screen with the occasional
+player walking through it. The bot has kept every object it was ever sent in its
+own world model, so the view is built from that and the live packets carry on
+from there.
+
 Two worlds are kept side by side and never mixed — yours, fed by your socket,
 and the view, fed by whichever bot you are driving. Releasing possession just
 stops reading the view; your own state was never touched, so there is nothing
