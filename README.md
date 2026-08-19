@@ -356,6 +356,39 @@ Caching the gradient saves little on its own — the full-screen `fillRect`
 dominates, not the gradient object — which is why Lite Mode skips the whole
 pass rather than just caching it.
 
+### Frame breakers
+
+Lite Mode lowers the average. These four fix the *hitches* — they apply whether
+or not it is on, because a dropped frame is a dropped frame.
+
+- **`renderGameObjects` walked the whole world five times a frame.** It is
+  called once per layer, and every call scanned the entire `gameObjects` array
+   — which only ever grows, since the client keeps every object it has been
+  sent. The array is now walked once, on-screen objects are bucketed by layer,
+  and each pass draws its own bucket. At 3000 objects that is 15,000 iterations
+  a frame down to 3000, and the buckets are reused between frames so a frame
+  costs no allocations. Garbage collection pauses are dropped frames.
+- **The red spike markers had no bounds check.** Every spike in the world got
+  two filled arcs a frame, wherever it was. After exploring, that was hundreds
+  of paths a frame drawn off the canvas where nothing could appear — in the
+  test world, 205 markers of which 205 were off screen. Only visible spikes are
+  marked now.
+- **Two dead `getPrePlaceAngles` calls in the preplacer's 1 ms timeout.** They
+  passed three arguments to a two-parameter function, so `customObjects` got a
+  number, `checkItemLocation` read `.length` off it and skipped its loop, and
+  every angle came back placeable. The return value was discarded anyway. Each
+  was 144 angle tests and 144 allocations, twice per preplace object, fired
+  from a timeout that lands inside frame time.
+- **The FPS counter pushed a timestamp per frame and `shift()`ed the old ones
+  off.** `shift()` is O(n) and the array held a second of frames, so it moved
+  ~14,000 elements a second for one integer — on its own `requestAnimationFrame`
+  loop next to the game's. It is a counter now, called from `doUpdate`, so the
+  browser schedules one callback a frame instead of two.
+
+`tools/test-render-buckets.js` proves the bucket restructure draws the same
+sequence as the old five-pass version, calls `update()` on the same objects the
+same number of times, and only differs where intended (the off-screen markers).
+
 **If you want the counter itself above 120**, that is a display and browser
 setting, not a script one: raise the refresh rate in your OS display settings
 if the monitor supports more, or launch Chrome with `--disable-frame-rate-limit

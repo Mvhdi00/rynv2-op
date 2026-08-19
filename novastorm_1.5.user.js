@@ -11136,6 +11136,10 @@ let pps = 0;
                     mainContext.stroke();
                     */
 
+                // Walk gameObjects once and bucket what is on screen by layer;
+                // the five passes below then only touch their own bucket.
+                buildRenderFrame(xOffset, yOffset);
+
                 // RENDER BOTTOM LAYER:
                 mainContext.globalAlpha = 1;
                 mainContext.strokeStyle = outlineColor;
@@ -11513,70 +11517,92 @@ let pps = 0;
         }
 
         // RENDER GAME OBJECTS:
-        function renderGameObjects(layer, xOffset, yOffset) {
-
-            var tmpSprite, tmpX, tmpY;
-
-            // ---- NEW: store spike positions ----
-            let spikeList = [];
-
-            for (var i = 0; i < gameObjects.length; ++i) {
-                tmpObj = gameObjects[i];
-
-                if (tmpObj.active) {
-
-                    tmpX = tmpObj.x + tmpObj.xWiggle - xOffset;
-                    tmpY = tmpObj.y + tmpObj.yWiggle - yOffset;
-
-                    // collect spikes (change name if needed later)
-                    if (layer == 0 && tmpObj.isItem && tmpObj.name === "spikes") {
-                        spikeList.push({x: tmpX, y: tmpY});
-                    }
-
-                    if (layer == 0) {
-                        tmpObj.update(delta);
-                    }
-
-                    if (tmpObj.layer == layer && isOnScreen(tmpX, tmpY, tmpObj.scale + (tmpObj.blocker || 0))) {
-
-                        mainContext.globalAlpha = tmpObj.hideFromEnemy ? 0.6 : 1;
-
-                        if (tmpObj.isItem) {
-
-                            tmpSprite = getItemSprite(tmpObj);
-
-                            mainContext.save();
-                            mainContext.translate(tmpX, tmpY);
-                            mainContext.rotate(tmpObj.dir);
-                            mainContext.drawImage(tmpSprite, -(tmpSprite.width / 2), -(tmpSprite.height / 2));
-
-                            if (tmpObj.blocker) {
-                                mainContext.strokeStyle = "#db6e6e";
-                                mainContext.globalAlpha = 0.3;
-                                mainContext.lineWidth = 6;
-                                renderCircle(0, 0, tmpObj.blocker, mainContext, false, true);
-                            }
-
-                            mainContext.restore();
-
-                        } else {
-                            tmpSprite = getResSprite(tmpObj);
-                            mainContext.drawImage(tmpSprite, tmpX - (tmpSprite.width / 2), tmpY - (tmpSprite.height / 2));
-                        }
-                    }
+        // ONE SCAN PER FRAME, NOT FIVE.
+        //
+        // renderGameObjects() is called five times a frame, once per layer, and
+        // each call used to walk the whole gameObjects array. That array holds
+        // every object the client has ever been sent — it only grows — so the
+        // per-frame cost was 5 x N and it got worse the longer you played. At
+        // 120 Hz with a few thousand objects that is millions of iterations a
+        // second spent deciding what NOT to draw.
+        //
+        // Now the array is walked once, on-screen objects are bucketed by their
+        // layer, and each pass draws its bucket. The buckets are flat arrays of
+        // [object, screenX, screenY] reused between frames, so a frame costs no
+        // allocations — allocation is what the garbage collector eventually
+        // stops the world to clean up, and those pauses are exactly the dropped
+        // frames you feel.
+        const layerBuckets = [[], [], [], [], []];   // index = layer + 1, layers -1..3
+        const spikeDots = [];                        // flat x, y pairs
+        function buildRenderFrame(xOffset, yOffset) {
+            for (let b = 0; b < layerBuckets.length; b++) layerBuckets[b].length = 0;
+            spikeDots.length = 0;
+            for (let i = 0; i < gameObjects.length; ++i) {
+                const o = gameObjects[i];
+                if (!o.active) continue;
+                // Every active object still animates, on screen or not — that is
+                // what the old layer-0 pass did and rotation must not stall.
+                o.update(delta);
+                const tmpX = o.x + o.xWiggle - xOffset;
+                const tmpY = o.y + o.yWiggle - yOffset;
+                if (!isOnScreen(tmpX, tmpY, o.scale + (o.blocker || 0))) continue;
+                // The spike markers had no bounds check at all: every spike ever
+                // seen got two filled arcs a frame, almost all of them off the
+                // canvas where nothing could show. Only visible ones now.
+                if (o.isItem && o.name === "spikes") spikeDots.push(tmpX, tmpY);
+                const bi = o.layer + 1;
+                if (bi >= 0 && bi < layerBuckets.length) {
+                    const bucket = layerBuckets[bi];
+                    bucket.push(o, tmpX, tmpY);
                 }
             }
-            if (layer == 0 && spikeList.length > 0) {
+        }
+
+        function renderGameObjects(layer, xOffset, yOffset) {
+            var tmpSprite;
+            const bucket = layerBuckets[layer + 1];
+
+            for (var i = 0; bucket && i < bucket.length; i += 3) {
+                tmpObj = bucket[i];
+                const tmpX = bucket[i + 1], tmpY = bucket[i + 2];
+
+                mainContext.globalAlpha = tmpObj.hideFromEnemy ? 0.6 : 1;
+
+                if (tmpObj.isItem) {
+
+                    tmpSprite = getItemSprite(tmpObj);
+
+                    mainContext.save();
+                    mainContext.translate(tmpX, tmpY);
+                    mainContext.rotate(tmpObj.dir);
+                    mainContext.drawImage(tmpSprite, -(tmpSprite.width / 2), -(tmpSprite.height / 2));
+
+                    if (tmpObj.blocker) {
+                        mainContext.strokeStyle = "#db6e6e";
+                        mainContext.globalAlpha = 0.3;
+                        mainContext.lineWidth = 6;
+                        renderCircle(0, 0, tmpObj.blocker, mainContext, false, true);
+                    }
+
+                    mainContext.restore();
+
+                } else {
+                    tmpSprite = getResSprite(tmpObj);
+                    mainContext.drawImage(tmpSprite, tmpX - (tmpSprite.width / 2), tmpY - (tmpSprite.height / 2));
+                }
+            }
+
+            if (layer == 0 && spikeDots.length > 0) {
 
                 mainContext.save();
 
                 mainContext.shadowBlur = 0;
                 mainContext.globalAlpha = 1;
 
-                for (let i = 0; i < spikeList.length; i++) {
+                for (let i = 0; i < spikeDots.length; i += 2) {
 
-                    let sx = Math.round(spikeList[i].x);
-                    let sy = Math.round(spikeList[i].y);
+                    let sx = Math.round(spikeDots[i]);
+                    let sy = Math.round(spikeDots[i + 1]);
 
                     // main red dot (smaller)
                     mainContext.beginPath();
@@ -17121,8 +17147,16 @@ for (let tree of trees) {
                 for (let object of predictObjects) {
                     if (!object.preplace) continue;
                     setPlaceTick();
-                    getPrePlaceAngles(myPlayer.items[2], object.id, object.angle);
-                    getPrePlaceAngles(myPlayer.items[4] || 15, object.id, object.angle);
+                    // Two getPrePlaceAngles() calls used to sit here. They were
+                    // passed three arguments to a two-parameter function, so
+                    // `customObjects` received object.id — a number — and
+                    // checkItemLocation read `.length` off it, got undefined,
+                    // skipped its loop and called every angle placeable. The
+                    // return value was then discarded. So each one was 144
+                    // angle tests and 144 object allocations producing a wrong
+                    // answer nobody read, fired from a 1 ms timeout that lands
+                    // squarely inside frame time. Removed; nothing downstream
+                    // observed them.
                     io.send("D", getAttackDir());
                 }
             }, 1);
@@ -18190,22 +18224,19 @@ for (let tree of trees) {
         let averagePing = 0;
         let isFirstPing = true;
 
-        let frameTimes = [];
-        let fps = 0;
-
+        // A counter over a one-second window, not a timestamp array. The old
+        // version pushed a timestamp per frame and shift()ed the expired ones
+        // off the front — shift() is O(n) and the array held a full second of
+        // frames, so at 120 Hz it moved on the order of 14,000 elements a
+        // second to produce one integer. It also ran on its own
+        // requestAnimationFrame loop alongside the game's; now doUpdate calls
+        // it, so the browser schedules one callback a frame instead of two.
+        let fps = 0, fpsFrames = 0, fpsSince = 0;
         function trackFPS() {
-            let now = performance.now();
-            frameTimes.push(now);
-
-            while (frameTimes.length > 0 && frameTimes[0] <= now - 1000) {
-                frameTimes.shift();
-            }
-
-            fps = frameTimes.length;
-            requestAnimationFrame(trackFPS);
+            fpsFrames++;
+            const t = performance.now();
+            if (t - fpsSince >= 1000) { fps = fpsFrames; fpsFrames = 0; fpsSince = t; }
         }
-
-        requestAnimationFrame(trackFPS);
 
         // PING:
         var lastPing = -1;
@@ -18261,6 +18292,7 @@ for (let tree of trees) {
             now = Date.now();
             delta = now - lastUpdate;
             lastUpdate = now;
+            trackFPS();
             updateGame();
             requestAnimationFrame(doUpdate);
         }
