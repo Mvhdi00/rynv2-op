@@ -363,12 +363,49 @@ Projectile damage is flat, so this table is exact. At 100 HP:
 | bow + crossbow + musket | 110 — **dead** | 82.5 — **live at 17.5** |
 | + turret gear | 135 — **dead** | **101.25 — still dead** |
 
-The three-piece is the one this feature turns around. The four-piece with
-Turret Gear is not survivable by hat alone: 135 × 0.75 = 101.25, over by 1.25.
-The detection reads it correctly at 135 — the arithmetic is what beats you.
-Beating that needs the wooden shield, which blocks a projectile outright when
-raised toward it (`game_index.js:3126`), or breaking line of sight. Both are
-tested and recorded in the suite so the limit is not quietly forgotten.
+The three-piece is the one the helmet turns around. The four-piece with Turret
+Gear is not survivable by hat alone: 135 × 0.75 = 101.25, over by 1.25. So the
+helmet is not the whole answer — **Block Shot** and **Dodge** are.
+
+### Block Shot — and why a wall is not a mill
+
+One line in the game decides what stops what (`game_index.js:3111`):
+
+```js
+l.active && this.layer <= l.layer && !l.ignoreCollision && lineInRect(...)
+```
+
+The nearest candidate then consumes the projectile whether or not it takes
+damage — `this.active = !1` runs either way (`:3134`). A stone wall eats an
+arrow for free; only the wood wall has `projDmg` and actually loses health to
+one.
+
+The layers are what matter. Arrows are layer 0, the turret-gear shot is layer
+1, walls are group layer 0, mills are group layer 1:
+
+| | arrow (layer 0) | turret gear (layer 1) |
+|---|---|---|
+| **wall** (group layer 0) | blocks | **passes straight over** |
+| **mill** (group layer 1) | blocks | blocks |
+
+The turret shot is the exact 25 damage that takes the combo from 82.5
+(survivable) to 101.25 (not) — and a wall cannot stop it. So the mill is tried
+first always, and when a turret projectile is in the air it is the *only* thing
+tried. A blocker goes down toward the shot, at the placer's own offset, with a
+couple of angles either side attempted when the spot is occupied; it respects
+the group limit and the 119-packet budget, and places one blocker per shot
+rather than a wall every tick.
+
+### Dodge
+
+When nothing can be placed — no mill or wall owned, group at its limit, every
+angle occupied — the response is to step out of the line instead. The step is
+perpendicular to the shot, which is the shortest way out of its path, on
+whichever side is not walled off (walk-over pads like boost and platform are
+not cover). It lasts about two ticks and overrides every other reason to be
+walking somewhere, because the alternative is taking the shot.
+
+Both are toggles under **Defense → Ranged**.
 
 Flat projectile damage, from `game_index.js:1552`:
 
@@ -382,9 +419,11 @@ Flat projectile damage, from `game_index.js:1552`:
 | 5 | musket | 50 |
 
 `tools/test-anti-bow-insta.js` runs the detection out of the shipped script
-against these numbers — 30 checks over the projectile maths, the tell, the
+against these numbers — 50 checks over the projectile maths, the tell, the
 range gate, the freshness and hold windows, the cases where the helmet saves
-you, and the one where it provably cannot.
+you and the one where it provably cannot, the mill-over-wall choice and the
+turret-shot case that only a mill answers, the limit / budget / cooldown
+guards, and the dodge's perpendicular, its side choice and its expiry.
 
 ## Lite Mode (performance)
 

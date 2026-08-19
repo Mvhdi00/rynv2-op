@@ -12764,6 +12764,125 @@ for (let tree of trees) {
             return total;
         }
 
+        // ── BLOCK OR DODGE ──────────────────────────────────────────────────
+        // What can stop what is decided by one line in the game
+        // (game_index.js:3111): an object is a candidate hit only when
+        //
+        //     this.layer <= l.layer  &&  !l.ignoreCollision  &&  lineInRect(...)
+        //
+        // and the nearest candidate then consumes the projectile whether or not
+        // it takes damage — `this.active = !1` runs either way (:3134). So a
+        // stone wall eats an arrow for free; only the wood wall has projDmg and
+        // actually loses health to it.
+        //
+        // The layers matter more than that, though. Arrows are layer 0, the
+        // turret-gear shot is layer 1, walls are group layer 0 and mills are
+        // group layer 1:
+        //
+        //     wall  vs arrow   0 <= 0   blocks
+        //     wall  vs turret  1 <= 0   PASSES STRAIGHT OVER
+        //     mill  vs arrow   0 <= 1   blocks
+        //     mill  vs turret  1 <= 1   blocks
+        //
+        // The turret shot is the 25 damage that takes the four-piece combo from
+        // 82.5 (survivable in soldier) to 101.25 (not). A wall cannot stop it.
+        // So when a turret projectile is in the air the mill is the only
+        // blocker worth placing, and it is tried first.
+        let bowDodgeAngle = null, bowDodgeUntil = 0, bowLastBlock = 0;
+
+        // Whatever the player owns out of a group, by group id — robust against
+        // however myPlayer.items happens to be indexed.
+        function ownedItemInGroup(groupId) {
+            if (!myPlayer || !myPlayer.items) return null;
+            for (const id of myPlayer.items) {
+                if (id === undefined || id === null) continue;
+                const it = items.list[id];
+                if (it && it.group && it.group.id === groupId) return id;
+            }
+            return null;
+        }
+
+        // Where the shot is coming from: the nearest incoming projectile if one
+        // exists, otherwise the enemy that gave the swap tell.
+        function bowThreatSource() {
+            let best = null, bestD = Infinity, turret = false;
+            for (const p of projectiles) {
+                if (!p || !p.active) continue;
+                const dx = myPlayer.x2 - p.x, dy = myPlayer.y2 - p.y;
+                const d = Math.sqrt(dx * dx + dy * dy);
+                if (d < 1 || d > (p.range || 0)) continue;
+                const off = UTILS.getAngleDist(Math.atan2(dy, dx), p.dir);
+                if (off > Math.PI / 2) continue;
+                if (d * Math.sin(off) > (myPlayer.scale || 35) + 20) continue;
+                if (d < bestD) { bestD = d; best = { x: p.x, y: p.y, dir: p.dir }; }
+                if ((p.layer || 0) >= 1 || p.indx === 1) turret = true;   // turret-gear shot
+            }
+            if (best) return { x: best.x, y: best.y, dir: best.dir, dist: bestD, turret: turret };
+            for (const e of enemiesNear) {
+                if (!e || !e.visible) continue;
+                const cur = e.weaponIndex, old = e.oldWeaponIndex;
+                if (!((cur === 9 && old !== 9) || (cur === 12 && old === 9) || (cur === 15 && old === 12))) continue;
+                if (tick - (e.weaponSwapTick || 0) > 2) continue;
+                const d = UTILS.getDistance(myPlayer.x2, myPlayer.y2, e.x2, e.y2);
+                if (d < bestD) { bestD = d; best = { x: e.x2, y: e.y2, dir: Math.atan2(myPlayer.y2 - e.y2, myPlayer.x2 - e.x2) }; }
+            }
+            return best ? { x: best.x, y: best.y, dir: best.dir, dist: bestD, turret: false } : null;
+        }
+
+        // Put a wall or a mill in the way. Returns true if something went down.
+        function tryBowBlock(src) {
+            if (!window.vars.antiBowBlock || !src) return false;
+            const now = Date.now();
+            if (now - bowLastBlock < 250) return false;      // one blocker per shot, not a wall spam
+            if (packets + 5 > 119) return false;             // the placer's own budget
+
+            const wall = ownedItemInGroup(1);
+            const mill = ownedItemInGroup(3);
+            // A turret shot goes over a wall, so the mill is not a preference
+            // there, it is the only option.
+            const order = src.turret ? [mill] : [mill, wall];
+            const angle = Math.atan2(src.y - myPlayer.y2, src.x - myPlayer.x2);
+
+            for (const id of order) {
+                if (id === null || id === undefined) continue;
+                if (isItemLimit(id)) continue;
+                // Try dead on first, then a little either side — the exact
+                // angle is often occupied by something already standing there.
+                for (const off of [0, 0.12, -0.12, 0.24, -0.24]) {
+                    const a = angle + off;
+                    if (!canPlace(id, a)) continue;
+                    place(id, a);
+                    bowLastBlock = now;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Nothing could be placed: step out of the line instead. Perpendicular
+        // to the shot is the shortest way out of its path; pick the side that
+        // is not walled off.
+        function startBowDodge(src) {
+            if (!window.vars.antiBowDodge || !src) return;
+            const perp = src.dir + Math.PI / 2;
+            const options = [perp, perp + Math.PI];
+            let chosen = null;
+            for (const a of options) {
+                const px = myPlayer.x2 + Math.cos(a) * 70;
+                const py = myPlayer.y2 + Math.sin(a) * 70;
+                let clear = true;
+                for (const o of visibleObjects) {
+                    if (o.ignoreCollision) continue;
+                    const r = 35 + o.getScale();
+                    if (UTILS.getDistance(px, py, o.x, o.y) < r) { clear = false; break; }
+                }
+                if (clear) { chosen = a; break; }
+            }
+            if (chosen === null) return;
+            bowDodgeAngle = chosen;
+            bowDodgeUntil = Date.now() + 220;   // about two ticks of sidestep
+        }
+
         function updateBowInstaThreat() {
             bowIncomingDmg = 0;
             bowThreatActive = false;
@@ -16626,6 +16745,15 @@ for (let tree of trees) {
                         }
                     }
 
+                    // A dodge outranks every other reason to be walking
+                    // somewhere: it lasts about two ticks and the alternative
+                    // is taking the shot. It is only ever set when nothing
+                    // could be placed in the way.
+                    if (bowDodgeAngle !== null) {
+                        if (Date.now() < bowDodgeUntil) predictMoveAngle = bowDodgeAngle;
+                        else bowDodgeAngle = null;
+                    }
+
                     if (predictMoveAngle != lastMoveAngle) {
                         io.send("9", predictMoveAngle);
                         lastMoveAngle = predictMoveAngle;
@@ -17168,6 +17296,11 @@ for (let tree of trees) {
                         } else if (totalDmgPot >= myPlayer.health) {
                             soldierAnti = true;
                         }
+                        // The helmet only scales the damage; a blocker deletes
+                        // it. Try to put one in the way, and if nothing can go
+                        // down, step out of the line instead.
+                        const src = bowThreatSource();
+                        if (src && !tryBowBlock(src)) startBowDodge(src);
                     }
 
 
@@ -22303,6 +22436,8 @@ for (let tree of trees) {
         antiSmart: false,
         antiBowInsta: true,   // soldier helmet against an incoming bow insta
         antiBowMinDist: 0,    // 0 = react at any range; raise it to ignore close swaps
+        antiBowBlock: true,   // put a mill or a wall in the path of the shot
+        antiBowDodge: true,   // if nothing can be placed, step out of the line
 
         // Placers
         autoPlace: false,
@@ -22472,7 +22607,9 @@ for (let tree of trees) {
                 title: "Ranged",
                 items: [
                     { type: 'toggle', name: "Anti Bow Insta", id: "antiBowInsta" },
-                    { type: 'slider', name: "Ignore Swaps Closer Than", id: "antiBowMinDist", min: 0, max: 600 }
+                    { type: 'slider', name: "Ignore Swaps Closer Than", id: "antiBowMinDist", min: 0, max: 600 },
+                    { type: 'toggle', name: "Block Shot (mill / wall)", id: "antiBowBlock" },
+                    { type: 'toggle', name: "Dodge If Cannot Block", id: "antiBowDodge" }
                 ]
             }
         ],

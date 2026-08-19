@@ -26,6 +26,22 @@ const PROJ = [
     { dmg: 50, speed: 3.6, range: 1400 }    // 5 musket
 ];
 let myPlayer = null, enemiesNear = [], projectiles = [], tick = 100;
+let visibleObjects = [], packets = 0;
+const placed = [];
+// Item groups that matter here (game_index.js): walls are group 1 at layer 0,
+// mills are group 3 at layer 1.
+const GROUPS = { 1: { id: 1, layer: 0, limit: 30 }, 3: { id: 3, layer: 1, limit: 7 } };
+const items = { list: [] };
+items.list[3]  = { name: 'wood wall',       scale: 50, group: GROUPS[1] };
+items.list[4]  = { name: 'stone wall',      scale: 50, group: GROUPS[1] };
+items.list[5]  = { name: 'castle wall',     scale: 52, group: GROUPS[1] };
+items.list[10] = { name: 'windmill',        scale: 45, group: GROUPS[3] };
+items.list[11] = { name: 'faster windmill', scale: 47, group: GROUPS[3] };
+items.list[12] = { name: 'power mill',      scale: 47, group: GROUPS[3] };
+let placeableAngles = true, limitReached = {};
+function isItemLimit(id) { return !!limitReached[id]; }
+function canPlace(id, angle) { return placeableAngles; }
+function place(id, angle) { placed.push({ id, angle }); }
 global.window = { vars: {} };
 
 const SCRIPT = process.argv[2] || (__dirname + '/../novastorm_1.5.user.js');
@@ -36,7 +52,10 @@ if (from < 0 || to < 0 || to <= from) { console.error('could not find the Anti B
 const block = lines.slice(from, to).join('\n');
 const api = eval(block + '\n; ({ updateBowInstaThreat, bowSwitchTell, bowIncomingProjectileDamage, bowLookingAtMe,'
     + ' get dmg() { return bowIncomingDmg; }, get active() { return bowThreatActive; },'
-    + ' get tellUntil() { return bowTellUntil; }, reset() { bowTellUntil = 0; } })');
+    + ' get tellUntil() { return bowTellUntil; }, reset() { bowTellUntil = 0; },'
+    + ' bowThreatSource, tryBowBlock, startBowDodge, ownedItemInGroup,'
+    + ' get dodgeAngle() { return bowDodgeAngle; }, get dodgeUntil() { return bowDodgeUntil; },'
+    + ' resetBlock() { bowDodgeAngle = null; bowDodgeUntil = 0; bowLastBlock = 0; } })');
 
 // ---- helpers ---------------------------------------------------------------
 function me(x = 5000, y = 5000, health = 100) {
@@ -57,9 +76,11 @@ function enemy(sid, x, y, cur, old, aimOff = 0, swapTick = tick) {
              weaponIndex: cur, oldWeaponIndex: old, weaponSwapTick: swapTick };
 }
 function reset() {
-    window.vars = { antiBowInsta: true, antiBowMinDist: 0 };
+    window.vars = { antiBowInsta: true, antiBowMinDist: 0, antiBowBlock: true, antiBowDodge: true };
     enemiesNear = []; projectiles = []; tick = 100;
-    me(); api.reset();
+    visibleObjects = []; packets = 0; placed.length = 0;
+    placeableAngles = true; limitReached = {};
+    me(); api.reset(); api.resetBlock();
 }
 
 let pass = 0, fail = 0;
@@ -252,6 +273,170 @@ t('and the helmet is NOT enough for it', () => {
     // maths is what beats you. Recorded so the limit cannot be forgotten.
     ok(135 * 0.75 > 100, 'soldier should not save the four-piece');
     ok(110 * 0.75 < 100, 'but it does save bow + crossbow + musket');
+});
+
+
+// ---- blocking ---------------------------------------------------------------
+console.log('\nblocking the shot');
+reset();
+t('a mill is preferred over a wall', () => {
+    myPlayer.items = [0, 3, 6, 10];                 // wood wall + windmill
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    ok(api.tryBowBlock(api.bowThreatSource()));
+    eq(placed.length, 1);
+    eq(placed[0].id, 10, 'should have placed the windmill');
+});
+t('the blocker goes down toward the shot, not away from it', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    projectiles = [shot(0, 5000 - 200, 5000)];      // coming from the west
+    api.tryBowBlock(api.bowThreatSource());
+    const a = placed[0].angle;
+    ok(Math.abs(Math.abs(a) - Math.PI) < 0.3, 'expected roughly west (PI), got ' + a);
+});
+t('a wall is used when there is no mill', () => {
+    reset();
+    myPlayer.items = [0, 5, 6];                     // castle wall, no mill
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    ok(api.tryBowBlock(api.bowThreatSource()));
+    eq(placed[0].id, 5);
+});
+t('a turret shot is never answered with a wall', () => {
+    reset();
+    myPlayer.items = [0, 5, 6];                     // wall only, no mill
+    const p = shot(1, 5000 - 200, 5000); p.layer = 1;
+    projectiles = [p];
+    const src = api.bowThreatSource();
+    ok(src.turret, 'the source should be flagged as a turret shot');
+    no(api.tryBowBlock(src), 'a wall cannot stop a layer-1 projectile');
+    eq(placed.length, 0);
+});
+t('a turret shot IS answered with a mill', () => {
+    reset();
+    myPlayer.items = [0, 5, 6, 12];                 // wall + power mill
+    const p = shot(1, 5000 - 200, 5000); p.layer = 1;
+    projectiles = [p];
+    ok(api.tryBowBlock(api.bowThreatSource()));
+    eq(placed[0].id, 12, 'the mill is the only thing that stops it');
+});
+t('a group at its limit is skipped', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    limitReached[10] = true;                        // mills maxed
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    ok(api.tryBowBlock(api.bowThreatSource()));
+    eq(placed[0].id, 3, 'should fall back to the wall');
+});
+t('nothing owned means nothing placed', () => {
+    reset();
+    myPlayer.items = [0, 6];                        // food and spikes only
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    no(api.tryBowBlock(api.bowThreatSource()));
+});
+t('a blocked spot is retried a little either side', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    let calls = 0;
+    canPlace = (id, a) => (++calls > 2);             // first two angles occupied
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    ok(api.tryBowBlock(api.bowThreatSource()));
+    ok(calls >= 3, 'should have tried offsets');
+    canPlace = () => placeableAngles;
+});
+t('one blocker per shot, not a wall every tick', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    ok(api.tryBowBlock(api.bowThreatSource()));
+    no(api.tryBowBlock(api.bowThreatSource()), 'the cooldown should hold');
+    eq(placed.length, 1);
+});
+t('the packet budget is respected', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    packets = 118;
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    no(api.tryBowBlock(api.bowThreatSource()));
+});
+t('the toggle turns blocking off', () => {
+    reset();
+    window.vars.antiBowBlock = false;
+    myPlayer.items = [0, 3, 6, 10];
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    no(api.tryBowBlock(api.bowThreatSource()));
+});
+
+// ---- dodging ----------------------------------------------------------------
+console.log('\ndodging when nothing can be placed');
+reset();
+t('the step is perpendicular to the shot', () => {
+    projectiles = [shot(0, 5000 - 200, 5000)];      // travelling east
+    api.startBowDodge(api.bowThreatSource());
+    const a = api.dodgeAngle;
+    ok(a !== null, 'no dodge started');
+    // east is 0, so perpendicular is +/- PI/2 (either side is a valid dodge)
+    ok(UTILS.getAngleDist(a, Math.PI / 2) < 0.01 || UTILS.getAngleDist(a, -Math.PI / 2) < 0.01,
+       'expected +/-PI/2, got ' + a);
+});
+t('it picks the side that is not walled off', () => {
+    reset();
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    // block the +PI/2 side (south, +y)
+    visibleObjects = [{ x: 5000, y: 5070, ignoreCollision: false, getScale: () => 50 }];
+    api.startBowDodge(api.bowThreatSource());
+    // 3PI/2 and -PI/2 are the same heading; compare on the circle.
+    ok(UTILS.getAngleDist(api.dodgeAngle, -Math.PI / 2) < 0.01,
+       'should have gone north, got ' + api.dodgeAngle);
+});
+t('boxed in on both sides, no dodge', () => {
+    reset();
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    visibleObjects = [{ x: 5000, y: 5070, ignoreCollision: false, getScale: () => 50 },
+                      { x: 5000, y: 4930, ignoreCollision: false, getScale: () => 50 }];
+    api.startBowDodge(api.bowThreatSource());
+    eq(api.dodgeAngle, null);
+});
+t('walk-over pads never block a dodge', () => {
+    reset();
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    visibleObjects = [{ x: 5000, y: 5070, ignoreCollision: true, getScale: () => 50 },
+                      { x: 5000, y: 4930, ignoreCollision: true, getScale: () => 50 }];
+    api.startBowDodge(api.bowThreatSource());
+    ok(api.dodgeAngle !== null, 'a boost pad is not cover');
+});
+t('the dodge expires', () => {
+    reset();
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    api.startBowDodge(api.bowThreatSource());
+    ok(api.dodgeUntil > Date.now(), 'window should be open');
+    ok(api.dodgeUntil - Date.now() <= 250, 'and short: about two ticks');
+});
+t('the toggle turns dodging off', () => {
+    reset();
+    window.vars.antiBowDodge = false;
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    api.startBowDodge(api.bowThreatSource());
+    eq(api.dodgeAngle, null);
+});
+
+// ---- the source ------------------------------------------------------------
+console.log('\nwhere the shot is coming from');
+reset();
+t('an arrow in the air beats the tell as the source', () => {
+    projectiles = [shot(0, 5000 - 200, 5000)];
+    enemiesNear = [enemy(2, 5000 + 800, 5000, 9, 5)];
+    const src = api.bowThreatSource();
+    ok(src.x < 5000, 'should point at the arrow to the west, not the enemy east');
+});
+t('with no arrow yet it falls back to the enemy that told', () => {
+    reset();
+    enemiesNear = [enemy(2, 5000 - 500, 5000, 9, 5)];
+    const src = api.bowThreatSource();
+    ok(src && src.x === 4500);
+});
+t('nothing happening, no source', () => {
+    reset();
+    eq(api.bowThreatSource(), null);
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
