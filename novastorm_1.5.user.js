@@ -12702,7 +12702,12 @@ for (let tree of trees) {
         // Flat projectile damage, for reference (game_index.js:1552):
         //   0 hunting bow 25 · 1 turret 25 · 2 crossbow 35
         //   3 repeater 30   · 4 mine 16   · 5 musket 50
-        const BOW_TELL_MIN_DIST = 300;   // RYN's threshold: a bow insta is a ranged play
+        // RYN gates the tell at 300 units, on the reading that a bow insta is a
+        // ranged play and a close swap is just poking. That is not how it goes
+        // in practice — people fire the moment you are in range, near or far —
+        // and the gate is exactly backwards for the case that matters most: up
+        // close the flight time is under one tick, so the swap is the ONLY
+        // warning there is. It is a slider now, defaulting to no minimum.
         const BOW_TELL_HOLD = 1200;      // ms to keep the helmet on after a tell
         let bowTellUntil = 0;
         let bowIncomingDmg = 0;
@@ -12730,7 +12735,7 @@ for (let tree of trees) {
                 // sticky, so without this a single swap would tell forever.
                 if (tick - (enemy.weaponSwapTick || 0) > 2) continue;
                 const dist = UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2);
-                if (dist <= BOW_TELL_MIN_DIST) continue;
+                if (dist <= (window.vars.antiBowMinDist || 0)) continue;
                 if (!bowLookingAtMe(enemy, dist)) continue;
                 return true;
             }
@@ -22297,6 +22302,7 @@ for (let tree of trees) {
         safeSoldier: true,
         antiSmart: false,
         antiBowInsta: true,   // soldier helmet against an incoming bow insta
+        antiBowMinDist: 0,    // 0 = react at any range; raise it to ignore close swaps
 
         // Placers
         autoPlace: false,
@@ -22465,7 +22471,8 @@ for (let tree of trees) {
             {
                 title: "Ranged",
                 items: [
-                    { type: 'toggle', name: "Anti Bow Insta", id: "antiBowInsta" }
+                    { type: 'toggle', name: "Anti Bow Insta", id: "antiBowInsta" },
+                    { type: 'slider', name: "Ignore Swaps Closer Than", id: "antiBowMinDist", min: 0, max: 600 }
                 ]
             }
         ],

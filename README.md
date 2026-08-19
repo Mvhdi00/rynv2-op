@@ -346,6 +346,30 @@ tracked previous weapon is sticky, so without a freshness window one swap would
 tell forever. Projectile damage is added into `totalDmgPot`, and the helmet
 goes on when the total would kill or while a tell is live.
 
+RYN gates the tell at 300 units, reading a bow insta as a ranged play. That is
+backwards for the case that matters most: people fire the moment you are in
+range, and up close the flight time is under one tick, so the swap is the only
+warning that exists. **Ignore Swaps Closer Than** defaults to 0 — react at any
+range — and can be raised to 600 if the helmet comes on too eagerly.
+
+### What the helmet can and cannot save
+
+Projectile damage is flat, so this table is exact. At 100 HP:
+
+| combo | raw | in soldier (x0.75) |
+|---|---|---|
+| bow + crossbow | 60 | 45 — live |
+| crossbow + musket | 85 | 63.75 — live |
+| bow + crossbow + musket | 110 — **dead** | 82.5 — **live at 17.5** |
+| + turret gear | 135 — **dead** | **101.25 — still dead** |
+
+The three-piece is the one this feature turns around. The four-piece with
+Turret Gear is not survivable by hat alone: 135 × 0.75 = 101.25, over by 1.25.
+The detection reads it correctly at 135 — the arithmetic is what beats you.
+Beating that needs the wooden shield, which blocks a projectile outright when
+raised toward it (`game_index.js:3126`), or breaking line of sight. Both are
+tested and recorded in the suite so the limit is not quietly forgotten.
+
 Flat projectile damage, from `game_index.js:1552`:
 
 | index | source | damage |
@@ -358,8 +382,9 @@ Flat projectile damage, from `game_index.js:1552`:
 | 5 | musket | 50 |
 
 `tools/test-anti-bow-insta.js` runs the detection out of the shipped script
-against these numbers — 27 checks over the projectile maths, the tell, the
-freshness and hold windows, and the cases where the helmet actually saves you.
+against these numbers — 30 checks over the projectile maths, the tell, the
+range gate, the freshness and hold windows, the cases where the helmet saves
+you, and the one where it provably cannot.
 
 ## Lite Mode (performance)
 

@@ -30,7 +30,7 @@ global.window = { vars: {} };
 
 const SCRIPT = process.argv[2] || (__dirname + '/../novastorm_1.5.user.js');
 const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
-const from = lines.findIndex(l => l.includes('const BOW_TELL_MIN_DIST'));
+const from = lines.findIndex(l => l.includes('const BOW_TELL_HOLD'));
 const to = lines.findIndex(l => l.trim() === 'function doSmartTickAnti() {');
 if (from < 0 || to < 0 || to <= from) { console.error('could not find the Anti Bow Insta block'); process.exit(2); }
 const block = lines.slice(from, to).join('\n');
@@ -57,7 +57,7 @@ function enemy(sid, x, y, cur, old, aimOff = 0, swapTick = tick) {
              weaponIndex: cur, oldWeaponIndex: old, weaponSwapTick: swapTick };
 }
 function reset() {
-    window.vars = { antiBowInsta: true };
+    window.vars = { antiBowInsta: true, antiBowMinDist: 0 };
     enemiesNear = []; projectiles = []; tick = 100;
     me(); api.reset();
 }
@@ -142,9 +142,17 @@ t('a melee swap is not a tell', () => {
     enemiesNear = [enemy(2, 5000 - 500, 5000, 5, 0)];
     no(api.bowSwitchTell());
 });
-t('inside melee range it is not a bow insta', () => {
+t('a close swap tells too — they fire at any range', () => {
     enemiesNear = [enemy(2, 5000 - 150, 5000, 9, 5)];
-    no(api.bowSwitchTell(), '150 units is not a ranged play');
+    ok(api.bowSwitchTell(), 'up close the swap is the only warning there is');
+});
+t('the minimum-distance slider can silence close swaps', () => {
+    window.vars.antiBowMinDist = 300;
+    enemiesNear = [enemy(2, 5000 - 150, 5000, 9, 5)];
+    no(api.bowSwitchTell(), '150 is inside a 300 gate');
+    enemiesNear = [enemy(2, 5000 - 500, 5000, 9, 5)];
+    ok(api.bowSwitchTell(), '500 is outside it');
+    window.vars.antiBowMinDist = 0;
 });
 t('not aimed at me, no tell', () => {
     enemiesNear = [enemy(2, 5000 - 500, 5000, 9, 5, 0.8)];
@@ -230,6 +238,20 @@ t('musket plus a polearm hit is the classic insta', () => {
     api.updateBowInstaThreat();
     const polearm = 45 * 1.5;                        // diamond variant
     ok(polearm + api.dmg >= 100, 'should read as lethal: ' + (polearm + api.dmg));
+});
+
+t('the full four-piece combo is read at its true 135', () => {
+    reset();
+    projectiles = [shot(0, 5000 - 200, 5000), shot(2, 5000 - 200, 5000),
+                   shot(5, 5000 - 200, 5000), shot(1, 5000 - 200, 5000)];
+    api.updateBowInstaThreat();
+    eq(api.dmg, 25 + 35 + 50 + 25, 'bow + crossbow + musket + turret gear');
+});
+t('and the helmet is NOT enough for it', () => {
+    // 135 * 0.75 = 101.25, which is still over 100. Detection is right; the
+    // maths is what beats you. Recorded so the limit cannot be forgotten.
+    ok(135 * 0.75 > 100, 'soldier should not save the four-piece');
+    ok(110 * 0.75 < 100, 'but it does save bow + crossbow + musket');
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
