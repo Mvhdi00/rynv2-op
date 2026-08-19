@@ -366,6 +366,40 @@ t('the toggle turns blocking off', () => {
     no(api.tryBowBlock(api.bowThreatSource()));
 });
 
+t('the blocker follows the shot around all eight directions', () => {
+    const dirs = [['E',1,0],['NE',1,-1],['N',0,-1],['NW',-1,-1],
+                  ['W',-1,0],['SW',-1,1],['S',0,1],['SE',1,1]];
+    for (const [label, dx, dy] of dirs) {
+        reset();
+        myPlayer.items = [0, 3, 6, 10];
+        const L = Math.hypot(dx, dy);
+        const sx = 5000 + (dx / L) * 300, sy = 5000 + (dy / L) * 300;
+        projectiles = [shot(0, sx, sy)];                 // fired from that side
+        ok(api.tryBowBlock(api.bowThreatSource()), label + ': nothing placed');
+        const want = Math.atan2(sy - 5000, sx - 5000);   // from me toward the shot
+        ok(UTILS.getAngleDist(placed[0].angle, want) < 0.3,
+           label + ': placed at ' + placed[0].angle.toFixed(2) + ' want ' + want.toFixed(2));
+    }
+});
+t('an enemy directly behind gets a blocker directly behind', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    // facing east, shot coming from due west (behind)
+    projectiles = [shot(0, 5000 - 300, 5000)];
+    api.tryBowBlock(api.bowThreatSource());
+    ok(UTILS.getAngleDist(placed[0].angle, Math.PI) < 0.3,
+       'expected roughly PI (west/behind), got ' + placed[0].angle.toFixed(2));
+});
+t('the blocker tracks the arrow, not the shooter who has since moved', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    projectiles = [shot(0, 5000 - 300, 5000)];           // arrow to the west
+    enemiesNear = [enemy(2, 5000 + 700, 5000, 9, 5)];     // shooter now to the east
+    api.tryBowBlock(api.bowThreatSource());
+    ok(UTILS.getAngleDist(placed[0].angle, Math.PI) < 0.3,
+       'should block the arrow (west), got ' + placed[0].angle.toFixed(2));
+});
+
 // ---- dodging ----------------------------------------------------------------
 console.log('\ndodging when nothing can be placed');
 reset();
