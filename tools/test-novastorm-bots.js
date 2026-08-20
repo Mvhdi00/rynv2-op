@@ -39,19 +39,25 @@ const items = {
 };
 const ITEM_DEFS = [
     ['apple', 20, { heal: 20 }], ['cookie', 22, { heal: 40 }], ['cheese', 27, { heal: 30 }],
-    ['wood wall', 27], ['stone wall', 50], ['castle wall', 50],
-    ['spikes', 52, { dmg: 20 }], ['greater spikes', 49, { dmg: 35 }],
-    ['poison spikes', 52, { dmg: 30 }], ['spinning spikes', 52, { dmg: 45 }],
-    ['windmill', 45], ['faster windmill', 47], ['power mill', 47],
+    ['wood wall', 27, { health: 380 }], ['stone wall', 50, { health: 900 }], ['castle wall', 50, { health: 1500 }],
+    ['spikes', 52, { dmg: 20, health: 400 }], ['greater spikes', 49, { dmg: 35, health: 500 }],
+    ['poison spikes', 52, { dmg: 30, health: 600 }], ['spinning spikes', 52, { dmg: 45, health: 500 }],
+    ['windmill', 45, { health: 400 }], ['faster windmill', 47, { health: 500 }], ['power mill', 47, { health: 800 }],
     ['mine', 65], ['sapling', 110],
-    ['pit trap', 50, { trap: true }], ['boost pad', 45, { ignoreCollision: true }],
-    ['turret', 43], ['platform', 43, { ignoreCollision: true }],
-    ['healing pad', 45, { ignoreCollision: true }], ['spawn pad', 45, { ignoreCollision: true }],
-    ['blocker', 45], ['teleporter', 45, { ignoreCollision: true }]
+    ['pit trap', 50, { trap: true, health: 500 }], ['boost pad', 45, { ignoreCollision: true, health: 150 }],
+    ['turret', 43, { health: 800 }], ['platform', 43, { ignoreCollision: true, health: 300 }],
+    ['healing pad', 45, { ignoreCollision: true, health: 400 }], ['spawn pad', 45, { ignoreCollision: true, health: 400 }],
+    ['blocker', 45, { health: 400 }], ['teleporter', 45, { ignoreCollision: true, health: 200 }]
 ];
 ITEM_DEFS.forEach(([name, scale, extra]) => items.list.push(Object.assign({ name, scale }, extra || {})));
 
-const config = { mapScale: 14400 };
+const config = {
+    mapScale: 14400,
+    weaponVariants: [{ val: 1 }, { val: 1.1 }, { val: 1.18 }, { val: 1.18 }]
+};
+// The shipped placing resolution; the engine reads it by name.
+const PLACE_ANGLES = 144;
+const hats = [{ id: 0 }, { id: 6, dmgMult: 0.75 }, { id: 20, atkSpd: 0.78 }, { id: 40 }, { id: 53 }];
 let packets = 0;
 function lineInCircle(x, y, x2, y2, cx, cy, scale) {
     const lv = { x: x2 - x, y: y2 - y };
@@ -112,6 +118,7 @@ function defaults() {
         botCircleRadius: 150, botStopRadius: 60,
         botPrimary: 5, botSecondary: 9, botAgeTrap: true, botAgeBoost: false, botAge8: 'auto',
         botAutoHeal: true, botAutoPlace: true, botAutoMills: false, botAutoPush: true,
+        botSpikeTick: true,
         botScanKeep: 350, botGuardRadius: 300, botPossessKeys: true,
         autoPlay: false
     };
@@ -1038,6 +1045,260 @@ t('a push overrides where the bot was walking, and it keeps swinging', () => {
     ok(mv && mv.args[0] !== null, 'should be moving');
     ok(Math.abs(mv.args[0]) < 0.6, 'toward the push, got ' + mv.args[0]);
     eq(last('F').args[0], 1, 'should be attacking while it shoves');
+});
+
+// ---------------------------------------------------------------------------
+// The spike-tick foundation: reload clocks, structure damage, object health.
+// ---------------------------------------------------------------------------
+console.log('reload clocks off the server\'s own swing packet');
+reset();
+t('a swing puts that weapon on cooldown for its speed', () => {
+    const b = mkBot(200);
+    ok(RynBots._weaponReady(b, 5), 'a fresh weapon is ready');
+    RynBots._onPacket(b, 'K', [b.sid, false, 5]);      // polearm, speed 700
+    ok(!RynBots._weaponReady(b, 5), 'should be reloading');
+    b.readyAt[5] = Date.now() - 1;
+    ok(RynBots._weaponReady(b, 5), 'and ready again after it');
+});
+t('samurai armor shortens it by its atkSpd', () => {
+    reset();
+    const b = mkBot(201);
+    const t0 = Date.now();
+    RynBots._onPacket(b, 'K', [b.sid, false, 5]);
+    const plain = b.readyAt[5] - t0;
+    b.skinIndex = 20;
+    RynBots._onPacket(b, 'K', [b.sid, false, 5]);
+    const fast = b.readyAt[5] - Date.now();
+    ok(fast < plain, 'expected a shorter reload, got ' + fast + ' vs ' + plain);
+    ok(Math.abs(fast - 700 * 0.78) <= 5, 'expected ~546ms, got ' + fast);
+});
+t('another player\'s swing does not touch my clocks', () => {
+    reset();
+    const b = mkBot(202);
+    b.players.set(9, { sid: 9, x: 0, y: 0, dir: 0 });
+    RynBots._onPacket(b, 'K', [9, false, 5]);
+    ok(RynBots._weaponReady(b, 5), 'that was their cooldown, not mine');
+});
+
+console.log('\nstructure damage and object health');
+reset();
+t('objects load at full health', () => {
+    const b = mkBot(210);
+    RynBots._onPacket(b, 'H', [[1, 300, 0, 0, 50, -1, 15, b.sid]]);
+    eq(b.objects.get(1).health, 500, 'a fresh pit trap');
+    eq(b.objects.get(1).maxHealth, 500);
+});
+t('a re-send of a tracked object does not heal it back to full', () => {
+    reset();
+    const b = mkBot(211);
+    RynBots._onPacket(b, 'H', [[1, 300, 0, 0, 50, -1, 15, b.sid]]);
+    b.objects.get(1).health = 60;
+    RynBots._onPacket(b, 'H', [[1, 300, 0, 0, 50, -1, 15, b.sid]]);
+    eq(b.objects.get(1).health, 60);
+});
+t('resources carry no health and are never damaged', () => {
+    reset();
+    const b = mkBot(212);
+    RynBots._onPacket(b, 'H', [[1, 60, 0, 0, 50, 0, null, null]]);   // a tree
+    eq(b.objects.get(1).health, undefined);
+    b.x = 0; b.y = 0; b.dir = 0; b.weaponVariant = 0;
+    RynBots._onPacket(b, 'K', [b.sid, true, 10]);
+    eq(b.objects.get(1).health, undefined, 'still nothing to damage');
+});
+t('a landed hammer swing takes 75 off what is in the cone', () => {
+    reset();
+    const b = mkBot(213);
+    b.x = 0; b.y = 0; b.dir = 0;
+    RynBots._onPacket(b, 'H', [[1, 60, 0, 0, 50, -1, 15, b.sid]]);
+    RynBots._onPacket(b, 'K', [b.sid, true, 10]);          // 10 dmg x 7.5 sDmg
+    eq(b.objects.get(1).health, 425);
+});
+t('a swing that hit nothing costs the trap nothing', () => {
+    reset();
+    const b = mkBot(214);
+    b.x = 0; b.y = 0; b.dir = 0;
+    RynBots._onPacket(b, 'H', [[1, 60, 0, 0, 50, -1, 15, b.sid]]);
+    RynBots._onPacket(b, 'K', [b.sid, false, 10]);
+    eq(b.objects.get(1).health, 500);
+});
+t('behind me is out of the cone', () => {
+    reset();
+    const b = mkBot(215);
+    b.x = 0; b.y = 0; b.dir = 0;                            // facing east
+    RynBots._onPacket(b, 'H', [[1, -60, 0, 0, 50, -1, 15, b.sid]]);   // trap to the west
+    RynBots._onPacket(b, 'K', [b.sid, true, 10]);
+    eq(b.objects.get(1).health, 500);
+});
+t('out of range is out of reach', () => {
+    reset();
+    const b = mkBot(216);
+    b.x = 0; b.y = 0; b.dir = 0;
+    RynBots._onPacket(b, 'H', [[1, 400, 0, 0, 50, -1, 15, b.sid]]);   // hammer range 75
+    RynBots._onPacket(b, 'K', [b.sid, true, 10]);
+    eq(b.objects.get(1).health, 500);
+});
+t('a diamond hammer and tank gear scale the damage', () => {
+    reset();
+    const b = mkBot(217);
+    b.weaponVariant = 2; b.skinIndex = 40;
+    eq(Math.round(RynBots._structDmg(b, 10)), Math.round(10 * 7.5 * 1.18 * 3.3));
+});
+
+console.log('\nspike tick (the mod\'s trap tick)');
+reset();
+// The enemy stands in the bot's own trap, close enough that the placing ring
+// reaches them. The trap is beaten down to where one hammer hit finishes it.
+function tickSetup(opts) {
+    opts = opts || {};
+    const b = mkBot(220);
+    b.x = 0; b.y = 0;
+    b.weapons = [5, opts.sec === undefined ? 10 : opts.sec];
+    b.itemsOwned = [0, 3, 6, 10];
+    const ex = opts.ex === undefined ? 120 : opts.ex;
+    b.players.set(99, { sid: 99, x: ex, y: 0, visible: true });
+    b.objects.set(1, {
+        sid: 1, x: ex, y: 0, scale: 50, type: -1, id: 15,
+        owner: opts.trapOwner === undefined ? b.sid : opts.trapOwner,
+        health: opts.hp === undefined ? 60 : opts.hp, maxHealth: 500
+    });
+    return { b, e: b.players.get(99) };
+}
+t('a charged hammer over a nearly-dead trap fires the tick', () => {
+    const { b } = tickSetup();
+    ok(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), 'expected a tick');
+});
+t('the packets are hammer-at-the-trap, then the spike, then the primary back', () => {
+    reset();
+    const { b } = tickSetup();
+    sent.length = 0;
+    RynBots._spikeTick(b, RynBots._nearestEnemy(b));
+    const z = sent.filter(p => p.type === 'z').map(p => p.args[0]);
+    eq(z[0], 10, 'hammer first');
+    eq(z[1], 6, 'then the spike');
+    eq(z[2], 5, 'then the primary back');
+    const f = sent.filter(p => p.type === 'F');
+    eq(f.length, 4, 'one swing for the trap, one for the placement');
+    // the first swing points at the trap, due east
+    ok(Math.abs(f[0].args[1]) < 0.01, 'hammer aimed at the trap, got ' + f[0].args[1]);
+});
+t('the trap is dropped from the world model the moment it is popped', () => {
+    reset();
+    const { b } = tickSetup();
+    RynBots._spikeTick(b, RynBots._nearestEnemy(b));
+    eq(b.objects.has(1), false);
+});
+t('a full-health trap is not tickable — the hammer cannot finish it', () => {
+    reset();
+    const { b } = tickSetup({ hp: 500 });
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('no hammer, no tick', () => {
+    reset();
+    const { b } = tickSetup({ sec: 9 });       // bow
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('a hammer still on cooldown waits', () => {
+    reset();
+    const { b } = tickSetup();
+    b.readyAt[10] = Date.now() + 300;
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('a primary still on cooldown waits too', () => {
+    reset();
+    const { b } = tickSetup();
+    b.readyAt[5] = Date.now() + 300;
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('someone else\'s trap is not mine to tick', () => {
+    reset();
+    const { b } = tickSetup({ trapOwner: 77 });
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('an enemy already bleeding on a spike is skipped', () => {
+    reset();
+    const { b } = tickSetup();
+    b.objects.set(2, { sid: 2, x: 120, y: 40, scale: 50, type: -1, id: 6, owner: b.sid });
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('the toggle turns it off', () => {
+    reset();
+    const { b } = tickSetup();
+    window.vars.botSpikeTick = false;
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('no spike owned, nothing to tick onto', () => {
+    reset();
+    const { b } = tickSetup();
+    b.itemsOwned = [0, 3, 10];
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('a trap out past the placing ring is out of the play', () => {
+    reset();
+    const { b } = tickSetup({ ex: 600 });
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('the spike lands within reach of them', () => {
+    reset();
+    const { b } = tickSetup();
+    sent.length = 0;
+    RynBots._spikeTick(b, RynBots._nearestEnemy(b));
+    const place = sent.filter(p => p.type === 'F')[2];   // the placing swing
+    const a = place.args[1];
+    const r = 35 + 52;
+    const px = Math.cos(a) * r, py = Math.sin(a) * r;
+    ok(Math.hypot(px - 120, py) < 52 + 55, 'spike ' + Math.round(Math.hypot(px - 120, py)) + ' away from them');
+});
+t('the knockback is never aimed back at me', () => {
+    reset();
+    const { b } = tickSetup();
+    sent.length = 0;
+    RynBots._spikeTick(b, RynBots._nearestEnemy(b));
+    const a = sent.filter(p => p.type === 'F')[2].args[1];
+    const r = 35 + 52;
+    const sx = Math.cos(a) * r, sy = Math.sin(a) * r;
+    const kb = Math.atan2(0 - sy, 120 - sx);            // spike -> enemy
+    const toMe = Math.atan2(0 - 0, 0 - 120);            // enemy -> me
+    ok(UTILS.getAngleDist(kb, toMe) >= Math.PI / 5, 'that shove would hand them the gap');
+});
+t('a point-blank enemy is not ticked onto the spike behind them', () => {
+    reset();
+    // Inside the placing ring: the spot nearest them sits past them, so its
+    // knockback runs straight back at the bot. The mod refuses that spot, and
+    // so does this — it takes a flanking one instead.
+    const { b } = tickSetup({ ex: 40 });
+    sent.length = 0;
+    ok(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), 'should still find a spot');
+    const a = sent.filter(p => p.type === 'F')[2].args[1];
+    ok(Math.abs(a) > 0.3, 'took the spot straight past them, angle ' + a.toFixed(2));
+    const r = 35 + 52;
+    const sx = Math.cos(a) * r, sy = Math.sin(a) * r;
+    ok(UTILS.getAngleDist(Math.atan2(0 - sy, 40 - sx), Math.PI) >= Math.PI / 5);
+});
+t('the weapon variant reaches the bot from updatePlayers', () => {
+    reset();
+    const b = mkBot(230);
+    RynBots._onPacket(b, 'a', [[b.sid, 0, 0, 0, -1, 10, 2, null, 0, 0, 0, 0, 0]]);
+    eq(b.weaponVariant, 2);
+    eq(Math.round(RynBots._structDmg(b, 10)), Math.round(10 * 7.5 * 1.18));
+});
+t('the tick does not fire twice in the same third of a second', () => {
+    reset();
+    const { b } = tickSetup();
+    ok(RynBots._spikeTick(b, RynBots._nearestEnemy(b)));
+    b.objects.set(1, { sid: 1, x: 120, y: 0, scale: 50, type: -1, id: 15,
+                       owner: b.sid, health: 60, maxHealth: 500 });
+    eq(RynBots._spikeTick(b, RynBots._nearestEnemy(b)), false);
+});
+t('a full tick keeps swinging on the next tick', () => {
+    reset();
+    const { b } = tickSetup();
+    RynBots._spikeTick(b, RynBots._nearestEnemy(b));
+    b.objects.clear();
+    b.players.set(99, { sid: 99, x: 900, y: 0, visible: true });   // out of reach now
+    window.vars.botSync = false;
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(last('F').args[0], 1, 'should follow the tick up');
 });
 
 console.log('');

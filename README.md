@@ -199,6 +199,7 @@ master connection speaks.
 | **Auto Break** | Bots → Behaviour | Three stalled ticks while trying to walk means something is in the way: the bot finds the closest destroyable building within reach and within 90° of its heading, swaps to its breaking weapon and swings. Walls, mills, spikes, traps, turrets, blockers. |
 | **Auto Heal** | Bots → Behaviour | The mod's own heal, not an approximation: it fires on **any** damage taken (the mod's `tick - damageTick > 0`, here a drop in the bot's own health packet) and tops all the way back to 100 in one tick — `ceil(missing / food.heal)` units, which is what the mod's `heal(100 - health)` loop works out to. The first version waited for 15 missing health and then ate at most three, which is why it felt bad. Runs while you are driving a bot too. |
 | **Auto Mills** | Bots → Behaviour | The mod's three-mill trail, laid **behind** the direction of travel: `angle + 180°`, then `± toRad(scale + scale/2)` either side. That offset reads the mill's scale as degrees — odd arithmetic, but it is what the mod does and what gives the familiar spacing, so it is reproduced rather than "corrected". Off by default. |
+| **Spike Tick** | Bots → Behaviour | The mod's trap tick, `canTrapTick()` gate for gate on the bot's own world: hammer and primary both charged, the enemy inside one of the bot's own traps, that trap one hammer hit from breaking, and a placeable spike spot within `scale + 55` of them whose knockback does not shove them at the bot. Pops the trap and drops the spike on the same server tick. See [the foundation it rides on](#the-spike-tick-foundation). |
 | **Auto Push** | Bots → Behaviour | The mod's trap-into-spike play: when the nearest enemy stands in one of the bot's own pit traps and one of its own spikes sits beside that trap, it walks at the far side of the spike so they are shoved onto it, swinging as it goes. Same construction as the mod — `pos = spike + scale·unit(spike→trap)`, `push = pos + (dist+35)·unit(pos→enemy)` — and the same clearance test, refusing a line through their body, their spikes, a boost pad or a teleporter. |
 | **Auto Place** | Bots → Behaviour | An enemy inside 250 gets a spike dropped between them and the bot, hardest one owned first, and never stacked on a spike already there. |
 | **Sync** | Bots → Sync & Freeze | On: the squad swings on the same tick you do — one wrapper on `io.send` catches every swing the client makes, and `place()` flags its own use of the attack packet so putting a building down is not read as a swing. Off: they swing while the **Bot Attack** key is held. |
@@ -356,10 +357,45 @@ the way back corrupts your own player silently.
 So what is ported here is ported *faithfully by rule*: Auto Heal and Auto Mills
 reproduce the mod's exact trigger and pattern, checked against its source line
 by line. `autoPush` turned out to port cleanly — it is geometry over objects and one
-enemy, and the bot has both — so it is in. The **spike tick** is the one that
-does not: it needs per-enemy reload tracking, the weapon-variant and hat damage
-tables, and the predict-object placer running on the bot's world, none of which
-the bot's model carries. That is a foundation to build, not a rule to copy.
+enemy, and the bot has both — so it is in.
+
+The **spike tick** needed a foundation first, and that foundation is now built —
+see below. What is still out is the rest of the prediction pipeline: shame
+combat, the insta-kills and the full predict-object placer, all of which read
+`totalDmgPot`, `predictObjects` and the damage accumulators that only exist for
+your own player.
+
+### The spike-tick foundation
+
+Three things the mod reads off its own client every frame that the bot's world
+model never carried:
+
+| | How the bot gets it |
+|---|---|
+| **Reload clocks** | The `K` (gatherAnimation) packet is the server saying a swing just landed. `readyAt[weaponIndex] = now + speed × atkSpd` starts the clock on the server's tick rather than on the tick we asked for the swing — closer to the truth than the master's own delta counter. Samurai Armor (id 20) is the only hat that changes it. |
+| **Structure damage** | `dmg × sDmg × variant × (tank gear ? 3.3 : 1)`, the same expression as `getPlayerInfo(player, "secondaryStructureDmg")`. The variant now reaches the bot from `updatePlayers`. |
+| **Object health** | The `H` packet carries none, so objects load at full — which is exactly what the game's own client assumes. From there the bot watches swings land: on a `K` with `didHit`, everything inside that swinger's range and the `π/2.6` gather cone loses one hit's worth. A re-send of an object already tracked keeps its damage instead of healing back to full. |
+
+On top of those, **Spike Tick** (Bots → Behaviour, on by default) is
+`canTrapTick()` rewritten against the bot's world, gate for gate: the secondary
+is the great hammer, hammer and primary are both charged, the enemy is not
+already bleeding on a spike, they are inside one of the bot's *own* pit traps,
+`trap.health ≤ hammer structure damage` so one hit finishes it, and a placeable
+spike spot exists with `dist(trap, me) < scale + 95` and
+`dist(spot, enemy) < scale + 55`. It also applies `shouldPlace()`'s own refusal:
+if the knockback off that spike would run back the way the enemy already faces
+you (`angleDist < π/5`), the spot is rejected and a flanking one is used.
+
+The packet order is the whole trick, and it rides one server tick:
+
+1. hammer, aimed at the trap — the trap dies
+2. the spike, into the spot the trap was standing on (the trap is excluded from
+   the collision test because it no longer exists, the same filter the mod uses)
+3. primary back in hand, aimed at them, swinging for the next 400 ms while they
+   bleed
+
+The enemy is thrown out of the dying trap and lands on a spike that was not
+there a tick earlier.
 
 ## Verification
 
@@ -369,10 +405,11 @@ node tools/test-novastorm-bots.js
 ```
 
 The test evaluates the `RynBots` block straight out of the shipped userscript
-against stubs and asserts the packets it emits — 113 checks over the age path,
+against stubs and asserts the packets it emits — 142 checks over the age path,
 break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
-console, Scan and Kill, possession, the mod's heal rule and the mill trail.
+console, Scan and Kill, possession, the mod's heal rule, the mill trail, auto
+push, the reload clocks, structure damage, object health and the spike tick.
 
 ## Anti Bow Insta
 

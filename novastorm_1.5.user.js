@@ -15257,7 +15257,13 @@ for (let tree of trees) {
                     search: null, searchUntil: 0,
                     healAt: 0, placeAt: 0, hurtAt: 0, millAt: 0,
                     detourUntil: 0, detourSign: 1,
-                    forceAttackUntil: 0, buyAt: 0
+                    forceAttackUntil: 0, buyAt: 0,
+                    // Spike-tick foundation. readyAt[weaponIndex] is the ms
+                    // stamp that weapon comes off cooldown; the server tells us
+                    // when a swing landed, so the clock starts from the server's
+                    // own timing instead of from when we asked for the swing.
+                    readyAt: {},
+                    tickAt: 0
                 };
             },
 
@@ -15380,6 +15386,9 @@ for (let tree of trees) {
                             bot.x = p.x; bot.y = p.y; bot.dir = p.dir;
                             bot.buildIndex = p.buildIndex;
                             bot.weaponIndex = p.weaponIndex;
+                            // Structure damage scales with the variant, so the
+                            // trap tick needs it on the bot as well as on them.
+                            bot.weaponVariant = p.weaponVariant;
                             bot.team = p.team;
                             const dx = bot.x - bot.px, dy = bot.y - bot.py;
                             bot.speed = (isFinite(dx) && isFinite(dy)) ? Math.sqrt(dx * dx + dy * dy) : 0;
@@ -15393,14 +15402,29 @@ for (let tree of trees) {
                 case "H": { // loadGameObject
                     const d = args[0] || [];
                     for (let i = 0; i + 7 < d.length; i += 8) {
+                        const id = d[i + 6];
+                        // The packet carries no health, so do what the game's own
+                        // client does on load: assume full. From here the bot
+                        // tracks it by watching swings land (see "K").
+                        const conf = (id === null || id === undefined) ? null : items.list[id];
+                        const hp = (conf && conf.health) || undefined;
+                        const old = bot.objects.get(d[i]);
                         bot.objects.set(d[i], {
                             sid: d[i], x: d[i + 1], y: d[i + 2], dir: d[i + 3],
-                            scale: d[i + 4], type: d[i + 5], id: d[i + 6], owner: d[i + 7]
+                            scale: d[i + 4], type: d[i + 5], id: id, owner: d[i + 7],
+                            // A re-send of an object we already track must not
+                            // silently heal it back to full.
+                            health: (old && old.sid === d[i] && old.id === id && old.health !== undefined)
+                                ? old.health : hp,
+                            maxHealth: hp
                         });
                     }
                     if (bot.objects.size > 1400) this._pruneObjects(bot);
                     break;
                 }
+                case "K": // gatherAnimation(sid, didHit, weaponIndex)
+                    this._onSwing(bot, args[0], args[1], args[2]);
+                    break;
                 case "Q": bot.objects.delete(args[0]); break;          // killObject(sid)
                 case "R": {                                            // killObjects(ownerSid)
                     for (const [k, o] of bot.objects) if (o.owner === args[0]) bot.objects.delete(k);
@@ -15839,18 +15863,214 @@ for (let tree of trees) {
 
             // canPlace for a bot: the same test the mod runs, against the bot's
             // own object map instead of the master's visibleObjects.
-            _botCanPlace(bot, id, angle) {
+            // exceptSid: an object the caller is about to destroy, so it must not
+            // count as being in the way. The mod does the same when it ticks a
+            // trap (objects.filter(o => o != enemyTrapped)).
+            _botCanPlace(bot, id, angle, exceptSid) {
                 const item = items.list[id];
                 if (!item) return false;
                 const r = 35 + item.scale + (item.placeOffset || 0);
                 const px = bot.x + Math.cos(angle) * r;
                 const py = bot.y + Math.sin(angle) * r;
                 for (const o of bot.objects.values()) {
+                    if (exceptSid !== undefined && o.sid === exceptSid) continue;
                     const oi = (o.id === null || o.id === undefined) ? null : items.list[o.id];
                     const os = o.scale || (oi && oi.scale) || 40;
                     const dx = o.x - px, dy = o.y - py;
                     if (dx * dx + dy * dy < (item.scale + os) * (item.scale + os)) return false;
                 }
+                return true;
+            },
+
+            // =================================================================
+            // THE SPIKE-TICK FOUNDATION
+            // =================================================================
+            // Three things the mod reads off its own client every frame and the
+            // bot's world model never carried: whose weapon is off cooldown, how
+            // much a swing takes out of a building, and how much of a building
+            // is left. Without all three the trap tick cannot be timed, so they
+            // are built here first and the tick is written on top of them.
+            //
+            // Reload: the "K" packet is the server telling us a swing just
+            // landed, so the cooldown clock starts on the server's tick, not on
+            // the tick we asked for the swing. That is closer to the truth than
+            // the master's own reload counter, which counts up from delta.
+            _onSwing(bot, sid, didHit, weapon) {
+                const w = items.weapons[weapon];
+                if (!w) return;
+                const now = Date.now();
+                const p = (sid === bot.sid) ? bot : bot.players.get(sid);
+                if (!p) return;
+                if (sid === bot.sid) {
+                    // Samurai Armor is the one hat that changes swing speed.
+                    let atkSpd = 1;
+                    try {
+                        for (const h of hats) if (h.id === bot.skinIndex) { atkSpd = h.atkSpd || 1; break; }
+                    } catch (err) {}
+                    bot.readyAt[weapon] = now + w.speed * atkSpd;
+                }
+                if (!didHit) return;
+                // Same rule the game uses when a swing lands: everything inside
+                // the weapon's range and the gather cone takes structure damage.
+                const dmg = this._structDmg(p, weapon);
+                if (dmg <= 0) return;
+                const dir = (p.dir === undefined || p.dir === null) ? 0 : p.dir;
+                for (const o of bot.objects.values()) {
+                    if (o.health === undefined) continue;
+                    if (UTILS.getDistance(p.x, p.y, o.x, o.y) - (o.scale || 0) > w.range) continue;
+                    const toObj = UTILS.getDirection(o.x, o.y, p.x, p.y);
+                    if (UTILS.getAngleDist(toObj, dir) > Math.PI / 2.6) continue;
+                    o.health -= dmg;
+                }
+            },
+
+            // What one swing takes out of a building: base damage x the
+            // weapon's structure multiplier x the variant x tank gear.
+            _structDmg(p, weapon) {
+                const w = items.weapons[weapon];
+                if (!w) return 0;
+                const v = config.weaponVariants[p.weaponVariant || 0];
+                return w.dmg * (w.sDmg || 1) * ((v && v.val) || 1) * (p.skinIndex === 40 ? 3.3 : 1);
+            },
+
+            _weaponReady(bot, weapon) {
+                if (weapon === null || weapon === undefined) return false;
+                return Date.now() >= (bot.readyAt[weapon] || 0);
+            },
+
+            // getPrePlaceAngles, on the bot's world: every spot on the placing
+            // ring the bot could actually drop this item, at the game's own
+            // offset, with the same PLACE_ANGLES resolution the master uses.
+            _botPlaceSpots(bot, id, exceptSid) {
+                const item = items.list[id];
+                if (!item) return [];
+                const r = 35 + item.scale + (item.placeOffset || 0);
+                const out = [];
+                const step = (Math.PI * 2) / PLACE_ANGLES;
+                for (let i = 0; i < PLACE_ANGLES; i++) {
+                    const a = -Math.PI + i * step;
+                    out.push({
+                        angle: a, scale: item.scale,
+                        x: bot.x + Math.cos(a) * r,
+                        y: bot.y + Math.sin(a) * r,
+                        placeable: this._botCanPlace(bot, id, a, exceptSid)
+                    });
+                }
+                return out;
+            },
+
+            // =================================================================
+            // SPIKE TICK  —  canTrapTick(), on the bot's own world
+            // =================================================================
+            // The mod's play, unchanged in shape: the enemy is standing in one
+            // of your pit traps, your hammer is charged and would break that
+            // trap in a single hit, and your primary is charged too. Drop a
+            // spike beside them first, then break the trap — the release throws
+            // them onto the spike instead of away clean.
+            //
+            // The gates, one for one with canTrapTick():
+            //   secondary is the hammer          -> only it damages structures
+            //   secondary and primary both ready -> the two halves land together
+            //   the enemy is not already on a spike
+            //   the enemy is inside one of MY traps
+            //   trap.health <= hammer structure damage   (one hit breaks it)
+            //   a placeable spike spot exists with
+            //       dist(trap, me)  < spot.scale + 95
+            //       dist(spot, enemy) < spot.scale + 55
+            // plus shouldPlace()'s own check, that the knockback off that spike
+            // does not simply shove them at me (angleDiff >= PI/5).
+            _spikeTick(bot, enemy) {
+                if (!window.vars.botSpikeTick || !enemy) return false;
+                const now = Date.now();
+                if (now - bot.tickAt < 300) return false;
+
+                const sec = bot.weapons && bot.weapons[1];
+                if (sec !== 10) return false;                        // great hammer only
+                if (!this._weaponReady(bot, sec)) return false;
+                const pri = (bot.weapons && bot.weapons[0] !== undefined) ? bot.weapons[0] : 0;
+                if (!this._weaponReady(bot, pri)) return false;
+
+                const e = enemy.p;
+                const mine = (o) => o.owner === bot.sid;
+
+                // Already bleeding on a spike -- the mod skips, spikeDamage > 0.
+                for (const o of bot.objects.values()) {
+                    if (!(o.id > 5 && o.id < 10)) continue;
+                    if (UTILS.getDistance(e.x, e.y, o.x, o.y) <= 35 + (o.scale || 50)) return false;
+                }
+
+                let trap = null;
+                for (const o of bot.objects.values()) {
+                    if (o.id !== 15 || !mine(o)) continue;
+                    if (UTILS.getDistance(e.x, e.y, o.x, o.y) < (o.scale || 50)) { trap = o; break; }
+                }
+                if (!trap) return false;
+
+                const hammer = this._structDmg(bot, sec);
+                const hp = (trap.health === undefined) ? (items.list[15].health || 500) : trap.health;
+                if (hp > hammer) return false;
+
+                // Best spike the bot owns, hardest first -- same order as the placer.
+                let pick = null;
+                for (const id of [BOT_ITEM.SPINNING_SPIKES, BOT_ITEM.POISON_SPIKES,
+                                  BOT_ITEM.GREATER_SPIKES, BOT_ITEM.SPIKES]) {
+                    if (bot.itemsOwned && bot.itemsOwned.indexOf(id) >= 0) { pick = id; break; }
+                }
+                if (pick === null) return false;
+
+                let best = null, bestD = Infinity;
+                // The trap is excluded from the collision test because it is
+                // about to stop existing — same filter the mod uses, and the
+                // packet order below makes it true.
+                for (const s of this._botPlaceSpots(bot, pick, trap.sid)) {
+                    if (!s.placeable) continue;
+                    if (UTILS.getDistance(trap.x, trap.y, bot.x, bot.y) >= s.scale + 95) continue;
+                    if (UTILS.getDistance(s.x, s.y, e.x, e.y) >= s.scale + 55) continue;
+                    // shouldPlace(): knockback runs spike -> enemy. If that is
+                    // roughly the way the enemy already faces me, the tick hands
+                    // them a free approach, so the mod refuses it.
+                    const kb = Math.atan2(e.y - s.y, e.x - s.x);
+                    const toMe = Math.atan2(bot.y - e.y, bot.x - e.x);
+                    if (UTILS.getAngleDist(kb, toMe) < Math.PI / 5) continue;
+                    const d = UTILS.getDistance(s.x, s.y, e.x, e.y);
+                    if (d < bestD) { bestD = d; best = s; }
+                }
+                if (!best) return false;
+
+                bot.tickAt = now;
+                bot.placeAt = now;
+
+                // The order is the whole trick, and it all rides one server tick:
+                //   1. hammer, aimed at the trap  -> the trap dies (hp <= dmg)
+                //   2. the spike, into the spot the trap was standing on
+                //   3. primary back in hand, aimed at them
+                // The enemy is thrown out of the dying trap and lands on a spike
+                // that did not exist a tick ago.
+                const toTrap = Math.atan2(trap.y - bot.y, trap.x - bot.x);
+                const toEnemy = Math.atan2(e.y - bot.y, e.x - bot.x);
+                try {
+                    EXP.send(bot.ws, "D", [toTrap]);
+                    EXP.send(bot.ws, "z", [sec, true]);
+                    EXP.send(bot.ws, "F", [1, toTrap]);
+                    EXP.send(bot.ws, "F", [0, toTrap]);
+
+                    EXP.send(bot.ws, "z", [pick, false]);
+                    EXP.send(bot.ws, "F", [1, best.angle]);
+                    EXP.send(bot.ws, "F", [0, best.angle]);
+
+                    EXP.send(bot.ws, "z", [pri, true]);
+                    EXP.send(bot.ws, "D", [toEnemy]);
+                } catch (err) {}
+                // The trap is gone as far as this bot is concerned; the server's
+                // own "Q" confirms it a tick later.
+                bot.objects.delete(trap.sid);
+                bot.wantWeapon = pri;
+                bot.weaponSentAt = now;
+                bot.aimSent = Math.round(toEnemy * 100) / 100;
+                bot.attacking = false;
+                // Swing the primary on the next tick, while they are still
+                // bleeding on the spike.
+                bot.forceAttackUntil = now + 400;
                 return true;
             },
 
@@ -16355,6 +16575,11 @@ for (let tree of trees) {
                 // A spike dropped on whoever is standing on the bot, same as the
                 // placer does for you. It borrows the attack packet, so it only
                 // runs on a tick the bot is not already breaking something.
+                // The trap tick goes first: it is the same placing packet, but
+                // it is a timed two-part play and a plain contact spike would
+                // spend the tick on nothing.
+                if (breakAim === null && role !== "spot" && !this.ceasefire
+                    && this._spikeTick(bot, enemy)) return;
                 if (breakAim === null && role !== "spot" && !this.ceasefire
                     && this._autoPlaceSpike(bot, enemy)) return;
 
@@ -16363,7 +16588,9 @@ for (let tree of trees) {
                 const manual = !silent && !V.botSync && this._manualAttack;
                 const engaged = !silent && V.botAutoAttack && enemy && enemy.d <= this._reach(bot);
                 const pushing = !silent && pushAngle !== null;
-                this._sendAttack(bot, !!(synced || manual || engaged || pushing || breakAim !== null));
+                // The tick just fired: keep swinging while they are on the spike.
+                const following = !silent && now < bot.forceAttackUntil;
+                this._sendAttack(bot, !!(synced || manual || engaged || pushing || following || breakAim !== null));
 
                 // --- walk ----------------------------------------------------------
                 this._sendMove(bot, moveAngle);
@@ -23071,6 +23298,7 @@ for (let tree of trees) {
         botAutoPlace: true,      // drop a spike on whoever closes in
         botAutoMills: false,     // lay the mod's three-mill trail behind them
         botAutoPush: true,       // shove a trapped enemy onto your spike
+        botSpikeTick: true,      // spike beside a trapped enemy, then pop the trap
         botSync: true,           // swing on the same tick you do
         botFreeze: false,        // toggled by the Freeze key
         botFollowCursor: false,  // walk to the mouse instead of to you
@@ -23304,6 +23532,7 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Auto Place (spike on contact)", id: "botAutoPlace" },
                     { type: 'toggle', name: "Auto Mills (trail behind)", id: "botAutoMills" },
                     { type: 'toggle', name: "Auto Push (trap into spike)", id: "botAutoPush" },
+                    { type: 'toggle', name: "Spike Tick (trap tick)", id: "botSpikeTick" },
                     { type: 'toggle', name: "Auto Buy Hats (copy mine)", id: "botAutoBuyHats" }
                 ]
             },
