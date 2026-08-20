@@ -11247,6 +11247,11 @@ let pps = 0;
                         // and the bots swing for as long as it is held.
                         RynBots.setManualAttack(true);
                     }
+                    else if (keyStr === window.vars.keyPacketSpam) {
+                        window.vars.botPacketSpam = !window.vars.botPacketSpam;
+                        try { if (typeof addChatLog === "function")
+                            addChatLog("Packet Spam " + (window.vars.botPacketSpam ? "ON" : "OFF"), "#00e5ff"); } catch (e) {}
+                    }
                 }
             }
         }
@@ -15478,6 +15483,36 @@ for (let tree of trees) {
             // =================================================================
             // PACKET HELPERS — only send when something actually changed
             // =================================================================
+            // =================================================================
+            // PACKET SPAM  —  every bot on full throttle
+            // =================================================================
+            // The client itself is held to ~119 packets a second, on purpose:
+            // past that the server starts dropping frames and you lose inputs.
+            // The bots are not you, though, and each one has its own socket and
+            // its own budget. Turn this on and every bot pours a burst of
+            // packets down its own line each tick -- N of them, on a slider --
+            // so the squad's total flies well past 120 a second combined
+            // without costing your own connection a thing.
+            //
+            // The burst is spun aim ("D") packets: the server accepts and acts
+            // on every one, they change nothing about where the bot stands or
+            // what it hits, and they do not touch the mod's own budget because
+            // they go straight out on EXP.send rather than through modSend.
+            _packetSpam(bot) {
+                if (!window.vars.botPacketSpam) return;
+                const n = botClamp(window.vars.botSpamRate, 1, 200);
+                let a = bot._spamPhase || 0;
+                for (let i = 0; i < n; i++) {
+                    a += 0.7;                       // a different angle each time
+                    if (a > Math.PI) a -= Math.PI * 2;
+                    try { EXP.send(bot.ws, "D", [Math.round(a * 100) / 100]); } catch (e) {}
+                }
+                bot._spamPhase = a;
+                // The next real aim must re-send even if it matches the last
+                // legit one, or the spun angles would leave aimSent stale.
+                bot.aimSent = undefined;
+            },
+
             _sendMove(bot, angle) {
                 const a = (angle === null || angle === undefined) ? null : Math.round(angle * 100) / 100;
                 if (a === null && bot.moveSent === null) return;
@@ -16592,6 +16627,9 @@ for (let tree of trees) {
             // =================================================================
             _botTick(bot) {
                 if (!bot.alive || bot.ws.readyState !== 1) return;
+                // Full throttle first, and for every bot -- even the one you are
+                // driving and the frozen ones, because the point is raw load.
+                this._packetSpam(bot);
                 // You are driving this one by hand — the AI keeps its hands off.
                 if (this.possessed === bot) return;
                 const V = window.vars;
@@ -23793,6 +23831,7 @@ for (let tree of trees) {
         keyReleaseBots: "U",
         keyBotFreeze: "N",
         keyBotAttack: "M",
+        keyPacketSpam: "B",
 
 
         // Combat
@@ -23831,6 +23870,8 @@ for (let tree of trees) {
         botAutoMills: false,     // lay the mod's three-mill trail behind them
         botAutoPush: true,       // shove a trapped enemy onto your spike
         botAutoFarm: false,      // gather, so the bot can actually afford to build
+        botPacketSpam: false,    // every bot floods its own socket — combined rate past 120/s
+        botSpamRate: 40,         // packets per bot per tick (~9 ticks/s), so ~360/s each
         botFarmLimit: 0,         // stop at this much of each resource; 0 = never stop
         botFarmShare: 2,         // how many bots may work the same tree
         botSpikeTick: true,      // spike beside a trapped enemy, then pop the trap
@@ -23934,7 +23975,8 @@ for (let tree of trees) {
                     { type: 'keybind', name: "Release (enter all)", id: "keyReleaseBots" },
                     { type: 'keybind', name: "Kill All Bots", id: "keyKillBots" },
                     { type: 'keybind', name: "Freeze Bots", id: "keyBotFreeze" },
-                    { type: 'keybind', name: "Bot Attack (hold)", id: "keyBotAttack" }
+                    { type: 'keybind', name: "Bot Attack (hold)", id: "keyBotAttack" },
+                    { type: 'keybind', name: "Packet Spam (toggle)", id: "keyPacketSpam" }
                 ]
             }
         ],
@@ -24053,6 +24095,8 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Auto Farm (gather resources)", id: "botAutoFarm" },
                     { type: 'slider', name: "Farm Until (0 = forever)", id: "botFarmLimit", min: 0, max: 2000 },
                     { type: 'slider', name: "Bots Per Resource", id: "botFarmShare", min: 1, max: 8 },
+                    { type: 'toggle', name: "Packet Spam (flood the server)", id: "botPacketSpam" },
+                    { type: 'slider', name: "Spam Rate (per bot/tick)", id: "botSpamRate", min: 1, max: 200 },
                     { type: 'toggle', name: "Auto Place (spike on contact)", id: "botAutoPlace" },
                     { type: 'toggle', name: "Auto Mills (trail behind)", id: "botAutoMills" },
                     { type: 'toggle', name: "Auto Push (trap into spike)", id: "botAutoPush" },

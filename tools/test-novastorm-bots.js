@@ -131,6 +131,7 @@ function defaults() {
         botPrimary: 5, botSecondary: 9, botAgeTrap: true, botAgeBoost: false, botAge8: 'auto',
         botAutoHeal: true, botAutoPlace: true, botAutoMills: false, botAutoPush: true,
         botSpikeTick: true, botAutoFarm: true, botFarmLimit: 0, botFarmShare: 2,
+        botPacketSpam: false, botSpamRate: 40,
         botScanKeep: 350, botGuardRadius: 300, botPossessKeys: true,
         autoPlay: false
     };
@@ -1700,6 +1701,98 @@ t('the age path stops choosing for a bot you are driving', () => {
     sent.length = 0;
     RynBots._chooseUpgrade(b, 1, 2);
     eq(sent.length, 0, 'the upgrade is your call while you are in it');
+});
+
+
+// ---------------------------------------------------------------------------
+// Packet Spam — every bot on full throttle.
+//
+// The client itself is capped near 119 packets a second on purpose. The bots
+// are not the client: each has its own socket and its own budget, so turning
+// this on lets the squad's combined rate fly past 120 without touching your own
+// connection. The burst is spun aim packets — accepted and acted on by the
+// server, harmless to where the bot stands.
+// ---------------------------------------------------------------------------
+console.log('\npacket spam');
+reset();
+t('off, it sends nothing extra', () => {
+    const b = mkBot(600);
+    window.vars.botPacketSpam = false;
+    sent.length = 0;
+    RynBots._packetSpam(b);
+    eq(sent.length, 0);
+});
+t('on, it fires a burst of the configured size', () => {
+    reset();
+    const b = mkBot(601);
+    window.vars.botPacketSpam = true;
+    window.vars.botSpamRate = 40;
+    sent.length = 0;
+    RynBots._packetSpam(b);
+    eq(sent.length, 40);
+    ok(sent.every(p => p.type === 'D'), 'the burst should be aim packets');
+    ok(sent.every(p => p.sock === 601), 'all on the bot\'s own socket');
+});
+t('the rate slider controls the size', () => {
+    reset();
+    const b = mkBot(602);
+    window.vars.botPacketSpam = true;
+    window.vars.botSpamRate = 120;
+    sent.length = 0;
+    RynBots._packetSpam(b);
+    eq(sent.length, 120);
+});
+t('the rate is clamped to something sane', () => {
+    reset();
+    const b = mkBot(603);
+    window.vars.botPacketSpam = true;
+    window.vars.botSpamRate = 999999;
+    sent.length = 0;
+    RynBots._packetSpam(b);
+    eq(sent.length, 200, 'a runaway value should be capped, not honoured');
+});
+t('the angles differ, so the server processes each one', () => {
+    reset();
+    const b = mkBot(604);
+    window.vars.botPacketSpam = true;
+    window.vars.botSpamRate = 10;
+    sent.length = 0;
+    RynBots._packetSpam(b);
+    const angles = sent.map(p => p.args[0]);
+    eq(new Set(angles).size, angles.length, 'a burst of identical angles would be one input, not ten');
+});
+t('the whole tick spams every bot, even the possessed one', () => {
+    reset();
+    const b = mkBot(605);
+    RynBots.possessed = b;             // the driven bot still contributes load
+    window.vars.botPacketSpam = true;
+    window.vars.botSpamRate = 30;
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(sent.filter(p => p.type === 'D').length >= 30, true, 'the possessed bot did not spam');
+});
+t('combined across the squad it clears 120 a second', () => {
+    reset();
+    const squad = [mkBot(610), mkBot(611), mkBot(612), mkBot(613), mkBot(614)];
+    window.vars.botPacketSpam = true;
+    window.vars.botSpamRate = 40;
+    sent.length = 0;
+    for (const b of squad) RynBots._packetSpam(b);
+    // 5 bots x 40 per tick x ~9 ticks a second = ~1800/s. One tick alone is 200.
+    eq(sent.length, 200);
+    ok(200 * 9 > 120, 'per second this is well past the client cap');
+});
+t('a real aim still goes out after a spam burst', () => {
+    reset();
+    const b = mkBot(615);
+    b.x = 0; b.y = 0;
+    window.vars.botPacketSpam = true;
+    window.vars.botSpamRate = 10;
+    RynBots._packetSpam(b);
+    sent.length = 0;
+    RynBots._sendAim(b, 1.0);
+    eq(sent.length, 1, 'the spun angles left aimSent stale and swallowed the real aim');
+    eq(sent[0].type, 'D');
 });
 
 console.log('');

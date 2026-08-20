@@ -200,6 +200,7 @@ master connection speaks.
 | **Auto Heal** | Bots → Behaviour | The mod's own heal, not an approximation: it fires on **any** damage taken (the mod's `tick - damageTick > 0`, here a drop in the bot's own health packet) and tops all the way back to 100 in one tick — `ceil(missing / food.heal)` units, which is what the mod's `heal(100 - health)` loop works out to. The first version waited for 15 missing health and then ate at most three, which is why it felt bad. Runs while you are driving a bot too. |
 | **Auto Mills** | Bots → Behaviour | The mod's three-mill trail, laid **behind** the direction of travel: `angle + 180°`, then `± toRad(scale + scale/2)` either side. That offset reads the mill's scale as degrees — odd arithmetic, but it is what the mod does and what gives the familiar spacing, so it is reproduced rather than "corrected". Off by default. |
 | **Full Mod** | Bots → Behaviour | The bots stop running ported rules and run *the mod itself* — its own tick, on their own world, through their own socket. Everything the mod does, they do. On by default; see [Full Mod](#full-mod--the-bots-run-the-mod-itself). |
+| **Packet Spam** | Bots → Behaviour, or the `B` key | *Off by default.* Every bot pours a burst of packets down its **own** socket each tick — N on a slider, ~9 ticks a second — so the squad's combined rate flies well past 120/s without costing your own connection anything. The burst is spun aim (`D`) packets: the server acts on every one, they change nothing about where the bot stands or what it hits, and they bypass the mod's own budget by going straight out on `EXP.send`. |
 | **Auto Farm** | Bots → Behaviour | *Off by default.* Walks to the nearest resource, holds whatever gathers fastest, and hits it — with the target claimed so the squad spreads over different trees instead of stacking on one. **This is the foundation everything else needed**; see below. |
 | **Spike Tick** | Bots → Behaviour | The mod's trap tick, `canTrapTick()` gate for gate on the bot's own world: hammer and primary both charged, the enemy inside one of the bot's own traps, that trap one hammer hit from breaking, and a placeable spike spot within `scale + 55` of them whose knockback does not shove them at the bot. Pops the trap and drops the spike on the same server tick. See [the foundation it rides on](#the-spike-tick-foundation). |
 | **Auto Push** | Bots → Behaviour | The mod's trap-into-spike play: when the nearest enemy stands in one of the bot's own pit traps and one of its own spikes sits beside that trap, it walks at the far side of the spike so they are shoved onto it, swinging as it goes. Same construction as the mod — `pos = spike + scale·unit(spike→trap)`, `push = pos + (dist+35)·unit(pos→enemy)` — and the same clearance test, refusing a line through their body, their spikes, a boost pad or a teleporter. |
@@ -519,12 +520,12 @@ node tools/test-novastorm-bots.js
 ```
 
 The test evaluates the `RynBots` block straight out of the shipped userscript
-against stubs and asserts the packets it emits — 179 checks over the age path,
+against stubs and asserts the packets it emits — 187 checks over the age path,
 break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
 console, Scan and Kill, possession, the mod's heal rule, the mill trail, auto
 push, the reload clocks, structure damage, object health, the spike tick and
-what the engine hands over under Full Mod, Auto Farm, the affordability gate and acting as the bot you drive.
+what the engine hands over under Full Mod, Auto Farm, the affordability gate, acting as the bot you drive and Packet Spam.
 
 ```sh
 node tools/test-mod-context.js
