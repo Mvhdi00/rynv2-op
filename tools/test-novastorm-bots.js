@@ -52,6 +52,7 @@ const ITEM_DEFS = [
 ITEM_DEFS.forEach(([name, scale, extra]) => items.list.push(Object.assign({ name, scale }, extra || {})));
 
 const config = { mapScale: 14400 };
+let packets = 0;
 const UTILS = {
     getDistance(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); },
     getDirection(x1, y1, x2, y2) { return Math.atan2(y1 - y2, x1 - x2); },
@@ -59,7 +60,8 @@ const UTILS = {
     getAngleDist(a, b) {
         const p = Math.abs(b - a) % (Math.PI * 2);
         return p > Math.PI ? (Math.PI * 2) - p : p;
-    }
+    },
+    toRad(d) { return d * Math.PI / 180; }
 };
 const io = { send() {} };
 let myPlayer = { sid: 1, alive: true, x2: 5000, y2: 5000, skinIndex: 0, tailIndex: 0 };
@@ -98,7 +100,7 @@ function defaults() {
         botFreeze: false, botFollowCursor: false, botRandomMove: false, botAutoBuyHats: true,
         botCircleRadius: 150, botStopRadius: 60,
         botPrimary: 5, botSecondary: 9, botAgeTrap: true, botAgeBoost: false, botAge8: 'auto',
-        botAutoHeal: true, botAutoPlace: true,
+        botAutoHeal: true, botAutoPlace: true, botAutoMills: false,
         botScanKeep: 350, botGuardRadius: 300, botPossessKeys: true,
         autoPlay: false
     };
@@ -507,43 +509,137 @@ t('attack state flips once per change', () => {
     eq(sent.filter(p => p.type === 'F').length, 2);
 });
 
-console.log('auto heal');
+console.log('auto heal (the mod\'s, not an approximation)');
 reset();
-t('a hurt bot eats, then puts its weapon back', () => {
+function hurt(b, to) {                      // a real health packet, which is what sets hurtAt
+    RynBots._onPacket(b, 'O', [b.sid, to]);
+}
+t('it tops all the way back to 100 in one go, like heal(100 - health)', () => {
     const b = mkBot(130); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
-    b.health = 40;
+    hurt(b, 40);                            // 60 missing, apples heal 20 -> 3
     sent.length = 0;
     ok(RynBots._autoHeal(b), 'did not heal');
+    eq(sent.filter(p => p.type === 'F' && p.args[0] === 1).length, 3, 'ceil(60/20)');
     const z = sent.filter(p => p.type === 'z');
-    const f = sent.filter(p => p.type === 'F');
     eq(z[0].args[0], 0, 'food slot');   eq(z[0].args[1], false);
-    eq(f.length % 2, 0, 'swings come in pairs');
     eq(z[z.length - 1].args[0], 5, 'weapon back');
-    eq(z[z.length - 1].args[1], true);
 });
-t('a full bot never eats', () => {
-    const b = mkBot(131); b.health = 100; sent.length = 0;
-    eq(RynBots._autoHeal(b), false);
-    eq(sent.length, 0);
+t('one point of damage is enough to trigger it', () => {
+    reset();
+    const b = mkBot(131); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    hurt(b, 99);
+    sent.length = 0;
+    ok(RynBots._autoHeal(b), 'the old version waited for 15 missing; the mod does not');
+    eq(sent.filter(p => p.type === 'F' && p.args[0] === 1).length, 1);
 });
-t('the burst is capped at three units', () => {
-    const b = mkBot(132); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
-    b.health = 1; sent.length = 0;
+t('a bigger food eats fewer of them', () => {
+    reset();
+    const b = mkBot(132); b.weapons = [5, 10]; b.itemsOwned = [1, 3, 6, 10];  // cookie, heal 40
+    hurt(b, 20);                            // 80 missing -> ceil(80/40) = 2
+    sent.length = 0;
     RynBots._autoHeal(b);
-    eq(sent.filter(p => p.type === 'F' && p.args[0] === 1).length, 3);
+    eq(sent.filter(p => p.type === 'F' && p.args[0] === 1).length, 2);
+});
+t('undamaged means no eating, however long ago it was hurt', () => {
+    reset();
+    const b = mkBot(133); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    b.health = 55; b.hurtAt = Date.now() - 5000;
+    sent.length = 0;
+    eq(RynBots._autoHeal(b), false, 'a stale hit is not a reason to eat');
+});
+t('full health never eats', () => {
+    reset();
+    const b = mkBot(134); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    hurt(b, 100);
+    eq(RynBots._autoHeal(b), false);
 });
 t('auto heal off means no food', () => {
-    const b = mkBot(133); b.health = 20; window.vars.botAutoHeal = false;
-    sent.length = 0;
+    reset();
+    const b = mkBot(135); b.itemsOwned = [0, 3, 6, 10];
+    window.vars.botAutoHeal = false;
+    hurt(b, 20);
     eq(RynBots._autoHeal(b), false);
 });
 t('healing takes the whole tick', () => {
     reset();
-    const b = mkBot(134); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
-    b.health = 30; b.x = 0; b.y = 5000;
+    const b = mkBot(136); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    b.x = 0; b.y = 5000;
+    hurt(b, 30);
     sent.length = 0;
     RynBots._botTick(b);
     eq(sent.filter(p => p.type === '9').length, 0, 'should not have re-steered');
+});
+
+console.log('auto mills (the mod\'s three-mill trail)');
+reset();
+t('three mills go down BEHIND the direction of travel', () => {
+    const b = mkBot(137); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    b.x = 5000; b.y = 5000;
+    window.vars.botAutoMills = true;
+    sent.length = 0;
+    ok(RynBots._autoMills(b, 0), 'nothing placed');        // walking east
+    const swings = sent.filter(p => p.type === 'F' && p.args[0] === 1);
+    eq(swings.length, 3, 'the mod places three');
+    for (const sw of swings) {
+        ok(UTILS.getAngleDist(sw.args[1], Math.PI) < 1.4,
+           'each should be roughly behind (PI), got ' + sw.args[1].toFixed(2));
+    }
+});
+t('the weapon comes back afterwards', () => {
+    reset();
+    const b = mkBot(138); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    window.vars.botAutoMills = true;
+    sent.length = 0;
+    RynBots._autoMills(b, 0);
+    const z = sent.filter(p => p.type === 'z');
+    eq(z[z.length - 1].args[0], 5);
+    eq(z[z.length - 1].args[1], true);
+});
+t('standing still lays no trail', () => {
+    reset();
+    const b = mkBot(139); b.itemsOwned = [0, 3, 6, 10];
+    window.vars.botAutoMills = true;
+    eq(RynBots._autoMills(b, null), false);
+});
+t('a pinned bot lays no trail', () => {
+    reset();
+    const b = mkBot(140); b.itemsOwned = [0, 3, 6, 10];
+    window.vars.botAutoMills = true;
+    b.stuckTicks = 2;
+    eq(RynBots._autoMills(b, 0), false, 'being stuck is the bot\'s nearestTrap guard');
+});
+t('no mill owned, no trail', () => {
+    reset();
+    const b = mkBot(141); b.itemsOwned = [0, 3, 6];      // no mill in slot 3
+    window.vars.botAutoMills = true;
+    eq(RynBots._autoMills(b, 0), false);
+});
+t('the toggle is off by default', () => {
+    reset();
+    const b = mkBot(142); b.itemsOwned = [0, 3, 6, 10];
+    eq(RynBots._autoMills(b, 0), false);
+});
+t('an occupied spot is skipped', () => {
+    reset();
+    const b = mkBot(143); b.weapons = [5, 10]; b.itemsOwned = [0, 3, 6, 10];
+    b.x = 0; b.y = 0;
+    window.vars.botAutoMills = true;
+    // Something small sitting exactly where the straight-back mill would go.
+    // It has to be small: the mod's offsets are toRad(scale + scale/2), which
+    // at the mill's placement radius puts the three spots only ~94 units apart,
+    // so a wide blocker covers all three and none go down.
+    const r = 35 + 45 + 5;
+    b.objects.set(1, { sid: 1, x: -r, y: 0, scale: 15, type: -1, id: 4, owner: 9 });
+    sent.length = 0;
+    RynBots._autoMills(b, 0);
+    eq(sent.filter(p => p.type === 'F' && p.args[0] === 1).length, 2, 'two of three');
+});
+t('the packet budget stops the trail', () => {
+    reset();
+    const b = mkBot(144); b.itemsOwned = [0, 3, 6, 10];
+    window.vars.botAutoMills = true;
+    packets = 118;
+    eq(RynBots._autoMills(b, 0), false);
 });
 
 console.log('auto place');

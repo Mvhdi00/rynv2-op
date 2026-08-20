@@ -15255,7 +15255,7 @@ for (let tree of trees) {
                     stuckTicks: 0, freeTicks: 0, breakAim: null,
                     wander: null, wanderUntil: 0,
                     search: null, searchUntil: 0,
-                    healAt: 0, placeAt: 0,
+                    healAt: 0, placeAt: 0, hurtAt: 0, millAt: 0,
                     detourUntil: 0, detourSign: 1,
                     forceAttackUntil: 0, buyAt: 0
                 };
@@ -15406,7 +15406,16 @@ for (let tree of trees) {
                     for (const [k, o] of bot.objects) if (o.owner === args[0]) bot.objects.delete(k);
                     break;
                 }
-                case "O": if (args[0] === bot.sid) bot.health = args[1]; break;   // updateHealth
+                case "O": {                                        // updateHealth
+                    if (args[0] === bot.sid) {
+                        // The mod heals on "took damage this tick" (damageTick),
+                        // so the bot needs the same signal — a drop in its own
+                        // health, timestamped.
+                        if (args[1] < bot.health) bot.hurtAt = Date.now();
+                        bot.health = args[1];
+                    }
+                    break;
+                }
                 case "P": {                                            // killPlayer
                     bot.alive = false;
                     bot.deadAt = Date.now();
@@ -15735,6 +15744,20 @@ for (let tree of trees) {
             // The burst is capped at three units a tick. A bot that spams food
             // as fast as the loop allows just burns its packet budget — the
             // server applies one consume per tick anyway.
+            // This is the mod's own heal, not an approximation of it.
+            //
+            //     if (((healing && shameCount < 7) || (tick - damageTick) > 0)
+            //         && myPlayer.health < 100) heal(100 - myPlayer.health);
+            //
+            // and heal(value) is `for (i = 0; i < value; i += food.heal) place(food)`
+            // — it tops all the way back to 100 in ONE tick, and it fires on ANY
+            // damage taken rather than on a threshold of missing health.
+            //
+            // The first version here did neither: it waited until 15 health was
+            // missing and then ate at most three, which is why it felt bad. It
+            // now eats exactly what the mod eats, the moment the mod eats it.
+            // The only cap left is the packet budget, which is a real limit
+            // rather than an invented one.
             _autoHeal(bot) {
                 if (!window.vars.botAutoHeal) return false;
                 const food = bot.itemsOwned && bot.itemsOwned[0];
@@ -15742,11 +15765,18 @@ for (let tree of trees) {
                 const item = items.list[food];
                 if (!item || !item.heal) return false;
                 const missing = 100 - (bot.health === undefined ? 100 : bot.health);
-                if (missing < Math.min(item.heal, 15)) return false;
+                if (missing <= 0) return false;
                 const now = Date.now();
-                if (now - bot.healAt < 100) return false;
+                // "took damage this tick" — the bot's own health packet sets
+                // hurtAt, and one server tick is 111 ms.
+                const justHurt = (now - (bot.hurtAt || 0)) < 120;
+                if (!justHurt) return false;
+                if (now - bot.healAt < 90) return false;
                 bot.healAt = now;
-                const n = Math.max(1, Math.min(3, Math.ceil(missing / item.heal)));
+                // ceil(missing / heal), exactly what the mod's loop works out to,
+                // trimmed only by what the socket can actually carry.
+                const want = Math.ceil(missing / item.heal);
+                const n = Math.max(1, Math.min(want, 8));
                 try {
                     for (let i = 0; i < n; i++) {
                         EXP.send(bot.ws, "z", [food, false]);
@@ -15758,6 +15788,69 @@ for (let tree of trees) {
                     bot.wantWeapon = back;
                 } catch (e) {}
                 bot.attacking = false;   // the swings above left the state at 0
+                return true;
+            },
+
+            // =================================================================
+            // AUTO MILLS  —  the mod's pattern, on the bot's own world
+            // =================================================================
+            // The mod drops three mills BEHIND the direction of travel:
+            //
+            //     angle = lastMoveAngle + toRad(180)
+            //     addPredictObject(items[3], angle)
+            //     addPredictObject(items[3], angle -/+ toRad(scale + scale/2))
+            //
+            // The offsets read as degrees taken off the mill's scale, which is
+            // odd arithmetic but it is what the mod does and what produces the
+            // familiar trail, so it is reproduced rather than "corrected".
+            // Guarded by !nearestTrap there; here that is "not stuck", which is
+            // the bot's equivalent of being pinned.
+            _autoMills(bot, moveAngle) {
+                if (!window.vars.botAutoMills) return false;
+                if (moveAngle === null || moveAngle === undefined) return false;
+                if (bot.stuckTicks > 0) return false;              // pinned, not walking
+                const mill = (bot.itemsOwned || [])[3];
+                if (mill === undefined || mill === null) return false;
+                const item = items.list[mill];
+                if (!item) return false;
+                const now = Date.now();
+                if (now - bot.millAt < 400) return false;
+                const back = moveAngle + Math.PI;
+                const off = UTILS.toRad(item.scale + item.scale / 2);
+                let placed = 0;
+                for (const a of [back, back - off, back + off]) {
+                    if (packets + 5 > 119) break;
+                    if (!this._botCanPlace(bot, mill, a)) continue;
+                    try {
+                        EXP.send(bot.ws, "z", [mill, false]);
+                        EXP.send(bot.ws, "F", [1, a]);
+                        EXP.send(bot.ws, "F", [0, a]);
+                    } catch (e) {}
+                    placed++;
+                }
+                if (!placed) return false;
+                const backTo = (bot.weapons && bot.weapons[0] !== undefined) ? bot.weapons[0] : 0;
+                try { EXP.send(bot.ws, "z", [backTo, true]); } catch (e) {}
+                bot.wantWeapon = backTo;
+                bot.attacking = false;
+                bot.millAt = now;
+                return true;
+            },
+
+            // canPlace for a bot: the same test the mod runs, against the bot's
+            // own object map instead of the master's visibleObjects.
+            _botCanPlace(bot, id, angle) {
+                const item = items.list[id];
+                if (!item) return false;
+                const r = 35 + item.scale + (item.placeOffset || 0);
+                const px = bot.x + Math.cos(angle) * r;
+                const py = bot.y + Math.sin(angle) * r;
+                for (const o of bot.objects.values()) {
+                    const oi = (o.id === null || o.id === undefined) ? null : items.list[o.id];
+                    const os = o.scale || (oi && oi.scale) || 40;
+                    const dx = o.x - px, dy = o.y - py;
+                    if (dx * dx + dy * dy < (item.scale + os) * (item.scale + os)) return false;
+                }
                 return true;
             },
 
@@ -16133,6 +16226,11 @@ for (let tree of trees) {
                         }
                     }
                 }
+
+                // --- lay the mill trail -------------------------------------------
+                // Before the combat decisions: it borrows the attack packet, so
+                // it must not run on a tick that is already swinging.
+                if (this._autoMills(bot, moveAngle)) { this._sendMove(bot, moveAngle); return; }
 
                 // --- what is in the way ------------------------------------------
                 const breakAim = this._autoBreak(bot, moveAngle);
@@ -22890,6 +22988,7 @@ for (let tree of trees) {
         botAutoAttack: true,     // hit enemy players that come into reach
         botAutoHeal: true,       // eat the moment they take damage
         botAutoPlace: true,      // drop a spike on whoever closes in
+        botAutoMills: false,     // lay the mod's three-mill trail behind them
         botSync: true,           // swing on the same tick you do
         botFreeze: false,        // toggled by the Freeze key
         botFollowCursor: false,  // walk to the mouse instead of to you
@@ -23121,6 +23220,7 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Auto Attack Players", id: "botAutoAttack" },
                     { type: 'toggle', name: "Auto Heal (eat when hit)", id: "botAutoHeal" },
                     { type: 'toggle', name: "Auto Place (spike on contact)", id: "botAutoPlace" },
+                    { type: 'toggle', name: "Auto Mills (trail behind)", id: "botAutoMills" },
                     { type: 'toggle', name: "Auto Buy Hats (copy mine)", id: "botAutoBuyHats" }
                 ]
             },
