@@ -13956,6 +13956,13 @@ for (let tree of trees) {
         // (35 + 52 = 87) that puts neighbouring candidates 3.8 units apart, so
         // the edge of a gap is found twice as precisely as the old 72 did.
         //
+        // It is NOT swept flat, though -- see buildPlaceAngles(). Every second
+        // angle here is an angle of the old 72 grid, and those are tried first
+        // and alone. The finer half is only reached when the coarse circle is
+        // completely blocked. So the placer picks the same spot it always did,
+        // at the same cost, and the extra resolution is reach in the one case
+        // where 72 had nothing rather than a different answer every tick.
+        //
         // Do not push this much higher without fixing the ban first. A placed
         // angle is banned by exact key (`bannedAngles.has(obj.angle)`) and
         // matched with a 0.01 rad tolerance, so the step has to stay well above
@@ -13968,13 +13975,7 @@ for (let tree of trees) {
         const PLACE_ANGLES = 144;
 
         function updateAngles(id) {
-            const angles = [];
-            for (let i = 0; i < PLACE_ANGLES; i++) {
-                const angle = UTILS.toRad(i * (360 / PLACE_ANGLES));
-                angles.push({ id: id, angle: angle, placeable: canPlace(id, angle), ...getConfig(id, angle) });
-            }
-
-            getPerfectAngles(angles);
+            const angles = buildPlaceAngles(id);
 
             // Check placed angles and ban them if still placeable
             for (let placedAngle of placedAngles) {
@@ -14126,14 +14127,48 @@ for (let tree of trees) {
         }
 
         function getPrePlaceAngles(id, customObjects) {
-            const angles = [];
-            for (let i = 0; i < PLACE_ANGLES; i++) {
-                const angle = UTILS.toRad(i * (360 / PLACE_ANGLES));
-                angles.push({ id: id, angle: angle, placeable: canPlace(id, angle, customObjects), ...getConfig(id, angle) });
-            }
+            return buildPlaceAngles(id, customObjects);
+        }
 
-            getPerfectAngles(angles);
-            return angles;
+        // =====================================================================
+        // THE PLACER SWEEP  —  the old grid first, the fine one only if needed
+        // =====================================================================
+        // PLACE_ANGLES is 144, and every second one of those angles IS an angle
+        // of the old 72 grid: 2 x 2.5deg == 5deg. So the fine grid is a strict
+        // superset of the coarse one, and the two can be spent in that order.
+        //
+        // Pass one is the old 72 sweep, exactly: same angles, same values, same
+        // order, same count of canPlace calls. If anything on it can be placed,
+        // that is what the placer sees and every decision downstream comes out
+        // where it came out before -- the same spot, from the same list.
+        //
+        // Pass two only happens when the coarse circle is completely blocked,
+        // which is the one case where the old grid genuinely had nothing and
+        // 2.5deg steps can still find a gap. Then all 144 are returned.
+        //
+        // That is what 144 buys, and all it costs: extra reach when 72 comes up
+        // empty, and nothing at all the rest of the time. (Want the fine grid
+        // every tick again? Delete the early return.)
+        function buildPlaceAngles(id, customObjects) {
+            const step = (PLACE_ANGLES % 2 === 0) ? 2 : 1;
+            const mk = (i) => {
+                const angle = UTILS.toRad(i * (360 / PLACE_ANGLES));
+                return { id: id, angle: angle,
+                         placeable: canPlace(id, angle, customObjects),
+                         ...getConfig(id, angle) };
+            };
+
+            const coarse = [];
+            for (let i = 0; i < PLACE_ANGLES; i += step) coarse.push(mk(i));
+            getPerfectAngles(coarse);
+            if (step === 1) return coarse;
+            for (let i = 0; i < coarse.length; i++) if (coarse[i].placeable) return coarse;
+
+            // Walled in on every one of the old angles. Spend the other half.
+            const all = [];
+            for (let i = 0; i < PLACE_ANGLES; i++) all.push(i % 2 ? mk(i) : coarse[i >> 1]);
+            getPerfectAngles(all);
+            return all;
         }
 
         function getPerfectAngles(angles) {

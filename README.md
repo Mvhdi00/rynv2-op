@@ -460,6 +460,7 @@ what the engine hands over under Full Mod.
 
 ```sh
 node tools/test-mod-context.js
+node tools/test-place-angles.js
 ```
 
 20 checks on the context swap itself: that the key list covers every singleton
@@ -467,6 +468,47 @@ the mod reads, that a tick writing to all 139 leaves none of yours touched, that
 each bot keeps its own copy, that a throw still restores everything, that
 `io.send` lands on the right socket, and that deferred work re-enters the bot
 that scheduled it — or is dropped if that bot died first.
+
+18 checks on the placer sweep: that an open circle produces a list identical to
+the old 72 sweep down to the float values and the `perfect` flags, that it costs
+72 `canPlace` calls and not 144, that the fine grid is reached only when the
+coarse circle is fully blocked, and that the coarse angles keep their values and
+their indices when it is.
+
+## The placer's angle sweep
+
+`PLACE_ANGLES` is **144** — 2.5° a step. It is not swept flat.
+
+Every second one of those angles *is* an angle of the original 72 grid
+(2 × 2.5° = 5°), so the fine grid is a strict superset of the coarse one and the
+two can be spent in that order:
+
+| | |
+|---|---|
+| **Pass one** | the old 72 sweep, exactly — same angles, same float values, same order, same 72 `canPlace` calls. If anything on it can be placed, that is the whole list, and every decision downstream lands where it always landed. |
+| **Pass two** | only when the coarse circle is **completely** blocked — the one case where 5° genuinely had nothing and 2.5° can still find a gap. Then all 144 are returned, coarse angles still at even indices. |
+
+So 144 buys reach where 72 came up empty, and costs nothing the rest of the
+time. It is not a different answer every tick.
+
+That distinction matters because a flat 144 sweep is not neutral. The placer
+picks by *minimum distance to the enemy*, so a new in-between candidate can win
+outright — at the spike radius (35 + 52 = 87) the neighbours sit 3.8 units apart
+instead of 7.6, and the spike lands somewhere it never used to. It also doubles
+the sweep: `updateAngles` runs twice a tick (spike and trap), so 288 `canPlace`
+calls instead of 144, each scanning `visibleObjects`, inside a tick that has
+111 ms to finish. Both of those showed up as the trap tick "not feeling the
+same".
+
+The angle *values* are compared bit for bit in the tests, not approximately:
+`placedAngles` and `bannedAngles` are keyed on them, and the ban is matched with
+a 0.01 rad tolerance. That tolerance is also why the grid does not go much
+higher — at 629 steps the step is 0.00999 rad and three grid angles fall inside
+it, so the ban stops covering its own neighbours and the placer re-picks a spot
+the server has already refused. 144 steps is 0.0436 rad, four times clear.
+
+Want the fine grid every tick again? Delete the early return in
+`buildPlaceAngles`.
 
 ## Anti Bow Insta
 
