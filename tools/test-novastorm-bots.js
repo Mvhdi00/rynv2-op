@@ -18,15 +18,15 @@ const EXP = {
 // items table, trimmed to what the engine reads
 const items = {
     weapons: [
-        { id: 0, dmg: 25, speed: 300, range: 65 },
-        { id: 1, dmg: 30, speed: 400, range: 70 },
+        { id: 0, dmg: 25, speed: 300, range: 65, gather: 1 },
+        { id: 1, dmg: 30, speed: 400, range: 70, gather: 2 },
         { id: 2, dmg: 35, speed: 400, range: 75 },
         { id: 3, dmg: 35, speed: 300, range: 110 },
         { id: 4, dmg: 40, speed: 300, range: 118 },
         { id: 5, dmg: 45, speed: 700, range: 142 },
         { id: 6, dmg: 20, speed: 300, range: 110 },
         { id: 7, dmg: 20, speed: 100, range: 65 },
-        { id: 8, dmg: 1, speed: 400, range: 70 },
+        { id: 8, dmg: 1, speed: 400, range: 70, gather: 7 },
         { id: 9, speed: 600, projectile: 0, range: 70 },
         { id: 10, dmg: 10, sDmg: 7.5, speed: 400, range: 75 },
         { id: 11, speed: 0, range: 75 },
@@ -39,10 +39,10 @@ const items = {
 };
 const ITEM_DEFS = [
     ['apple', 20, { heal: 20 }], ['cookie', 22, { heal: 40 }], ['cheese', 27, { heal: 30 }],
-    ['wood wall', 27, { health: 380 }], ['stone wall', 50, { health: 900 }], ['castle wall', 50, { health: 1500 }],
-    ['spikes', 52, { dmg: 20, health: 400 }], ['greater spikes', 49, { dmg: 35, health: 500 }],
+    ['wood wall', 27, { health: 380, req: ['wood', 10] }], ['stone wall', 50, { health: 900 }], ['castle wall', 50, { health: 1500 }],
+    ['spikes', 52, { dmg: 20, health: 400, req: ['wood', 20, 'stone', 5] }], ['greater spikes', 49, { dmg: 35, health: 500 }],
     ['poison spikes', 52, { dmg: 30, health: 600 }], ['spinning spikes', 52, { dmg: 45, health: 500 }],
-    ['windmill', 45, { health: 400 }], ['faster windmill', 47, { health: 500 }], ['power mill', 47, { health: 800 }],
+    ['windmill', 45, { health: 400, req: ['wood', 50, 'stone', 10] }], ['faster windmill', 47, { health: 500 }], ['power mill', 47, { health: 800 }],
     ['mine', 65], ['sapling', 110],
     ['pit trap', 50, { trap: true, health: 500 }], ['boost pad', 45, { ignoreCollision: true, health: 150 }],
     ['turret', 43, { health: 800 }], ['platform', 43, { ignoreCollision: true, health: 300 }],
@@ -119,7 +119,7 @@ function defaults() {
         botCircleRadius: 150, botStopRadius: 60,
         botPrimary: 5, botSecondary: 9, botAgeTrap: true, botAgeBoost: false, botAge8: 'auto',
         botAutoHeal: true, botAutoPlace: true, botAutoMills: false, botAutoPush: true,
-        botSpikeTick: true,
+        botSpikeTick: true, botAutoFarm: true, botFarmLimit: 0, botFarmShare: 2,
         botScanKeep: 350, botGuardRadius: 300, botPossessKeys: true,
         autoPlay: false
     };
@@ -128,6 +128,12 @@ function mkBot(tag) {
     const ws = { tag, readyState: 1, addEventListener() {} };
     const b = RynBots._newBot(ws);
     b.ready = true; b.alive = true; b.sid = tag;
+    // A bot that has been playing for a minute has resources. Placement is
+    // gated on affording the item now, so a bot with an empty bank cannot
+    // build anything — which is the point of the gate, and would otherwise
+    // make every placement test here fail for the wrong reason. The tests that
+    // are about the gate set these to zero themselves.
+    b.stats = { points: 0, food: 200, wood: 500, stone: 500, kills: 0 };
     RynBots.list.push(b);
     return b;
 }
@@ -146,6 +152,10 @@ function reset() {
     players = [ myPlayer ];
     nearestEnemy = null;
     attackState = 0; leftClick = false; ePress = false;
+    // The packet budget is module-scope and one test pushes it to 118 to check
+    // the guard. Without clearing it here every later placement silently fails
+    // the budget check instead of the thing under test.
+    packets = 0;
     for (const k in keys) delete keys[k];
     window.vars = defaults();
 }
@@ -1406,6 +1416,201 @@ t('you are never a bot\'s enemy, whoever is asking', () => {
     b.players.set(myPlayer.sid, { sid: myPlayer.sid, x: 10, y: 0, visible: true });
     eq(RynBots._friendlySid(myPlayer.sid), true);
     eq(RynBots._nearestEnemy(b), null, 'it targeted you');
+});
+
+
+// ---------------------------------------------------------------------------
+// Auto Farm — the foundation everything else was missing.
+//
+// A bot that never gathers cannot build: no XP means it never leaves age 1, so
+// no upgrade ever arrives, and no resources means every place packet the server
+// simply drops. It swings and does nothing else, forever, with no error
+// anywhere. These pin down that it now gathers, that the squad spreads out,
+// and that nothing tries to pay for a building it cannot afford.
+// ---------------------------------------------------------------------------
+console.log('\nauto farm');
+reset();
+// A tree is an object with NO item id — that is what separates a resource from
+// a building in the packet, and what the whole farm keys off.
+function tree(sid, x, y, type = 0) {
+    return { sid, x, y, scale: 50, type, id: null, owner: null };
+}
+function farmBot(tag, stats) {
+    const b = mkBot(tag);
+    b.x = 0; b.y = 0;
+    b.weapons = [0, null];
+    b.stats = Object.assign({ points: 0, food: 0, wood: 0, stone: 0, kills: 0 }, stats || {});
+    return b;
+}
+t('a resource in range makes the bot hit it', () => {
+    const b = farmBot(400);
+    b.objects.set(1, tree(1, 80, 0));
+    const f = RynBots._autoFarm(b);
+    ok(f, 'no farm decision');
+    eq(f.mode, 'hit');
+    ok(Math.abs(f.angle) < 0.01, 'should face the tree');
+});
+t('a resource out of range makes it walk there first', () => {
+    reset();
+    const b = farmBot(401);
+    b.objects.set(1, tree(1, 700, 0));
+    eq(RynBots._autoFarm(b).mode, 'walk');
+});
+t('buildings are not resources', () => {
+    reset();
+    const b = farmBot(402);
+    b.objects.set(1, { sid: 1, x: 80, y: 0, scale: 50, type: -1, id: 6, owner: 99 });
+    eq(RynBots._autoFarm(b), null);
+});
+t('it picks the nearest one', () => {
+    reset();
+    const b = farmBot(403);
+    b.objects.set(1, tree(1, 600, 0));
+    b.objects.set(2, tree(2, 0, 200));
+    const f = RynBots._autoFarm(b);
+    ok(Math.abs(f.angle - Math.PI / 2) < 0.01, 'expected the closer one to the south');
+});
+t('and stays on it, instead of flipping between two the same distance away', () => {
+    reset();
+    const b = farmBot(404);
+    b.objects.set(1, tree(1, 300, 0));
+    b.objects.set(2, tree(2, -300, 0));
+    const first = RynBots._autoFarm(b).angle;
+    for (let i = 0; i < 5; i++) eq(RynBots._autoFarm(b).angle, first, 'the target moved');
+});
+t('two bots take two different trees', () => {
+    reset();
+    const a = farmBot(410), b = farmBot(411);
+    for (const bot of [a, b]) { bot.objects.set(1, tree(1, 300, 0)); bot.objects.set(2, tree(2, 320, 0)); }
+    window.vars.botFarmShare = 1;
+    RynBots._autoFarm(a);
+    RynBots._autoFarm(b);
+    ok(a.farmTarget !== b.farmTarget, 'both picked tree ' + a.farmTarget);
+});
+t('but they will double up rather than stand idle', () => {
+    reset();
+    const a = farmBot(412), b = farmBot(413);
+    for (const bot of [a, b]) bot.objects.set(1, tree(1, 300, 0));
+    window.vars.botFarmShare = 1;
+    RynBots._autoFarm(a);
+    ok(RynBots._autoFarm(b), 'the second bot gave up instead of sharing');
+});
+t('the share setting decides how many', () => {
+    reset();
+    const bots = [farmBot(414), farmBot(415), farmBot(416)];
+    for (const bot of bots) { bot.objects.set(1, tree(1, 300, 0)); bot.objects.set(2, tree(2, 900, 0)); }
+    window.vars.botFarmShare = 2;
+    bots.forEach(x => RynBots._autoFarm(x));
+    eq(bots.filter(x => x.farmTarget === 1).length, 2, 'expected two on the near tree');
+    eq(bots.filter(x => x.farmTarget === 2).length, 1);
+});
+t('it stops once it has enough', () => {
+    reset();
+    const b = farmBot(417, { wood: 500, food: 500, stone: 500 });
+    b.objects.set(1, tree(1, 80, 0));
+    window.vars.botFarmLimit = 300;
+    eq(RynBots._autoFarm(b), null);
+    eq(b.farmTarget, null, 'and lets go of its tree');
+});
+t('a limit of zero means it never stops', () => {
+    reset();
+    const b = farmBot(418, { wood: 9000, food: 9000, stone: 9000 });
+    b.objects.set(1, tree(1, 80, 0));
+    window.vars.botFarmLimit = 0;
+    ok(RynBots._autoFarm(b));
+});
+t('it only goes for what it is still short of', () => {
+    reset();
+    const b = farmBot(419, { wood: 500, food: 0, stone: 500 });
+    window.vars.botFarmLimit = 300;
+    b.objects.set(1, tree(1, 100, 0, 0));      // wood — full
+    b.objects.set(2, tree(2, 0, 400, 1));      // food — still wanted, further away
+    const f = RynBots._autoFarm(b);
+    ok(f && Math.abs(f.angle - Math.PI / 2) < 0.01, 'should have walked past the tree to the bush');
+});
+t('the toggle turns it off', () => {
+    reset();
+    const b = farmBot(420);
+    b.objects.set(1, tree(1, 80, 0));
+    window.vars.botAutoFarm = false;
+    eq(RynBots._autoFarm(b), null);
+});
+t('it holds whatever gathers fastest', () => {
+    reset();
+    const b = farmBot(421);
+    b.weapons = [0, null];
+    eq(RynBots._gatherWeapon(b), 0, 'only the tool hammer is owned');
+    b.weapons = [1, 8];                        // hand axe 2/400 vs stick 7/400
+    eq(RynBots._gatherWeapon(b), 8, 'the stick gathers more than three times faster');
+    b.weapons = [1, 9];                        // a bow gathers nothing
+    eq(RynBots._gatherWeapon(b), 1);
+});
+t('the whole tick walks and swings at the tree', () => {
+    reset();
+    const b = farmBot(422);
+    b.objects.set(1, tree(1, 80, 0));
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(last('F').args[0], 1, 'should be swinging at it');
+    const mv = last('9');
+    eq(mv.args[0], null, 'and standing still, since it is already in range');
+});
+t('farming yields the moment something is worth fighting', () => {
+    reset();
+    const b = farmBot(423);
+    b.objects.set(1, tree(1, 80, 0));
+    b.players.set(99, { sid: 99, x: 60, y: 0, visible: true });
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(b.farmTarget, null, 'it kept farming with an enemy on top of it');
+});
+
+console.log('\npaying for what it builds');
+reset();
+t('no wood, no spike', () => {
+    const b = mkBot(430);
+    b.x = 0; b.y = 0;
+    b.itemsOwned = [0, 3, 6, 10];
+    b.stats = { wood: 0, stone: 0, food: 0, points: 0 };
+    b.players.set(99, { sid: 99, x: 100, y: 0, visible: true });
+    sent.length = 0;
+    eq(RynBots._autoPlaceSpike(b, RynBots._nearestEnemy(b)), false);
+    eq(sent.length, 0, 'it sent a packet the server would have thrown away');
+});
+t('enough wood and stone, and it places', () => {
+    reset();
+    const b = mkBot(431);
+    b.x = 0; b.y = 0;
+    b.itemsOwned = [0, 3, 6, 10];
+    b.stats = { wood: 100, stone: 100, food: 0, points: 0 };
+    b.players.set(99, { sid: 99, x: 100, y: 0, visible: true });
+    ok(RynBots._autoPlaceSpike(b, RynBots._nearestEnemy(b)));
+});
+t('one resource short is still short', () => {
+    reset();
+    const b = mkBot(432);
+    b.x = 0; b.y = 0;
+    b.itemsOwned = [0, 3, 6, 10];
+    b.stats = { wood: 100, stone: 1, food: 0, points: 0 };   // spikes need 5 stone
+    b.players.set(99, { sid: 99, x: 100, y: 0, visible: true });
+    eq(RynBots._autoPlaceSpike(b, RynBots._nearestEnemy(b)), false);
+});
+t('the mill trail checks the bill too', () => {
+    reset();
+    const b = mkBot(433);
+    b.x = 0; b.y = 0;
+    b.itemsOwned = [0, 3, 6, 10];
+    b.stats = { wood: 10, stone: 0, food: 0, points: 0 };    // a windmill is 50 wood
+    window.vars.botAutoMills = true;
+    eq(RynBots._autoMills(b, 0), false);
+    b.stats.wood = 500; b.stats.stone = 500;
+    ok(RynBots._autoMills(b, 0), 'it should build once it can pay');
+});
+t('an item with no cost is always affordable', () => {
+    reset();
+    const b = mkBot(434);
+    b.stats = { wood: 0, stone: 0, food: 0, points: 0 };
+    eq(RynBots._canAfford(b, 0), true, 'apples have no req in the table');
 });
 
 console.log('');

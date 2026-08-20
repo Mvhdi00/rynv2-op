@@ -200,6 +200,7 @@ master connection speaks.
 | **Auto Heal** | Bots → Behaviour | The mod's own heal, not an approximation: it fires on **any** damage taken (the mod's `tick - damageTick > 0`, here a drop in the bot's own health packet) and tops all the way back to 100 in one tick — `ceil(missing / food.heal)` units, which is what the mod's `heal(100 - health)` loop works out to. The first version waited for 15 missing health and then ate at most three, which is why it felt bad. Runs while you are driving a bot too. |
 | **Auto Mills** | Bots → Behaviour | The mod's three-mill trail, laid **behind** the direction of travel: `angle + 180°`, then `± toRad(scale + scale/2)` either side. That offset reads the mill's scale as degrees — odd arithmetic, but it is what the mod does and what gives the familiar spacing, so it is reproduced rather than "corrected". Off by default. |
 | **Full Mod** | Bots → Behaviour | The bots stop running ported rules and run *the mod itself* — its own tick, on their own world, through their own socket. Everything the mod does, they do. Off by default; see [Full Mod](#full-mod--the-bots-run-the-mod-itself). |
+| **Auto Farm** | Bots → Behaviour | Walks to the nearest resource, holds whatever gathers fastest, and hits it — with the target claimed so the squad spreads over different trees instead of stacking on one. **This is the foundation everything else needed**; see below. |
 | **Spike Tick** | Bots → Behaviour | The mod's trap tick, `canTrapTick()` gate for gate on the bot's own world: hammer and primary both charged, the enemy inside one of the bot's own traps, that trap one hammer hit from breaking, and a placeable spike spot within `scale + 55` of them whose knockback does not shove them at the bot. Pops the trap and drops the spike on the same server tick. See [the foundation it rides on](#the-spike-tick-foundation). |
 | **Auto Push** | Bots → Behaviour | The mod's trap-into-spike play: when the nearest enemy stands in one of the bot's own pit traps and one of its own spikes sits beside that trap, it walks at the far side of the spike so they are shoved onto it, swinging as it goes. Same construction as the mod — `pos = spike + scale·unit(spike→trap)`, `push = pos + (dist+35)·unit(pos→enemy)` — and the same clearance test, refusing a line through their body, their spikes, a boost pad or a teleporter. |
 | **Auto Place** | Bots → Behaviour | An enemy inside 250 gets a spike dropped between them and the bot, hardest one owned first, and never stacked on a spike already there. |
@@ -340,6 +341,41 @@ the way it was.
 The arrows stop steering you while this is on — that is the trade, and
 **Bots → Control → Arrow keys switch bots** turns it off. WASD is unaffected.
 
+### Why the bots could not build anything
+
+They never gathered. That one gap explains the whole symptom, and it fails
+silently at both ends:
+
+```
+no gathering ──► no XP        ──► the bot never leaves age 1,
+                                  so no upgrade packet ever arrives
+             └─► no resources ──► every place packet is refused by the
+                                  server, with no reply of any kind
+```
+
+So the bot swings and does nothing else, forever, and nothing on the client
+ever says why. `_autoBreak` only ever targeted *buildings* in the way
+(`o.id !== null`); resources — the objects with **no** item id — were skipped
+everywhere in the engine.
+
+RYN's bots do not have this problem because RYN has `BotAutoFarmModule`: pick
+the nearest resource of a type still wanted, claim it so bots spread out, walk
+into weapon range, then hold weapon 0 and swing. **Auto Farm** is that, on the
+bot's own world:
+
+| | |
+|---|---|
+| **What it wants** | the types still under the cap, read from `bot.stats`, which the server fills via `updatePlayerValue` — real numbers, not a guess at what it has gathered |
+| **What it holds** | the best `gather / speed` among the weapons it owns. The stick is 7 per 400 ms and wins outright wherever it is owned; then the great axe (4/400), the hand axe (2/400), the tool hammer (1/300) |
+| **Spreading out** | the claim is read straight off the other bots' `farmTarget`, not kept in a side map, so it cannot go stale when a bot dies mid-walk. Past the share limit they double up rather than stand idle |
+| **Sticking** | the target is kept between ticks. Re-picking every tick makes a bot jitter between two equidistant trees and gather neither |
+| **Yielding** | it drops the moment an enemy is inside 1.5× reach, and to the hunt, Random Move, Follow Cursor and Freeze |
+
+**And nothing pays for what it cannot afford.** `_canAfford` reads
+`items.list[id].req` against the bot's own bank before Auto Place, the mill
+trail and the spike tick send anything. Without it the bot fires a placement
+packet the server drops on the floor, every tick, forever.
+
 ### Full Mod — the bots run the mod itself
 
 **Bots → Behaviour → "Full Mod (bots run the whole mod)".** Off by default.
@@ -450,12 +486,12 @@ node tools/test-novastorm-bots.js
 ```
 
 The test evaluates the `RynBots` block straight out of the shipped userscript
-against stubs and asserts the packets it emits — 152 checks over the age path,
+against stubs and asserts the packets it emits — 172 checks over the age path,
 break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
 console, Scan and Kill, possession, the mod's heal rule, the mill trail, auto
 push, the reload clocks, structure damage, object health, the spike tick and
-what the engine hands over under Full Mod.
+what the engine hands over under Full Mod, Auto Farm and the affordability gate.
 
 ```sh
 node tools/test-mod-context.js

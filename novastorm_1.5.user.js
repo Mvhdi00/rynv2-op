@@ -15157,7 +15157,9 @@ for (let tree of trees) {
                     tickAt: 0,
                     // Full Mod: this bot's own copy of the whole mod state, its
                     // io.send adapter, and what the mod did on the current tick.
-                    mod: null, modSend: null, modMoved: false, modAttacked: false
+                    mod: null, modSend: null, modMoved: false, modAttacked: false,
+                    // Auto Farm: the resource this bot has claimed.
+                    farmTarget: null
                 };
             },
 
@@ -15349,6 +15351,7 @@ for (let tree of trees) {
                     bot.age = 1;
                     bot.wantWeapon = null;
                     bot.readyAt = {};
+                    bot.farmTarget = null;
                     // A fresh life gets a fresh mod state; a half-finished
                     // pre-place from the last one would fire into the new spawn.
                     bot.mod = null;
@@ -15753,6 +15756,7 @@ for (let tree of trees) {
                 if (mill === undefined || mill === null) return false;
                 const item = items.list[mill];
                 if (!item) return false;
+                if (!this._canAfford(bot, mill)) return false;
                 const now = Date.now();
                 if (now - bot.millAt < 400) return false;
                 const back = moveAngle + Math.PI;
@@ -15794,6 +15798,130 @@ for (let tree of trees) {
                     const os = o.scale || (oi && oi.scale) || 40;
                     const dx = o.x - px, dy = o.y - py;
                     if (dx * dx + dy * dy < (item.scale + os) * (item.scale + os)) return false;
+                }
+                return true;
+            },
+
+            // =================================================================
+            // AUTO FARM  —  the foundation everything else was missing
+            // =================================================================
+            // A bot that never gathers cannot build. Not "builds badly" -- cannot
+            // build at all, and the failure is silent, which is why it looked
+            // like the placer was broken:
+            //
+            //   no gathering  ->  no XP        ->  the bot never leaves age 1,
+            //                                     so no upgrade ever arrives
+            //   no gathering  ->  no resources ->  every place packet is refused
+            //                                     by the server, with no reply
+            //
+            // So the bot swings and nothing else, forever. RYN's bots do not have
+            // this problem because RYN has a farm module: walk to the nearest
+            // resource, hold a gathering weapon, hit it, and claim it so the
+            // squad spreads over different trees instead of stacking on one.
+            // This is that, on the bot's own world.
+            //
+            // Returns "walk" (heading set, do not swing), "hit" (in range, swing
+            // at it) or null (nothing to farm -- the formation takes over).
+
+            // Which resources this bot still wants. bot.stats is filled from the
+            // server's own updatePlayerValue, so these are real numbers, not
+            // guesses at what it has gathered.
+            _farmNeeds(bot) {
+                const cap = botClamp(window.vars.botFarmLimit, 0, 9999);
+                const s = bot.stats || {};
+                const need = new Set();
+                if (!cap || (s.wood || 0) < cap) need.add(0);      // trees
+                if (!cap || (s.food || 0) < cap) need.add(1);      // bushes
+                if (!cap || (s.stone || 0) < cap) need.add(2);     // stone
+                return need.size ? need : null;
+            },
+
+            // The best thing in hand for gathering: resource per millisecond over
+            // the weapons the bot owns. The stick is 7 per 400 ms and wins
+            // outright wherever it is owned; failing that the axes, then whatever
+            // the primary is.
+            _gatherWeapon(bot) {
+                let best = (bot.weapons && bot.weapons[0] !== undefined) ? bot.weapons[0] : 0;
+                let bestRate = -1;
+                const owned = [];
+                if (bot.weapons) {
+                    if (bot.weapons[0] !== null && bot.weapons[0] !== undefined) owned.push(bot.weapons[0]);
+                    if (bot.weapons[1] !== null && bot.weapons[1] !== undefined) owned.push(bot.weapons[1]);
+                }
+                for (const id of owned) {
+                    const w = items.weapons[id];
+                    if (!w || !w.gather || !w.speed) continue;
+                    const rate = w.gather / w.speed;
+                    if (rate > bestRate) { bestRate = rate; best = id; }
+                }
+                return best;
+            },
+
+            // Nearest resource of a wanted type, avoiding the ones the rest of the
+            // squad already picked. The claim is read straight off the other bots'
+            // targets rather than kept in a side map, so it cannot go stale when a
+            // bot dies mid-walk.
+            _claimedBy(bot, sid) {
+                let n = 0;
+                for (const b of this.list) if (b !== bot && b.farmTarget === sid) n++;
+                return n;
+            },
+            _nearestResource(bot, types) {
+                const share = botClamp(window.vars.botFarmShare, 1, 8);
+                let best = null, bd = Infinity;
+                let spare = null, sd = Infinity;      // over-subscribed, but better than nothing
+                for (const o of bot.objects.values()) {
+                    // Resources are the objects with no item id; buildings have one.
+                    if (o.id !== null && o.id !== undefined) continue;
+                    if (!types.has(o.type)) continue;
+                    const d = UTILS.getDistance(bot.x, bot.y, o.x, o.y);
+                    if (d > 1400) continue;
+                    if (this._claimedBy(bot, o.sid) < share) {
+                        if (d < bd) { bd = d; best = o; }
+                    } else if (d < sd) { sd = d; spare = o; }
+                }
+                return best || spare;
+            },
+
+            _autoFarm(bot) {
+                if (!window.vars.botAutoFarm) return null;
+                const needs = this._farmNeeds(bot);
+                if (!needs) { bot.farmTarget = null; return null; }
+
+                // Keep the target between ticks -- re-picking every tick makes the
+                // bot jitter between two equidistant trees and gather neither.
+                let target = bot.farmTarget !== null && bot.farmTarget !== undefined
+                    ? bot.objects.get(bot.farmTarget) : null;
+                if (target && (target.id !== null && target.id !== undefined)) target = null;
+                if (target && !needs.has(target.type)) target = null;
+                if (target && UTILS.getDistance(bot.x, bot.y, target.x, target.y) > 1500) target = null;
+                if (!target) {
+                    target = this._nearestResource(bot, needs);
+                    bot.farmTarget = target ? target.sid : null;
+                }
+                if (!target) return null;
+
+                const angle = Math.atan2(target.y - bot.y, target.x - bot.x);
+                const w = items.weapons[this._gatherWeapon(bot)];
+                const reach = ((w && w.range) || 65) + (target.scale || 40);
+                const d = UTILS.getDistance(bot.x, bot.y, target.x, target.y);
+                return { angle: angle, mode: d > reach - 5 ? "walk" : "hit",
+                         weapon: this._gatherWeapon(bot) };
+            },
+
+            // Can this bot actually pay for that building? Without the check the
+            // bot sends a place packet the server drops on the floor, every tick,
+            // and nothing on the client ever says why.
+            _canAfford(bot, id) {
+                const item = items.list[id];
+                if (!item || !item.req) return true;
+                const s = bot.stats || {};
+                for (let i = 0; i + 1 < item.req.length; i += 2) {
+                    const have = (item.req[i] === "food") ? (s.food || 0)
+                               : (item.req[i] === "wood") ? (s.wood || 0)
+                               : (item.req[i] === "stone") ? (s.stone || 0)
+                               : (s.points || 0);
+                    if (have < item.req[i + 1]) return false;
                 }
                 return true;
             },
@@ -15991,6 +16119,7 @@ for (let tree of trees) {
                     if (bot.itemsOwned && bot.itemsOwned.indexOf(id) >= 0) { pick = id; break; }
                 }
                 if (pick === null) return false;
+                if (!this._canAfford(bot, pick)) return false;
 
                 let best = null, bestD = Infinity;
                 // The trap is excluded from the collision test because it is
@@ -16139,6 +16268,7 @@ for (let tree of trees) {
                     if (bot.itemsOwned && bot.itemsOwned.indexOf(id) >= 0) { pick = id; break; }
                 }
                 if (pick === null) return false;
+                if (!this._canAfford(bot, pick)) return false;
                 const item = items.list[pick];
                 const angle = Math.atan2(enemy.p.y - bot.y, enemy.p.x - bot.x);
                 // Don't stack one on top of another — the server would reject it
@@ -16513,6 +16643,27 @@ for (let tree of trees) {
                     }
                     if (!bot.modMoved) this._sendMove(bot, moveAngle);
                     return;
+                }
+
+                // --- gather ------------------------------------------------------
+                // Before any of the combat below, because a bot with no wood is
+                // a bot that cannot do any of it. Yields the moment something
+                // worth fighting is in reach, and to the hunt, and to a bot you
+                // are already steering by hand.
+                const farmEnemy = this._nearestEnemy(bot);
+                const farmBusy = role || V.botFreeze || V.botRandomMove || V.botFollowCursor
+                              || (farmEnemy && farmEnemy.d <= this._reach(bot) * 1.5);
+                if (!farmBusy) {
+                    const farm = this._autoFarm(bot);
+                    if (farm) {
+                        this._sendWeapon(bot, farm.weapon);
+                        this._sendAim(bot, farm.angle);
+                        this._sendAttack(bot, farm.mode === "hit");
+                        this._sendMove(bot, farm.mode === "walk" ? this._safeWalk(bot, farm.angle) : null);
+                        return;
+                    }
+                } else {
+                    bot.farmTarget = null;
                 }
 
                 // --- shove them onto the spike ------------------------------------
@@ -23642,6 +23793,9 @@ for (let tree of trees) {
         botAutoPlace: true,      // drop a spike on whoever closes in
         botAutoMills: false,     // lay the mod's three-mill trail behind them
         botAutoPush: true,       // shove a trapped enemy onto your spike
+        botAutoFarm: true,       // gather, so the bot can actually afford to build
+        botFarmLimit: 0,         // stop at this much of each resource; 0 = never stop
+        botFarmShare: 2,         // how many bots may work the same tree
         botSpikeTick: true,      // spike beside a trapped enemy, then pop the trap
         botFullMod: false,       // run the WHOLE mod on every bot, as that bot
 
@@ -23859,6 +24013,9 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Random Move (roam the map)", id: "botRandomMove" },
                     { type: 'toggle', name: "Auto Attack Players", id: "botAutoAttack" },
                     { type: 'toggle', name: "Auto Heal (eat when hit)", id: "botAutoHeal" },
+                    { type: 'toggle', name: "Auto Farm (gather resources)", id: "botAutoFarm" },
+                    { type: 'slider', name: "Farm Until (0 = forever)", id: "botFarmLimit", min: 0, max: 2000 },
+                    { type: 'slider', name: "Bots Per Resource", id: "botFarmShare", min: 1, max: 8 },
                     { type: 'toggle', name: "Auto Place (spike on contact)", id: "botAutoPlace" },
                     { type: 'toggle', name: "Auto Mills (trail behind)", id: "botAutoMills" },
                     { type: 'toggle', name: "Auto Push (trap into spike)", id: "botAutoPush" },
