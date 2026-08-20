@@ -8964,6 +8964,213 @@ let pps = 0;
             };
         }
 
+        // =====================================================================
+        // SERVER LOG  —  everything the server tells you, with a clock on it
+        // =====================================================================
+        // The client already receives every one of these events; it just throws
+        // most of them away after using them. This keeps a timestamped copy.
+        //
+        // It hooks the packet table rather than each handler, so no game
+        // function is modified: ServerLog.wrap() returns the same table with
+        // every entry sandwiched between a `before` and an `after` pass. Some
+        // events can only be read before the handler runs (removePlayer splices
+        // the player out, so the name has to be taken first) and some only
+        // after, which is why there are two.
+        const ServerLog = {
+            lines: [],
+            max: 800,
+            // sid -> name / team, kept here rather than read off `players`,
+            // because the whole point of several of these lines is to report a
+            // value the handler is about to overwrite.
+            _names: {},
+            _teams: {},
+            _clans: {},          // sid -> clan name
+            _mates: null,        // your clan's roster, to diff against
+            _synced: 0,          // packets arriving before this are the join burst
+            _burst: 0,
+
+            now() {
+                const d = new Date();
+                return String(d.getHours()).padStart(2, "0") + ":" +
+                       String(d.getMinutes()).padStart(2, "0") + ":" +
+                       String(d.getSeconds()).padStart(2, "0");
+            },
+            on(kind) {
+                const v = window.vars;
+                if (!v || !v.serverLog) return false;
+                if (kind === "chat"  && !v.logChat) return false;
+                if (kind === "join"  && !v.logJoins) return false;
+                if (kind === "leave" && !v.logJoins) return false;
+                if (kind === "death" && !v.logDeaths) return false;
+                if (kind === "clan"  && !v.logClans) return false;
+                return true;
+            },
+            push(kind, text) {
+                if (!this.on(kind)) return;
+                this.lines.push({ t: Date.now(), time: this.now(), kind: kind, text: String(text) });
+                if (this.lines.length > this.max) this.lines.shift();
+                try { if (window._novaServerLogSink) window._novaServerLogSink(); } catch (e) {}
+            },
+            clear() {
+                this.lines.length = 0;
+                try { if (window._novaServerLogSink) window._novaServerLogSink(); } catch (e) {}
+            },
+            text() {
+                return this.lines.map(l => l.time + "  [" + l.kind + "] " + l.text).join("\n");
+            },
+            name(sid) {
+                if (this._names[sid]) return this._names[sid];
+                try {
+                    const p = findPlayerBySID(sid);
+                    if (p && p.name) return p.name;
+                } catch (e) {}
+                return "sid " + sid;
+            },
+
+            // -----------------------------------------------------------------
+            before(type, args) {
+                try {
+                    switch (type) {
+                    case "C":                                  // setupGame — a new world
+                        this._names = {}; this._teams = {}; this._clans = {};
+                        this._mates = null; this._burst = 0;
+                        // Everything the server dumps in the first second is the
+                        // state of the world, not news. Counted, not listed.
+                        this._synced = Date.now() + 1500;
+                        this.push("server", "joined the server");
+                        break;
+                    case "E": {                                // removePlayer(id)
+                        const p = (function (id) {
+                            for (let i = 0; i < players.length; i++) if (players[i].id == id) return players[i];
+                            return null;
+                        })(args[0]);
+                        if (p) {
+                            this.push("leave", this.name(p.sid) + " left");
+                            delete this._names[p.sid];
+                            delete this._teams[p.sid];
+                        }
+                        break;
+                    }
+                    case "1": {                                // deleteAlliance(sid)
+                        const nm = this._clans[args[0]];
+                        this.push("clan", "clan " + (nm ? "«" + nm + "»" : "sid " + args[0]) + " was disbanded");
+                        delete this._clans[args[0]];
+                        break;
+                    }
+                    case "3": {                                // setPlayerTeam(team, isOwner)
+                        const was = myPlayer ? myPlayer.team : null;
+                        if (args[0] && !was) {
+                            this.push("clan", args[1] ? "you created clan «" + args[0] + "»"
+                                                      : "you joined clan «" + args[0] + "»");
+                        } else if (!args[0] && was) {
+                            this.push("clan", "you left clan «" + was + "»");
+                        }
+                        break;
+                    }
+                    case "4": {                                // setAlliancePlayers(data)
+                        // [sid, name, sid, name, ...] — diff it against the last
+                        // roster and you have every join and leave in YOUR clan,
+                        // named, which no other packet gives you.
+                        const now = [], d = args[0] || [];
+                        for (let i = 0; i + 1 < d.length; i += 2) now.push({ sid: d[i], name: d[i + 1] });
+                        if (this._mates) {
+                            const had = new Set(this._mates.map(m => m.sid));
+                            const has = new Set(now.map(m => m.sid));
+                            for (const m of now) if (!had.has(m.sid)) this.push("clan", m.name + " joined your clan");
+                            for (const m of this._mates) if (!has.has(m.sid)) this.push("clan", m.name + " left your clan");
+                        }
+                        this._mates = now;
+                        break;
+                    }
+                    case "a": this._scanTeams(args[0]); break; // updatePlayers
+                    }
+                } catch (e) {}
+            },
+
+            after(type, args) {
+                try {
+                    switch (type) {
+                    case "D": {                                // addPlayer(data, isYou)
+                        const d = args[0];
+                        if (!d) break;
+                        this._names[d[1]] = d[2];
+                        if (args[1]) this.push("join", "you spawned as " + d[2]);
+                        else if (Date.now() > this._synced) this.push("join", d[2] + " spawned");
+                        break;
+                    }
+                    case "g": {                                // addAlliance(data)
+                        const a = args[0];
+                        if (!a) break;
+                        this._clans[a.sid] = a.name;
+                        if (Date.now() > this._synced) {
+                            this.push("clan", this.name(a.sid) + " created clan «" + a.name + "»");
+                        } else {
+                            this._burst++;
+                        }
+                        break;
+                    }
+                    case "2":                                  // allianceNotification(sid, name)
+                        this.push("clan", args[1] + " is asking to join your clan");
+                        break;
+                    case "6": {                                // receiveChat(sid, message)
+                        this.push("chat", this.name(args[0]) + ": " + args[1]);
+                        break;
+                    }
+                    case "O":                                  // updateHealth(sid, value)
+                        if (args[1] <= 0) this.push("death", this.name(args[0]) + " died");
+                        break;
+                    case "P":                                  // killPlayer
+                        this.push("death", "you died");
+                        break;
+                    case "Z":                                  // serverShutdownNotice
+                        this.push("server", "server restarting in " + args[0] + "s");
+                        break;
+                    }
+                    // The clan burst that arrived with the world, as one line.
+                    if (this._burst && Date.now() > this._synced) {
+                        this.push("server", this._burst + " clan(s) already on the server");
+                        this._burst = 0;
+                    }
+                } catch (e) {}
+            },
+
+            // A player's team is in every updatePlayers packet, so comparing it
+            // with what it was last tick catches EVERY clan join and leave on
+            // the server, not just the ones in your own clan.
+            _scanTeams(d) {
+                if (!d) return;
+                for (let i = 0; i + 12 < d.length; i += 13) {
+                    const sid = d[i], team = d[i + 7];
+                    const was = this._teams[sid];
+                    this._teams[sid] = team;
+                    if (was === undefined) continue;           // first sighting is not news
+                    if (was === team) continue;
+                    if (myPlayer && sid === myPlayer.sid) continue;   // "3" reports you
+                    if (team) this.push("clan", this.name(sid) + " joined clan «" + team + "»");
+                    else this.push("clan", this.name(sid) + " left clan «" + was + "»");
+                }
+            },
+
+            // Same table, every handler sandwiched. The game's functions are
+            // untouched, and a throw in here can never take a packet down.
+            wrap(table) {
+                const self = this;
+                const out = {};
+                for (const type in table) {
+                    const fn = table[type];
+                    out[type] = function () {
+                        const args = arguments;
+                        self.before(type, args);
+                        const r = fn.apply(this, args);
+                        self.after(type, args);
+                        return r;
+                    };
+                }
+                return out;
+            }
+        };
+        try { window.ServerLog = ServerLog; } catch (e) {}
+
         function connectSocket(wsAddress) {
             // CONNECT:
             io.connect(wsAddress, function (error) {
@@ -8985,7 +9192,7 @@ let pps = 0;
                     });
                     UTILS.hookTouchEvents(enterGameButton);
                 }
-            }, {
+            }, ServerLog.wrap({
                 "A": setInitData,
                 "B": disconnect,
                 "C": setupGame,
@@ -9022,7 +9229,7 @@ let pps = 0;
                 "8": showText,
                 "9": pingMap,
                 "0": pingSocketResponse
-            });
+            }));
         }
         function socketReady() {
             return (io.connected);
@@ -23450,6 +23657,13 @@ for (let tree of trees) {
         botAutoPush: true,       // shove a trapped enemy onto your spike
         botSpikeTick: true,      // spike beside a trapped enemy, then pop the trap
         botFullMod: false,       // run the WHOLE mod on every bot, as that bot
+
+        // ---- SERVER LOG ------------------------------------------------------
+        serverLog: true,         // record what the server tells you, timestamped
+        logJoins: true,          // spawns and disconnects
+        logDeaths: true,         // anyone dropping to 0 health, and your own death
+        logClans: true,          // created, disbanded, joined, left, join requests
+        logChat: true,           // every chat line, by name
         botSync: true,           // swing on the same tick you do
         botFreeze: false,        // toggled by the Freeze key
         botFollowCursor: false,  // walk to the mouse instead of to you
@@ -23726,6 +23940,25 @@ for (let tree of trees) {
                         { value: "bow", label: "Crossbow" },
                         { value: "mill", label: "Power Mill" }
                     ] }
+                ]
+            }
+        ],
+
+        log: [
+            {
+                title: "Server Log",
+                items: [
+                    { type: 'serverlog', name: "Events" }
+                ]
+            },
+            {
+                title: "What to record",
+                items: [
+                    { type: 'toggle', name: "Recording", id: "serverLog" },
+                    { type: 'toggle', name: "Joins / leaves", id: "logJoins" },
+                    { type: 'toggle', name: "Deaths", id: "logDeaths" },
+                    { type: 'toggle', name: "Clans", id: "logClans" },
+                    { type: 'toggle', name: "Chat", id: "logChat" }
                 ]
             }
         ],
@@ -24043,6 +24276,10 @@ for (let tree of trees) {
         white-space: pre-wrap; word-break: break-word;
     }
     .bot-console-log .bc-time { color: var(--text-dimmer); margin-right: 6px; }
+    .server-log { height: 340px; }
+    .server-log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .log-btns { display: flex; gap: 8px; margin-top: 8px; }
+    .log-btns .keybind-btn { flex: 1; }
     .bot-console-log::-webkit-scrollbar { width: 6px; }
     .bot-console-log::-webkit-scrollbar-thumb { background: var(--accent-dim); border-radius: 3px; }
 
@@ -24100,6 +24337,7 @@ for (let tree of trees) {
                     <div class="nav-item" data-tab="utilities"><svg viewBox="0 0 24 24"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9c-2-2-5-2.4-7.4-1.3L9 6L6 9L1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>Utilities</div>
                     <div class="nav-item" data-tab="misc"><svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Misc</div>
                     <div class="nav-item" data-tab="bots"><svg viewBox="0 0 24 24"><path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z"/></svg>Bots</div>
+                    <div class="nav-item" data-tab="log"><svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>Log</div>
                     <div class="nav-item" data-tab="visuals"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>Visuals</div>
                     <div class="nav-item" data-tab="menu"><svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>Menu Settings</div>
                 </div>
@@ -24132,6 +24370,7 @@ for (let tree of trees) {
         content.innerHTML = '';
         // Whatever the last render wired up is gone with that innerHTML.
         window._novaBotLogSink = null;
+        window._novaServerLogSink = null;
 
         if (searchResults) {
             headerTitle.innerText = `Search Results`;
@@ -24145,6 +24384,7 @@ for (let tree of trees) {
                 utilities: 'Utilities Settings',
                 misc: 'Miscellaneous',
                 bots: 'Bots',
+                log: 'Server Log',
                 visuals: 'Visuals Settings',
                 menu: 'Menu Settings'
             };
@@ -24320,6 +24560,80 @@ for (let tree of trees) {
 
                     wrap.appendChild(sel);
                     row.appendChild(wrap);
+                    itemsContainer.appendChild(row);
+                }
+                // SERVER LOG — the timestamped event feed, plus a search box
+                // and the two buttons you actually want next to a log.
+                else if (item.type === 'serverlog') {
+                    const row = document.createElement('div');
+                    row.className = 'feature-row stacked';
+                    row.innerHTML = `<span class="feat-label">${item.name || 'Events'}</span>`;
+
+                    const logEl = document.createElement('div');
+                    logEl.className = 'bot-console-log server-log';
+
+                    const colour = {
+                        join: '#4cd964', leave: '#ff9f0a', death: '#ff3b30',
+                        clan: '#0a84ff', chat: '#c9c9c9', server: '#00e5ff'
+                    };
+                    let filter = '';
+                    const paint = () => {
+                        const lines = (window.ServerLog && window.ServerLog.lines) || [];
+                        const q = filter.toLowerCase();
+                        // Rendering only what is on screen keeps an 800-line log
+                        // from relaying the whole page on every packet.
+                        const shown = (q ? lines.filter(l => (l.text + ' ' + l.kind).toLowerCase().includes(q))
+                                         : lines).slice(-250);
+                        logEl.innerHTML = shown.map(l => {
+                            const safe = String(l.text)
+                                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                            const c = colour[l.kind] || '#c9c9c9';
+                            return `<div><span class="bc-time">${l.time}</span>` +
+                                   `<span style="color:${c};">${safe}</span></div>`;
+                        }).join('') || `<div style="opacity:.5;">nothing recorded yet</div>`;
+                        logEl.scrollTop = logEl.scrollHeight;
+                    };
+                    paint();
+                    window._novaServerLogSink = paint;
+
+                    const wrap = document.createElement('div');
+                    wrap.className = 'input-wrapper';
+
+                    const find = document.createElement('input');
+                    find.type = 'text';
+                    find.className = 'text-input-styled';
+                    find.placeholder = 'filter — a name, or join / leave / death / clan / chat';
+                    find.oninput = (e) => { filter = e.target.value.trim(); paint(); };
+                    // The menu sits over the game; typing here must not also
+                    // drive the player.
+                    find.onkeydown = find.onkeyup = find.onkeypress = (e) => e.stopPropagation();
+
+                    const btns = document.createElement('div');
+                    btns.className = 'log-btns';
+
+                    const copy = document.createElement('button');
+                    copy.className = 'keybind-btn';
+                    copy.innerText = 'Copy';
+                    copy.onclick = () => {
+                        const txt = window.ServerLog ? window.ServerLog.text() : '';
+                        try {
+                            navigator.clipboard.writeText(txt);
+                            copy.innerText = 'Copied';
+                        } catch (e) { copy.innerText = 'Failed'; }
+                        setTimeout(() => { copy.innerText = 'Copy'; }, 1200);
+                    };
+
+                    const clear = document.createElement('button');
+                    clear.className = 'keybind-btn';
+                    clear.innerText = 'Clear';
+                    clear.onclick = () => { try { window.ServerLog.clear(); } catch (e) {} };
+
+                    btns.appendChild(copy);
+                    btns.appendChild(clear);
+                    wrap.appendChild(find);
+                    row.appendChild(logEl);
+                    row.appendChild(wrap);
+                    row.appendChild(btns);
                     itemsContainer.appendChild(row);
                 }
                 // BOT CONSOLE — a log plus a command line, wired to the same

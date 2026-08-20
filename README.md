@@ -459,6 +459,7 @@ what the engine hands over under Full Mod.
 
 ```sh
 node tools/test-mod-context.js
+node tools/test-server-log.js
 ```
 
 20 checks on the context swap itself: that the key list covers every singleton
@@ -466,6 +467,64 @@ the mod reads, that a tick writing to all 132 leaves none of yours touched, that
 each bot keeps its own copy, that a throw still restores everything, that
 `io.send` lands on the right socket, and that deferred work re-enters the bot
 that scheduled it — or is dropped if that bot died first.
+
+## Server Log
+
+**Log tab.** On by default.
+
+Every event below already arrives on your socket — the client uses it and
+throws it away. This keeps a timestamped copy, newest at the bottom, with a
+filter box and Copy / Clear.
+
+| Recorded | From |
+|---|---|
+| someone spawned, you spawned | `D` addPlayer |
+| someone left | `E` removePlayer |
+| anyone died, you died | `O` updateHealth at 0, `P` killPlayer |
+| **X created clan «Y»** | `g` addAlliance, owner resolved by sid |
+| clan «Y» was disbanded | `1` deleteAlliance |
+| **X joined / left clan «Y»** — anyone on the server | the `team` field of `a` updatePlayers, diffed tick to tick |
+| X joined / left **your** clan, by name | `4` setAlliancePlayers, roster diffed |
+| X is asking to join your clan | `2` allianceNotification |
+| you created / joined / left a clan | `3` setPlayerTeam |
+| chat, by name | `6` receiveChat |
+| server restarting in Ns | `Z` serverShutdownNotice |
+
+Time is `hh:mm:ss`, and each line keeps its raw millisecond stamp so Copy
+exports in order.
+
+### How it hooks
+
+No game function is modified. `ServerLog.wrap()` takes the packet table handed
+to `io.connect` and returns the same table with every handler sandwiched:
+
+```js
+out[type] = function () { self.before(type, arguments);
+                          const r = fn.apply(this, arguments);
+                          self.after(type, arguments); return r; };
+```
+
+The split is not cosmetic. `removePlayer` splices the player out of `players`
+and `setPlayerTeam` overwrites `myPlayer.team`, so those lines can only be read
+**before** the handler runs; `addPlayer`'s name only exists after it. Both
+halves are wrapped in `try`, so a fault in the logger can never take a packet
+down.
+
+Two details worth knowing:
+
+- **Clan joins for other players come from `updatePlayers`, not from any clan
+  packet.** The alliance packets only ever describe *your* clan. But every
+  player's `team` is in every tick, so holding the previous value and comparing
+  catches every join and leave on the server, named. A first sighting is not
+  reported — that is the state of the world, not a change.
+- **The join burst is not news.** On connect the server dumps every player and
+  every existing clan. Anything arriving in the first 1.5 s after `setupGame` is
+  learned but not listed; the clans it carried are reported as one
+  `N clan(s) already on the server` line.
+
+Per-kind toggles (joins, deaths, clans, chat) sit under the log, and the buffer
+caps at 800 lines. `tools/test-server-log.js` covers it with 41 checks, driven
+through the wrapped table the way the socket calls it.
 
 ## Fixes to the 1.4 code
 
