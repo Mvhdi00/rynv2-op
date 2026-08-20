@@ -15855,6 +15855,78 @@ for (let tree of trees) {
             },
 
             // =================================================================
+            // AUTO PUSH  —  the mod's, on the bot's own world
+            // =================================================================
+            // The mod's play: when the nearest enemy is standing in one of your
+            // pit traps and one of your spikes sits next to that trap, walk at
+            // the far side of the spike so the enemy is shoved onto it.
+            //
+            //     posX = spike.x + spike.scale * cos(angle(spike -> trap))
+            //     push = pos + (dist(pos, enemy) + 35) * unit(pos -> enemy)
+            //     predictMoveAngle = angle(me -> push)
+            //
+            // It ports cleanly because it is geometry over objects and one
+            // enemy, and the bot has both. What it is NOT is a swap of the
+            // mod's own code: nothing in the mod runs for another player, so
+            // this is the same rule rewritten against bot.objects and the bot's
+            // own nearest enemy, with the same clearance test.
+            _autoPush(bot, enemy) {
+                if (!window.vars.botAutoPush || !enemy) return null;
+                const e = enemy.p;
+                const mine = (o) => o.owner === bot.sid;
+
+                // A trap of mine holding them.
+                let trap = null;
+                for (const o of bot.objects.values()) {
+                    if (o.id !== 15 || !mine(o)) continue;
+                    if (UTILS.getDistance(e.x, e.y, o.x, o.y) < 50) { trap = o; break; }
+                }
+                if (!trap) return null;
+
+                // A spike of mine beside that trap, the one nearest to them.
+                let spike = null, best = Infinity;
+                for (const o of bot.objects.values()) {
+                    if (!(o.id > 5 && o.id < 10) || !mine(o)) continue;
+                    const ts = trap.scale || 50, os = o.scale || 50;
+                    if (UTILS.getDistance(trap.x, trap.y, o.x, o.y) >= (35 / 2 + os + ts)) continue;
+                    const d = UTILS.getDistance(e.x, e.y, o.x, o.y);
+                    if (d < best) { best = d; spike = o; }
+                }
+                if (!spike) return null;
+                // Already on it — the mod checks spikeDamage, which the bot does
+                // not track; touching the spike is the same condition seen from
+                // the outside.
+                if (UTILS.getDistance(e.x, e.y, spike.x, spike.y) <= (35 + (spike.scale || 50))) return null;
+
+                const a = Math.atan2(trap.y - spike.y, trap.x - spike.x);
+                const posX = spike.x + (spike.scale || 50) * Math.cos(a);
+                const posY = spike.y + (spike.scale || 50) * Math.sin(a);
+                const toE = Math.atan2(e.y - posY, e.x - posX);
+                const reach = UTILS.getDistance(posX, posY, e.x, e.y) + 35;
+                const push = { x: posX + reach * Math.cos(toE), y: posY + reach * Math.sin(toE) };
+
+                if (!this._botPushClear(bot, push, e)) return null;
+                return Math.atan2(push.y - bot.y, push.x - bot.x);
+            },
+
+            // canAutoPush, against the bot's objects. Walking the push line into
+            // the enemy's own spikes, a boost pad or a teleporter would cost more
+            // than the push is worth, and shoving through their body does not
+            // work at all.
+            _botPushClear(bot, push, e) {
+                if (lineInCircle(bot.x, bot.y, push.x, push.y, e.x, e.y, 33)) return false;
+                for (const o of bot.objects.values()) {
+                    if (o.id === null || o.id === undefined) continue;
+                    if (o.id === 15 && o.owner === bot.sid) continue;      // my own trap is fine
+                    const s = o.scale || 50;
+                    const hostile = ((o.id > 5 && o.id < 10) && o.owner !== bot.sid) || o.id === 16 || o.id === 22;
+                    const r = hostile ? (35 + s * 0.6) : (s * 0.6 * 0.75);
+                    if (lineInCircle(bot.x, bot.y, push.x, push.y, o.x, o.y, r)) return false;
+                }
+                return true;
+            },
+
+            // =================================================================
             // AUTO PLACE  —  a spike between the bot and whoever is on it
             // =================================================================
             // The master's placer is a whole prediction engine; this is the part
@@ -16227,6 +16299,14 @@ for (let tree of trees) {
                     }
                 }
 
+                // --- shove them onto the spike ------------------------------------
+                // The mod sets predictMoveAngle = autoPushAngle, overriding
+                // wherever it was going. Same here: a push in progress outranks
+                // the formation, the search and the roam.
+                const pushEnemy = this._nearestEnemy(bot);
+                const pushAngle = this._autoPush(bot, pushEnemy);
+                if (pushAngle !== null) moveAngle = pushAngle;
+
                 // --- lay the mill trail -------------------------------------------
                 // Before the combat decisions: it borrows the attack packet, so
                 // it must not run on a tick that is already swinging.
@@ -16282,7 +16362,8 @@ for (let tree of trees) {
                 const synced = !silent && V.botSync && now < this._syncUntil;
                 const manual = !silent && !V.botSync && this._manualAttack;
                 const engaged = !silent && V.botAutoAttack && enemy && enemy.d <= this._reach(bot);
-                this._sendAttack(bot, !!(synced || manual || engaged || breakAim !== null));
+                const pushing = !silent && pushAngle !== null;
+                this._sendAttack(bot, !!(synced || manual || engaged || pushing || breakAim !== null));
 
                 // --- walk ----------------------------------------------------------
                 this._sendMove(bot, moveAngle);
@@ -22989,6 +23070,7 @@ for (let tree of trees) {
         botAutoHeal: true,       // eat the moment they take damage
         botAutoPlace: true,      // drop a spike on whoever closes in
         botAutoMills: false,     // lay the mod's three-mill trail behind them
+        botAutoPush: true,       // shove a trapped enemy onto your spike
         botSync: true,           // swing on the same tick you do
         botFreeze: false,        // toggled by the Freeze key
         botFollowCursor: false,  // walk to the mouse instead of to you
@@ -23221,6 +23303,7 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Auto Heal (eat when hit)", id: "botAutoHeal" },
                     { type: 'toggle', name: "Auto Place (spike on contact)", id: "botAutoPlace" },
                     { type: 'toggle', name: "Auto Mills (trail behind)", id: "botAutoMills" },
+                    { type: 'toggle', name: "Auto Push (trap into spike)", id: "botAutoPush" },
                     { type: 'toggle', name: "Auto Buy Hats (copy mine)", id: "botAutoBuyHats" }
                 ]
             },

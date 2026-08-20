@@ -53,6 +53,17 @@ ITEM_DEFS.forEach(([name, scale, extra]) => items.list.push(Object.assign({ name
 
 const config = { mapScale: 14400 };
 let packets = 0;
+function lineInCircle(x, y, x2, y2, cx, cy, scale) {
+    const lv = { x: x2 - x, y: y2 - y };
+    const tc = { x: cx - x, y: cy - y };
+    const proj = (tc.x * lv.x + tc.y * lv.y) / (lv.x * lv.x + lv.y * lv.y);
+    const cp = { x: x + proj * lv.x, y: y + proj * lv.y };
+    if (cp.x >= Math.min(x, x2) && cp.x <= Math.max(x, x2) &&
+        cp.y >= Math.min(y, y2) && cp.y <= Math.max(y, y2)) {
+        return Math.hypot(cp.x - cx, cp.y - cy) < scale;
+    }
+    return false;
+}
 const UTILS = {
     getDistance(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); },
     getDirection(x1, y1, x2, y2) { return Math.atan2(y1 - y2, x1 - x2); },
@@ -100,7 +111,7 @@ function defaults() {
         botFreeze: false, botFollowCursor: false, botRandomMove: false, botAutoBuyHats: true,
         botCircleRadius: 150, botStopRadius: 60,
         botPrimary: 5, botSecondary: 9, botAgeTrap: true, botAgeBoost: false, botAge8: 'auto',
-        botAutoHeal: true, botAutoPlace: true, botAutoMills: false,
+        botAutoHeal: true, botAutoPlace: true, botAutoMills: false, botAutoPush: true,
         botScanKeep: 350, botGuardRadius: 300, botPossessKeys: true,
         autoPlay: false
     };
@@ -939,6 +950,94 @@ t('killAll clears the hunt and the possession', () => {
     RynBots.killAll();
     eq(RynBots.hunt, null);
     eq(RynBots.possessed, null);
+});
+
+
+console.log('auto push (the mod\'s trap-into-spike play)');
+reset();
+// A bot at the origin, an enemy east of it standing in the bot's own trap,
+// with the bot's own spike just past the trap.
+function pushSetup(opts) {
+    opts = opts || {};
+    const b = mkBot(150);
+    b.x = 0; b.y = 0;
+    const ex = opts.ex === undefined ? 300 : opts.ex;
+    const e = { sid: 99, x: ex, y: 0, visible: true };
+    b.players.set(99, e);
+    b.objects.set(1, { sid: 1, x: ex, y: 0, scale: 50, type: -1, id: 15,
+                       owner: opts.trapOwner === undefined ? b.sid : opts.trapOwner });
+    // The spike has to clear the enemy's own body (35 + 50 = 85) or it reads as
+    // "already on it", while staying inside 35/2 + 50 + 50 = 117.5 of the trap.
+    // 100 sits in that band, which is where a spike beside a trap really lands.
+    b.objects.set(2, { sid: 2, x: ex + 100, y: 0, scale: 50, type: -1, id: 6,
+                       owner: opts.spikeOwner === undefined ? b.sid : opts.spikeOwner });
+    return { b, e };
+}
+t('a trapped enemy next to my spike gives a push heading', () => {
+    const { b } = pushSetup();
+    const a = RynBots._autoPush(b, RynBots._nearestEnemy(b));
+    ok(a !== null, 'no push angle');
+    ok(Math.abs(a) < 0.6, 'should head toward them in the east, got ' + a.toFixed(2));
+});
+t('no trap, no push', () => {
+    reset();
+    const { b } = pushSetup();
+    b.objects.delete(1);
+    eq(RynBots._autoPush(b, RynBots._nearestEnemy(b)), null);
+});
+t('someone else\'s trap is not my play', () => {
+    reset();
+    const { b } = pushSetup({ trapOwner: 77 });
+    eq(RynBots._autoPush(b, RynBots._nearestEnemy(b)), null);
+});
+t('someone else\'s spike is not my play either', () => {
+    reset();
+    const { b } = pushSetup({ spikeOwner: 77 });
+    eq(RynBots._autoPush(b, RynBots._nearestEnemy(b)), null);
+});
+t('an enemy already on the spike is left alone', () => {
+    reset();
+    const b = mkBot(151);
+    b.x = 0; b.y = 0;
+    b.players.set(99, { sid: 99, x: 300, y: 0, visible: true });
+    b.objects.set(1, { sid: 1, x: 300, y: 0, scale: 50, type: -1, id: 15, owner: b.sid });
+    b.objects.set(2, { sid: 2, x: 320, y: 0, scale: 50, type: -1, id: 6, owner: b.sid });
+    eq(RynBots._autoPush(b, RynBots._nearestEnemy(b)), null, 'already touching it');
+});
+t('a spike too far from the trap does not count', () => {
+    reset();
+    const { b } = pushSetup();
+    b.objects.get(2).x = 300 + 400;   // way outside 117.5 of the trap
+    eq(RynBots._autoPush(b, RynBots._nearestEnemy(b)), null);
+});
+t('the toggle turns it off', () => {
+    reset();
+    const { b } = pushSetup();
+    window.vars.botAutoPush = false;
+    eq(RynBots._autoPush(b, RynBots._nearestEnemy(b)), null);
+});
+t('an enemy spike on the path calls it off', () => {
+    reset();
+    const { b } = pushSetup();
+    // their spike sitting on the walk line, halfway to the enemy
+    b.objects.set(3, { sid: 3, x: 150, y: 0, scale: 50, type: -1, id: 7, owner: 77 });
+    eq(RynBots._autoPush(b, RynBots._nearestEnemy(b)), null, 'walking through their spike is not worth it');
+});
+t('my own trap on the path does not call it off', () => {
+    reset();
+    const { b } = pushSetup();
+    b.objects.set(3, { sid: 3, x: 150, y: 0, scale: 50, type: -1, id: 15, owner: b.sid });
+    ok(RynBots._autoPush(b, RynBots._nearestEnemy(b)) !== null, 'my own trap is not an obstacle');
+});
+t('a push overrides where the bot was walking, and it keeps swinging', () => {
+    reset();
+    const { b } = pushSetup();
+    sent.length = 0;
+    RynBots._botTick(b);
+    const mv = last('9');
+    ok(mv && mv.args[0] !== null, 'should be moving');
+    ok(Math.abs(mv.args[0]) < 0.6, 'toward the push, got ' + mv.args[0]);
+    eq(last('F').args[0], 1, 'should be attacking while it shoves');
 });
 
 console.log('');
