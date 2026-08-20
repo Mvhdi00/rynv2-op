@@ -336,6 +336,29 @@ the way it was.
 The arrows stop steering you while this is on — that is the trade, and
 **Bots → Control → Arrow keys switch bots** turns it off. WASD is unaffected.
 
+### What the bots cannot borrow from the mod, and why
+
+The mod's features are not functions of a player. `autoPush`, the spike tick,
+the shame combat, the insta-kills and the placer are one global pipeline
+written against module-scope singletons — `myPlayer`, `visibleObjects`,
+`enemiesNear`, `nearestEnemy`, `primaryReload[myPlayer.sid]`, `predictObjects`,
+`totalDmgPot` — and they send through `io.send`, which is your socket.
+
+There is no call that runs them *for* somebody else. Making a bot use them needs
+one of two things: rewriting that pipeline to take a (player, world, socket)
+instead of reading globals, or swapping every one of those globals to the bot's
+before the tick and back afterwards. The second looks cheap and is not — the
+tick spans a promise callback and three `setTimeout`s, and any global missed on
+the way back corrupts your own player silently.
+
+So what is ported here is ported *faithfully by rule*: Auto Heal and Auto Mills
+reproduce the mod's exact trigger and pattern, checked against its source line
+by line. `autoPush` and the spike tick additionally need per-enemy reload
+tracking, the weapon-variant and hat damage tables, and the predict-object
+placer running on the bot's world — none of which the bot's model has yet.
+Buildable, but as their own piece of work rather than a claim bolted onto this
+one.
+
 ## Verification
 
 ```sh
@@ -344,10 +367,10 @@ node tools/test-novastorm-bots.js
 ```
 
 The test evaluates the `RynBots` block straight out of the shipped userscript
-against stubs and asserts the packets it emits — 87 checks over the age path,
+against stubs and asserts the packets it emits — 103 checks over the age path,
 break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
-console, Scan and Kill and possession.
+console, Scan and Kill, possession, the mod's heal rule and the mill trail.
 
 ## Anti Bow Insta
 
