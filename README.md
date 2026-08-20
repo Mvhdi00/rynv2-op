@@ -462,6 +462,22 @@ node tools/test-mod-context.js
 node tools/test-server-log.js
 ```
 
+```sh
+npm i --no-save acorn acorn-walk
+node tools/check-undefined.js
+```
+
+`node --check` only parses — it accepts a file that reads a variable nobody
+declares, which is exactly the shape a large hand-revert leaves behind: the
+declaration goes out with the feature, the reader comes back with the original
+code, and the two never meet until a frame runs. `check-undefined.js` walks the
+real scope chain and reports every identifier read but never bound.
+
+Run it against the current file and against an older build and compare: the
+answer that matters is *no new names*, since the file has always carried a
+handful of optional vendor globals (`$`, `Howl`, `factorem`, `OriginalWebSocket`)
+and a few webpack factory arguments this tool does not thread.
+
 20 checks on the context swap itself: that the key list covers every singleton
 the mod reads, that a tick writing to all 132 leaves none of yours touched, that
 each bot keeps its own copy, that a throw still restores everything, that

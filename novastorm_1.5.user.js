@@ -11518,8 +11518,6 @@ let pps = 0;
         }
 
         // UPDATE GAME:
-        // The vignette never changes shape, only the viewport does, so build it
-        // once per viewport instead of once per frame.
         function updateGame() {
             if (true) {
 
@@ -12033,6 +12031,8 @@ let pps = 0;
                 ctxt.fillRect(0, tmpY, maxScreenWidth, tmpW);
             }
         }
+
+        // RENDER GAME OBJECTS:
         function renderGameObjects(layer, xOffset, yOffset) {
 
             var tmpSprite, tmpX, tmpY;
@@ -13834,6 +13834,7 @@ for (let tree of trees) {
             getPerfectAngles(angles);
             return angles;
         }
+
         function getPerfectAngles(angles) {
             for (let i in angles) {
                 angles[i].perfect = false;
@@ -17135,14 +17136,6 @@ for (let tree of trees) {
                     tmpObj.dt = 0;
 
                     tmpObj.buildIndex = data[i + 4];
-                    // Anti Bow Insta reads the *change* of weapon, not the
-                    // weapon: swapping into a bow is the tell, holding one is
-                    // not. Keep the last different value, so a weapon held for
-                    // several ticks does not erase what it was swapped from.
-                    if (data[i + 5] !== tmpObj.weaponIndex) {
-                        tmpObj.oldWeaponIndex = tmpObj.weaponIndex;
-                        tmpObj.weaponSwapTick = tick;
-                    }
                     tmpObj.weaponIndex = data[i + 5];
                     tmpObj.weaponVariant = data[i + 6];
 
@@ -19681,13 +19674,7 @@ for (let tree of trees) {
         let averagePing = 0;
         let isFirstPing = true;
 
-        // A counter over a one-second window, not a timestamp array. The old
-        // version pushed a timestamp per frame and shift()ed the expired ones
-        // off the front — shift() is O(n) and the array held a full second of
-        // frames, so at 120 Hz it moved on the order of 14,000 elements a
-        // second to produce one integer. It also ran on its own
-        // requestAnimationFrame loop alongside the game's; now doUpdate calls
-        // it, so the browser schedules one callback a frame instead of two.
+        let frameTimes = [];
         let fps = 0;
 
         function trackFPS() {
@@ -23692,8 +23679,6 @@ for (let tree of trees) {
         millRotation: false,
         spikeRotation: false,
 
-        // Performance
-
         // Settings
         theme: "",
 
@@ -23760,7 +23745,7 @@ for (let tree of trees) {
                     { type: 'keybind', name: "Freeze Bots", id: "keyBotFreeze" },
                     { type: 'keybind', name: "Bot Attack (hold)", id: "keyBotAttack" }
                 ]
-            },
+            }
         ],
         combat: [
             {
