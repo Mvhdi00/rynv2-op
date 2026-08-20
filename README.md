@@ -197,7 +197,9 @@ master connection speaks.
 |---|---|---|
 | **Auto Spawn** | Bots → Join / Leave | The instant a bot dies it re-sends the spawn packet. No menu, no wait; a dropped spawn is retried once a second. |
 | **Auto Break** | Bots → Behaviour | Three stalled ticks while trying to walk means something is in the way: the bot finds the closest destroyable building within reach and within 90° of its heading, swaps to its breaking weapon and swings. Walls, mills, spikes, traps, turrets, blockers. |
-| **Auto Heal** | Bots → Behaviour | Bots read their own health off the packets they receive, so they know they were hit on the same tick you would, and eat the moment they drop — up to three units in one burst, then the weapon goes straight back in hand. Runs while you are driving a bot too. |
+| **Auto Heal** | Bots → Behaviour | The mod's own heal, not an approximation: it fires on **any** damage taken (the mod's `tick - damageTick > 0`, here a drop in the bot's own health packet) and tops all the way back to 100 in one tick — `ceil(missing / food.heal)` units, which is what the mod's `heal(100 - health)` loop works out to. The first version waited for 15 missing health and then ate at most three, which is why it felt bad. Runs while you are driving a bot too. |
+| **Auto Mills** | Bots → Behaviour | The mod's three-mill trail, laid **behind** the direction of travel: `angle + 180°`, then `± toRad(scale + scale/2)` either side. That offset reads the mill's scale as degrees — odd arithmetic, but it is what the mod does and what gives the familiar spacing, so it is reproduced rather than "corrected". Off by default. |
+| **Auto Push** | Bots → Behaviour | The mod's trap-into-spike play: when the nearest enemy stands in one of the bot's own pit traps and one of its own spikes sits beside that trap, it walks at the far side of the spike so they are shoved onto it, swinging as it goes. Same construction as the mod — `pos = spike + scale·unit(spike→trap)`, `push = pos + (dist+35)·unit(pos→enemy)` — and the same clearance test, refusing a line through their body, their spikes, a boost pad or a teleporter. |
 | **Auto Place** | Bots → Behaviour | An enemy inside 250 gets a spike dropped between them and the bot, hardest one owned first, and never stacked on a spike already there. |
 | **Sync** | Bots → Sync & Freeze | On: the squad swings on the same tick you do — one wrapper on `io.send` catches every swing the client makes, and `place()` flags its own use of the attack packet so putting a building down is not read as a swing. Off: they swing while the **Bot Attack** key is held. |
 | **Loadout** | Bots → Loadout | You pick the primary (age 2) and the secondary (age 6); the bots take exactly that on upgrade. |
@@ -353,11 +355,11 @@ the way back corrupts your own player silently.
 
 So what is ported here is ported *faithfully by rule*: Auto Heal and Auto Mills
 reproduce the mod's exact trigger and pattern, checked against its source line
-by line. `autoPush` and the spike tick additionally need per-enemy reload
-tracking, the weapon-variant and hat damage tables, and the predict-object
-placer running on the bot's world — none of which the bot's model has yet.
-Buildable, but as their own piece of work rather than a claim bolted onto this
-one.
+by line. `autoPush` turned out to port cleanly — it is geometry over objects and one
+enemy, and the bot has both — so it is in. The **spike tick** is the one that
+does not: it needs per-enemy reload tracking, the weapon-variant and hat damage
+tables, and the predict-object placer running on the bot's world, none of which
+the bot's model carries. That is a foundation to build, not a rule to copy.
 
 ## Verification
 
@@ -367,7 +369,7 @@ node tools/test-novastorm-bots.js
 ```
 
 The test evaluates the `RynBots` block straight out of the shipped userscript
-against stubs and asserts the packets it emits — 103 checks over the age path,
+against stubs and asserts the packets it emits — 113 checks over the age path,
 break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
 console, Scan and Kill, possession, the mod's heal rule and the mill trail.
