@@ -199,8 +199,8 @@ master connection speaks.
 | **Auto Break** | Bots → Behaviour | Three stalled ticks while trying to walk means something is in the way: the bot finds the closest destroyable building within reach and within 90° of its heading, swaps to its breaking weapon and swings. Walls, mills, spikes, traps, turrets, blockers. |
 | **Auto Heal** | Bots → Behaviour | The mod's own heal, not an approximation: it fires on **any** damage taken (the mod's `tick - damageTick > 0`, here a drop in the bot's own health packet) and tops all the way back to 100 in one tick — `ceil(missing / food.heal)` units, which is what the mod's `heal(100 - health)` loop works out to. The first version waited for 15 missing health and then ate at most three, which is why it felt bad. Runs while you are driving a bot too. |
 | **Auto Mills** | Bots → Behaviour | The mod's three-mill trail, laid **behind** the direction of travel: `angle + 180°`, then `± toRad(scale + scale/2)` either side. That offset reads the mill's scale as degrees — odd arithmetic, but it is what the mod does and what gives the familiar spacing, so it is reproduced rather than "corrected". Off by default. |
-| **Full Mod** | Bots → Behaviour | The bots stop running ported rules and run *the mod itself* — its own tick, on their own world, through their own socket. Everything the mod does, they do. Off by default; see [Full Mod](#full-mod--the-bots-run-the-mod-itself). |
-| **Auto Farm** | Bots → Behaviour | Walks to the nearest resource, holds whatever gathers fastest, and hits it — with the target claimed so the squad spreads over different trees instead of stacking on one. **This is the foundation everything else needed**; see below. |
+| **Full Mod** | Bots → Behaviour | The bots stop running ported rules and run *the mod itself* — its own tick, on their own world, through their own socket. Everything the mod does, they do. On by default; see [Full Mod](#full-mod--the-bots-run-the-mod-itself). |
+| **Auto Farm** | Bots → Behaviour | *Off by default.* Walks to the nearest resource, holds whatever gathers fastest, and hits it — with the target claimed so the squad spreads over different trees instead of stacking on one. **This is the foundation everything else needed**; see below. |
 | **Spike Tick** | Bots → Behaviour | The mod's trap tick, `canTrapTick()` gate for gate on the bot's own world: hammer and primary both charged, the enemy inside one of the bot's own traps, that trap one hammer hit from breaking, and a placeable spike spot within `scale + 55` of them whose knockback does not shove them at the bot. Pops the trap and drops the spike on the same server tick. See [the foundation it rides on](#the-spike-tick-foundation). |
 | **Auto Push** | Bots → Behaviour | The mod's trap-into-spike play: when the nearest enemy stands in one of the bot's own pit traps and one of its own spikes sits beside that trap, it walks at the far side of the spike so they are shoved onto it, swinging as it goes. Same construction as the mod — `pos = spike + scale·unit(spike→trap)`, `push = pos + (dist+35)·unit(pos→enemy)` — and the same clearance test, refusing a line through their body, their spikes, a boost pad or a teleporter. |
 | **Auto Place** | Bots → Behaviour | An enemy inside 250 gets a spike dropped between them and the bot, hardest one owned first, and never stacked on a spike already there. |
@@ -376,9 +376,42 @@ bot's own world:
 trail and the spike tick send anything. Without it the bot fires a placement
 packet the server drops on the floor, every tick, forever.
 
+### Driving a bot means acting as it
+
+Aim, movement, attacks and the number keys were routed to the bot from the
+start. Everything else you can deliberately *do* was not — it still went to the
+body you left standing, which is not full control by any reading:
+
+| While you are in a bot | goes out on |
+|---|---|
+| **chat** (Enter, type, Enter) | the bot's socket |
+| auto gather toggle | the bot's socket |
+| equipping and buying hats | the bot's socket |
+| taking an age upgrade | the bot's socket — and the age path stands down, because the choice is yours |
+| creating, joining and leaving a clan | the bot's socket |
+
+Every one of those is a one-line `io.send`, so one helper covers all of them:
+
+```js
+function actAsBot(type) {
+    const bot = RynBots.possessed;
+    if (!bot || !bot.alive || bot.ws.readyState !== 1) return false;
+    EXP.send(bot.ws, type, [...arguments].slice(1));
+    return true;
+}
+```
+
+`if (actAsBot(...)) return;` in front of each. Not driving a bot, and nothing
+changes at all.
+
+**Automation is deliberately not routed through this.** The mod's own tick
+reaches a bot through the Full Mod context, which blocks chat: five bots running
+kill-chat would be five bots spamming the server under your name. This path is
+only ever reached from something you did with your own hands.
+
 ### Full Mod — the bots run the mod itself
 
-**Bots → Behaviour → "Full Mod (bots run the whole mod)".** Off by default.
+**Bots → Behaviour → "Full Mod (bots run the whole mod)".** On by default.
 
 Everything else in this section is a rule copied out of the mod by hand. This is
 the other approach, and it is the one RYN's architecture gets for free: don't
@@ -486,12 +519,12 @@ node tools/test-novastorm-bots.js
 ```
 
 The test evaluates the `RynBots` block straight out of the shipped userscript
-against stubs and asserts the packets it emits — 172 checks over the age path,
+against stubs and asserts the packets it emits — 179 checks over the age path,
 break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
 console, Scan and Kill, possession, the mod's heal rule, the mill trail, auto
 push, the reload clocks, structure damage, object health, the spike tick and
-what the engine hands over under Full Mod, Auto Farm and the affordability gate.
+what the engine hands over under Full Mod, Auto Farm, the affordability gate and acting as the bot you drive.
 
 ```sh
 node tools/test-mod-context.js

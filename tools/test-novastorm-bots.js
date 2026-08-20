@@ -110,6 +110,17 @@ if (from < 0 || to < 0 || to <= from) {
 }
 const RynBots = eval(lines.slice(from, to).join('\n') + '\n; RynBots');
 
+// actAsBot lives outside the RynBots block — it is the routing layer that sends
+// YOUR deliberate actions to the bot you are driving — so it is lifted on its
+// own. Everything it needs (RynBots, EXP) is already in scope here.
+const actAsBot = (function () {
+    const i = lines.findIndex(l => l.trim().startsWith('function actAsBot('));
+    if (i < 0) throw new Error('could not find actAsBot');
+    const out = [];
+    for (let j = i; j < lines.length; j++) { out.push(lines[j]); if (lines[j] === '        }') break; }
+    return eval('(' + out.join('\n').trim() + ')');
+})();
+
 // ---------------------------------------------------------------- helpers
 function defaults() {
     return {
@@ -1611,6 +1622,84 @@ t('an item with no cost is always affordable', () => {
     const b = mkBot(434);
     b.stats = { wood: 0, stone: 0, food: 0, points: 0 };
     eq(RynBots._canAfford(b, 0), true, 'apples have no req in the table');
+});
+
+
+// ---------------------------------------------------------------------------
+// Driving a bot means acting AS it.
+//
+// Aim, movement and attacks were already routed. Everything else you can
+// deliberately do — talk, wear a hat, take an upgrade, make or join a clan,
+// toggle auto gather — still went to the body you left standing. Every one of
+// those is a one-line io.send, so one helper covers all of them.
+// ---------------------------------------------------------------------------
+console.log('\nacting as the bot you drive');
+reset();
+t('nothing is routed when you are not driving one', () => {
+    RynBots.possessed = null;
+    eq(actAsBot('6', 'hello'), false);
+    eq(sent.length, 0);
+});
+t('chat goes out on the bot\'s socket', () => {
+    reset();
+    const b = mkBot(500);
+    RynBots.possessed = b;
+    sent.length = 0;
+    eq(actAsBot('6', 'hello'), true);
+    eq(sent.length, 1);
+    eq(sent[0].sock, 500, 'it talked from the wrong body');
+    eq(sent[0].type, '6');
+    eq(sent[0].args[0], 'hello');
+});
+t('and so does everything else you can do on purpose', () => {
+    reset();
+    const b = mkBot(501);
+    RynBots.possessed = b;
+    sent.length = 0;
+    actAsBot('K', 1);                 // auto gather
+    actAsBot('c', 0, 6, 0);           // equip a hat
+    actAsBot('c', 1, 6, 0);           // buy one
+    actAsBot('H', 17);                // take an upgrade
+    actAsBot('L', 'WOLF');            // create a clan
+    actAsBot('b', 42);                // ask to join one
+    actAsBot('N');                    // leave it
+    eq(sent.length, 7);
+    eq(sent.map(p => p.type).join(''), 'KccHLbN');
+    ok(sent.every(p => p.sock === 501), 'something went to the wrong socket');
+});
+t('the arguments arrive in order', () => {
+    reset();
+    const b = mkBot(502);
+    RynBots.possessed = b;
+    sent.length = 0;
+    actAsBot('c', 1, 6, 0);
+    eq(JSON.stringify(sent[0].args), JSON.stringify([1, 6, 0]));
+});
+t('a dead bot is not spoken through', () => {
+    reset();
+    const b = mkBot(503);
+    b.alive = false;
+    RynBots.possessed = b;
+    eq(actAsBot('6', 'hi'), false);
+    eq(sent.length, 0);
+});
+t('nor is one whose socket has closed', () => {
+    reset();
+    const b = mkBot(504);
+    b.ws.readyState = 3;
+    RynBots.possessed = b;
+    eq(actAsBot('6', 'hi'), false);
+});
+t('the age path stops choosing for a bot you are driving', () => {
+    reset();
+    const b = mkBot(505);
+    sent.length = 0;
+    RynBots._chooseUpgrade(b, 1, 2);
+    eq(sent.length, 1, 'it should pick for an unattended bot');
+    RynBots.possessed = b;
+    sent.length = 0;
+    RynBots._chooseUpgrade(b, 1, 2);
+    eq(sent.length, 0, 'the upgrade is your call while you are in it');
 });
 
 console.log('');

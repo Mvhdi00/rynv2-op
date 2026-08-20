@@ -9812,14 +9812,18 @@ let pps = 0;
             io.send("Q", sid);
         }
         function sendJoin(index) {
+            if (actAsBot("b", alliances[index].sid)) return;
             io.send("b", alliances[index].sid);
         }
         function createAlliance() {
-            io.send("L", document.getElementById("allianceInput").value);
+            const name = document.getElementById("allianceInput").value;
+            if (actAsBot("L", name)) return;
+            io.send("L", name);
         }
         function leaveAlliance() {
             allianceNotifications = [];
             updateNotifications();
+            if (actAsBot("N")) return;
             io.send("N");
         }
 
@@ -10502,9 +10506,11 @@ let pps = 0;
             }
         }
         function storeEquip(id, index) {
+            if (actAsBot("c", 0, id, index)) return;
             io.send("c", 0, id, index);
         }
         function storeBuy(id, index) {
+            if (actAsBot("c", 1, id, index)) return;
             io.send("c", 1, id, index);
         }
 
@@ -10755,10 +10761,37 @@ let pps = 0;
 
         // ── Chat send (translation removed — uses zero network) ─────────────
         // Sends your text as-is; local "!f / !find / !c" commands are intercepted.
+        // =====================================================================
+        // ACTING AS THE BOT YOU ARE DRIVING
+        // =====================================================================
+        // Aim, movement and attacks were already routed to the bot. Everything
+        // else you can deliberately DO -- talk, put a hat on, take an upgrade,
+        // make or join a clan, toggle auto gather -- still went to the body you
+        // left standing, which is not "full control" by any reading.
+        //
+        // Every one of those is a one-line io.send, so one helper covers all of
+        // them: while a bot is possessed the action goes to its socket instead,
+        // and when it is not, nothing changes at all.
+        //
+        // Automation is deliberately NOT routed through here. The mod's own tick
+        // reaches a bot through the Full Mod context, which blocks chat -- five
+        // bots running kill-chat would be five bots spamming the server on your
+        // behalf. This path is only ever reached from something you did.
+        function actAsBot(type) {
+            try {
+                const bot = RynBots.possessed;
+                if (!bot || !bot.alive || !bot.ws || bot.ws.readyState !== 1) return false;
+                EXP.send(bot.ws, type, Array.prototype.slice.call(arguments, 1));
+                return true;
+            } catch (e) { return false; }
+        }
+
         function sendChat(message) {
             message = String(message);
             if (handleBotCommand(message)) return; // local command, don't send
-            io.send("6", message.slice(0, 30));
+            const line = message.slice(0, 30);
+            if (actAsBot("6", line)) return;       // talking as the bot you drive
+            io.send("6", line);
         }
         function closeChat() {
             chatBox.value = "";
@@ -11292,6 +11325,7 @@ let pps = 0;
         }
         function sendAutoGather() {
             autogathering = !autogathering;
+            if (actAsBot("K", 1)) return;
             io.send("K", 1);
         }
         function selectToBuild(index) {
@@ -11470,6 +11504,7 @@ let pps = 0;
             }
         }
         function sendUpgrade(index) {
+            if (actAsBot("H", index)) return;
             io.send("H", index);
         }
 
@@ -15415,6 +15450,8 @@ for (let tree of trees) {
                 bot.upgradePoints = points || 0;
                 bot.upgrAge = age;
                 if (!points || points <= 0) return;
+                // Driving it? Then the upgrade is your call, not the age path's.
+                if (this.possessed === bot) return;
                 const V = window.vars;
                 const WL = items.weapons.length; // 16 — items start after the weapons
                 let pick = -1;
@@ -23793,11 +23830,11 @@ for (let tree of trees) {
         botAutoPlace: true,      // drop a spike on whoever closes in
         botAutoMills: false,     // lay the mod's three-mill trail behind them
         botAutoPush: true,       // shove a trapped enemy onto your spike
-        botAutoFarm: true,       // gather, so the bot can actually afford to build
+        botAutoFarm: false,      // gather, so the bot can actually afford to build
         botFarmLimit: 0,         // stop at this much of each resource; 0 = never stop
         botFarmShare: 2,         // how many bots may work the same tree
         botSpikeTick: true,      // spike beside a trapped enemy, then pop the trap
-        botFullMod: false,       // run the WHOLE mod on every bot, as that bot
+        botFullMod: true,        // run the WHOLE mod on every bot, as that bot
 
         // ---- SERVER LOG ------------------------------------------------------
         serverLog: true,         // record what the server tells you, timestamped
