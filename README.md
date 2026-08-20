@@ -364,7 +364,7 @@ So the singletons get swapped instead. Every bot carries:
   `AiManager` and `ProjectileManager` instances, fed from that bot's own packet
   stream (this is the same machinery that already drew the bot you possess, now
   built for all of them)
-- **its own copy of the mod's entire mutable state** — 137 names, saved and
+- **its own copy of the mod's entire mutable state** — 139 names, saved and
   restored *whole* rather than trimmed to "the ones that carry across ticks",
   because being wrong about one of those is a silent leak between your player
   and a bot
@@ -391,7 +391,7 @@ mills.
 | **The engine's own job** | With the mod driving, `_botTick` stops fighting entirely and does only what the mod has no opinion about, because it has no keyboard: where the bot walks. A move the mod already sent this tick wins outright. Sync, the manual attack key and `!cf` still apply, but only on a tick the mod did not decide the attack state itself. |
 
 The state list is asserted key by key in `tools/test-mod-context.js`: a tick that
-writes to all 137 must leave every one of yours untouched, and must leave all 137
+writes to all 139 must leave every one of yours untouched, and must leave all 139
 of its own changes with the bot.
 
 ### What is still hand-ported, and why that is fine
@@ -463,7 +463,7 @@ node tools/test-mod-context.js
 ```
 
 20 checks on the context swap itself: that the key list covers every singleton
-the mod reads, that a tick writing to all 137 leaves none of yours touched, that
+the mod reads, that a tick writing to all 139 leaves none of yours touched, that
 each bot keeps its own copy, that a throw still restores everything, that
 `io.send` lands on the right socket, and that deferred work re-enters the bot
 that scheduled it — or is dropped if that bot died first.
