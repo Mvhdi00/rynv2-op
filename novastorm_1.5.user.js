@@ -1416,7 +1416,6 @@ let frames = 0;
 let lastTime = performance.now();
 let currentFps = 0;
 
-let lastStatsPaint = 0;
 function updateStats() {
     frames++;
     let now = performance.now();
@@ -1425,15 +1424,6 @@ function updateStats() {
         frames = 0;
         lastTime = now;
     }
-    // The frame counter above has to tick every frame; the HUD text does not.
-    // Writing innerHTML re-parses the string and relayouts, and at 120 Hz that
-    // was happening 120 times a second to show a number that changes once a
-    // second. Five repaints a second reads identically.
-    if (now - lastStatsPaint < 200) {
-        requestAnimationFrame(updateStats);
-        return;
-    }
-    lastStatsPaint = now;
     let ping = window.pingTime || 0;
     let botStr = "";
     try {
@@ -10633,36 +10623,8 @@ let pps = 0;
                 (screenWidth * pixelDensity - (maxScreenWidth * scaleFillNative)) / 2,
                 (screenHeight * pixelDensity - (maxScreenHeight * scaleFillNative)) / 2
             );
-            // Nearest-neighbour costs the GPU less than bilinear, and below
-            // native resolution the game's flat art loses nothing readable to
-            // it. setTransform resets nothing else, but the smoothing flag is
-            // per-context state that a canvas resize clears, so set it here.
-            mainContext.imageSmoothingEnabled = !(window.vars && window.vars.liteMode);
         }
         resize();
-
-        // RENDER SCALE:
-        // The canvas backing store is `screenWidth * pixelDensity` pixels wide
-        // while its CSS size stays the full window, so dropping pixelDensity
-        // renders fewer pixels and lets the browser upscale. That is the one
-        // knob that cuts GPU work proportionally — at 70% the renderer fills
-        // half the pixels it used to.
-        //
-        // Mouse input is unaffected: mouseX/mouseY are CSS pixels and the
-        // world conversion divides by screenWidth, neither of which moves.
-        let appliedRenderScale = 100;
-        function applyRenderScale() {
-            // window.vars is installed by the mod's config block, which runs
-            // after this module — so the first call can land before it exists.
-            if (!window.vars) return;
-            const want = Math.max(50, Math.min(100, parseInt(window.vars.renderScale) || 100));
-            if (want === appliedRenderScale) return;
-            appliedRenderScale = want;
-            pixelDensity = want / 100;
-            resize();
-        }
-        setInterval(applyRenderScale, 400);
-        applyRenderScale();
 
         // Scroll zoom
         window.addEventListener('wheel', (e) => {
@@ -11045,13 +11007,6 @@ let pps = 0;
                         // and the bots swing for as long as it is held.
                         RynBots.setManualAttack(true);
                     }
-                    else if (keyStr === window.vars.keyLiteMode) {
-                        window.vars.liteMode = !window.vars.liteMode;
-                        // The smoothing flag is context state, so it only takes
-                        // effect on the next resize — force one.
-                        try { resize(); } catch (e) {}
-                        addChatLog("Lite Mode " + (window.vars.liteMode ? "ON" : "OFF"), "#00e5ff");
-                    }
                 }
             }
         }
@@ -11358,22 +11313,7 @@ let pps = 0;
         // UPDATE GAME:
         // The vignette never changes shape, only the viewport does, so build it
         // once per viewport instead of once per frame.
-        let vignetteCache = null, vignetteW = 0, vignetteH = 0;
-        function getVignette() {
-            if (vignetteCache && vignetteW === maxScreenWidth && vignetteH === maxScreenHeight) return vignetteCache;
-            const g = mainContext.createRadialGradient(
-                maxScreenWidth / 2, maxScreenHeight / 2, 0,
-                maxScreenWidth / 2, maxScreenHeight / 2, maxScreenWidth / 2);
-            g.addColorStop(0, "rgba(0, 0, 0, 0.10)");
-            g.addColorStop(0.5, "rgba(0, 0, 0, 0.20)");
-            g.addColorStop(1, "rgba(0, 0, 0, 0.30)");
-            vignetteCache = g; vignetteW = maxScreenWidth; vignetteH = maxScreenHeight;
-            return g;
-        }
-
         function updateGame() {
-            // Read the toggle once a frame, not once per draw call.
-            const LITE = !!(window.vars && window.vars.liteMode);
             if (true) {
 
                 // UPDATE DIRECTION:
@@ -11493,17 +11433,12 @@ let pps = 0;
 
                 // RENDER WATER AREAS:
                 if (!firstSetup) {
-                    // Lite mode freezes the wave instead of animating it: the
-                    // river still reads as a river, and the second full-width
-                    // fill stops changing every frame.
-                    if (!LITE) {
-                        waterMult += waterPlus * config.waveSpeed * delta;
-                        if (waterMult >= config.waveMax) {
-                            waterMult = config.waveMax;
-                            waterPlus = -1;
-                        } else if (waterMult <= 1) {
-                            waterMult = waterPlus = 1;
-                        }
+                    waterMult += waterPlus * config.waveSpeed * delta;
+                    if (waterMult >= config.waveMax) {
+                        waterMult = config.waveMax;
+                        waterPlus = -1;
+                    } else if (waterMult <= 1) {
+                        waterMult = waterPlus = 1;
                     }
                     mainContext.globalAlpha = 1;
                     mainContext.fillStyle = "#dbc666";
@@ -11532,10 +11467,6 @@ let pps = 0;
                     }
                     mainContext.stroke();
                     */
-
-                // Walk gameObjects once and bucket what is on screen by layer;
-                // the five passes below then only touch their own bucket.
-                buildRenderFrame(xOffset, yOffset);
 
                 // RENDER BOTTOM LAYER:
                 mainContext.globalAlpha = 1;
@@ -11610,28 +11541,20 @@ let pps = 0;
                                          (maxScreenWidth - tmpX) - tmpMin, maxScreenHeight - (config.mapScale - yOffset));
                 }
 
-                // The trap prediction and the placer's ghost sprites are advice,
-                // not information you lose the fight without. Lite mode skips
-                // both; the placer itself keeps running, it just stops drawing.
-                if (!LITE) {
-                    renderEnemyTraps(xOffset, yOffset);
-                    for (let object of predictObjects) {
-                        mainContext.globalAlpha = .6;
+                renderEnemyTraps(xOffset, yOffset);
+                for (let object of predictObjects) {
+                    mainContext.globalAlpha = .6;
 
-                        mainContext.save();
-                        mainContext.translate(object.x - xOffset, object.y - yOffset);
+                    mainContext.save();
+                    mainContext.translate(object.x - xOffset, object.y - yOffset);
 
-                        let image = getItemSprite({ id: object.id, name: object.name, scale: object.scale, prediction: true, preplace: object.preplace });
-                        mainContext.drawImage(image, -(image.width / 2), -(image.height / 2));
+                    let image = getItemSprite({ id: object.id, name: object.name, scale: object.scale, prediction: true, preplace: object.preplace });
+                    mainContext.drawImage(image, -(image.width / 2), -(image.height / 2));
 
-                        mainContext.rotate(object.angle);
-                        mainContext.restore();
-                    }
+                    mainContext.rotate(object.angle);
+                    mainContext.restore();
                 }
 
-                // Building health rings stay on in lite mode — they are the one
-                // overlay you actually fight with — but drop the dark backing
-                // stroke, which halves the stroked paths per building.
                 for(let i in visibleObjects){
                     let object = visibleObjects[i];
                     if(UTILS.getDistance(myPlayer.x, myPlayer.y, object.x, object.y) < 300 && object.isItem){
@@ -11641,13 +11564,11 @@ let pps = 0;
 
                         mainContext.globalAlpha = 1;
                         mainContext.lineCap = "round";
-                        if (!LITE) {
-                            mainContext.strokeStyle = darkOutlineColor;
-                            mainContext.lineWidth = 12.5;
-                            mainContext.beginPath();
-                            mainContext.arc(object.x - xOffset, object.y - yOffset, radius, 0, healthArc);
-                            mainContext.stroke();
-                        }
+                        mainContext.strokeStyle = darkOutlineColor;
+                        mainContext.lineWidth = 12.5;
+                        mainContext.beginPath();
+                        mainContext.arc(object.x - xOffset, object.y - yOffset, radius, 0, healthArc);
+                        mainContext.stroke();
 
                         mainContext.strokeStyle = color;
                         mainContext.lineWidth = 5;
@@ -11657,15 +11578,17 @@ let pps = 0;
                     }
                 }
                 // RENDER DAY/NIGHT TIME (Dark Black Vignette)
-                // The gradient is static, so it is built once and reused rather
-                // than allocated and re-stopped on every single frame. Lite mode
-                // drops the pass entirely — it is a full-screen composite that
-                // buys nothing but mood.
-                if (!LITE) {
-                    mainContext.globalAlpha = 1;
-                    mainContext.fillStyle = getVignette();
-                    mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
-                }
+
+                mainContext.globalAlpha = 1;
+                const gradient = mainContext.createRadialGradient(
+                    maxScreenWidth / 2, maxScreenHeight / 2, 0,
+                    maxScreenWidth / 2, maxScreenHeight / 2, maxScreenWidth / 2 );
+                // pure black instead of blue
+                gradient.addColorStop(0, "rgba(0, 0, 00, 0.10)");
+                gradient.addColorStop(0.5, "rgba(0, 0, 00, 0.20)");
+                gradient.addColorStop(1, "rgba(0, 0, 00, 0.30)");
+                mainContext.fillStyle = gradient;
+                mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
 
 
 
@@ -11692,13 +11615,7 @@ let pps = 0;
                                 mainContext.lineJoin = "round";
                                 mainContext.strokeText(tmpText, tmpObj.x - xOffset, (tmpObj.y - yOffset - tmpObj.scale) - config.nameY);
                                 mainContext.fillText(tmpText, tmpObj.x - xOffset, (tmpObj.y - yOffset - tmpObj.scale) - config.nameY);
-                                // The crown and skull cost a measureText each,
-                                // per player, per frame — text measurement is
-                                // the most expensive thing on this canvas and
-                                // neither icon changes how you play.
-                                if (LITE) {
-                                    // nothing
-                                } else if (tmpObj.isLeader && iconSprites["crown"].isLoaded) {
+                                if (tmpObj.isLeader && iconSprites["crown"].isLoaded) {
                                     var tmpS = config.crownIconScale;
                                     var tmpX = tmpObj.x - xOffset - (tmpS / 2) - (mainContext.measureText(tmpText).width / 2) - config.crownPad;
                                     mainContext.drawImage(iconSprites["crown"], tmpX, (tmpObj.y - yOffset - tmpObj.scale)
@@ -11909,95 +11826,71 @@ let pps = 0;
                 ctxt.fillRect(0, tmpY, maxScreenWidth, tmpW);
             }
         }
-
-        // RENDER GAME OBJECTS:
-        // ONE SCAN PER FRAME, NOT FIVE.
-        //
-        // renderGameObjects() is called five times a frame, once per layer, and
-        // each call used to walk the whole gameObjects array. That array holds
-        // every object the client has ever been sent — it only grows — so the
-        // per-frame cost was 5 x N and it got worse the longer you played. At
-        // 120 Hz with a few thousand objects that is millions of iterations a
-        // second spent deciding what NOT to draw.
-        //
-        // Now the array is walked once, on-screen objects are bucketed by their
-        // layer, and each pass draws its bucket. The buckets are flat arrays of
-        // [object, screenX, screenY] reused between frames, so a frame costs no
-        // allocations — allocation is what the garbage collector eventually
-        // stops the world to clean up, and those pauses are exactly the dropped
-        // frames you feel.
-        const layerBuckets = [[], [], [], [], []];   // index = layer + 1, layers -1..3
-        const spikeDots = [];                        // flat x, y pairs
-        function buildRenderFrame(xOffset, yOffset) {
-            for (let b = 0; b < layerBuckets.length; b++) layerBuckets[b].length = 0;
-            spikeDots.length = 0;
-            const source = renderObjectSource();
-            for (let i = 0; i < source.length; ++i) {
-                const o = source[i];
-                if (!o.active) continue;
-                // Every active object still animates, on screen or not — that is
-                // what the old layer-0 pass did and rotation must not stall.
-                o.update(delta);
-                const tmpX = o.x + o.xWiggle - xOffset;
-                const tmpY = o.y + o.yWiggle - yOffset;
-                if (!isOnScreen(tmpX, tmpY, o.scale + (o.blocker || 0))) continue;
-                // The spike markers had no bounds check at all: every spike ever
-                // seen got two filled arcs a frame, almost all of them off the
-                // canvas where nothing could show. Only visible ones now.
-                if (o.isItem && o.name === "spikes") spikeDots.push(tmpX, tmpY);
-                const bi = o.layer + 1;
-                if (bi >= 0 && bi < layerBuckets.length) {
-                    const bucket = layerBuckets[bi];
-                    bucket.push(o, tmpX, tmpY);
-                }
-            }
-        }
-
         function renderGameObjects(layer, xOffset, yOffset) {
-            var tmpSprite;
-            const bucket = layerBuckets[layer + 1];
 
-            for (var i = 0; bucket && i < bucket.length; i += 3) {
-                tmpObj = bucket[i];
-                const tmpX = bucket[i + 1], tmpY = bucket[i + 2];
+            var tmpSprite, tmpX, tmpY;
 
-                mainContext.globalAlpha = tmpObj.hideFromEnemy ? 0.6 : 1;
+            // ---- NEW: store spike positions ----
+            let spikeList = [];
 
-                if (tmpObj.isItem) {
+            const source = renderObjectSource();
+            for (var i = 0; i < source.length; ++i) {
+                tmpObj = source[i];
 
-                    tmpSprite = getItemSprite(tmpObj);
+                if (tmpObj.active) {
 
-                    mainContext.save();
-                    mainContext.translate(tmpX, tmpY);
-                    mainContext.rotate(tmpObj.dir);
-                    mainContext.drawImage(tmpSprite, -(tmpSprite.width / 2), -(tmpSprite.height / 2));
+                    tmpX = tmpObj.x + tmpObj.xWiggle - xOffset;
+                    tmpY = tmpObj.y + tmpObj.yWiggle - yOffset;
 
-                    if (tmpObj.blocker) {
-                        mainContext.strokeStyle = "#db6e6e";
-                        mainContext.globalAlpha = 0.3;
-                        mainContext.lineWidth = 6;
-                        renderCircle(0, 0, tmpObj.blocker, mainContext, false, true);
+                    // collect spikes (change name if needed later)
+                    if (layer == 0 && tmpObj.isItem && tmpObj.name === "spikes") {
+                        spikeList.push({x: tmpX, y: tmpY});
                     }
 
-                    mainContext.restore();
+                    if (layer == 0) {
+                        tmpObj.update(delta);
+                    }
 
-                } else {
-                    tmpSprite = getResSprite(tmpObj);
-                    mainContext.drawImage(tmpSprite, tmpX - (tmpSprite.width / 2), tmpY - (tmpSprite.height / 2));
+                    if (tmpObj.layer == layer && isOnScreen(tmpX, tmpY, tmpObj.scale + (tmpObj.blocker || 0))) {
+
+                        mainContext.globalAlpha = tmpObj.hideFromEnemy ? 0.6 : 1;
+
+                        if (tmpObj.isItem) {
+
+                            tmpSprite = getItemSprite(tmpObj);
+
+                            mainContext.save();
+                            mainContext.translate(tmpX, tmpY);
+                            mainContext.rotate(tmpObj.dir);
+                            mainContext.drawImage(tmpSprite, -(tmpSprite.width / 2), -(tmpSprite.height / 2));
+
+                            if (tmpObj.blocker) {
+                                mainContext.strokeStyle = "#db6e6e";
+                                mainContext.globalAlpha = 0.3;
+                                mainContext.lineWidth = 6;
+                                renderCircle(0, 0, tmpObj.blocker, mainContext, false, true);
+                            }
+
+                            mainContext.restore();
+
+                        } else {
+                            tmpSprite = getResSprite(tmpObj);
+                            mainContext.drawImage(tmpSprite, tmpX - (tmpSprite.width / 2), tmpY - (tmpSprite.height / 2));
+                        }
+                    }
                 }
             }
-
-            if (layer == 0 && spikeDots.length > 0) {
+            if (layer == 0 && spikeList.length > 0) {
 
                 mainContext.save();
 
                 mainContext.shadowBlur = 0;
                 mainContext.globalAlpha = 1;
 
-                for (let i = 0; i < spikeDots.length; i += 2) {
+                for (let i = 0; i < spikeList.length; i++) {
 
-                    let sx = Math.round(spikeDots[i]);
-                    let sy = Math.round(spikeDots[i + 1]);
+                    let sx = Math.round(spikeList[i].x);
+                    let sy = Math.round(spikeList[i].y);
 
                     // main red dot (smaller)
                     mainContext.beginPath();
@@ -19588,12 +19481,21 @@ for (let tree of trees) {
         // second to produce one integer. It also ran on its own
         // requestAnimationFrame loop alongside the game's; now doUpdate calls
         // it, so the browser schedules one callback a frame instead of two.
-        let fps = 0, fpsFrames = 0, fpsSince = 0;
+        let fps = 0;
+
         function trackFPS() {
-            fpsFrames++;
-            const t = performance.now();
-            if (t - fpsSince >= 1000) { fps = fpsFrames; fpsFrames = 0; fpsSince = t; }
+            let now = performance.now();
+            frameTimes.push(now);
+
+            while (frameTimes.length > 0 && frameTimes[0] <= now - 1000) {
+                frameTimes.shift();
+            }
+
+            fps = frameTimes.length;
+            requestAnimationFrame(trackFPS);
         }
+
+        requestAnimationFrame(trackFPS);
 
         // PING:
         var lastPing = -1;
@@ -19649,7 +19551,6 @@ for (let tree of trees) {
             now = Date.now();
             delta = now - lastUpdate;
             lastUpdate = now;
-            trackFPS();
             updateGame();
             requestAnimationFrame(doUpdate);
         }
@@ -23510,7 +23411,6 @@ for (let tree of trees) {
         keyReleaseBots: "U",
         keyBotFreeze: "N",
         keyBotAttack: "M",
-        keyLiteMode: "L",
 
 
         // Combat
@@ -23579,8 +23479,6 @@ for (let tree of trees) {
         spikeRotation: false,
 
         // Performance
-        liteMode: false,     // cut every optional thing the renderer draws
-        renderScale: 100,    // 50 .. 100 % of native — the biggest single win
 
         // Settings
         theme: "",
@@ -23649,12 +23547,6 @@ for (let tree of trees) {
                     { type: 'keybind', name: "Bot Attack (hold)", id: "keyBotAttack" }
                 ]
             },
-            {
-                title: "Performance Keys",
-                items: [
-                    { type: 'keybind', name: "Toggle Lite Mode", id: "keyLiteMode" }
-                ]
-            }
         ],
         combat: [
             {
@@ -23839,14 +23731,6 @@ for (let tree of trees) {
         ],
 
         visuals: [
-            {
-                title: "Performance",
-                items: [
-                    { type: 'toggle', name: "Lite Mode", id: "liteMode" },
-                    { type: 'slider', name: "Render Scale %", id: "renderScale", min: 50, max: 100 },
-                    { type: 'keybind', name: "Toggle Lite Mode", id: "keyLiteMode" }
-                ]
-            },
             {
                 title: "Objects",
                 items: [
