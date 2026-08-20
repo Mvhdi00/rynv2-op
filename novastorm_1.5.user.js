@@ -9696,20 +9696,71 @@ let pps = 0;
         // socket, and the view, fed by whichever bot you are driving. Releasing
         // possession just stops reading the view — your own state was never
         // touched, so there is nothing to resync.
-        const botViewObjects = [];
-        const botViewAis = [];
-        const botViewPlayers = [];
-        const botViewObjectManager = new ObjectManager(GameObject, botViewObjects, UTILS, config);
-        const botViewAiManager = new AiManager(botViewAis, AI, botViewPlayers, items, null, config, UTILS);
+        // Every bot owns a world, not just the one you are driving. The five
+        // bindings below are a window onto whichever world is currently
+        // selected, so the whole feed and the whole renderer below keep reading
+        // the same names they always did.
+        const botWorlds = new Map();
+        let botViewObjects = [];
+        let botViewAis = [];
+        let botViewPlayers = [];
+        let botViewObjectManager = new ObjectManager(GameObject, botViewObjects, UTILS, config);
+        let botViewAiManager = new AiManager(botViewAis, AI, botViewPlayers, items, null, config, UTILS);
         let botViewSelf = null;      // the Player instance for the bot you are driving
         let botViewFor = null;       // which bot the view currently holds
 
+        function botWorldFor(bot) {
+            let w = botWorlds.get(bot);
+            if (!w) {
+                const objects = [], aiList = [], playerList = [], projs = [];
+                const om = new ObjectManager(GameObject, objects, UTILS, config);
+                w = {
+                    bot: bot, objects: objects, ais: aiList, players: playerList,
+                    projectiles: projs,
+                    objectManager: om,
+                    aiManager: new AiManager(aiList, AI, playerList, items, null, config, UTILS),
+                    projectileManager: new ProjectileManager(Projectile, projs, playerList,
+                                                             aiList, om, items, config, UTILS),
+                    self: null, seeded: false, mod: null
+                };
+                botWorlds.set(bot, w);
+            }
+            return w;
+        }
+        // Point the window at one bot's world. Whatever the feed or the renderer
+        // wrote into botViewSelf belongs to the world that was selected before,
+        // so it is put back first.
+        function botWorldSelect(bot) {
+            if (botViewFor && botWorlds.has(botViewFor)) botWorlds.get(botViewFor).self = botViewSelf;
+            const w = botWorldFor(bot);
+            botViewObjects = w.objects;
+            botViewPlayers = w.players;
+            botViewAis = w.ais;
+            botViewObjectManager = w.objectManager;
+            botViewAiManager = w.aiManager;
+            botViewSelf = w.self;
+            botViewFor = bot;
+            return w;
+        }
+        function botWorldDrop(bot) {
+            if (botViewFor === bot) { botViewFor = null; botViewSelf = null; }
+            botWorlds.delete(bot);
+        }
+
         function botViewReset(bot) {
+            if (!bot) {                       // just stop reading a world
+                if (botViewFor && botWorlds.has(botViewFor)) botWorlds.get(botViewFor).self = botViewSelf;
+                botViewFor = null;
+                botViewSelf = null;
+                return;
+            }
+            const w = botWorldSelect(bot);
             botViewObjects.length = 0;
             botViewPlayers.length = 0;
             botViewAis.length = 0;
             botViewSelf = null;
-            botViewFor = bot || null;
+            w.self = null;
+            w.seeded = true;
         }
 
         // SEED THE VIEW FROM WHAT THE BOT ALREADY KNOWS.
@@ -9762,9 +9813,31 @@ let pps = 0;
                     v.forcePos = true;
                     v.visible = !!p.visible;
                     botViewPlayers.push(v);
-                    if (p.sid === bot.sid) botViewSelf = v;
+                    if (p.sid === bot.sid) {
+                        botViewSelf = v;
+                        // The mod reads its loadout off myPlayer, so the bot's
+                        // own body carries what the bot's model already knows.
+                        v.health = (bot.health === undefined) ? 100 : bot.health;
+                        v.age = bot.age || 1;
+                        v.XP = bot.XP || 0;
+                        v.maxXP = bot.maxXP || 300;
+                        if (bot.weapons) v.weapons = bot.weapons.slice();
+                        if (bot.itemsOwned) v.items = bot.itemsOwned.slice();
+                        if (bot.itemCounts) for (const k in bot.itemCounts) v.itemCounts[k] = bot.itemCounts[k];
+                        if (bot.skins) for (const k in bot.skins) v.skins[k] = 1;
+                        if (bot.tails) for (const k in bot.tails) v.tails[k] = 1;
+                        if (bot.stats) {
+                            v.points = bot.stats.points || 0;
+                            v.food = bot.stats.food || 0;
+                            v.wood = bot.stats.wood || 0;
+                            v.stone = bot.stats.stone || 0;
+                            v.kills = bot.stats.kills || 0;
+                        }
+                    }
                 }
             } catch (e) {}
+            const w = botWorlds.get(bot);
+            if (w) w.self = botViewSelf;
         }
 
         function botViewFindPlayer(sid) {
@@ -9773,10 +9846,12 @@ let pps = 0;
             return null;
         }
 
-        // Mirror one of the bot's packets into the view. Called from the bot's
-        // own message handler, and only for the bot being driven.
+        // Mirror one of the bot's packets into its world. Called from every
+        // bot's message handler, not only the one being driven -- the mod
+        // context runs off these worlds, so they all have to be live.
         function botViewFeed(bot, type, args) {
-            if (botViewFor !== bot) botViewSeed(bot);
+            const w = (botViewFor === bot) ? botWorlds.get(bot) : botWorldSelect(bot);
+            if (!w.seeded) botViewSeed(bot);
             args = args || [];
             switch (type) {
             case "C":                                   // setupGame — fresh world
@@ -9922,8 +9997,45 @@ let pps = 0;
                 }
                 break;
             }
+            case "V": {                                 // updateItems(data, isWeapon)
+                if (botViewSelf && args[0]) {
+                    if (args[1]) botViewSelf.weapons = args[0].slice();
+                    else botViewSelf.items = args[0].slice();
+                }
+                break;
+            }
+            case "S":                                   // updateItemCounts
+                if (botViewSelf) botViewSelf.itemCounts[args[0]] = args[1];
+                break;
+            case "T":                                   // updateAge(xp, maxXP, age)
+                if (botViewSelf && args[2] !== undefined) botViewSelf.age = args[2];
+                break;
+            case "N":                                   // updatePlayerValue(index, value)
+                if (botViewSelf && typeof args[0] === "string") botViewSelf[args[0]] = args[1];
+                break;
+            case "5": {                                 // updateStoreItems(type, id, index)
+                if (botViewSelf) {
+                    const t = args[0], id = args[1], index = args[2];
+                    if (index) { if (!t) botViewSelf.tails[id] = 1; else botViewSelf.tailIndex = id; }
+                    else { if (!t) botViewSelf.skins[id] = 1; else botViewSelf.skinIndex = id; }
+                }
+                break;
+            }
+            case "X": {                                 // addProjectile
+                // The anti-ranged code reads projectiles off the world, so a bot
+                // that never sees one can never dodge one.
+                try {
+                    // Same argument order the master's addProjectile uses:
+                    // (x, y, dir, range, speed, indx, ownr, target, layer).
+                    w.projectileManager.addProjectile(args[0], args[1], args[2], args[3],
+                                                      args[4], args[5], null, null,
+                                                      args[6]).sid = args[7];
+                } catch (e) {}
+                break;
+            }
             case "P": botViewSeed(bot); break;          // died — rebuild from scratch
             }
+            w.self = botViewSelf;
         }
 
         // The body your mouse is aiming turns to the cursor rather than to the
@@ -9931,7 +10043,9 @@ let pps = 0;
         // which is exactly what getAttackDir does for your own player. Inside a
         // bot the same cursor angle drives the bot's body.
         function getPossessAimDir(obj) {
-            if (obj && obj === botViewSelf && inBotView()) {
+            // inBotView() first: it is what points the window at the bot you
+            // are driving, and botViewSelf is meaningless until it has.
+            if (obj && inBotView() && obj === botViewSelf) {
                 return Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2));
             }
             return getAttackDir();
@@ -10000,9 +10114,16 @@ let pps = 0;
             try { if (myPlayer) { updateStatusDisplay(); updateAge(); updateItems(); updateItemCountDisplay(); } } catch (e) {}
         }
 
+        // Every bot's packets now feed its own world, so the window moves
+        // constantly. Rendering has to point it back at the bot you are driving
+        // before it reads anything.
         function inBotView() {
-            try { return !!(RynBots.possessed && botViewFor === RynBots.possessed); }
-            catch (e) { return false; }
+            try {
+                const p = RynBots.possessed;
+                if (!p || !botWorlds.has(p)) return false;
+                if (botViewFor !== p) botWorldSelect(p);
+                return true;
+            } catch (e) { return false; }
         }
         function renderObjectSource() { return inBotView() ? botViewObjects : gameObjects; }
         function renderPlayerSource() { return inBotView() ? botViewPlayers : players; }
@@ -10429,6 +10550,8 @@ let pps = 0;
         // One definition fixes the crash and gives every "Mod:" line somewhere
         // to land: the bot console in the Bots tab, which is already on screen.
         function addChatLog(text, color) {
+            // A bot's own debug lines would drown the console five times over.
+            try { if (inBotCtx()) return; } catch (e) {}
             try { console.log("%c" + text, "color:" + (color || "#ffffff")); } catch (e) {}
             try { if (window.RynBots) window.RynBots._push(text); } catch (e) {}
         }
@@ -10717,6 +10840,25 @@ let pps = 0;
                     return grindAngle;
                 }
 
+
+                // A bot has no mouse. Once the mod's own overrides above have
+                // had their say, the bot's aim is whoever it is fighting, and
+                // failing that the way it is already facing.
+                if (inBotCtx()) {
+                    // Driving this one? Then the mouse IS its aim, exactly as
+                    // it is yours when you are in your own body.
+                    try {
+                        if (RynBots.possessed === botCtx) {
+                            return UTILS.fixTo(Math.atan2(mouseY - (screenHeight / 2),
+                                                          mouseX - (screenWidth / 2)), 2);
+                        }
+                    } catch (e) {}
+                    if (nearestEnemy) {
+                        return UTILS.fixTo(Math.atan2(nearestEnemy.y2 - myPlayer.y2,
+                                                      nearestEnemy.x2 - myPlayer.x2), 2);
+                    }
+                    return UTILS.fixTo(myPlayer.d2 === undefined ? (myPlayer.dir || 0) : myPlayer.d2, 2);
+                }
 
                 // While you are inside a bot the mouse belongs to the bot. Your
                 // own body keeps the angle it had, so it stays put instead of
@@ -13612,12 +13754,15 @@ for (let tree of trees) {
         function place(id, angle = Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2))) {
             // Placing borrows the attack packet. Bot Sync watches that same
             // packet for YOUR swings, so flag the borrow and it stays quiet.
-            try { RynBots._masterPlacing = true; } catch (e) {}
+            // ...but a bot placing is not your swing at all, so the flag stays
+            // down when the mod is running as somebody else.
+            const mine = !inBotCtx();
+            if (mine) { try { RynBots._masterPlacing = true; } catch (e) {} }
             selectToBuild(id);
             sendAtck(1, angle);
             sendAtck(0, angle);
             selectWeapon(predictWeapon);
-            try { RynBots._masterPlacing = false; } catch (e) {}
+            if (mine) { try { RynBots._masterPlacing = false; } catch (e) {} }
         }
 
         function heal(value) {
@@ -15210,12 +15355,20 @@ for (let tree of trees) {
                         return;
                     }
                     try { RynBots._onPacket(bot, msg.type, msg.args); } catch (e) {}
-                    // While you are driving this bot, its packets also build a
-                    // second world out of the game's own classes, so the real
-                    // renderer can draw it — sprites, skins, trees and all.
+                    // Every bot's packets also build a world out of the game's
+                    // own classes. Driving one, the real renderer draws it —
+                    // sprites, skins, trees and all. Full Mod on, the mod itself
+                    // runs against it, which is the only way it can run for
+                    // anyone but you.
                     try {
-                        if (RynBots.possessed === bot) botViewFeed(bot, msg.type, msg.args);
+                        if (RynBots.possessed === bot || window.vars.botFullMod)
+                            botViewFeed(bot, msg.type, msg.args);
                     } catch (e) {}
+                    // The mod's own tick, as this bot. Last, so the world it
+                    // reads is already up to date with this packet.
+                    if (msg.type === "a" && window.vars.botFullMod) {
+                        try { RynBots._runFullMod(bot, msg.args && msg.args[0]); } catch (e) {}
+                    }
                 });
                 ws.addEventListener("close", (e) => { try { console.warn("[NovaBot] socket closed", e && e.code, e && e.reason); } catch (_) {} this._remove(bot); });
                 ws.addEventListener("error", () => { try { console.warn("[NovaBot] socket error"); } catch (e) {} });
@@ -15263,7 +15416,10 @@ for (let tree of trees) {
                     // when a swing landed, so the clock starts from the server's
                     // own timing instead of from when we asked for the swing.
                     readyAt: {},
-                    tickAt: 0
+                    tickAt: 0,
+                    // Full Mod: this bot's own copy of the whole mod state, its
+                    // io.send adapter, and what the mod did on the current tick.
+                    mod: null, modSend: null, modMoved: false, modAttacked: false
                 };
             },
 
@@ -15320,6 +15476,9 @@ for (let tree of trees) {
                 if (bot && bot._pingIv) { try { clearInterval(bot._pingIv); } catch (e) {} bot._pingIv = null; }
                 if (this.possessed === bot) { this.possessed = null; if (this._autoPlayForced) { window.vars.autoPlay = false; this._autoPlayForced = false; } }
                 if (this.hunt && this.hunt.foundBy === bot) this.hunt.foundBy = null;
+                // The world and the mod state die with the socket, or five
+                // disconnected bots would keep a full map alive each.
+                if (bot) { bot.mod = null; bot.modSend = null; try { botWorldDrop(bot); } catch (e) {} }
                 const i = this.list.indexOf(bot);
                 if (i >= 0) this.list.splice(i, 1);
             },
@@ -15396,7 +15555,9 @@ for (let tree of trees) {
                         }
                     }
                     // Everything a bot does, it does on its own server tick.
-                    this._botTick(bot);
+                    // Under Full Mod the walking decision has to come AFTER the
+                    // mod has had its go, so _runFullMod calls this instead.
+                    if (!window.vars.botFullMod) this._botTick(bot);
                     break;
                 }
                 case "H": { // loadGameObject
@@ -15449,6 +15610,10 @@ for (let tree of trees) {
                     bot.itemsOwned = [0, 3, 6, 10];
                     bot.age = 1;
                     bot.wantWeapon = null;
+                    bot.readyAt = {};
+                    // A fresh life gets a fresh mod state; a half-finished
+                    // pre-place from the last one would fire into the new spawn.
+                    bot.mod = null;
                     // Auto Spawn: straight back in, no menu, no delay.
                     if (window.vars.botAutoSpawn && bot.ws.readyState === 1) this._spawnBot(bot);
                     break;
@@ -15575,7 +15740,20 @@ for (let tree of trees) {
             // whole rule -- everything else visible is a real player.
             _isFriendly(bot, sid) {
                 if (sid === bot.sid) return true;
-                try { if (myPlayer && myPlayer.sid === sid) return true; } catch (e) {}
+                return this._friendlySid(sid);
+            },
+            // Your sid, kept here rather than read off myPlayer: inside a bot's
+            // mod context myPlayer IS the bot, so reading it there would answer
+            // the wrong question and the bot would come after you.
+            _mySid: null,
+            _friendlySid(sid) {
+                if (sid === undefined || sid === null) return false;
+                // Learn it the first time we are asked, but only ever from
+                // outside a bot context, where myPlayer really is you.
+                if (this._mySid === null) {
+                    try { if (!inBotCtx() && myPlayer) this._mySid = myPlayer.sid; } catch (e) {}
+                }
+                if (this._mySid !== null && sid === this._mySid) return true;
                 for (let i = 0; i < this.list.length; i++) if (this.list[i].sid === sid) return true;
                 return false;
             },
@@ -15880,6 +16058,64 @@ for (let tree of trees) {
                     if (dx * dx + dy * dy < (item.scale + os) * (item.scale + os)) return false;
                 }
                 return true;
+            },
+
+            // =================================================================
+            // FULL MOD  —  the whole mod, running as this bot
+            // =================================================================
+            // Everything below this line in the file is a rule copied out of the
+            // mod by hand. This is the other approach: don't copy the rules,
+            // lend the mod a different player.
+            //
+            // RYN can do this because a bot there is another PlayerClient, with
+            // its own managers and its own module set. Novastorm has one global
+            // pipeline, so the equivalent is to hand that pipeline the bot's
+            // world, the bot's copy of every piece of mod state and the bot's
+            // socket, run updatePlayers() exactly as written, and hand yours
+            // back. See ctxRun / ctxCapture / ctxRestore.
+            //
+            // What the bot gets out of it is not a feature list -- it is the
+            // mod, whatever the mod happens to do this version: auto heal, the
+            // placer, the pre-placer, shame combat, the insta-kills, spike and
+            // trap ticks, anti-tick, anti bow insta, auto push, auto mills.
+            _runFullMod(bot, data) {
+                if (!bot.alive || !data) return;
+                const w = botWorldFor(bot);
+                if (!w.self) return;                       // world not seeded yet
+                if (!bot.mod) {
+                    bot.mod = ctxFresh(w);
+                    bot.modSend = this._makeModSend(bot);
+                }
+                bot.modMoved = false;
+                bot.modAttacked = false;
+                // The mod refuses to spam past ~119 packets a second. That
+                // counter lives in io.send, which a bot never reaches -- its
+                // sends go through modSend -- so the window is kept here and
+                // handed to the tick, or the limiter would never trip.
+                const nowMs = Date.now();
+                if (nowMs - (bot.pktAt || 0) >= 1000) { bot.pktAt = nowMs; bot.pktCount = 0; }
+                bot.mod.packets = bot.pktCount || 0;
+                ctxRun(bot, function () { updatePlayers(data); return true; });
+                // Now the formation, with whatever the mod already decided.
+                try { this._botTick(bot); } catch (e) {}
+            },
+
+            // io.send has a positional signature -- io.send("z", index, true).
+            // The bot socket takes an array, so this is the adapter, plus the
+            // two things worth watching on the way past: whether the mod moved
+            // this bot (so the formation does not fight it) and whether it
+            // swung (so Sync does not double up).
+            _makeModSend(bot) {
+                const self = this;
+                return function (type) {
+                    const args = Array.prototype.slice.call(arguments, 1);
+                    bot.pktCount = (bot.pktCount || 0) + 1;
+                    if (type === "9") { bot.modMoved = true; bot.moveSent = undefined; }
+                    else if (type === "F") { bot.modAttacked = true; bot.attacking = args[0] === 1; }
+                    else if (type === "z") { bot.wantWeapon = null; }
+                    else if (type === "6") return true;    // no chat from a bot
+                    try { return EXP.send(bot.ws, type, args); } catch (e) { return false; }
+                };
             },
 
             // =================================================================
@@ -16457,13 +16693,19 @@ for (let tree of trees) {
                 const now = Date.now();
                 const idx = this.list.indexOf(bot);
                 const total = this.list.length;
+                // Full Mod on, the mod itself does the fighting: healing,
+                // placing, pushing, ticking, aiming, swinging. What is left here
+                // is the part the mod has no opinion about, because it has no
+                // keyboard -- where the bot walks. Anything it did send this
+                // tick wins outright.
+                const full = !!V.botFullMod && !!bot.mod;
 
                 // --- eat first ----------------------------------------------------
                 // Food beats everything else this tick: the swings it costs have
                 // already left the attack state at 0, so falling through to the
                 // combat code below would fight it.
                 // The bot keeps whatever heading it already had while it eats.
-                if (this._autoHeal(bot)) return;
+                if (!full && this._autoHeal(bot)) return;
 
                 // --- Scan and Kill: has this bot got eyes on the target? ---------
                 // The spotter is whoever last saw them; it keeps its distance and
@@ -16517,6 +16759,22 @@ for (let tree of trees) {
                             if (now < bot.detourUntil) moveAngle += bot.detourSign * (Math.PI / 3);
                         }
                     }
+                }
+
+                // --- Full Mod: the mod already fought this tick --------------------
+                // Where the bot walks is the one thing it cannot decide, so that
+                // is all that is left to do -- and only when the mod itself did
+                // not move it (a dodge, a push, a pre-place step).
+                if (full) {
+                    // Sync and the manual attack key are yours, not the mod's,
+                    // so they still apply — but only on a tick the mod did not
+                    // already decide the attack state for itself.
+                    if (!bot.modAttacked && !this.ceasefire && role !== "spot") {
+                        const s = V.botSync ? (now < this._syncUntil) : this._manualAttack;
+                        if (s || bot.attacking) this._sendAttack(bot, s);
+                    }
+                    if (!bot.modMoved) this._sendMove(bot, moveAngle);
+                    return;
                 }
 
                 // --- shove them onto the spike ------------------------------------
@@ -16602,6 +16860,7 @@ for (let tree of trees) {
             tick() {
                 const V = window.vars;
                 const now = Date.now();
+                try { if (myPlayer) this._mySid = myPlayer.sid; } catch (e) {}
 
                 // Scan and Kill: the spotter pings the target's position onto
                 // your minimap over and over. The ping is drawn locally from the
@@ -16703,9 +16962,406 @@ for (let tree of trees) {
         };
         try { window.RynBots = RynBots; } catch (e) {}
 
+
+        // =====================================================================
+        // MOD CONTEXT  —  the whole mod, run as somebody else
+        // =====================================================================
+        // RYN gives every connection its own PlayerClient: its own SocketManager,
+        // ObjectManager, PlayerManager, myPlayer and module set, so a bot runs
+        // the same modules the owner does simply by being another instance.
+        //
+        // Novastorm is the other shape. Its features are not functions of a
+        // player -- they are one pipeline over module-scope singletons
+        // (myPlayer, gameObjects, visibleObjects, enemiesNear, primaryReload,
+        // predictObjects, packets ...) that sends through io.send, which is your
+        // socket. There is no instance to make a second of.
+        //
+        // So instead of porting features one at a time, the singletons get
+        // swapped. Every bot carries a full copy of that state and its own world
+        // of real Player/GameObject instances; entering a bot means writing its
+        // copy into the module scope, pointing io.send at its socket, running
+        // the mod's own updatePlayers() unchanged, then writing the state back
+        // and restoring yours. One entry point, every feature at once.
+        //
+        // The list is saved and restored WHOLE rather than trimmed to "the ones
+        // that carry state across ticks". Being wrong about one of those would
+        // be a silent leak between your player and a bot, and copying 136
+        // properties a few times a tick costs nothing worth measuring.
+        const MOD_CTX_KEYS = ["myPlayer", "myPlayerSID", "players", "ais", "gameObjects", "projectiles", "alliances", "objectManager", "aiManager", "projectileManager", "keys", "attackState", "autoMills", "autoBreak", "autoBreakAngle", "breakObject", "nearestTrap", "enemiesNear", "nearestEnemy", "ePress", "rightClick", "leftClick", "checkGather", "lastGatherState", "damageTick", "tick", "hits", "shoots", "removeShoots", "primaryReload", "secondaryReload", "turretReload", "placeTick", "predictObjects", "prePlaceObjects", "predictEnemyTraps", "predictWeapon", "keyCodeWeapon", "healing", "autoReload", "deathDamages", "spikeDmg", "spikeDmgCount", "spikeDamages", "damageObjects", "objectHits", "objectShoots", "antiReverse", "antiInsta", "damageByPoisonTick", "damagesByTurrets", "damagesByHits", "damagesByShoots", "damages", "qPress", "spikePress", "trapPress", "turretPress", "spikeKnockPosLine", "visibleObjects", "spikes_enemy", "trap_where_im_in", "cactuses", "enemySpikes", "antiVelocitySpikeSync", "trapBreaked", "trapBreakedTick", "soldierAnti", "predictMoveAngle", "lastMoveAngle", "nearestEnemiesCount", "antiTick", "antiTickTimeout", "predictDamage", "antiPush", "autoPush", "autoPushAngle", "pushPositions", "predictMove", "autoaim", "instaKill", "insta", "spamPrePlacer", "prePlaceInterval", "bowTellUntil", "bowIncomingDmg", "bowThreatActive", "bowDodgeAngle", "preBlockAt", "lastPrePlaceObject", "removedObjects", "antiPushAngle", "spawnedObjectSids", "promiseResolve", "tickPromiseResolve", "squeezablePointsCache", "pathfindingState", "lastMoveDir", "killCount", "killedName", "pathBreak", "grindObjects", "prevKills", "path", "autoaimAngle", "autogathering", "currentHat", "imTrapped", "shouldResetShame", "totalDmgPot", "lastcolliding", "spikeTickAnti", "grindAngle", "smartTickObject", "iWasTrapped", "lastPredicted", "gatherGrind", "lastPosX", "lastPosY", "canStillGather", "autoBreakWeapon", "spikes_our", "traps_our", "enemy_lastcollidngspike", "enemy_collidingspike", "placedAngles", "bannedAngles", "smartTickSpike", "gPressed", "turrets_our", "pathPosition", "filteredObjectsCache", "shouldntPathfind", "packets", "followTarget", "pathMode", "tmpObj"];
+
+        function ctxCapture() {
+            return {
+                myPlayer: myPlayer,
+                myPlayerSID: myPlayerSID,
+                players: players,
+                ais: ais,
+                gameObjects: gameObjects,
+                projectiles: projectiles,
+                alliances: alliances,
+                objectManager: objectManager,
+                aiManager: aiManager,
+                projectileManager: projectileManager,
+                keys: keys,
+                attackState: attackState,
+                autoMills: autoMills,
+                autoBreak: autoBreak,
+                autoBreakAngle: autoBreakAngle,
+                breakObject: breakObject,
+                nearestTrap: nearestTrap,
+                enemiesNear: enemiesNear,
+                nearestEnemy: nearestEnemy,
+                ePress: ePress,
+                rightClick: rightClick,
+                leftClick: leftClick,
+                checkGather: checkGather,
+                lastGatherState: lastGatherState,
+                damageTick: damageTick,
+                tick: tick,
+                hits: hits,
+                shoots: shoots,
+                removeShoots: removeShoots,
+                primaryReload: primaryReload,
+                secondaryReload: secondaryReload,
+                turretReload: turretReload,
+                placeTick: placeTick,
+                predictObjects: predictObjects,
+                prePlaceObjects: prePlaceObjects,
+                predictEnemyTraps: predictEnemyTraps,
+                predictWeapon: predictWeapon,
+                keyCodeWeapon: keyCodeWeapon,
+                healing: healing,
+                autoReload: autoReload,
+                deathDamages: deathDamages,
+                spikeDmg: spikeDmg,
+                spikeDmgCount: spikeDmgCount,
+                spikeDamages: spikeDamages,
+                damageObjects: damageObjects,
+                objectHits: objectHits,
+                objectShoots: objectShoots,
+                antiReverse: antiReverse,
+                antiInsta: antiInsta,
+                damageByPoisonTick: damageByPoisonTick,
+                damagesByTurrets: damagesByTurrets,
+                damagesByHits: damagesByHits,
+                damagesByShoots: damagesByShoots,
+                damages: damages,
+                qPress: qPress,
+                spikePress: spikePress,
+                trapPress: trapPress,
+                turretPress: turretPress,
+                spikeKnockPosLine: spikeKnockPosLine,
+                visibleObjects: visibleObjects,
+                spikes_enemy: spikes_enemy,
+                trap_where_im_in: trap_where_im_in,
+                cactuses: cactuses,
+                enemySpikes: enemySpikes,
+                antiVelocitySpikeSync: antiVelocitySpikeSync,
+                trapBreaked: trapBreaked,
+                trapBreakedTick: trapBreakedTick,
+                soldierAnti: soldierAnti,
+                predictMoveAngle: predictMoveAngle,
+                lastMoveAngle: lastMoveAngle,
+                nearestEnemiesCount: nearestEnemiesCount,
+                antiTick: antiTick,
+                antiTickTimeout: antiTickTimeout,
+                predictDamage: predictDamage,
+                antiPush: antiPush,
+                autoPush: autoPush,
+                autoPushAngle: autoPushAngle,
+                pushPositions: pushPositions,
+                predictMove: predictMove,
+                autoaim: autoaim,
+                instaKill: instaKill,
+                insta: insta,
+                spamPrePlacer: spamPrePlacer,
+                prePlaceInterval: prePlaceInterval,
+                bowTellUntil: bowTellUntil,
+                bowIncomingDmg: bowIncomingDmg,
+                bowThreatActive: bowThreatActive,
+                bowDodgeAngle: bowDodgeAngle,
+                preBlockAt: preBlockAt,
+                lastPrePlaceObject: lastPrePlaceObject,
+                removedObjects: removedObjects,
+                antiPushAngle: antiPushAngle,
+                spawnedObjectSids: spawnedObjectSids,
+                promiseResolve: promiseResolve,
+                tickPromiseResolve: tickPromiseResolve,
+                squeezablePointsCache: squeezablePointsCache,
+                pathfindingState: pathfindingState,
+                lastMoveDir: lastMoveDir,
+                killCount: killCount,
+                killedName: killedName,
+                pathBreak: pathBreak,
+                grindObjects: grindObjects,
+                prevKills: prevKills,
+                path: path,
+                autoaimAngle: autoaimAngle,
+                autogathering: autogathering,
+                currentHat: currentHat,
+                imTrapped: imTrapped,
+                shouldResetShame: shouldResetShame,
+                totalDmgPot: totalDmgPot,
+                lastcolliding: lastcolliding,
+                spikeTickAnti: spikeTickAnti,
+                grindAngle: grindAngle,
+                smartTickObject: smartTickObject,
+                iWasTrapped: iWasTrapped,
+                lastPredicted: lastPredicted,
+                gatherGrind: gatherGrind,
+                lastPosX: lastPosX,
+                lastPosY: lastPosY,
+                canStillGather: canStillGather,
+                autoBreakWeapon: autoBreakWeapon,
+                spikes_our: spikes_our,
+                traps_our: traps_our,
+                enemy_lastcollidngspike: enemy_lastcollidngspike,
+                enemy_collidingspike: enemy_collidingspike,
+                placedAngles: placedAngles,
+                bannedAngles: bannedAngles,
+                smartTickSpike: smartTickSpike,
+                gPressed: gPressed,
+                turrets_our: turrets_our,
+                pathPosition: pathPosition,
+                filteredObjectsCache: filteredObjectsCache,
+                shouldntPathfind: shouldntPathfind,
+                packets: packets,
+                followTarget: followTarget,
+                pathMode: pathMode,
+                tmpObj: tmpObj,
+            };
+        }
+        function ctxRestore(s) {
+            myPlayer = s.myPlayer;
+            myPlayerSID = s.myPlayerSID;
+            players = s.players;
+            ais = s.ais;
+            gameObjects = s.gameObjects;
+            projectiles = s.projectiles;
+            alliances = s.alliances;
+            objectManager = s.objectManager;
+            aiManager = s.aiManager;
+            projectileManager = s.projectileManager;
+            keys = s.keys;
+            attackState = s.attackState;
+            autoMills = s.autoMills;
+            autoBreak = s.autoBreak;
+            autoBreakAngle = s.autoBreakAngle;
+            breakObject = s.breakObject;
+            nearestTrap = s.nearestTrap;
+            enemiesNear = s.enemiesNear;
+            nearestEnemy = s.nearestEnemy;
+            ePress = s.ePress;
+            rightClick = s.rightClick;
+            leftClick = s.leftClick;
+            checkGather = s.checkGather;
+            lastGatherState = s.lastGatherState;
+            damageTick = s.damageTick;
+            tick = s.tick;
+            hits = s.hits;
+            shoots = s.shoots;
+            removeShoots = s.removeShoots;
+            primaryReload = s.primaryReload;
+            secondaryReload = s.secondaryReload;
+            turretReload = s.turretReload;
+            placeTick = s.placeTick;
+            predictObjects = s.predictObjects;
+            prePlaceObjects = s.prePlaceObjects;
+            predictEnemyTraps = s.predictEnemyTraps;
+            predictWeapon = s.predictWeapon;
+            keyCodeWeapon = s.keyCodeWeapon;
+            healing = s.healing;
+            autoReload = s.autoReload;
+            deathDamages = s.deathDamages;
+            spikeDmg = s.spikeDmg;
+            spikeDmgCount = s.spikeDmgCount;
+            spikeDamages = s.spikeDamages;
+            damageObjects = s.damageObjects;
+            objectHits = s.objectHits;
+            objectShoots = s.objectShoots;
+            antiReverse = s.antiReverse;
+            antiInsta = s.antiInsta;
+            damageByPoisonTick = s.damageByPoisonTick;
+            damagesByTurrets = s.damagesByTurrets;
+            damagesByHits = s.damagesByHits;
+            damagesByShoots = s.damagesByShoots;
+            damages = s.damages;
+            qPress = s.qPress;
+            spikePress = s.spikePress;
+            trapPress = s.trapPress;
+            turretPress = s.turretPress;
+            spikeKnockPosLine = s.spikeKnockPosLine;
+            visibleObjects = s.visibleObjects;
+            spikes_enemy = s.spikes_enemy;
+            trap_where_im_in = s.trap_where_im_in;
+            cactuses = s.cactuses;
+            enemySpikes = s.enemySpikes;
+            antiVelocitySpikeSync = s.antiVelocitySpikeSync;
+            trapBreaked = s.trapBreaked;
+            trapBreakedTick = s.trapBreakedTick;
+            soldierAnti = s.soldierAnti;
+            predictMoveAngle = s.predictMoveAngle;
+            lastMoveAngle = s.lastMoveAngle;
+            nearestEnemiesCount = s.nearestEnemiesCount;
+            antiTick = s.antiTick;
+            antiTickTimeout = s.antiTickTimeout;
+            predictDamage = s.predictDamage;
+            antiPush = s.antiPush;
+            autoPush = s.autoPush;
+            autoPushAngle = s.autoPushAngle;
+            pushPositions = s.pushPositions;
+            predictMove = s.predictMove;
+            autoaim = s.autoaim;
+            instaKill = s.instaKill;
+            insta = s.insta;
+            spamPrePlacer = s.spamPrePlacer;
+            prePlaceInterval = s.prePlaceInterval;
+            bowTellUntil = s.bowTellUntil;
+            bowIncomingDmg = s.bowIncomingDmg;
+            bowThreatActive = s.bowThreatActive;
+            bowDodgeAngle = s.bowDodgeAngle;
+            preBlockAt = s.preBlockAt;
+            lastPrePlaceObject = s.lastPrePlaceObject;
+            removedObjects = s.removedObjects;
+            antiPushAngle = s.antiPushAngle;
+            spawnedObjectSids = s.spawnedObjectSids;
+            promiseResolve = s.promiseResolve;
+            tickPromiseResolve = s.tickPromiseResolve;
+            squeezablePointsCache = s.squeezablePointsCache;
+            pathfindingState = s.pathfindingState;
+            lastMoveDir = s.lastMoveDir;
+            killCount = s.killCount;
+            killedName = s.killedName;
+            pathBreak = s.pathBreak;
+            grindObjects = s.grindObjects;
+            prevKills = s.prevKills;
+            path = s.path;
+            autoaimAngle = s.autoaimAngle;
+            autogathering = s.autogathering;
+            currentHat = s.currentHat;
+            imTrapped = s.imTrapped;
+            shouldResetShame = s.shouldResetShame;
+            totalDmgPot = s.totalDmgPot;
+            lastcolliding = s.lastcolliding;
+            spikeTickAnti = s.spikeTickAnti;
+            grindAngle = s.grindAngle;
+            smartTickObject = s.smartTickObject;
+            iWasTrapped = s.iWasTrapped;
+            lastPredicted = s.lastPredicted;
+            gatherGrind = s.gatherGrind;
+            lastPosX = s.lastPosX;
+            lastPosY = s.lastPosY;
+            canStillGather = s.canStillGather;
+            autoBreakWeapon = s.autoBreakWeapon;
+            spikes_our = s.spikes_our;
+            traps_our = s.traps_our;
+            enemy_lastcollidngspike = s.enemy_lastcollidngspike;
+            enemy_collidingspike = s.enemy_collidingspike;
+            placedAngles = s.placedAngles;
+            bannedAngles = s.bannedAngles;
+            smartTickSpike = s.smartTickSpike;
+            gPressed = s.gPressed;
+            turrets_our = s.turrets_our;
+            pathPosition = s.pathPosition;
+            filteredObjectsCache = s.filteredObjectsCache;
+            shouldntPathfind = s.shouldntPathfind;
+            packets = s.packets;
+            followTarget = s.followTarget;
+            pathMode = s.pathMode;
+            tmpObj = s.tmpObj;
+        }
+
+        // A virgin context for a freshly connected bot: the same shape as the
+        // live one, with every value back at its starting point, then the world
+        // pointers aimed at that bot's own objects.
+        function ctxFresh(world) {
+            const s = ctxCapture();
+            for (const k of MOD_CTX_KEYS) {
+                const v = s[k];
+                if (Array.isArray(v)) s[k] = [];
+                else if (v instanceof Map) s[k] = new Map();
+                else if (v && typeof v === "object" && v.constructor === Object) {
+                    const o = {};
+                    for (const p in v) o[p] = v[p];
+                    s[k] = o;
+                } else if (typeof v === "number") s[k] = 0;
+                else if (typeof v === "boolean") s[k] = false;
+                else s[k] = null;
+            }
+            s.myPlayer = world.self;
+            s.myPlayerSID = world.self ? world.self.sid : null;
+            s.players = world.players;
+            s.ais = world.ais;
+            s.gameObjects = world.objects;
+            s.projectiles = world.projectiles;
+            s.alliances = [];
+            s.objectManager = world.objectManager;
+            s.aiManager = world.aiManager;
+            s.projectileManager = world.projectileManager;
+            // No hands on this keyboard. Your presses must never reach a bot,
+            // and an inherited "true" would jam a key down forever.
+            // (mouseX / mouseY are deliberately NOT in the list: there is one
+            // cursor, and while you are driving a bot it aims that bot.)
+            s.keys = {};
+            s.attackState = 0;
+            return s;
+        }
+
+        // ---------------------------------------------------------------------
+        // Which bot, if any, currently owns the module scope. Null means you do.
+        // Everything that would touch the screen, the DOM or your own socket
+        // checks this before running.
+        let botCtx = null;
+        function inBotCtx() { return botCtx !== null; }
+
+        // Run fn with a bot's state, world and socket in place of yours, then
+        // put everything back. The bot's copy is written back first, so what the
+        // mod changed while it was the bot stays with the bot.
+        function ctxRun(bot, fn) {
+            if (!bot || !bot.mod) return false;
+            const savedState = ctxCapture();
+            const savedSend = io.send;
+            const savedFor = botViewFor;
+            const savedPrev = botCtx;
+            let out = false;
+            try {
+                botWorldSelect(bot);
+                bot.mod.myPlayer = botViewSelf;
+                bot.mod.myPlayerSID = botViewSelf ? botViewSelf.sid : null;
+                ctxRestore(bot.mod);
+                io.send = bot.modSend;
+                botCtx = bot;
+                out = fn();
+            } catch (e) {
+                try { console.warn("[NovaBot] mod tick threw", e); } catch (_) {}
+            } finally {
+                try { bot.mod = ctxCapture(); } catch (_) {}
+                ctxRestore(savedState);
+                io.send = savedSend;
+                botCtx = savedPrev;
+                if (savedFor && savedFor !== bot) botWorldSelect(savedFor);
+            }
+            return out;
+        }
+
+        // The mod defers part of a tick -- one promise and four timeouts, which
+        // is where the pre-placer and the anti-tick live. Those callbacks run
+        // long after the swap has been undone, so on their own they would place
+        // buildings on YOUR player with YOUR socket. Wrapped, they re-enter the
+        // same bot they were scheduled from.
+        function ctxDefer(fn, ms) {
+            const bot = botCtx;
+            if (!bot) return setTimeout(fn, ms);
+            return setTimeout(function () {
+                if (!bot.alive || !bot.ws || bot.ws.readyState !== 1) return;
+                ctxRun(bot, fn);
+            }, ms);
+        }
+
         function updatePlayers(data) {
             tick++;
-            try { RynBots.tick(); } catch (e) {}
+            // RynBots.tick() drives the bots from YOUR tick. Running it again
+            // from inside a bot would recurse through every bot on every bot.
+            if (!inBotCtx()) { try { RynBots.tick(); } catch (e) {} }
 
 
 
@@ -16788,13 +17444,25 @@ for (let tree of trees) {
             const promise = new Promise(function (resolve, reject) {
                 promiseResolve = resolve;
 
-                setTimeout(function () {
+                ctxDefer(function () {
                     if (!promiseResolve) return;
                     promiseResolve(false);
                 }, 1);
             });
 
+            // The rest of the tick is a microtask, so by the time it runs the
+            // context swap has already been undone. Re-enter whichever bot
+            // scheduled it -- or run plainly, when that was you.
+            const ctxOwner = botCtx;
             promise.then(function (newObject) {
+                if (ctxOwner && botCtx !== ctxOwner) {
+                    if (!ctxOwner.alive || !ctxOwner.ws || ctxOwner.ws.readyState !== 1) return;
+                    return ctxRun(ctxOwner, function () { return tickBody(newObject); });
+                }
+                return tickBody(newObject);
+            });
+
+            function tickBody(newObject) {
                 if (tickPromiseResolve) {
                     tickPromiseResolve(true);
                 }
@@ -16820,6 +17488,13 @@ for (let tree of trees) {
 
                 for (let i in players) {
                     if (players[i].visible && players[i] != myPlayer && (players[i].team == null || players[i].team != myPlayer.team)) {
+                        // A bot never fights you and never fights another bot,
+                        // Full Mod or not. Teams do not cover it: unteamed bots
+                        // and an unteamed you both read as team null, which the
+                        // line above treats as fair game.
+                        if (inBotCtx()) {
+                            try { if (RynBots._friendlySid(players[i].sid)) continue; } catch (e) {}
+                        }
                         enemiesNear.push(players[i]);
                     }
                 }
@@ -18240,10 +18915,10 @@ for (let tree of trees) {
                     if (player.spikeDamage <= 0) continue;
                     player.spikeDamage = 0;
                 }
-            });
+            }
 
             // PRE PLACER
-            setTimeout(function () {
+            ctxDefer(function () {
                 for (let object of predictObjects) {
                     if (!object.preplace) continue;
                     setPlaceTick();
@@ -18261,7 +18936,7 @@ for (let tree of trees) {
                 }
             }, 1);
 
-            setTimeout(function () {
+            ctxDefer(function () {
                 for (let object of predictObjects) {
                     if (!object.preplace) continue;
                     if (packets + 5 > 119) break;
@@ -18272,7 +18947,7 @@ for (let tree of trees) {
                 }
             }, 111 - window.pingTime);
 
-            setTimeout(function () {
+            ctxDefer(function () {
                 if (spamPrePlacer) {
                     for (let object of predictObjects) {
                         if (!object.preplace) continue;
@@ -23299,6 +23974,7 @@ for (let tree of trees) {
         botAutoMills: false,     // lay the mod's three-mill trail behind them
         botAutoPush: true,       // shove a trapped enemy onto your spike
         botSpikeTick: true,      // spike beside a trapped enemy, then pop the trap
+        botFullMod: false,       // run the WHOLE mod on every bot, as that bot
         botSync: true,           // swing on the same tick you do
         botFreeze: false,        // toggled by the Freeze key
         botFollowCursor: false,  // walk to the mouse instead of to you
@@ -23532,6 +24208,7 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Auto Place (spike on contact)", id: "botAutoPlace" },
                     { type: 'toggle', name: "Auto Mills (trail behind)", id: "botAutoMills" },
                     { type: 'toggle', name: "Auto Push (trap into spike)", id: "botAutoPush" },
+                    { type: 'toggle', name: "Full Mod (bots run the whole mod)", id: "botFullMod" },
                     { type: 'toggle', name: "Spike Tick (trap tick)", id: "botSpikeTick" },
                     { type: 'toggle', name: "Auto Buy Hats (copy mine)", id: "botAutoBuyHats" }
                 ]

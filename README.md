@@ -199,6 +199,7 @@ master connection speaks.
 | **Auto Break** | Bots → Behaviour | Three stalled ticks while trying to walk means something is in the way: the bot finds the closest destroyable building within reach and within 90° of its heading, swaps to its breaking weapon and swings. Walls, mills, spikes, traps, turrets, blockers. |
 | **Auto Heal** | Bots → Behaviour | The mod's own heal, not an approximation: it fires on **any** damage taken (the mod's `tick - damageTick > 0`, here a drop in the bot's own health packet) and tops all the way back to 100 in one tick — `ceil(missing / food.heal)` units, which is what the mod's `heal(100 - health)` loop works out to. The first version waited for 15 missing health and then ate at most three, which is why it felt bad. Runs while you are driving a bot too. |
 | **Auto Mills** | Bots → Behaviour | The mod's three-mill trail, laid **behind** the direction of travel: `angle + 180°`, then `± toRad(scale + scale/2)` either side. That offset reads the mill's scale as degrees — odd arithmetic, but it is what the mod does and what gives the familiar spacing, so it is reproduced rather than "corrected". Off by default. |
+| **Full Mod** | Bots → Behaviour | The bots stop running ported rules and run *the mod itself* — its own tick, on their own world, through their own socket. Everything the mod does, they do. Off by default; see [Full Mod](#full-mod--the-bots-run-the-mod-itself). |
 | **Spike Tick** | Bots → Behaviour | The mod's trap tick, `canTrapTick()` gate for gate on the bot's own world: hammer and primary both charged, the enemy inside one of the bot's own traps, that trap one hammer hit from breaking, and a placeable spike spot within `scale + 55` of them whose knockback does not shove them at the bot. Pops the trap and drops the spike on the same server tick. See [the foundation it rides on](#the-spike-tick-foundation). |
 | **Auto Push** | Bots → Behaviour | The mod's trap-into-spike play: when the nearest enemy stands in one of the bot's own pit traps and one of its own spikes sits beside that trap, it walks at the far side of the spike so they are shoved onto it, swinging as it goes. Same construction as the mod — `pos = spike + scale·unit(spike→trap)`, `push = pos + (dist+35)·unit(pos→enemy)` — and the same clearance test, refusing a line through their body, their spikes, a boost pad or a teleporter. |
 | **Auto Place** | Bots → Behaviour | An enemy inside 250 gets a spike dropped between them and the bot, hardest one owned first, and never stacked on a spike already there. |
@@ -339,20 +340,65 @@ the way it was.
 The arrows stop steering you while this is on — that is the trade, and
 **Bots → Control → Arrow keys switch bots** turns it off. WASD is unaffected.
 
-### What the bots cannot borrow from the mod, and why
+### Full Mod — the bots run the mod itself
 
-The mod's features are not functions of a player. `autoPush`, the spike tick,
-the shame combat, the insta-kills and the placer are one global pipeline
-written against module-scope singletons — `myPlayer`, `visibleObjects`,
-`enemiesNear`, `nearestEnemy`, `primaryReload[myPlayer.sid]`, `predictObjects`,
-`totalDmgPot` — and they send through `io.send`, which is your socket.
+**Bots → Behaviour → "Full Mod (bots run the whole mod)".** Off by default.
 
-There is no call that runs them *for* somebody else. Making a bot use them needs
-one of two things: rewriting that pipeline to take a (player, world, socket)
-instead of reading globals, or swapping every one of those globals to the bot's
-before the tick and back afterwards. The second looks cheap and is not — the
-tick spans a promise callback and three `setTimeout`s, and any global missed on
-the way back corrupts your own player silently.
+Everything else in this section is a rule copied out of the mod by hand. This is
+the other approach, and it is the one RYN's architecture gets for free: don't
+copy the rules, lend the mod a different player.
+
+RYN builds every connection as a `PlayerClient` — its own `SocketManager`,
+`ObjectManager`, `PlayerManager`, `myPlayer` and module set. A bot there runs the
+same modules the owner does by being another instance of the same thing.
+
+Novastorm is the other shape. Its features are not functions of a player: they
+are one pipeline over module-scope singletons (`myPlayer`, `gameObjects`,
+`visibleObjects`, `enemiesNear`, `primaryReload`, `predictObjects`, `packets` …)
+that sends through `io.send`, which is your socket. There is no instance to make
+a second of.
+
+So the singletons get swapped instead. Every bot carries:
+
+- **its own world** — real `Player`, `GameObject`, `AI`, `ObjectManager`,
+  `AiManager` and `ProjectileManager` instances, fed from that bot's own packet
+  stream (this is the same machinery that already drew the bot you possess, now
+  built for all of them)
+- **its own copy of the mod's entire mutable state** — 137 names, saved and
+  restored *whole* rather than trimmed to "the ones that carry across ticks",
+  because being wrong about one of those is a silent leak between your player
+  and a bot
+- **its own `io.send`**, adapting the positional signature (`io.send("z", i, true)`)
+  onto the bot's socket
+
+Entering a bot means writing its copy into module scope, pointing `io.send` at
+its socket, running the mod's own `updatePlayers()` **unchanged**, then writing
+the state back and restoring yours — `ctxCapture` / `ctxRestore` / `ctxRun`.
+
+What the bot gets is not a feature list. It is the mod, whatever the mod happens
+to do this version: auto heal, the placer, the pre-placer, shame combat, the
+insta-kills, spike and trap ticks, anti-tick, Anti Bow Insta, auto push, auto
+mills.
+
+**The parts that needed care:**
+
+| | |
+|---|---|
+| **Deferred work** | The tick does not finish synchronously — one promise and four `setTimeout`s carry the pre-placer and the anti-tick. Those fire long after the swap is undone, so on their own they would place buildings on *your* player with *your* socket. `ctxDefer` re-enters whichever bot scheduled them, and drops the callback if that bot died or disconnected in between. |
+| **Targeting** | Teams do not keep a bot off you: an unteamed bot and an unteamed you both read as `team == null`, which the mod's `enemiesNear` filter treats as fair game. The filter now skips you and every other bot when it is running as one. Your sid is cached outside the swap, because inside a bot context `myPlayer` *is* the bot. |
+| **Aim** | A bot has no mouse. After the mod's own overrides (autoaim, anti-push, auto-break, grind), `getAttackDir()` returns the enemy it is fighting, or the way it is already facing. The bot you are driving is the exception: there the cursor aims it, exactly as it aims you in your own body. `mouseX`/`mouseY` are deliberately *not* swapped for that reason. |
+| **Rate limit** | The mod refuses to spam past ~119 packets a second, counted inside `io.send` — which a bot never reaches. The window is kept per bot and handed to the tick, or the limiter would never trip. |
+| **The engine's own job** | With the mod driving, `_botTick` stops fighting entirely and does only what the mod has no opinion about, because it has no keyboard: where the bot walks. A move the mod already sent this tick wins outright. Sync, the manual attack key and `!cf` still apply, but only on a tick the mod did not decide the attack state itself. |
+
+The state list is asserted key by key in `tools/test-mod-context.js`: a tick that
+writes to all 137 must leave every one of yours untouched, and must leave all 137
+of its own changes with the bot.
+
+### What is still hand-ported, and why that is fine
+
+With Full Mod off, the bots run the rules ported one at a time below. Those stay:
+they are what runs when you would rather not have five extra copies of the whole
+prediction pipeline on the wire, and they are what the tests cover in detail.
 
 So what is ported here is ported *faithfully by rule*: Auto Heal and Auto Mills
 reproduce the mod's exact trigger and pattern, checked against its source line
@@ -405,11 +451,22 @@ node tools/test-novastorm-bots.js
 ```
 
 The test evaluates the `RynBots` block straight out of the shipped userscript
-against stubs and asserts the packets it emits — 142 checks over the age path,
+against stubs and asserts the packets it emits — 152 checks over the age path,
 break-weapon pick, targeting, world model, formation, auto break, safe walk,
 sync, random move, auto buy, packet throttling, auto heal, auto place, the bot
 console, Scan and Kill, possession, the mod's heal rule, the mill trail, auto
-push, the reload clocks, structure damage, object health and the spike tick.
+push, the reload clocks, structure damage, object health, the spike tick and
+what the engine hands over under Full Mod.
+
+```sh
+node tools/test-mod-context.js
+```
+
+20 checks on the context swap itself: that the key list covers every singleton
+the mod reads, that a tick writing to all 137 leaves none of yours touched, that
+each bot keeps its own copy, that a throw still restores everything, that
+`io.send` lands on the right socket, and that deferred work re-enters the bot
+that scheduled it — or is dropped if that bot died first.
 
 ## Anti Bow Insta
 

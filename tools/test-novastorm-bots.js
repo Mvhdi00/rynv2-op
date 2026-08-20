@@ -93,6 +93,9 @@ let camX = 5000, camY = 5000, mouseX = 800, mouseY = 400;
 let screenWidth = 1600, screenHeight = 900, maxScreenWidth = 1920, maxScreenHeight = 1080;
 let wsAddress = 'wss://example.test';
 function addChatLog() {}
+// The mod-context guard lives outside the RynBots block; from here we are
+// always the master, never inside a bot's context.
+function inBotCtx() { return false; }
 
 global.window = { vars: {}, turnstile: null };
 global.document = { querySelector: () => null, createElement: () => ({ style: {}, appendChild() {}, remove() {} }), head: null, documentElement: { appendChild() {} } };
@@ -1299,6 +1302,112 @@ t('a full tick keeps swinging on the next tick', () => {
     sent.length = 0;
     RynBots._botTick(b);
     eq(last('F').args[0], 1, 'should follow the tick up');
+});
+
+console.log('\nfull mod: what the bot engine still does, and what it hands over');
+reset();
+function fullBot(tag) {
+    const b = mkBot(tag);
+    b.x = 0; b.y = 0;
+    b.weapons = [5, 10];
+    window.vars.botFullMod = true;
+    b.mod = { tick: 0 };                 // a context exists -> the mod is driving
+    b.modSend = RynBots._makeModSend(b);
+    return b;
+}
+t('the hand-ported combat stands down', () => {
+    const b = fullBot(300);
+    // A textbook trap tick sitting there: with the mod driving, the engine
+    // must not fire its own.
+    b.itemsOwned = [0, 3, 6, 10];
+    b.players.set(99, { sid: 99, x: 120, y: 0, visible: true });
+    b.objects.set(1, { sid: 1, x: 120, y: 0, scale: 50, type: -1, id: 15,
+                       owner: b.sid, health: 60, maxHealth: 500 });
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(sent.filter(p => p.type === 'z').length, 0, 'the engine placed something');
+});
+t('but it still walks the formation', () => {
+    reset();
+    const b = fullBot(301);
+    myPlayer.x2 = 4000; myPlayer.y2 = 4000;
+    sent.length = 0;
+    RynBots._botTick(b);
+    const mv = last('9');
+    ok(mv && mv.args[0] !== null, 'the bot should still be told where to go');
+});
+t('a move the mod already sent wins', () => {
+    reset();
+    const b = fullBot(302);
+    myPlayer.x2 = 4000; myPlayer.y2 = 4000;
+    b.modMoved = true;                   // the mod dodged this tick
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(sent.filter(p => p.type === '9').length, 0, 'the formation overrode a dodge');
+});
+t('sync still swings the bot when the mod did not decide', () => {
+    reset();
+    const b = fullBot(303);
+    RynBots._syncUntil = Date.now() + 200;
+    sent.length = 0;
+    RynBots._botTick(b);
+    const f = last('F');
+    ok(f && f.args[0] === 1, 'sync should still reach a bot under full mod');
+});
+t('an attack the mod already decided is left alone', () => {
+    reset();
+    const b = fullBot(304);
+    RynBots._syncUntil = Date.now() + 200;
+    b.modAttacked = true;
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(sent.filter(p => p.type === 'F').length, 0, 'sync fought the mod');
+});
+t('a ceasefire still silences it', () => {
+    reset();
+    const b = fullBot(305);
+    RynBots.ceasefire = true;
+    RynBots._syncUntil = Date.now() + 200;
+    sent.length = 0;
+    RynBots._botTick(b);
+    eq(sent.filter(p => p.type === 'F').length, 0);
+});
+t('modSend turns io.send\'s positional arguments into a bot packet', () => {
+    reset();
+    const b = fullBot(306);
+    sent.length = 0;
+    b.modSend('z', 5, true);
+    b.modSend('F', 1, 0.5);
+    eq(sent[0].type, 'z');
+    eq(JSON.stringify(sent[0].args), JSON.stringify([5, true]));
+    eq(sent[1].type, 'F');
+    eq(JSON.stringify(sent[1].args), JSON.stringify([1, 0.5]));
+});
+t('modSend records what the mod did, and never lets a bot chat', () => {
+    reset();
+    const b = fullBot(307);
+    sent.length = 0;
+    b.modSend('9', 1.2);
+    eq(b.modMoved, true);
+    b.modSend('F', 1, 0);
+    eq(b.modAttacked, true);
+    eq(b.attacking, true);
+    b.modSend('6', 'hello');
+    eq(sent.filter(p => p.type === '6').length, 0, 'a bot sent chat');
+});
+t('modSend counts packets so the mod\'s own rate limit still applies', () => {
+    reset();
+    const b = fullBot(308);
+    for (let i = 0; i < 7; i++) b.modSend('D', 0);
+    eq(b.pktCount, 7);
+});
+t('you are never a bot\'s enemy, whoever is asking', () => {
+    reset();
+    const b = mkBot(310);
+    RynBots._mySid = myPlayer.sid;
+    b.players.set(myPlayer.sid, { sid: myPlayer.sid, x: 10, y: 0, visible: true });
+    eq(RynBots._friendlySid(myPlayer.sid), true);
+    eq(RynBots._nearestEnemy(b), null, 'it targeted you');
 });
 
 console.log('');
