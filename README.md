@@ -510,6 +510,35 @@ range, and up close the flight time is under one tick, so the swap is the only
 warning that exists. **Ignore Swaps Closer Than** defaults to 0 — react at any
 range — and can be raised to 600 if the helmet comes on too eagerly.
 
+### Yielding to a live trap play
+
+**Defense → Ranged → "Yield To Trap Tick".** On by default.
+
+Two of the three defensive halves are speculative. **Pre-Block** builds cover
+every 700 ms whenever anyone carrying a bow has an open line, whether or not
+they have drawn. The **tell**-driven half blocks or sidesteps on a weapon swap.
+Neither is reacting to a shot that exists.
+
+Both cost the trap tick, and not subtly:
+
+- a pre-block wall lands in the spot `canTrapTick()` needs a spike in
+  (`dist(spot, enemy) < scale + 55`), and the tick stops being possible
+- every speculative placement goes into `placedAngles`, which bans those angles
+  for the next 18 ticks
+- the dodge writes `predictMoveAngle`, walking you out of the
+  `dist(trap, me) < scale + 95` window the tick needs
+
+So while a trap play is live — their body inside one of your traps, a hammer in
+your off hand — the speculative half stands down. The helmet still goes on: it
+costs no placement and no step.
+
+The **arrow already in the air** path (`onProjectileSpawned`) is *not* gated. A
+shot that is actually flying and on course outranks a tick.
+
+The check is deliberately not `canTrapTick()`. That answers a narrower question
+— is *this* the tick — and costs 144 `canPlace` calls to ask. This is the whole
+play, and it is a scan of `traps_our`.
+
 ### What the helmet can and cannot save
 
 Projectile damage is flat, so this table is exact. At 100 HP:
@@ -648,8 +677,8 @@ you and the one where it provably cannot, the mill-over-wall choice and the
 turret-shot case that only a mill answers, the limit / budget / cooldown
 guards, the dodge's perpendicular, its side choice and its expiry, the blocker
 bearing across all eight directions, and the pre-block's arming check, line-of-
-sight test, range gate and upkeep pace, and the instant path that runs off the
-projectile packet — 79 in all.
+sight test, range gate and upkeep pace, the instant path that runs off the
+projectile packet, and the yielding to a live trap play — 87 in all.
 
 ## Lite Mode (performance)
 

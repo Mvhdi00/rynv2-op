@@ -27,6 +27,10 @@ const PROJ = [
 ];
 let myPlayer = null, enemiesNear = [], projectiles = [], tick = 100;
 let visibleObjects = [], packets = 0;
+// The trap play the speculative defence has to yield to: your traps, the enemy
+// nearest you, and what is in your off hand.
+let traps_our = [], nearestEnemy = null, mySecondary = 'hammer';
+function getPlayerInfo(p, what) { return what === 'secondaryWeapon' ? mySecondary : null; }
 const placed = [];
 // Item groups that matter here (game_index.js): walls are group 1 at layer 0,
 // mills are group 3 at layer 1.
@@ -76,7 +80,7 @@ const api = eval(block + '\n; ({ updateBowInstaThreat, bowSwitchTell, bowIncomin
     + ' bowThreatSource, tryBowBlock, startBowDodge, ownedItemInGroup,'
     + ' get dodgeAngle() { return bowDodgeAngle; }, get dodgeUntil() { return bowDodgeUntil; },'
     + ' tryPreBlock, rangedEnemyWithLineOnMe, lineIsCovered, placeBlockerToward,'
-    + ' onProjectileSpawned, get soldier() { return soldierAnti; },'
+    + ' onProjectileSpawned, inTrapPlay, get soldier() { return soldierAnti; },'
     + ' resetBlock() { bowDodgeAngle = null; bowDodgeUntil = 0; bowLastBlock = 0; preBlockAt = 0; } })');
 
 // ---- helpers ---------------------------------------------------------------
@@ -99,9 +103,11 @@ function enemy(sid, x, y, cur, old, aimOff = 0, swapTick = tick) {
 }
 function reset() {
     window.vars = { antiBowInsta: true, antiBowMinDist: 0, antiBowBlock: true, antiBowDodge: true,
-                    antiBowPreBlock: true, antiBowPreSoldier: true, preBlockRange: 900 };
+                    antiBowPreBlock: true, antiBowPreSoldier: true, preBlockRange: 900,
+                    antiBowYieldToTick: true };
     enemiesNear = []; projectiles = []; tick = 100;
     visibleObjects = []; packets = 0; placed.length = 0;
+    traps_our = []; nearestEnemy = null; mySecondary = 'hammer';
     placeableAngles = true; limitReached = {};
     soldierAnti = false; equippedHat = 0; ownedHats = { 6: true };
     me(); api.reset(); api.resetBlock();
@@ -691,6 +697,76 @@ t('soldier is the only damage reduction that exists', () => {
     // game_index.js: changeHealth applies skin.dmgMult and tail.dmgMult, and
     // dmgMult appears on exactly one item in the whole game.
     ok(0.75 * 135 > 100, 'so 135 raw cannot be survived by gear alone');
+});
+
+
+// ---------------------------------------------------------------------------
+// Yielding to a live trap play.
+//
+// Two of the three defensive halves are speculative: the pre-block builds cover
+// every 700 ms whenever anyone with a bow has a line, and the tell-driven half
+// blocks or sidesteps on a weapon swap. Both cost the trap tick — a wall in the
+// spot canTrapTick() needs, an angle banned for 18 ticks, or a sidestep out of
+// the dist(trap, me) < scale + 95 window. While the play is live they stand
+// down. The arrow-already-in-the-air path does not.
+// ---------------------------------------------------------------------------
+function trapPlay(hammer, inside) {
+    nearestEnemy = enemy(7, 5000, 5120, 0, 5);
+    mySecondary = (hammer === false) ? 'bow' : 'hammer';
+    // Out of the play means the trap is somewhere else, not that it is small.
+    traps_our = [{ x: (inside === false) ? 5600 : 5000, y: 5120, scale: 50 }];
+}
+console.log('\nyielding to a live trap play');
+t('their body in my trap with a hammer in hand is a live play', () => {
+    reset(); trapPlay();
+    ok(api.inTrapPlay());
+});
+t('no hammer, no play', () => {
+    reset(); trapPlay(false);
+    no(api.inTrapPlay());
+});
+t('a trap they are not standing in is not a play', () => {
+    reset(); trapPlay(true, false);
+    no(api.inTrapPlay());
+});
+t('no trap at all is not a play', () => {
+    reset();
+    nearestEnemy = enemy(7, 5000, 5120, 0, 5);
+    no(api.inTrapPlay());
+});
+t('the toggle turns the yielding off', () => {
+    reset(); trapPlay();
+    window.vars.antiBowYieldToTick = false;
+    no(api.inTrapPlay());
+});
+t('the pre-block stands down during the play', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(3, 5000 - 400, 5000)];
+    ok(api.tryPreBlock(), 'it should build with no play running');
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(3, 5000 - 400, 5000)];
+    trapPlay();
+    no(api.tryPreBlock(), 'it built a wall in the middle of the tick');
+    eq(placed.length, 0);
+});
+t('and starts again the moment they are out of the trap', () => {
+    reset();
+    myPlayer.items = [0, 3, 6, 10];
+    enemiesNear = [armed(3, 5000 - 400, 5000)];
+    trapPlay();
+    no(api.tryPreBlock());
+    traps_our = [];
+    ok(api.tryPreBlock(), 'cover should come back once the play is over');
+});
+t('an arrow already in the air is still answered mid-play', () => {
+    reset();
+    trapPlay();
+    api.onProjectileSpawned(shot(0, 5000, 4800));
+    eq(api.soldier, true, 'the helmet is free and always goes on');
+    ok(placed.length > 0 || api.dodgeAngle !== null,
+       'a real shot outranks the tick and must still be answered');
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

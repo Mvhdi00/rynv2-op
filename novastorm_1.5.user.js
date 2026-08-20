@@ -13322,9 +13322,45 @@ for (let tree of trees) {
             return best;
         }
 
+        // =====================================================================
+        // THE TRAP PLAY OUTRANKS THE SPECULATIVE DEFENCE
+        // =====================================================================
+        // Anti Bow Insta has two halves. One reacts to an arrow that is already
+        // in the air and on course -- that one always runs, because a shot that
+        // will kill you outranks anything. The other is speculative: it builds
+        // cover every 700 ms whenever any ranged enemy has a line, and it
+        // sidesteps on the weapon-swap tell. Those two are what changed how the
+        // spike tick felt, and the reason is not subtle:
+        //
+        //   - a pre-block wall lands in the spot canTrapTick() needs a spike in
+        //     (dist(spot, enemy) < scale + 55) and the tick stops being possible
+        //   - every speculative placement goes into placedAngles, which bans
+        //     those angles for the next 18 ticks
+        //   - the dodge writes predictMoveAngle, walking you out of the
+        //     dist(trap, me) < scale + 95 window the tick needs
+        //
+        // So while a trap play is live -- their body in one of your traps, a
+        // hammer in your off hand -- the speculative half stands down. The
+        // helmet still goes on: it costs no placement and no step.
+        //
+        // Checked without getPrePlaceAngles on purpose. canTrapTick() answers a
+        // narrower question (is THIS the tick) and costs 144 canPlace calls to
+        // ask; this is the whole play, and it is a scan of traps_our.
+        function inTrapPlay() {
+            if (!window.vars.antiBowYieldToTick) return false;
+            if (!nearestEnemy || !myPlayer) return false;
+            if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
+            for (let i = 0; i < traps_our.length; i++) {
+                const t = traps_our[i];
+                if (UTILS.getDistance(t.x, t.y, nearestEnemy.x2, nearestEnemy.y2) < t.scale) return true;
+            }
+            return false;
+        }
+
         function tryPreBlock() {
             if (!window.vars.antiBowPreBlock) return false;
             if (!myPlayer || !myPlayer.alive) return false;
+            if (inTrapPlay()) return false;
             const now = Date.now();
             if (now - preBlockAt < 700) return false;    // this is upkeep, not a panic
             if (packets + 5 > 119) return false;
@@ -18799,8 +18835,16 @@ for (let tree of trees) {
                         // The helmet only scales the damage; a blocker deletes
                         // it. Try to put one in the way, and if nothing can go
                         // down, step out of the line instead.
-                        const src = bowThreatSource();
-                        if (src && !tryBowBlock(src)) startBowDodge(src);
+                        //
+                        // Unless a trap play is live: then this is speculative
+                        // cover against a shot nobody has fired, and it would
+                        // cost the tick. The arrow-in-the-air path
+                        // (onProjectileSpawned) is not gated -- that one is not
+                        // speculation.
+                        if (!inTrapPlay()) {
+                            const src = bowThreatSource();
+                            if (src && !tryBowBlock(src)) startBowDodge(src);
+                        }
                     }
 
                     // PRE-BLOCK — runs whether or not anything is happening
@@ -23952,6 +23996,7 @@ for (let tree of trees) {
         antiBowDodge: true,   // if nothing can be placed, step out of the line
         antiBowPreBlock: true,  // keep cover on the line BEFORE they draw
         antiBowPreSoldier: true,// and keep the helmet on while they have a line
+        antiBowYieldToTick: true, // ...but not while a trap tick is live
         preBlockRange: 900,     // only bother inside real firing range
 
         // Placers
@@ -24131,6 +24176,7 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Dodge If Cannot Block", id: "antiBowDodge" },
                     { type: 'toggle', name: "Pre-Block (cover before the shot)", id: "antiBowPreBlock" },
                     { type: 'toggle', name: "Pre-Soldier (helmet on their line)", id: "antiBowPreSoldier" },
+                    { type: 'toggle', name: "Yield To Trap Tick", id: "antiBowYieldToTick" },
                     { type: 'slider', name: "Pre-Block Range", id: "preBlockRange", min: 200, max: 1400 }
                 ]
             }
