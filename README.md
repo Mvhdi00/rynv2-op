@@ -467,16 +467,28 @@ npm i --no-save acorn acorn-walk
 node tools/check-undefined.js
 ```
 
-`node --check` only parses — it accepts a file that reads a variable nobody
-declares, which is exactly the shape a large hand-revert leaves behind: the
-declaration goes out with the feature, the reader comes back with the original
-code, and the two never meet until a frame runs. `check-undefined.js` walks the
-real scope chain and reports every identifier read but never bound.
+```sh
+node tools/check-wiring.js
+```
 
-Run it against the current file and against an older build and compare: the
-answer that matters is *no new names*, since the file has always carried a
-handful of optional vendor globals (`$`, `Howl`, `factorem`, `OriginalWebSocket`)
-and a few webpack factory arguments this tool does not thread.
+`node --check` only parses. It accepts a file that reads a variable nobody
+declares, or a menu row bound to a setting that no longer exists — both halves
+are valid JavaScript on their own. That is exactly the shape a large hand-revert
+leaves behind: the declaration goes out with the feature, the reader comes back
+with the original code, and the two never meet until a frame runs.
+
+- **`check-undefined.js`** walks the real scope chain (acorn) and reports every
+  identifier read but never bound.
+- **`check-wiring.js`** cross-checks the settings object, the menu rows, the
+  tabs, the item types the renderer handles, the packet table, and top-level
+  functions nobody calls.
+
+Both are **comparison** tools, not pass/fail ones. Run them against the current
+file *and* an older build: the answer that matters is **no new findings**. The
+file has always carried a handful of optional vendor globals (`$`, `Howl`,
+`factorem`, `OriginalWebSocket`), a few webpack factory arguments the scope
+walker does not thread, an unreachable `items` menu tab, a self-initialising
+`vars.circleDirection`, and eight functions the 1.4 code never called.
 
 20 checks on the context swap itself: that the key list covers every singleton
 the mod reads, that a tick writing to all 132 leaves none of yours touched, that
