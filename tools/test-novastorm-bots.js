@@ -55,8 +55,6 @@ const config = {
     mapScale: 14400,
     weaponVariants: [{ val: 1 }, { val: 1.1 }, { val: 1.18 }, { val: 1.18 }]
 };
-// The shipped placing resolution; the engine reads it by name.
-const PLACE_ANGLES = 144;
 const hats = [{ id: 0 }, { id: 6, dmgMult: 0.75 }, { id: 20, atkSpd: 0.78 }, { id: 40 }, { id: 53 }];
 let packets = 0;
 function lineInCircle(x, y, x2, y2, cx, cy, scale) {

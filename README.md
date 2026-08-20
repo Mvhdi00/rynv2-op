@@ -364,7 +364,7 @@ So the singletons get swapped instead. Every bot carries:
   `AiManager` and `ProjectileManager` instances, fed from that bot's own packet
   stream (this is the same machinery that already drew the bot you possess, now
   built for all of them)
-- **its own copy of the mod's entire mutable state** — 139 names, saved and
+- **its own copy of the mod's entire mutable state** — 132 names, saved and
   restored *whole* rather than trimmed to "the ones that carry across ticks",
   because being wrong about one of those is a silent leak between your player
   and a bot
@@ -377,8 +377,7 @@ the state back and restoring yours — `ctxCapture` / `ctxRestore` / `ctxRun`.
 
 What the bot gets is not a feature list. It is the mod, whatever the mod happens
 to do this version: auto heal, the placer, the pre-placer, shame combat, the
-insta-kills, spike and trap ticks, anti-tick, Anti Bow Insta, auto push, auto
-mills.
+insta-kills, spike and trap ticks, anti-tick, auto push, auto mills.
 
 **The parts that needed care:**
 
@@ -391,7 +390,7 @@ mills.
 | **The engine's own job** | With the mod driving, `_botTick` stops fighting entirely and does only what the mod has no opinion about, because it has no keyboard: where the bot walks. A move the mod already sent this tick wins outright. Sync, the manual attack key and `!cf` still apply, but only on a tick the mod did not decide the attack state itself. |
 
 The state list is asserted key by key in `tools/test-mod-context.js`: a tick that
-writes to all 139 must leave every one of yours untouched, and must leave all 139
+writes to all 132 must leave every one of yours untouched, and must leave all 132
 of its own changes with the bot.
 
 ### What is still hand-ported, and why that is fine
@@ -460,267 +459,13 @@ what the engine hands over under Full Mod.
 
 ```sh
 node tools/test-mod-context.js
-node tools/test-place-angles.js
 ```
 
 20 checks on the context swap itself: that the key list covers every singleton
-the mod reads, that a tick writing to all 139 leaves none of yours touched, that
+the mod reads, that a tick writing to all 132 leaves none of yours touched, that
 each bot keeps its own copy, that a throw still restores everything, that
 `io.send` lands on the right socket, and that deferred work re-enters the bot
 that scheduled it — or is dropped if that bot died first.
-
-18 checks on the placer sweep: that an open circle produces a list identical to
-the old 72 sweep down to the float values and the `perfect` flags, that it costs
-72 `canPlace` calls and not 144, that the fine grid is reached only when the
-coarse circle is fully blocked, and that the coarse angles keep their values and
-their indices when it is.
-
-## The placer's angle sweep
-
-`PLACE_ANGLES` is **144** — 2.5° a step. It is not swept flat.
-
-Every second one of those angles *is* an angle of the original 72 grid
-(2 × 2.5° = 5°), so the fine grid is a strict superset of the coarse one and the
-two can be spent in that order:
-
-| | |
-|---|---|
-| **Pass one** | the old 72 sweep, exactly — same angles, same float values, same order, same 72 `canPlace` calls. If anything on it can be placed, that is the whole list, and every decision downstream lands where it always landed. |
-| **Pass two** | only when the coarse circle is **completely** blocked — the one case where 5° genuinely had nothing and 2.5° can still find a gap. Then all 144 are returned, coarse angles still at even indices. |
-
-So 144 buys reach where 72 came up empty, and costs nothing the rest of the
-time. It is not a different answer every tick.
-
-That distinction matters because a flat 144 sweep is not neutral. The placer
-picks by *minimum distance to the enemy*, so a new in-between candidate can win
-outright — at the spike radius (35 + 52 = 87) the neighbours sit 3.8 units apart
-instead of 7.6, and the spike lands somewhere it never used to. It also doubles
-the sweep: `updateAngles` runs twice a tick (spike and trap), so 288 `canPlace`
-calls instead of 144, each scanning `visibleObjects`, inside a tick that has
-111 ms to finish. Both of those showed up as the trap tick "not feeling the
-same".
-
-The angle *values* are compared bit for bit in the tests, not approximately:
-`placedAngles` and `bannedAngles` are keyed on them, and the ban is matched with
-a 0.01 rad tolerance. That tolerance is also why the grid does not go much
-higher — at 629 steps the step is 0.00999 rad and three grid angles fall inside
-it, so the ban stops covering its own neighbours and the placer re-picks a spot
-the server has already refused. 144 steps is 0.0436 rad, four times clear.
-
-Want the fine grid every tick again? Delete the early return in
-`buildPlaceAngles`.
-
-## Anti Bow Insta
-
-**Defense → Ranged.** On by default.
-
-A bow insta is a shot fired from outside melee range and timed to land on the
-same tick as everything else. The existing damage prediction never saw it:
-`spikeDmgPot`, `hitDmgPot`, `turretDmgPot` and `secDmgPot` are all melee, spike
-and turret, so an arrow already in the air counted for nothing until it hit.
-
-The answer is the Soldier Helmet. `changeHealth` applies the wearer's
-`skin.dmgMult` to *every* incoming damage, projectiles included
-(`src/game_index.js:2420`), and the soldier's is `0.75` — so a shot that kills
-on the nose often does not through the helmet.
-
-Two signals feed it:
-
-1. **The arrow that already exists.** Novastorm is sent every projectile
-   (`"X"` → `addProjectile`), so incoming shots are added up for real rather
-   than guessed at. A projectile counts when its path clears the player's body,
-   it still has the range to arrive, and it lands within about two server ticks
-   — further out than that and you move rather than change hats. Damage comes
-   straight off the projectile table and is never scaled by weapon variant or
-   shooter hat: the server hands the flat value to the projectile
-   (`game_index.js:990`), and the ranged-hat `aMlt` scales only range and speed.
-2. **The switch tell**, ported from RYN's `rangedBowInsta`: an enemy beyond 300
-   units, aimed at you, changing *into* a bow, or bow → crossbow, or crossbow →
-   musket. That is the queue for a multi-projectile insta and it fires a tick
-   before any arrow exists, which is the tick where you still have a choice.
-   "Aimed at you" is the half-angle your body subtends from where they stand,
-   so the cone tightens with distance — the same construction RYN uses.
-
-The tell holds the helmet for 1.2 s and only fires on a *fresh* swap: the
-tracked previous weapon is sticky, so without a freshness window one swap would
-tell forever. Projectile damage is added into `totalDmgPot`, and the helmet
-goes on when the total would kill or while a tell is live.
-
-RYN gates the tell at 300 units, reading a bow insta as a ranged play. That is
-backwards for the case that matters most: people fire the moment you are in
-range, and up close the flight time is under one tick, so the swap is the only
-warning that exists. **Ignore Swaps Closer Than** defaults to 0 — react at any
-range — and can be raised to 600 if the helmet comes on too eagerly.
-
-### Yielding to a live trap play
-
-**Defense → Ranged → "Yield To Trap Tick".** On by default.
-
-Two of the three defensive halves are speculative. **Pre-Block** builds cover
-every 700 ms whenever anyone carrying a bow has an open line, whether or not
-they have drawn. The **tell**-driven half blocks or sidesteps on a weapon swap.
-Neither is reacting to a shot that exists.
-
-Both cost the trap tick, and not subtly:
-
-- a pre-block wall lands in the spot `canTrapTick()` needs a spike in
-  (`dist(spot, enemy) < scale + 55`), and the tick stops being possible
-- every speculative placement goes into `placedAngles`, which bans those angles
-  for the next 18 ticks
-- the dodge writes `predictMoveAngle`, walking you out of the
-  `dist(trap, me) < scale + 95` window the tick needs
-
-So while a trap play is live — their body inside one of your traps, a hammer in
-your off hand — the speculative half stands down. The helmet still goes on: it
-costs no placement and no step.
-
-The **arrow already in the air** path (`onProjectileSpawned`) is *not* gated. A
-shot that is actually flying and on course outranks a tick.
-
-The check is deliberately not `canTrapTick()`. That answers a narrower question
-— is *this* the tick — and costs 144 `canPlace` calls to ask. This is the whole
-play, and it is a scan of `traps_our`.
-
-### What the helmet can and cannot save
-
-Projectile damage is flat, so this table is exact. At 100 HP:
-
-| combo | raw | in soldier (x0.75) |
-|---|---|---|
-| bow + crossbow | 60 | 45 — live |
-| crossbow + musket | 85 | 63.75 — live |
-| bow + crossbow + musket | 110 — **dead** | 82.5 — **live at 17.5** |
-| + turret gear | 135 — **dead** | **101.25 — still dead** |
-
-The three-piece is the one the helmet turns around. The four-piece with Turret
-Gear is not survivable by hat alone: 135 × 0.75 = 101.25, over by 1.25. So the
-helmet is not the whole answer — **Block Shot** and **Dodge** are.
-
-### Block Shot — and why a wall is not a mill
-
-One line in the game decides what stops what (`game_index.js:3111`):
-
-```js
-l.active && this.layer <= l.layer && !l.ignoreCollision && lineInRect(...)
-```
-
-The nearest candidate then consumes the projectile whether or not it takes
-damage — `this.active = !1` runs either way (`:3134`). A stone wall eats an
-arrow for free; only the wood wall has `projDmg` and actually loses health to
-one.
-
-The layers are what matter. Arrows are layer 0, the turret-gear shot is layer
-1, walls are group layer 0, mills are group layer 1:
-
-| | arrow (layer 0) | turret gear (layer 1) |
-|---|---|---|
-| **wall** (group layer 0) | blocks | **passes straight over** |
-| **mill** (group layer 1) | blocks | blocks |
-
-The turret shot is the exact 25 damage that takes the combo from 82.5
-(survivable) to 101.25 (not) — and a wall cannot stop it. So the mill is tried
-first always, and when a turret projectile is in the air it is the *only* thing
-tried. A blocker goes down toward the shot, at the placer's own offset, with a
-couple of angles either side attempted when the spot is occupied; it respects
-the group limit and the 119-packet budget, and places one blocker per shot
-rather than a wall every tick.
-
-### Dodge
-
-When nothing can be placed — no mill or wall owned, group at its limit, every
-angle occupied — the response is to step out of the line instead. The step is
-perpendicular to the shot, which is the shortest way out of its path, on
-whichever side is not walled off (walk-over pads like boost and platform are
-not cover). It lasts about two ticks and overrides every other reason to be
-walking somewhere, because the alternative is taking the shot.
-
-Both are toggles under **Defense → Ranged**.
-
-### Pre-Block — the half that actually works up close
-
-Everything above is reactive, and reaction has a floor. A musket from 150 units
-lands in **42 ms**; the server tick is **111 ms**. The packet that would save
-you leaves after the shot has already landed. No amount of tuning fixes that —
-at close range there is no reacting, only having been covered already.
-
-So Pre-Block runs whether or not anything is happening yet: while an enemy who
-owns a ranged weapon has a **clear line** to you, it keeps something standing on
-that line. When they pull the bow, the cover is already there and the shot never
-had a path.
-
-- "Owns a ranged weapon" is what they have shown they carry — `weapons[1]` is
-  filled in from their own updates the first time they hold one — or what they
-  are holding right now.
-- "Clear line" uses the same rule the projectile does: any object on the segment
-  with layer ≥ 0 that is not walk-over. A tree, a rock or someone else's wall
-  already on the line is cover you did not have to pay for, and nothing is built.
-- Only inside **Pre-Block Range** (200–1400, default 900), so it is not building
-  across the whole map.
-- Upkeep pace: one placement per 700 ms, against the reactive block's 250 ms.
-
-**Pre-Soldier** is the same idea for the helmet: keep it on while someone who can
-shoot has an open line, instead of waiting for the swap tell.
-
-### Reacting on the packet, not the next tick
-
-The rest of the feature runs inside `updatePlayers`' tick callback, which fires
-once per server tick. The projectile packet (`"X"`) does not — it arrives on its
-own, whenever the shot was fired. A response that waits for the next tick has
-already burned up to **111 ms** before it starts, and a musket from 150 units
-flies for **42 ms**. That was the lateness: not the logic, the place it ran from.
-
-`addProjectile` now calls the response the moment the packet lands, so the
-helmet, the blocker and the dodge all go out on the same millisecond the shot
-appears. The helmet is sent directly with `hat(6)` rather than only setting
-`soldierAnti`, because that flag is not read until `hatFc()` runs on the next
-tick — which is the delay being removed.
-
-The spawn path's window is wider than the tick path's (450 ms, about four
-ticks, against 260 ms): acting early is free, since a blocker put up too soon
-still blocks, while acting late is worth nothing.
-
-### Can soldier alone survive the four-piece? No.
-
-`dmgMult` appears on exactly one item in the entire game — the Soldier Helmet,
-at `0.75`. `changeHealth` applies both `skin.dmgMult` and `tail.dmgMult`
-(`game_index.js:2420-2421`), but no accessory carries one, so 0.75 is the floor.
-135 × 0.75 = 101.25, and no gear closes that.
-
-What does close it is removing **any one** projectile from the volley:
-
-| blocked | left | in soldier |
-|---|---|---|
-| bow (25) | 110 | 82.5 — live |
-| turret (25) | 110 | 82.5 — live |
-| crossbow (35) | 100 | 75 — live |
-| musket (50) | 85 | 63.75 — live |
-
-That is the whole design in one line: **one blocked shot is the difference**,
-which is why the blocker and Pre-Block matter more than the helmet does.
-
-This is the honest answer to "how do I stop dying to it". The reactive layer
-handles the shots you get warning of; Pre-Block handles the ones you do not.
-
-Flat projectile damage, from `game_index.js:1552`:
-
-| index | source | damage |
-|---|---|---|
-| 0 | hunting bow | 25 |
-| 1 | turret | 25 |
-| 2 | crossbow | 35 |
-| 3 | repeater crossbow | 30 |
-| 4 | mine | 16 |
-| 5 | musket | 50 |
-
-`tools/test-anti-bow-insta.js` runs the detection out of the shipped script
-against these numbers — 50 checks over the projectile maths, the tell, the
-range gate, the freshness and hold windows, the cases where the helmet saves
-you and the one where it provably cannot, the mill-over-wall choice and the
-turret-shot case that only a mill answers, the limit / budget / cooldown
-guards, the dodge's perpendicular, its side choice and its expiry, the blocker
-bearing across all eight directions, and the pre-block's arming check, line-of-
-sight test, range gate and upkeep pace, the instant path that runs off the
-projectile packet, and the yielding to a live trap play — 87 in all.
 
 ## Lite Mode (performance)
 
@@ -789,8 +534,8 @@ or not it is on, because a dropped frame is a dropped frame.
   passed three arguments to a two-parameter function, so `customObjects` got a
   number, `checkItemLocation` read `.length` off it and skipped its loop, and
   every angle came back placeable. The return value was discarded anyway. Each
-  was 144 angle tests and 144 allocations, twice per preplace object, fired
-  from a timeout that lands inside frame time.
+  was 72 angle tests and 72 allocations, twice per preplace object, fired from
+  a timeout that lands inside frame time.
 - **The FPS counter pushed a timestamp per frame and `shift()`ed the old ones
   off.** `shift()` is O(n) and the array held a second of frames, so it moved
   ~14,000 elements a second for one integer — on its own `requestAnimationFrame`

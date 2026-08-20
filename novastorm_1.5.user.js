@@ -12691,11 +12691,6 @@ for (let tree of trees) {
                 */
 
             shoots.push({ projectile: projectile, x: x, y: y, range: range, speed: speed });
-
-            // Anti Bow Insta reacts HERE, on the packet, not on the next tick.
-            // Waiting for updatePlayers costs up to a full 111 ms server tick,
-            // and a musket from 150 units is in the air for 42.
-            try { onProjectileSpawned(projectile); } catch (e) {}
         }
 
         // REMOVE PROJECTILE:
@@ -13071,384 +13066,6 @@ for (let tree of trees) {
                 return (myPlayer.weapons[0] == 4 || myPlayer.weapons[0] == 5) && UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, myPlayer.xVel, myPlayer.yVel) <= (35 * 1.8 + items.weapons[myPlayer.weapons[0]].range)
                 && primaryReload[myPlayer.sid] == 1 && !autoaim;
             }
-        }
-
-        // =====================================================================
-        // ANTI BOW INSTA
-        // =====================================================================
-        // A bow insta is a shot from outside melee range timed to land on the
-        // same tick as everything else, and the existing damage prediction
-        // never saw it: spikeDmgPot / hitDmgPot / turretDmgPot / secDmgPot are
-        // all melee, spike and turret. An arrow already in the air counted for
-        // nothing until it hit.
-        //
-        // The answer is the Soldier Helmet. changeHealth applies the wearer's
-        // skin.dmgMult to EVERY incoming damage, projectiles included
-        // (game_index.js:2420), and the soldier's is 0.75 — so a shot that
-        // would kill on the nose often does not through the helmet.
-        //
-        // Two signals feed it:
-        //
-        //  1. The arrow that already exists. Novastorm is sent every projectile
-        //     ("X" -> addProjectile), so incoming shots are added up for real
-        //     rather than guessed at. Damage comes straight off the projectile
-        //     table and is never scaled by weapon variant or shooter hat — the
-        //     server hands the flat value to the projectile
-        //     (game_index.js:990, `w.init(..., f.dmg, ...)`), and aMlt scales
-        //     only range and speed.
-        //
-        //  2. The switch tell, ported from RYN's rangedBowInsta: an enemy
-        //     beyond melee range, aimed at you, changing INTO a bow, or
-        //     bow -> crossbow, or crossbow -> musket. That is the queue for a
-        //     multi-projectile insta and it fires a tick before any arrow
-        //     exists, which is the tick that matters.
-        //
-        // Flat projectile damage, for reference (game_index.js:1552):
-        //   0 hunting bow 25 · 1 turret 25 · 2 crossbow 35
-        //   3 repeater 30   · 4 mine 16   · 5 musket 50
-        // RYN gates the tell at 300 units, on the reading that a bow insta is a
-        // ranged play and a close swap is just poking. That is not how it goes
-        // in practice — people fire the moment you are in range, near or far —
-        // and the gate is exactly backwards for the case that matters most: up
-        // close the flight time is under one tick, so the swap is the ONLY
-        // warning there is. It is a slider now, defaulting to no minimum.
-        const BOW_TELL_HOLD = 1200;      // ms to keep the helmet on after a tell
-        let bowTellUntil = 0;
-        let bowIncomingDmg = 0;
-        let bowThreatActive = false;
-
-        // Is the enemy's aim actually covering my hitbox? Same construction RYN
-        // uses: the half-angle my body subtends from where they stand.
-        function bowLookingAtMe(enemy, dist) {
-            if (!dist) return false;
-            const toMe = Math.atan2(myPlayer.y2 - enemy.y2, myPlayer.x2 - enemy.x2);
-            const half = Math.asin(Math.min(1, (2 * (myPlayer.scale || 35)) / (2 * dist)));
-            return UTILS.getAngleDist(toMe, enemy.d2 === undefined ? enemy.dir : enemy.d2) <= half;
-        }
-
-        // Signal 2 — the swap into a ranged weapon.
-        function bowSwitchTell() {
-            for (const enemy of enemiesNear) {
-                if (!enemy || !enemy.visible) continue;
-                const cur = enemy.weaponIndex, old = enemy.oldWeaponIndex;
-                const tell = (cur === 9 && old !== 9)
-                          || (cur === 12 && old === 9)
-                          || (cur === 15 && old === 12);
-                if (!tell) continue;
-                // Only count the swap while it is fresh — oldWeaponIndex is
-                // sticky, so without this a single swap would tell forever.
-                if (tick - (enemy.weaponSwapTick || 0) > 2) continue;
-                const dist = UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2);
-                if (dist <= (window.vars.antiBowMinDist || 0)) continue;
-                if (!bowLookingAtMe(enemy, dist)) continue;
-                return true;
-            }
-            return false;
-        }
-
-        // Signal 1 — what is already in the air and going to land on me.
-        // A projectile is a threat when it is pointed close enough at me that
-        // its path clears my body, and it still has the range to get here.
-        function bowIncomingProjectileDamage() {
-            let total = 0;
-            for (const p of projectiles) {
-                if (!p || !p.active) continue;
-                const dx = myPlayer.x2 - p.x, dy = myPlayer.y2 - p.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist < 1 || dist > (p.range || 0)) continue;      // cannot reach me
-                const off = UTILS.getAngleDist(Math.atan2(dy, dx), p.dir);
-                if (off > Math.PI / 2) continue;                      // travelling away
-                // Perpendicular miss distance at my range.
-                if (dist * Math.sin(off) > (myPlayer.scale || 35) + (p.scale ? 20 : 20)) continue;
-                // Only shots landing within about two server ticks are worth
-                // changing a hat for; anything further out, you move first.
-                if (p.speed > 0 && (dist / p.speed) > 260) continue;
-                total += p.dmg || 0;
-            }
-            return total;
-        }
-
-        // ── BLOCK OR DODGE ──────────────────────────────────────────────────
-        // What can stop what is decided by one line in the game
-        // (game_index.js:3111): an object is a candidate hit only when
-        //
-        //     this.layer <= l.layer  &&  !l.ignoreCollision  &&  lineInRect(...)
-        //
-        // and the nearest candidate then consumes the projectile whether or not
-        // it takes damage — `this.active = !1` runs either way (:3134). So a
-        // stone wall eats an arrow for free; only the wood wall has projDmg and
-        // actually loses health to it.
-        //
-        // The layers matter more than that, though. Arrows are layer 0, the
-        // turret-gear shot is layer 1, walls are group layer 0 and mills are
-        // group layer 1:
-        //
-        //     wall  vs arrow   0 <= 0   blocks
-        //     wall  vs turret  1 <= 0   PASSES STRAIGHT OVER
-        //     mill  vs arrow   0 <= 1   blocks
-        //     mill  vs turret  1 <= 1   blocks
-        //
-        // The turret shot is the 25 damage that takes the four-piece combo from
-        // 82.5 (survivable in soldier) to 101.25 (not). A wall cannot stop it.
-        // So when a turret projectile is in the air the mill is the only
-        // blocker worth placing, and it is tried first.
-        let bowDodgeAngle = null, bowDodgeUntil = 0, bowLastBlock = 0;
-
-        // Whatever the player owns out of a group, by group id — robust against
-        // however myPlayer.items happens to be indexed.
-        function ownedItemInGroup(groupId) {
-            if (!myPlayer || !myPlayer.items) return null;
-            for (const id of myPlayer.items) {
-                if (id === undefined || id === null) continue;
-                const it = items.list[id];
-                if (it && it.group && it.group.id === groupId) return id;
-            }
-            return null;
-        }
-
-        // Where the shot is coming from: the nearest incoming projectile if one
-        // exists, otherwise the enemy that gave the swap tell.
-        function bowThreatSource() {
-            let best = null, bestD = Infinity, turret = false;
-            for (const p of projectiles) {
-                if (!p || !p.active) continue;
-                const dx = myPlayer.x2 - p.x, dy = myPlayer.y2 - p.y;
-                const d = Math.sqrt(dx * dx + dy * dy);
-                if (d < 1 || d > (p.range || 0)) continue;
-                const off = UTILS.getAngleDist(Math.atan2(dy, dx), p.dir);
-                if (off > Math.PI / 2) continue;
-                if (d * Math.sin(off) > (myPlayer.scale || 35) + 20) continue;
-                if (d < bestD) { bestD = d; best = { x: p.x, y: p.y, dir: p.dir }; }
-                if ((p.layer || 0) >= 1 || p.indx === 1) turret = true;   // turret-gear shot
-            }
-            if (best) return { x: best.x, y: best.y, dir: best.dir, dist: bestD, turret: turret };
-            for (const e of enemiesNear) {
-                if (!e || !e.visible) continue;
-                const cur = e.weaponIndex, old = e.oldWeaponIndex;
-                if (!((cur === 9 && old !== 9) || (cur === 12 && old === 9) || (cur === 15 && old === 12))) continue;
-                if (tick - (e.weaponSwapTick || 0) > 2) continue;
-                const d = UTILS.getDistance(myPlayer.x2, myPlayer.y2, e.x2, e.y2);
-                if (d < bestD) { bestD = d; best = { x: e.x2, y: e.y2, dir: Math.atan2(myPlayer.y2 - e.y2, myPlayer.x2 - e.x2) }; }
-            }
-            return best ? { x: best.x, y: best.y, dir: best.dir, dist: bestD, turret: false } : null;
-        }
-
-        // Put a wall or a mill on a bearing. Shared by the reactive block and
-        // the pre-block, because "get something onto that line" is the same job
-        // either way.
-        function placeBlockerToward(tx, ty, millOnly) {
-            const wall = ownedItemInGroup(1);
-            const mill = ownedItemInGroup(3);
-            const order = millOnly ? [mill] : [mill, wall];
-            const angle = Math.atan2(ty - myPlayer.y2, tx - myPlayer.x2);
-            for (const id of order) {
-                if (id === null || id === undefined) continue;
-                if (isItemLimit(id)) continue;
-                // Try dead on first, then a little either side — the exact
-                // angle is often occupied by something already standing there.
-                for (const off of [0, 0.12, -0.12, 0.24, -0.24]) {
-                    const a = angle + off;
-                    if (!canPlace(id, a)) continue;
-                    place(id, a);
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // Put a wall or a mill in the way. Returns true if something went down.
-        function tryBowBlock(src) {
-            if (!window.vars.antiBowBlock || !src) return false;
-            const now = Date.now();
-            if (now - bowLastBlock < 250) return false;      // one blocker per shot, not a wall spam
-            if (packets + 5 > 119) return false;             // the placer's own budget
-            // A turret shot goes over a wall, so the mill is not a preference
-            // there, it is the only option.
-            if (!placeBlockerToward(src.x, src.y, !!src.turret)) return false;
-            bowLastBlock = now;
-            return true;
-        }
-
-        // =====================================================================
-        // PRE-BLOCK — cover before the shot, not after it
-        // =====================================================================
-        // Everything above is reactive: the tell, the arrow, the helmet, the
-        // dodge. Reaction has a floor. A musket from 150 units lands in 42 ms
-        // and the server tick is 111 ms, so at close range there is nothing to
-        // react with — the packet that would save you leaves after the shot has
-        // already landed.
-        //
-        // The only thing that beats that is to have been covered before they
-        // decided to shoot. So: while an enemy who owns a ranged weapon has a
-        // clear line to you, keep something standing on that line. When they
-        // pull the bow the cover is already there and the shot never had a path.
-        //
-        // It only builds when the line is actually clear — a tree, a rock or
-        // someone else's wall already on it is cover you did not have to pay
-        // for — and only inside real firing range, so it is not building across
-        // the whole map.
-        const BOW_RANGED_WEAPONS = [9, 12, 13, 15];
-        let preBlockAt = 0;
-
-        // Does anything already stand between these two points? Uses the same
-        // rule the projectile does: layer >= 0 for an arrow, and never anything
-        // you walk over.
-        function lineIsCovered(x1, y1, x2, y2) {
-            for (const o of visibleObjects) {
-                if (!o.active || o.ignoreCollision) continue;
-                if ((o.layer === undefined ? 2 : o.layer) < 0) continue;
-                if (lineInCircle(x1, y1, x2, y2, o.x, o.y, o.getScale())) return true;
-            }
-            return false;
-        }
-
-        // The nearest enemy who could shoot you right now and has the line to
-        // do it. "Could shoot" is what they have shown they carry — weapons[1]
-        // is filled in from their own updates as soon as they hold it once.
-        function rangedEnemyWithLineOnMe() {
-            let best = null, bestD = Infinity;
-            for (const e of enemiesNear) {
-                if (!e || !e.visible) continue;
-                const sec = e.weapons ? e.weapons[1] : undefined;
-                const armed = BOW_RANGED_WEAPONS.indexOf(sec) >= 0
-                           || BOW_RANGED_WEAPONS.indexOf(e.weaponIndex) >= 0;
-                if (!armed) continue;
-                const d = UTILS.getDistance(myPlayer.x2, myPlayer.y2, e.x2, e.y2);
-                if (d > botClamp(window.vars.preBlockRange, 200, 1400)) continue;
-                if (d >= bestD) continue;
-                if (lineIsCovered(myPlayer.x2, myPlayer.y2, e.x2, e.y2)) continue;  // already safe
-                bestD = d; best = e;
-            }
-            return best;
-        }
-
-        // =====================================================================
-        // THE TRAP PLAY OUTRANKS THE SPECULATIVE DEFENCE
-        // =====================================================================
-        // Anti Bow Insta has two halves. One reacts to an arrow that is already
-        // in the air and on course -- that one always runs, because a shot that
-        // will kill you outranks anything. The other is speculative: it builds
-        // cover every 700 ms whenever any ranged enemy has a line, and it
-        // sidesteps on the weapon-swap tell. Those two are what changed how the
-        // spike tick felt, and the reason is not subtle:
-        //
-        //   - a pre-block wall lands in the spot canTrapTick() needs a spike in
-        //     (dist(spot, enemy) < scale + 55) and the tick stops being possible
-        //   - every speculative placement goes into placedAngles, which bans
-        //     those angles for the next 18 ticks
-        //   - the dodge writes predictMoveAngle, walking you out of the
-        //     dist(trap, me) < scale + 95 window the tick needs
-        //
-        // So while a trap play is live -- their body in one of your traps, a
-        // hammer in your off hand -- the speculative half stands down. The
-        // helmet still goes on: it costs no placement and no step.
-        //
-        // Checked without getPrePlaceAngles on purpose. canTrapTick() answers a
-        // narrower question (is THIS the tick) and costs 144 canPlace calls to
-        // ask; this is the whole play, and it is a scan of traps_our.
-        function inTrapPlay() {
-            if (!window.vars.antiBowYieldToTick) return false;
-            if (!nearestEnemy || !myPlayer) return false;
-            if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
-            for (let i = 0; i < traps_our.length; i++) {
-                const t = traps_our[i];
-                if (UTILS.getDistance(t.x, t.y, nearestEnemy.x2, nearestEnemy.y2) < t.scale) return true;
-            }
-            return false;
-        }
-
-        function tryPreBlock() {
-            if (!window.vars.antiBowPreBlock) return false;
-            if (!myPlayer || !myPlayer.alive) return false;
-            if (inTrapPlay()) return false;
-            const now = Date.now();
-            if (now - preBlockAt < 700) return false;    // this is upkeep, not a panic
-            if (packets + 5 > 119) return false;
-            const e = rangedEnemyWithLineOnMe();
-            if (!e) return false;
-            // A mill covers the turret shot as well as arrows, so it is the one
-            // worth spending here — but a wall is far better than nothing.
-            if (!placeBlockerToward(e.x2, e.y2, false)) return false;
-            preBlockAt = now;
-            return true;
-        }
-
-        // Nothing could be placed: step out of the line instead. Perpendicular
-        // to the shot is the shortest way out of its path; pick the side that
-        // is not walled off.
-        function startBowDodge(src) {
-            if (!window.vars.antiBowDodge || !src) return;
-            const perp = src.dir + Math.PI / 2;
-            const options = [perp, perp + Math.PI];
-            let chosen = null;
-            for (const a of options) {
-                const px = myPlayer.x2 + Math.cos(a) * 70;
-                const py = myPlayer.y2 + Math.sin(a) * 70;
-                let clear = true;
-                for (const o of visibleObjects) {
-                    if (o.ignoreCollision) continue;
-                    const r = 35 + o.getScale();
-                    if (UTILS.getDistance(px, py, o.x, o.y) < r) { clear = false; break; }
-                }
-                if (clear) { chosen = a; break; }
-            }
-            if (chosen === null) return;
-            bowDodgeAngle = chosen;
-            bowDodgeUntil = Date.now() + 220;   // about two ticks of sidestep
-        }
-
-        // =====================================================================
-        // THE INSTANT PATH — react on the packet, not on the next tick
-        // =====================================================================
-        // Everything else here runs inside updatePlayers' tick callback, which
-        // fires once per server tick. The projectile packet ("X") does not: it
-        // arrives on its own, whenever the shot was fired. So a response that
-        // waits for the next tick has already burned up to 111 ms before it
-        // starts — and a musket only flies for 42 ms from 150 units. That is
-        // the lateness: not the logic, the place it was being run from.
-        //
-        // addProjectile calls this the moment the packet lands, so the helmet,
-        // the blocker and the dodge all go out on the same millisecond the shot
-        // appears rather than a tick later.
-        //
-        // The window here is wider than the tick path's (450 ms, about four
-        // ticks, against 260 ms) because acting early is free — a blocker put
-        // up too soon still blocks — while acting late is worth nothing.
-        const BOW_SPAWN_WINDOW = 450;
-        function onProjectileSpawned(p) {
-            if (!window.vars || !window.vars.antiBowInsta) return;
-            if (!p || !myPlayer || !myPlayer.alive) return;
-            const dx = myPlayer.x2 - p.x, dy = myPlayer.y2 - p.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 1 || dist > (p.range || 0)) return;
-            const off = UTILS.getAngleDist(Math.atan2(dy, dx), p.dir);
-            if (off > Math.PI / 2) return;
-            if (dist * Math.sin(off) > (myPlayer.scale || 35) + 20) return;   // it misses
-            if (p.speed > 0 && (dist / p.speed) > BOW_SPAWN_WINDOW) return;   // still far off
-
-            // The helmet, now. soldierAnti alone would not equip it until
-            // hatFc() runs on the next tick, which is the delay we are here to
-            // remove — so send the equip directly as well.
-            soldierAnti = true;
-            try { if (isBoughtHat(6, 0)) hat(6); } catch (e) {}
-
-            // Then take the shot off the board entirely if we can, and step out
-            // of its line if we cannot.
-            const src = { x: p.x, y: p.y, dir: p.dir, dist: dist,
-                          turret: ((p.layer || 0) >= 1 || p.indx === 1) };
-            if (!tryBowBlock(src)) startBowDodge(src);
-        }
-
-        function updateBowInstaThreat() {
-            bowIncomingDmg = 0;
-            bowThreatActive = false;
-            if (!window.vars.antiBowInsta) { bowTellUntil = 0; return; }
-            if (!myPlayer || !myPlayer.alive) { bowTellUntil = 0; return; }
-
-            bowIncomingDmg = bowIncomingProjectileDamage();
-            const now = Date.now();
-            if (bowSwitchTell()) bowTellUntil = now + BOW_TELL_HOLD;
-            bowThreatActive = bowIncomingDmg > 0 || now < bowTellUntil;
         }
 
         function doSmartTickAnti() {
@@ -13949,33 +13566,14 @@ for (let tree of trees) {
         let lastPrePlaceObject = null;
         let removedObjects = [];
 
-        // How many directions the placer tests around you. Both placer sweeps
-        // read it, so the resolution is one number instead of two literals.
-        //
-        // 144 is 2.5 degrees a step: at the radius a spike is placed from you
-        // (35 + 52 = 87) that puts neighbouring candidates 3.8 units apart, so
-        // the edge of a gap is found twice as precisely as the old 72 did.
-        //
-        // It is NOT swept flat, though -- see buildPlaceAngles(). Every second
-        // angle here is an angle of the old 72 grid, and those are tried first
-        // and alone. The finer half is only reached when the coarse circle is
-        // completely blocked. So the placer picks the same spot it always did,
-        // at the same cost, and the extra resolution is reach in the one case
-        // where 72 had nothing rather than a different answer every tick.
-        //
-        // Do not push this much higher without fixing the ban first. A placed
-        // angle is banned by exact key (`bannedAngles.has(obj.angle)`) and
-        // matched with a 0.01 rad tolerance, so the step has to stay well above
-        // 0.01 rad or the ban stops covering the angles either side of it —
-        // at 629 steps the step is 0.00999 and three grid angles fall inside
-        // the tolerance, which means the placer keeps re-picking a neighbour
-        // that drops the spike in the same spot and burns the packet budget on
-        // placements the server rejects. 144 steps is 0.0436 rad, four times
-        // clear of that.
-        const PLACE_ANGLES = 144;
-
         function updateAngles(id) {
-            const angles = buildPlaceAngles(id);
+            const angles = [];
+            for (let i = 0; i < 72; i++) {
+                const angle = UTILS.toRad(i * (360 / 72));
+                angles.push({ id: id, angle: angle, placeable: canPlace(id, angle), ...getConfig(id, angle) });
+            }
+
+            getPerfectAngles(angles);
 
             // Check placed angles and ban them if still placeable
             for (let placedAngle of placedAngles) {
@@ -14127,50 +13725,15 @@ for (let tree of trees) {
         }
 
         function getPrePlaceAngles(id, customObjects) {
-            return buildPlaceAngles(id, customObjects);
+            const angles = [];
+            for (let i = 0; i < 72; i++) {
+                const angle = UTILS.toRad(i * (360 / 72));
+                angles.push({ id: id, angle: angle, placeable: canPlace(id, angle, customObjects), ...getConfig(id, angle) });
+            }
+
+            getPerfectAngles(angles);
+            return angles;
         }
-
-        // =====================================================================
-        // THE PLACER SWEEP  —  the old grid first, the fine one only if needed
-        // =====================================================================
-        // PLACE_ANGLES is 144, and every second one of those angles IS an angle
-        // of the old 72 grid: 2 x 2.5deg == 5deg. So the fine grid is a strict
-        // superset of the coarse one, and the two can be spent in that order.
-        //
-        // Pass one is the old 72 sweep, exactly: same angles, same values, same
-        // order, same count of canPlace calls. If anything on it can be placed,
-        // that is what the placer sees and every decision downstream comes out
-        // where it came out before -- the same spot, from the same list.
-        //
-        // Pass two only happens when the coarse circle is completely blocked,
-        // which is the one case where the old grid genuinely had nothing and
-        // 2.5deg steps can still find a gap. Then all 144 are returned.
-        //
-        // That is what 144 buys, and all it costs: extra reach when 72 comes up
-        // empty, and nothing at all the rest of the time. (Want the fine grid
-        // every tick again? Delete the early return.)
-        function buildPlaceAngles(id, customObjects) {
-            const step = (PLACE_ANGLES % 2 === 0) ? 2 : 1;
-            const mk = (i) => {
-                const angle = UTILS.toRad(i * (360 / PLACE_ANGLES));
-                return { id: id, angle: angle,
-                         placeable: canPlace(id, angle, customObjects),
-                         ...getConfig(id, angle) };
-            };
-
-            const coarse = [];
-            for (let i = 0; i < PLACE_ANGLES; i += step) coarse.push(mk(i));
-            getPerfectAngles(coarse);
-            if (step === 1) return coarse;
-            for (let i = 0; i < coarse.length; i++) if (coarse[i].placeable) return coarse;
-
-            // Walled in on every one of the old angles. Spend the other half.
-            const all = [];
-            for (let i = 0; i < PLACE_ANGLES; i++) all.push(i % 2 ? mk(i) : coarse[i >> 1]);
-            getPerfectAngles(all);
-            return all;
-        }
-
         function getPerfectAngles(angles) {
             for (let i in angles) {
                 angles[i].perfect = false;
@@ -15224,6 +14787,9 @@ for (let tree of trees) {
         // shield (11) and mc grabby (14) -- they shoot, block or steal, and none
         // of them puts real damage into a building.
         const BOT_NO_BREAK = [9, 11, 12, 13, 14, 15];
+        // How many directions a bot tests around itself when it looks for a
+        // spike spot -- the same 5-degree grid the master's placer sweeps.
+        const BOT_PLACE_ANGLES = 72;
         // Word pool for "Auto Random Bots name" -- a word plus 1, 2, 3 ...
         const BOT_NAME_WORDS = ["nova", "storm", "byte", "void", "zephyr", "onyx", "flux",
                                 "echo", "raven", "cinder", "vortex", "delta", "nyx", "quartz",
@@ -16247,14 +15813,14 @@ for (let tree of trees) {
 
             // getPrePlaceAngles, on the bot's world: every spot on the placing
             // ring the bot could actually drop this item, at the game's own
-            // offset, with the same PLACE_ANGLES resolution the master uses.
+            // offset, at the same resolution the master's placer sweeps.
             _botPlaceSpots(bot, id, exceptSid) {
                 const item = items.list[id];
                 if (!item) return [];
                 const r = 35 + item.scale + (item.placeOffset || 0);
                 const out = [];
-                const step = (Math.PI * 2) / PLACE_ANGLES;
-                for (let i = 0; i < PLACE_ANGLES; i++) {
+                const step = (Math.PI * 2) / BOT_PLACE_ANGLES;
+                for (let i = 0; i < BOT_PLACE_ANGLES; i++) {
                     const a = -Math.PI + i * step;
                     out.push({
                         angle: a, scale: item.scale,
@@ -17058,7 +16624,7 @@ for (let tree of trees) {
         // that carry state across ticks". Being wrong about one of those would
         // be a silent leak between your player and a bot, and copying 136
         // properties a few times a tick costs nothing worth measuring.
-        const MOD_CTX_KEYS = ["myPlayer", "myPlayerSID", "players", "ais", "gameObjects", "projectiles", "alliances", "objectManager", "aiManager", "projectileManager", "keys", "attackState", "autoMills", "autoBreak", "autoBreakAngle", "breakObject", "nearestTrap", "enemiesNear", "nearestEnemy", "ePress", "rightClick", "leftClick", "checkGather", "lastGatherState", "damageTick", "tick", "hits", "shoots", "removeShoots", "primaryReload", "secondaryReload", "turretReload", "placeTick", "predictObjects", "prePlaceObjects", "predictEnemyTraps", "predictWeapon", "keyCodeWeapon", "healing", "autoReload", "deathDamages", "spikeDmg", "spikeDmgCount", "spikeDamages", "damageObjects", "objectHits", "objectShoots", "antiReverse", "antiInsta", "damageByPoisonTick", "damagesByTurrets", "damagesByHits", "damagesByShoots", "damages", "qPress", "spikePress", "trapPress", "turretPress", "spikeKnockPosLine", "visibleObjects", "spikes_enemy", "trap_where_im_in", "cactuses", "enemySpikes", "antiVelocitySpikeSync", "trapBreaked", "trapBreakedTick", "soldierAnti", "predictMoveAngle", "lastMoveAngle", "nearestEnemiesCount", "antiTick", "antiTickTimeout", "predictDamage", "antiPush", "autoPush", "autoPushAngle", "pushPositions", "predictMove", "autoaim", "instaKill", "insta", "spamPrePlacer", "prePlaceInterval", "bowTellUntil", "bowIncomingDmg", "bowThreatActive", "bowDodgeAngle", "bowDodgeUntil", "bowLastBlock", "preBlockAt", "lastPrePlaceObject", "removedObjects", "antiPushAngle", "spawnedObjectSids", "promiseResolve", "tickPromiseResolve", "squeezablePointsCache", "pathfindingState", "lastMoveDir", "killCount", "killedName", "pathBreak", "grindObjects", "prevKills", "path", "autoaimAngle", "autogathering", "currentHat", "imTrapped", "shouldResetShame", "totalDmgPot", "lastcolliding", "spikeTickAnti", "grindAngle", "smartTickObject", "iWasTrapped", "lastPredicted", "gatherGrind", "lastPosX", "lastPosY", "canStillGather", "autoBreakWeapon", "spikes_our", "traps_our", "enemy_lastcollidngspike", "enemy_collidingspike", "placedAngles", "bannedAngles", "smartTickSpike", "gPressed", "turrets_our", "pathPosition", "filteredObjectsCache", "shouldntPathfind", "packets", "followTarget", "pathMode", "tmpObj"];
+        const MOD_CTX_KEYS = ["myPlayer", "myPlayerSID", "players", "ais", "gameObjects", "projectiles", "alliances", "objectManager", "aiManager", "projectileManager", "keys", "attackState", "autoMills", "autoBreak", "autoBreakAngle", "breakObject", "nearestTrap", "enemiesNear", "nearestEnemy", "ePress", "rightClick", "leftClick", "checkGather", "lastGatherState", "damageTick", "tick", "hits", "shoots", "removeShoots", "primaryReload", "secondaryReload", "turretReload", "placeTick", "predictObjects", "prePlaceObjects", "predictEnemyTraps", "predictWeapon", "keyCodeWeapon", "healing", "autoReload", "deathDamages", "spikeDmg", "spikeDmgCount", "spikeDamages", "damageObjects", "objectHits", "objectShoots", "antiReverse", "antiInsta", "damageByPoisonTick", "damagesByTurrets", "damagesByHits", "damagesByShoots", "damages", "qPress", "spikePress", "trapPress", "turretPress", "spikeKnockPosLine", "visibleObjects", "spikes_enemy", "trap_where_im_in", "cactuses", "enemySpikes", "antiVelocitySpikeSync", "trapBreaked", "trapBreakedTick", "soldierAnti", "predictMoveAngle", "lastMoveAngle", "nearestEnemiesCount", "antiTick", "antiTickTimeout", "predictDamage", "antiPush", "autoPush", "autoPushAngle", "pushPositions", "predictMove", "autoaim", "instaKill", "insta", "spamPrePlacer", "prePlaceInterval", "lastPrePlaceObject", "removedObjects", "antiPushAngle", "spawnedObjectSids", "promiseResolve", "tickPromiseResolve", "squeezablePointsCache", "pathfindingState", "lastMoveDir", "killCount", "killedName", "pathBreak", "grindObjects", "prevKills", "path", "autoaimAngle", "autogathering", "currentHat", "imTrapped", "shouldResetShame", "totalDmgPot", "lastcolliding", "spikeTickAnti", "grindAngle", "smartTickObject", "iWasTrapped", "lastPredicted", "gatherGrind", "lastPosX", "lastPosY", "canStillGather", "autoBreakWeapon", "spikes_our", "traps_our", "enemy_lastcollidngspike", "enemy_collidingspike", "placedAngles", "bannedAngles", "smartTickSpike", "gPressed", "turrets_our", "pathPosition", "filteredObjectsCache", "shouldntPathfind", "packets", "followTarget", "pathMode", "tmpObj"];
 
         function ctxCapture() {
             return {
@@ -17146,13 +16712,6 @@ for (let tree of trees) {
                 insta: insta,
                 spamPrePlacer: spamPrePlacer,
                 prePlaceInterval: prePlaceInterval,
-                bowTellUntil: bowTellUntil,
-                bowIncomingDmg: bowIncomingDmg,
-                bowThreatActive: bowThreatActive,
-                bowDodgeAngle: bowDodgeAngle,
-                bowDodgeUntil: bowDodgeUntil,
-                bowLastBlock: bowLastBlock,
-                preBlockAt: preBlockAt,
                 lastPrePlaceObject: lastPrePlaceObject,
                 removedObjects: removedObjects,
                 antiPushAngle: antiPushAngle,
@@ -17288,13 +16847,6 @@ for (let tree of trees) {
             insta = s.insta;
             spamPrePlacer = s.spamPrePlacer;
             prePlaceInterval = s.prePlaceInterval;
-            bowTellUntil = s.bowTellUntil;
-            bowIncomingDmg = s.bowIncomingDmg;
-            bowThreatActive = s.bowThreatActive;
-            bowDodgeAngle = s.bowDodgeAngle;
-            bowDodgeUntil = s.bowDodgeUntil;
-            bowLastBlock = s.bowLastBlock;
-            preBlockAt = s.preBlockAt;
             lastPrePlaceObject = s.lastPrePlaceObject;
             removedObjects = s.removedObjects;
             antiPushAngle = s.antiPushAngle;
@@ -18316,15 +17868,6 @@ for (let tree of trees) {
                         }
                     }
 
-                    // A dodge outranks every other reason to be walking
-                    // somewhere: it lasts about two ticks and the alternative
-                    // is taking the shot. It is only ever set when nothing
-                    // could be placed in the way.
-                    if (bowDodgeAngle !== null) {
-                        if (Date.now() < bowDodgeUntil) predictMoveAngle = bowDodgeAngle;
-                        else bowDodgeAngle = null;
-                    }
-
                     if (predictMoveAngle != lastMoveAngle) {
                         io.send("9", predictMoveAngle);
                         lastMoveAngle = predictMoveAngle;
@@ -18841,58 +18384,14 @@ for (let tree of trees) {
                     iWasTrapped = imTrapped;
                     lastPredicted = predicted;
 
-                    // ANTI BOW INSTA — the arrow in the air and the swap tell.
-                    // Everything above this line is melee, spike and turret, so
-                    // a shot from range contributed nothing to the total until
-                    // the moment it landed.
-                    updateBowInstaThreat();
-
                     // Total dmg pot combine of all dmgs
-                    totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot
-                                + bowIncomingDmg;
+                    totalDmgPot = spikeDmgPot + hitDmgPot + turretDmgPot + secDmgPot + poisonDmgPot;
 
                     if (totalDmgPot > 140)
                         totalDmgPot = 140;
 
                     if (totalDmgPot >= 100)
                         soldierAnti = true;
-
-                    // The helmet is worth wearing whenever the shot would kill
-                    // and the 0.75 would carry you through it — and on the bare
-                    // tell too, before any arrow exists, because that is the
-                    // tick you still have a choice.
-                    if (window.vars.antiBowInsta && bowThreatActive) {
-                        if (Date.now() < bowTellUntil) {
-                            soldierAnti = true;
-                        } else if (totalDmgPot >= myPlayer.health) {
-                            soldierAnti = true;
-                        }
-                        // The helmet only scales the damage; a blocker deletes
-                        // it. Try to put one in the way, and if nothing can go
-                        // down, step out of the line instead.
-                        //
-                        // Unless a trap play is live: then this is speculative
-                        // cover against a shot nobody has fired, and it would
-                        // cost the tick. The arrow-in-the-air path
-                        // (onProjectileSpawned) is not gated -- that one is not
-                        // speculation.
-                        if (!inTrapPlay()) {
-                            const src = bowThreatSource();
-                            if (src && !tryBowBlock(src)) startBowDodge(src);
-                        }
-                    }
-
-                    // PRE-BLOCK — runs whether or not anything is happening
-                    // yet. This is the half that actually saves you at close
-                    // range, where there is no time to react to anything.
-                    if (window.vars.antiBowInsta) {
-                        tryPreBlock();
-                        // And keep the helmet on while someone who can shoot
-                        // has an open line, rather than waiting for the swap.
-                        if (window.vars.antiBowPreSoldier && rangedEnemyWithLineOnMe()) {
-                            soldierAnti = true;
-                        }
-                    }
 
 
 
@@ -24025,14 +23524,6 @@ for (let tree of trees) {
         // Defense
         safeSoldier: true,
         antiSmart: false,
-        antiBowInsta: true,   // soldier helmet against an incoming bow insta
-        antiBowMinDist: 0,    // 0 = react at any range; raise it to ignore close swaps
-        antiBowBlock: true,   // put a mill or a wall in the path of the shot
-        antiBowDodge: true,   // if nothing can be placed, step out of the line
-        antiBowPreBlock: true,  // keep cover on the line BEFORE they draw
-        antiBowPreSoldier: true,// and keep the helmet on while they have a line
-        antiBowYieldToTick: true, // ...but not while a trap tick is live
-        preBlockRange: 900,     // only bother inside real firing range
 
         // Placers
         autoPlace: false,
@@ -24200,19 +23691,6 @@ for (let tree of trees) {
                 title: "Knockbacks",
                 items: [
                     { type: 'toggle', name: "Anti Smart-Tick", id: "antiSmart" }
-                ]
-            },
-            {
-                title: "Ranged",
-                items: [
-                    { type: 'toggle', name: "Anti Bow Insta", id: "antiBowInsta" },
-                    { type: 'slider', name: "Ignore Swaps Closer Than", id: "antiBowMinDist", min: 0, max: 600 },
-                    { type: 'toggle', name: "Block Shot (mill / wall)", id: "antiBowBlock" },
-                    { type: 'toggle', name: "Dodge If Cannot Block", id: "antiBowDodge" },
-                    { type: 'toggle', name: "Pre-Block (cover before the shot)", id: "antiBowPreBlock" },
-                    { type: 'toggle', name: "Pre-Soldier (helmet on their line)", id: "antiBowPreSoldier" },
-                    { type: 'toggle', name: "Yield To Trap Tick", id: "antiBowYieldToTick" },
-                    { type: 'slider', name: "Pre-Block Range", id: "preBlockRange", min: 200, max: 1400 }
                 ]
             }
         ],
