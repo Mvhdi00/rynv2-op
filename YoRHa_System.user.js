@@ -14345,11 +14345,12 @@ for (let tree of trees) {
             const EDGE_INSET   = 0.012;   // rad, how far inside the free side to sit
             const MICRO        = 0.035;   // rad, micro-refinement span (~2 deg)
             const TOPK         = 6;       // candidates that get the expensive terms
-            const SCORE_MIN    = 30;      // below this, placing is not worth a slot
+            const SCORE_MIN    = 18;      // below this, placing is not worth a slot
+            const REFILL_MIN   = 8;       // a broken spike is worth putting back on its own
             const SPAM_SCORE   = 120;     // above this, ask for the second burst
             const KB_PROJECT   = 200;     // knockback projection length
             const PENDING_TTL  = 4;       // ticks to wait before calling a place lost
-            const RECENT_TTL   = 5;       // ticks a committed spot stays reserved
+            const RECENT_TTL   = 3;       // ticks a committed spot stays reserved
             const MAX_THROWS   = 8;       // consecutive throws before self-disable
 
             // ---- score weights ----------------------------------------------
@@ -14360,14 +14361,18 @@ for (let tree of trees) {
             const W_TRAP_PRED = 125;   // trap lands on their predicted position
             const W_TRAP_NOW  = 60;    // trap lands on them right now
             const W_RETRAP    = 48;    // trap stacked on a held, bleeding enemy
-            const W_SEAL      = 24;    // per escape lane the placement closes
-            const W_FREED     = 55;    // replace: how close to the ground freed
+            const W_SEAL      = 42;    // per escape lane the placement closes
+            const W_FREED     = 95;    // replace: how close to the ground freed
             const W_DENY      = 26;    // takes ground the enemy was about to build on
             const W_CLOSE     = 18;    // general closeness to the fight
             const W_REL       = 18;    // learned accept rate for this angle
             const W_CLAIM     = 22;    // ground that is one hit away from opening
-            const P_SELF      = -70;   // sits on my own escape corridor
-            const P_LOS       = -48;   // blocks my line to the enemy
+            const P_SELF      = -35;   // sits on my own escape corridor
+            const P_LOS       = -10;   // stands between me and the enemy. Small on
+                                       // purpose: melee in this game is a range
+                                       // and angle check, not a line of sight, so
+                                       // a spike in between still lets you hit —
+                                       // and a cage is made of exactly those.
             const P_SCARCE    = -14;   // per item below the last three
             const P_BANNED    = -26;   // v1 marked this angle as refused lately
 
@@ -14420,6 +14425,32 @@ for (let tree of trees) {
             }
             function on(name) { return !!v(name, false); }
             function clamp(x, a, b) { return x < a ? a : (x > b ? b : x); }
+
+            // Spikes Only wins over Spend Traps: one switch, one answer, and the
+            // engine never spends a trap while it is on.
+            function useTraps() {
+                if (!!v("pp2SpikesOnly", true)) return false;
+                return !!v("pp2Traps", true);
+            }
+
+            // The aim belongs on the enemy. Placing borrows the attack packet,
+            // so the angle a placement goes out on is also the angle the player
+            // ends up facing — which is how a swing lands on your own fresh
+            // spike instead of on them. Every placement this engine makes is
+            // followed by putting the aim back.
+            function aimAtEnemy() {
+                if (!nearestEnemy || !myPlayer) return null;
+                return Math.atan2(nearestEnemy.y2 - myPlayer.y2, nearestEnemy.x2 - myPlayer.x2);
+            }
+            function aimBack(deferred) {
+                if (!v("pp2AimLock", true)) return;
+                let a = aimAtEnemy();
+                if (a == null) { try { a = getAttackDir(); } catch (e) { return; } }
+                try {
+                    if (deferred) ctxDefer(function () { try { io.send("D", a); } catch (e) {} }, 0);
+                    else io.send("D", a);
+                } catch (e) { /* not connected */ }
+            }
             function d2(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
             function now() {
                 try { return performance.now(); } catch (e) { return Date.now(); }
@@ -14835,7 +14866,9 @@ for (let tree of trees) {
                     const c = {};
                     if (place1(s, id, it, off, edge, c)) { c.edge = true; list.push(c); }
                 }
-                s.m.cand = list.length;
+                // smoothed, so the readout shows how much room you usually have
+                // rather than whatever the last call happened to see
+                s.m.cand = s.m.cand ? (s.m.cand * 0.9 + list.length * 0.1) : list.length;
                 s.rings.set(id, { tick: tick, stamp: s.recent.length + predictObjects.length, list: list });
                 return list;
             }
@@ -14943,7 +14976,7 @@ for (let tree of trees) {
                 }
 
                 if (ctx.freed) {
-                    sc += W_FREED * (1 - clamp(Math.sqrt(d2(c.x, c.y, ctx.freed.x, ctx.freed.y)) / 170, 0, 1));
+                    sc += W_FREED * (1 - clamp(Math.sqrt(d2(c.x, c.y, ctx.freed.x, ctx.freed.y)) / 110, 0, 1));
                 }
                 sc += W_CLOSE * (1 - clamp(Math.sqrt(d2(c.x, c.y, e.x2, e.y2)) / 300, 0, 1));
 
@@ -15006,9 +15039,10 @@ for (let tree of trees) {
                     }
                 }
                 let top = null;
+                const sealW = W_SEAL * ((!!v("pp2Cage", true) && adjacent()) ? 1.6 : 1);
                 for (let i = 0; i < shortlist.length; i++) {
                     const c = shortlist[i];
-                    if (c.id === ctx.spikeId) c.score += W_SEAL * sealGain(s, c, ctx);
+                    if (c.id === ctx.spikeId) c.score += sealW * sealGain(s, c, ctx);
                     if (!top || c.score > top.score) top = c;
                 }
                 if (!top) return null;
@@ -15022,7 +15056,7 @@ for (let tree of trees) {
                     const c = {};
                     if (!place1(s, id, it, off, top.angle + k * MICRO, c)) continue;
                     c.score = cheapScore(s, c, ctx);
-                    if (c.id === ctx.spikeId) c.score += W_SEAL * sealGain(s, c, ctx);
+                    if (c.id === ctx.spikeId) c.score += sealW * sealGain(s, c, ctx);
                     if (c.score > top.score) top = c;
                 }
                 return top;
@@ -15036,7 +15070,15 @@ for (let tree of trees) {
             }
             function rateLeft(s) {
                 if (s.commitTick !== tick) { s.commitTick = tick; s.commits = 0; }
-                return v("pp2MaxPerTick", 2) - s.commits;
+                let cap = v("pp2MaxPerTick", 2);
+                // Cage: with them right on top of you the tick is worth one more
+                // spike — that is the one that closes the last gap they leave by.
+                if (!!v("pp2Cage", true) && adjacent()) cap += 1;
+                return cap - s.commits;
+            }
+            function adjacent() {
+                if (!nearestEnemy || !myPlayer) return false;
+                return d2(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2) < 150 * 150;
             }
             function ledger(s, c, kind) {
                 s.commits++;
@@ -15047,11 +15089,21 @@ for (let tree of trees) {
                 s.rings.delete(c.id);
             }
 
-            // Preplacement: hand it to the existing end-of-tick sender, which
-            // fires at 111-ping and (when asked) again at 111-minPing.
+            // Two ways out.
+            //
+            //   Build Instantly (default) hands the placement to the mod's own
+            //   in-tick loop, which runs a few lines after this one and sends it
+            //   straight away. Nothing waits for the end of the tick window.
+            //
+            //   The exception is a placement that claims ground still occupied
+            //   by a building about to fall: that one has to go out late, at
+            //   111-ping, or the server refuses it because the ground is still
+            //   taken. Those keep the preplace timing.
             function commit(s, c, kind) {
-                addPredictObject(c.id, c.angle, true);
+                const late = !!c.claim || !v("pp2Direct", true);
+                addPredictObject(c.id, c.angle, late);
                 ledger(s, c, kind);
+                return late;
             }
 
             // Replacement: straight onto the wire, in the same turn as the
@@ -15060,6 +15112,7 @@ for (let tree of trees) {
                 if (!budget()) return false;
                 place(c.id, c.angle);
                 try { placedAngles.push(c.angle); } catch (e) { /* not in a tick */ }
+                aimBack(false);   // ...and the aim goes straight back on them
                 ledger(s, c, "rep");
                 s.m.instant++;
                 return true;
@@ -15109,7 +15162,7 @@ for (let tree of trees) {
             function pickRefill(s, r, ctx) {
                 const ids = [];
                 if (ctx.spikeId != null) ids.push(ctx.spikeId);
-                if (!!v("pp2Traps", true) && ctx.trapId != null) ids.push(ctx.trapId);
+                if (useTraps() && ctx.trapId != null) ids.push(ctx.trapId);
                 let top = null;
                 for (let i = 0; i < ids.length; i++) {
                     const id = ids[i];
@@ -15121,7 +15174,7 @@ for (let tree of trees) {
                     if (r.trap && !ctx.held && id === ctx.trapId) c.score += 70;
                     if (!top || c.score > top.score) top = c;
                 }
-                return (top && top.score >= SCORE_MIN) ? top : null;
+                return (top && top.score >= REFILL_MIN) ? top : null;
             }
 
             // =================================================================
@@ -15138,21 +15191,29 @@ for (let tree of trees) {
                 if (rateLeft(s) <= 0) return;
 
                 const ctx = buildCtx(s, { mode: "pre" });
-                const picks = [];
                 const ids = [ctx.spikeId];
-                if (!!v("pp2Traps", true) && ctx.trapId != null) ids.push(ctx.trapId);
-                for (let i = 0; i < ids.length; i++) {
-                    const id = ids[i];
-                    if (id == null || limitLeft(id) <= 0) continue;
-                    const c = best(s, id, ctx);
-                    if (c && c.score >= SCORE_MIN) picks.push(c);
+                if (useTraps() && ctx.trapId != null) ids.push(ctx.trapId);
+
+                // Keep taking the best remaining spot until the tick's budget is
+                // gone or nothing left is worth a placement. Each commit reserves
+                // its ground and drops the cached ring, so the next round comes
+                // back with a different spot — which is how a gap gets closed in
+                // one tick instead of one spike per tick.
+                let placed = 0;
+                while (rateLeft(s) > 0 && placed < 6) {
+                    let top = null;
+                    for (let i = 0; i < ids.length; i++) {
+                        const id = ids[i];
+                        if (id == null || limitLeft(id) <= 0) continue;
+                        const c = best(s, id, ctx);
+                        if (c && (!top || c.score > top.score)) top = c;
+                    }
+                    if (!top || top.score < SCORE_MIN) break;
+                    const late = commit(s, top, "pre");
+                    placed++;
+                    if (late && (top.score >= SPAM_SCORE || top.claim)) spamPrePlacer = true;
                 }
-                picks.sort(function (a, b) { return b.score - a.score; });
-                for (let i = 0; i < picks.length; i++) {
-                    if (rateLeft(s) <= 0) break;
-                    commit(s, picks[i], "pre");
-                    if (picks[i].score >= SPAM_SCORE || picks[i].claim) spamPrePlacer = true;
-                }
+                if (placed) aimBack(true);
             }
 
             // Freed ground that could not be filled the instant it opened
@@ -15162,14 +15223,16 @@ for (let tree of trees) {
                 if (!nearestEnemy) { s.queue.length = 0; return; }
                 const q = s.queue;
                 s.queue = [];
+                let filled = 0;
                 for (let i = 0; i < q.length; i++) {
                     if (rateLeft(s) <= 0) break;
                     const r = q[i];
                     if (tick - r.gone > 2) continue;
                     const ctx = buildCtx(s, { mode: "rep", freed: r });
                     const pick = pickRefill(s, r, ctx);
-                    if (pick) commit(s, pick, "rep");
+                    if (pick) { commit(s, pick, "rep"); filled++; }
                 }
+                if (filled) aimBack(true);
             }
 
             // =================================================================
@@ -15182,6 +15245,16 @@ for (let tree of trees) {
                 if (!r) return;
                 r.gone = tick;
                 s.objs.delete(sid);
+                // Drop any reservation we were holding over this ground. It was
+                // there to stop the engine spending two placements on one spot;
+                // now that the spot has actually opened it must not stand in the
+                // way of putting the spike back.
+                for (let i = s.recent.length - 1; i >= 0; i--) {
+                    const p = s.recent[i];
+                    const rr = p.scale + r.scale;
+                    if (d2(p.x, p.y, r.x, r.y) < rr * rr) s.recent.splice(i, 1);
+                }
+                s.rings.clear();
                 if (!on("replace2")) return;
                 if (!r.ours || !myPlayer || !myPlayer.alive || !nearestEnemy) return;
 
@@ -15270,7 +15343,7 @@ for (let tree of trees) {
                         landedInTicks: +m.lat.toFixed(2),
                         predictErrorPx: +m.err.toFixed(1),
                         decisionUs: Math.round(m.us),
-                        candidates: m.cand,
+                        candidates: Math.round(m.cand),
                         tracked: s.objs.size, pending: s.pending.length
                     };
                 },
@@ -24959,7 +25032,11 @@ for (let tree of trees) {
         pp2MaxPerTick: 2,        // placements the engine may spend per tick
         pp2Instant: true,        // Replace 2 answers in the destroy packet's turn
         pp2PreArm: true,         // work the refill out before the break lands
-        pp2Traps: true,          // let the engine spend traps as well as spikes
+        pp2SpikesOnly: true,     // spikes and nothing else
+        pp2Traps: false,         // (only consulted when Spikes Only is off)
+        pp2Direct: true,         // build now, not at the end of the tick window
+        pp2AimLock: true,        // after every placement the aim goes back on them
+        pp2Cage: true,           // up close, spend the extra spike that seals them in
         pp2Debug: false,         // corner readout: accept rate, prediction error
 
         // Velocity tick (Glotus)
@@ -25192,9 +25269,13 @@ for (let tree of trees) {
                 items: [
                     { type: 'toggle', name: "Preplace 2", id: "prePlace2", disables: ["prePlace", "replace"], engineTag: "v2" },
                     { type: 'toggle', name: "Replace 2", id: "replace2", disables: ["prePlace", "replace"], engineTag: "v2" },
+                    { type: 'toggle', name: "Spikes Only", id: "pp2SpikesOnly" },
+                    { type: 'toggle', name: "Build Instantly", id: "pp2Direct" },
+                    { type: 'toggle', name: "Aim Lock (stay on enemy)", id: "pp2AimLock" },
+                    { type: 'toggle', name: "Cage (seal their escape)", id: "pp2Cage" },
                     { type: 'toggle', name: "Instant Replace", id: "pp2Instant" },
                     { type: 'toggle', name: "Predictive Refill", id: "pp2PreArm" },
-                    { type: 'toggle', name: "Spend Traps", id: "pp2Traps" },
+                    { type: 'toggle', name: "Spend Traps (Spikes Only off)", id: "pp2Traps" },
                     { type: 'slider', name: "Engage Range", id: "pp2Range", min: 150, max: 500 },
                     { type: 'slider', name: "Places Per Tick", id: "pp2MaxPerTick", min: 1, max: 4 },
                     { type: 'toggle', name: "Accuracy Readout", id: "pp2Debug" }

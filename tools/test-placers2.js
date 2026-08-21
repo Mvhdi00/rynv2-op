@@ -68,7 +68,7 @@ function player(p) {
     }, p);
 }
 
-const calls = { addPredict: [], place: [] };
+const calls = { addPredict: [], place: [], send: [], defer: [] };
 
 const harness = new Function("EXT", `
     "use strict";
@@ -99,6 +99,10 @@ const harness = new Function("EXT", `
     function isAlly() { return false; }
     function addPredictObject(id, angle, preplace) { calls.addPredict.push({ id, angle, preplace, tick }); }
     function place(id, angle) { calls.place.push({ id, angle, tick }); }
+    let autoaim = false;
+    const io = { send: (op, a) => calls.send.push({ op, a, tick }) };
+    function getAttackDir() { return 0; }
+    function ctxDefer(fn, ms) { calls.defer.push(fn); return 0; }
     const window = { vars: {} };
     const document = { getElementById: () => null, createElement: () => ({ style: {} }), body: { appendChild() {} } };
 
@@ -143,8 +147,11 @@ function defaults() {
         prePlace: true, replace: true,
         prePlace2: true, replace2: true,
         pp2Range: 320, pp2MaxPerTick: 2,
-        pp2Instant: true, pp2PreArm: true, pp2Traps: true, pp2Debug: false
+        pp2Instant: true, pp2PreArm: true, pp2Traps: false, pp2Debug: false,
+        pp2SpikesOnly: true, pp2Direct: true, pp2AimLock: true, pp2Cage: true
     });
+    calls.send.length = 0;
+    calls.defer.length = 0;
 }
 
 // A fight: me at the origin, an enemy walking in from the east.
@@ -185,7 +192,8 @@ for (let t = 1; t <= 4; t++) {
 }
 ok("something was committed", calls.addPredict.length > 0,
    "commits=" + calls.addPredict.length);
-ok("committed as a preplacement", calls.addPredict.every(c => c.preplace === true));
+ok("committed for this tick, not the end of it (Build Instantly)",
+   calls.addPredict.every(c => c.preplace === false));
 {
     const last = calls.addPredict[calls.addPredict.length - 1];
     const it = ITEMS[last.id];
@@ -305,12 +313,12 @@ section("replace 2: instant refill on freed ground");
     ok("the refill was counted as instant", harness.YP2.metrics().instant >= 1);
 }
 
-section("replace 2: a predicted break is already covered, and not paid for twice");
+section("replace 2: a predicted break is claimed early AND refilled when it lands");
 {
-    // Same spike, one hit from death, with the enemy's weapon loaded and in
-    // range. The preplace pass treats that ground as already open and claims it
-    // this tick; when the break actually lands there is nothing left to do, and
-    // the engine must not spend a second packet saying so.
+    // One hit from death, enemy loaded and in range. The preplace pass treats
+    // that ground as already open and builds the cage around it this tick; when
+    // the break actually lands the freed spot is filled as well. Both, not one:
+    // a spike that is gone is a hole the enemy walks out through.
     defaults();
     calls.place.length = 0;
     calls.addPredict.length = 0;
@@ -320,18 +328,149 @@ section("replace 2: a predicted break is already covered, and not paid for twice
     harness.set({ visibleObjects: [doomed], spikes_our: [doomed] });
     harness.YP2.sample();
     harness.YP2.run();
-    const claimed = calls.addPredict.some(c => {
+    const near = calls.addPredict.filter(c => {
         const it = ITEMS[c.id];
         const off = 35 + it.scale + (it.placeOffset || 0);
-        return Math.hypot(off * Math.cos(c.angle) - 84, off * Math.sin(c.angle)) < 60;
+        return Math.hypot(off * Math.cos(c.angle) - 84, off * Math.sin(c.angle)) < 140;
     });
-    ok("the preplacer claimed the ground before the break", claimed,
-       "commits=" + JSON.stringify(calls.addPredict.map(c => c.angle.toFixed(2))));
+    ok("the doomed ground is built around before the break", near.length > 0,
+       "commits=" + calls.addPredict.length);
+    ok("a placement onto still-occupied ground keeps the late timing",
+       calls.addPredict.every(c => {
+           const it = ITEMS[c.id];
+           const off = 35 + it.scale + (it.placeOffset || 0);
+           const onIt = Math.hypot(off * Math.cos(c.angle) - 84, off * Math.sin(c.angle)) < 98;
+           return !onIt || c.preplace === true;
+       }));
     calls.place.length = 0;
     doomed.active = false;
     harness.YP2.removed(905);
-    ok("no duplicate packet once the break lands", calls.place.length === 0,
+    ok("and the freed spot is filled the moment it opens", calls.place.length === 1,
        "places=" + calls.place.length);
+}
+
+// ===========================================================================
+section("spikes only");
+{
+    defaults();                      // pp2SpikesOnly on by default
+    calls.addPredict.length = 0;
+    for (let t = 130; t <= 132; t++) {
+        const x = 200 - (t - 130) * 25;
+        fight(t, x, 0, x + 25, 0);
+        harness.YP2.sample();
+        harness.YP2.run();
+    }
+    ok("not one trap was spent", calls.addPredict.every(c => ITEMS[c.id].group.id === 2),
+       JSON.stringify(calls.addPredict.map(c => ITEMS[c.id].name)));
+
+    // With the spikes spent, Spikes Only is the difference between a trap and
+    // nothing at all — which is the switch, stated as plainly as it gets.
+    defaults();
+    calls.addPredict.length = 0;
+    let f = fight(140, 120, 0, 145, 0);
+    f.me.itemCounts[GROUPS.spikes.id] = 15;     // no spikes left
+    harness.YP2.sample();
+    harness.YP2.run();
+    ok("Spikes Only: out of spikes means nothing is placed", calls.addPredict.length === 0,
+       JSON.stringify(calls.addPredict.map(c => ITEMS[c.id].name)));
+
+    defaults();
+    V.pp2SpikesOnly = false; V.pp2Traps = true;
+    calls.addPredict.length = 0;
+    f = fight(145, 120, 0, 145, 0);
+    f.me.itemCounts[GROUPS.spikes.id] = 15;
+    harness.YP2.sample();
+    harness.YP2.run();
+    ok("Spikes Only off lets it spend traps again",
+       calls.addPredict.length > 0 && calls.addPredict.every(c => ITEMS[c.id].group.id === 5),
+       JSON.stringify(calls.addPredict.map(c => ITEMS[c.id].name)));
+}
+
+// ===========================================================================
+section("aim never stays on the building");
+{
+    defaults();
+    fight(150, 0, 120, 0, 150);       // enemy due south
+    const mine = obj({ sid: 980, x: 84, y: 0, scale: 49, id: 6, owner: { sid: 1 }, health: 500 });
+    harness.set({ visibleObjects: [mine], spikes_our: [mine] });
+    harness.YP2.sample();
+    harness.YP2.run();
+    calls.send.length = 0;
+    calls.place.length = 0;
+    mine.active = false;
+    harness.YP2.removed(980);
+    ok("the refill went out", calls.place.length === 1);
+    const aim = calls.send.filter(s => s.op === "D");
+    ok("an aim packet followed it", aim.length === 1, JSON.stringify(calls.send));
+    if (aim.length) {
+        const want = Math.atan2(120 - 0, 0 - 0);   // straight at the enemy
+        let diff = Math.abs(aim[0].a - want);
+        if (diff > Math.PI) diff = 2 * Math.PI - diff;
+        ok("and it points at the enemy, not at the build angle", diff < 0.01,
+           "aim=" + aim[0].a.toFixed(2) + " want=" + want.toFixed(2) +
+           " build=" + calls.place[0].angle.toFixed(2));
+    }
+    // ...and the tick pass queues the same correction after its own placements
+    calls.defer.length = 0;
+    calls.addPredict.length = 0;
+    fight(156, 0, 115, 0, 130);   // past the reservations the refill just made
+    harness.YP2.sample();
+    harness.YP2.run();
+    ok("the tick pass queues the same correction",
+       calls.addPredict.length > 0 && calls.defer.length > 0,
+       "commits=" + calls.addPredict.length + " deferred=" + calls.defer.length);
+}
+
+// ===========================================================================
+section("cage: more than one spike in a tick when they are on top of you");
+{
+    defaults();
+    calls.addPredict.length = 0;
+    fight(160, 90, 0, 95, 0);         // adjacent, barely moving — they are on me
+    harness.YP2.sample();
+    harness.YP2.run();
+    ok("the tick spends more than one spike", calls.addPredict.length >= 2,
+       "commits=" + calls.addPredict.length);
+    const angles = calls.addPredict.map(c => c.angle);
+    const spread = angles.every((a, i) => angles.every((b, j) => i === j || Math.abs(a - b) > 0.2));
+    ok("and they are different spots, not the same one twice", spread,
+       JSON.stringify(angles.map(a => a.toFixed(2))));
+
+    defaults();
+    V.pp2Cage = false;
+    calls.addPredict.length = 0;
+    fight(170, 90, 0, 95, 0);
+    harness.YP2.sample();
+    harness.YP2.run();
+    ok("Cage off holds it to the slider", calls.addPredict.length <= V.pp2MaxPerTick,
+       "commits=" + calls.addPredict.length);
+}
+
+// ===========================================================================
+section("a spike between me and the enemy is still rebuilt");
+{
+    // This is the one the old line-of-sight penalty used to veto: the broken
+    // spike sits exactly between the two of you, which is where a cage spike
+    // belongs.
+    defaults();
+    calls.place.length = 0;
+    fight(180, 170, 0, 175, 0);
+    const between = obj({ sid: 990, x: 84, y: 0, scale: 49, id: 6, owner: { sid: 1 }, health: 500 });
+    harness.set({ visibleObjects: [between], spikes_our: [between] });
+    harness.YP2.sample();
+    harness.YP2.run();
+    calls.place.length = 0;
+    between.active = false;
+    harness.YP2.removed(990);
+    ok("it goes straight back", calls.place.length === 1, "places=" + calls.place.length);
+    if (calls.place.length) {
+        const c = calls.place[0];
+        const it = ITEMS[c.id];
+        const off = 35 + it.scale + (it.placeOffset || 0);
+        ok("and back onto the ground it was on",
+           Math.hypot(off * Math.cos(c.angle) - 84, off * Math.sin(c.angle)) < 60,
+           "d=" + Math.hypot(off * Math.cos(c.angle) - 84, off * Math.sin(c.angle)).toFixed(1));
+    }
 }
 
 // ===========================================================================

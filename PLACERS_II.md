@@ -10,13 +10,36 @@ toggles. Only one engine is ever allowed to run — see [The lock](#the-lock).
 Menu → PLACERS → Placer II
     Preplace 2          the new preplacer
     Replace 2           the new replacer
+    Spikes Only         spikes and nothing else                        (on)
+    Build Instantly     place in this tick, not at the end of it       (on)
+    Aim Lock            after every placement the aim goes back on them (on)
+    Cage                up close, spend the extra spike that seals them (on)
     Instant Replace     refill in the same turn the destroy packet arrives
     Predictive Refill   work the refill out before the break lands
-    Spend Traps         let the engine spend traps as well as spikes
+    Spend Traps         only consulted when Spikes Only is off
     Engage Range        150 .. 500
     Places Per Tick     1 .. 4
     Accuracy Readout    corner panel: accept rate, prediction error, cost
 ```
+
+### Aim, and why a swing used to land on your own spike
+
+Placing borrows the attack packet: `selectToBuild` → `sendAtck(1, angle)` →
+`sendAtck(0, angle)`. That angle is also the angle your player ends up facing,
+so a placement quietly turns you toward the ground you just built on — and the
+next swing goes there instead of into the enemy. Every placement this engine
+makes is now followed by an aim packet pointing at the enemy: immediately on the
+instant path, and on a zero-delay defer after the tick pass, so it lands after
+the mod's own `D` packet rather than before it. That is **Aim Lock**.
+
+### Building now instead of at the end of the tick
+
+A preplacement is timed for `111 - ping` ms so it lands on ground that opens at
+the tick boundary. That timing is only worth paying for when the ground is *not
+yet free* — a building one hit from falling. **Build Instantly** sends everything
+else through the mod's own in-tick loop, which runs a few lines after the
+decision: the spike is on the wire immediately. Placements that claim
+still-occupied ground keep the late timing automatically.
 
 ---
 
@@ -101,18 +124,28 @@ ladder where the first matching rule ends the search.
 | Trap lands on their predicted position | +125 |
 | Trap lands on them now | +60 |
 | Trap stacked on a held, bleeding enemy | +48 |
-| Each escape lane the placement closes | +24 |
+| Each escape lane the placement closes | +42 (×1.6 with Cage, up close) |
 | Ground that is one hit from opening | +22 |
-| Ground just freed (replace) | +55 |
+| Ground just freed (replace) | +95 |
 | Takes ground the enemy was about to build on | +26 |
 | Learned accept rate for this angle | ±18 |
-| Sits on my own escape corridor | −70 |
-| Blocks my line to the enemy | −48 |
+| Sits on my own escape corridor | −35 |
+| Stands between me and the enemy | −10 |
 | Spends one of my last three of that item | −14 each |
+
+The line-of-sight penalty is deliberately small: melee in this game is a range
+and angle check, not a line of sight, so a spike between you and them does not
+stop you hitting them — and a cage is made of exactly those spikes.
 
 Collision is tested the way the server tests it — circle against circle. The v1
 path uses `lineInRect`, a bounding box, which over-reports a diagonal approach
 by up to 41%: it reports hits that will not happen.
+
+The pass keeps taking the best remaining spot until the tick's budget is spent
+or nothing is worth a placement — each commit reserves its ground and drops the
+cached ring, so the next round returns a different spot. That is how a gap gets
+closed in one tick instead of one spike per tick. With **Cage** on and the enemy
+inside 150 px, the tick is worth one extra spike over the slider.
 
 ### Executor
 
@@ -125,9 +158,10 @@ by up to 41%: it reports hits that will not happen.
   next-tick path. When Predictive Refill is on, the angle was already chosen
   while the building was still standing, so that path is a validity check rather
   than a search.
-- A spot the engine has committed to is reserved for five ticks, so it never
-  spends two placements on the same ground — including the case where the
-  preplacer already claimed ground that then broke.
+- A spot the engine has committed to is reserved for three ticks, so it never
+  spends two placements on the same ground. The reservation is dropped the
+  moment that ground actually opens, so a broken spike is never held back by
+  the engine's own bookkeeping.
 
 ---
 
@@ -194,5 +228,5 @@ committed output, then checks that all ten v1 placement functions
 `rynReplacePick`, `rynDoReplace`, `checkPredictObjects`, `addPredictObject`,
 `canPlace`, `isItemLimit`) appear in the output verbatim.
 
-Current state: **all verify checks pass, 30/30 engine tests, 24/24 menu-lock
+Current state: **all verify checks pass, 43/43 engine tests, 24/24 menu-lock
 tests.**

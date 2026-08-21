@@ -113,7 +113,11 @@ edit("vars",
         pp2MaxPerTick: 2,        // placements the engine may spend per tick
         pp2Instant: true,        // Replace 2 answers in the destroy packet's turn
         pp2PreArm: true,         // work the refill out before the break lands
-        pp2Traps: true,          // let the engine spend traps as well as spikes
+        pp2SpikesOnly: true,     // spikes and nothing else
+        pp2Traps: false,         // (only consulted when Spikes Only is off)
+        pp2Direct: true,         // build now, not at the end of the tick window
+        pp2AimLock: true,        // after every placement the aim goes back on them
+        pp2Cage: true,           // up close, spend the extra spike that seals them in
         pp2Debug: false,         // corner readout: accept rate, prediction error
 `);
 
@@ -141,9 +145,13 @@ edit("menu",
                 items: [
                     { type: 'toggle', name: "Preplace 2", id: "prePlace2", disables: ["prePlace", "replace"], engineTag: "v2" },
                     { type: 'toggle', name: "Replace 2", id: "replace2", disables: ["prePlace", "replace"], engineTag: "v2" },
+                    { type: 'toggle', name: "Spikes Only", id: "pp2SpikesOnly" },
+                    { type: 'toggle', name: "Build Instantly", id: "pp2Direct" },
+                    { type: 'toggle', name: "Aim Lock (stay on enemy)", id: "pp2AimLock" },
+                    { type: 'toggle', name: "Cage (seal their escape)", id: "pp2Cage" },
                     { type: 'toggle', name: "Instant Replace", id: "pp2Instant" },
                     { type: 'toggle', name: "Predictive Refill", id: "pp2PreArm" },
-                    { type: 'toggle', name: "Spend Traps", id: "pp2Traps" },
+                    { type: 'toggle', name: "Spend Traps (Spikes Only off)", id: "pp2Traps" },
                     { type: 'slider', name: "Engage Range", id: "pp2Range", min: 150, max: 500 },
                     { type: 'slider', name: "Places Per Tick", id: "pp2MaxPerTick", min: 1, max: 4 },
                     { type: 'toggle', name: "Accuracy Readout", id: "pp2Debug" }
