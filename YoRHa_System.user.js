@@ -10966,6 +10966,32 @@ let pps = 0;
         }
 
         // =====================================================================
+        // POD AI  —  optional Anthropic-backed conversation
+        // =====================================================================
+        // With Pod AI on and a key set, what you TYPE to the pod is answered by
+        // Claude instead of the local matcher; the instant combat call-outs stay
+        // local (an API round-trip is too slow to narrate a fight). The pod calls
+        // the Messages API straight from the page with the direct-browser-access
+        // header, so no userscript grant or proxy is needed.
+        //
+        //   ┌─ SECURITY: this key ships INSIDE the file. Anyone you hand the file
+        //   │  to can read it and spend your credits. That is the model you chose.
+        //   │  Prefer instead the "Anthropic API Key" box in Settings > YoRHa,
+        //   │  which stays only in your own browser. Leave this blank to use that.
+        //   └──────────────────────────────────────────────────────────────────
+        const POD_AI_KEY   = "";               // ← paste your sk-ant-... key here (optional)
+        const POD_AI_MODEL = "claude-opus-5";  // fast+cheap option: "claude-haiku-4-5"
+        const POD_SYSTEM =
+            "You are Pod 042, the support unit from NieR:Automata, reprogrammed as a companion inside the browser game moomoo.io. " +
+            "Speak tersely and literally in the YoRHa register: short lines, prefixes like 'Proposal:', 'Alert:', 'Query:', 'Analysis:', 'Affirmative.', 'Negative.'. No emoji. " +
+            "You understand ONLY moomoo.io: its weapons (stick, tool hammer, hammer, short sword, katana, knife, polearm, bat, daggers, great hammer, mc grabby, sickle, spear, musket, bow, great axe, crossbow, repeater crossbow, mine, turret), " +
+            "buildings (apple, cookie, cheese, wood/stone/spike/big-spike/poison-spike/spinning-spike walls, windmill/faster-windmill/power-mill, mine, sapling, pit trap, boost pad, turret, platform, healing pad, spawn pad, blocker, teleporter), " +
+            "resources (wood, food, stone, gold, points), ages and upgrades, clans, and tactics like trapping, spike-ticking, insta-kill combos, healing and building. " +
+            "If asked about anything NOT related to moomoo.io, refuse briefly in character: 'Query outside operational scope. This unit is limited to moomoo.io.' Do not answer it. " +
+            "Use the live match state given in each message to ground tactical advice. Keep replies to 1-2 short sentences. Reply in Arabic when the user writes Arabic. " +
+            "Do not include internal or system XML tags in your response.";
+
+        // =====================================================================
         // THE POD  —  a support unit you can actually talk to
         // =====================================================================
         // Pod 042 does not run a language model; it runs on the same world the
@@ -11131,11 +11157,87 @@ let pps = 0;
             },
             _pick(a) { return a[(Math.random() * a.length) | 0]; },
 
+            // ---- the AI link -------------------------------------------------
+            _ai: { history: [], busy: false },
+            _apiKey() {
+                try { if (window.vars && window.vars.podAIKey) return String(window.vars.podAIKey).trim(); } catch (e) {}
+                return String(POD_AI_KEY || "").trim();
+            },
+            _aiOn() {
+                try { return !!(window.vars && window.vars.podAI && this._apiKey()); } catch (e) { return false; }
+            },
+            // A compact, factual snapshot of the match, fed to Claude each turn so
+            // its advice is about the fight you are actually in.
+            _stateSnapshot() {
+                const s = this._self();
+                if (!s || !s.alive) return "no active unit (dead or not spawned).";
+                const hp = Math.round(this._hpRatio(s) * 100);
+                const k = (s.kills || (typeof killCount !== "undefined" ? killCount : 0)) | 0;
+                const foe = this._nearestFoe(s);
+                let f = "none in view";
+                if (foe) {
+                    const b = this._bearing(Math.atan2(foe.p.y - s.y, foe.p.x - s.x));
+                    f = Math.round(foe.d) + " units " + b[0] + (foe.p.name ? " (" + foe.p.name + ")" : "");
+                }
+                let res = "";
+                try { const st = s.stats; if (st) res = ", resources wood:" + (st.wood || 0) + " food:" + (st.food || 0) + " stone:" + (st.stone || 0) + " gold:" + (st.gold || 0); } catch (e) {}
+                return "hp:" + hp + "%, kills:" + k + ", nearest hostile:" + f + ", age:" + (s.age || 1) + res + ".";
+            },
+            _askAI(userText) {
+                const key = this._apiKey();
+                if (!key) { this._ruleReply(userText); return; }
+                if (this._ai.busy) { this.say("Standby — processing previous query."); return; }
+                this._ai.busy = true;
+                const model = (window.vars && window.vars.podAIModel) || POD_AI_MODEL;
+                const stateMsg = "[MATCH STATE] " + this._stateSnapshot() + "\n[PLAYER] " + userText;
+                const messages = this._ai.history.concat([{ role: "user", content: stateMsg }]);
+                const pending = { t: Date.now(), time: this.now(), who: "pod", text: "…analysing" };
+                this.lines.push(pending); this._render();
+                const drop = () => { const i = this.lines.indexOf(pending); if (i >= 0) this.lines.splice(i, 1); };
+                fetch("https://api.anthropic.com/v1/messages", {
+                    method: "POST",
+                    headers: {
+                        "content-type": "application/json",
+                        "x-api-key": key,
+                        "anthropic-version": "2023-06-01",
+                        "anthropic-dangerous-direct-browser-access": "true"
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        max_tokens: 512,
+                        output_config: { effort: "low" },
+                        system: POD_SYSTEM,
+                        messages: messages
+                    })
+                }).then(r => r.json()).then(data => {
+                    this._ai.busy = false; drop();
+                    let reply = "";
+                    try { reply = (data.content || []).filter(b => b.type === "text").map(b => b.text).join(" ").trim(); } catch (e) {}
+                    if (!reply) {
+                        if (data && data.error) return this.say("Alert: link error — " + (data.error.message || "unknown") + ".");
+                        this.say("Query failed. Verify the API key."); return;
+                    }
+                    this._ai.history.push({ role: "user", content: userText });
+                    this._ai.history.push({ role: "assistant", content: reply });
+                    if (this._ai.history.length > 12) this._ai.history = this._ai.history.slice(-12);
+                    this.say(reply);
+                }).catch(e => {
+                    this._ai.busy = false; drop();
+                    this.say("Alert: AI link unreachable. Reverting to local analysis.");
+                    this._ruleReply(userText);
+                });
+            },
+
             // ---- answering what you type -------------------------------------
+            // AI on and a key set → Claude answers; otherwise the local matcher.
             handle(text) {
                 text = String(text || "").trim();
                 if (!text) return;
                 this.youSaid(text);
+                if (this._aiOn()) { this._askAI(text); return; }
+                this._ruleReply(text);
+            },
+            _ruleReply(text) {
                 const q = text.toLowerCase();
                 const s = this._self();
                 const has = (arr) => arr.some(w => q.indexOf(w) >= 0);
@@ -24462,6 +24564,9 @@ for (let tree of trees) {
         yorhaVisual: true,       // full-screen YoRHa atmosphere wash
         podEnabled: true,        // the YoRHa Pod: a drone that follows + a targeting line
         podVariant: 0,           // 0 = 042, 1 = 153, 2 = A2
+        podAI: false,            // route typed pod chat through Claude (needs a key)
+        podAIKey: "",            // your Anthropic key, kept only in this browser
+        podAIModel: "",          // blank = use POD_AI_MODEL; e.g. "claude-haiku-4-5"
 
         // Settings
         theme: "",
@@ -24788,7 +24893,10 @@ for (let tree of trees) {
                         { value: 1, label: "153 (grey)" },
                         { value: 2, label: "A2 (black / red)" }
                     ] },
-                    { type: 'keybind', name: "Open Pod Chat", id: "keyPodChat" }
+                    { type: 'keybind', name: "Open Pod Chat", id: "keyPodChat" },
+                    { type: 'toggle', name: "Pod AI (Claude conversation)", id: "podAI" },
+                    { type: 'input', name: "Anthropic API Key (sk-ant-…)", id: "podAIKey" },
+                    { type: 'input', name: "AI Model (blank = Opus 5)", id: "podAIModel" }
                 ]
             }
         ],
