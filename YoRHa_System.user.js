@@ -10235,6 +10235,18 @@ let pps = 0;
                 break;
             }
             case "P": botViewSeed(bot); break;          // died — rebuild from scratch
+            case "6": {                                 // receiveChat(sid, message)
+                // Chat bubbles are drawn off the render-world's own players, so
+                // driving a bot showed no chat at all — not your own line, not
+                // anyone else's — until this fed it in the same way the master
+                // client does. Now the bubble sits over whoever spoke.
+                const p = botViewFindPlayer(args[0]);
+                if (p) {
+                    p.chatMessage = checkProfanityString(String(args[1]));
+                    p.chatCountdown = config.chatCountdown;
+                }
+                break;
+            }
             }
             w.self = botViewSelf;
         }
@@ -10828,6 +10840,95 @@ let pps = 0;
         let factor = 1.0; // Zoom factor
         function lerp(start, end, t) {
             return start + (end - start) * t;
+        }
+
+        // =====================================================================
+        // THE POD  —  a NieR:Automata support unit, client-side only
+        // =====================================================================
+        // A little drone that hovers beside whoever the camera is following (your
+        // player, or the bot you are driving) and paints a targeting line toward
+        // your aim. It is pure overlay: it never sends a packet and never touches
+        // the game state, so it cannot deal a point of real damage — moomoo's
+        // combat is the server's. It just makes your aim visible and gives the
+        // YoRHa look its companion. podX/podY carry the drone's smoothed world
+        // position between frames so it trails instead of snapping.
+        let podX = null, podY = null;
+        function renderPod(xOffset, yOffset) {
+            if (!(window.vars && window.vars.podEnabled)) { podX = podY = null; return; }
+            // Who the camera follows: the possessed bot's render-self, else you.
+            let self = null;
+            try { if (inBotView() && botViewSelf) self = botViewSelf; } catch (e) {}
+            if (!self) self = myPlayer;
+            if (!self || self.x === undefined || !self.alive) { podX = podY = null; return; }
+
+            // Aim: your cursor, the same read the game uses to face you.
+            const aim = Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2));
+            const t = Date.now();
+            const bob = Math.sin(t / 320) * 5;
+
+            // Rest point: up and to the left of the body, floating. It eases
+            // toward that spot each frame so quick turns leave it trailing.
+            const rest = 46;
+            const targetX = self.x + Math.cos(aim + Math.PI) * rest - 26;
+            const targetY = self.y + Math.sin(aim + Math.PI) * rest - 34;
+            if (podX === null) { podX = targetX; podY = targetY; }
+            podX = lerp(podX, targetX, 0.12);
+            podY = lerp(podY, targetY, 0.12);
+
+            const px = podX - xOffset, py = podY - yOffset + bob;
+            const sx = self.x - xOffset, sy = self.y - yOffset;
+
+            mainContext.save();
+
+            // The targeting line: a thin dashed ink beam from the pod out along
+            // your aim, ending in a small reticle. It reads your angle at a glance.
+            const beamLen = 900;
+            const bx = sx + Math.cos(aim) * beamLen;
+            const by = sy + Math.sin(aim) * beamLen;
+            mainContext.globalAlpha = 0.28;
+            mainContext.strokeStyle = "#2f2c26";
+            mainContext.lineWidth = 2;
+            mainContext.setLineDash([10, 8]);
+            mainContext.beginPath();
+            mainContext.moveTo(px, py);
+            mainContext.lineTo(bx, by);
+            mainContext.stroke();
+            mainContext.setLineDash([]);
+            // A reticle where the beam points, a little way out from the body.
+            const rx = sx + Math.cos(aim) * 190, ry = sy + Math.sin(aim) * 190;
+            mainContext.globalAlpha = 0.5;
+            mainContext.lineWidth = 2;
+            mainContext.beginPath();
+            mainContext.arc(rx, ry, 9, 0, Math.PI * 2);
+            mainContext.moveTo(rx - 14, ry); mainContext.lineTo(rx + 14, ry);
+            mainContext.moveTo(rx, ry - 14); mainContext.lineTo(rx, ry + 14);
+            mainContext.stroke();
+
+            // The pod body: a small rounded shell, ink-outlined, with a dark
+            // single eye that looks the way you aim.
+            mainContext.globalAlpha = 1;
+            mainContext.lineWidth = 2.5;
+            mainContext.strokeStyle = "#2f2c26";
+            mainContext.fillStyle = "#dedacb";
+            mainContext.beginPath();
+            mainContext.arc(px, py, 12, 0, Math.PI * 2);
+            mainContext.fill();
+            mainContext.stroke();
+            // Two little fins.
+            mainContext.fillStyle = "#c2bda8";
+            mainContext.beginPath();
+            mainContext.ellipse(px - 13, py, 5, 8, aim, 0, Math.PI * 2);
+            mainContext.ellipse(px + 13, py, 5, 8, aim, 0, Math.PI * 2);
+            mainContext.fill();
+            mainContext.stroke();
+            // The eye, offset toward the aim.
+            mainContext.fillStyle = "#26231e";
+            mainContext.beginPath();
+            mainContext.arc(px + Math.cos(aim) * 4, py + Math.sin(aim) * 4, 4.5, 0, Math.PI * 2);
+            mainContext.fill();
+
+            mainContext.restore();
+            mainContext.globalAlpha = 1;
         }
 
         function resetZoom() {
@@ -11771,6 +11872,9 @@ let pps = 0;
                 renderPlayers(xOffset, yOffset, 1);
                 renderGameObjects(2, xOffset, yOffset);
                 renderGameObjects(3, xOffset, yOffset);
+
+                // THE POD — follows the camera's player, paints the aim line.
+                try { renderPod(xOffset, yOffset); } catch (e) {}
 
                 // MAP BOUNDARIES:
                 mainContext.fillStyle = "#000";
@@ -15249,8 +15353,12 @@ for (let tree of trees) {
                             botViewFeed(bot, msg.type, msg.args);
                     } catch (e) {}
                     // The mod's own tick, as this bot. Last, so the world it
-                    // reads is already up to date with this packet.
-                    if (msg.type === "a" && window.vars.botFullMod) {
+                    // reads is already up to date with this packet. The bot you
+                    // are driving always runs it, whatever the global Full Mod
+                    // toggle says — stepping into a bot means you want the whole
+                    // mod on it (heal, mills, placers, spike tick, push, aim),
+                    // the same suite your own player gets.
+                    if (msg.type === "a" && (RynBots.possessed === bot || window.vars.botFullMod)) {
                         try { RynBots._runFullMod(bot, msg.args && msg.args[0]); } catch (e) {}
                     }
                 });
@@ -24024,7 +24132,8 @@ for (let tree of trees) {
         // Visuals
         millRotation: false,
         spikeRotation: false,
-        yorhaVisual: true,       // reskin players, hats and animals to YoRHa
+        yorhaVisual: true,       // full-screen YoRHa atmosphere wash
+        podEnabled: true,        // the YoRHa Pod: a drone that follows + a targeting line
 
         // Settings
         theme: "",
@@ -24344,7 +24453,8 @@ for (let tree of trees) {
             {
                 title: "YoRHa",
                 items: [
-                    { type: 'toggle', name: "YoRHa Visual (players / hats / animals)", id: "yorhaVisual" }
+                    { type: 'toggle', name: "YoRHa Visual (atmosphere)", id: "yorhaVisual" },
+                    { type: 'toggle', name: "Pod (drone + targeting line)", id: "podEnabled" }
                 ]
             }
         ],
