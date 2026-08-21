@@ -13756,14 +13756,34 @@ for (let tree of trees) {
         let lastPrePlaceObject = null;
         let removedObjects = [];
 
-        function updateAngles(id) {
-            const angles = [];
-            for (let i = 0; i < 72; i++) {
-                const angle = UTILS.toRad(i * (360 / 72));
-                angles.push({ id: id, angle: angle, placeable: canPlace(id, angle), ...getConfig(id, angle) });
-            }
+        // How many directions the placer tests around you. Both placer sweeps
+        // read it, so the resolution is one number instead of two literals.
+        //
+        // 144 is 2.5 degrees a step: at the radius a spike is placed from you
+        // (35 + 52 = 87) that puts neighbouring candidates 3.8 units apart, so
+        // the edge of a gap is found twice as precisely as the old 72 did.
+        //
+        // It is NOT swept flat, though -- see buildPlaceAngles(). Every second
+        // angle here is an angle of the old 72 grid, and those are tried first
+        // and alone. The finer half is only reached when the coarse circle is
+        // completely blocked. So the placer picks the same spot it always did,
+        // at the same cost, and the extra resolution is reach in the one case
+        // where 72 had nothing rather than a different answer every tick. This
+        // is what keeps the spike tick landing exactly where 72 landed it.
+        //
+        // Do not push this much higher without fixing the ban first. A placed
+        // angle is banned by exact key (`bannedAngles.has(obj.angle)`) and
+        // matched with a 0.01 rad tolerance, so the step has to stay well above
+        // 0.01 rad or the ban stops covering the angles either side of it —
+        // at 629 steps the step is 0.00999 and three grid angles fall inside
+        // the tolerance, which means the placer keeps re-picking a neighbour
+        // that drops the spike in the same spot and burns the packet budget on
+        // placements the server rejects. 144 steps is 0.0436 rad, four times
+        // clear of that.
+        const PLACE_ANGLES = 144;
 
-            getPerfectAngles(angles);
+        function updateAngles(id) {
+            const angles = buildPlaceAngles(id);
 
             // Check placed angles and ban them if still placeable
             for (let placedAngle of placedAngles) {
@@ -13915,14 +13935,49 @@ for (let tree of trees) {
         }
 
         function getPrePlaceAngles(id, customObjects) {
-            const angles = [];
-            for (let i = 0; i < 72; i++) {
-                const angle = UTILS.toRad(i * (360 / 72));
-                angles.push({ id: id, angle: angle, placeable: canPlace(id, angle, customObjects), ...getConfig(id, angle) });
-            }
+            return buildPlaceAngles(id, customObjects);
+        }
 
-            getPerfectAngles(angles);
-            return angles;
+        // =====================================================================
+        // THE PLACER SWEEP  —  the old grid first, the fine one only if needed
+        // =====================================================================
+        // PLACE_ANGLES is 144, and every second one of those angles IS an angle
+        // of the old 72 grid: 2 x 2.5deg == 5deg. So the fine grid is a strict
+        // superset of the coarse one, and the two can be spent in that order.
+        //
+        // Pass one is the old 72 sweep, exactly: same angles, same values, same
+        // order, same count of canPlace calls. If anything on it can be placed,
+        // that is what the placer sees and every decision downstream comes out
+        // where it came out before -- the same spot, from the same list. This
+        // is why the spike tick feels identical to the 72 placer.
+        //
+        // Pass two only happens when the coarse circle is completely blocked,
+        // which is the one case where the old grid genuinely had nothing and
+        // 2.5deg steps can still find a gap. Then all 144 are returned.
+        //
+        // That is what 144 buys, and all it costs: extra reach when 72 comes up
+        // empty, and nothing at all the rest of the time. (Want the fine grid
+        // every tick again? Delete the early return.)
+        function buildPlaceAngles(id, customObjects) {
+            const step = (PLACE_ANGLES % 2 === 0) ? 2 : 1;
+            const mk = (i) => {
+                const angle = UTILS.toRad(i * (360 / PLACE_ANGLES));
+                return { id: id, angle: angle,
+                         placeable: canPlace(id, angle, customObjects),
+                         ...getConfig(id, angle) };
+            };
+
+            const coarse = [];
+            for (let i = 0; i < PLACE_ANGLES; i += step) coarse.push(mk(i));
+            getPerfectAngles(coarse);
+            if (step === 1) return coarse;
+            for (let i = 0; i < coarse.length; i++) if (coarse[i].placeable) return coarse;
+
+            // Walled in on every one of the old angles. Spend the other half.
+            const all = [];
+            for (let i = 0; i < PLACE_ANGLES; i++) all.push(i % 2 ? mk(i) : coarse[i >> 1]);
+            getPerfectAngles(all);
+            return all;
         }
 
         function getPerfectAngles(angles) {
