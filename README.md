@@ -6,6 +6,11 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+> There is a second script in this repo: **`YoRHa_System.user.js`**, which
+> carries the NieR:Automata-styled Pod support unit — a bilingual
+> (Arabic / English) companion with speech in and out, persistent memory, and an
+> optional Claude link. See **[POD.md](POD.md)**.
+
 ---
 
 ## Why RYN is the base
