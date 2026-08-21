@@ -177,3 +177,24 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+## YoRHa System — Placer II
+
+The repository also carries a second, separate build: the **YoRHa System** mod
+with a new placement engine added beside its existing one.
+
+```
+YoRHa_System.user.js          the build output — install this one for YoRHa System
+src/YoRHa_System_v1.5.js      base mod (input)
+src/placers2/engine.js        the Preplace 2 / Replace 2 engine (input)
+tools/build-yorha-placers2.js base + engine -> YoRHa_System.user.js
+tools/verify-placers2.js      hooks, lock, settings, v1 left untouched
+tools/test-placers2.js        the engine against a simulated fight
+tools/test-menulock.js        the shipped toggle renderer against a DOM stub
+```
+
+Preplace 2 and Replace 2 are new toggles under Menu → Placers; switching either
+on closes and locks the old Preplacer and Replace, which are otherwise left
+exactly as they were. See [PLACERS_II.md](PLACERS_II.md).
