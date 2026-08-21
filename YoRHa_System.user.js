@@ -13756,31 +13756,19 @@ for (let tree of trees) {
         let lastPrePlaceObject = null;
         let removedObjects = [];
 
-        // How many directions the placer tests around you. Both placer sweeps
-        // read it, so the resolution is one number instead of two literals.
+        // How many directions the placer tests around you is a menu choice now:
+        // the "144 Angles" / "72 Angles" tiles in Placers. buildPlaceAngles()
+        // reads that choice — see it for the full story. In short: the coarse
+        // 72 grid (5deg a step) is always swept first, and 144 mode only spends
+        // the finer 2.5deg half when the whole 72 circle is blocked. So the
+        // spike tick lands exactly where 72 landed it either way, and 144 buys
+        // reach when 72 had nothing rather than a different answer every tick.
         //
-        // 144 is 2.5 degrees a step: at the radius a spike is placed from you
-        // (35 + 52 = 87) that puts neighbouring candidates 3.8 units apart, so
-        // the edge of a gap is found twice as precisely as the old 72 did.
-        //
-        // It is NOT swept flat, though -- see buildPlaceAngles(). Every second
-        // angle here is an angle of the old 72 grid, and those are tried first
-        // and alone. The finer half is only reached when the coarse circle is
-        // completely blocked. So the placer picks the same spot it always did,
-        // at the same cost, and the extra resolution is reach in the one case
-        // where 72 had nothing rather than a different answer every tick. This
-        // is what keeps the spike tick landing exactly where 72 landed it.
-        //
-        // Do not push this much higher without fixing the ban first. A placed
-        // angle is banned by exact key (`bannedAngles.has(obj.angle)`) and
-        // matched with a 0.01 rad tolerance, so the step has to stay well above
-        // 0.01 rad or the ban stops covering the angles either side of it —
-        // at 629 steps the step is 0.00999 and three grid angles fall inside
-        // the tolerance, which means the placer keeps re-picking a neighbour
-        // that drops the spike in the same spot and burns the packet budget on
-        // placements the server rejects. 144 steps is 0.0436 rad, four times
-        // clear of that.
-        const PLACE_ANGLES = 144;
+        // The ceiling is the ban: a placed angle is keyed exactly
+        // (`bannedAngles.has(obj.angle)`) and matched with a 0.01 rad tolerance,
+        // so the step must stay well above 0.01 rad. 144 steps is 0.0436 rad,
+        // four times clear; do not raise the fine grid past that without fixing
+        // the ban first.
 
         function updateAngles(id) {
             const angles = buildPlaceAngles(id);
@@ -13959,23 +13947,36 @@ for (let tree of trees) {
         // empty, and nothing at all the rest of the time. (Want the fine grid
         // every tick again? Delete the early return.)
         function buildPlaceAngles(id, customObjects) {
-            const step = (PLACE_ANGLES % 2 === 0) ? 2 : 1;
-            const mk = (i) => {
-                const angle = UTILS.toRad(i * (360 / PLACE_ANGLES));
+            // The coarse grid is ALWAYS the classic 72 (5deg steps), swept first.
+            // The fine 144 fallback (the 2.5deg in-between angles) is spent only
+            // when 144 mode is on AND the whole 72 circle is blocked. The menu's
+            // "144 Angles" / "72 Angles" tiles drive placeAngles144. In node —
+            // where the test lifts this function — window is absent, so it reads
+            // as 144 mode, the path test-place-angles.js pins.
+            const fineOn = (typeof window === 'undefined') ||
+                           !window.vars || window.vars.placeAngles144 !== false;
+            const COARSE = 72, FINE = 144;
+            const mk = (total, i) => {
+                const angle = UTILS.toRad(i * (360 / total));
                 return { id: id, angle: angle,
                          placeable: canPlace(id, angle, customObjects),
                          ...getConfig(id, angle) };
             };
 
+            // Pass one: the old 72 sweep, exactly — same angles, values, order.
             const coarse = [];
-            for (let i = 0; i < PLACE_ANGLES; i += step) coarse.push(mk(i));
+            for (let i = 0; i < COARSE; i++) coarse.push(mk(COARSE, i));
             getPerfectAngles(coarse);
-            if (step === 1) return coarse;
+
+            if (!fineOn) return coarse;   // 72 mode: never touch the fine half.
             for (let i = 0; i < coarse.length; i++) if (coarse[i].placeable) return coarse;
 
-            // Walled in on every one of the old angles. Spend the other half.
+            // 144 mode and walled in on every old angle. Spend the other half.
+            // Even indices of the 144 grid ARE the 72 angles (2 x 2.5 == 5), so
+            // reuse the coarse objects and only compute the odd in-betweens —
+            // that keeps the placed/banned angle keys bit-identical to the old grid.
             const all = [];
-            for (let i = 0; i < PLACE_ANGLES; i++) all.push(i % 2 ? mk(i) : coarse[i >> 1]);
+            for (let i = 0; i < FINE; i++) all.push(i % 2 ? mk(FINE, i) : coarse[i >> 1]);
             getPerfectAngles(all);
             return all;
         }
@@ -23957,6 +23958,14 @@ for (let tree of trees) {
         prePlace: true,
         replace: true,
 
+        // Placer resolution — two mutually-exclusive tiles. 144 mode sweeps the
+        // classic 72 grid first (so the spike tick lands exactly where it always
+        // did) and only spends the finer 2.5deg half when the 72 circle is fully
+        // blocked. 72 mode never touches the fine half. The placer reads
+        // placeAngles144; placeAngles72 is only the mirror tile.
+        placeAngles144: true,
+        placeAngles72: false,
+
         // Velocity tick (Glotus)
         velocityTick: false,
 
@@ -24162,6 +24171,13 @@ for (let tree of trees) {
                 items: [
                     { type: 'toggle', name: "Enable Preplacer", id: "prePlace" },
                     { type: 'toggle', name: "Enable Replace", id: "replace" }
+                ]
+            },
+            {
+                title: "Placer Resolution",
+                items: [
+                    { type: 'toggle', name: "144 Angles (Fine)", id: "placeAngles144", exclusive: "placeAngles72" },
+                    { type: 'toggle', name: "72 Angles (Classic)", id: "placeAngles72", exclusive: "placeAngles144" }
                 ]
             }
         ],
