@@ -24748,15 +24748,101 @@ for (let tree of trees) {
     body.yorha-hud #actionBar div {
         border-radius: 0 !important;
     }
+
+    /* ===== YoRHa BOOT SCREEN ===== a NieR:Automata-style boot sequence over a
+       black field, shown once when the page loads and faded out (or skipped). */
+    #yorha-boot {
+        position: fixed; inset: 0; z-index: 2147483647;
+        background: #0b0b0a; color: #cfcbb8;
+        font-family: 'Jost', 'Century Gothic', monospace;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        letter-spacing: 2px; cursor: pointer;
+        transition: opacity 0.6s ease;
+        overflow: hidden;
+    }
+    #yorha-boot::before {   /* scanlines */
+        content: ''; position: absolute; inset: 0; pointer-events: none;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,0.35) 0px, rgba(0,0,0,0.35) 1px, transparent 1px, transparent 3px);
+    }
+    #yorha-boot.gone { opacity: 0; pointer-events: none; }
+    .yb-wrap { width: 560px; max-width: 88vw; position: relative; z-index: 1; }
+    .yb-title { font-size: 30px; font-weight: 500; letter-spacing: 10px; text-transform: uppercase; }
+    .yb-sub { font-size: 12px; color: #8f8b76; letter-spacing: 5px; margin: 6px 0 22px; text-transform: uppercase; }
+    .yb-rule { height: 2px; background: #cfcbb8; opacity: 0.5; margin: 14px 0; }
+    .yb-lines { font-size: 13px; line-height: 2.1; min-height: 200px; }
+    .yb-line { opacity: 0; white-space: pre; }
+    .yb-line.show { opacity: 1; }
+    .yb-line .ok { color: #cfcbb8; float: right; }
+    .yb-bar { height: 10px; border: 2px solid #cfcbb8; margin-top: 18px; position: relative; }
+    .yb-bar > i { position: absolute; inset: 0; width: 0; background: #cfcbb8; transition: width 0.25s linear; }
+    .yb-skip { position: absolute; bottom: 22px; right: 28px; font-size: 11px; color: #6f6b5e; letter-spacing: 3px; }
+    .yb-cursor { animation: yb-blink 1s steps(2,start) infinite; }
+    @keyframes yb-blink { 50% { opacity: 0; } }
 `;
 
     const styleSheet = document.createElement('style');
     styleSheet.textContent = styles;
     document.head.appendChild(styleSheet);
 
+    // ------------------------------------------------------------------ BOOT
+    // A NieR:Automata-style boot sequence, shown once on page load. It types a
+    // few system lines, fills a bar, then fades. Click or any key skips it.
+    (function yorhaBoot() {
+        if (window.__yorhaBooted) return;
+        window.__yorhaBooted = true;
+        const lines = [
+            "> initializing black box .............",
+            "> loading combat data ................",
+            "> syncing network protocol ...........",
+            "> calibrating pod support unit .......",
+            "> establishing uplink ................"
+        ];
+        const el = document.createElement('div');
+        el.id = 'yorha-boot';
+        el.innerHTML =
+            '<div class="yb-wrap">' +
+              '<div class="yb-title">YoRHa System</div>' +
+              '<div class="yb-sub">Command Terminal &nbsp;//&nbsp; v1.5</div>' +
+              '<div class="yb-rule"></div>' +
+              '<div class="yb-lines"></div>' +
+              '<div class="yb-bar"><i></i></div>' +
+              '<div class="yb-rule"></div>' +
+              '<div style="text-align:center;letter-spacing:8px;font-size:14px;">GLORY TO MANKIND<span class="yb-cursor">_</span></div>' +
+            '</div><div class="yb-skip">CLICK OR PRESS ANY KEY TO SKIP</div>';
+        const mount = () => (document.body || document.documentElement).appendChild(el);
+        if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
+
+        const box = el.querySelector('.yb-lines');
+        const bar = el.querySelector('.yb-bar > i');
+        let i = 0, done = false;
+        function finish() {
+            if (done) return; done = true;
+            el.classList.add('gone');
+            setTimeout(() => { try { el.remove(); } catch (e) {} }, 700);
+        }
+        function step() {
+            if (done) return;
+            if (i < lines.length) {
+                const row = document.createElement('div');
+                row.className = 'yb-line show';
+                row.innerHTML = lines[i] + '<span class="ok">OK</span>';
+                box.appendChild(row);
+                bar.style.width = Math.round(((i + 1) / lines.length) * 100) + '%';
+                i++;
+                setTimeout(step, 320);
+            } else {
+                setTimeout(finish, 650);
+            }
+        }
+        setTimeout(step, 250);
+        el.addEventListener('click', finish);
+        window.addEventListener('keydown', finish, { once: true });
+    })();
+
     // Added Keybinds Tab
     const html = `
-        <div class="deltek-root active">
+        <div class="deltek-root">
             <div class="deltek-sidebar">
                 <div class="deltek-logo"><h1>YoRHa System</h1><span>Command Terminal</span></div>
                 <div class="nav-container">
