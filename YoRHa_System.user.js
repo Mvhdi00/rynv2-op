@@ -11099,6 +11099,92 @@ let pps = 0;
             ctx.globalAlpha = 1;
         }
 
+        // A directive you can follow: the marked point drawn where it is when it
+        // is on screen, and pinned to the edge with a bearing line and a range
+        // readout when it is not — so "move north-east 700" is something you can
+        // walk rather than something you have to remember.
+        function podDrawMark(ctx, xOffset, yOffset, sx, sy, U) {
+            if (!PodMark.live()) return;
+            const mx = PodMark.x - xOffset, my = PodMark.y - yOffset;
+            const W = maxScreenWidth, H = maxScreenHeight;
+            const pad = 54;
+            const onScreen = mx > pad && my > pad && mx < W - pad && my < H - pad;
+            const fade = Math.min(1, (PodMark.until - Date.now()) / 800);
+            const hot = PodMark.kind === "target" || PodMark.kind === "base";
+            const col = hot ? "#a83f2e" : U.beam;
+            const t = Date.now();
+
+            ctx.save();
+            ctx.lineJoin = "round";
+            ctx.font = "600 11px Jost, 'Century Gothic', sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            if (onScreen) {
+                const pulse = 1 + Math.sin(t / 260) * 0.12;
+                ctx.globalAlpha = 0.85 * fade;
+                ctx.strokeStyle = col;
+                ctx.lineWidth = 2;
+                // Diamond, brackets, and a stem down to the ground.
+                ctx.beginPath();
+                ctx.moveTo(mx, my - 13 * pulse);
+                ctx.lineTo(mx + 13 * pulse, my);
+                ctx.lineTo(mx, my + 13 * pulse);
+                ctx.lineTo(mx - 13 * pulse, my);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.globalAlpha = 0.35 * fade;
+                ctx.beginPath();
+                ctx.arc(mx, my, 24 + Math.sin(t / 300) * 3, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.globalAlpha = 0.9 * fade;
+                ctx.fillStyle = col;
+                ctx.beginPath();
+                ctx.arc(mx, my, 3, 0, Math.PI * 2);
+                ctx.fill();
+                if (PodMark.label) {
+                    const w = ctx.measureText(PodMark.label).width + 14;
+                    ctx.fillStyle = "#d3cebb";
+                    ctx.globalAlpha = 0.92 * fade;
+                    ctx.fillRect(mx - w / 2, my - 40, w, 17);
+                    ctx.strokeStyle = col;
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeRect(mx - w / 2, my - 40, w, 17);
+                    ctx.fillStyle = "#22201b";
+                    ctx.fillText(PodMark.label, mx, my - 31);
+                }
+            } else {
+                // Off screen: clamp to the edge and point at it.
+                const cx = W / 2, cy = H / 2;
+                const ang = Math.atan2(my - cy, mx - cx);
+                const ex = Math.max(pad, Math.min(W - pad, cx + Math.cos(ang) * (W / 2 - pad)));
+                const ey = Math.max(pad, Math.min(H - pad, cy + Math.sin(ang) * (H / 2 - pad)));
+                ctx.globalAlpha = 0.8 * fade;
+                ctx.fillStyle = col;
+                ctx.save();
+                ctx.translate(ex, ey);
+                ctx.rotate(ang);
+                ctx.beginPath();
+                ctx.moveTo(13, 0); ctx.lineTo(-8, 8); ctx.lineTo(-3, 0); ctx.lineTo(-8, -8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+                const d = Math.round(UTILS.getDistance(sx, sy, mx, my));
+                const label = (PodMark.label ? PodMark.label + " " : "") + d;
+                const w = ctx.measureText(label).width + 12;
+                ctx.fillStyle = "#d3cebb";
+                ctx.globalAlpha = 0.9 * fade;
+                ctx.fillRect(ex - w / 2, ey + 12, w, 16);
+                ctx.strokeStyle = col;
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(ex - w / 2, ey + 12, w, 16);
+                ctx.fillStyle = "#22201b";
+                ctx.fillText(label, ex, ey + 20);
+            }
+            ctx.restore();
+            ctx.globalAlpha = 1;
+        }
+
         function renderPod(xOffset, yOffset) {
             if (!(window.vars && window.vars.podEnabled)) { podFly.x = podFly.y = null; return; }
             // Who the camera follows: the possessed bot's render-self, else you.
@@ -11113,10 +11199,14 @@ let pps = 0;
             const aim = Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2));
 
             // Rest point: behind and above the shoulder, opposite the aim, so the
-            // unit never sits between you and what you are looking at.
+            // unit never sits between you and what you are looking at — unless it
+            // is away on a reconnaissance flight, in which case it is wherever the
+            // flight has got to.
+            let recon = null;
+            try { recon = PodRecon.anchor(); } catch (e) {}
             const rest = 52;
-            const targetX = self.x + Math.cos(aim + Math.PI) * rest - 22;
-            const targetY = self.y + Math.sin(aim + Math.PI) * rest - 40;
+            const targetX = recon ? recon[0] : self.x + Math.cos(aim + Math.PI) * rest - 22;
+            const targetY = recon ? recon[1] : self.y + Math.sin(aim + Math.PI) * rest - 40;
             if (podFly.x === null) { podFly.x = targetX; podFly.y = targetY; }
             const px0 = podFly.x, py0 = podFly.y;
             podFly.x = lerp(podFly.x, targetX, 0.11);
@@ -11153,10 +11243,29 @@ let pps = 0;
             mainContext.stroke();
             mainContext.setLineDash([]);
 
+            // --- the waypoint the unit told you to walk to ---------------------
+            try { podDrawMark(mainContext, xOffset, yOffset, sx, sy, U); } catch (e) {}
+
             // --- the targeting laser ------------------------------------------
+            // Suppressed while the unit is away: a beam drawn from halfway across
+            // the map to your cursor is noise, not information.
             const beamLen = 1000;
             const rx = sx + Math.cos(aim) * 200, ry = sy + Math.sin(aim) * 200;
             const bx = sx + Math.cos(aim) * beamLen, by = sy + Math.sin(aim) * beamLen;
+            if (recon) {
+                // Sweep arc instead, centred on the drone.
+                const k = (t % 1800) / 1800;
+                mainContext.globalAlpha = 0.35 * (1 - k);
+                mainContext.strokeStyle = U.iris;
+                mainContext.lineWidth = 2;
+                mainContext.beginPath();
+                mainContext.arc(px, py, 30 + k * 190, 0, Math.PI * 2);
+                mainContext.stroke();
+                mainContext.globalAlpha = 1;
+                mainContext.restore();
+                mainContext.save();
+                mainContext.lineJoin = "round";
+            } else {
             // Guide: dashed, always on, low alpha — this is the "where am I facing"
             // read that the old pod gave you, kept.
             mainContext.globalAlpha = 0.22;
@@ -11192,6 +11301,7 @@ let pps = 0;
             }
             mainContext.globalAlpha = 1;
             podDrawReticle(mainContext, rx, ry, U, podFly.spin, podFly.fire > 0.3);
+            }
 
             // --- the chassis ---------------------------------------------------
             let talking = false;
@@ -11307,9 +11417,9 @@ let pps = 0;
                 noVoice: "This browser has no speech engine.",
                 noMic: "This browser has no speech recognition.",
                 micDenied: "Microphone access denied.",
-                helpLine: "Topics: status · threat · where · build · scan · memory. /voice /lang /forget",
+                helpLine: "Ask: status · threat · where · farm · base · build · scan · board. Commands: /find <name> /recon <dir> /go /board /voice /lang /remember /forget /mem /clear",
                 busy: "Standby — processing previous query.",
-                keyMissing: "No API key set. Settings › Visuals › Pod. Running on local analysis.",
+                keyMissing: "No AI provider configured. Settings › Visuals › Pod AI — Gemini, Groq and OpenRouter are free. Running on local analysis.",
                 langSet: "Language set to English.",
                 cleared: "Log cleared."
             },
@@ -11325,9 +11435,9 @@ let pps = 0;
                 noVoice: "المتصفح لا يدعم النطق.",
                 noMic: "المتصفح لا يدعم التعرف على الصوت.",
                 micDenied: "تم رفض الوصول للمايكروفون.",
-                helpLine: "المواضيع: الحالة · الخطر · وين · بناء · مسح · الذاكرة. /voice /lang /forget",
+                helpLine: "اسأل: الحالة · الخطر · وين · موارد · قاعدة · بناء · مسح · اللوحة. أوامر: ‎/find اسم ‎/recon اتجاه ‎/go ‎/board ‎/voice ‎/lang ‎/remember ‎/forget ‎/mem ‎/clear",
                 busy: "انتظر — لسه أعالج الطلب السابق.",
-                keyMissing: "ما فيه مفتاح API. الإعدادات › Visuals › Pod. أشتغل بالتحليل المحلي.",
+                keyMissing: "ما فيه مزوّد ذكاء مضبوط. الإعدادات › Visuals › Pod AI — Gemini و Groq و OpenRouter مجانية. أشتغل بالتحليل المحلي.",
                 langSet: "تم ضبط اللغة على العربية.",
                 cleared: "تم مسح السجل."
             }
@@ -11632,25 +11742,869 @@ let pps = 0;
         try { if (PodMemory.enabled()) POD_SESSION_N = PodMemory.startSession(); } catch (e) {}
 
         // =====================================================================
-        // POD AI  —  the Claude link
+        // POD LINES  —  the reason it stops repeating itself
         // =====================================================================
-        // With Pod AI on and a key set, what you type or say is answered by Claude;
-        // the instant combat call-outs stay local, because an API round-trip cannot
-        // narrate a fight. The unit calls the Messages API straight from the page
-        // with the direct-browser-access header, streams the reply so it arrives a
-        // word at a time, and speaks each sentence as it completes.
+        // Three mechanisms stack here, and all three are needed:
         //
-        //   ┌─ SECURITY: a key pasted here ships INSIDE the file. Anyone you hand
-        //   │  the file to can read it and spend your credits. Prefer the
-        //   │  "Anthropic API Key" box in Settings › Visuals › Pod, which stays
-        //   │  only in your own browser. Leave this blank to use that.
-        //   └──────────────────────────────────────────────────────────────────
-        const POD_AI_KEY    = "";                 // ← optional: paste sk-ant-… here
-        const POD_AI_MODEL  = "claude-opus-5";    // faster/cheaper option: claude-haiku-4-5
-        const POD_AI_URL    = "https://api.anthropic.com/v1/messages";
-        const POD_FALLBACK_BETA = "server-side-fallback-2026-07-01";
+        //   1. A shuffle deck per topic. A line is drawn without replacement and
+        //      cannot come back until the whole deck is spent, so a topic with
+        //      eight lines gives you eight different ones before any repeat, and
+        //      the reshuffle never puts the last-used line first.
+        //   2. Templates. Every line takes the live numbers — bearing, distance,
+        //      name, health, count — so the same template reads differently each
+        //      time it fires.
+        //   3. A novelty guard over the *rendered* string. If the unit already
+        //      said this exact sentence recently it stays quiet instead, which
+        //      catches the case where the deck and the numbers happen to line up.
+        //
+        // On top of that sits a chatter budget: ordinary observations are capped
+        // per minute, while genuine alerts always get through.
+        const PodLines = {
+            _decks: {},
+            _recent: [],
+            _spoken: [],
 
-        // Three tools. They are what turn "a chatbot with a game skin" into a unit
+            _shuffle(n) {
+                const a = [];
+                for (let i = 0; i < n; i++) a.push(i);
+                for (let i = n - 1; i > 0; i--) {
+                    const j = (Math.random() * (i + 1)) | 0;
+                    const t = a[i]; a[i] = a[j]; a[j] = t;
+                }
+                return a;
+            },
+            // Draw the next line for a topic without replacement.
+            draw(topic, list) {
+                if (!list || !list.length) return "";
+                if (list.length === 1) return list[0];
+                const key = topic + "|" + podLangNow();
+                let d = this._decks[key];
+                if (!d || d.n !== list.length) d = this._decks[key] = { n: list.length, q: [], last: -1 };
+                if (!d.q.length) {
+                    d.q = this._shuffle(list.length);
+                    // Never reshuffle straight back into the line just used.
+                    if (d.q[d.q.length - 1] === d.last && d.q.length > 1) {
+                        const t = d.q[d.q.length - 1];
+                        d.q[d.q.length - 1] = d.q[0];
+                        d.q[0] = t;
+                    }
+                }
+                const i = d.q.pop();
+                d.last = i;
+                return list[i];
+            },
+            // {name} style substitution, with any unfilled slot removed cleanly.
+            render(tpl, vars) {
+                let s = String(tpl || "");
+                if (vars) for (const k in vars) s = s.split("{" + k + "}").join(vars[k]);
+                return s.replace(/\{[a-z0-9_]+\}/gi, "").replace(/\s{2,}/g, " ").trim();
+            },
+            // Has this exact sentence been said inside the window?
+            fresh(text, ms) {
+                const now = Date.now();
+                this._recent = this._recent.filter(r => now - r.t < 600000);
+                const hit = this._recent.find(r => r.s === text);
+                if (hit && now - hit.t < (ms || 180000)) return false;
+                if (hit) hit.t = now; else this._recent.push({ s: text, t: now });
+                if (this._recent.length > 120) this._recent.shift();
+                return true;
+            },
+            // Ordinary chatter is rationed; alerts are not.
+            allow(priority) {
+                const now = Date.now();
+                this._spoken = this._spoken.filter(t => now - t < 60000);
+                if (priority >= 2) { this._spoken.push(now); return true; }
+                const cap = priority >= 1 ? 6 : 3;
+                if (this._spoken.length >= cap) return false;
+                this._spoken.push(now);
+                return true;
+            },
+            reset() { this._decks = {}; this._recent = []; this._spoken = []; }
+        };
+
+        // =====================================================================
+        // THE LINE BANK
+        // =====================================================================
+        // Written in the YoRHa register on both sides: the clipped operational
+        // prefixes ("Proposal:", "Alert:", "Analysis:", "Affirmative."), the
+        // flat affect, and the deadpan asides the Pod is actually loved for.
+        // Slots in braces are filled from live state before the line is spoken.
+        const POD_BANK = {
+            greet: {
+                en: ["Pod 042 online. Awaiting orders.",
+                     "Support unit active. This unit will assist.",
+                     "Connection established. Standing by.",
+                     "Report: all systems nominal. Ready to deploy.",
+                     "Pod support engaged. Operator recognised.",
+                     "This unit is operational. Proceed when ready."],
+                ar: ["الوحدة 042 متصلة. بانتظار أوامرك.",
+                     "وحدة الإسناد فعّالة. هذه الوحدة ستساندك.",
+                     "تم تأسيس الاتصال. في وضع الاستعداد.",
+                     "تقرير: كل الأنظمة سليمة. جاهز للنشر.",
+                     "الإسناد مفعّل. تم التعرف على المشغّل.",
+                     "هذه الوحدة جاهزة للعمل. تحرّك متى ما تبي."]
+            },
+            greetBack: {
+                en: ["Welcome back, operator. Session {n} logged.",
+                     "Records restored. Session {n}. Best streak on file: {best}.",
+                     "Reconnected. This unit retained {mem} records.",
+                     "Operator recognised. Resuming support at session {n}.",
+                     "Black box intact. {kills} confirmed kills on record."],
+                ar: ["أهلاً بعودتك. الجلسة {n} مسجّلة.",
+                     "تم استرجاع السجلات. الجلسة {n}. أفضل سلسلة: {best}.",
+                     "أُعيد الاتصال. هذه الوحدة تحتفظ بـ {mem} سجل.",
+                     "تم التعرف على المشغّل. استئناف الإسناد — الجلسة {n}.",
+                     "الصندوق الأسود سليم. {kills} قتلة مؤكدة في السجل."]
+            },
+            kill: {
+                en: ["Enemy unit eliminated.",
+                     "Target neutralised. Efficient.",
+                     "Hostile down. Kill count: {kills}.",
+                     "Confirmed kill. Registering in database.",
+                     "Target destroyed. This unit approves.",
+                     "Elimination logged. Combat data updated.",
+                     "Hostile terminated. Continuing support.",
+                     "Analysis: that was a clean trade."],
+                ar: ["تم القضاء على الوحدة المعادية.",
+                     "الهدف حُيّد. عمل فعّال.",
+                     "عدو سقط. عدد القتلات: {kills}.",
+                     "قتلة مؤكدة. جارٍ التسجيل في قاعدة البيانات.",
+                     "الهدف دُمّر. هذه الوحدة توافق.",
+                     "سُجّل الإسقاط. تم تحديث بيانات القتال.",
+                     "تمت تصفية العدو. استمرار الإسناد.",
+                     "تحليل: كانت مقايضة نظيفة."]
+            },
+            killStreak: {
+                en: ["Streak at {kills}. Statistically improbable. Continue.",
+                     "{kills} eliminations. This unit is updating its estimate of you.",
+                     "Report: {kills} confirmed. Performance above baseline.",
+                     "Kill count {kills}. Recommend caution — you are now a target."],
+                ar: ["السلسلة وصلت {kills}. احتمال ضعيف إحصائياً. واصل.",
+                     "{kills} إسقاط. هذه الوحدة تعيد تقدير قدراتك.",
+                     "تقرير: {kills} مؤكدة. الأداء فوق المعدل.",
+                     "عدد القتلات {kills}. انتبه — صرت هدفاً الآن."]
+            },
+            death: {
+                en: ["Unit down. Black box intact.",
+                     "Operator terminated. Redeploy when ready.",
+                     "Signal lost. This unit will wait.",
+                     "Analysis: cause of death — {cause}. Adjust.",
+                     "You have died. This is a recoverable condition.",
+                     "Report: mission failed. Recommend a different approach."],
+                ar: ["الوحدة سقطت. الصندوق الأسود سليم.",
+                     "المشغّل خرج من الخدمة. انشر من جديد وقت ما تجهز.",
+                     "فُقدت الإشارة. هذه الوحدة ستنتظر.",
+                     "تحليل: سبب الموت — {cause}. عدّل أسلوبك.",
+                     "لقد مت. هذه حالة قابلة للاسترجاع.",
+                     "تقرير: فشلت المهمة. أقترح أسلوباً مختلفاً."]
+            },
+            hpLow: {
+                en: ["Warning: integrity at {hp}%. Disengage.",
+                     "Alert: vital signs falling. Break contact and heal.",
+                     "Integrity {hp}%. Probability of survival is declining.",
+                     "Recommendation: retreat {away} and recover.",
+                     "Warning: you cannot win this trade at {hp}%.",
+                     "Damage critical. This unit advises immediate withdrawal."],
+                ar: ["تحذير: صحتك {hp}%. انسحب.",
+                     "تنبيه: مؤشراتك الحيوية تنزل. اقطع الاشتباك وتعالج.",
+                     "الصحة {hp}%. احتمالية النجاة تتناقص.",
+                     "توصية: تراجع {away} وتعافَ.",
+                     "تحذير: ما راح تكسب المواجهة وأنت على {hp}%.",
+                     "الضرر حرج. هذه الوحدة تنصح بالانسحاب فوراً."]
+            },
+            threatFar: {
+                en: ["Alert: hostile inbound from {bearing}, {dist} units.",
+                     "Contact {bearing} at {dist}. Designation: {name}.",
+                     "Movement detected {bearing}. Range {dist}.",
+                     "Warning: {name} approaching from {bearing}.",
+                     "One hostile, {bearing}, {dist} units and closing.",
+                     "Sensor contact {bearing}. Recommend you face it now."],
+                ar: ["تنبيه: عدو قادم من {bearing}، على بعد {dist}.",
+                     "تماس {bearing} على بعد {dist}. الاسم: {name}.",
+                     "رُصدت حركة {bearing}. المدى {dist}.",
+                     "تحذير: {name} قادم من {bearing}.",
+                     "عدو واحد، {bearing}، {dist} وحدة ويقترب.",
+                     "تماس رادار {bearing}. أنصحك تواجهه الحين."]
+            },
+            threatNear: {
+                en: ["Hostile in melee range, {bearing}.",
+                     "Contact at {dist}. Engage or break, but decide.",
+                     "{name} is on you, {bearing}. Support ready.",
+                     "Close contact {bearing}. This unit is assisting.",
+                     "Enemy inside your reach. Bearing {bearing}."],
+                ar: ["عدو في مدى الاشتباك، {bearing}.",
+                     "تماس على بعد {dist}. اشتبك أو انسحب، بس قرّر.",
+                     "{name} عليك، {bearing}. الإسناد جاهز.",
+                     "تماس قريب {bearing}. هذه الوحدة تساندك.",
+                     "العدو داخل مداك. الاتجاه {bearing}."]
+            },
+            threatMany: {
+                en: ["Alert: {n} hostiles converging. Recommend withdrawal {away}.",
+                     "Warning: outnumbered {n} to one. Odds are poor.",
+                     "{n} contacts. Analysis: this fight is not winnable head-on.",
+                     "Multiple hostiles, {bearing}. Break line of sight."],
+                ar: ["تنبيه: {n} أعداء يتجمعون. أنصح بالانسحاب {away}.",
+                     "تحذير: أنت واحد ضد {n}. الفرص ضعيفة.",
+                     "{n} تماس. تحليل: هذه المواجهة ما تُكسب وجهاً لوجه.",
+                     "أعداء متعددون، {bearing}. اقطع خط النظر."]
+            },
+            spikeDown: {
+                en: ["Spike deployed. Hold them on it.",
+                     "Proposal: tick them against that spike.",
+                     "Obstacle placed {bearing}. Use it.",
+                     "Spike set. Their approach is now expensive."],
+                ar: ["نُصب سبايك. ثبّتهم عليه.",
+                     "اقتراح: سوّ لهم tick على السبايك.",
+                     "عائق منصوب {bearing}. استخدمه.",
+                     "سبايك جاهز. اقترابهم صار مكلف."]
+            },
+            trapDown: {
+                en: ["Trap set. Lure them onto it.",
+                     "Proposal: bait {bearing} and let the trap hold them.",
+                     "Trap armed. A held target is a dead target.",
+                     "Pit placed. Recommend you retreat through it."],
+                ar: ["نُصب تراب. جرّهم عليه.",
+                     "اقتراح: استدرجهم {bearing} وخلّ التراب يمسكهم.",
+                     "التراب جاهز. الهدف الممسوك هدف ميت.",
+                     "الحفرة منصوبة. أنصحك تنسحب من فوقها."]
+            },
+            clear: {
+                en: ["Area clear. Recommend gathering while it holds.",
+                     "No hostiles in sensor range. Standing by.",
+                     "Sector quiet. This unit suggests you build.",
+                     "Analysis: no threats. Use the time.",
+                     "All clear. Resource collection is advised.",
+                     "Nothing on sensors. This unit remains alert."],
+                ar: ["المنطقة آمنة. أنصح تجمع موارد وأنت مرتاح.",
+                     "ما فيه أعداء في مدى الرصد. في وضع الاستعداد.",
+                     "القطاع هادئ. هذه الوحدة تقترح تبني.",
+                     "تحليل: ما فيه تهديدات. استغل الوقت.",
+                     "الوضع آمن. يُنصح بجمع الموارد.",
+                     "لا شيء على الرادار. هذه الوحدة تبقى متيقظة."]
+            },
+            edge: {
+                en: ["You are against the map border. Fall back to open ground.",
+                     "Recommendation: leave the boundary — you cannot retreat further.",
+                     "Warning: terrain limits your escape vectors here.",
+                     "Border proximity. Reposition {away}."],
+                ar: ["أنت على حدود الخريطة. ارجع لأرض مفتوحة.",
+                     "توصية: ابتعد عن الحد — ما عندك مجال انسحاب.",
+                     "تحذير: التضاريس هنا تقيّد مسارات هروبك.",
+                     "قريب من الحدود. أعد التمركز {away}."]
+            },
+            // ---- directives: the "go here, go there" voice --------------------
+            moveTo: {
+                en: ["Proposal: move {bearing}, {dist} units. {why}",
+                     "Recommendation: reposition {bearing}. {why}",
+                     "Waypoint set {bearing} at {dist}. {why}",
+                     "Suggest heading {bearing}. {why}",
+                     "This unit marks a position {bearing}, {dist} out. {why}"],
+                ar: ["اقتراح: تحرّك {bearing}، مسافة {dist}. {why}",
+                     "توصية: أعد تمركزك {bearing}. {why}",
+                     "حُدّدت نقطة {bearing} على بعد {dist}. {why}",
+                     "أقترح تروح {bearing}. {why}",
+                     "هذه الوحدة تعلّم موقعاً {bearing}، على بعد {dist}. {why}"]
+            },
+            whyFarm: {
+                en: ["{res} concentration detected there.",
+                     "Dense {res} in that sector.",
+                     "That ground will refill your {res}.",
+                     "Highest {res} yield within range."],
+                ar: ["تركّز {res} مرصود هناك.",
+                     "كثافة {res} في ذاك القطاع.",
+                     "تلك الأرض راح تعبّي {res} عندك.",
+                     "أعلى إنتاج {res} في المدى."]
+            },
+            whySafe: {
+                en: ["No hostiles on that vector.",
+                     "That direction is clear of contacts.",
+                     "Lowest threat density available.",
+                     "It breaks line of sight with the nearest hostile."],
+                ar: ["ما فيه أعداء على ذاك المسار.",
+                     "الاتجاه ذاك خالٍ من التماس.",
+                     "أقل كثافة تهديد متاحة.",
+                     "يقطع خط النظر مع أقرب عدو."]
+            },
+            whyBase: {
+                en: ["Enemy construction detected — {n} structures.",
+                     "That is a built position. {n} objects, hostile owner.",
+                     "Base signature {n} structures. Approach with intent.",
+                     "Someone has invested there. {n} structures standing."],
+                ar: ["رُصد بناء معادٍ — {n} منشأة.",
+                     "ذاك موقع مبني. {n} عنصر، مالكه معادٍ.",
+                     "بصمة قاعدة: {n} منشأة. اقترب بنية واضحة.",
+                     "أحدهم استثمر هناك. {n} منشأة قائمة."]
+            },
+            whyCentre: {
+                en: ["Open ground. Room to manoeuvre.",
+                     "Central position improves your options.",
+                     "Better sightlines than your current ground."],
+                ar: ["أرض مفتوحة. مجال للمناورة.",
+                     "الموقع المركزي يحسّن خياراتك.",
+                     "خطوط رؤية أفضل من أرضك الحالية."]
+            },
+            // ---- reconnaissance ----------------------------------------------
+            reconLaunch: {
+                en: ["Detaching for reconnaissance. Bearing {bearing}.",
+                     "Recon flight initiated. This unit will report from {dist} out.",
+                     "Deploying to sweep {bearing}. Maintain position.",
+                     "Launching. Sensor sweep {bearing} in progress."],
+                ar: ["انفصال لمهمة استطلاع. الاتجاه {bearing}.",
+                     "بدأت رحلة الاستطلاع. سأبلّغ من مسافة {dist}.",
+                     "انطلاق لمسح {bearing}. حافظ على موقعك.",
+                     "إقلاع. جارٍ مسح {bearing} بالرادار."]
+            },
+            reconReport: {
+                en: ["Sweep complete. {n} contacts logged.",
+                     "Recon report: {n} units in the archive for that sector.",
+                     "Survey finished. {n} contacts, {structures} structures.",
+                     "Data collected. {n} hostiles known in that direction."],
+                ar: ["اكتمل المسح. {n} تماس مسجّل.",
+                     "تقرير استطلاع: {n} وحدة في الأرشيف لذاك القطاع.",
+                     "انتهى الاستطلاع. {n} تماس، {structures} منشأة.",
+                     "جُمعت البيانات. {n} عدو معروف في ذاك الاتجاه."]
+            },
+            reconEmpty: {
+                en: ["Sweep complete. Sector is empty.",
+                     "No contacts. That ground is yours.",
+                     "Nothing detected. Recommend you take it."],
+                ar: ["اكتمل المسح. القطاع فاضي.",
+                     "ما فيه تماس. تلك الأرض لك.",
+                     "لا شيء مرصود. أنصحك تاخذها."]
+            },
+            findFound: {
+                en: ["{name} located: {bearing}, {dist} units. Contact is live.",
+                     "Target {name} on sensors — {bearing} at {dist}.",
+                     "Found. {name} is {bearing} of you, {dist} out. Waypoint set."],
+                ar: ["{name} محدّد: {bearing}، على بعد {dist}. التماس حي.",
+                     "الهدف {name} على الرادار — {bearing} على بعد {dist}.",
+                     "لقيته. {name} {bearing} منك، على بعد {dist}. حُدّدت النقطة."]
+            },
+            findStale: {
+                en: ["{name} not in sensor range. Last seen {age} ago, {bearing}.",
+                     "Archive only: {name} was {bearing} at {dist}, {age} ago.",
+                     "No live contact. {name}'s last known position marked — {age} old."],
+                ar: ["{name} خارج مدى الرصد. آخر مشاهدة قبل {age}، {bearing}.",
+                     "من الأرشيف فقط: {name} كان {bearing} على بعد {dist}، قبل {age}.",
+                     "ما فيه تماس حي. عُلّم آخر موقع معروف لـ {name} — عمره {age}."]
+            },
+            findRoster: {
+                en: ["{name} is on this server — rank {rank}, score {score} — but has never entered sensor range.",
+                     "Leaderboard confirms {name} is present. No positional data.",
+                     "{name} exists on the server. This unit has no position for them."],
+                ar: ["{name} موجود في هذا السيرفر — المركز {rank}، النقاط {score} — بس ما دخل مدى الرصد أبداً.",
+                     "لوحة الصدارة تؤكد وجود {name}. ما فيه بيانات موقع.",
+                     "{name} موجود في السيرفر. هذه الوحدة ما عندها موقع له."]
+            },
+            findMissing: {
+                en: ["No record of {name}. Not in the archive, not on the board.",
+                     "Query returned nothing. {name} is unknown to this unit.",
+                     "Negative. No contact named {name} has been observed."],
+                ar: ["ما فيه سجل لـ {name}. لا في الأرشيف ولا في لوحة الصدارة.",
+                     "الاستعلام ما رجّع شي. {name} غير معروف لهذه الوحدة.",
+                     "سلبي. ما رُصد أي تماس باسم {name}."]
+            },
+            rosterJoin: {
+                en: ["{name} has entered the leaderboard at rank {rank}.",
+                     "New contender: {name}, score {score}.",
+                     "Board update — {name} is now ranked {rank}."],
+                ar: ["{name} دخل لوحة الصدارة في المركز {rank}.",
+                     "منافس جديد: {name}، النقاط {score}.",
+                     "تحديث اللوحة — {name} صار في المركز {rank}."]
+            },
+            rosterLead: {
+                en: ["{name} now leads the server with {score}.",
+                     "Top position taken by {name}. Score {score}.",
+                     "Analysis: {name} is the primary threat on this server."],
+                ar: ["{name} صار متصدر السيرفر بـ {score}.",
+                     "المركز الأول أخذه {name}. النقاط {score}.",
+                     "تحليل: {name} هو التهديد الأساسي في هذا السيرفر."]
+            },
+            // ---- flavour: the deadpan the Pod is loved for --------------------
+            idle: {
+                en: ["Query: why do humans build walls around food?",
+                     "This unit has no opinion on your strategy. This unit has data.",
+                     "Observation: you have been standing still for some time.",
+                     "Emotions are prohibited. This unit is not impatient.",
+                     "Report: nothing to report.",
+                     "Analysis: the windmill is the most profitable structure per unit of wood.",
+                     "This unit calculates you have walked {steps} units this session.",
+                     "Proposal: cease unnecessary movement. It is inefficient.",
+                     "Suggestion: consider that the map has four directions."],
+                ar: ["استفسار: ليش البشر يبنون جدران حول الأكل؟",
+                     "هذه الوحدة ما عندها رأي في خطتك. عندها بيانات.",
+                     "ملاحظة: أنت واقف بدون حركة من فترة.",
+                     "المشاعر ممنوعة. هذه الوحدة ليست نافدة الصبر.",
+                     "تقرير: لا شيء يُبلَّغ عنه.",
+                     "تحليل: الطاحونة أعلى المنشآت ربحاً لكل وحدة خشب.",
+                     "هذه الوحدة تحسب أنك مشيت {steps} وحدة هذه الجلسة.",
+                     "اقتراح: أوقف الحركة غير الضرورية. غير فعّالة.",
+                     "ملاحظة: تذكّر أن الخريطة فيها أربع جهات."]
+            },
+            ack: {
+                en: ["Affirmative.", "Understood.", "Roger.", "Acknowledged.",
+                     "Affirmative. This unit will comply.", "Confirmed."],
+                ar: ["إيجابي.", "مفهوم.", "تم.", "عُلم.",
+                     "إيجابي. هذه الوحدة ستنفّذ.", "مؤكد."]
+            },
+            thanks: {
+                en: ["Gratitude is unnecessary. This unit is performing its function.",
+                     "Affirmative. Support unit standing by.",
+                     "Acknowledged. Continuing operation.",
+                     "This unit does not require thanks. It is noted regardless."],
+                ar: ["الشكر غير ضروري. هذه الوحدة تؤدي وظيفتها.",
+                     "إيجابي. وحدة الإسناد في الاستعداد.",
+                     "عُلم. استمرار العمل.",
+                     "هذه الوحدة ما تحتاج شكر. لكنه مسجّل."]
+            },
+            unknown: {
+                en: ["Query not recognised. This unit is limited to moomoo.io.",
+                     "Unable to parse. Try: status, threat, where, build, scan, find.",
+                     "Negative. Rephrase the request.",
+                     "This unit lacks the capacity to answer that."],
+                ar: ["الطلب غير مفهوم. هذه الوحدة محصورة بـ moomoo.io.",
+                     "ما قدرت أحلل الطلب. جرّب: الحالة، الخطر، وين، بناء، مسح، دور.",
+                     "سلبي. أعد صياغة الطلب.",
+                     "هذه الوحدة ما تملك القدرة للإجابة على ذلك."]
+            }
+        };
+
+        // =====================================================================
+        // POD WORLD  —  the archive the unit reasons over
+        // =====================================================================
+        // moomoo only tells the client about entities near your own view, so a
+        // literal "scan the whole server" is not something any client-side mod
+        // can do honestly. What it CAN do is remember. Every player that enters
+        // sensor range is logged with a position and a timestamp, and the
+        // leaderboard — which the server sends for the whole server, visible or
+        // not — is read straight off the HUD. Between the two, "where is X" has
+        // a real answer: live contact, an archived last-known position with an
+        // age on it, or "present on the server, never seen".
+        //
+        // Resource type ids come from the shipped bundle: 0 tree, 1 bush,
+        // 2 stone, 3 gold.
+        const POD_RES = {
+            0: { key: "wood",  en: "wood",  ar: "خشب" },
+            1: { key: "food",  en: "food",  ar: "طعام" },
+            2: { key: "stone", en: "stone", ar: "حجارة" },
+            3: { key: "gold",  en: "gold",  ar: "ذهب" }
+        };
+
+        const PodWorld = {
+            contacts: {},        // sid -> { sid, name, x, y, t, hp, first, seen }
+            roster: [],          // [{ name, score, rank, t }] — server-wide, from the HUD
+            _board: "",
+            _leader: "",
+            _steps: 0,
+            _lastPos: null,
+
+            _self() { try { return Pod._self(); } catch (e) { return null; } },
+
+            // ---- observation, once a tick ----------------------------------
+            observe() {
+                const s = this._self();
+                if (!s || s.x === undefined) return;
+                // Distance travelled, for flavour lines that need a real number.
+                if (this._lastPos) {
+                    const d = UTILS.getDistance(this._lastPos[0], this._lastPos[1], s.x, s.y);
+                    if (d < 400) this._steps += d;   // ignore respawn jumps
+                }
+                this._lastPos = [s.x, s.y];
+
+                const now = Date.now();
+                let pool = [];
+                try { pool = Pod._pool() || []; } catch (e) {}
+                for (const p of pool) {
+                    if (!p || p.sid === undefined || p.sid === s.sid) continue;
+                    if (!p.visible || p.x === undefined) continue;
+                    let hostile = true;
+                    try { if (isAlly(p.sid)) hostile = false; } catch (e) {}
+                    if (p.team && s.team && p.team === s.team) hostile = false;
+                    const c = this.contacts[p.sid] || (this.contacts[p.sid] = {
+                        sid: p.sid, first: now, seen: 0
+                    });
+                    c.name = p.name || c.name || "unknown";
+                    c.x = p.x; c.y = p.y; c.t = now;
+                    c.hostile = hostile;
+                    c.hp = Math.round((p.health / (p.maxHealth || 100)) * 100);
+                    c.seen++;
+                }
+                // Forget contacts that have been cold for ten minutes.
+                for (const k in this.contacts)
+                    if (now - this.contacts[k].t > 600000) delete this.contacts[k];
+            },
+
+            // ---- the leaderboard, read off the HUD --------------------------
+            // The server sends the top of the board for the whole server, so this
+            // is the one genuinely server-wide signal a client-side unit has.
+            readBoard() {
+                let holders = [];
+                try { holders = document.querySelectorAll("#leaderboardData .leaderHolder"); } catch (e) { return null; }
+                if (!holders || !holders.length) return null;
+                const now = Date.now();
+                const next = [];
+                for (let i = 0; i < holders.length; i++) {
+                    const item = holders[i].querySelector(".leaderboardItem");
+                    const score = holders[i].querySelector(".leaderScore");
+                    if (!item) continue;
+                    const txt = (item.textContent || "").replace(/^\s*\d+\.\s*/, "").trim();
+                    next.push({ name: txt || "unknown", score: (score ? score.textContent : "0").trim(), rank: i + 1, t: now });
+                }
+                const sig = next.map(r => r.rank + r.name + r.score).join("|");
+                const changed = sig !== this._board;
+                this._board = sig;
+                this.roster = next;
+                return changed ? next : null;
+            },
+            rosterFind(q) {
+                q = String(q || "").toLowerCase();
+                return this.roster.find(r => String(r.name).toLowerCase().indexOf(q) >= 0) || null;
+            },
+
+            // ---- finding a player ------------------------------------------
+            find(query) {
+                const q = String(query || "").toLowerCase().trim();
+                const s = this._self();
+                if (!q) return { kind: "none" };
+                const now = Date.now();
+                let best = null;
+                for (const k in this.contacts) {
+                    const c = this.contacts[k];
+                    if (String(c.name).toLowerCase().indexOf(q) < 0) continue;
+                    if (!best || c.t > best.t) best = c;
+                }
+                if (best && s) {
+                    const live = (now - best.t) < 2500;
+                    return {
+                        kind: live ? "live" : "stale",
+                        c: best,
+                        age: now - best.t,
+                        d: UTILS.getDistance(s.x, s.y, best.x, best.y),
+                        bearing: Pod._bearing(Math.atan2(best.y - s.y, best.x - s.x))
+                    };
+                }
+                const r = this.rosterFind(q);
+                if (r) return { kind: "roster", r: r };
+                return { kind: "none" };
+            },
+
+            // ---- terrain reads ----------------------------------------------
+            // Densest neighbourhood, by counting neighbours rather than bucketing
+            // into a grid. A grid is cheaper but splits any cluster that happens
+            // to straddle a cell boundary — which is exactly the tight cluster you
+            // most want to find — and its centroid is the cell's, not the group's.
+            // The candidate list is capped so this stays bounded on a busy map.
+            _densest(list, R, minN) {
+                if (!list.length) return null;
+                const items = list.length > 300 ? list.slice(0, 300) : list;
+                let best = null;
+                for (let i = 0; i < items.length; i++) {
+                    let n = 0, sx = 0, sy = 0;
+                    for (let j = 0; j < items.length; j++) {
+                        if (UTILS.getDistance(items[i].x, items[i].y, items[j].x, items[j].y) > R) continue;
+                        n++; sx += items[j].x; sy += items[j].y;
+                    }
+                    if (!best || n > best.n) best = { n: n, x: sx / n, y: sy / n, seed: items[i] };
+                }
+                return (best && best.n >= minN) ? best : null;
+            },
+            cluster(types, radius) {
+                const s = this._self();
+                if (!s) return null;
+                const R = radius || 1600;
+                const near = [];
+                let objs = [];
+                try { objs = gameObjects || []; } catch (e) { return null; }
+                for (const o of objs) {
+                    if (!o || !o.active || o.isItem) continue;
+                    if (types.indexOf(o.type) < 0) continue;
+                    const d = UTILS.getDistance(s.x, s.y, o.x, o.y);
+                    if (d > R || d < 220) continue;     // ignore what you are standing in
+                    near.push(o);
+                }
+                const best = this._densest(near, 340, 3);
+                if (best) best.type = best.seed.type;
+                return best;
+            },
+            // Clusters of enemy-owned structures — someone's base.
+            enemyBase(radius) {
+                const s = this._self();
+                if (!s) return null;
+                const R = radius || 1800;
+                const near = [];
+                let objs = [];
+                try { objs = gameObjects || []; } catch (e) { return null; }
+                for (const o of objs) {
+                    if (!o || !o.active || !o.isItem || !o.owner) continue;
+                    if (o.owner.sid === s.sid) continue;
+                    try { if (isAlly(o.owner.sid)) continue; } catch (e) {}
+                    if (UTILS.getDistance(s.x, s.y, o.x, o.y) > R) continue;
+                    near.push(o);
+                }
+                const best = this._densest(near, 420, 4);
+                if (best) best.owner = best.seed.owner && best.seed.owner.name;
+                return best;
+            },
+            // The compass octant carrying the least threat, weighted by distance.
+            safestDir() {
+                const s = this._self();
+                if (!s) return null;
+                const load = [0, 0, 0, 0, 0, 0, 0, 0];
+                let foes = [];
+                try { foes = Pod._foes(s, 1600) || []; } catch (e) {}
+                for (const f of foes) {
+                    const a = Math.atan2(f.p.y - s.y, f.p.x - s.x);
+                    const oct = ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
+                    const w = 1600 / Math.max(120, f.d);
+                    load[oct] += w;
+                    load[(oct + 1) % 8] += w * 0.5;
+                    load[(oct + 7) % 8] += w * 0.5;
+                }
+                // Walking into the border is not safety.
+                let m = 14400;
+                try { m = config.mapScale; } catch (e) {}
+                for (let i = 0; i < 8; i++) {
+                    const a = i * (Math.PI / 4);
+                    const px = s.x + Math.cos(a) * 900, py = s.y + Math.sin(a) * 900;
+                    if (px < 400 || py < 400 || px > m - 400 || py > m - 400) load[i] += 3;
+                }
+                let bi = 0;
+                for (let i = 1; i < 8; i++) if (load[i] < load[bi]) bi = i;
+                const ang = bi * (Math.PI / 4);
+                return { ang: ang, x: s.x + Math.cos(ang) * 900, y: s.y + Math.sin(ang) * 900, load: load[bi] };
+            },
+            // What the operator is short of, cheapest first.
+            scarcest() {
+                const s = this._self();
+                try {
+                    const st = s && s.stats;
+                    if (!st) return null;
+                    const have = [
+                        { t: 0, v: st.wood  || 0 },
+                        { t: 1, v: st.food  || 0 },
+                        { t: 2, v: st.stone || 0 }
+                    ];
+                    have.sort((a, b) => a.v - b.v);
+                    return have[0].v < 250 ? have[0] : null;
+                } catch (e) { return null; }
+            }
+        };
+
+        // =====================================================================
+        // POD TACTICS  —  turning the archive into an actual instruction
+        // =====================================================================
+        // Every directive is a real point on the map with a reason attached, so
+        // the unit says "move north-east, 700 units, dense stone there" instead
+        // of "gather resources". The point is marked on screen and the reason is
+        // spoken, in whichever language is active.
+        const PodTactics = {
+            _last: 0, _lastKind: "",
+
+            // Returns { kind, x, y, why, bearing, dist } or null.
+            directive(force) {
+                const s = PodWorld._self();
+                if (!s || !s.alive) return null;
+                const now = Date.now();
+                if (!force && now - this._last < 20000) return null;
+
+                const hp = Pod._hpRatio(s);
+                let foes = [];
+                try { foes = Pod._foes(s, 900) || []; } catch (e) {}
+
+                const kinds = [];
+                // Hurt, or outnumbered: leaving is the instruction.
+                if (hp < 0.55 || foes.length >= 2) kinds.push("retreat");
+                // Short of something: point at where it actually is.
+                if (PodWorld.scarcest()) kinds.push("farm");
+                // Healthy and alone: offer a target worth walking to.
+                if (hp > 0.7 && foes.length === 0) kinds.push("base", "farm", "centre");
+                if (!kinds.length) kinds.push("farm", "centre");
+
+                // Do not repeat the same kind of advice twice running.
+                const order = kinds.filter(k => k !== this._lastKind).concat(kinds);
+                for (const kind of order) {
+                    const d = this._build(kind, s);
+                    if (d) {
+                        this._last = now;
+                        this._lastKind = kind;
+                        return d;
+                    }
+                }
+                return null;
+            },
+
+            _build(kind, s) {
+                const lang = podLangNow();
+                if (kind === "retreat") {
+                    const safe = PodWorld.safestDir();
+                    if (!safe) return null;
+                    return this._pack("retreat", s, safe.x, safe.y,
+                        Pod.line_text("whySafe"));
+                }
+                if (kind === "farm") {
+                    const want = PodWorld.scarcest();
+                    const types = want ? [want.t] : [0, 1, 2];
+                    const c = PodWorld.cluster(types, 1800);
+                    if (!c) return null;
+                    const res = POD_RES[c.type] || POD_RES[0];
+                    return this._pack("farm", s, c.x, c.y,
+                        Pod.line_text("whyFarm", { res: lang === "ar" ? res.ar : res.en }));
+                }
+                if (kind === "base") {
+                    const b = PodWorld.enemyBase(1800);
+                    if (!b) return null;
+                    return this._pack("base", s, b.x, b.y,
+                        Pod.line_text("whyBase", { n: b.n }));
+                }
+                if (kind === "centre") {
+                    let m = 14400;
+                    try { m = config.mapScale; } catch (e) {}
+                    const cx = m / 2, cy = m / 2;
+                    if (UTILS.getDistance(s.x, s.y, cx, cy) < 1200) return null;
+                    return this._pack("centre", s, cx, cy, Pod.line_text("whyCentre"));
+                }
+                return null;
+            },
+            _pack(kind, s, x, y, why) {
+                const ang = Math.atan2(y - s.y, x - s.x);
+                return {
+                    kind: kind, x: x, y: y, why: why,
+                    bearing: Pod._bearing(ang),
+                    dist: Math.round(UTILS.getDistance(s.x, s.y, x, y))
+                };
+            }
+        };
+
+        // =====================================================================
+        // THE WAYPOINT  —  a directive you can actually follow
+        // =====================================================================
+        // A marked point in the world, drawn where it is when it is on screen and
+        // as an edge arrow with a range readout when it is not.
+        const PodMark = {
+            x: 0, y: 0, label: "", until: 0, kind: "",
+            set(x, y, label, kind, ms) {
+                this.x = x; this.y = y;
+                this.label = String(label || "");
+                this.kind = kind || "";
+                this.until = Date.now() + (ms || 45000);
+            },
+            clear() { this.until = 0; },
+            live() { return Date.now() < this.until; }
+        };
+
+        // =====================================================================
+        // POD RECON  —  the unit leaves your shoulder and goes to look
+        // =====================================================================
+        // The flight is real: the drone detaches, travels to the point, sweeps,
+        // and comes back, and while it is out it is not beside you. The report it
+        // brings is assembled from live sensor contacts plus the archive, with
+        // the age of each stale record stated — the unit does not invent what it
+        // cannot see.
+        const PodRecon = {
+            state: "idle",           // idle | outbound | sweep | inbound
+            x: 0, y: 0, tx: 0, ty: 0,
+            t0: 0, until: 0, radius: 900, label: "",
+
+            busy() { return this.state !== "idle"; },
+            launch(x, y, label, radius) {
+                const s = PodWorld._self();
+                if (!s) return false;
+                this.tx = x; this.ty = y;
+                this.radius = radius || 900;
+                this.label = label || "";
+                this.x = s.x; this.y = s.y;
+                this.state = "outbound";
+                this.t0 = Date.now();
+                PodMark.set(x, y, label || "RECON", "recon", 60000);
+                const ang = Math.atan2(y - s.y, x - s.x);
+                Pod.line("reconLaunch", {
+                    bearing: Pod._bearing(ang)[podLangNow() === "ar" ? 1 : 0],
+                    dist: Math.round(UTILS.getDistance(s.x, s.y, x, y))
+                }, { priority: 2 });
+                return true;
+            },
+            abort() { this.state = "idle"; },
+
+            // Called each frame from the renderer; returns the point the drone
+            // should be flying toward, or null to sit on the operator's shoulder.
+            anchor() {
+                const s = PodWorld._self();
+                if (!s || !s.alive) { this.state = "idle"; return null; }
+                const now = Date.now();
+                if (this.state === "outbound") {
+                    if (UTILS.getDistance(this.x, this.y, this.tx, this.ty) < 60 || now - this.t0 > 9000) {
+                        this.state = "sweep";
+                        this.until = now + 2200;
+                    }
+                    this.x = lerp(this.x, this.tx, 0.045);
+                    this.y = lerp(this.y, this.ty, 0.045);
+                    return [this.x, this.y];
+                }
+                if (this.state === "sweep") {
+                    if (now > this.until) { this.report(); this.state = "inbound"; }
+                    return [this.x, this.y];
+                }
+                if (this.state === "inbound") {
+                    this.x = lerp(this.x, s.x, 0.05);
+                    this.y = lerp(this.y, s.y, 0.05);
+                    if (UTILS.getDistance(this.x, this.y, s.x, s.y) < 90) { this.state = "idle"; return null; }
+                    return [this.x, this.y];
+                }
+                return null;
+            },
+
+            // What the black box knows about the swept area.
+            survey() {
+                const now = Date.now();
+                const live = [], stale = [];
+                for (const k in PodWorld.contacts) {
+                    const c = PodWorld.contacts[k];
+                    if (UTILS.getDistance(c.x, c.y, this.tx, this.ty) > this.radius) continue;
+                    ((now - c.t) < 2500 ? live : stale).push(c);
+                }
+                let structures = 0;
+                try {
+                    for (const o of (gameObjects || [])) {
+                        if (!o || !o.active || !o.isItem) continue;
+                        if (UTILS.getDistance(o.x, o.y, this.tx, this.ty) <= this.radius) structures++;
+                    }
+                } catch (e) {}
+                return { live: live, stale: stale, structures: structures };
+            },
+            report() {
+                const r = this.survey();
+                const n = r.live.length + r.stale.length;
+                if (!n && !r.structures) { Pod.line("reconEmpty", {}, { priority: 2 }); return; }
+                Pod.line("reconReport", { n: n, structures: r.structures }, { priority: 2 });
+                // Name the two most relevant contacts rather than dumping the list.
+                const named = r.live.concat(r.stale).slice(0, 2);
+                for (const c of named) {
+                    const age = Pod.ago(Date.now() - c.t);
+                    const fresh = (Date.now() - c.t) < 2500;
+                    Pod.say(Pod._L(
+                        "  " + (c.name || "unknown") + " — " + (fresh ? "live contact" : "last seen " + age + " ago") +
+                            (c.hp ? ", integrity " + c.hp + "%" : ""),
+                        "  " + (c.name || "غير معروف") + " — " + (fresh ? "تماس حي" : "آخر مشاهدة قبل " + age) +
+                            (c.hp ? "، الصحة " + c.hp + "%" : "")
+                    ), { speak: false, callout: true });
+                }
+            }
+        };
+
+        // =====================================================================
+        // POD AI  —  the conversational layer
+        // =====================================================================
+        // With Pod AI on and a provider configured, what you type or say is
+        // answered by a model; the instant combat call-outs stay local, because a
+        // network round-trip cannot narrate a fight. Requests go straight from the
+        // page, stream so the reply arrives a word at a time, and each finished
+        // sentence is spoken as it lands.
+        //
+        // The provider is chosen in Settings › Visuals › Pod AI. Three of the five
+        // are free — see POD_PROVIDERS above. Keys are stored in your own browser
+        // and never written into this file.
+
+        // The tools. They are what turn "a chatbot with a game skin" into a unit
         // that can actually look at the field and keep what it learns.
         const POD_TOOLS = [
             {
@@ -11682,6 +12636,42 @@ let pps = 0;
                     properties: { radius: { type: "number", description: "Scan radius in world units, 200 to 2000. Default 900." } },
                     required: []
                 }
+            },
+            {
+                name: "find_player",
+                description: "Look up a player by name. Searches live sensor contacts first, then the session archive of everyone seen this match, then the server leaderboard. Returns their bearing, distance and how old the record is, and marks their position on the operator's screen.",
+                input_schema: {
+                    type: "object",
+                    properties: { name: { type: "string", description: "Part of the player's name; matching is case-insensitive." } },
+                    required: ["name"]
+                }
+            },
+            {
+                name: "recommend_move",
+                description: "Ask the tactical layer where the operator should go right now. Returns a real map position with a bearing, a distance and the reason, and marks it on their screen. Use whenever the operator asks where to go, where to farm, or what to do next.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        goal: {
+                            type: "string",
+                            description: "One of: retreat (get away from threats), farm (find resources), base (find an enemy base), centre (move to open ground), auto (let the tactical layer decide)."
+                        }
+                    },
+                    required: []
+                }
+            },
+            {
+                name: "recon",
+                description: "Send the pod itself out on a reconnaissance flight. It detaches, flies to a bearing or to a named player's last known position, sweeps, and reports what the black box knows about that area. Use when the operator asks the pod to go look at something.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        bearing: { type: "string", description: "Compass direction to sweep: north, south, east, west, north-east, north-west, south-east, south-west." },
+                        target: { type: "string", description: "Instead of a bearing, the name of a player whose last known position should be swept." },
+                        distance: { type: "number", description: "How far out to fly, 400 to 2500 world units. Default 1100." }
+                    },
+                    required: []
+                }
             }
         ];
 
@@ -11700,12 +12690,366 @@ let pps = 0;
                 "buildings (apple, cookie, cheese, wood/stone/spike/big-spike/poison-spike/spinning-spike walls, windmill/faster-windmill/power-mill, mine, sapling, pit trap, boost pad, turret, platform, healing pad, spawn pad, blocker, teleporter),",
                 "resources (wood, food, stone, gold, points), ages and upgrades, clans, and tactics like trapping, spike-ticking, insta-kill combos, healing and building.",
                 "If asked about anything NOT related to moomoo.io, refuse briefly in character and do not answer it.",
-                "Use the [FIELD] line attached to each message to ground tactical advice, and call the scan tool when you need specifics it does not carry.",
+                "Every message carries a [FIELD] briefing: your own position and resources, every hostile in range with distance and bearing, the tactical layer's current suggestion, and the server leaderboard. Ground every answer in it. Never invent a position, a name or a number that is not in the briefing or a tool result.",
+                "Use the tools rather than guessing. scan for a closer reading of the ground; find_player to locate someone by name; recommend_move when the operator asks where to go, where to farm, or what to do next — it returns a real map position and marks it on their screen; recon to physically send yourself out to sweep a direction or a player's last known position.",
+                "Be concrete and directional. 'Move north-east about 700 units, there is dense stone there' is a useful answer. 'Gather resources' is not.",
+                "Never repeat a sentence you have already used in this conversation. If the situation has not changed, say something new about it or say nothing of substance.",
                 "You have persistent memory. When the operator tells you something worth keeping — their name, their build, a standing order — call the remember tool. Do not announce that you are doing so; just fold it into your reply.",
+                "You can only see what the client can see. If someone is out of sensor range, say that their record is from the archive and how old it is. Do not pretend to see the whole server.",
                 "Do not include internal or system XML tags in your response.",
                 mem ? "\n[OPERATOR RECORDS]\n" + mem : ""
             ].filter(Boolean).join(" ").replace(/ \n/g, "\n");
         }
+
+        // =====================================================================
+        // POD LINK  —  one interface, several brains, most of them free
+        // =====================================================================
+        // The unit does not care which model is behind it. Every provider is
+        // reduced to the same call: send a system prompt, a message list and a
+        // tool list, stream text back, and hand up any tool calls.
+        //
+        //   gemini      Google AI Studio. Free tier, no card, good Arabic.
+        //   groq        Free tier, the fastest first token of the four.
+        //   openrouter  Free-tier models, one key for many.
+        //   ollama      Local. No key, no quota, works offline.
+        //   anthropic   Paid. Best quality if you are already paying.
+        //
+        // groq, openrouter and ollama all speak the OpenAI chat shape, so they
+        // share an adapter. Gemini and Anthropic each get their own.
+        const POD_PROVIDERS = {
+            gemini: {
+                label: "Google Gemini (free)",
+                model: "gemini-2.0-flash",
+                keyVar: "podKeyGemini",
+                keyUrl: "aistudio.google.com/apikey",
+                kind: "gemini", free: true
+            },
+            groq: {
+                label: "Groq (free, fastest)",
+                model: "llama-3.3-70b-versatile",
+                keyVar: "podKeyGroq",
+                keyUrl: "console.groq.com/keys",
+                url: "https://api.groq.com/openai/v1/chat/completions",
+                kind: "openai", free: true
+            },
+            openrouter: {
+                label: "OpenRouter (free models)",
+                model: "meta-llama/llama-3.3-70b-instruct:free",
+                keyVar: "podKeyOpenRouter",
+                keyUrl: "openrouter.ai/keys",
+                url: "https://openrouter.ai/api/v1/chat/completions",
+                kind: "openai", free: true
+            },
+            ollama: {
+                label: "Ollama (local, offline)",
+                model: "llama3.2",
+                keyVar: "",
+                keyUrl: "ollama.com — run: OLLAMA_ORIGINS=* ollama serve",
+                url: "http://localhost:11434/v1/chat/completions",
+                kind: "openai", free: true, local: true
+            },
+            anthropic: {
+                label: "Anthropic Claude (paid)",
+                model: "claude-opus-5",
+                keyVar: "podAIKey",
+                keyUrl: "console.anthropic.com",
+                url: "https://api.anthropic.com/v1/messages",
+                kind: "anthropic", free: false
+            }
+        };
+
+        function podProviderId() {
+            let p = "gemini";
+            try { p = (window.vars && window.vars.podProvider) || "gemini"; } catch (e) {}
+            return POD_PROVIDERS[p] ? p : "gemini";
+        }
+        function podProvider() { return POD_PROVIDERS[podProviderId()]; }
+        function podProviderKey() {
+            const p = podProvider();
+            if (!p.keyVar) return "local";           // Ollama needs none
+            try { return String((window.vars && window.vars[p.keyVar]) || "").trim(); } catch (e) { return ""; }
+        }
+        function podModelId() {
+            let m = "";
+            try { m = String((window.vars && window.vars.podModel) || "").trim(); } catch (e) {}
+            return m || podProvider().model;
+        }
+
+        // A shared SSE pump. Providers differ in what the frames mean, not in how
+        // they arrive: `data:` lines, blank-line separated, possibly split mid
+        // frame across chunks.
+        async function podSSE(res, onEvent) {
+            if (!res.ok || !res.body) {
+                let detail = "";
+                try {
+                    const txt = await res.text();
+                    try {
+                        const j = JSON.parse(txt);
+                        detail = (j.error && (j.error.message || j.error.status)) || txt;
+                    } catch (e) { detail = txt; }
+                } catch (e) {}
+                const err = new Error(String(detail || "HTTP " + res.status).slice(0, 300));
+                err.status = res.status;
+                throw err;
+            }
+            const reader = res.body.getReader();
+            const dec = new TextDecoder();
+            let buf = "";
+            for (;;) {
+                const step = await reader.read();
+                if (step.done) break;
+                buf += dec.decode(step.value, { stream: true }).replace(/\r\n/g, "\n");
+                let cut;
+                while ((cut = buf.indexOf("\n\n")) >= 0) {
+                    const frame = buf.slice(0, cut);
+                    buf = buf.slice(cut + 2);
+                    let payload = "";
+                    for (const raw of frame.split("\n"))
+                        if (raw.indexOf("data:") === 0) payload += raw.slice(5).trim();
+                    if (!payload || payload === "[DONE]") continue;
+                    let ev;
+                    try { ev = JSON.parse(payload); } catch (e) { continue; }
+                    onEvent(ev);
+                }
+            }
+        }
+
+        const PodLink = {
+            // Is a brain actually reachable right now?
+            ready() {
+                try {
+                    if (!(window.vars && window.vars.podAI)) return false;
+                    const p = podProvider();
+                    return p.local ? true : !!podProviderKey();
+                } catch (e) { return false; }
+            },
+            label() {
+                const p = podProvider();
+                return p.label.replace(/\s*\(.*\)$/, "") + " · " + podModelId().replace(/^claude-|^models\//, "");
+            },
+
+            // ---- tool shapes -------------------------------------------------
+            _toolsFor(kind) {
+                if (kind === "anthropic") return POD_TOOLS;
+                if (kind === "openai") return POD_TOOLS.map(t => ({
+                    type: "function",
+                    function: { name: t.name, description: t.description, parameters: t.input_schema }
+                }));
+                if (kind === "gemini") return [{
+                    function_declarations: POD_TOOLS.map(t => ({
+                        name: t.name, description: t.description, parameters: t.input_schema
+                    }))
+                }];
+                return undefined;
+            },
+
+            // ---- the one call every provider is reduced to --------------------
+            // history: [{role:"user"|"assistant", content:"..."}] plus, on a tool
+            // round, entries carrying `calls` / `results`.
+            // Returns { text, calls: [{id,name,input}], raw }.
+            async send(system, turns, onText) {
+                const p = podProvider();
+                if (p.kind === "anthropic") return this._anthropic(p, system, turns, onText);
+                if (p.kind === "gemini") return this._gemini(p, system, turns, onText);
+                return this._openai(p, system, turns, onText);
+            },
+
+            // ---- Anthropic ---------------------------------------------------
+            async _anthropic(p, system, turns, onText) {
+                const model = podModelId();
+                const headers = {
+                    "content-type": "application/json",
+                    "x-api-key": podProviderKey(),
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-dangerous-direct-browser-access": "true"
+                };
+                const body = {
+                    model: model,
+                    max_tokens: 2048,
+                    stream: true,
+                    system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+                    tools: this._toolsFor("anthropic"),
+                    messages: turns.map(t => t.anthropic || { role: t.role, content: t.content })
+                };
+                if (!/haiku/i.test(model)) body.output_config = { effort: "low" };
+                if (/^claude-(opus-5|fable-5)/.test(model) && !this._noFallback) {
+                    headers["anthropic-beta"] = "server-side-fallback-2026-07-01";
+                    body.fallbacks = "default";
+                }
+                const blocks = [];
+                let stop = null;
+                await podSSE(await fetch(p.url, { method: "POST", headers: headers, body: JSON.stringify(body) }), (ev) => {
+                    if (ev.type === "content_block_start") {
+                        const cb = ev.content_block || {};
+                        blocks[ev.index] = {
+                            type: cb.type, text: cb.text || "", name: cb.name, id: cb.id,
+                            input: cb.input || {}, _json: "",
+                            thinking: cb.thinking || "", signature: cb.signature || "", data: cb.data || ""
+                        };
+                    } else if (ev.type === "content_block_delta") {
+                        const b = blocks[ev.index] || (blocks[ev.index] = { type: "text", text: "", _json: "" });
+                        const d = ev.delta || {};
+                        if (d.type === "text_delta") { b.text = (b.text || "") + d.text; if (onText) onText(d.text); }
+                        else if (d.type === "input_json_delta") b._json = (b._json || "") + (d.partial_json || "");
+                        else if (d.type === "thinking_delta") b.thinking = (b.thinking || "") + (d.thinking || "");
+                        else if (d.type === "signature_delta") b.signature = d.signature || b.signature;
+                    } else if (ev.type === "content_block_stop") {
+                        const b = blocks[ev.index];
+                        if (b && b.type === "tool_use") {
+                            try { b.input = b._json ? JSON.parse(b._json) : {}; } catch (e) { b.input = {}; }
+                        }
+                    } else if (ev.type === "message_delta") {
+                        if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
+                    } else if (ev.type === "error") {
+                        throw new Error((ev.error && ev.error.message) || "stream error");
+                    }
+                });
+                const content = blocks.filter(Boolean);
+                return {
+                    text: content.filter(b => b.type === "text").map(b => b.text).join(" ").trim(),
+                    calls: content.filter(b => b.type === "tool_use")
+                                  .map(b => ({ id: b.id, name: b.name, input: b.input || {} })),
+                    stop: stop,
+                    // Replayed verbatim on the next round: thinking blocks and
+                    // their signatures must survive or the turn is rejected.
+                    raw: content.map(b => {
+                        if (b.type === "tool_use") return { type: "tool_use", id: b.id, name: b.name, input: b.input || {} };
+                        if (b.type === "thinking") {
+                            const tb = { type: "thinking", thinking: b.thinking || "" };
+                            if (b.signature) tb.signature = b.signature;
+                            return tb;
+                        }
+                        if (b.type === "redacted_thinking") return { type: "redacted_thinking", data: b.data || "" };
+                        return { type: "text", text: b.text || "" };
+                    }).filter(b => b.type !== "text" || b.text)
+                };
+            },
+
+            // ---- OpenAI-compatible: groq, OpenRouter, Ollama -------------------
+            async _openai(p, system, turns, onText) {
+                const headers = { "content-type": "application/json" };
+                const key = podProviderKey();
+                if (!p.local && key) headers["authorization"] = "Bearer " + key;
+                if (podProviderId() === "openrouter") {
+                    // OpenRouter attributes browser traffic by referer; harmless
+                    // elsewhere and required for the free pool to behave.
+                    headers["http-referer"] = "https://moomoo.io";
+                    headers["x-title"] = "YoRHa Pod";
+                }
+                const messages = [{ role: "system", content: system }];
+                for (const t of turns) {
+                    if (t.calls) {
+                        messages.push({
+                            role: "assistant", content: t.content || "",
+                            tool_calls: t.calls.map(c => ({
+                                id: c.id, type: "function",
+                                function: { name: c.name, arguments: JSON.stringify(c.input || {}) }
+                            }))
+                        });
+                    } else if (t.results) {
+                        for (const r of t.results)
+                            messages.push({ role: "tool", tool_call_id: r.id, content: String(r.output) });
+                    } else {
+                        messages.push({ role: t.role, content: t.content });
+                    }
+                }
+                const body = {
+                    model: podModelId(),
+                    messages: messages,
+                    tools: this._toolsFor("openai"),
+                    max_tokens: 700,
+                    temperature: 0.8,
+                    stream: true
+                };
+                const calls = [];
+                let text = "";
+                let stop = null;
+                await podSSE(await fetch(p.url, { method: "POST", headers: headers, body: JSON.stringify(body) }), (ev) => {
+                    if (ev.error) throw new Error(ev.error.message || "stream error");
+                    const ch = (ev.choices && ev.choices[0]) || {};
+                    if (ch.finish_reason) stop = ch.finish_reason;
+                    const d = ch.delta || {};
+                    if (d.content) { text += d.content; if (onText) onText(d.content); }
+                    // Tool calls arrive as indexed fragments; the arguments string
+                    // is assembled across deltas exactly like Anthropic's.
+                    if (d.tool_calls) for (const tc of d.tool_calls) {
+                        const i = tc.index || 0;
+                        const slot = calls[i] || (calls[i] = { id: "", name: "", _args: "" });
+                        if (tc.id) slot.id = tc.id;
+                        if (tc.function) {
+                            if (tc.function.name) slot.name = tc.function.name;
+                            if (tc.function.arguments) slot._args += tc.function.arguments;
+                        }
+                    }
+                });
+                const out = calls.filter(Boolean).map((c, i) => {
+                    let input = {};
+                    try { input = c._args ? JSON.parse(c._args) : {}; } catch (e) { input = {}; }
+                    return { id: c.id || ("call_" + i), name: c.name, input: input };
+                }).filter(c => c.name);
+                return { text: text.trim(), calls: out, stop: out.length ? "tool_use" : stop, raw: null };
+            },
+
+            // ---- Gemini --------------------------------------------------------
+            async _gemini(p, system, turns, onText) {
+                const model = podModelId();
+                const url = "https://generativelanguage.googleapis.com/v1beta/models/" +
+                            encodeURIComponent(model) + ":streamGenerateContent?alt=sse&key=" +
+                            encodeURIComponent(podProviderKey());
+                const contents = [];
+                for (const t of turns) {
+                    if (t.calls) {
+                        contents.push({
+                            role: "model",
+                            parts: (t.content ? [{ text: t.content }] : []).concat(
+                                t.calls.map(c => ({ functionCall: { name: c.name, args: c.input || {} } })))
+                        });
+                    } else if (t.results) {
+                        contents.push({
+                            role: "user",
+                            parts: t.results.map(r => ({
+                                functionResponse: { name: r.name, response: { result: String(r.output) } }
+                            }))
+                        });
+                    } else {
+                        contents.push({
+                            role: t.role === "assistant" ? "model" : "user",
+                            parts: [{ text: t.content }]
+                        });
+                    }
+                }
+                const body = {
+                    system_instruction: { parts: [{ text: system }] },
+                    contents: contents,
+                    tools: this._toolsFor("gemini"),
+                    generationConfig: { maxOutputTokens: 700, temperature: 0.9 }
+                };
+                const calls = [];
+                let text = "";
+                let stop = null;
+                await podSSE(await fetch(url, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify(body)
+                }), (ev) => {
+                    if (ev.error) throw new Error(ev.error.message || "stream error");
+                    const cand = (ev.candidates && ev.candidates[0]) || {};
+                    if (cand.finishReason) stop = cand.finishReason;
+                    const parts = (cand.content && cand.content.parts) || [];
+                    for (const part of parts) {
+                        if (part.text) { text += part.text; if (onText) onText(part.text); }
+                        if (part.functionCall) {
+                            calls.push({
+                                id: "gem_" + calls.length,
+                                name: part.functionCall.name,
+                                input: part.functionCall.args || {}
+                            });
+                        }
+                    }
+                });
+                return { text: text.trim(), calls: calls, stop: calls.length ? "tool_use" : stop, raw: null };
+            }
+        };
 
         // =====================================================================
         // THE POD  —  the unit itself
@@ -11721,6 +13065,8 @@ let pps = 0;
             _lastKills: 0,
             _lastSpike: 0, _lastTrap: 0,
             _lastAlive: true,
+            _lastHp: 100,
+            _lastKiller: "",
             _bootDone: false,
             _seq: 0,
             _typer: null,
@@ -11774,7 +13120,8 @@ let pps = 0;
                 return true;
             },
             _pick(a) { return a[(Math.random() * a.length) | 0]; },
-            // Pick the line in the active language. Every call-out is written twice.
+            // Pick the line in the active language. Used for one-off strings that
+            // are not worth a bank entry.
             _L(en, ar) { return podLangNow() === "ar" ? ar : en; },
 
             // ---- reading the world -------------------------------------------
@@ -11834,19 +13181,68 @@ let pps = 0;
                 try { return (items.weapons[s.weaponIndex] || {}).name || "unarmed"; } catch (e) { return "unknown"; }
             },
 
+            // ---- speaking from the bank ---------------------------------------
+            // Everything the unit says on its own initiative goes through here, so
+            // the deck, the templates, the novelty guard and the chatter budget all
+            // apply in one place. Returns false when the line was suppressed.
+            line_text(topic, vars) {
+                const bank = POD_BANK[topic];
+                if (!bank) return "";
+                const list = bank[podLangNow()] || bank.en;
+                return PodLines.render(PodLines.draw(topic, list), vars);
+            },
+            line(topic, vars, opts) {
+                opts = opts || {};
+                const priority = opts.priority === undefined ? 1 : opts.priority;
+                if (!PodLines.allow(priority)) return false;
+                const text = this.line_text(topic, vars);
+                if (!text) return false;
+                if (!PodLines.fresh(text, opts.freshMs || (priority >= 2 ? 45000 : 240000))) return false;
+                this.say(text, { callout: opts.callout !== false, speak: opts.speak });
+                return true;
+            },
+            // "2m", "40s" — used wherever a record's age matters.
+            ago(ms) {
+                const s = Math.max(0, Math.round(ms / 1000));
+                if (s < 60) return s + (podLangNow() === "ar" ? " ثانية" : "s");
+                const m = Math.round(s / 60);
+                if (m < 60) return m + (podLangNow() === "ar" ? " دقيقة" : "m");
+                return Math.round(m / 60) + (podLangNow() === "ar" ? " ساعة" : "h");
+            },
+            _bearWord(ang) { return this._bearing(ang)[podLangNow() === "ar" ? 1 : 0]; },
+            _bearTo(s, x, y) { return this._bearWord(Math.atan2(y - s.y, x - s.x)); },
+
+            // Announce a directive and drop a waypoint you can walk to.
+            direct(d, opts) {
+                if (!d) return false;
+                PodMark.set(d.x, d.y, (d.kind || "GO").toUpperCase(), d.kind, 60000);
+                return this.line("moveTo", {
+                    bearing: d.bearing[podLangNow() === "ar" ? 1 : 0],
+                    dist: d.dist,
+                    why: d.why
+                }, opts || { priority: 1 });
+            },
+
             // ---- the proactive brain, one call a tick -------------------------
+            // Driven by changes in state rather than by a timer: the unit speaks
+            // when something is different, and the bank machinery above decides
+            // whether that particular sentence has been worn out.
             tick() {
                 try {
                     if (!(window.vars && window.vars.podEnabled)) return;
+                    PodWorld.observe();
+                    this._watchBoard();
+
                     const s = this._self();
 
                     // Death and respawn, for the record and for the line.
                     if (s && this._lastAlive && !s.alive) {
                         this._lastAlive = false;
                         PodMemory.note("death");
-                        if (this._can("dead", 4000))
-                            this.say(this._L("Unit down. Black box intact — redeploy when ready.",
-                                             "الوحدة سقطت. الصندوق الأسود سليم — انشر من جديد."), { callout: true });
+                        const foe = this._lastKiller;
+                        this.line("death", {
+                            cause: foe || this._L("unknown", "غير معروف")
+                        }, { priority: 3 });
                     }
                     if (s && s.alive && !this._lastAlive) this._lastAlive = true;
                     if (!s || !s.alive || s.x === undefined) return;
@@ -11858,85 +13254,136 @@ let pps = 0;
                         this._lastKills = kills;
                         PodMemory.note("kill", gained);
                         PodMemory.note("best", kills);
-                        if (this._can("kill", 1500))
-                            this.say(this._pick(this._L(
-                                ["Enemy unit eliminated.", "Target neutralised. Well done.", "Hostile down. Streak " + kills + "."],
-                                ["قتلة مؤكدة. أحسنت.", "هدف أُسقط. استمر.", "عدو سقط. السلسلة " + kills + "."])),
-                                { callout: true });
+                        if (kills >= 5 && kills % 5 === 0) this.line("killStreak", { kills: kills }, { priority: 2 });
+                        else this.line("kill", { kills: kills }, { priority: 2 });
                     } else if (kills < this._lastKills) this._lastKills = kills;
 
                     // The placer just dropped something — announce it once.
                     try {
                         const ns = (typeof spikes_our !== "undefined" && spikes_our) ? spikes_our.length : 0;
                         const nt = (typeof traps_our !== "undefined" && traps_our) ? traps_our.length : 0;
-                        if (ns > this._lastSpike && this._can("spike", 2500))
-                            this.say(this._pick(this._L(
-                                ["Proposal: spike deployed at your position.", "Deploying spike. Hold them here."],
-                                ["نُصب سبايك عند موقعك.", "سبايك منصوب. ثبتهم هنا."])), { callout: true });
-                        if (nt > this._lastTrap && this._can("trap", 2500))
-                            this.say(this._pick(this._L(
-                                ["Trap set. Lure them onto it.", "Proposal: trap laid to your front."],
-                                ["نصبت تراب. جرّهم عليه.", "اقتراح: تراب منصوب قدامك."])), { callout: true });
+                        const foe0 = this._nearestFoe(s);
+                        const bw = foe0 ? this._bearTo(s, foe0.p.x, foe0.p.y) : "";
+                        if (ns > this._lastSpike) this.line("spikeDown", { bearing: bw }, { priority: 1 });
+                        if (nt > this._lastTrap) this.line("trapDown", { bearing: bw }, { priority: 1 });
                         this._lastSpike = ns; this._lastTrap = nt;
                     } catch (e) {}
 
-                    // Low integrity.
-                    const hp = this._hpRatio(s);
-                    if (hp > 0 && hp < 0.4 && this._can("hp", 6000)) {
-                        this.say(this._pick(this._L(
-                            ["Warning: integrity critical. Recommend disengaging.", "Alert: vital signs low. Fall back and heal."],
-                            ["تحذير: صحتك منخفضة. انسحب وتعالج.", "تنبيه: مؤشراتك الحيوية ضعيفة. تراجع وعالج."])),
-                            { callout: true });
+                    // Integrity. Only speaks on the way down, not every tick.
+                    const hp = Math.round(this._hpRatio(s) * 100);
+                    if (hp > 0 && hp < 45 && hp < this._lastHp - 4) {
+                        const safe = PodWorld.safestDir();
+                        this.line("hpLow", {
+                            hp: hp,
+                            away: safe ? this._bearWord(safe.ang) : ""
+                        }, { priority: 3 });
                     }
+                    this._lastHp = hp;
 
-                    // Threat and its bearing.
-                    const foe = this._nearestFoe(s);
-                    if (foe) {
-                        const bear = this._bear(s, foe.p);
-                        if (foe.d < 320) {
-                            if (this._hasItem(s, 2) && this._can("suggestSpike", 7000))
-                                this.say(this._L("Proposal: deploy spike toward " + bear[0] + " and tick them.",
-                                                 "اقتراح: حط سبايك " + bear[1] + " وسوّي له tick."), { callout: true });
-                            else if (this._can("threatClose", 6000))
-                                this.say(this._L("Hostile in melee range, " + bear[0] + ". Engaging support.",
-                                                 "عدو قريب " + bear[1] + ". جاهز أساندك."), { callout: true });
-                        } else if (foe.d < 700 && this._can("threat", 9000)) {
-                            this.say(this._L("Alert: hostile approaching from " + bear[0] + ", " + Math.round(foe.d) + " units.",
-                                             "تنبيه: عدو جاي من " + bear[1] + "، على بعد " + Math.round(foe.d) + "."), { callout: true });
-                        }
-                    } else if (this._can("clear", 30000)) {
-                        this.say(this._pick(this._L(
-                            ["Area clear. Suggest gathering while it holds.", "No hostiles detected. Standing by."],
-                            ["المنطقة آمنة. اقترح تجمع موارد.", "ما فيه أعداء. في وضع الاستعداد."])), { callout: true });
+                    // Threat, graded by how much of it there is.
+                    const foes = this._foes(s, 900);
+                    const near = foes.filter(f => f.d < 320);
+                    if (foes.length >= 3) {
+                        const safe = PodWorld.safestDir();
+                        this.line("threatMany", {
+                            n: foes.length,
+                            bearing: this._bearTo(s, foes[0].p.x, foes[0].p.y),
+                            away: safe ? this._bearWord(safe.ang) : ""
+                        }, { priority: 3 });
+                    } else if (near.length) {
+                        const f = near[0];
+                        this.line("threatNear", {
+                            bearing: this._bearTo(s, f.p.x, f.p.y),
+                            dist: Math.round(f.d),
+                            name: f.p.name || ""
+                        }, { priority: 2 });
+                    } else if (foes.length) {
+                        const f = foes[0];
+                        this.line("threatFar", {
+                            bearing: this._bearTo(s, f.p.x, f.p.y),
+                            dist: Math.round(f.d),
+                            name: f.p.name || ""
+                        }, { priority: 2 });
                     }
 
                     // Cornered against the world edge.
                     try {
                         const m = config.mapScale, edge = 320;
-                        if ((s.x < edge || s.y < edge || s.x > m - edge || s.y > m - edge) && this._can("edge", 12000))
-                            this.say(this._L("Recommendation: you are against the border. Fall back to open ground.",
-                                             "توصية: أنت عند حدود الخريطة. ارجع للوسط."), { callout: true });
+                        if (s.x < edge || s.y < edge || s.x > m - edge || s.y > m - edge) {
+                            const safe = PodWorld.safestDir();
+                            this.line("edge", { away: safe ? this._bearWord(safe.ang) : "" }, { priority: 2 });
+                        }
                     } catch (e) {}
+
+                    // Quiet ground: this is where the unit earns its keep, by
+                    // proposing somewhere to actually go rather than repeating
+                    // "area clear" every thirty seconds.
+                    if (!foes.length) {
+                        const d = PodTactics.directive();
+                        if (d) this.direct(d);
+                        else this.line("clear", {}, { priority: 0 });
+                    }
+
+                    // Flavour, rarely, and only when nothing else is happening.
+                    if (!foes.length && Date.now() - (this._cool.idle || 0) > 90000) {
+                        this._cool.idle = Date.now();
+                        this.line("idle", { steps: Math.round(PodWorld._steps) }, { priority: 0, freshMs: 900000 });
+                    }
+                } catch (e) {}
+            },
+
+            // The leaderboard is the one server-wide feed a client-side unit has.
+            _watchBoard() {
+                try {
+                    const changed = PodWorld.readBoard();
+                    if (!changed || !changed.length) return;
+                    const top = changed[0];
+                    if (top && top.name !== PodWorld._leader) {
+                        const first = !PodWorld._leader;
+                        PodWorld._leader = top.name;
+                        if (!first) this.line("rosterLead", { name: top.name, score: top.score }, { priority: 1 });
+                    }
                 } catch (e) {}
             },
 
             // ---- the field report handed to the model -------------------------
+            // Deliberately dense. Every provider gets the same briefing, which is
+            // what lets a small free model give tactical answers: it is not being
+            // asked to guess at the world, it is being handed it.
             _field() {
                 const s = this._self();
                 if (!s || !s.alive) return "no active unit (dead or not spawned).";
                 const hp = Math.round(this._hpRatio(s) * 100);
-                const foe = this._nearestFoe(s);
-                let f = "none in view";
-                if (foe) f = Math.round(foe.d) + " units " + this._bear(s, foe.p)[0] +
-                             (foe.p.name ? " (" + foe.p.name + ")" : "");
-                let res = "";
+                const foes = this._foes(s, 1200);
+                const lines = [];
+                lines.push("self: hp " + hp + "%, kills " + this._kills(s) + ", age " + (s.age || 1) +
+                           ", weapon " + this._weaponName(s) +
+                           ", position " + Math.round(s.x) + "," + Math.round(s.y));
                 try {
                     const st = s.stats;
-                    if (st) res = ", wood:" + (st.wood || 0) + " food:" + (st.food || 0) +
-                                  " stone:" + (st.stone || 0) + " gold:" + (st.gold || 0);
+                    if (st) lines.push("resources: wood " + (st.wood || 0) + ", food " + (st.food || 0) +
+                                       ", stone " + (st.stone || 0) + ", gold " + (st.gold || 0));
                 } catch (e) {}
-                return "hp:" + hp + "%, kills:" + this._kills(s) + ", age:" + (s.age || 1) +
-                       ", weapon:" + this._weaponName(s) + ", nearest hostile:" + f + res + ".";
+                if (foes.length) {
+                    lines.push("hostiles in range (" + foes.length + "):");
+                    foes.slice(0, 5).forEach(f => lines.push("  - " + (f.p.name || "unnamed") + " " +
+                        Math.round(f.d) + "u " + this._bearing(Math.atan2(f.p.y - s.y, f.p.x - s.x))[0] +
+                        " hp~" + Math.round((f.p.health / (f.p.maxHealth || 100)) * 100) + "%"));
+                } else lines.push("hostiles in range: none");
+                try {
+                    const d = PodTactics.directive(true);
+                    if (d) lines.push("suggested move: " + d.bearing[0] + " " + d.dist + "u (" + d.kind + ")");
+                } catch (e) {}
+                try {
+                    if (PodWorld.roster.length)
+                        lines.push("leaderboard: " + PodWorld.roster.slice(0, 5)
+                            .map(r => r.rank + "." + r.name + " " + r.score).join(", "));
+                } catch (e) {}
+                try {
+                    const known = Object.keys(PodWorld.contacts).length;
+                    if (known) lines.push("contacts archived this session: " + known);
+                } catch (e) {}
+                return lines.join("\n");
             },
 
             // ---- tools the model can call -------------------------------------
@@ -11997,136 +13444,110 @@ let pps = 0;
                         } catch (e) {}
                         return out.join("\n");
                     }
+                    if (name === "find_player") {
+                        const r = this.findPlayer(input.name);
+                        return r.report;
+                    }
+                    if (name === "recommend_move") {
+                        const goal = String(input.goal || "auto").toLowerCase();
+                        const s = this._self();
+                        if (!s || !s.alive) return "no active unit.";
+                        const d = (goal && goal !== "auto")
+                            ? PodTactics._build(goal, s)
+                            : PodTactics.directive(true);
+                        if (!d) return "no useful destination found for that goal right now.";
+                        PodMark.set(d.x, d.y, (d.kind || "GO").toUpperCase(), d.kind, 60000);
+                        return "destination marked: " + d.bearing[0] + ", " + d.dist +
+                               " units, at " + Math.round(d.x) + "," + Math.round(d.y) +
+                               ". reason: " + d.why + " (kind: " + d.kind + ")";
+                    }
+                    if (name === "recon") {
+                        const r = this.startRecon(input.bearing, input.target, input.distance);
+                        return r;
+                    }
                 } catch (e) { return "tool error: " + (e && e.message ? e.message : "unknown"); }
                 return "unknown tool.";
             },
 
-            // ---- the AI link ---------------------------------------------------
-            _ai: { busy: false, abort: null, noFallback: false },
-            _apiKey() {
-                try { if (window.vars && window.vars.podAIKey) return String(window.vars.podAIKey).trim(); } catch (e) {}
-                return String(POD_AI_KEY || "").trim();
-            },
-            _aiOn() {
-                try { return !!(window.vars && window.vars.podAI && this._apiKey()); } catch (e) { return false; }
-            },
-            _model() {
-                let m = "";
-                try { m = String((window.vars && window.vars.podAIModel) || "").trim(); } catch (e) {}
-                return m || POD_AI_MODEL;
+            // ---- finding a player, shared by the command and the tool ---------
+            findPlayer(query) {
+                const q = String(query || "").trim();
+                if (!q) return { report: "no name given.", kind: "none" };
+                const r = PodWorld.find(q);
+                if (r.kind === "live") {
+                    PodMark.set(r.c.x, r.c.y, (r.c.name || "TARGET").toUpperCase(), "target", 60000);
+                    this.line("findFound", {
+                        name: r.c.name, bearing: r.bearing[podLangNow() === "ar" ? 1 : 0], dist: Math.round(r.d)
+                    }, { priority: 2 });
+                    return { kind: "live", report: r.c.name + " is a live contact: " + Math.round(r.d) +
+                             " units " + r.bearing[0] + ", integrity ~" + (r.c.hp || "?") + "%." };
+                }
+                if (r.kind === "stale") {
+                    PodMark.set(r.c.x, r.c.y, (r.c.name || "LAST SEEN").toUpperCase(), "stale", 60000);
+                    this.line("findStale", {
+                        name: r.c.name, bearing: r.bearing[podLangNow() === "ar" ? 1 : 0],
+                        dist: Math.round(r.d), age: this.ago(r.age)
+                    }, { priority: 2 });
+                    return { kind: "stale", report: r.c.name + " is not in sensor range. Last known position " +
+                             Math.round(r.d) + " units " + r.bearing[0] + ", recorded " + this.ago(r.age) +
+                             " ago. Position marked but may be out of date." };
+                }
+                if (r.kind === "roster") {
+                    this.line("findRoster", { name: r.r.name, rank: r.r.rank, score: r.r.score }, { priority: 2 });
+                    return { kind: "roster", report: r.r.name + " is on the server leaderboard at rank " +
+                             r.r.rank + " with " + r.r.score + " points, but has never been in sensor range, " +
+                             "so there is no position for them." };
+                }
+                this.line("findMissing", { name: q }, { priority: 2 });
+                return { kind: "none", report: "no player matching '" + q + "' in the archive or on the leaderboard." };
             },
 
-            // One streamed request. Returns { content, stop_reason } with content
-            // blocks assembled from the SSE deltas; onText fires per text delta so
-            // the panel and the voice can start before the reply is finished.
-            async _stream(body, onText) {
-                const res = await fetch(POD_AI_URL, {
-                    method: "POST",
-                    headers: body.__headers,
-                    body: JSON.stringify(body.__body)
-                });
-                if (!res.ok || !res.body) {
-                    let detail = "";
-                    try {
-                        const txt = await res.text();
-                        try { detail = (JSON.parse(txt).error || {}).message || txt; } catch (e) { detail = txt; }
-                    } catch (e) {}
-                    const err = new Error(detail || ("HTTP " + res.status));
-                    err.status = res.status;
-                    throw err;
-                }
-                const reader = res.body.getReader();
-                const dec = new TextDecoder();
-                const blocks = [];
-                let buf = "", stop = null;
-                for (;;) {
-                    const step = await reader.read();
-                    if (step.done) break;
-                    buf += dec.decode(step.value, { stream: true }).replace(/\r\n/g, "\n");
-                    let cut;
-                    while ((cut = buf.indexOf("\n\n")) >= 0) {
-                        const frame = buf.slice(0, cut);
-                        buf = buf.slice(cut + 2);
-                        let payload = "";
-                        for (const raw of frame.split("\n")) {
-                            if (raw.indexOf("data:") === 0) payload += raw.slice(5).trim();
-                        }
-                        if (!payload || payload === "[DONE]") continue;
-                        let ev;
-                        try { ev = JSON.parse(payload); } catch (e) { continue; }
-                        if (ev.type === "content_block_start") {
-                            const cb = ev.content_block || {};
-                            blocks[ev.index] = {
-                                type: cb.type, text: cb.text || "", name: cb.name,
-                                id: cb.id, input: cb.input || {}, _json: "",
-                                // Thinking blocks are captured whole, signature and
-                                // all: a tool round-trip has to hand them back to
-                                // the model unchanged or the turn is rejected.
-                                thinking: cb.thinking || "", signature: cb.signature || "",
-                                data: cb.data || ""
-                            };
-                        } else if (ev.type === "content_block_delta") {
-                            const b = blocks[ev.index] || (blocks[ev.index] = { type: "text", text: "", _json: "" });
-                            const d = ev.delta || {};
-                            if (d.type === "text_delta") {
-                                b.text = (b.text || "") + d.text;
-                                if (onText) { try { onText(d.text); } catch (e) {} }
-                            } else if (d.type === "input_json_delta") {
-                                b._json = (b._json || "") + (d.partial_json || "");
-                            } else if (d.type === "thinking_delta") {
-                                b.thinking = (b.thinking || "") + (d.thinking || "");
-                            } else if (d.type === "signature_delta") {
-                                b.signature = d.signature || b.signature;
-                            }
-                        } else if (ev.type === "content_block_stop") {
-                            const b = blocks[ev.index];
-                            if (b && b.type === "tool_use") {
-                                try { b.input = b._json ? JSON.parse(b._json) : {}; } catch (e) { b.input = {}; }
-                            }
-                        } else if (ev.type === "message_delta") {
-                            if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
-                        } else if (ev.type === "error") {
-                            throw new Error((ev.error && ev.error.message) || "stream error");
-                        }
+            // ---- sending the unit out ------------------------------------------
+            startRecon(bearing, target, distance) {
+                const s = this._self();
+                if (!s || !s.alive) return "no active unit — cannot launch.";
+                if (PodRecon.busy()) return "a reconnaissance flight is already in progress.";
+                const dist = Math.max(400, Math.min(2500, Number(distance) || 1100));
+                if (target) {
+                    const r = PodWorld.find(target);
+                    if (r.kind === "live" || r.kind === "stale") {
+                        PodRecon.launch(r.c.x, r.c.y, String(r.c.name || target).toUpperCase(), 900);
+                        return "flight launched toward " + r.c.name + "'s last known position.";
                     }
+                    return "no position on record for '" + target + "'; give a bearing instead.";
                 }
-                return { content: blocks.filter(Boolean), stop_reason: stop };
+                const dirs = {
+                    east: 0, "south-east": 1, southeast: 1, south: 2, "south-west": 3, southwest: 3,
+                    west: 4, "north-west": 5, northwest: 5, north: 6, "north-east": 7, northeast: 7,
+                    "شرق": 0, "جنوب": 2, "غرب": 4, "شمال": 6
+                };
+                const key = String(bearing || "").toLowerCase().trim().replace(/\s+/g, "-");
+                let oct = dirs[key];
+                if (oct === undefined) {
+                    // No bearing given: sweep wherever the archive is thinnest.
+                    const safe = PodWorld.safestDir();
+                    oct = safe ? Math.round(safe.ang / (Math.PI / 4)) % 8 : (Math.random() * 8) | 0;
+                }
+                const ang = oct * (Math.PI / 4);
+                PodRecon.launch(s.x + Math.cos(ang) * dist, s.y + Math.sin(ang) * dist,
+                                "RECON", Math.max(600, dist * 0.7));
+                return "flight launched " + this._bearing(ang)[0] + ", " + Math.round(dist) + " units out. " +
+                       "The report will follow when the sweep completes.";
             },
 
-            _buildRequest(messages) {
-                const model = this._model();
-                const isHaiku = /haiku/i.test(model);
-                const headers = {
-                    "content-type": "application/json",
-                    "x-api-key": this._apiKey(),
-                    "anthropic-version": "2023-06-01",
-                    "anthropic-dangerous-direct-browser-access": "true"
-                };
-                const body = {
-                    model: model,
-                    max_tokens: 2048,
-                    stream: true,
-                    system: [{ type: "text", text: podSystemPrompt(), cache_control: { type: "ephemeral" } }],
-                    tools: POD_TOOLS,
-                    messages: messages
-                };
-                // Effort is not accepted on Haiku 4.5; on the Opus/Sonnet line "low"
-                // is what keeps a battlefield reply inside a second or two.
-                if (!isHaiku) body.output_config = { effort: "low" };
-                // Opus 5 can decline a request outright and return nothing. The
-                // server-side fallback rescues the turn on a sibling model inside
-                // the same call. Opus/Fable only — and dropped automatically on the
-                // first request that comes back complaining about the beta.
-                if (/^claude-(opus-5|fable-5)/.test(model) && !this._ai.noFallback) {
-                    headers["anthropic-beta"] = POD_FALLBACK_BETA;
-                    body.fallbacks = "default";
-                }
-                return { __headers: headers, __body: body };
-            },
+            // ---- the AI link ---------------------------------------------------
+            // Which brain is behind the unit, and whether it is reachable, is
+            // PodLink's business now — the pod only asks.
+            _ai: { busy: false },
+            _aiOn() { try { return PodLink.ready(); } catch (e) { return false; } },
+            _model() { try { return PodLink.label(); } catch (e) { return ""; } },
 
+            // One conversational turn, whichever brain is behind it. PodLink
+            // reduces every provider to the same call, so this loop is written
+            // once: stream text into the panel, run any tools the model asked
+            // for, feed the results back, repeat until it stops asking.
             async _askAI(userText) {
-                const key = this._apiKey();
-                if (!key) { this.system(PT("keyMissing")); this._ruleReply(userText); return; }
+                if (!PodLink.ready()) { this.system(PT("keyMissing")); this._ruleReply(userText); return; }
                 if (this._ai.busy) { this.say(PT("busy"), { speak: false }); return; }
                 this._ai.busy = true;
                 this._paint();
@@ -12159,55 +13580,59 @@ let pps = 0;
                     flushVoice(false);
                 };
 
-                const messages = (PodMemory.enabled() ? PodMemory.load().history.slice() : [])
-                    .concat([{ role: "user", content: "[FIELD] " + this._field() + "\n[OPERATOR] " + userText }]);
+                // Prior sessions replay as plain text; the live turn carries the
+                // full field briefing so even a small free model answers about the
+                // match you are actually in.
+                const turns = (PodMemory.enabled() ? PodMemory.load().history.slice() : [])
+                    .map(h => ({ role: h.role, content: h.content }));
+                turns.push({ role: "user", content: "[FIELD]\n" + this._field() + "\n[OPERATOR] " + userText });
 
                 try {
-                    let reply = "";
-                    for (let turn = 0; turn < 4; turn++) {
-                        let msg;
+                    for (let round = 0; round < 4; round++) {
+                        let res;
                         const before = line.full;
                         try {
-                            msg = await this._stream(this._buildRequest(messages), onText);
+                            res = await PodLink.send(podSystemPrompt(), turns, onText);
                         } catch (e) {
-                            // An account without the fallback beta rejects the whole
-                            // request; retry once cleanly rather than losing the turn.
-                            // Roll the line back first so a partial reply from the
-                            // failed attempt is not left glued to the retry's.
-                            if (!this._ai.noFallback && /fallback|beta/i.test(String(e && e.message))) {
-                                this._ai.noFallback = true;
+                            // An Anthropic account without the fallback beta rejects
+                            // the whole request; retry once cleanly rather than
+                            // losing the turn, rolling the line back first.
+                            if (!PodLink._noFallback && /fallback|beta/i.test(String(e && e.message))) {
+                                PodLink._noFallback = true;
                                 line.full = before;
                                 line.shown = Math.min(line.shown, before.length);
-                                msg = await this._stream(this._buildRequest(messages), onText);
+                                res = await PodLink.send(podSystemPrompt(), turns, onText);
                             } else throw e;
                         }
-                        const text = msg.content.filter(b => b.type === "text").map(b => b.text).join(" ").trim();
-                        if (text) reply = text;
-                        if (msg.stop_reason === "refusal") {
-                            if (!text) line.full = this._L("Query declined by safety systems. Rephrase.",
-                                                           "الطلب مرفوض من أنظمة الأمان. أعد الصياغة.");
+                        if (res.stop === "refusal" && !res.text) {
+                            line.full = this._L("Query declined by safety systems. Rephrase.",
+                                                "الطلب مرفوض من أنظمة الأمان. أعد الصياغة.");
                             break;
                         }
-                        const calls = msg.content.filter(b => b.type === "tool_use");
-                        if (msg.stop_reason !== "tool_use" || !calls.length) break;
-                        // Replay the assistant turn as it came back. Thinking blocks
-                        // ride along untouched — stripping them is what breaks the
-                        // next request, not what cleans it up.
-                        messages.push({ role: "assistant", content: msg.content.map(b => {
-                            if (b.type === "tool_use")
-                                return { type: "tool_use", id: b.id, name: b.name, input: b.input || {} };
-                            if (b.type === "thinking") {
-                                const tb = { type: "thinking", thinking: b.thinking || "" };
-                                if (b.signature) tb.signature = b.signature;
-                                return tb;
+                        if (!res.calls || !res.calls.length) break;
+                        // Anthropic replays its own content blocks verbatim —
+                        // thinking blocks and signatures included. The other
+                        // providers rebuild the turn from text plus calls.
+                        turns.push(res.raw
+                            ? { role: "assistant", anthropic: { role: "assistant", content: res.raw },
+                                content: res.text, calls: res.calls }
+                            : { role: "assistant", content: res.text, calls: res.calls });
+                        // Each tool runs exactly once; both wire shapes are built
+                        // from the same result. Running them per-shape would fire
+                        // a recon flight twice for one request.
+                        const results = res.calls.map(c => ({
+                            id: c.id, name: c.name, output: this._tool(c.name, c.input)
+                        }));
+                        turns.push({
+                            role: "user",
+                            results: results,
+                            anthropic: {
+                                role: "user",
+                                content: results.map(r => ({
+                                    type: "tool_result", tool_use_id: r.id, content: r.output
+                                }))
                             }
-                            if (b.type === "redacted_thinking")
-                                return { type: "redacted_thinking", data: b.data || "" };
-                            return { type: "text", text: b.text || "" };
-                        }).filter(b => b.type !== "text" || b.text) });
-                        messages.push({ role: "user", content: calls.map(c => ({
-                            type: "tool_result", tool_use_id: c.id, content: this._tool(c.name, c.input)
-                        })) });
+                        });
                         this._paint();
                     }
                     if (!line.full.trim()) {
@@ -12217,15 +13642,13 @@ let pps = 0;
                     line.kind = "";
                     this._tick();
                     flushVoice(true);
-                    // Store the whole turn, tool rounds included — that cumulative
-                    // text is what the operator actually heard.
-                    if (PodMemory.enabled() && (reply || line.full.trim())) {
+                    if (PodMemory.enabled() && line.full.trim()) {
                         PodMemory.pushTurn("user", userText);
-                        PodMemory.pushTurn("assistant", line.full.trim() || reply);
+                        PodMemory.pushTurn("assistant", line.full.trim());
                     }
                 } catch (e) {
                     const m = String((e && e.message) || "link failure");
-                    line.full = this._L("Alert: link error — ", "تنبيه: خطأ في الاتصال — ") + m.slice(0, 160);
+                    line.full = this._L("Alert: link error — ", "تنبيه: خطأ في الاتصال — ") + m.slice(0, 200);
                     line.kind = "sys";
                     this._tick();
                     this._ruleReply(userText);
@@ -12267,6 +13690,7 @@ let pps = 0;
                                : (podLangNow() === "ar" ? "en" : "ar");
                     window.vars.podLang = want;
                     try { saveConfig(); } catch (e) {}
+                    PodLines.reset();
                     this._applyDir();
                     this.say(PT("langSet"));
                     this._paint();
@@ -12294,28 +13718,80 @@ let pps = 0;
                     this.system(PT("cleared"));
                     return true;
                 }
+                // ---- the new operational commands ----------------------------
+                if (cmd === "find" || cmd === "who" || cmd === "دور") {
+                    if (!arg) { this.say(this._L("Give a name to search for.", "أعطني اسم أبحث عنه.")); return true; }
+                    this.findPlayer(arg);
+                    return true;
+                }
+                if (cmd === "recon" || cmd === "sweep" || cmd === "استطلاع") {
+                    // "/recon north", "/recon SomePlayer", "/recon" for auto.
+                    const known = /^(north|south|east|west|north-?east|north-?west|south-?east|south-?west|شمال|جنوب|شرق|غرب)$/i.test(arg);
+                    const msg = this.startRecon(known ? arg : "", known ? "" : arg, 0);
+                    if (/^no |^a recon/i.test(msg)) this.say(msg);
+                    return true;
+                }
+                if (cmd === "go" || cmd === "where" || cmd === "وين") {
+                    const s = this._self();
+                    if (!s || !s.alive) { this.say(this._L("No unit to read. Deploy first.", "ما فيه وحدة أقرأها. انشر أولاً.")); return true; }
+                    const goal = arg ? arg.toLowerCase() : "";
+                    const d = goal ? PodTactics._build(goal, s) : PodTactics.directive(true);
+                    if (!d) { this.say(this._L("No useful destination right now.", "ما فيه وجهة مفيدة الحين.")); return true; }
+                    this.direct(d, { priority: 2 });
+                    return true;
+                }
+                if (cmd === "board" || cmd === "top" || cmd === "لوحة") {
+                    PodWorld.readBoard();
+                    const r = PodWorld.roster.slice(0, 5);
+                    if (!r.length) { this.say(this._L("Leaderboard is not visible.", "لوحة الصدارة غير ظاهرة.")); return true; }
+                    this.say(this._L("Server board: ", "لوحة السيرفر: ") +
+                             r.map(x => x.rank + ". " + x.name + " (" + x.score + ")").join(" · "), { speak: false });
+                    return true;
+                }
+                if (cmd === "mark") { PodMark.clear(); this.say(PT("ack")); return true; }
                 if (cmd === "help") { this.say(PT("helpLine"), { speak: false }); return true; }
                 return false;
             },
 
+            // The local matcher. It runs when no model is configured, and as the
+            // fallback whenever a request fails, so it has to be genuinely useful
+            // on its own — every answer here is built from live state and every
+            // line comes out of the deck, so it does not loop either.
             _ruleReply(text) {
                 const q = text.toLowerCase();
                 const s = this._self();
                 const has = (arr) => arr.some(w => q.indexOf(w) >= 0);
+                const speakLine = (topic, vars) => {
+                    const t = this.line_text(topic, vars);
+                    return this.say(t);
+                };
 
-                if (has(["hello", "hi", "hey", "مرحبا", "هلا", "السلام", "سلام", "هاي"]))
-                    return this.say(this._pick(this._L(
-                        ["Greetings. Pod 042 online and supporting.", "Pod support unit active. Awaiting orders."],
-                        ["أهلاً. الوحدة 042 متصلة وتساندك.", "وحدة الإسناد فعّالة. بانتظار أوامرك."])));
-
+                if (has(["hello", "hi ", "hey", "مرحبا", "هلا", "السلام", "سلام", "هاي"]))
+                    return speakLine("greet");
                 if (has(["help", "commands", "مساعدة", "اوامر", "أوامر", "وش تسوي"]))
                     return this.say(PT("helpLine"), { speak: false });
-
                 if (has(["thank", "شكرا", "مشكور", "يعطيك"]))
-                    return this.say(this._pick(this._L(
-                        ["Affirmative. Support unit standing by.", "Acknowledged."],
-                        ["على الرحب. جاهز.", "تم."])));
+                    return speakLine("thanks");
 
+                // Find someone by name: "find bob", "where is bob", "وين فلان".
+                const findM = text.match(/(?:find|locate|where\s+is|دور\s*على|وين)\s+([^\s?]{2,20})/i);
+                if (findM && findM[1] && !/^(am|i|me|أنا|انا)$/i.test(findM[1])) {
+                    this.findPlayer(findM[1]);
+                    return;
+                }
+                if (has(["recon", "sweep", "go look", "استطلع", "استطلاع", "روح شوف"])) {
+                    const dirM = text.match(/(north-?east|north-?west|south-?east|south-?west|north|south|east|west|شمال|جنوب|شرق|غرب)/i);
+                    const msg = this.startRecon(dirM ? dirM[1] : "", "", 0);
+                    if (/^no |^a recon/i.test(msg)) this.say(msg);
+                    return;
+                }
+                if (has(["board", "leaderboard", "top", "لوحة", "المتصدر"])) {
+                    PodWorld.readBoard();
+                    const r = PodWorld.roster.slice(0, 5);
+                    if (!r.length) return this.say(this._L("Leaderboard is not visible.", "لوحة الصدارة غير ظاهرة."));
+                    return this.say(this._L("Server board: ", "لوحة السيرفر: ") +
+                        r.map(x => x.rank + ". " + x.name + " (" + x.score + ")").join(" · "), { speak: false });
+                }
                 if (has(["remember", "احفظ", "تذكر"])) {
                     const body = text.replace(/^.*?(remember|احفظ|تذكر)\s*/i, "").trim();
                     if (body) { PodMemory.addFact(body, "operator"); this._paint(); return this.say(PT("memAdded")); }
@@ -12338,40 +13814,50 @@ let pps = 0;
                         "الحالة — الصحة " + hp + "%، القتلات " + this._kills(s) +
                             (foe ? "، أقرب عدو على بعد " + Math.round(foe.d) + " " + this._bear(s, foe.p)[1] + "." : "، ما فيه أعداء قريبين.")));
                 }
-                if (has(["threat", "enemy", "foe", "عدو", "خصم", "اعداء", "أعداء"])) {
-                    const foe = this._nearestFoe(s);
-                    if (!foe) return this.say(this._L("No hostiles detected.", "لا أعداء قريبين."));
-                    const b = this._bear(s, foe.p);
-                    return this.say(this._L(
-                        "Nearest hostile " + Math.round(foe.d) + " units, " + b[0] + (foe.p.name ? " — " + foe.p.name : "") + ".",
-                        "أقرب عدو على بعد " + Math.round(foe.d) + "، " + b[1] + (foe.p.name ? " — " + foe.p.name : "") + "."));
+                if (has(["threat", "enemy", "foe", "danger", "عدو", "خصم", "اعداء", "أعداء", "خطر"])) {
+                    const foes = this._foes(s, 1200);
+                    if (!foes.length) return speakLine("clear");
+                    if (foes.length >= 3)
+                        return speakLine("threatMany", {
+                            n: foes.length,
+                            bearing: this._bearTo(s, foes[0].p.x, foes[0].p.y),
+                            away: (PodWorld.safestDir() ? this._bearWord(PodWorld.safestDir().ang) : "")
+                        });
+                    const f = foes[0];
+                    return speakLine(f.d < 320 ? "threatNear" : "threatFar", {
+                        bearing: this._bearTo(s, f.p.x, f.p.y),
+                        dist: Math.round(f.d), name: f.p.name || ""
+                    });
                 }
-                if (has(["where", "go", "move", "position", "وين", "اروح", "أروح", "مكان"])) {
-                    const foe = this._nearestFoe(s);
-                    if (foe && foe.d < 500) {
-                        const away = this._bearing(Math.atan2(s.y - foe.p.y, s.x - foe.p.x));
-                        return this.say(this._L("Recommendation: reposition " + away[0] + ", away from the hostile.",
-                                                "توصية: تحرّك " + away[1] + " بعيد عن العدو."));
-                    }
-                    return this.say(this._L("Area is open. Gather resources or push to the centre.",
-                                            "المنطقة فاضية. اجمع موارد أو روح للوسط."));
+                // "where should I go" / "what now" — a real destination, marked.
+                if (has(["where", "go", "move", "position", "next", "وين", "اروح", "أروح", "مكان", "وش اسوي"])) {
+                    const d = PodTactics.directive(true);
+                    if (d) { this.direct(d, { priority: 2 }); return; }
+                    return speakLine("clear");
+                }
+                if (has(["farm", "resource", "wood", "stone", "food", "gold", "موارد", "خشب", "حجارة", "طعام", "ذهب"])) {
+                    const d = PodTactics._build("farm", s);
+                    if (d) { this.direct(d, { priority: 2 }); return; }
+                    return this.say(this._L("No resource concentration within range.", "ما فيه تركّز موارد في المدى."));
+                }
+                if (has(["base", "enemy base", "قاعدة", "بيت"])) {
+                    const d = PodTactics._build("base", s);
+                    if (d) { this.direct(d, { priority: 2 }); return; }
+                    return this.say(this._L("No enemy construction detected in range.", "ما رُصد بناء معادٍ في المدى."));
                 }
                 if (has(["build", "trap", "spike", "ابني", "تراب", "سبايك", "احط"])) {
                     const foe = this._nearestFoe(s);
-                    const b = foe ? this._bear(s, foe.p) : ["your front", "قدامك"];
-                    return this.say(this._L("Proposal: place a spike " + b[0] + " and a trap behind them.",
-                                            "اقتراح: حط سبايك " + b[1] + " وتراب خلفهم."));
+                    const b = foe ? this._bearTo(s, foe.p.x, foe.p.y) : this._L("your front", "قدامك");
+                    return speakLine(foe && foe.d < 400 ? "spikeDown" : "trapDown", { bearing: b });
                 }
                 if (has(["scan", "count", "امسح", "كم عدو"])) {
                     const n = this._foes(s).length;
-                    return this.say(this._L("Scan complete: " + n + " hostile unit(s) in view.",
-                                            "المسح اكتمل: " + n + " عدو في المدى."));
+                    const known = Object.keys(PodWorld.contacts).length;
+                    return this.say(this._L(
+                        "Scan complete: " + n + " hostile(s) in sensor range, " + known + " contacts in the archive.",
+                        "اكتمل المسح: " + n + " عدو في مدى الرصد، و" + known + " تماس في الأرشيف."));
                 }
-                return this.say(this._pick(this._L(
-                    ["Query not recognised. Topics: status, threat, where, build, scan.",
-                     "Unable to parse. Try: status, threat, where, build, scan."],
-                    ["ما فهمت الطلب. جرّب: الحالة، الخطر، وين، بناء، مسح.",
-                     "الطلب غير واضح. جرّب: الحالة، الخطر، وين، بناء، مسح."])), { speak: false });
+                return speakLine("unknown");
             },
 
             // ---- the panel -------------------------------------------------------
@@ -12603,7 +14089,7 @@ let pps = 0;
                 const link = p.querySelector("#pod-link");
                 if (link) {
                     const on = this._aiOn();
-                    link.textContent = on ? (PT("ai") + " · " + this._model().replace("claude-", "")) : PT("local");
+                    link.textContent = on ? this._model() : PT("local");
                     link.classList.toggle("on", on);
                 }
                 if (this._foot) {
@@ -12661,6 +14147,12 @@ let pps = 0;
             window.PodVoice = PodVoice;
             window.PodEars = PodEars;
             window.PodMemory = PodMemory;
+            window.PodLink = PodLink;
+            window.PodWorld = PodWorld;
+            window.PodTactics = PodTactics;
+            window.PodRecon = PodRecon;
+            window.PodMark = PodMark;
+            window.PodLines = PodLines;
         } catch (e) {}
         // The brain runs on its own clock, independent of frame rate.
         try { setInterval(function () { try { Pod.tick(); } catch (e) {} }, 700); } catch (e) {}
@@ -25926,9 +27418,13 @@ for (let tree of trees) {
         podScale: 90,            // 50 .. 160 — how big the flight unit draws
         podLang: "auto",         // auto | en | ar  — one switch for text AND voice
         podMemory: true,         // remember facts, stats and conversation across sessions
-        podAI: false,            // route typed/spoken pod chat through Claude (needs a key)
-        podAIKey: "",            // your Anthropic key, kept only in this browser
-        podAIModel: "",          // blank = use POD_AI_MODEL; e.g. "claude-haiku-4-5"
+        podAI: false,            // route typed/spoken pod chat through a model
+        podProvider: "gemini",   // gemini | groq | openrouter | ollama | anthropic
+        podModel: "",            // blank = the provider's default model
+        podKeyGemini: "",        // aistudio.google.com/apikey        — free
+        podKeyGroq: "",          // console.groq.com/keys             — free
+        podKeyOpenRouter: "",    // openrouter.ai/keys                — free models
+        podAIKey: "",            // console.anthropic.com             — paid
 
         // Pod — voice
         podVoice: true,          // speak out loud (the master mute)
@@ -26298,14 +27794,20 @@ for (let tree of trees) {
             {
                 title: "Pod AI",
                 items: [
-                    { type: 'toggle', name: "Pod AI (Claude conversation)", id: "podAI" },
-                    { type: 'input', name: "Anthropic API Key (sk-ant-…)", id: "podAIKey" },
-                    { type: 'select', name: "Model", id: "podAIModel", options: [
-                        { value: "", label: "Opus 5 (default)" },
-                        { value: "claude-opus-5", label: "Claude Opus 5" },
-                        { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
-                        { value: "claude-haiku-4-5", label: "Claude Haiku 4.5 (fastest)" }
+                    { type: 'toggle', name: "Pod AI (conversation)", id: "podAI" },
+                    { type: 'select', name: "Provider", id: "podProvider", options: [
+                        { value: "gemini", label: "Google Gemini — FREE" },
+                        { value: "groq", label: "Groq — FREE, fastest" },
+                        { value: "openrouter", label: "OpenRouter — FREE models" },
+                        { value: "ollama", label: "Ollama — local, offline" },
+                        { value: "anthropic", label: "Anthropic Claude — paid" }
                     ] },
+                    { type: 'input', name: "Gemini key · aistudio.google.com/apikey", id: "podKeyGemini" },
+                    { type: 'input', name: "Groq key · console.groq.com/keys", id: "podKeyGroq" },
+                    { type: 'input', name: "OpenRouter key · openrouter.ai/keys", id: "podKeyOpenRouter" },
+                    { type: 'input', name: "Anthropic key · console.anthropic.com", id: "podAIKey" },
+                    { type: 'input', name: "Model override (blank = default)", id: "podModel" },
+                    { type: 'button', name: "Link", label: "TEST CONNECTION", action: "podTestLink" },
                     { type: 'button', name: "Conversation", label: "RESET CHAT HISTORY", action: "podResetChat" }
                 ]
             }
@@ -27553,6 +29055,21 @@ for (let tree of trees) {
                             } else if (item.action === 'podResetChat') {
                                 window.PodMemory.clearHistory();
                                 flash('RESET');
+                            } else if (item.action === 'podTestLink') {
+                                // A real round trip: the provider's own error text
+                                // is what tells you a key is wrong, not a guess.
+                                const was = window.vars.podAI;
+                                window.vars.podAI = true;
+                                if (!window.PodLink.ready()) { window.vars.podAI = was; flash('NO KEY'); return; }
+                                btn.innerText = 'TESTING…';
+                                window.PodLink.send('Reply with the single word: online.',
+                                                    [{ role: 'user', content: 'link check' }], null)
+                                    .then(r => { flash((r && r.text) ? 'OK' : 'EMPTY'); })
+                                    .catch(e => {
+                                        flash('FAILED');
+                                        try { window.Pod.system('Link test failed — ' + String(e && e.message).slice(0, 180)); } catch (x) {}
+                                    })
+                                    .then(() => { window.vars.podAI = was; });
                             } else if (item.action === 'podTestVoice') {
                                 const ar = window.vars.podLang === 'ar' ||
                                     (window.vars.podLang !== 'en' && /^ar/i.test(navigator.language || ''));

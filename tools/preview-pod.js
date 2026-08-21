@@ -48,7 +48,12 @@ const FONT = '<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300
 // ---------------------------------------------------------------- unit sheet
 // podFly is flight state rather than art, so it is dropped from the extract.
 const ART = slice("        const POD_UNITS = [", "        function renderPod(xOffset, yOffset) {")
-    .replace(/const podFly = \{[^}]*\};/, "");
+    .replace(/const podFly = \{[^}]*\};/, "")
+    // podDrawMark reads the live waypoint and the screen size; the preview
+    // supplies both so the marker can be drawn on its own.
+    + "\n const PodMark = { x:0,y:0,label:'',kind:'',until:0, live(){return Date.now()<this.until;} };" +
+      "\n let maxScreenWidth = 560, maxScreenHeight = 260;" +
+      "\n const UTILS = { getDistance:(a,b,c,d)=>Math.hypot(c-a,d-b) };";
 
 const unitHtml = `<!doctype html><html><head><meta charset="utf-8">${FONT}
 <style>body{margin:0;background:#c7c3b1;font-family:Jost,sans-serif}canvas{display:block}</style>
@@ -83,6 +88,19 @@ POD_UNITS.forEach((U, r) => {
 podDrawReticle(x, 1080, 560, POD_UNITS[0], 0.6, true);
 podDrawReticle(x, 1000, 560, POD_UNITS[0], 0.2, false);
 x.fillStyle = "#454138"; x.textAlign = "left"; x.fillText("RETICLE  idle / lock", 940, 600);
+
+// The waypoint, in both of its forms.
+PodMark.until = Date.now() + 60000;
+maxScreenWidth = 560; maxScreenHeight = 260;
+x.save();
+x.translate(150, 428);
+PodMark.x = 280; PodMark.y = 120; PodMark.label = "FARM"; PodMark.kind = "farm";
+podDrawMark(x, 0, 0, 90, 200, POD_UNITS[0]);
+PodMark.x = 900; PodMark.y = 40; PodMark.label = "KAINE"; PodMark.kind = "target";
+podDrawMark(x, 0, 0, 90, 200, POD_UNITS[0]);
+x.restore();
+x.fillStyle = "#454138"; x.textAlign = "left";
+x.fillText("WAYPOINT  on-screen / off-screen edge arrow", 130, 612);
 <\/script></body></html>`;
 
 // --------------------------------------------------------------- panel sheet

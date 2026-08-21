@@ -8,8 +8,10 @@ Build output: **`ReUp_Mix.user.js`**
 
 > There is a second script in this repo: **`YoRHa_System.user.js`**, which
 > carries the NieR:Automata-styled Pod support unit — a bilingual
-> (Arabic / English) companion with speech in and out, persistent memory, and an
-> optional Claude link. See **[POD.md](POD.md)**.
+> (Arabic / English) companion with speech in and out, persistent memory, a
+> tactical layer that tells you where to go, a contact archive it can search by
+> name, reconnaissance flights, and an optional AI link with three free provider
+> options. See **[POD.md](POD.md)**.
 
 ---
 

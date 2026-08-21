@@ -2,9 +2,11 @@
 
 The YoRHa companion in `YoRHa_System.user.js`: a flight unit that follows you,
 paints a targeting laser, talks out loud in Arabic or English, listens on the
-microphone, and remembers you between sessions.
+microphone, remembers you between sessions, tells you where to go, finds players
+by name, and flies off on its own to go and look.
 
-Open it with **Y**. Hold **C** to talk to it.
+Open it with **Y**. Hold **C** to talk to it. It works with no API key at all —
+and with a free one it holds a conversation.
 
 ![The unit, every variant and state](pod-preview-unit.png)
 ![The terminal, English and Arabic](pod-preview-panel.png)
@@ -25,7 +27,11 @@ Both images are generated from the shipping code by `node tools/preview-pod.js`
 | تخليه يحفظ شي عنك | `/remember أنا ألعب بالبوليرم` |
 | تشوف ذاكرته | زر **MEM** |
 | تمسح الذاكرة | `/forget`، أو زر **WIPE MEMORY** في الإعدادات |
-| تشغّل الذكاء الاصطناعي | Settings › Visuals › **Pod AI**، وحط مفتاح Anthropic |
+| تشغّل الذكاء الاصطناعي **مجاناً** | Settings › Visuals › **Pod AI** → المزوّد **Google Gemini** + مفتاح مجاني من `aistudio.google.com/apikey` |
+| تدوّر على لاعب | `/find اسمه` — يعلّم موقعه على الشاشة |
+| تخليه يستطلع | `/recon شمال` — ينفصل عنك، يطير، يمسح، ويرجع |
+| يقول لك وين تروح | `/go` أو اسأله "وين أروح" — يعطيك اتجاه ومسافة وسبب، ويعلّم النقطة |
+| تشوف لوحة السيرفر | `/board` |
 
 اللغة اللي تختارها تنطبق على كل شي: كلامه المكتوب، صوته، والمايك اللي يسمعك فيه.
 
@@ -117,35 +123,112 @@ settings clears the lot. Turning `podMemory` off suppresses the brief entirely.
 Because the store is on your machine and nowhere else, wiping it is the whole
 of forgetting.
 
-## The AI link
+## The AI link — five providers, three of them free
 
-Off by default. Turn on **Pod AI** and paste an Anthropic key in
-Settings › Visuals › Pod AI, and typed or spoken input is answered by Claude
-instead of the local matcher. Combat call-outs stay local — an API round trip
+Off by default. Turn on **Pod AI**, pick a provider and paste its key in
+Settings › Visuals › Pod AI, and typed or spoken input is answered by a model
+instead of the local matcher. Combat call-outs stay local — a network round trip
 cannot narrate a fight.
 
-- `POST https://api.anthropic.com/v1/messages` straight from the page with
-  `anthropic-dangerous-direct-browser-access`, so no userscript grant or proxy
-  is needed.
-- **Streamed** (`stream: true`), so the reply types itself into the panel and
-  starts being spoken before it is finished.
-- `claude-opus-5` by default at `effort: "low"`; Sonnet 5 and Haiku 4.5 are
-  selectable. Effort is omitted on Haiku, which rejects it.
-- **Three tools**: `remember` writes to the store, `recall` searches it, and
-  `scan` takes a live reading of the field — hostiles with distance and bearing,
-  animals, structures, your loadout and resources. The tool loop runs up to four
-  rounds and replays assistant turns verbatim, thinking blocks and signatures
-  included, because stripping them is what breaks the next request.
-- Server-side `fallbacks: "default"` on Opus 5, so a policy decline is rescued
-  on a sibling model inside the same call rather than returning nothing. If the
-  account does not carry that beta, the first rejection sets a flag and the
-  request is retried once without it.
-- Any hard failure surfaces the API's own message and then answers locally, so
-  the unit never just goes quiet.
+| Provider | Cost | Key from | Notes |
+|---|---|---|---|
+| **Google Gemini** (default) | **Free tier, no card** | `aistudio.google.com/apikey` | Best Arabic of the free three. The recommended starting point. |
+| **Groq** | **Free tier** | `console.groq.com/keys` | Fastest first token by a wide margin. |
+| **OpenRouter** | **Free models** | `openrouter.ai/keys` | Use a model id ending in `:free`. |
+| **Ollama** | **Free, local, offline** | none | Run `OLLAMA_ORIGINS=* ollama serve`. No quota, no key, nothing leaves your machine. |
+| **Anthropic Claude** | Paid | `console.anthropic.com` | Best quality if you are already paying. |
 
-The key is stored in your browser's settings, not in the file. There is a
-`POD_AI_KEY` constant for pasting one into the script directly — anything put
-there ships to anyone you hand the file to.
+`PodLink` reduces all five to one call — system prompt, message list, tool list,
+streamed text, tool calls out. Groq, OpenRouter and Ollama all speak the OpenAI
+chat shape and share an adapter; Gemini and Anthropic each have their own.
+
+- Every request is **streamed**, so the reply types itself into the panel and
+  starts being spoken before it has finished arriving.
+- **Six tools**: `remember` and `recall` for memory, `scan` for a close reading
+  of the ground, `find_player` to locate someone by name, `recommend_move` to
+  get a real destination with a reason, and `recon` to physically send the unit
+  out. Tool calls are wired into every provider's native format — Anthropic
+  `tool_use`, OpenAI `tool_calls`, Gemini `functionCall` — and each call runs
+  exactly once per round regardless of how many wire shapes it is rendered into.
+- On Anthropic, assistant turns replay verbatim with thinking blocks and
+  signatures intact, because stripping them is what breaks the next request, and
+  server-side `fallbacks: "default"` rescues a policy decline on a sibling model.
+- **Any hard failure surfaces the provider's own message and then answers
+  locally**, so a bad key looks like a bad key rather than silence. There is a
+  **TEST CONNECTION** button that does a real round trip and reports what came
+  back.
+
+Keys are stored in your browser's settings, never written into the file.
+
+**Which to pick:** start with **Gemini** — free, no card, good Arabic. Switch to
+**Groq** if you want the lowest latency in a fight. Use **Ollama** if you would
+rather nothing left your machine at all.
+
+## Not repeating itself
+
+The old pod picked at random from a handful of lines on a cooldown, so it looped
+within a minute. Three mechanisms replace that, and all three are needed:
+
+1. **A shuffle deck per topic.** Lines are drawn without replacement — a topic
+   with eight lines gives eight different ones before any repeat, and the
+   reshuffle never puts the last-used line back at the front.
+2. **Templates.** Every line takes live values — bearing, distance, name,
+   health, count — so the same template reads differently each time.
+3. **A novelty guard over the rendered sentence.** If the unit already said this
+   exact sentence recently it stays quiet, which catches the case where the deck
+   and the numbers happen to line up.
+
+Over that sits a **chatter budget**: idle observations are capped at three a
+minute, advice at six, and genuine alerts are never rationed. And the brain is
+driven by *changes in state* rather than by a timer — the health warning fires
+on the way down, not every tick.
+
+The bank carries ~30 topics in both languages, in the YoRHa register: the
+clipped prefixes, the flat affect, and the deadpan asides ("Query: why do humans
+build walls around food?"). `tools/test-pod-ui.js` fails the build if a topic
+exists in one language and not the other, or if a template's slots differ
+between the two.
+
+## Telling you where to go
+
+`PodTactics` produces a **directive**: a real point on the map with a bearing, a
+distance and a reason, marked on your screen — a diamond where it is when it is
+on screen, an edge arrow with a range readout when it is not.
+
+| Goal | What it finds |
+|---|---|
+| `farm` | The densest cluster of whatever resource you are shortest on |
+| `retreat` | The compass octant carrying the least threat, excluding the border |
+| `base` | A cluster of enemy-owned structures — someone's base |
+| `centre` | Open ground, when nothing else applies |
+
+Clusters are found by counting neighbours rather than bucketing into a grid: a
+grid is cheaper but splits any cluster that straddles a cell boundary, which is
+exactly the tight cluster you most want to find.
+
+So the unit says *"Proposal: move north-east, 700 units. Dense stone in that
+sector."* rather than *"gather resources"* — and the point is there to walk to.
+
+## Finding people, and going to look
+
+moomoo only tells the client about entities near your own view, so a literal
+"scan the whole server" is not something any client-side mod can do honestly.
+What it can do is **remember**, and read the one server-wide feed it has.
+
+- **The contact archive.** Every player that enters sensor range is logged with
+  a position and a timestamp, kept for ten minutes.
+- **The leaderboard**, read straight off the HUD. That is server-wide — it names
+  players you have never seen.
+
+So `/find <name>` has three honest answers: a **live** contact with a bearing and
+distance; an **archived** last-known position *with its age stated*; or "present
+on the leaderboard at rank N, never in sensor range, no position". It never
+invents a position.
+
+`/recon <direction>` sends the unit itself out. It detaches from your shoulder,
+flies, sweeps, and comes back — and while it is away it is genuinely not beside
+you, the targeting laser is replaced by a sweep ring, and its report is built
+from live contacts plus the archive with each stale record's age attached.
 
 ## Commands
 
@@ -153,17 +236,24 @@ Typed in the panel, in either language.
 
 | Command | Does |
 |---|---|
+| `/find <name>` | Locate a player; marks them on screen |
+| `/recon [dir\|name]` | Send the unit out to sweep |
+| `/go [farm\|retreat\|base\|centre]` | Get a destination, marked |
+| `/board` | The server leaderboard |
 | `/voice [on\|off]` | Mute or unmute; no argument toggles |
 | `/lang [ar\|en]` | Switch language; no argument toggles |
 | `/mic` | Toggle the microphone |
 | `/remember <text>` | Store a fact |
 | `/forget` | Wipe all memory |
 | `/memory` | Open the memory drawer |
+| `/mark` | Clear the current waypoint |
 | `/clear` | Clear the conversation log |
 | `/help` | Topic list |
 
-Without the AI link, the local matcher answers `status`, `threat`, `where`,
-`build`, `scan` and `memory` in either script.
+Without the AI link the local matcher still answers `status`, `threat`, `where`,
+`farm`, `base`, `build`, `scan`, `board`, `memory`, and "where is X" in either
+script — every one of those answers is built from live state, so the pod is
+genuinely useful with no key at all.
 
 ## Settings
 
@@ -174,8 +264,8 @@ Settings › **Visuals**, under three cards:
 - **Pod Voice** — voice on/off, call-outs, microphone, voice picker, speed,
   pitch, volume, and **SPEAK TEST LINE** (which speaks even while muted, since
   that is the point of a test button).
-- **Pod AI** — the link toggle, the API key, the model, and **RESET CHAT
-  HISTORY**.
+- **Pod AI** — the link toggle, the provider, a key box per provider, a model
+  override, **TEST CONNECTION**, and **RESET CHAT HISTORY**.
 
 ## Verification
 
@@ -186,11 +276,32 @@ node tools/test-pod-ui.js    # needs: npm i --no-save jsdom
 node tools/preview-pod.js    # needs: npm i --no-save playwright
 ```
 
-`test-pod.js` (50 assertions) and `test-pod-ui.js` (90 assertions) both extract
+`test-pod.js` (50 assertions) and `test-pod-ui.js` (173 assertions) both extract
 the real blocks out of the userscript and run them under mocks — they test what
-ships, not a copy. Between them they cover the streaming parser against split
-frames, CRLF, fragmented tool JSON, thinking deltas, refusals and HTTP errors;
-the memory store's caps, persistence, reload and corrupt-storage handling; the
-panel's construction, typewriter, RTL flip and memory drawer; the voice and
-microphone switches; and a complete two-round Claude turn including the tool
-round trip.
+ships, not a copy. Between them they cover:
+
+- the streaming pump against split frames, CRLF, fragmented tool JSON, thinking
+  deltas, refusals, malformed frames and HTTP errors;
+- the memory store's caps, persistence, reload and corrupt-storage handling;
+- the panel's construction, typewriter, RTL flip and memory drawer, and that the
+  closed panel cannot swallow a click meant for the game;
+- the voice and microphone switches, including that muting actually silences;
+- **the anti-repetition engine** — deck exhaustion, reshuffle behaviour, long-run
+  distribution, the novelty guard, the chatter budget, template rendering, and
+  that a burst of ticks on an unchanged world produces no duplicate line;
+- **the world layer** — contact logging, live vs. stale vs. roster lookup,
+  leaderboard parsing, cluster detection, waypoint marking;
+- **recon** — launch, refusal to double-launch, outbound, sweep, report, return;
+- **all three wire formats** — Anthropic, Gemini and OpenAI-compatible — each
+  with a full tool round trip, plus that a tool runs exactly once per call and
+  that a provider with no key never fires a request.
+
+### What could not be verified here
+
+The Gemini endpoint was checked live and behaves as the code expects (the exact
+streaming URL, and an invalid key coming back as `error.message`, which is what
+the panel surfaces). **Groq and OpenRouter are blocked by the egress policy of
+the environment this was built in**, so their adapters are covered by the wire
+format tests above but were never run against the live services. Ollama is local
+and equally unverified from here. If one of them misbehaves, **TEST CONNECTION**
+will print the provider's own error.

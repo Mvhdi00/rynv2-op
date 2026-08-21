@@ -130,20 +130,27 @@ global.window.vars.podMemory = false;
 ok("brief empty when memory is off", PodMemory.brief() === "");
 global.window.vars.podMemory = true;
 
-// ---- 3. the SSE parser ----------------------------------------------------
+// ---- 3. the SSE pump and the provider adapters -----------------------------
 console.log("\n[sse]");
-// The parser is a method on Pod; lift the body into a standalone async fn.
-const streamBody = slice("async _stream(body, onText) {", "return { content: blocks.filter(Boolean), stop_reason: stop };");
-const inner = streamBody
-  .replace("async _stream(body, onText) {", "")
-  .replace(/^\s*const res = await fetch\([\s\S]*?\}\);\s*$/m, "");
-// Rebuild as a function taking a prepared Response-like object.
-const parseSrc = `
+// podSSE is the shared frame pump every provider rides on; the adapters that
+// interpret those frames are methods on PodLink. Both come out of the file.
+const sseSrc = slice("async function podSSE(res, onEvent) {", "\n        }") +
+  "\n module.exports = podSSE;";
+const sseOut = { exports: {} };
+new Function("module", "TextDecoder", sseSrc)(sseOut, TextDecoder);
+const podSSE = sseOut.exports;
+
+// The Anthropic adapter's event handling, lifted so the block assembly (text,
+// tool JSON, thinking + signature) is tested exactly as it ships.
+const anthroSrc = slice("                const blocks = [];\n                let stop = null;",
+                        "                const content = blocks.filter(Boolean);");
+// `slice` keeps its end marker, so anthroSrc already ends with the line that
+// collects the blocks — the wrapper only has to return them.
+const parse = new Function("podSSE", "TextDecoder", `
   return async function parse(res, onText) {
-    ${inner.slice(inner.indexOf("if (!res.ok || !res.body)"))}
-    return { content: blocks.filter(Boolean), stop_reason: stop };
-  };`;
-const parse = new Function("TextDecoder", parseSrc)(TextDecoder);
+    ${anthroSrc.replace(/await podSSE\(await fetch\([\s\S]*?\), \(ev\) => \{/, "await podSSE(res, (ev) => {")}
+    return { content: content, stop_reason: stop };
+  };`)(podSSE, TextDecoder);
 
 function fakeRes(chunks, opts) {
   opts = opts || {};

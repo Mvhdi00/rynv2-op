@@ -27,7 +27,8 @@ const nav = { language: "en-US" };
 
 W.vars = {
   podEnabled: true, podVariant: 0, podLang: "en", podMemory: true,
-  podAI: false, podAIKey: "", podAIModel: "",
+  podAI: false, podProvider: "anthropic", podModel: "",
+  podKeyGemini: "", podKeyGroq: "", podKeyOpenRouter: "", podAIKey: "",
   podVoice: true, podVoiceCallouts: true, podVoiceName: "",
   podVoiceRate: 105, podVoicePitch: 85, podVoiceVolume: 100, podMic: true
 };
@@ -69,6 +70,14 @@ const players = [myPlayer];
 const items = { weapons: [{ name: "tool hammer" }], list: [] };
 const UTILS = { getDistance: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1) };
 const config = { mapScale: 14400 };
+// A stone field to the east and an enemy base to the north, so the tactical
+// layer has something real to point at.
+const gameObjects = [];
+for (let i = 0; i < 9; i++)
+  gameObjects.push({ active: true, isItem: false, type: 2, x: 1900 + (i % 3) * 40, y: 1000 + ((i / 3) | 0) * 40 });
+for (let i = 0; i < 7; i++)
+  gameObjects.push({ active: true, isItem: true, owner: { sid: 99, name: "Enemy" },
+                     x: 1000 + (i % 3) * 50, y: 200 + ((i / 3) | 0) * 50, name: "spikes" });
 
 // fetch is replaced per-test.
 let fetchImpl = async () => { throw new Error("no fetch configured"); };
@@ -81,17 +90,19 @@ const make = new Function(
   "UTILS", "config", "killCount", "items", "ais", "gameObjects",
   "spikes_our", "traps_our", "attackState", "mainContext",
   "mouseX", "mouseY", "screenWidth", "screenHeight",
-  BLOCK + "\n return { Pod, PodVoice, PodEars, PodMemory, podLangNow, PT, POD_TOOLS, podSystemPrompt, POD_UNITS };");
+  BLOCK + "\n return { Pod, PodVoice, PodEars, PodMemory, PodLines, PodWorld, PodTactics, PodRecon," +
+          " PodMark, PodLink, POD_BANK, podLangNow, PT, POD_TOOLS, podSystemPrompt, POD_UNITS };");
 
 const api = make(
   W, D, nav, localStorage, fetch, TextDecoder,
   W.setInterval.bind(W), W.clearInterval.bind(W), saveConfig, (s, e, t) => s + (e - s) * t,
   myPlayer, players, players, null, () => false, () => false,
-  UTILS, config, 0, items, [], [],
+  UTILS, config, 0, items, [], gameObjects,
   [], [], 0, null,
   0, 0, 1920, 1080);
 
-const { Pod, PodVoice, PodEars, PodMemory, podLangNow, PT, POD_TOOLS, podSystemPrompt } = api;
+const { Pod, PodVoice, PodEars, PodMemory, PodLines, PodWorld, PodTactics, PodRecon,
+        PodMark, PodLink, POD_BANK, podLangNow, PT, POD_TOOLS, podSystemPrompt } = api;
 
 // ---- 1. panel construction ------------------------------------------------
 console.log("\n[panel]");
@@ -134,7 +145,8 @@ ok("pitch applied", Math.abs(spoken[0].pitch - 0.85) < 1e-9, spoken[0].pitch);
 ok("rate applied", Math.abs(spoken[0].rate - 1.05) < 1e-9, spoken[0].rate);
 
 Pod.handle("threat");
-ok("threat answered", /No hostiles|Nearest hostile/.test(Pod.lines[Pod.lines.length - 1].full));
+ok("threat answered from the bank", Pod.lines[Pod.lines.length - 1].full.length > 8,
+   Pod.lines[Pod.lines.length - 1].full);
 
 // XSS: a chat line must never inject markup.
 Pod.handle("<img src=x onerror=alert(1)>");
@@ -234,6 +246,155 @@ ok("recogniser follows a language change", recs[0].lang === "ar-SA", recs[0].lan
 PodEars.stop();
 W.vars.podLang = "en";
 
+// ---- 6b. the anti-repetition engine --------------------------------------
+console.log("\n[no repeats]");
+PodLines.reset();
+// A deck must exhaust every line before any of them comes back.
+const killBank = POD_BANK.kill.en;
+const drawn = [];
+for (let i = 0; i < killBank.length; i++) drawn.push(PodLines.draw("t", killBank));
+ok("deck hands out every line before repeating", new Set(drawn).size === killBank.length,
+   killBank.length + " lines, " + new Set(drawn).size + " distinct");
+const next = PodLines.draw("t", killBank);
+ok("reshuffle never repeats the last line", next !== drawn[drawn.length - 1], { next: next, last: drawn[drawn.length - 1] });
+// Over a long run every line should appear at close to equal frequency.
+PodLines.reset();
+const counts = {};
+for (let i = 0; i < killBank.length * 30; i++) {
+  const l = PodLines.draw("t2", killBank);
+  counts[l] = (counts[l] || 0) + 1;
+}
+const spread = Object.values(counts);
+ok("long-run distribution stays even", Math.max(...spread) - Math.min(...spread) <= 2, counts);
+
+// The novelty guard blocks an identical rendered sentence.
+PodLines.reset();
+ok("first utterance is fresh", PodLines.fresh("Alert: hostile north.", 60000) === true);
+ok("identical utterance is suppressed", PodLines.fresh("Alert: hostile north.", 60000) === false);
+ok("a different sentence passes", PodLines.fresh("Alert: hostile south.", 60000) === true);
+
+// The chatter budget rations low-priority lines and never blocks alerts.
+PodLines.reset();
+let allowed = 0;
+for (let i = 0; i < 20; i++) if (PodLines.allow(0)) allowed++;
+ok("idle chatter is capped", allowed <= 3, allowed);
+let alerts = 0;
+for (let i = 0; i < 20; i++) if (PodLines.allow(3)) alerts++;
+ok("alerts are never rationed", alerts === 20, alerts);
+
+// Templates fill from live state and drop unused slots cleanly.
+ok("template fills", PodLines.render("hostile {bearing} at {dist}", { bearing: "north", dist: 420 })
+   === "hostile north at 420");
+ok("unused slots are removed", PodLines.render("go {bearing}. {why}", { bearing: "east" }) === "go east.");
+
+// Both language tables must carry every topic, or a language half-applies.
+const bankGaps = Object.keys(POD_BANK).filter(k => !POD_BANK[k].ar || !POD_BANK[k].en ||
+                                                   !POD_BANK[k].ar.length || !POD_BANK[k].en.length);
+ok("every bank topic exists in both languages", bankGaps.length === 0, bankGaps);
+// And the same slots on both sides, or a template renders blanks in one language.
+const slotGaps = Object.keys(POD_BANK).filter(k => {
+  const slots = (arr) => new Set((arr.join(" ").match(/\{[a-z0-9_]+\}/gi) || []));
+  const a = slots(POD_BANK[k].en), b = slots(POD_BANK[k].ar);
+  return [...a].some(s => !b.has(s)) || [...b].some(s => !a.has(s));
+});
+ok("template slots match across languages", slotGaps.length === 0, slotGaps);
+
+// Two ticks in a row on an unchanged world must not produce the same line twice.
+console.log("\n[tick behaviour]");
+PodLines.reset();
+const before = Pod.lines.length;
+for (let i = 0; i < 12; i++) Pod.tick();
+const said = Pod.lines.slice(before).map(l => l.full);
+ok("repeated ticks do not spam", said.length <= 6, said.length);
+ok("no identical line twice in a burst", new Set(said).size === said.length, said);
+
+// ---- 6c. world archive, tactics, recon -----------------------------------
+console.log("\n[world]");
+const enemy = { sid: 42, name: "Kaine", x: 1600, y: 1000, visible: true, health: 60, maxHealth: 100 };
+players.push(enemy);
+PodWorld.observe();
+ok("contact logged", !!PodWorld.contacts[42], Object.keys(PodWorld.contacts));
+ok("contact carries a position", PodWorld.contacts[42].x === 1600);
+let f = PodWorld.find("kai");
+ok("live contact found by partial name", f.kind === "live", f.kind);
+ok("bearing computed", f.bearing[0] === "east", f.bearing);
+ok("distance computed", Math.round(f.d) === 600, f.d);
+// Age it out of sensor range.
+PodWorld.contacts[42].t = Date.now() - 30000;
+f = PodWorld.find("kaine");
+ok("stale contact reported as stale", f.kind === "stale", f.kind);
+ok("stale record keeps its age", f.age >= 29000, f.age);
+enemy.visible = false;
+ok("unknown name returns none", PodWorld.find("nobodyhere").kind === "none");
+
+// The leaderboard is read off the HUD, which is the one server-wide signal.
+const board = D.createElement("div");
+board.id = "leaderboardData";
+board.innerHTML =
+  '<div class="leaderHolder"><div class="leaderboardItem">1. Adam</div><div class="leaderScore">9k</div></div>' +
+  '<div class="leaderHolder"><div class="leaderboardItem">2. Eve</div><div class="leaderScore">7k</div></div>';
+D.body.appendChild(board);
+const changed = PodWorld.readBoard();
+ok("board parsed", PodWorld.roster.length === 2, PodWorld.roster);
+ok("board strips the rank prefix", PodWorld.roster[0].name === "Adam", PodWorld.roster[0]);
+ok("board reports a change on first read", !!changed);
+ok("unchanged board reports nothing", PodWorld.readBoard() === null);
+ok("roster lookup finds a never-seen player", PodWorld.find("adam").kind === "roster");
+
+// Tactics must point at real ground with a real reason.
+console.log("\n[tactics]");
+const farm = PodTactics._build("farm", myPlayer);
+ok("farm directive found the stone field", !!farm, farm);
+ok("farm points east", farm && farm.bearing[0] === "east", farm && farm.bearing);
+ok("farm carries a distance", farm && farm.dist > 400 && farm.dist < 1400, farm && farm.dist);
+ok("farm explains itself", farm && /stone/i.test(farm.why), farm && farm.why);
+const base = PodTactics._build("base", myPlayer);
+ok("enemy base detected", !!base, base);
+ok("base points north", base && base.bearing[0] === "north", base && base.bearing);
+ok("base counts the structures", base && /7|[4-9]/.test(base.why), base && base.why);
+const safe = PodWorld.safestDir();
+ok("safest direction computed", !!safe && isFinite(safe.ang));
+
+// A directive marks a point you can walk to.
+PodMark.clear();
+Pod.direct(farm, { priority: 3 });
+ok("directive drops a waypoint", PodMark.live());
+ok("waypoint is the directive's position", Math.round(PodMark.x) === Math.round(farm.x));
+
+// /find and /go go through the same paths.
+console.log("\n[commands]");
+enemy.visible = true;
+PodWorld.observe();
+PodMark.clear();
+Pod.handle("/find kaine");
+ok("/find marks the target", PodMark.live());
+ok("/find names the target", /KAINE/i.test(PodMark.label), PodMark.label);
+PodMark.clear();
+Pod.handle("/go farm");
+ok("/go farm marks a destination", PodMark.live());
+Pod.handle("/board");
+ok("/board lists the server", /Adam/.test(Pod.lines[Pod.lines.length - 1].full), Pod.lines[Pod.lines.length - 1].full);
+
+// Recon actually leaves and comes back.
+console.log("\n[recon]");
+ok("recon starts idle", !PodRecon.busy());
+const msg = Pod.startRecon("east", "", 800);
+ok("recon launches", PodRecon.busy(), msg);
+ok("recon is outbound", PodRecon.state === "outbound", PodRecon.state);
+ok("second launch is refused", /already in progress/.test(Pod.startRecon("west", "", 800)));
+let guard = 0;
+while (PodRecon.state === "outbound" && guard++ < 600) PodRecon.anchor();
+ok("recon reaches the target", PodRecon.state === "sweep", PodRecon.state);
+ok("recon anchor pulls the drone off your shoulder", Math.abs(PodRecon.x - myPlayer.x) > 400);
+PodRecon.until = Date.now() - 1;
+PodRecon.anchor();
+ok("sweep completes into the return leg", PodRecon.state === "inbound", PodRecon.state);
+guard = 0;
+while (PodRecon.state === "inbound" && guard++ < 600) PodRecon.anchor();
+ok("recon returns to idle", PodRecon.state === "idle", PodRecon.state);
+ok("recon reported something", Pod.lines.slice(-6).some(l => /sweep|contact|empty|قطاع|مسح/i.test(l.full)),
+   Pod.lines.slice(-4).map(l => l.full));
+
 // ---- 7. a full Claude turn, with a tool round-trip -----------------------
 console.log("\n[ai turn]");
 function sseResponse(frames) {
@@ -286,7 +447,7 @@ spoken.length = 0;
   ok("api key header set", seen[0].headers["x-api-key"] === "sk-ant-test");
   ok("fallback beta on opus 5", seen[0].headers["anthropic-beta"] === "server-side-fallback-2026-07-01", seen[0].headers);
   ok("fallbacks default", seen[0].body.fallbacks === "default");
-  ok("tools declared", seen[0].body.tools.length === 3);
+  ok("tools declared", seen[0].body.tools.length === POD_TOOLS.length, seen[0].body.tools.length);
   ok("field state attached", /\[FIELD\]/.test(seen[0].body.messages[0].content));
   ok("operator text attached", /what is around me/.test(seen[0].body.messages[0].content));
 
@@ -324,6 +485,116 @@ spoken.length = 0;
      PodMemory.load().facts.some(f => /katana/.test(f.text)));
   ok("recall tool finds it", /katana/.test(Pod._tool("recall", { query: "katana" })));
   ok("unknown tool is handled", Pod._tool("nope", {}) === "unknown tool.");
+
+  // ---- 8. the free providers ----------------------------------------------
+  // Each speaks a different wire format. These check the request we build and
+  // the stream we parse, including the tool round trip, for all of them.
+  console.log("\n[gemini]");
+  PodMemory.clearHistory();
+  const gSeen = [];
+  fetchImpl = async (url, opts) => {
+    gSeen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
+    if (gSeen.length === 1) {
+      return sseResponse([
+        'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"recommend_move","args":{"goal":"farm"}}}]}}]}\n\n'
+      ]);
+    }
+    return sseResponse([
+      'data: {"candidates":[{"content":{"parts":[{"text":"اقتراح: "}]}}]}\n\n',
+      'data: {"candidates":[{"content":{"parts":[{"text":"تحرّك شرقك."}]},"finishReason":"STOP"}]}\n\n'
+    ]);
+  };
+  W.vars.podProvider = "gemini";
+  W.vars.podKeyGemini = "AIza-test";
+  PodMark.clear();
+  await Pod._askAI("وين أروح");
+
+  ok("gemini made two calls", gSeen.length === 2, gSeen.length);
+  ok("gemini streaming endpoint", /:streamGenerateContent\?alt=sse/.test(gSeen[0].url), gSeen[0].url);
+  ok("gemini default model in the path", /models\/gemini-2\.0-flash:/.test(gSeen[0].url), gSeen[0].url);
+  ok("gemini key in the query", /key=AIza-test/.test(gSeen[0].url));
+  ok("gemini sends no auth header", !gSeen[0].headers["authorization"]);
+  ok("gemini system_instruction set", !!gSeen[0].body.system_instruction.parts[0].text);
+  ok("gemini tools declared", gSeen[0].body.tools[0].function_declarations.length === POD_TOOLS.length);
+  ok("gemini contents carry the field brief", /\[FIELD\]/.test(gSeen[0].body.contents[0].parts[0].text));
+  const gReplay = gSeen[1].body.contents;
+  ok("gemini replays the model turn", gReplay.some(c => c.role === "model" && c.parts.some(p => p.functionCall)),
+     gReplay.map(c => c.role));
+  const fr = gReplay[gReplay.length - 1].parts[0].functionResponse;
+  ok("gemini sends a functionResponse", !!fr, gReplay[gReplay.length - 1]);
+  ok("functionResponse names the tool", fr && fr.name === "recommend_move", fr);
+  ok("functionResponse carries the result", fr && /destination marked/.test(fr.response.result), fr);
+  ok("gemini reply reached the log", /تحرّك/.test(Pod.lines[Pod.lines.length - 1].full),
+     Pod.lines[Pod.lines.length - 1].full);
+  ok("the tool ran and marked the map", PodMark.live());
+
+  console.log("\n[openai-compatible]");
+  PodMemory.clearHistory();
+  const oSeen = [];
+  let scanRuns = 0;
+  const realTool = Pod._tool.bind(Pod);
+  Pod._tool = (n, i) => { if (n === "scan") scanRuns++; return realTool(n, i); };
+  fetchImpl = async (url, opts) => {
+    oSeen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
+    if (oSeen.length === 1) {
+      // Tool call arriving as indexed fragments, the way these APIs stream it.
+      return sseResponse([
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_7","function":{"name":"scan","arguments":"{\\"rad"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ius\\":600}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n'
+      ]);
+    }
+    return sseResponse([
+      'data: {"choices":[{"delta":{"content":"Analysis: "}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"one hostile east."},"finish_reason":"stop"}]}\n\n'
+    ]);
+  };
+  W.vars.podProvider = "groq";
+  W.vars.podKeyGroq = "gsk-test";
+  W.vars.podLang = "en";
+  await Pod._askAI("what is out there");
+
+  ok("groq made two calls", oSeen.length === 2, oSeen.length);
+  ok("groq endpoint", oSeen[0].url === "https://api.groq.com/openai/v1/chat/completions", oSeen[0].url);
+  ok("groq bearer auth", oSeen[0].headers["authorization"] === "Bearer gsk-test", oSeen[0].headers);
+  ok("groq default model", oSeen[0].body.model === "llama-3.3-70b-versatile", oSeen[0].body.model);
+  ok("groq system message first", oSeen[0].body.messages[0].role === "system");
+  ok("groq tools in function shape", oSeen[0].body.tools[0].type === "function" &&
+     !!oSeen[0].body.tools[0].function.parameters, oSeen[0].body.tools[0]);
+  const oReplay = oSeen[1].body.messages;
+  const oAsst = oReplay.find(m => m.role === "assistant" && m.tool_calls);
+  ok("assistant turn replayed with tool_calls", !!oAsst, oReplay.map(m => m.role));
+  ok("fragmented arguments assembled", oAsst && JSON.parse(oAsst.tool_calls[0].function.arguments).radius === 600,
+     oAsst && oAsst.tool_calls[0]);
+  const oTool = oReplay[oReplay.length - 1];
+  ok("tool result sent as a tool message", oTool.role === "tool" && oTool.tool_call_id === "call_7", oTool);
+  ok("tool result carries the scan", /hostiles\(/.test(oTool.content), oTool.content);
+  ok("each tool call runs exactly once", scanRuns === 1, scanRuns);
+  ok("openai reply reached the log", /one hostile east/.test(Pod.lines[Pod.lines.length - 1].full),
+     Pod.lines[Pod.lines.length - 1].full);
+  Pod._tool = realTool;
+
+  // Ollama is the same adapter without a key, on localhost.
+  const lSeen = [];
+  fetchImpl = async (url, opts) => {
+    lSeen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
+    return sseResponse(['data: {"choices":[{"delta":{"content":"Affirmative."},"finish_reason":"stop"}]}\n\n']);
+  };
+  W.vars.podProvider = "ollama";
+  ok("ollama needs no key", PodLink.ready() === true);
+  await Pod._askAI("status");
+  ok("ollama hits localhost", /^http:\/\/localhost:11434/.test(lSeen[0].url), lSeen[0].url);
+  ok("ollama sends no auth header", !lSeen[0].headers["authorization"], lSeen[0].headers);
+  ok("ollama reply reached the log", /Affirmative/.test(Pod.lines[Pod.lines.length - 1].full));
+
+  // Readiness gating: a provider with no key must not fire a request.
+  W.vars.podProvider = "openrouter";
+  W.vars.podKeyOpenRouter = "";
+  ok("provider without a key is not ready", PodLink.ready() === false);
+  const guardCount = lSeen.length;
+  await Pod._askAI("hello");
+  ok("no request without a key", lSeen.length === guardCount, lSeen.length);
+  ok("falls back to local analysis", Pod.lines.some(l => /No AI provider configured/.test(l.full)));
 
   console.log("\n" + pass + " passed, " + fail + " failed");
   process.exit(fail ? 1 : 0);
