@@ -36,6 +36,11 @@ for (const [name, patch] of [['Balthazar-priv.js', 'tools/patch-balthazar.js'],
   steps.push([patch, [mid, name]]);
 }
 
+// YoRHa System is novastorm with four thousand lines added and a new name, by
+// its own author. There is no "original" to repair -- the repairs are already
+// in it -- so it gets its shim replaced and its body left alone.
+steps.push(['tools/reshim.js', ['reference/originals/YoRHa-System.v1.5.js', 'YoRHa-System.v1.5.js']]);
+
 let failed = 0;
 for (const [script, args] of steps) {
   try {

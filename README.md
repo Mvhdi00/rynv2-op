@@ -2156,3 +2156,53 @@ The rescue is unaffected: with `#turnstileWidget` hidden, the fallback widget
 still renders, its solve still goes through `window.onGotTurnstileToken`, and
 the game removes its own class and connects. The stock game, same conditions,
 still wedges.
+
+# YoRHa System 1.5, or: what to do when the author keeps going
+
+The twelfth file is novastorm with four thousand lines added and a new name, by
+its own author — and it still carries the shim it was branched from, bugs and
+all. It works, and then a refresh and it does not: the boot race, exactly.
+
+Running it back through `repair-mod.js` would be wrong twice over. The repairs
+are already in it, and re-applying them to a body that has moved on is a good
+way to break code that works. What it needs is the shim brought up to date and
+nothing else touched.
+
+`tools/reshim.js` takes such a file apart at the seams `repair-mod.js` left —
+metadata, shim, `__repairedBoot`, starter — puts the current shim and the
+current boot starter back, and hands the body across untouched. Then it proves
+that: the author's code has to appear in the output exactly once and unaltered,
+or the tool refuses to write.
+
+```
+YoRHa System
+  shim     : replaced with the current one (1276 lines)
+  starter  : replaced -- now waits for the bundle, not just for the page
+  transport: client replacement, as before
+  body     : 24220 lines, byte-for-byte unchanged
+```
+
+Independently, by hash: 1,046,814 bytes in, 1,046,814 bytes out, same SHA-256.
+
+The race, before and after, on the file exactly as it arrived:
+
+```
+  slow-bundle=0     render loops : 3     <- the bundle won, and it worked
+  slow-bundle=900   render loops : 4     <- the mod won, and it did not
+```
+
+After: 3 loops at 0, 400, 900 and 1800 ms, and the server accepts its spawn in
+every one.
+
+## Two checks that were wrong before they were right
+
+Both were mine, both in verification code, and both would have read as bugs in
+the thing being verified.
+
+- `reshim.js` compared its extracted body against a re-extraction of its own
+  output. The two sides punctuate the trailing brace differently, so it refused
+  to write a file that was in fact correct. It now asserts what actually
+  matters: the author's code appears in the output, once, unaltered.
+- The test's body extractor used `split('} catch (e) {}')[1]`, which cuts at the
+  *second* occurrence as well — that shape appears in the body too — and so
+  compared two truncations and called them equal. `indexOf` and one slice.

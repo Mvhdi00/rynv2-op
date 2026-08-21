@@ -453,5 +453,37 @@ console.log('\n9. Remedy 4.1');
         "its own socket hook is left exactly as written");
 }
 
+// --------------------------------------------------------------------------
+console.log('\n10. YoRHa System 1.5, re-shimmed and not re-repaired');
+{
+  // The author took a repaired novastorm, added four thousand lines and renamed
+  // it. What it needed was the shim it was branched from, brought up to date --
+  // not another pass of repair-mod.js, which would re-apply repairs already in
+  // it to a body that has moved on.
+  const before = fs.readFileSync(path.join(ROOT, 'reference/originals/YoRHa-System.v1.5.js'), 'utf8');
+  const after = fs.readFileSync(path.join(ROOT, 'YoRHa-System.v1.5.js'), 'utf8');
+
+  // split() on the marker would cut at its SECOND occurrence too -- the body
+  // contains that shape as well -- and quietly compare two truncations. Slice
+  // from the first one and no further.
+  const body = (s) => {
+    const a = s.indexOf('\nfunction __repairedBoot() {');
+    const b = s.indexOf('\n(function __repaired');
+    const inner = s.slice(a, b);
+    const marker = '} catch (e) {}';
+    return inner.slice(inner.indexOf(marker) + marker.length).replace(/\s+$/, '').replace(/\}$/, '');
+  };
+  check(body(after) === body(before), "the author's code is byte-for-byte what it was");
+  check(body(after).length > 1000000, 'and it is the whole megabyte of it, not a fragment');
+
+  // what did change
+  check(!/window\.loadedScript === true/.test(before), 'the file as sent waits only for the page');
+  check(/window\.loadedScript === true \|\| document\.readyState === "complete"/.test(after),
+        'the re-shimmed one waits for the bundle too, which is the race it was losing');
+  check(/@run-at\s+document-start/.test(after), 'and still runs at document-start');
+  check(/^window\.UNPATCH_CLIENT = true;$/m.test(after),
+        'and is still marked a client replacement, as it was');
+}
+
 console.log('\n' + (fails ? '=> ' + fails + ' FAILURE(S)' : '=> ALL ENTRY GUARD TESTS PASSED'));
 process.exit(fails ? 1 : 0);
