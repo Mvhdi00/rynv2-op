@@ -11654,10 +11654,9 @@ let pps = 0;
                 // RENDER BACKGROUND:
                 // YoRHa Visual repaints every biome in the muted parchment
                 // palette; off, the game's own greens and sand.
-                const _YV = yorhaOn();
-                const GRASS = _YV ? YORHA.grass : "#b6db66";
-                const SAND  = _YV ? YORHA.sand  : "#dbc666";
-                const SNOW  = _YV ? YORHA.snow  : "#fff";
+                const GRASS = "#b6db66";
+                const SAND  = "#dbc666";
+                const SNOW  = "#fff";
                 if (config.snowBiomeTop - yOffset <= 0 && config.mapScale - config.snowBiomeTop - yOffset >= maxScreenHeight) {
                     mainContext.fillStyle = GRASS;
                     mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
@@ -11692,9 +11691,9 @@ let pps = 0;
                         waterMult = waterPlus = 1;
                     }
                     mainContext.globalAlpha = 1;
-                    mainContext.fillStyle = yorhaOn() ? YORHA.riverbed : "#dbc666";
+                    mainContext.fillStyle = "#dbc666";
                     renderWaterBodies(xOffset, yOffset, mainContext, config.riverPadding);
-                    mainContext.fillStyle = yorhaOn() ? YORHA.water : "#91b2db";
+                    mainContext.fillStyle = "#91b2db";
                     renderWaterBodies(xOffset, yOffset, mainContext, (waterMult - 1) * 250);
                 }
 
@@ -11840,6 +11839,43 @@ let pps = 0;
                 gradient.addColorStop(1, "rgba(0, 0, 00, 0.30)");
                 mainContext.fillStyle = gradient;
                 mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
+
+                // YoRHa ATMOSPHERE — a full-screen mood wash only. It NEVER
+                // touches any object's shape, size, or position, so every
+                // hitbox reads exactly where it looks. Just a parchment
+                // color-grade, a warm vignette, and faint horizontal
+                // scanlines for the NieR:Automata terminal feel.
+                if (yorhaOn()) {
+                    mainContext.save();
+                    // Parchment/sand multiply wash across the whole frame.
+                    mainContext.globalCompositeOperation = "multiply";
+                    mainContext.globalAlpha = 0.22;
+                    mainContext.fillStyle = "#c9c3a8";
+                    mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
+                    // A little warmth lifted back in so it doesn't go grey.
+                    mainContext.globalCompositeOperation = "overlay";
+                    mainContext.globalAlpha = 0.10;
+                    mainContext.fillStyle = "#efe9d0";
+                    mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
+                    // Warm ink vignette hugging the edges.
+                    mainContext.globalCompositeOperation = "source-over";
+                    const yGrad = mainContext.createRadialGradient(
+                        maxScreenWidth / 2, maxScreenHeight / 2, maxScreenHeight * 0.35,
+                        maxScreenWidth / 2, maxScreenHeight / 2, maxScreenWidth * 0.62);
+                    yGrad.addColorStop(0, "rgba(47,44,38,0)");
+                    yGrad.addColorStop(1, "rgba(47,44,38,0.34)");
+                    mainContext.globalAlpha = 1;
+                    mainContext.fillStyle = yGrad;
+                    mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
+                    // Faint scanlines.
+                    mainContext.globalAlpha = 0.05;
+                    mainContext.fillStyle = "#2f2c26";
+                    for (var ySL = 0; ySL < maxScreenHeight; ySL += 3) {
+                        mainContext.fillRect(0, ySL, maxScreenWidth, 1);
+                    }
+                    mainContext.restore();
+                    mainContext.globalAlpha = 1;
+                }
 
 
 
@@ -12116,7 +12152,6 @@ let pps = 0;
                             mainContext.translate(tmpX, tmpY);
                             mainContext.rotate(tmpObj.dir);
                             mainContext.drawImage(tmpSprite, -(tmpSprite.width / 2), -(tmpSprite.height / 2));
-                            if (yorhaOn()) yorhaTint(mainContext, -(tmpSprite.width / 2), -(tmpSprite.height / 2), tmpSprite.width, tmpSprite.height, 0.72);
 
                             if (tmpObj.blocker) {
                                 mainContext.strokeStyle = "#db6e6e";
@@ -12130,7 +12165,6 @@ let pps = 0;
                         } else {
                             tmpSprite = getResSprite(tmpObj);
                             mainContext.drawImage(tmpSprite, tmpX - (tmpSprite.width / 2), tmpY - (tmpSprite.height / 2));
-                            if (yorhaOn()) yorhaTint(mainContext, tmpX - (tmpSprite.width / 2), tmpY - (tmpSprite.height / 2), tmpSprite.width, tmpSprite.height, 0.6);
                         }
                     }
                 }
@@ -12207,40 +12241,17 @@ let pps = 0;
         // =====================================================================
         // YoRHa VISUAL  —  the world reskinned to NieR:Automata's androids
         // =====================================================================
-        // No new art: everything here is drawn over what the game already draws.
-        //   - characters become pale androids (parchment body, ink outline) with
-        //     the YoRHa blindfold band across the head
-        //   - hats and animals are washed to the monochrome sepia of the game
-        //     with a source-atop tint, so a bright cow reads as a grey silhouette
-        // A single toggle, and every hook is a no-op while it is off.
-        const YORHA = {
-            body:   "#c8c4b2",   // android skin
-            outline:"#2f2c26",   // the ink line around everything
-            visor:  "#26231e",   // the blindfold
-            wash:   "#6f6b5e",   // the tint animals, hats and buildings fade toward
-            grass:  "#b3ad95",   // the field, one notch greyer than the menu paper
-            sand:   "#c2b892",   // the desert biome
-            snow:   "#d8d4c4",   // the snow biome
-            water:  "#8f8b76",   // rivers, a muted ink-grey
-            riverbed:"#a49c82"   // the wet sand under the water pass
-        };
+        // YoRHa Visual is an ATMOSPHERE-ONLY layer. It never repaints any
+        // individual object (no recolored bodies, no tinted animals/hats, no
+        // biome swaps), so every sprite keeps its true silhouette and every
+        // hitbox reads exactly where it looks. The whole effect is a single
+        // full-screen mood wash drawn in updateGame, gated by yorhaOn().
         function yorhaOn() { return !!(window.vars && window.vars.yorhaVisual); }
-        // Tint whatever was just drawn into the box, and only where it is opaque.
-        function yorhaTint(ctxt, x, y, w, h, alpha) {
-            ctxt.save();
-            ctxt.globalCompositeOperation = "source-atop";
-            ctxt.globalAlpha = alpha;
-            ctxt.fillStyle = YORHA.wash;
-            ctxt.fillRect(x, y, w, h);
-            ctxt.restore();
-        }
 
         function renderPlayer(obj, ctxt) {
             ctxt = ctxt || mainContext;
             ctxt.lineWidth = outlineWidth;
             ctxt.lineJoin = "miter";
-            const YV = yorhaOn();
-            if (YV) ctxt.strokeStyle = YORHA.outline;
             var handAngle = (Math.PI / 4) * (items.weapons[obj.weaponIndex].armS || 1);
             var oHandAngle = (obj.buildIndex < 0) ? (items.weapons[obj.weaponIndex].hndS || 1) : 1;
             var oHandDist = (obj.buildIndex < 0) ? (items.weapons[obj.weaponIndex].hndD || 1) : 1;
@@ -12260,7 +12271,7 @@ let pps = 0;
             }
 
             // HANDS:
-            ctxt.fillStyle = YV ? YORHA.body : config.skinColors[obj.skinColor];
+            ctxt.fillStyle = config.skinColors[obj.skinColor];
             renderCircle(obj.scale * Math.cos(handAngle), (obj.scale * Math.sin(handAngle)), 14);
             renderCircle((obj.scale * oHandDist) * Math.cos(-handAngle * oHandAngle),
                          (obj.scale * oHandDist) * Math.sin(-handAngle * oHandAngle), 14);
@@ -12281,20 +12292,7 @@ let pps = 0;
             }
 
             // BODY:
-            if (YV) ctxt.fillStyle = YORHA.body;
             renderCircle(0, 0, obj.scale, ctxt);
-
-            // THE BLINDFOLD — a dark band across the front of the head, clipped
-            // to the circle, perpendicular to the way the android faces.
-            if (YV) {
-                ctxt.save();
-                ctxt.beginPath();
-                ctxt.arc(0, 0, obj.scale, 0, 2 * Math.PI);
-                ctxt.clip();
-                ctxt.fillStyle = YORHA.visor;
-                ctxt.fillRect(obj.scale * 0.12, -obj.scale - 2, obj.scale * 0.44, obj.scale * 2 + 4);
-                ctxt.restore();
-            }
 
             // SKIN:
             if (obj.skinIndex > 0) {
@@ -12329,10 +12327,8 @@ let pps = 0;
                 }
                 skinPointers[index] = tmpObj;
             }
-            if (tmpSkin.isLoaded) {
+            if (tmpSkin.isLoaded)
                 ctxt.drawImage(tmpSkin, -tmpObj.scale / 2, -tmpObj.scale / 2, tmpObj.scale, tmpObj.scale);
-                if (yorhaOn()) yorhaTint(ctxt, -tmpObj.scale / 2, -tmpObj.scale / 2, tmpObj.scale, tmpObj.scale, 0.5);
-            }
             if (!parentSkin && tmpObj.topSprite) {
                 ctxt.save();
                 ctxt.rotate(owner.skinRot);
@@ -12966,7 +12962,6 @@ for (let tree of trees) {
             if (tmpSprite.isLoaded) {
                 var tmpScale = obj.scale * 1.2 * (obj.spriteMlt || 1);
                 ctxt.drawImage(tmpSprite, -tmpScale, -tmpScale, tmpScale * 2, tmpScale * 2);
-                if (yorhaOn()) yorhaTint(ctxt, -tmpScale, -tmpScale, tmpScale * 2, tmpScale * 2, 0.6);
             }
         }
 
@@ -24697,7 +24692,6 @@ for (let tree of trees) {
     body.yorha-hud .actionBarItem {
         border: 2px solid #454138 !important;
         border-radius: 0 !important;
-        background-color: rgba(199,195,177,0.25) !important;
     }
 
     /* ===== YoRHa NATIVE SCREENS =====
@@ -24750,11 +24744,17 @@ for (let tree of trees) {
         background: #c7c3b1 !important;
         color: #454138 !important;
     }
-    /* age-upgrade tray + item tooltips: parchment tiles, ink frame */
-    #upgradeHolder > div, #itemInfoHolder {
+    /* item tooltip is text only, so a fill is safe here */
+    #itemInfoHolder {
         background: #bfbaa6 !important;
         border: 2px solid #454138 !important;
         color: #454138 !important;
+    }
+    /* age-upgrade choices carry their icon as a background-image -- only a frame,
+       never a background, or the icon is wiped (that emptied the SELECT ITEMS bar). */
+    #upgradeHolder > div {
+        border: 2px solid #454138 !important;
+        border-radius: 0 !important;
     }
     /* the death text -- YoRHa's flat game-over line */
     #diedText {
@@ -24764,9 +24764,8 @@ for (let tree of trees) {
         font-weight: 500 !important;
     }
     #loadingText { color: #454138 !important; letter-spacing: 3px !important; }
-    /* the store hat/accessory tiles: ink frame, so they read as gear cards */
+    /* store hats / clan tiles also carry an icon background-image -- frame only */
     #storeHolder .storeItem, #allianceHolder .allianceItem {
-        background: #bfbaa6 !important;
         border: 2px solid #454138 !important;
         border-radius: 0 !important;
     }
