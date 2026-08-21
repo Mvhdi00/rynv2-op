@@ -24001,6 +24001,22 @@ for (let tree of trees) {
     // generic toggle handler, and always correct.
     function applyYorhaHud() {
         try { document.body.classList.toggle("yorha-hud", !!(window.vars && window.vars.yorhaVisual)); } catch (e) {}
+        // The menu backdrop: show it only while the landing screen is up (the
+        // setup card / menu holder visible), hide it the moment you are in game
+        // so it never covers the world or the weapon bar.
+        try {
+            let bg = document.getElementById("yorha-menu-bg");
+            if (!bg && document.body) {
+                bg = document.createElement("div");
+                bg.id = "yorha-menu-bg";
+                document.body.insertBefore(bg, document.body.firstChild);
+            }
+            if (bg) {
+                const card = document.getElementById("setupCard") || document.getElementById("menuCardHolder");
+                const onMenu = !!(card && card.offsetParent !== null);
+                bg.classList.toggle("show", onMenu);
+            }
+        } catch (e) {}
     }
     try { applyYorhaHud(); setInterval(applyYorhaHud, 500); } catch (e) {}
 
@@ -24662,16 +24678,26 @@ for (let tree of trees) {
        A filter beats per-element rules here: the HUD is the game's DOM and its
        ids move between versions, but grayscale + a warm sepia lands every one of
        them in the same monochrome without knowing their names. */
-    body.yorha-hud #gameUI,
-    body.yorha-hud #mapDisplay,
-    body.yorha-hud #chatBox,
-    body.yorha-hud #chatHolder {
-        filter: grayscale(1) sepia(0.32) brightness(1.04) contrast(0.94) !important;
-    }
+    /* only the minimap is filtered -- it is a canvas with no icons to lose. The
+       action bar, upgrades and item counts are NEVER filtered, so weapons stay
+       visible. */
     body.yorha-hud #mapDisplay {
+        filter: grayscale(1) sepia(0.3) brightness(1.03) contrast(0.95) !important;
         border: 2px solid #454138 !important;
         border-radius: 0 !important;
-        background: #b4af9a !important;
+    }
+    /* resource counters and score: ink text, no layout or visibility change */
+    body.yorha-hud #foodDisplay, body.yorha-hud #woodDisplay,
+    body.yorha-hud #stoneDisplay, body.yorha-hud #scoreDisplay,
+    body.yorha-hud #killCounter, body.yorha-hud #ageText {
+        color: #efe9d6 !important;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.7) !important;
+    }
+    /* the weapon/item slots: a square ink frame, icon untouched */
+    body.yorha-hud .actionBarItem {
+        border: 2px solid #454138 !important;
+        border-radius: 0 !important;
+        background-color: rgba(199,195,177,0.25) !important;
     }
 
     /* ===== YoRHa NATIVE SCREENS =====
@@ -24832,6 +24858,31 @@ for (let tree of trees) {
     #setupCard a, #setupCard .menuText, .menuText {
         color: #454138 !important; border-radius: 0 !important;
     }
+
+    /* the designed menu SCREEN -- a real YoRHa backdrop behind the cards, so the
+       green terrain never shows through on the landing screen. Pointer-events off
+       so it never eats a click; the cards sit above it. */
+    #yorha-menu-bg {
+        position: fixed; inset: 0; z-index: 3; pointer-events: none;
+        display: none;
+        background:
+            radial-gradient(circle at 50% 42%, rgba(199,195,177,0.10), transparent 60%),
+            linear-gradient(180deg, #2b2820 0%, #35322a 45%, #2b2820 100%);
+    }
+    #yorha-menu-bg.show { display: block; }
+    #yorha-menu-bg::before {   /* scanlines */
+        content: ''; position: absolute; inset: 0;
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px);
+    }
+    #yorha-menu-bg::after {    /* a big faint YoRHa square emblem */
+        content: ''; position: absolute; top: 50%; left: 50%;
+        width: 300px; height: 300px; transform: translate(-50%, -60%) rotate(45deg);
+        border: 2px solid rgba(199,195,177,0.12);
+        box-shadow: 0 0 0 20px rgba(199,195,177,0.05);
+    }
+    /* keep the game's menu cards and logo above the backdrop */
+    #menuCardHolder, #setupCard, #serverBrowser, #gameName,
+    #mainMenu > .menuCard { position: relative; z-index: 6 !important; }
 
     /* ===== YoRHa BOOT SCREEN ===== a NieR:Automata-style boot sequence over a
        black field, shown once when the page loads and faded out (or skipped). */
