@@ -184,6 +184,26 @@ understood.
 
 ## Menu skin — YoRHa
 
+## In-game visual — YoRHa
+
+**Visuals → YoRHa → "YoRHa Visual".** Off by default.
+
+No new art — everything is drawn over what the game already draws, so it toggles
+instantly and costs nothing while off:
+
+- **Characters** become pale androids: the body and hands recolour to parchment,
+  the outline to ink, and the signature **YoRHa blindfold** is drawn as a dark
+  band clipped to the head circle, perpendicular to the way the android faces —
+  so it tracks the facing direction the way a real visor would.
+- **Hats** and **animals** are washed to the game's monochrome sepia with a
+  `source-atop` tint, painted only where the sprite is already opaque, so a
+  bright cow reads as a grey silhouette instead of its usual colours.
+
+It is character/creature-facing by design (that is what was asked); the terrain
+and buildings are left alone. Rendered in headless Chromium against the real
+render functions to confirm the body, outline and blindfold draw and rotate
+correctly.
+
 The whole mod menu (all nine tabs, sidebar, cards, toggles, sliders, keybind
 buttons, the bot console and the server log) is skinned to NieR:Automata's
 YoRHa pause-menu: an aged-parchment field, ink-brown rules, sharp square

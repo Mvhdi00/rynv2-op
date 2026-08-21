@@ -12196,10 +12196,38 @@ let pps = 0;
         }
 
         // RENDER PLAYER:
+        // =====================================================================
+        // YoRHa VISUAL  —  the world reskinned to NieR:Automata's androids
+        // =====================================================================
+        // No new art: everything here is drawn over what the game already draws.
+        //   - characters become pale androids (parchment body, ink outline) with
+        //     the YoRHa blindfold band across the head
+        //   - hats and animals are washed to the monochrome sepia of the game
+        //     with a source-atop tint, so a bright cow reads as a grey silhouette
+        // A single toggle, and every hook is a no-op while it is off.
+        const YORHA = {
+            body:   "#c8c4b2",   // android skin
+            outline:"#2f2c26",   // the ink line around everything
+            visor:  "#26231e",   // the blindfold
+            wash:   "#6f6b5e"    // the tint animals and hats fade toward
+        };
+        function yorhaOn() { return !!(window.vars && window.vars.yorhaVisual); }
+        // Tint whatever was just drawn into the box, and only where it is opaque.
+        function yorhaTint(ctxt, x, y, w, h, alpha) {
+            ctxt.save();
+            ctxt.globalCompositeOperation = "source-atop";
+            ctxt.globalAlpha = alpha;
+            ctxt.fillStyle = YORHA.wash;
+            ctxt.fillRect(x, y, w, h);
+            ctxt.restore();
+        }
+
         function renderPlayer(obj, ctxt) {
             ctxt = ctxt || mainContext;
             ctxt.lineWidth = outlineWidth;
             ctxt.lineJoin = "miter";
+            const YV = yorhaOn();
+            if (YV) ctxt.strokeStyle = YORHA.outline;
             var handAngle = (Math.PI / 4) * (items.weapons[obj.weaponIndex].armS || 1);
             var oHandAngle = (obj.buildIndex < 0) ? (items.weapons[obj.weaponIndex].hndS || 1) : 1;
             var oHandDist = (obj.buildIndex < 0) ? (items.weapons[obj.weaponIndex].hndD || 1) : 1;
@@ -12219,7 +12247,7 @@ let pps = 0;
             }
 
             // HANDS:
-            ctxt.fillStyle = config.skinColors[obj.skinColor];
+            ctxt.fillStyle = YV ? YORHA.body : config.skinColors[obj.skinColor];
             renderCircle(obj.scale * Math.cos(handAngle), (obj.scale * Math.sin(handAngle)), 14);
             renderCircle((obj.scale * oHandDist) * Math.cos(-handAngle * oHandAngle),
                          (obj.scale * oHandDist) * Math.sin(-handAngle * oHandAngle), 14);
@@ -12240,9 +12268,20 @@ let pps = 0;
             }
 
             // BODY:
+            if (YV) ctxt.fillStyle = YORHA.body;
             renderCircle(0, 0, obj.scale, ctxt);
 
-
+            // THE BLINDFOLD — a dark band across the front of the head, clipped
+            // to the circle, perpendicular to the way the android faces.
+            if (YV) {
+                ctxt.save();
+                ctxt.beginPath();
+                ctxt.arc(0, 0, obj.scale, 0, 2 * Math.PI);
+                ctxt.clip();
+                ctxt.fillStyle = YORHA.visor;
+                ctxt.fillRect(obj.scale * 0.12, -obj.scale - 2, obj.scale * 0.44, obj.scale * 2 + 4);
+                ctxt.restore();
+            }
 
             // SKIN:
             if (obj.skinIndex > 0) {
@@ -12277,8 +12316,10 @@ let pps = 0;
                 }
                 skinPointers[index] = tmpObj;
             }
-            if (tmpSkin.isLoaded)
+            if (tmpSkin.isLoaded) {
                 ctxt.drawImage(tmpSkin, -tmpObj.scale / 2, -tmpObj.scale / 2, tmpObj.scale, tmpObj.scale);
+                if (yorhaOn()) yorhaTint(ctxt, -tmpObj.scale / 2, -tmpObj.scale / 2, tmpObj.scale, tmpObj.scale, 0.5);
+            }
             if (!parentSkin && tmpObj.topSprite) {
                 ctxt.save();
                 ctxt.rotate(owner.skinRot);
@@ -12912,6 +12953,7 @@ for (let tree of trees) {
             if (tmpSprite.isLoaded) {
                 var tmpScale = obj.scale * 1.2 * (obj.spriteMlt || 1);
                 ctxt.drawImage(tmpSprite, -tmpScale, -tmpScale, tmpScale * 2, tmpScale * 2);
+                if (yorhaOn()) yorhaTint(ctxt, -tmpScale, -tmpScale, tmpScale * 2, tmpScale * 2, 0.6);
             }
         }
 
@@ -23910,6 +23952,7 @@ for (let tree of trees) {
         // Visuals
         millRotation: false,
         spikeRotation: false,
+        yorhaVisual: false,      // reskin players, hats and animals to YoRHa
 
         // Settings
         theme: "",
@@ -24192,6 +24235,12 @@ for (let tree of trees) {
                 items: [
                     { type: 'toggle', name: "Spikes rotation", id: "spikeRotation" },
                     { type: 'toggle', name: "Mills rotation", id: "millRotation" }
+                ]
+            },
+            {
+                title: "YoRHa",
+                items: [
+                    { type: 'toggle', name: "YoRHa Visual (players / hats / animals)", id: "yorhaVisual" }
                 ]
             }
         ],
