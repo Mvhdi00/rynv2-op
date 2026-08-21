@@ -1,6 +1,6 @@
 // Regression tests for the Novastorm bot engine.
 //
-//   node tools/test-novastorm-bots.js [path/to/novastorm_1.5.user.js]
+//   node tools/test-novastorm-bots.js [path/to/YoRHa_System.user.js]
 //
 // The RynBots block is evaluated out of the shipped userscript with stubs
 // standing in for the game module scope it normally lives in, so the packets
@@ -100,7 +100,7 @@ global.document = { querySelector: () => null, createElement: () => ({ style: {}
 
 // Lift the RynBots block straight out of the userscript, so this test always
 // runs against what actually ships rather than against a copy.
-const SCRIPT = process.argv[2] || (__dirname + '/../novastorm_1.5.user.js');
+const SCRIPT = process.argv[2] || (__dirname + '/../YoRHa_System.user.js');
 const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
 const from = lines.findIndex(l => l.trim().startsWith('const BOT_ITEM = {'));
 const to = lines.findIndex(l => l.includes('window.RynBots = RynBots'));

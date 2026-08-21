@@ -1,6 +1,6 @@
-// Tests for the Server Log in novastorm_1.5.user.js.
+// Tests for the Server Log in YoRHa_System.user.js.
 //
-//   node tools/test-server-log.js [path/to/novastorm_1.5.user.js]
+//   node tools/test-server-log.js [path/to/YoRHa_System.user.js]
 //
 // ServerLog hooks the packet table rather than any game function: wrap()
 // returns the same table with every handler sandwiched between a `before` and
@@ -14,7 +14,7 @@
 // against what actually ships.
 const fs = require('fs');
 
-const SCRIPT = process.argv[2] || (__dirname + '/../novastorm_1.5.user.js');
+const SCRIPT = process.argv[2] || (__dirname + '/../YoRHa_System.user.js');
 const lines = fs.readFileSync(SCRIPT, 'utf8').split('\n');
 const from = lines.findIndex(l => l.trim().startsWith('const ServerLog = {'));
 const to = lines.findIndex(l => l.includes('window.ServerLog = ServerLog'));

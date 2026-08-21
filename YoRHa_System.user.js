@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         novastorm 1.5
+// @name         YoRHa System
 // @author       nova
 // @description  best 2026 mod
 // @version      1.5

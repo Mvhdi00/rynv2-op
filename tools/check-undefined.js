@@ -1,4 +1,4 @@
-// Undefined-identifier sweep for novastorm_1.5.user.js.
+// Undefined-identifier sweep for YoRHa_System.user.js.
 //
 //   npm i --no-save acorn acorn-walk
 //   node tools/check-undefined.js [path/to/file.js]
@@ -15,7 +15,7 @@ const fs = require('fs');
 const acorn = require('acorn');
 const walk = require('acorn-walk');
 
-const FILE = process.argv[2] || (__dirname + '/../novastorm_1.5.user.js');
+const FILE = process.argv[2] || (__dirname + '/../YoRHa_System.user.js');
 const src = fs.readFileSync(FILE, 'utf8');
 
 const GLOBALS = new Set([

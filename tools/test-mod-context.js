@@ -1,6 +1,6 @@
-// Tests for the mod-context swap in novastorm_1.5.user.js.
+// Tests for the mod-context swap in YoRHa_System.user.js.
 //
-//   node tools/test-mod-context.js [path/to/novastorm_1.5.user.js]
+//   node tools/test-mod-context.js [path/to/YoRHa_System.user.js]
 //
 // Full Mod works by handing the mod's module-scope singletons to a bot, running
 // the mod's own tick, and handing yours back. The whole thing rests on one
@@ -14,7 +14,7 @@
 // what actually ships.
 const fs = require('fs');
 
-const SCRIPT = process.argv[2] || (__dirname + '/../novastorm_1.5.user.js');
+const SCRIPT = process.argv[2] || (__dirname + '/../YoRHa_System.user.js');
 const src = fs.readFileSync(SCRIPT, 'utf8');
 const lines = src.split('\n');
 

@@ -214,7 +214,7 @@ unchanged, so no behaviour, wiring or test is touched. The five theme swatches
 still work, re-tinted as YoRHa's console washes (default beige, plus red and
 three cooler variants).
 
-Build output: **`novastorm_1.5.user.js`** (Novastorm 1.4 with the bots rewritten).
+Build output: **`YoRHa_System.user.js`** (Novastorm 1.4 with the bots rewritten).
 
 The 1.4 bots connected, entered the game and did nothing else. In 1.5 every bot
 parses its own packet stream into a private world model — players, objects,
@@ -547,7 +547,7 @@ there a tick earlier.
 ## Verification
 
 ```sh
-node --check novastorm_1.5.user.js
+node --check YoRHa_System.user.js
 node tools/test-novastorm-bots.js
 ```
 

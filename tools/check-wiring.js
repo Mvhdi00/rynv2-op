@@ -1,4 +1,4 @@
-// Wiring audit for novastorm_1.5.user.js.
+// Wiring audit for YoRHa_System.user.js.
 //
 //   node tools/check-wiring.js [path/to/file.js]
 //
@@ -16,7 +16,7 @@
 // more, which is what a half-finished removal looks like.
 const fs = require('fs');
 
-const FILE = process.argv[2] || (__dirname + '/../novastorm_1.5.user.js');
+const FILE = process.argv[2] || (__dirname + '/../YoRHa_System.user.js');
 const src = fs.readFileSync(FILE, 'utf8');
 
 let problems = 0;
