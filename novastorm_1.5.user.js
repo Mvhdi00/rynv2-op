@@ -24408,15 +24408,14 @@ for (let tree of trees) {
 
     /* GRID LAYOUT FOR CARDS */
     .deltek-content {
-        padding: 22px;
+        padding: 22px 26px;
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        grid-auto-rows: min-content;
-        gap: 18px;
-        align-content: start;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
     }
 
     /* SCROLLBAR */
