@@ -23965,7 +23965,7 @@ for (let tree of trees) {
         // Visuals
         millRotation: false,
         spikeRotation: false,
-        yorhaVisual: false,      // reskin players, hats and animals to YoRHa
+        yorhaVisual: true,       // reskin players, hats and animals to YoRHa
 
         // Settings
         theme: "",
@@ -24747,6 +24747,90 @@ for (let tree of trees) {
     /* the action bar along the bottom -- square, ink-framed slots */
     body.yorha-hud #actionBar div {
         border-radius: 0 !important;
+    }
+
+    /* ===== YoRHa MAIN MENU ===== the game's own moomoo.io landing screen.
+       Real ids from the game bundle: #gameName is the logo, #setupCard the login
+       card, .adMenuCard the promo, #serverSelect / .colorHolder / #nativeCheckHolder
+       the controls. Ads out, logo swapped, everything in parchment and ink. */
+
+    /* ads and promos -- the Foundation card, the install banner, consent popups */
+    .adMenuCard, #promoImgHolder, #promoImg, #promoImageHolder,
+    .adMenuContainer, ins.adsbygoogle, .adsbygoogle,
+    iframe[id*="google_ads"], iframe[id^="aswift"], iframe[id*="ad_iframe"],
+    [id*="aiptag"], [id^="pw-"], .pw-container,
+    #onetrust-consent-sdk, #ot-sdk-btn-floating,
+    #downloadButtonContainer, #mobileDownloadButtonContainer {
+        display: none !important;
+    }
+
+    /* the MOOMOO.io logo -> YoRHa System (hide its own text, print ours) */
+    #gameName {
+        font-size: 0 !important;
+        line-height: 0 !important;
+        color: transparent !important;
+        background: none !important;
+    }
+    #gameName::after {
+        content: "YoRHa System";
+        display: block;
+        font-family: 'Jost', 'Century Gothic', sans-serif !important;
+        font-size: 78px; line-height: 1;
+        font-weight: 500; letter-spacing: 12px;
+        text-transform: uppercase;
+        color: #c7c3b1;
+        text-shadow: 4px 4px 0 rgba(0,0,0,0.35);
+    }
+
+    /* the login card and its controls */
+    #setupCard, .menuCard {
+        background: #c7c3b1 !important;
+        border: 2px solid #454138 !important;
+        border-radius: 0 !important;
+        box-shadow: 6px 6px 0 rgba(69,65,56,0.35) !important;
+        color: #454138 !important;
+        font-family: 'Jost', 'Century Gothic', sans-serif !important;
+    }
+    .menuHeader, #setupCard .menuHeader {
+        color: #454138 !important; letter-spacing: 3px !important;
+        text-transform: uppercase !important;
+    }
+    #nameInput {
+        background: #b4af9a !important; color: #454138 !important;
+        border: 2px solid #454138 !important; border-radius: 0 !important;
+        text-align: center !important; letter-spacing: 2px !important;
+    }
+    #nameInput::placeholder { color: #6f6b5e !important; }
+    #enterGame {
+        background: #454138 !important; color: #c7c3b1 !important;
+        border: 2px solid #454138 !important; border-radius: 0 !important;
+        text-transform: uppercase !important; letter-spacing: 3px !important;
+        font-weight: 500 !important;
+    }
+    #enterGame:hover { background: #c7c3b1 !important; color: #454138 !important; }
+    #serverSelect, #setupCard select {
+        background: #b4af9a !important; color: #454138 !important;
+        border: 2px solid #454138 !important; border-radius: 0 !important;
+        -webkit-appearance: none !important; appearance: none !important;
+        padding-right: 30px !important;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23454138' stroke-width='1.6' fill='none'/%3E%3C/svg%3E") !important;
+        background-repeat: no-repeat !important; background-position: right 10px center !important;
+    }
+    #serverSelect option, #setupCard select option { background: #c7c3b1 !important; color: #454138 !important; }
+    .colorHolder {
+        background: #b4af9a !important; border: 2px solid #454138 !important;
+        border-radius: 0 !important;
+    }
+    .colorButton, .skinColorItem {
+        border: 2px solid #454138 !important; border-radius: 0 !important;
+    }
+    #nativeCheckHolder {
+        background: #b4af9a !important; color: #454138 !important;
+        border: 2px solid #454138 !important; border-radius: 0 !important;
+    }
+    /* the "back to moomoo / sandbox" links as ink-framed chips */
+    #setupCard a, #setupCard .menuText, .menuText {
+        color: #454138 !important; border-radius: 0 !important;
     }
 
     /* ===== YoRHa BOOT SCREEN ===== a NieR:Automata-style boot sequence over a
