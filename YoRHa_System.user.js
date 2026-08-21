@@ -24416,7 +24416,7 @@ for (let tree of trees) {
         width: 0; background: var(--ink); transition: width 0.12s ease;
     }
 
-    .nav-item svg { width: 17px; height: 17px; fill: currentColor; opacity: 0.85; transition: none; z-index: 1; }
+    .nav-item svg { width: 17px; height: 17px; fill: currentColor; opacity: 1; transition: none; z-index: 1; }
 
     .nav-item:hover {
         background: rgba(69,65,56,0.10);
@@ -24502,6 +24502,7 @@ for (let tree of trees) {
         border-radius: 0;
         overflow: hidden;
         height: fit-content;
+        flex: 0 0 auto;            /* keep full height; the content column scrolls */
         transition: box-shadow 0.15s, transform 0.15s;
         display: flex; flex-direction: column;
     }
@@ -24547,6 +24548,7 @@ for (let tree of trees) {
         position: absolute; top: 1px; left: 1px;
         width: 14px; height: 14px;
         background: var(--ink); border-radius: 0;
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.35);
         transition: left 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.15s;
     }
     .switch.active { background: var(--ink); }
@@ -24582,7 +24584,12 @@ for (let tree of trees) {
     }
     .text-input-styled::placeholder { color: var(--ink-faint); }
     .text-input-styled:focus { box-shadow: 3px 3px 0 rgba(69,65,56,0.28); }
-    select.text-input-styled { cursor: pointer; }
+    select.text-input-styled {
+        cursor: pointer; -webkit-appearance: none; appearance: none;
+        padding-right: 30px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23454138' stroke-width='1.6' fill='none'/%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 10px center;
+    }
 
     /* CONSOLE / SERVER LOG */
     .bot-console-log {
@@ -24625,18 +24632,31 @@ for (let tree of trees) {
     /* THEME GRID */
     .theme-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; padding: 12px 18px; }
     .theme-btn {
-        height: 38px; border-radius: 0; cursor: pointer;
+        height: 42px; border-radius: 0; cursor: pointer;
         border: 2px solid var(--ink);
         transition: transform 0.12s; position: relative;
+        box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35);
+    }
+    /* a filled ink corner so each tile reads as a control, not a blank patch */
+    .theme-btn::after {
+        content: ''; position: absolute; top: 0; right: 0;
+        border-width: 0 10px 10px 0; border-style: solid;
+        border-color: transparent var(--ink) transparent transparent;
     }
     .theme-btn:hover { transform: translateY(-3px); }
-    .theme-btn.active { box-shadow: 0 0 0 2px var(--paper-2), 0 0 0 4px var(--ink); }
+    /* the selected tile inverts: a solid ink fill with a parchment core */
+    .theme-btn.active {
+        box-shadow: inset 0 0 0 3px var(--paper);
+        outline: 3px solid var(--ink); outline-offset: 2px;
+    }
+    .theme-btn.active::after { border-color: transparent var(--paper) transparent transparent; }
 
-    .tb-def  { background: #c7c3b1; }
-    .tb-nvg  { background: #b9bcac; }
-    .tb-ice  { background: #b4bdc0; }
-    .tb-red  { background: #c9b7ac; }
-    .tb-void { background: #bfb6c0; }
+    /* distinct enough to tell apart, still all within YoRHa's range */
+    .tb-def  { background: #8f8a76; }
+    .tb-nvg  { background: #6f7a63; }
+    .tb-ice  { background: #647579; }
+    .tb-red  { background: #8a4a40; }
+    .tb-void { background: #6a5f70; }
 
     /* ===== YoRHa HUD ===== the game's own overlay, washed to parchment/ink.
        A filter beats per-element rules here: the HUD is the game's DOM and its
@@ -24652,6 +24672,81 @@ for (let tree of trees) {
         border: 2px solid #454138 !important;
         border-radius: 0 !important;
         background: #b4af9a !important;
+    }
+
+    /* ===== YoRHa NATIVE SCREENS =====
+       The game's own screens -- the setup/login card, the store, the clan menu,
+       the age-upgrade tray, the death text, tooltips. These are the game's DOM,
+       so they are recoloured by id with defensive !important rules: parchment
+       grounds, ink text, square ink borders, and the invert-on-hover button.
+       Always on -- the mod is YoRHa System now, so its chrome is always YoRHa,
+       the same as the settings menu. */
+    #menuCardHolder, #guideCard, #storeMenu, #allianceMenu, #upgradeHolder,
+    #itemInfoHolder, #skinColorHolder, #serverBrowser,
+    .menuCard, #loadingText, #diedText {
+        font-family: 'Jost', 'Century Gothic', sans-serif !important;
+    }
+    #menuCardHolder, #guideCard, .menuCard, #storeHolder, #allianceHolder {
+        background: #c7c3b1 !important;
+        color: #454138 !important;
+        border: 2px solid #454138 !important;
+        border-radius: 0 !important;
+        box-shadow: 6px 6px 0 rgba(69,65,56,0.35) !important;
+    }
+    #menuCardHolder *, #guideCard *, .menuCard *, #storeHolder *, #allianceHolder * {
+        color: #454138 !important;
+        border-radius: 0 !important;
+    }
+    /* the name field and any text input on the native screens */
+    #nameInput, #serverBrowser, #allianceInput, #menuCardHolder input,
+    #storeHolder input {
+        background: #b4af9a !important;
+        color: #454138 !important;
+        border: 2px solid #454138 !important;
+        border-radius: 0 !important;
+        letter-spacing: 1px !important;
+    }
+    #nameInput::placeholder { color: #6f6b5e !important; }
+    /* the big ENTER button, and the game's own buttons, in the ink/parchment
+       invert -- ink by default, parchment ground on hover */
+    #enterGame, .menuButton, #storeHolder .storeTab, #allianceButton,
+    #partyButton, #joinPartyButton {
+        background: #454138 !important;
+        color: #c7c3b1 !important;
+        border: 2px solid #454138 !important;
+        border-radius: 0 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 2px !important;
+        font-weight: 500 !important;
+        transition: background 0.12s, color 0.12s !important;
+    }
+    #enterGame:hover, .menuButton:hover {
+        background: #c7c3b1 !important;
+        color: #454138 !important;
+    }
+    /* age-upgrade tray + item tooltips: parchment tiles, ink frame */
+    #upgradeHolder > div, #itemInfoHolder {
+        background: #bfbaa6 !important;
+        border: 2px solid #454138 !important;
+        color: #454138 !important;
+    }
+    /* the death text -- YoRHa's flat game-over line */
+    #diedText {
+        color: #454138 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 6px !important;
+        font-weight: 500 !important;
+    }
+    #loadingText { color: #454138 !important; letter-spacing: 3px !important; }
+    /* the store hat/accessory tiles: ink frame, so they read as gear cards */
+    #storeHolder .storeItem, #allianceHolder .allianceItem {
+        background: #bfbaa6 !important;
+        border: 2px solid #454138 !important;
+        border-radius: 0 !important;
+    }
+    /* the action bar along the bottom -- square, ink-framed slots */
+    body.yorha-hud #actionBar div {
+        border-radius: 0 !important;
     }
 `;
 
