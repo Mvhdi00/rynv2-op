@@ -199,8 +199,11 @@ instantly and costs nothing while off:
   `source-atop` tint, painted only where the sprite is already opaque, so a
   bright cow reads as a grey silhouette instead of its usual colours.
 
-It is character/creature-facing by design (that is what was asked); the terrain
-and buildings are left alone. Rendered in headless Chromium against the real
+It reaches the whole world: **terrain** repaints every biome in the muted
+parchment palette (grass, sand, snow, rivers), **buildings and resources** wash
+to the same monochrome as hats and animals, and the **HUD** — the game's own DOM
+overlay and minimap — is greyscaled toward sepia with a body-class filter, since
+the canvas hook cannot reach the DOM. The menu logo reads **YoRHa System**. Rendered in headless Chromium against the real
 render functions to confirm the body, outline and blindfold draw and rotate
 correctly.
 

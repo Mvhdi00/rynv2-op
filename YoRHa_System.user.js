@@ -11652,26 +11652,32 @@ let pps = 0;
                 yOffset = camY - (maxScreenHeight / 2);
 
                 // RENDER BACKGROUND:
+                // YoRHa Visual repaints every biome in the muted parchment
+                // palette; off, the game's own greens and sand.
+                const _YV = yorhaOn();
+                const GRASS = _YV ? YORHA.grass : "#b6db66";
+                const SAND  = _YV ? YORHA.sand  : "#dbc666";
+                const SNOW  = _YV ? YORHA.snow  : "#fff";
                 if (config.snowBiomeTop - yOffset <= 0 && config.mapScale - config.snowBiomeTop - yOffset >= maxScreenHeight) {
-                    mainContext.fillStyle = "#b6db66";
+                    mainContext.fillStyle = GRASS;
                     mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
                 } else if (config.mapScale - config.snowBiomeTop - yOffset <= 0) {
-                    mainContext.fillStyle = "#dbc666";
+                    mainContext.fillStyle = SAND;
                     mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
                 } else if (config.snowBiomeTop - yOffset >= maxScreenHeight) {
-                    mainContext.fillStyle = "#fff";
+                    mainContext.fillStyle = SNOW;
                     mainContext.fillRect(0, 0, maxScreenWidth, maxScreenHeight);
                 } else if (config.snowBiomeTop - yOffset >= 0) {
-                    mainContext.fillStyle = "#fff";
+                    mainContext.fillStyle = SNOW;
                     mainContext.fillRect(0, 0, maxScreenWidth, config.snowBiomeTop - yOffset);
-                    mainContext.fillStyle = "#b6db66";
+                    mainContext.fillStyle = GRASS;
                     mainContext.fillRect(0, config.snowBiomeTop - yOffset, maxScreenWidth,
                                          maxScreenHeight - (config.snowBiomeTop - yOffset));
                 } else {
-                    mainContext.fillStyle = "#b6db66";
+                    mainContext.fillStyle = GRASS;
                     mainContext.fillRect(0, 0, maxScreenWidth,
                                          (config.mapScale - config.snowBiomeTop - yOffset));
-                    mainContext.fillStyle = "#dbc666";
+                    mainContext.fillStyle = SAND;
                     mainContext.fillRect(0, (config.mapScale - config.snowBiomeTop - yOffset), maxScreenWidth,
                                          maxScreenHeight - (config.mapScale - config.snowBiomeTop - yOffset));
                 }
@@ -11686,9 +11692,9 @@ let pps = 0;
                         waterMult = waterPlus = 1;
                     }
                     mainContext.globalAlpha = 1;
-                    mainContext.fillStyle = "#dbc666";
+                    mainContext.fillStyle = yorhaOn() ? YORHA.riverbed : "#dbc666";
                     renderWaterBodies(xOffset, yOffset, mainContext, config.riverPadding);
-                    mainContext.fillStyle = "#91b2db";
+                    mainContext.fillStyle = yorhaOn() ? YORHA.water : "#91b2db";
                     renderWaterBodies(xOffset, yOffset, mainContext, (waterMult - 1) * 250);
                 }
 
@@ -12110,6 +12116,7 @@ let pps = 0;
                             mainContext.translate(tmpX, tmpY);
                             mainContext.rotate(tmpObj.dir);
                             mainContext.drawImage(tmpSprite, -(tmpSprite.width / 2), -(tmpSprite.height / 2));
+                            if (yorhaOn()) yorhaTint(mainContext, -(tmpSprite.width / 2), -(tmpSprite.height / 2), tmpSprite.width, tmpSprite.height, 0.72);
 
                             if (tmpObj.blocker) {
                                 mainContext.strokeStyle = "#db6e6e";
@@ -12123,6 +12130,7 @@ let pps = 0;
                         } else {
                             tmpSprite = getResSprite(tmpObj);
                             mainContext.drawImage(tmpSprite, tmpX - (tmpSprite.width / 2), tmpY - (tmpSprite.height / 2));
+                            if (yorhaOn()) yorhaTint(mainContext, tmpX - (tmpSprite.width / 2), tmpY - (tmpSprite.height / 2), tmpSprite.width, tmpSprite.height, 0.6);
                         }
                     }
                 }
@@ -12209,7 +12217,12 @@ let pps = 0;
             body:   "#c8c4b2",   // android skin
             outline:"#2f2c26",   // the ink line around everything
             visor:  "#26231e",   // the blindfold
-            wash:   "#6f6b5e"    // the tint animals and hats fade toward
+            wash:   "#6f6b5e",   // the tint animals, hats and buildings fade toward
+            grass:  "#b3ad95",   // the field, one notch greyer than the menu paper
+            sand:   "#c2b892",   // the desert biome
+            snow:   "#d8d4c4",   // the snow biome
+            water:  "#8f8b76",   // rivers, a muted ink-grey
+            riverbed:"#a49c82"   // the wet sand under the water pass
         };
         function yorhaOn() { return !!(window.vars && window.vars.yorhaVisual); }
         // Tint whatever was just drawn into the box, and only where it is opaque.
@@ -23982,6 +23995,15 @@ for (let tree of trees) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(window.vars));
     }
 
+    // YoRHa Visual also recolours the HUD, which is the game's own DOM rather
+    // than something the canvas hook can reach. A body class does it, kept in
+    // sync with the toggle by a light poll -- cheaper than special-casing the
+    // generic toggle handler, and always correct.
+    function applyYorhaHud() {
+        try { document.body.classList.toggle("yorha-hud", !!(window.vars && window.vars.yorhaVisual)); } catch (e) {}
+    }
+    try { applyYorhaHud(); setInterval(applyYorhaHud, 500); } catch (e) {}
+
     // =========================================================================
     //  >>> MENU CONFIGURATION MAPPING <<<
     // =========================================================================
@@ -24615,6 +24637,22 @@ for (let tree of trees) {
     .tb-ice  { background: #b4bdc0; }
     .tb-red  { background: #c9b7ac; }
     .tb-void { background: #bfb6c0; }
+
+    /* ===== YoRHa HUD ===== the game's own overlay, washed to parchment/ink.
+       A filter beats per-element rules here: the HUD is the game's DOM and its
+       ids move between versions, but grayscale + a warm sepia lands every one of
+       them in the same monochrome without knowing their names. */
+    body.yorha-hud #gameUI,
+    body.yorha-hud #mapDisplay,
+    body.yorha-hud #chatBox,
+    body.yorha-hud #chatHolder {
+        filter: grayscale(1) sepia(0.32) brightness(1.04) contrast(0.94) !important;
+    }
+    body.yorha-hud #mapDisplay {
+        border: 2px solid #454138 !important;
+        border-radius: 0 !important;
+        background: #b4af9a !important;
+    }
 `;
 
     const styleSheet = document.createElement('style');
@@ -24625,7 +24663,7 @@ for (let tree of trees) {
     const html = `
         <div class="deltek-root active">
             <div class="deltek-sidebar">
-                <div class="deltek-logo"><h1>NovaStorm</h1><span>YoRHa // Type-N</span></div>
+                <div class="deltek-logo"><h1>YoRHa System</h1><span>Command Terminal</span></div>
                 <div class="nav-container">
                     <div class="nav-item active" data-tab="keybinds"><svg viewBox="0 0 24 24"><path d="M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>Keybinds</div>
                     <div class="nav-item" data-tab="combat"><svg viewBox="0 0 24 24"><path d="M7 22h13v-5l-4-3l-2 3h-3v-6l-3-4l-8 5v2l6 3v5z"/></svg>Combat</div>
