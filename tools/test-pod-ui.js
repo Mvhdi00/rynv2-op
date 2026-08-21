@@ -26,6 +26,10 @@ const localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k
 const nav = { language: "en-US" };
 
 W.vars = {
+  podChatIn: true, podChatPrefix: ".", podChatAll: false, podChatListen: true,
+  podChatOut: false, podChatReply: false,
+  podPilotAI: false, podPilotThink: 15,
+  botPrimary: 5, botSecondary: 9, botAgeTrap: true, botAgeBoost: false, botAge8: "auto",
   podEnabled: true, podVariant: 0, podLang: "en", podMemory: true,
   podAI: false, podProvider: "anthropic", podModel: "",
   podKeyGemini: "", podKeyGroq: "", podKeyOpenRouter: "", podAIKey: "",
@@ -64,8 +68,10 @@ class Rec {
 W.SpeechRecognition = Rec;
 
 // Game-world stubs.
-const myPlayer = { sid: 1, x: 1000, y: 1000, alive: true, health: 100, maxHealth: 100, kills: 0,
-                   age: 3, items: [0, 3, 6, 10], weaponIndex: 0, stats: { wood: 40, food: 12, stone: 8, gold: 3 } };
+const myPlayer = { sid: 1, name: "Ryn", x: 1000, y: 1000, alive: true, health: 100, maxHealth: 100,
+                   kills: 0, age: 3, upgradePoints: 0, weapons: [0, 9],
+                   items: [0, 3, 6, 10, 15], weaponIndex: 0,
+                   stats: { wood: 40, food: 12, stone: 8, gold: 3 } };
 const players = [myPlayer];
 const items = { weapons: [{ name: "tool hammer" }], list: [] };
 const UTILS = { getDistance: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1) };
@@ -83,6 +89,21 @@ for (let i = 0; i < 7; i++)
 let fetchImpl = async () => { throw new Error("no fetch configured"); };
 const fetch = (...args) => fetchImpl(...args);
 
+// What the pilot and the chat bridge reach for in the real client.
+const sent = [];                                   // io.send calls
+const io = { send: (...a) => sent.push(a) };
+const acted = [];
+const actAsBot = (...a) => { acted.push(a); return false; };
+const findPlayerBySID = (sid) => players.find(p => p && p.sid === sid) || null;
+const RynBots = { possessed: null, _push() {}, command: () => false };
+const BOT_ITEM = { COOKIE: 1, GREATER_SPIKES: 7, SPINNING_SPIKES: 9, POWER_MILL: 12,
+                   TRAP: 15, BOOST: 16, PLATFORM: 18 };
+const calls = { heal: [], place: [], upgrade: [], atck: 0 };
+const heal = (v) => calls.heal.push(v);
+const place = (id, ang) => calls.place.push({ id, ang });
+const sendUpgrade = (i) => calls.upgrade.push(i);
+const sendAtckState = () => { calls.atck++; };
+
 const make = new Function(
   "window", "document", "navigator", "localStorage", "fetch", "TextDecoder",
   "setInterval", "clearInterval", "saveConfig", "lerp",
@@ -90,8 +111,13 @@ const make = new Function(
   "UTILS", "config", "killCount", "items", "ais", "gameObjects",
   "spikes_our", "traps_our", "attackState", "mainContext",
   "mouseX", "mouseY", "screenWidth", "screenHeight",
+  "io", "actAsBot", "findPlayerBySID", "RynBots", "BOT_ITEM",
+  "heal", "place", "sendUpgrade", "sendAtckState", "pathPosition", "pathMode",
   BLOCK + "\n return { Pod, PodVoice, PodEars, PodMemory, PodLines, PodWorld, PodTactics, PodRecon," +
-          " PodMark, PodLink, POD_BANK, podLangNow, PT, POD_TOOLS, podSystemPrompt, POD_UNITS };");
+          " PodMark, PodLink, PodChat, PodPilot, POD_BANK, POD_GOALS, podLangNow, PT, POD_TOOLS," +
+          " podSystemPrompt, POD_UNITS," +
+          " tick: { get pathPosition(){return pathPosition;}, get pathMode(){return pathMode;}," +
+          "         get attackState(){return attackState;} } };");
 
 const api = make(
   W, D, nav, localStorage, fetch, TextDecoder,
@@ -99,10 +125,13 @@ const api = make(
   myPlayer, players, players, null, () => false, () => false,
   UTILS, config, 0, items, [], gameObjects,
   [], [], 0, null,
-  0, 0, 1920, 1080);
+  0, 0, 1920, 1080,
+  io, actAsBot, findPlayerBySID, RynBots, BOT_ITEM,
+  heal, place, sendUpgrade, sendAtckState, null, {});
 
 const { Pod, PodVoice, PodEars, PodMemory, PodLines, PodWorld, PodTactics, PodRecon,
-        PodMark, PodLink, POD_BANK, podLangNow, PT, POD_TOOLS, podSystemPrompt } = api;
+        PodMark, PodLink, PodChat, PodPilot, POD_BANK, POD_GOALS, podLangNow, PT,
+        POD_TOOLS, podSystemPrompt } = api;
 
 // ---- 1. panel construction ------------------------------------------------
 console.log("\n[panel]");
@@ -486,6 +515,244 @@ spoken.length = 0;
   ok("recall tool finds it", /katana/.test(Pod._tool("recall", { query: "katana" })));
   ok("unknown tool is handled", Pod._tool("nope", {}) === "unknown tool.");
 
+  // ---- 7b. the game-chat bridge -------------------------------------------
+  console.log("\n[game chat]");
+  W.vars.podProvider = "anthropic"; W.vars.podAI = false; W.vars.podLang = "en";
+  const chatBefore = Pod.lines.length;
+  ok("prefixed chat is consumed", PodChat.intercept(".status") === true);
+  ok("prefixed chat reached the pod", Pod.lines.slice(chatBefore).some(l => /Status/.test(l.full)),
+     Pod.lines.slice(chatBefore).map(l => l.full));
+  ok("plain chat passes through to the server", PodChat.intercept("hello everyone") === false);
+  ok("'pod ...' also reaches it", PodChat.intercept("pod status") === true);
+  ok("Arabic 'بود ...' also reaches it", PodChat.intercept("بود الحالة") === true);
+  ok("a bare prefix is swallowed", PodChat.intercept(".") === true);
+  W.vars.podChatAll = true;
+  ok("route-all captures plain chat", PodChat.intercept("where do I go") === true);
+  W.vars.podChatAll = false;
+  W.vars.podChatIn = false;
+  ok("disabled bridge passes everything through", PodChat.intercept(".status") === false);
+  W.vars.podChatIn = true;
+  W.vars.podChatPrefix = "!";
+  ok("a custom prefix is honoured", PodChat.intercept("!status") === true);
+  ok("the old prefix stops working", PodChat.intercept(".status") === false);
+  W.vars.podChatPrefix = ".";
+
+  // Listening to the room.
+  players.push({ sid: 77, name: "Adam", x: 1200, y: 1000, visible: true, health: 100, maxHealth: 100 });
+  PodChat.log.length = 0;
+  PodChat.heard(77, "gg easy");
+  ok("other players' chat is logged", PodChat.log.length === 1, PodChat.log);
+  ok("the log names the speaker", PodChat.log[0].name === "Adam", PodChat.log[0]);
+  ok("chat reaches the model's briefing", /Adam: gg easy/.test(Pod._field()), Pod._field().slice(-200));
+  PodChat.heard(1, "my own echo");
+  ok("our own chat is not logged back", PodChat.log.length === 1, PodChat.log);
+  const namedBefore = Pod.lines.length;
+  PodChat.heard(77, "Ryn you are next");
+  ok("being named raises a call-out", Pod.lines.slice(namedBefore).some(l => /named you|ذكر اسمك/.test(l.full)),
+     Pod.lines.slice(namedBefore).map(l => l.full));
+  W.vars.podChatListen = false;
+  const quiet = PodChat.log.length;
+  PodChat.heard(77, "ignored");
+  ok("listening off stops logging", PodChat.log.length === quiet);
+  W.vars.podChatListen = true;
+
+  // Speaking publicly is off by default and rate limited when on.
+  sent.length = 0;
+  ok("public chat is refused while off", PodChat.say("hello") === false);
+  ok("nothing was sent", sent.length === 0);
+  W.vars.podChatOut = true;
+  PodChat._lastOut = 0;
+  ok("public chat sends when enabled", PodChat.say("Proposal: move east now") === true);
+  ok("it went out on the chat packet", sent.length === 1 && sent[0][0] === "6", sent);
+  ok("the YoRHa prefix is stripped for chat", !/Proposal/.test(sent[0][1]), sent[0][1]);
+  ok("second line is rate limited", PodChat.say("again") === false);
+  PodChat._lastOut = 0;
+  PodChat.say("x".repeat(80));
+  ok("long lines are clipped to what the game carries", sent[sent.length - 1][1].length <= 30,
+     sent[sent.length - 1][1].length);
+  // The tool refuses when the operator has not opted in.
+  W.vars.podChatOut = false;
+  ok("the chat tool refuses without consent", /refused/.test(Pod._tool("say_in_game_chat", { text: "hi" })));
+  W.vars.podChatOut = true;
+  PodChat._lastOut = 0;
+  ok("the chat tool sends with consent", /sent to game chat/.test(Pod._tool("say_in_game_chat", { text: "hi" })));
+  W.vars.podChatOut = false;
+
+  // ---- 7c. the autopilot ---------------------------------------------------
+  console.log("\n[pilot]");
+  players.length = 1;                                  // back to just us
+  PodMemory.load().tactics = {};
+  ok("starts off", PodPilot.on === false);
+  ok("not driving while off", PodPilot.driving() === false);
+  PodPilot.enable(true);
+  ok("enables", PodPilot.on === true);
+  ok("drives once enabled", PodPilot.driving() === true);
+  ok("announces itself", Pod.lines.slice(-3).some(l => /pilot engaged|قيادة البود/i.test(l.full)),
+     Pod.lines.slice(-3).map(l => l.full));
+
+  // Human override.
+  PodPilot.nudge();
+  ok("a human input pauses it", PodPilot.paused() === true && PodPilot.driving() === false);
+  PodPilot._humanUntil = 0;
+  ok("it resumes on its own", PodPilot.driving() === true);
+  // A possessed bot means the pilot is not the one steering.
+  RynBots.possessed = {};
+  ok("possession suspends the pilot", PodPilot.driving() === false);
+  RynBots.possessed = null;
+  // Turning the pod off must take the autopilot with it — no invisible driver.
+  W.vars.podEnabled = false;
+  ok("a hidden pod cannot fly", PodPilot.driving() === false);
+  W.vars.podEnabled = true;
+
+  // Goal selection follows the safety rules first.
+  myPlayer.health = 100;
+  ok("healthy and alone picks a peaceful goal",
+     ["farm", "build", "explore"].indexOf(PodPilot._choose(myPlayer)) >= 0, PodPilot._choose(myPlayer));
+  myPlayer.health = 30;
+  ok("hurt picks heal", PodPilot._choose(myPlayer) === "heal", PodPilot._choose(myPlayer));
+  myPlayer.stats.food = 0;
+  players.push({ sid: 55, name: "Foe", x: 1150, y: 1000, visible: true, health: 100, maxHealth: 100 });
+  ok("hurt with no food and an enemy picks flee", PodPilot._choose(myPlayer) === "flee", PodPilot._choose(myPlayer));
+  myPlayer.health = 100; myPlayer.stats.food = 20;
+  ok("healthy with one enemy picks fight", PodPilot._choose(myPlayer) === "fight", PodPilot._choose(myPlayer));
+  for (let i = 0; i < 3; i++)
+    players.push({ sid: 60 + i, name: "M" + i, x: 1120 + i * 10, y: 1010, visible: true, health: 100, maxHealth: 100 });
+  ok("outnumbered picks flee", PodPilot._choose(myPlayer) === "flee", PodPilot._choose(myPlayer));
+  players.length = 1;
+  myPlayer.upgradePoints = 1;
+  ok("an unspent upgrade point wins", PodPilot._choose(myPlayer) === "upgrade");
+  myPlayer.upgradePoints = 0;
+
+  // Steering feeds the client's own pathfinder.
+  PodPilot._open("farm");
+  PodPilot.steer();
+  ok("farm sets a destination", !!api.tick.pathPosition, api.tick.pathPosition);
+  ok("farm heads for the stone field", api.tick.pathPosition.x > 1500, api.tick.pathPosition);
+  ok("farm avoids enemy spikes", api.tick.pathMode.avoidEnemySpikes === true);
+  // Far enough away that it should close but not swing yet.
+  players.push({ sid: 55, name: "Foe", x: 1500, y: 1000, visible: true, health: 100, maxHealth: 100 });
+  PodPilot._open("fight");
+  calls.atck = 0;
+  PodPilot.steer();
+  ok("fight closes on the enemy", !!api.tick.pathPosition && api.tick.pathPosition.x > 1300, api.tick.pathPosition);
+  ok("fight holds its swing out of range", api.tick.attackState === 0, api.tick.attackState);
+  players[players.length - 1].x = 1150;                // now inside reach
+  PodPilot.steer();
+  ok("fight swings when in range", api.tick.attackState === 1, api.tick.attackState);
+  ok("the swing was actually sent", calls.atck === 1, calls.atck);
+  PodPilot.steer();
+  ok("an unchanged swing is not re-sent", calls.atck === 1, calls.atck);
+  PodPilot._open("flee");
+  PodPilot.steer();
+  ok("flee stops swinging", api.tick.attackState === 0);
+  ok("flee avoids enemies", api.tick.pathMode.avoidEnemy === true);
+  players.length = 1;
+
+  // The non-movement actions use the client's own primitives.
+  calls.heal.length = 0; calls.place.length = 0; calls.upgrade.length = 0;
+  myPlayer.health = 40;
+  PodPilot.goal = "heal"; PodPilot._doHeal(myPlayer);
+  ok("heal eats food", calls.heal.length === 1, calls.heal);
+  myPlayer.health = 100;
+  myPlayer.upgradePoints = 1; myPlayer.upgrAge = 2;
+  PodPilot._doUpgrade(myPlayer);
+  ok("upgrade follows the shared age path", calls.upgrade[0] === 5, calls.upgrade);
+  myPlayer.upgradePoints = 0;
+  myPlayer.stats.wood = 500;
+  PodPilot._lastBuild = 0;
+  PodPilot._doBuild(myPlayer);
+  ok("build places a windmill", calls.place.length === 1 && calls.place[0].id === myPlayer.items[3], calls.place);
+  PodPilot._doBuild(myPlayer);
+  ok("building is rate limited", calls.place.length === 1);
+  players.push({ sid: 55, name: "Foe", x: 1150, y: 1000, visible: true, health: 100, maxHealth: 100 });
+  PodPilot._lastSpike = 0;
+  PodPilot._doCombatItems(myPlayer);
+  ok("combat drops a spike on a close enemy", calls.place.length === 2 &&
+     calls.place[1].id === myPlayer.items[2], calls.place);
+  players.length = 1;
+
+  // Learning: episodes are scored and the table steers later choices.
+  console.log("\n[learning]");
+  PodMemory.load().tactics = {};
+  PodPilot._open("farm");
+  PodPilot._episode.start.t = Date.now() - 20000;      // a 20-second episode
+  myPlayer.kills = 3;                                  // three kills happened
+  PodPilot._close("test");
+  const table = PodMemory.load().tactics;
+  ok("an episode is recorded", Object.keys(table).length === 1, table);
+  ok("it is keyed by goal and situation", !!table["farm@clear"], Object.keys(table));
+  ok("kills score positively", table["farm@clear"].avg > 0, table["farm@clear"]);
+  const good = table["farm@clear"].avg;
+  // A short episode is noise, not evidence.
+  PodPilot._open("build");
+  PodPilot._close("test");
+  ok("episodes under four seconds are discarded", !table["build@clear"], Object.keys(table));
+  // A death is scored against the goal that was running.
+  PodPilot._open("explore");
+  PodPilot._episode.start.t = Date.now() - 15000;
+  myPlayer.alive = false;
+  PodPilot._close("test");
+  myPlayer.alive = true;
+  ok("dying scores against the goal", table["explore@clear"].avg < good, table["explore@clear"]);
+  ok("rating reads back", PodPilot.rating("farm", "clear") === table["farm@clear"].avg);
+  ok("an untried goal has no rating", PodPilot.rating("heal", "heavy") === null);
+  ok("the record renders for the model", /farm@clear/.test(PodPilot.report()), PodPilot.report());
+  ok("the record reaches the briefing", /what has worked/.test(Pod._field()), Pod._field().slice(-260));
+
+  // The learned table survives a reload, which is the whole point of learning.
+  PodMemory.save();
+  PodMemory.data = null;
+  ok("learning persists across sessions", !!PodMemory.load().tactics["farm@clear"],
+     PodMemory.load().tactics);
+
+  // With farm rated well above explore, the policy should prefer it.
+  PodMemory.load().tactics = { "farm@clear": { n: 30, sum: 300, avg: 10 },
+                               "explore@clear": { n: 30, sum: -300, avg: -10 },
+                               "build@clear": { n: 30, sum: -300, avg: -10 } };
+  let farmPicks = 0;
+  for (let i = 0; i < 200; i++) if (PodPilot._choose(myPlayer) === "farm") farmPicks++;
+  ok("the policy follows what worked", farmPicks > 140, farmPicks + "/200");
+  ok("…but still explores sometimes", farmPicks < 200, farmPicks + "/200");
+
+  // The director's plan is validated and time-limited.
+  ok("set_plan rejects nonsense", /unknown goal/.test(PodPilot.setPlan("conquer", "")));
+  ok("set_plan accepts a real goal", /plan set: fight/.test(PodPilot.setPlan("fight", "they are hurt")));
+  ok("the plan takes effect", PodPilot.goal === "fight", PodPilot.goal);
+  PodPilot._aiUntil = Date.now() - 1;
+  myPlayer.health = 100;
+  // The policy is deliberately stochastic, so this asserts the property that
+  // matters: an expired plan no longer forces its goal.
+  const afterStale = [];
+  for (let i = 0; i < 60; i++) afterStale.push(PodPilot._choose(myPlayer));
+  ok("a stale plan stops overriding", afterStale.indexOf("fight") < 0, [...new Set(afterStale)]);
+
+  // The tools the model actually calls.
+  ok("pilot tool reports", /autopilot/.test(Pod._tool("pilot", { action: "status" })));
+  ok("pilot tool stops it", /off/.test(Pod._tool("pilot", { action: "off" })) && PodPilot.on === false);
+  ok("pilot tool starts it", /flying|paused/.test(Pod._tool("pilot", { action: "on" })) && PodPilot.on === true);
+  ok("set_plan tool works", /plan set: farm/.test(Pod._tool("set_plan", { goal: "farm", why: "quiet" })));
+  Pod.handle("/pilot off");
+  ok("/pilot off disengages", PodPilot.on === false);
+  Pod.handle("play for me");
+  ok("plain language engages it", PodPilot.on === true);
+  Pod.handle("stop playing for me");
+  ok("plain language stops it", PodPilot.on === false);
+  // Regression: "top" used to match inside "stop", so this asked for the
+  // leaderboard instead of stopping the autopilot.
+  const boardBefore = Pod.lines.length;
+  Pod.handle("stop");
+  ok("a short keyword does not match inside a longer word",
+     !Pod.lines.slice(boardBefore).some(l => /Server board/.test(l.full)),
+     Pod.lines.slice(boardBefore).map(l => l.full));
+  Pod.handle("top");
+  ok("…but still matches on its own",
+     Pod.lines.slice(boardBefore).some(l => /Server board|Leaderboard is not/.test(l.full)),
+     Pod.lines.slice(boardBefore).map(l => l.full));
+  ok("every goal in POD_GOALS is reachable", POD_GOALS.every(g => /plan set/.test(PodPilot.setPlan(g, ""))),
+     POD_GOALS);
+  PodPilot.enable(false);
+  PodMemory.load().tactics = {};
+
   // ---- 8. the free providers ----------------------------------------------
   // Each speaks a different wire format. These check the request we build and
   // the stream we parse, including the tool round trip, for all of them.
@@ -504,6 +771,7 @@ spoken.length = 0;
       'data: {"candidates":[{"content":{"parts":[{"text":"تحرّك شرقك."}]},"finishReason":"STOP"}]}\n\n'
     ]);
   };
+  W.vars.podAI = true;
   W.vars.podProvider = "gemini";
   W.vars.podKeyGemini = "AIza-test";
   PodMark.clear();

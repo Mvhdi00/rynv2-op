@@ -5,8 +5,12 @@ paints a targeting laser, talks out loud in Arabic or English, listens on the
 microphone, remembers you between sessions, tells you where to go, finds players
 by name, and flies off on its own to go and look.
 
-Open it with **Y**. Hold **C** to talk to it. It works with no API key at all —
-and with a free one it holds a conversation.
+It reads the game's chat box, and on request it will play the game for you and
+keep score of what worked.
+
+Open it with **Y**. Hold **C** to talk to it. Press **K** to hand it the game.
+Type `.something` in the game's own chat to reach it from there. It works with no
+API key at all — and with a free one it holds a conversation.
 
 ![The unit, every variant and state](pod-preview-unit.png)
 ![The terminal, English and Arabic](pod-preview-panel.png)
@@ -32,6 +36,10 @@ Both images are generated from the shipping code by `node tools/preview-pod.js`
 | تخليه يستطلع | `/recon شمال` — ينفصل عنك، يطير، يمسح، ويرجع |
 | يقول لك وين تروح | `/go` أو اسأله "وين أروح" — يعطيك اتجاه ومسافة وسبب، ويعلّم النقطة |
 | تشوف لوحة السيرفر | `/board` |
+| تكلمه من **شات اللعبة** | اكتب في شات اللعبة `.` وبعدها سؤالك — مثال `.وين أروح` |
+| تخليه **يلعب بدالك** | زر **K**، أو اكتب `/pilot`، أو قل له "العب بدالي" |
+| تسترجع التحكم | حرّك بـ WASD أو اضغط الماوس — يتوقف فوراً ويرجع لك |
+| تشوف وش تعلّم | `/learned` |
 
 اللغة اللي تختارها تنطبق على كل شي: كلامه المكتوب، صوته، والمايك اللي يسمعك فيه.
 
@@ -144,10 +152,11 @@ chat shape and share an adapter; Gemini and Anthropic each have their own.
 
 - Every request is **streamed**, so the reply types itself into the panel and
   starts being spoken before it has finished arriving.
-- **Six tools**: `remember` and `recall` for memory, `scan` for a close reading
+- **Nine tools**: `remember` and `recall` for memory, `scan` for a close reading
   of the ground, `find_player` to locate someone by name, `recommend_move` to
-  get a real destination with a reason, and `recon` to physically send the unit
-  out. Tool calls are wired into every provider's native format — Anthropic
+  get a real destination with a reason, `recon` to physically send the unit out,
+  `pilot` and `set_plan` to drive the autopilot, and `say_in_game_chat` to speak
+  publicly. Tool calls are wired into every provider's native format — Anthropic
   `tool_use`, OpenAI `tool_calls`, Gemini `functionCall` — and each call runs
   exactly once per round regardless of how many wire shapes it is rendered into.
 - On Anthropic, assistant turns replay verbatim with thinking blocks and
@@ -230,12 +239,80 @@ flies, sweeps, and comes back — and while it is away it is genuinely not besid
 you, the targeting laser is replaced by a sweep ring, and its report is built
 from live contacts plus the archive with each stale record's age attached.
 
+## Talking to it through the game's chat box
+
+Three separate switches, because they have very different consequences.
+
+| Switch | What it does |
+|---|---|
+| **Reach the pod from game chat** (on) | A line starting with `.` — or `pod …` / `بود …` — goes to the pod instead of the server. `.where do I go` works from the game's own chat box. |
+| **Route ALL my chat to the pod** (off) | Every line you type goes to the pod and **nothing reaches the server**. |
+| **Pod reads other players' chat** (on) | The last few lines of server chat are carried into the pod's briefing, so it knows who threatened you — and it calls out when someone says your name. |
+| **Pod may reply in PUBLIC chat** (off) | The pod's answers go back out where everyone can read them. |
+| **…and reply when someone names you** (off) | It answers unprompted when named. |
+
+Public output is off by default and stays deliberately conservative: 30
+characters (all the game carries), one line per 2.6 seconds, the YoRHa prefix
+stripped, and battlefield call-outs never go out — that would be spam, and
+servers mute for it. The `say_in_game_chat` tool refuses outright unless you
+have turned the switch on.
+
+## Letting it play for you
+
+**K** hands the game over. The banner across the top of the screen says who is
+driving the whole time it is on — an autopilot you cannot see is one you forget
+about. **Any movement key or mouse click takes control straight back** and it
+resumes a couple of seconds after you stop.
+
+The split that makes this work: a language model cannot run a combat loop, so it
+does not try.
+
+- **The pilot** is a local state machine running at tick speed with seven goals —
+  `farm`, `fight`, `flee`, `build`, `heal`, `upgrade`, `explore`. It reuses the
+  client's own tested machinery: the pathfinder for movement, `place()` for
+  building, `heal()` for food, the same age-upgrade path the bots follow.
+- **The director** is the model, called every 15 seconds (adjustable), which
+  picks the goal for the next few seconds through the `set_plan` tool — a coach
+  calling a play, not moving the players. The pilot never waits on it; if the
+  link is down it keeps flying on local policy.
+- **Safety rules are not up for debate.** Low health picks `heal`, low health
+  with an enemy picks `flee`, three or more hostiles picks `flee`, an unspent
+  upgrade point gets spent. The model can only choose among what the situation
+  already allows.
+
+### What "learns" actually means
+
+Every stretch of play under one goal is an **episode**, scored on what really
+happened:
+
+```
+score = kills×40 + resources/25 + healthΔ×0.5 + ageΔ×20 − (died ? 60 : 0)
+        normalised per ten seconds
+```
+
+Scores are kept per **goal and situation** (`fight@clear`, `fight@heavy`,
+`farm@light` …), persisted to `localStorage`, and used two ways: the local policy
+picks the best-rated eligible goal — with a 15% exploration rate so a goal that
+started badly can recover — and the whole table is handed to the director in
+every briefing, so the model is choosing from *your* results rather than from
+what sounds good.
+
+`/learned` prints the table. **RESET LEARNING** in settings clears it.
+
+This is a contextual bandit over its own outcomes. It is real learning and it
+genuinely improves with play — but it is not model training, and episodes under
+four seconds are discarded as noise rather than counted.
+
 ## Commands
 
-Typed in the panel, in either language.
+Typed in the panel, in the game's chat box behind `.`, or spoken — in either
+language.
 
 | Command | Does |
 |---|---|
+| `/pilot [on\|off]` | Hand the game to the pod, or take it back |
+| `/learned` | What its record says works |
+| `/chat <text>` | Say one line in public game chat |
 | `/find <name>` | Locate a player; marks them on screen |
 | `/recon [dir\|name]` | Send the unit out to sweep |
 | `/go [farm\|retreat\|base\|centre]` | Get a destination, marked |
@@ -264,6 +341,10 @@ Settings › **Visuals**, under three cards:
 - **Pod Voice** — voice on/off, call-outs, microphone, voice picker, speed,
   pitch, volume, and **SPEAK TEST LINE** (which speaks even while muted, since
   that is the point of a test button).
+- **Pod Chat** — the three game-chat switches, the prefix, and the two
+  public-output switches.
+- **Pod Pilot** — the keybind, whether the AI directs it, how often it is asked,
+  **SHOW RECORD** and **RESET LEARNING**.
 - **Pod AI** — the link toggle, the provider, a key box per provider, a model
   override, **TEST CONNECTION**, and **RESET CHAT HISTORY**.
 
@@ -276,7 +357,7 @@ node tools/test-pod-ui.js    # needs: npm i --no-save jsdom
 node tools/preview-pod.js    # needs: npm i --no-save playwright
 ```
 
-`test-pod.js` (50 assertions) and `test-pod-ui.js` (173 assertions) both extract
+`test-pod.js` (50 assertions) and `test-pod-ui.js` (254 assertions) both extract
 the real blocks out of the userscript and run them under mocks — they test what
 ships, not a copy. Between them they cover:
 
@@ -294,7 +375,15 @@ ships, not a copy. Between them they cover:
 - **recon** — launch, refusal to double-launch, outbound, sweep, report, return;
 - **all three wire formats** — Anthropic, Gemini and OpenAI-compatible — each
   with a full tool round trip, plus that a tool runs exactly once per call and
-  that a provider with no key never fires a request.
+  that a provider with no key never fires a request;
+- **the game-chat bridge** — prefix matching, custom prefixes, route-all,
+  pass-through, listening, the rate limit, the 30-character clip, and that the
+  public-chat tool refuses without consent;
+- **the autopilot** — every safety rule, the human override, that a hidden pod
+  cannot fly, steering into the real pathfinder, swings sent only on change,
+  heal/build/upgrade going through the client's own primitives, episode scoring,
+  the learned table persisting across a reload, and that the policy actually
+  follows what worked while still exploring.
 
 ### What could not be verified here
 

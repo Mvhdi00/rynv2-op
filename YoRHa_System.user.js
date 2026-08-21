@@ -10801,6 +10801,9 @@ let pps = 0;
         function sendChat(message) {
             message = String(message);
             if (handleBotCommand(message)) return; // local command, don't send
+            // Talking to the pod through the game's own chat box. Consumed here
+            // means it never reaches the server — the pod is not a public reply.
+            try { if (PodChat.intercept(message)) return; } catch (e) {}
             const line = message.slice(0, 30);
             if (actAsBot("6", line)) return;       // talking as the bot you drive
             io.send("6", line);
@@ -10835,6 +10838,8 @@ let pps = 0;
                 tmpPlayer.chatMessage = checkProfanityString(message);
                 tmpPlayer.chatCountdown = config.chatCountdown;
             }
+            // The pod reads the room too, when you let it.
+            try { PodChat.heard(sid, message); } catch (e) {}
         }
 
         let factor = 1.0; // Zoom factor
@@ -11246,6 +11251,44 @@ let pps = 0;
             // --- the waypoint the unit told you to walk to ---------------------
             try { podDrawMark(mainContext, xOffset, yOffset, sx, sy, U); } catch (e) {}
 
+            // --- who is driving -------------------------------------------------
+            // An autopilot you cannot see is an autopilot you forget is on, so it
+            // announces itself across the top of the screen the whole time.
+            try {
+                if (PodPilot.on) {
+                    const paused = PodPilot.paused();
+                    const label = (paused ? "MANUAL OVERRIDE" : "POD PILOT") + "  ·  " +
+                                  String(PodPilot.goal).toUpperCase();
+                    mainContext.save();
+                    mainContext.font = "600 12px Jost, 'Century Gothic', sans-serif";
+                    mainContext.textAlign = "center";
+                    mainContext.textBaseline = "middle";
+                    const w = mainContext.measureText(label).width + 34;
+                    const bx = maxScreenWidth / 2 - w / 2, by = 14;
+                    mainContext.globalAlpha = 0.9;
+                    mainContext.fillStyle = paused ? "#6f6b5e" : U.ink;
+                    mainContext.beginPath();
+                    mainContext.moveTo(bx + 9, by);
+                    mainContext.lineTo(bx + w, by);
+                    mainContext.lineTo(bx + w - 9, by + 22);
+                    mainContext.lineTo(bx, by + 22);
+                    mainContext.closePath();
+                    mainContext.fill();
+                    // A blinking pip while it is actually flying.
+                    if (!paused) {
+                        mainContext.fillStyle = "#a83f2e";
+                        mainContext.globalAlpha = 0.55 + 0.45 * Math.abs(Math.sin(t / 420));
+                        mainContext.beginPath();
+                        mainContext.arc(bx + 17, by + 11, 3.5, 0, Math.PI * 2);
+                        mainContext.fill();
+                    }
+                    mainContext.globalAlpha = 1;
+                    mainContext.fillStyle = "#ded9c8";
+                    mainContext.fillText(label, bx + w / 2 + 6, by + 11);
+                    mainContext.restore();
+                }
+            } catch (e) {}
+
             // --- the targeting laser ------------------------------------------
             // Suppressed while the unit is away: a beam drawn from halfway across
             // the map to your cursor is noise, not information.
@@ -11637,6 +11680,7 @@ let pps = 0;
                     facts: [],                       // { t, tag, text }
                     profile: {},                     // free-form: name, playstyle, clan…
                     stats: { sessions: 0, kills: 0, best: 0, deaths: 0, chats: 0, lastSeen: 0 },
+                    tactics: {},                     // goal@situation -> { n, sum, avg }
                     history: []                      // rolling [{role, content}] for the AI
                 };
             },
@@ -11651,6 +11695,7 @@ let pps = 0;
                             this.data.facts   = Array.isArray(p.facts) ? p.facts.slice(-this.MAXF) : [];
                             this.data.profile = (p.profile && typeof p.profile === "object") ? p.profile : {};
                             this.data.stats   = Object.assign(this.data.stats, p.stats || {});
+                            this.data.tactics = (p.tactics && typeof p.tactics === "object") ? p.tactics : {};
                             this.data.history = Array.isArray(p.history) ? p.history.slice(-this.MAXH) : [];
                         }
                     }
@@ -12592,6 +12637,545 @@ let pps = 0;
         };
 
         // =====================================================================
+        // POD CHAT  —  talking to the unit through the game's own chat box
+        // =====================================================================
+        // Three separate things, each with its own switch, because they have very
+        // different consequences:
+        //
+        //   IN      what you type in moomoo's chat reaches the pod. Prefixed with
+        //           "." by default so ordinary chat still works; or route
+        //           everything, in which case nothing you type reaches the server.
+        //   LISTEN  the pod reads what other players say and carries the last few
+        //           lines into its briefing, so it knows who threatened you.
+        //   OUT     the pod's replies go back out to the game chat where everyone
+        //           can see them. Off by default: that is public, it is capped at
+        //           30 characters by the game, and servers mute for spam.
+        const PodChat = {
+            log: [],                 // { t, sid, name, text, mine }
+            _lastOut: 0,
+            _pending: null,
+
+            prefix() {
+                let p = ".";
+                try { p = String((window.vars && window.vars.podChatPrefix) || ".").trim(); } catch (e) {}
+                return p || ".";
+            },
+            _on(k) { try { return !!(window.vars && window.vars[k]); } catch (e) { return false; } },
+
+            // Called from sendChat before anything reaches the server. Returning
+            // true consumes the message — it is for the pod, not for the server.
+            intercept(message) {
+                const raw = String(message == null ? "" : message);
+                const text = raw.trim();
+                if (!text) return false;
+                if (!(window.vars && window.vars.podEnabled)) return false;
+                if (!this._on("podChatIn")) return false;
+
+                const p = this.prefix();
+                let body = null;
+                if (text.slice(0, p.length) === p) {
+                    // A bare prefix is still ours: swallowing it beats sending a
+                    // stray "." to the whole server.
+                    body = text.slice(p.length).trim();
+                } else if (/^pod[\s,:]+/i.test(text)) {
+                    body = text.replace(/^pod[\s,:]+/i, "").trim();
+                } else if (/^بود[\s,:]+/.test(text)) {
+                    body = text.replace(/^بود[\s,:]+/, "").trim();
+                } else if (this._on("podChatAll")) {
+                    body = text;
+                }
+                if (body === null) return false;
+                if (!body) return true;                       // a bare prefix: swallow it
+
+                this.log.push({ t: Date.now(), name: "you", text: body, mine: true });
+                this._trim();
+                try {
+                    Pod.buildPanel();
+                    // The reply goes wherever you asked from: the panel always,
+                    // and the game chat too when the unit is allowed to speak there.
+                    Pod.handle(body, { fromGameChat: true });
+                } catch (e) {}
+                return true;
+            },
+
+            // Called from receiveChat for every line on the server.
+            heard(sid, message) {
+                if (!this._on("podChatListen")) return;
+                let name = "player";
+                try {
+                    const p = findPlayerBySID(sid);
+                    if (p) name = p.name || "player";
+                    if (myPlayer && sid === myPlayer.sid) return;   // our own echo
+                } catch (e) {}
+                const text = String(message || "").trim();
+                if (!text) return;
+                this.log.push({ t: Date.now(), sid: sid, name: name, text: text });
+                this._trim();
+
+                // Someone said your name: that is worth a call-out, and worth an
+                // answer if the unit is allowed to speak in chat.
+                try {
+                    const me = (myPlayer && myPlayer.name) ? String(myPlayer.name).toLowerCase() : "";
+                    if (me && text.toLowerCase().indexOf(me) >= 0) {
+                        Pod.say(Pod._L("Alert: " + name + " named you in chat.",
+                                       "تنبيه: " + name + " ذكر اسمك في الشات."), { callout: true });
+                        if (this._on("podChatReply") && this._on("podChatOut"))
+                            Pod.handle(name + " said in chat: " + text, { fromGameChat: true, unsolicited: true });
+                    }
+                } catch (e) {}
+            },
+            _trim() { while (this.log.length > 40) this.log.shift(); },
+
+            // The unit's own voice in the game chat. Public, rate-limited, and
+            // clipped to what the game will actually carry.
+            say(text) {
+                if (!this._on("podChatOut")) return false;
+                const now = Date.now();
+                if (now - this._lastOut < 2600) return false;
+                let body = String(text || "")
+                    .replace(/\s+/g, " ")
+                    .replace(/^(Proposal|Alert|Analysis|Warning|Report|Recommendation|Query)\s*:\s*/i, "")
+                    .trim();
+                if (!body) return false;
+                if (body.length > 30) body = body.slice(0, 29) + "…";
+                this._lastOut = now;
+                try {
+                    if (actAsBot("6", body)) return true;
+                    io.send("6", body);
+                    return true;
+                } catch (e) { return false; }
+            },
+
+            // The last few lines, for the model's briefing.
+            brief(n) {
+                const rows = this.log.slice(-(n || 6));
+                if (!rows.length) return "";
+                return rows.map(r => (r.mine ? "you" : r.name) + ": " + r.text).join("\n");
+            }
+        };
+
+        // =====================================================================
+        // POD PILOT  —  the unit playing the game for you
+        // =====================================================================
+        // The split that makes this work: a language model cannot run a combat
+        // loop — the round trip is a hundred times slower than a tick — so it does
+        // not try. The pilot is a local state machine that plays at tick speed,
+        // and the model is a DIRECTOR that sets the goal every few seconds, the
+        // way a coach calls a play rather than moving the players.
+        //
+        // Between them sits the third piece, which is what "learns" actually
+        // means here: every stretch of play under one goal is an episode, scored
+        // on what really happened to your kills, health, resources and age. Those
+        // scores are kept per goal AND per situation, persisted, fed back to the
+        // director, and used by the local policy when no model is connected. It
+        // is a contextual bandit over its own outcomes — not model training, and
+        // the file says so rather than implying otherwise.
+        //
+        // Execution reuses the client's own tested machinery: the pathfinder for
+        // movement, place() for building, heal() for food, sendUpgrade() for the
+        // age path. The pilot decides; it does not reimplement.
+        const POD_GOALS = ["farm", "fight", "flee", "build", "heal", "upgrade", "explore"];
+
+        const PodPilot = {
+            on: false,
+            goal: "farm",
+            since: 0,
+            _atk: 0,
+            _dest: null,
+            _humanUntil: 0,
+            _lastThink: 0,
+            _lastDirect: 0,
+            _episode: null,
+            _aiNote: "",
+            _aiUntil: 0,
+            _busy: false,
+
+            // ---- lifecycle ---------------------------------------------------
+            enable(on) {
+                const want = (on === undefined) ? !this.on : !!on;
+                if (want === this.on) return this.on;
+                this.on = want;
+                if (want) {
+                    this.since = Date.now();
+                    this._open("farm");
+                    Pod.say(Pod._L("Pod pilot engaged. This unit has control.",
+                                   "تم تفعيل قيادة البود. هذه الوحدة تتحكم الآن."), { callout: true });
+                } else {
+                    this._close("manual");
+                    this._stopMoving();
+                    this._swing(false);
+                    Pod.say(Pod._L("Pod pilot disengaged. Control returned.",
+                                   "تم إيقاف قيادة البود. رجع التحكم لك."), { callout: true });
+                }
+                try { Pod._paint(); } catch (e) {}
+                return this.on;
+            },
+            // Any deliberate input from you pauses the pilot for a moment, so
+            // taking the controls back never needs a menu.
+            nudge() { if (this.on) this._humanUntil = Date.now() + 2500; },
+            paused() { return Date.now() < this._humanUntil; },
+            driving() {
+                if (!this.on || this.paused()) return false;
+                // The pod being switched off takes the banner with it, and an
+                // autopilot you cannot see must not be flying.
+                try { if (!(window.vars && window.vars.podEnabled)) return false; } catch (e) {}
+                try { if (RynBots.possessed) return false; } catch (e) {}
+                const s = Pod._self();
+                return !!(s && s.alive && s.x !== undefined);
+            },
+
+            // ---- situation ----------------------------------------------------
+            ctx() {
+                const s = Pod._self();
+                if (!s) return "clear";
+                const n = Pod._foes(s, 700).length;
+                return n === 0 ? "clear" : (n < 3 ? "light" : "heavy");
+            },
+            _res(s) {
+                try {
+                    const st = s.stats || {};
+                    return (st.wood || 0) + (st.food || 0) + (st.stone || 0) + (st.gold || 0);
+                } catch (e) { return 0; }
+            },
+            _snapshot() {
+                const s = Pod._self();
+                return {
+                    t: Date.now(),
+                    hp: s ? Math.round(Pod._hpRatio(s) * 100) : 0,
+                    kills: s ? Pod._kills(s) : 0,
+                    res: s ? this._res(s) : 0,
+                    age: (s && s.age) || 1,
+                    alive: !!(s && s.alive)
+                };
+            },
+
+            // ---- the learning loop --------------------------------------------
+            _table() {
+                const d = PodMemory.load();
+                if (!d.tactics) d.tactics = {};
+                return d.tactics;
+            },
+            _open(goal) {
+                this._close("switch");
+                this.goal = goal;
+                this.since = Date.now();
+                this._episode = { goal: goal, ctx: this.ctx(), start: this._snapshot() };
+            },
+            _close(reason) {
+                const ep = this._episode;
+                this._episode = null;
+                if (!ep) return;
+                const secs = (Date.now() - ep.start.t) / 1000;
+                if (secs < 4) return;                       // too short to mean anything
+                const end = this._snapshot();
+                // What actually happened, weighted by how much it matters.
+                const died = ep.start.alive && !end.alive;
+                let score = 0;
+                score += (end.kills - ep.start.kills) * 40;
+                score += (end.res - ep.start.res) / 25;
+                score += (end.hp - ep.start.hp) * 0.5;
+                score += (end.age - ep.start.age) * 20;
+                if (died) score -= 60;
+                score = score / Math.max(1, secs / 10);      // per ten seconds
+                const key = ep.goal + "@" + ep.ctx;
+                const t = this._table();
+                const row = t[key] || (t[key] = { n: 0, sum: 0, avg: 0 });
+                row.n++; row.sum += score;
+                row.avg = row.sum / row.n;
+                if (row.n > 400) { row.n = 200; row.sum = row.avg * 200; }
+                PodMemory.save();
+            },
+            // What the record says about a goal in this situation.
+            rating(goal, ctx) {
+                const row = this._table()[goal + "@" + ctx];
+                return row ? row.avg : null;
+            },
+            report() {
+                const t = this._table();
+                const keys = Object.keys(t).sort((a, b) => t[b].avg - t[a].avg);
+                if (!keys.length) return "";
+                return keys.slice(0, 8)
+                    .map(k => k + " " + t[k].avg.toFixed(1) + " (n=" + t[k].n + ")")
+                    .join(", ");
+            },
+
+            // ---- choosing a goal ----------------------------------------------
+            // Hard rules first — they are safety, not preference — then the
+            // learned scores decide among whatever is left, with a little
+            // exploration so a goal that started badly can still recover.
+            _eligible(s) {
+                const hp = Pod._hpRatio(s);
+                const foes = Pod._foes(s, 700);
+                const out = [];
+                if (hp < 0.55 && this._canHeal(s)) out.push("heal");
+                if (foes.length && hp < 0.5) out.push("flee");
+                if (foes.length >= 3) out.push("flee");
+                if (foes.length && hp > 0.55) out.push("fight");
+                if ((s.upgradePoints | 0) > 0) out.push("upgrade");
+                if (!foes.length) out.push("farm", "build", "explore");
+                if (!out.length) out.push("farm");
+                return out;
+            },
+            _choose(s) {
+                const list = this._eligible(s);
+                // A live model's call wins while it is fresh, if it is still legal.
+                if (this._aiNote && Date.now() < this._aiUntil && list.indexOf(this._aiNote) >= 0)
+                    return this._aiNote;
+                // Safety overrides are not up for debate.
+                if (list[0] === "heal" || list[0] === "flee") return list[0];
+                if (list.indexOf("upgrade") >= 0) return "upgrade";
+                const ctx = this.ctx();
+                if (Math.random() < 0.15) return list[(Math.random() * list.length) | 0];
+                let best = null, bestScore = -Infinity;
+                for (const g of list) {
+                    const r = this.rating(g, ctx);
+                    const v = (r === null) ? 0.5 : r;       // untried is mildly optimistic
+                    if (v > bestScore) { bestScore = v; best = g; }
+                }
+                return best || list[0];
+            },
+            _canHeal(s) {
+                try { return s.items && s.items[0] !== undefined && (s.stats && (s.stats.food || 0) > 0); }
+                catch (e) { return false; }
+            },
+
+            // ---- the slow loop: goals, buildings, upgrades, the director -------
+            think() {
+                if (!this.driving()) return;
+                const s = Pod._self();
+                if (!s) return;
+                const now = Date.now();
+
+                // Re-pick the goal, but do not thrash: a goal gets a few seconds
+                // to work unless a safety rule fires.
+                const forced = this._eligible(s)[0];
+                const urgent = (forced === "heal" || forced === "flee");
+                if (urgent || now - this.since > 6000) {
+                    const g = this._choose(s);
+                    if (g !== this.goal) this._open(g);
+                }
+
+                // Actions that are not movement happen here, once a tick of the
+                // pod's own clock rather than once a frame.
+                try {
+                    if (this.goal === "heal") this._doHeal(s);
+                    else if (this.goal === "upgrade") this._doUpgrade(s);
+                    else if (this.goal === "build") this._doBuild(s);
+                    else if (this.goal === "fight") this._doCombatItems(s);
+                } catch (e) {}
+
+                // The director, if a model is connected.
+                if (this._aiOnPilot() && now - this._lastDirect > this._directEvery()) {
+                    this._lastDirect = now;
+                    this.direct();
+                }
+            },
+            _directEvery() {
+                let n = 15;
+                try { n = Number(window.vars.podPilotThink) || 15; } catch (e) {}
+                return Math.max(6, Math.min(120, n)) * 1000;
+            },
+            _aiOnPilot() {
+                try { return !!(window.vars && window.vars.podPilotAI) && PodLink.ready(); } catch (e) { return false; }
+            },
+
+            // ---- the fast loop: steering, called from the game's own tick ------
+            // Sets the client's pathfinder destination rather than steering by
+            // hand, so spike avoidance and collision handling stay the code that
+            // was already tested.
+            steer() {
+                const s = Pod._self();
+                if (!s) return;
+                const foes = Pod._foes(s, 900);
+                const foe = foes[0];
+
+                if (this.goal === "flee" || this.goal === "heal") {
+                    const safe = PodWorld.safestDir();
+                    this._dest = safe ? { x: safe.x, y: safe.y } : null;
+                    pathMode = { avoidEnemySpikes: true, avoidEnemy: true };
+                    this._swing(false);
+                } else if (this.goal === "fight" && foe) {
+                    // Close to just outside reach and let the client's own combat
+                    // automation do the circling.
+                    const ang = Math.atan2(foe.p.y - s.y, foe.p.x - s.x);
+                    const want = 70;
+                    this._dest = {
+                        x: foe.p.x - Math.cos(ang) * want,
+                        y: foe.p.y - Math.sin(ang) * want
+                    };
+                    pathMode = { avoidEnemySpikes: true, avoidEnemy: false };
+                    this._swing(foe.d < 250);
+                } else if (this.goal === "farm") {
+                    const target = this._resourceTarget(s);
+                    this._dest = target;
+                    pathMode = { avoidEnemySpikes: true, avoidEnemy: true };
+                    // Gathering is the attack button held down next to a tree.
+                    this._swing(!!target && UTILS.getDistance(s.x, s.y, target.x, target.y) < 160);
+                } else if (this.goal === "explore" || this.goal === "build" || this.goal === "upgrade") {
+                    if (!this._dest || UTILS.getDistance(s.x, s.y, this._dest.x, this._dest.y) < 140)
+                        this._dest = this._wander(s);
+                    pathMode = { avoidEnemySpikes: true, avoidEnemy: true };
+                    this._swing(false);
+                }
+
+                if (this._dest) pathPosition = { x: this._dest.x, y: this._dest.y };
+            },
+            _stopMoving() {
+                this._dest = null;
+                try { pathPosition = null; } catch (e) {}
+            },
+            // Attack state is a packet, so it is only sent when it changes.
+            _swing(want) {
+                const v = want ? 1 : 0;
+                if (v === this._atk) return;
+                this._atk = v;
+                try {
+                    attackState = v;
+                    sendAtckState();
+                } catch (e) {}
+            },
+            _resourceTarget(s) {
+                const want = PodWorld.scarcest();
+                const c = PodWorld.cluster(want ? [want.t] : [0, 1, 2], 1600);
+                if (c) return { x: c.x, y: c.y };
+                // Nothing clustered nearby: walk to the nearest single resource.
+                try {
+                    let best = null, bd = Infinity;
+                    for (const o of (gameObjects || [])) {
+                        if (!o || !o.active || o.isItem) continue;
+                        if (o.type > 3) continue;
+                        const d = UTILS.getDistance(s.x, s.y, o.x, o.y);
+                        if (d < bd) { bd = d; best = o; }
+                    }
+                    if (best) return { x: best.x, y: best.y };
+                } catch (e) {}
+                return this._wander(s);
+            },
+            _wander(s) {
+                let m = 14400;
+                try { m = config.mapScale; } catch (e) {}
+                const safe = PodWorld.safestDir();
+                const ang = safe ? safe.ang : Math.random() * Math.PI * 2;
+                return {
+                    x: Math.max(400, Math.min(m - 400, s.x + Math.cos(ang) * 1400)),
+                    y: Math.max(400, Math.min(m - 400, s.y + Math.sin(ang) * 1400))
+                };
+            },
+
+            // ---- non-movement actions -----------------------------------------
+            _doHeal(s) {
+                if (!this._canHeal(s)) return;
+                const missing = (s.maxHealth || 100) - (s.health || 0);
+                if (missing < 15) return;
+                try { heal(Math.min(missing, 100)); } catch (e) {}
+            },
+            _doUpgrade(s) {
+                if (!((s.upgradePoints | 0) > 0)) return;
+                const pick = this._upgradeFor(s.upgrAge || s.age || 1, s);
+                if (pick < 0) return;
+                try { sendUpgrade(pick); } catch (e) {}
+            },
+            // The same age path the bots follow, so one set of preferences drives
+            // both rather than two that can disagree.
+            _upgradeFor(age, s) {
+                try {
+                    const V = window.vars;
+                    const WL = items.weapons.length;
+                    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v | 0));
+                    switch (age) {
+                    case 2: return clamp(V.botPrimary, 0, 15);
+                    case 3: return WL + BOT_ITEM.COOKIE;
+                    case 4: return WL + (V.botAgeBoost && !V.botAgeTrap ? BOT_ITEM.BOOST : BOT_ITEM.TRAP);
+                    case 5: return WL + BOT_ITEM.GREATER_SPIKES;
+                    case 6: return clamp(V.botSecondary, 0, 15);
+                    case 7: return WL + BOT_ITEM.PLATFORM;
+                    case 8: {
+                        const hasBow = s.weapons && s.weapons[1] === 9;
+                        const wantBow = V.botAge8 === "bow" || (V.botAge8 !== "mill" && hasBow);
+                        return (wantBow && hasBow) ? 12 : WL + BOT_ITEM.POWER_MILL;
+                    }
+                    case 9: return WL + BOT_ITEM.SPINNING_SPIKES;
+                    }
+                } catch (e) {}
+                return -1;
+            },
+            _doBuild(s) {
+                // A windmill is the best return on wood in the game, and it only
+                // pays while it is standing — so build when nothing is chasing you.
+                if (Date.now() - (this._lastBuild || 0) < 3000) return;
+                try {
+                    if ((s.stats && (s.stats.wood || 0)) < 100) return;
+                    const mill = s.items && s.items[3];
+                    if (mill === undefined) return;
+                    this._lastBuild = Date.now();
+                    place(mill, Math.random() * Math.PI * 2);
+                } catch (e) {}
+            },
+            _doCombatItems(s) {
+                if (Date.now() - (this._lastSpike || 0) < 1800) return;
+                try {
+                    const foe = Pod._nearestFoe(s);
+                    if (!foe || foe.d > 260) return;
+                    const spike = s.items && s.items[2];
+                    if (spike === undefined) return;
+                    this._lastSpike = Date.now();
+                    place(spike, Math.atan2(foe.p.y - s.y, foe.p.x - s.x));
+                } catch (e) {}
+            },
+
+            // ---- the director --------------------------------------------------
+            // One short request every few seconds, answered with a tool call. The
+            // pilot never waits on it: whatever the model says arrives as a hint
+            // for the next few seconds, and the local policy runs regardless.
+            async direct() {
+                if (this._busy) return;
+                this._busy = true;
+                try {
+                    const s = Pod._self();
+                    if (!s) return;
+                    const brief = [
+                        "[PILOT] autopilot is driving. current goal: " + this.goal +
+                            ", situation: " + this.ctx() + ", running " + Math.round((Date.now() - this.since) / 1000) + "s",
+                        "[FIELD]", Pod._field(),
+                        "[WHAT HAS WORKED] " + (this.report() || "no record yet"),
+                        "[TASK] Choose the goal for the next few seconds and call set_plan. " +
+                            "Goals: " + POD_GOALS.join(", ") + ". Reply with at most one short sentence."
+                    ].join("\n");
+                    const res = await PodLink.send(podSystemPrompt(), [{ role: "user", content: brief }], null);
+                    if (res.calls && res.calls.length) {
+                        for (const c of res.calls) {
+                            const out = Pod._tool(c.name, c.input);
+                            if (c.name === "set_plan") Pod.say(String(out), { callout: true });
+                        }
+                    } else if (res.text) {
+                        Pod.say(res.text, { callout: true });
+                    }
+                } catch (e) {
+                    // A director failure is not a reason to stop playing.
+                    try { Pod.system(Pod._L("Director offline — flying on local policy. ",
+                                            "الموجّه غير متصل — أكمل بالسياسة المحلية. ") +
+                                     String(e && e.message).slice(0, 120)); } catch (x) {}
+                } finally { this._busy = false; }
+            },
+
+            // What the director sets.
+            setPlan(goal, note) {
+                const g = String(goal || "").toLowerCase().trim();
+                if (POD_GOALS.indexOf(g) < 0) return "unknown goal: " + g;
+                this._aiNote = g;
+                this._aiUntil = Date.now() + this._directEvery() + 4000;
+                if (this.driving() && g !== this.goal) this._open(g);
+                return "plan set: " + g + (note ? " — " + note : "");
+            },
+            status() {
+                if (!this.on) return "autopilot off";
+                return "autopilot " + (this.paused() ? "paused (you have the controls)" : "flying") +
+                       ", goal " + this.goal + ", situation " + this.ctx() +
+                       (this.report() ? ", record: " + this.report() : "");
+            }
+        };
+
+        // =====================================================================
         // POD AI  —  the conversational layer
         // =====================================================================
         // With Pod AI on and a provider configured, what you type or say is
@@ -12661,6 +13245,41 @@ let pps = 0;
                 }
             },
             {
+                name: "set_plan",
+                description: "Set the autopilot's goal for the next few seconds. Only meaningful while the pod pilot is driving. Choose from what the situation and the operator's recorded results support.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        goal: {
+                            type: "string",
+                            description: "One of: farm, fight, flee, build, heal, upgrade, explore."
+                        },
+                        why: { type: "string", description: "One short clause explaining the call." }
+                    },
+                    required: ["goal"]
+                }
+            },
+            {
+                name: "pilot",
+                description: "Turn the autopilot on or off, or report what it is doing. Use when the operator asks you to play for them, to stop playing, or how it is going.",
+                input_schema: {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", description: "One of: on, off, status." }
+                    },
+                    required: ["action"]
+                }
+            },
+            {
+                name: "say_in_game_chat",
+                description: "Send a short line to the game's public chat, where every player on the server can read it. Capped at 30 characters and rate limited. Only use when the operator has explicitly asked you to say something in chat.",
+                input_schema: {
+                    type: "object",
+                    properties: { text: { type: "string", description: "What to say. Keep it under 30 characters." } },
+                    required: ["text"]
+                }
+            },
+            {
                 name: "recon",
                 description: "Send the pod itself out on a reconnaissance flight. It detaches, flies to a bearing or to a named player's last known position, sweeps, and reports what the black box knows about that area. Use when the operator asks the pod to go look at something.",
                 input_schema: {
@@ -12696,6 +13315,8 @@ let pps = 0;
                 "Never repeat a sentence you have already used in this conversation. If the situation has not changed, say something new about it or say nothing of substance.",
                 "You have persistent memory. When the operator tells you something worth keeping — their name, their build, a standing order — call the remember tool. Do not announce that you are doing so; just fold it into your reply.",
                 "You can only see what the client can see. If someone is out of sensor range, say that their record is from the archive and how old it is. Do not pretend to see the whole server.",
+                "You can be reached from the game's own chat box as well as your panel. When a message came from there, keep the reply under 30 characters if you can — that is all the game will carry.",
+                "You may be asked to play the game yourself. The pilot tool turns the autopilot on and off; while it is driving, set_plan chooses its goal for the next few seconds. Judge that call on the operator's recorded results, which arrive in the briefing — prefer what has worked for them over what sounds good.",
                 "Do not include internal or system XML tags in your response.",
                 mem ? "\n[OPERATOR RECORDS]\n" + mem : ""
             ].filter(Boolean).join(" ").replace(/ \n/g, "\n");
@@ -13107,6 +13728,10 @@ let pps = 0;
                 this._bubble = text.length > 120 ? text.slice(0, 117) + "…" : text;
                 this._bubbleUntil = Date.now() + (opts.callout ? 4200 : 6000);
                 if (opts.speak !== false) PodVoice.say(text, { callout: !!opts.callout });
+                // If you asked from the game's chat box and the unit is allowed to
+                // answer there, the reply goes back the way it came. Battlefield
+                // call-outs never do — that would be public spam.
+                if (this._replyToChat && !opts.callout) { try { PodChat.say(text); } catch (e) {} }
                 return line;
             },
             youSaid(text) { return this._push("you", String(text), { instant: true }); },
@@ -13383,6 +14008,15 @@ let pps = 0;
                     const known = Object.keys(PodWorld.contacts).length;
                     if (known) lines.push("contacts archived this session: " + known);
                 } catch (e) {}
+                try {
+                    if (PodPilot.on) lines.push("autopilot: " + PodPilot.status());
+                    const rec = PodPilot.report();
+                    if (rec) lines.push("what has worked for this operator: " + rec);
+                } catch (e) {}
+                try {
+                    const chat = PodChat.brief(6);
+                    if (chat) lines.push("recent game chat:\n" + chat);
+                } catch (e) {}
                 return lines.join("\n");
             },
 
@@ -13464,6 +14098,20 @@ let pps = 0;
                     if (name === "recon") {
                         const r = this.startRecon(input.bearing, input.target, input.distance);
                         return r;
+                    }
+                    if (name === "set_plan") return PodPilot.setPlan(input.goal, input.why);
+                    if (name === "pilot") {
+                        const a = String(input.action || "status").toLowerCase();
+                        if (a === "on")  { PodPilot.enable(true);  return PodPilot.status(); }
+                        if (a === "off") { PodPilot.enable(false); return PodPilot.status(); }
+                        return PodPilot.status();
+                    }
+                    if (name === "say_in_game_chat") {
+                        if (!(window.vars && window.vars.podChatOut))
+                            return "refused: the operator has not enabled game-chat output (Settings > Pod Chat).";
+                        return PodChat.say(input.text)
+                            ? "sent to game chat: " + String(input.text).slice(0, 30)
+                            : "not sent — rate limited or empty.";
                     }
                 } catch (e) { return "tool error: " + (e && e.message ? e.message : "unknown"); }
                 return "unknown tool.";
@@ -13663,7 +14311,8 @@ let pps = 0;
                 opts = opts || {};
                 text = String(text || "").trim();
                 if (!text) return;
-                this.youSaid(text);
+                this._replyToChat = !!opts.fromGameChat;
+                if (!opts.unsolicited) this.youSaid(text);
                 PodMemory.note("chat");
                 if (this._command(text)) return;
                 if (this._aiOn()) { this._askAI(text); return; }
@@ -13749,6 +14398,32 @@ let pps = 0;
                     return true;
                 }
                 if (cmd === "mark") { PodMark.clear(); this.say(PT("ack")); return true; }
+                if (cmd === "pilot" || cmd === "play" || cmd === "العب") {
+                    if (/^(off|stop|0|قف|ايقاف|إيقاف)$/i.test(arg)) PodPilot.enable(false);
+                    else if (/^(on|start|1|شغل|شغّل)$/i.test(arg)) PodPilot.enable(true);
+                    else if (/^(status|حالة)$/i.test(arg)) this.say(PodPilot.status(), { speak: false });
+                    else PodPilot.enable();
+                    this._paint();
+                    return true;
+                }
+                if (cmd === "learned" || cmd === "record" || cmd === "تعلم") {
+                    const r = PodPilot.report();
+                    this.say(r ? this._L("Record: ", "السجل: ") + r
+                               : this._L("No results recorded yet.", "ما فيه نتائج مسجلة بعد."), { speak: false });
+                    return true;
+                }
+                if (cmd === "chat") {
+                    // Speak one line publicly, on demand.
+                    if (!arg) { this.say(this._L("Give me something to say.", "أعطني شي أقوله.")); return true; }
+                    if (!(window.vars && window.vars.podChatOut)) {
+                        this.say(this._L("Game-chat output is off. Settings › Visuals › Pod Chat.",
+                                         "إخراج الشات مغلق. الإعدادات › Visuals › Pod Chat."));
+                        return true;
+                    }
+                    this.say(PodChat.say(arg) ? PT("ack")
+                        : this._L("Rate limited — wait a moment.", "انتظر لحظة — فيه حد للإرسال."), { speak: false });
+                    return true;
+                }
                 if (cmd === "help") { this.say(PT("helpLine"), { speak: false }); return true; }
                 return false;
             },
@@ -13760,7 +14435,17 @@ let pps = 0;
             _ruleReply(text) {
                 const q = text.toLowerCase();
                 const s = this._self();
-                const has = (arr) => arr.some(w => q.indexOf(w) >= 0);
+                // Latin keywords match whole words only. A plain substring test
+                // makes short triggers dangerous — "top" fires inside "stop", so
+                // "stop playing" asked for the leaderboard. Arabic keeps the
+                // substring test: its clitics attach to the word.
+                const has = (arr) => arr.some(w => {
+                    w = String(w).trim().toLowerCase();
+                    if (!w) return false;
+                    if (!/^[\x00-\x7F]+$/.test(w)) return q.indexOf(w) >= 0;
+                    const esc = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                    return new RegExp("(^|[^a-z0-9])" + esc + "([^a-z0-9]|$)").test(q);
+                });
                 const speakLine = (topic, vars) => {
                     const t = this.line_text(topic, vars);
                     return this.say(t);
@@ -13791,6 +14476,19 @@ let pps = 0;
                     if (!r.length) return this.say(this._L("Leaderboard is not visible.", "لوحة الصدارة غير ظاهرة."));
                     return this.say(this._L("Server board: ", "لوحة السيرفر: ") +
                         r.map(x => x.rank + ". " + x.name + " (" + x.score + ")").join(" · "), { speak: false });
+                }
+                // "play for me" / "العب بدالي" — the autopilot, in words.
+                if (has(["play for me", "playing for me", "play for", "take over", "autopilot",
+                         "you play", "pilot", "العب بدالي", "العب عني", "تلعب بدالي", "تحكم", "شغل الطيار"])) {
+                    if (has(["stop", "off", "قف", "وقف", "ايقاف", "إيقاف"])) PodPilot.enable(false);
+                    else PodPilot.enable(true);
+                    this._paint();
+                    return;
+                }
+                if (has(["what have you learned", "learned", "record", "وش تعلمت", "تعلمت"])) {
+                    const r = PodPilot.report();
+                    return this.say(r ? this._L("Record: ", "السجل: ") + r
+                                      : this._L("No results recorded yet.", "ما فيه نتائج مسجلة بعد."), { speak: false });
                 }
                 if (has(["remember", "احفظ", "تذكر"])) {
                     const body = text.replace(/^.*?(remember|احفظ|تذكر)\s*/i, "").trim();
@@ -14153,9 +14851,14 @@ let pps = 0;
             window.PodRecon = PodRecon;
             window.PodMark = PodMark;
             window.PodLines = PodLines;
+            window.PodChat = PodChat;
+            window.PodPilot = PodPilot;
         } catch (e) {}
         // The brain runs on its own clock, independent of frame rate.
         try { setInterval(function () { try { Pod.tick(); } catch (e) {} }, 700); } catch (e) {}
+        // The autopilot's slow loop — goals, buildings, upgrades, the director.
+        // Steering happens in the game's own tick; this is the part that thinks.
+        try { setInterval(function () { try { PodPilot.think(); } catch (e) {} }, 700); } catch (e) {}
         // Keep the chrome honest about speech state even when nothing else moves.
         try { setInterval(function () { try { if (Pod.isOpen()) Pod._paint(); } catch (e) {} }, 500); } catch (e) {}
 
@@ -14586,10 +15289,28 @@ let pps = 0;
                     else if (keyStr === window.vars.keyPodChat) {
                         try { Pod.toggle(); } catch (e) {}
                     }
+                    else if (keyStr === window.vars.keyPodPilot) {
+                        try { PodPilot.enable(); } catch (e) {}
+                    }
                 }
             }
         }
         window.addEventListener('keydown', UTILS.checkTrusted(keyDown));
+
+        // Taking the controls back. Any movement key or mouse button you press
+        // pauses the autopilot for a couple of seconds — you never have to find a
+        // menu to override it, and it resumes on its own once you stop.
+        (function podPilotOverride() {
+            const wake = () => { try { PodPilot.nudge(); } catch (e) {} };
+            const moveish = { KeyW: 1, KeyA: 1, KeyS: 1, KeyD: 1, ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1 };
+            window.addEventListener("keydown", (e) => {
+                if (!e || !moveish[e.code]) return;
+                const a = document.activeElement, tag = a && (a.tagName || "").toUpperCase();
+                if (tag === "INPUT" || tag === "TEXTAREA" || (a && a.isContentEditable)) return;
+                wake();
+            }, true);
+            window.addEventListener("mousedown", wake, true);
+        })();
 
         // Push-to-talk for the pod, kept out of the game's key state machine so it
         // works while you are dead, in a menu, or driving a bot. Hold the key, say
@@ -21515,6 +22236,11 @@ for (let tree of trees) {
                     predictMoveAngle = autoPushAngle;
                 }
 
+                // POD PILOT — the autopilot's destination, set last so it wins
+                // over the other automation while it is the one driving, and
+                // fed to the same pathfinder everything else uses.
+                try { if (PodPilot.driving()) PodPilot.steer(); } catch (e) {}
+
                 // PATHFINDER
                 path = null;
                 if (pathPosition && !shouldntPathfind) {
@@ -27326,6 +28052,7 @@ for (let tree of trees) {
         keyPacketSpam: "B",
         keyPodChat: "Y",
         keyPodTalk: "C",         // hold to talk to the pod through the microphone
+        keyPodPilot: "K",        // hand the game over to the pod, or take it back
 
 
         // Combat
@@ -27434,6 +28161,18 @@ for (let tree of trees) {
         podVoicePitch: 85,       // 0 .. 200   (% — under 100 reads as a machine)
         podVoiceVolume: 100,     // 0 .. 100
         podMic: true,            // allow push-to-talk speech input
+
+        // Pod — the game's own chat box
+        podChatIn: true,         // ".text" in game chat reaches the pod
+        podChatPrefix: ".",      // what marks a line as the pod's
+        podChatAll: false,       // route EVERY line you type to the pod instead
+        podChatListen: true,     // the pod reads what other players say
+        podChatOut: false,       // the pod may answer in PUBLIC game chat
+        podChatReply: false,     // …and may answer unprompted when named
+
+        // Pod — the autopilot
+        podPilotAI: true,        // let the model direct the autopilot's goals
+        podPilotThink: 15,       // 6 .. 120 seconds between director calls
 
         // Settings
         theme: "",
@@ -27776,6 +28515,27 @@ for (let tree of trees) {
                     { type: 'keybind', name: "Open Pod Chat", id: "keyPodChat" },
                     { type: 'keybind', name: "Push-To-Talk (hold)", id: "keyPodTalk" },
                     { type: 'button', name: "Stored Memory", label: "WIPE MEMORY", action: "podWipeMemory" }
+                ]
+            },
+            {
+                title: "Pod Chat (game chat box)",
+                items: [
+                    { type: 'toggle', name: "Reach the pod from game chat", id: "podChatIn" },
+                    { type: 'input', name: "Prefix (default \".\")", id: "podChatPrefix" },
+                    { type: 'toggle', name: "Route ALL my chat to the pod", id: "podChatAll" },
+                    { type: 'toggle', name: "Pod reads other players' chat", id: "podChatListen" },
+                    { type: 'toggle', name: "Pod may reply in PUBLIC chat", id: "podChatOut" },
+                    { type: 'toggle', name: "…and reply when someone names you", id: "podChatReply" }
+                ]
+            },
+            {
+                title: "Pod Pilot (it plays for you)",
+                items: [
+                    { type: 'keybind', name: "Toggle autopilot", id: "keyPodPilot" },
+                    { type: 'toggle', name: "AI directs the goals", id: "podPilotAI" },
+                    { type: 'slider', name: "Seconds between AI calls", id: "podPilotThink", min: 6, max: 120 },
+                    { type: 'button', name: "What it learned", label: "SHOW RECORD", action: "podPilotRecord" },
+                    { type: 'button', name: "Learned results", label: "RESET LEARNING", action: "podPilotForget" }
                 ]
             },
             {
@@ -29054,6 +29814,17 @@ for (let tree of trees) {
                                 flash('WIPED');
                             } else if (item.action === 'podResetChat') {
                                 window.PodMemory.clearHistory();
+                                flash('RESET');
+                            } else if (item.action === 'podPilotRecord') {
+                                const r = window.PodPilot.report();
+                                window.Pod.buildPanel();
+                                window.Pod.toggle(true);
+                                window.Pod.system(r ? "Pilot record — " + r : "No results recorded yet.");
+                                flash('SHOWN');
+                            } else if (item.action === 'podPilotForget') {
+                                const d = window.PodMemory.load();
+                                d.tactics = {};
+                                window.PodMemory.save();
                                 flash('RESET');
                             } else if (item.action === 'podTestLink') {
                                 // A real round trip: the provider's own error text

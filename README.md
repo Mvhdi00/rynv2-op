@@ -10,8 +10,9 @@ Build output: **`ReUp_Mix.user.js`**
 > carries the NieR:Automata-styled Pod support unit — a bilingual
 > (Arabic / English) companion with speech in and out, persistent memory, a
 > tactical layer that tells you where to go, a contact archive it can search by
-> name, reconnaissance flights, and an optional AI link with three free provider
-> options. See **[POD.md](POD.md)**.
+> name, reconnaissance flights, a bridge to the game's own chat box, an
+> autopilot that plays for you and keeps score of what worked, and an optional
+> AI link with three free provider options. See **[POD.md](POD.md)**.
 
 ---
 
