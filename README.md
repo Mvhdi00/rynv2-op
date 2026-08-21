@@ -182,6 +182,18 @@ understood.
 
 # Novastorm 1.5 — bot system
 
+## Menu skin — YoRHa
+
+The whole mod menu (all nine tabs, sidebar, cards, toggles, sliders, keybind
+buttons, the bot console and the server log) is skinned to NieR:Automata's
+YoRHa pause-menu: an aged-parchment field, ink-brown rules, sharp square
+corners, filled title bars, and the signature invert-on-select — the
+highlighted nav row and any hovered button flip to solid ink with parchment
+text. It is a pure CSS reskin: every class name the renderer emits is
+unchanged, so no behaviour, wiring or test is touched. The five theme swatches
+still work, re-tinted as YoRHa's console washes (default beige, plus red and
+three cooler variants).
+
 Build output: **`novastorm_1.5.user.js`** (Novastorm 1.4 with the bots rewritten).
 
 The 1.4 bots connected, entered the game and did nothing else. In 1.5 every bot

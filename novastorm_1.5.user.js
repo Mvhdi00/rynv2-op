@@ -24210,60 +24210,77 @@ for (let tree of trees) {
     // =========================================================================
 
     const styles = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&display=swap');
 
+    /* =====================================================================
+       YoRHa  —  NieR:Automata pause-menu skin
+       Aged parchment, ink-brown rules, sharp corners, and the signature
+       invert-on-select: the highlighted thing flips to solid ink.
+       ===================================================================== */
     :root {
-        --bg-root: #040904;
-        --bg-panel: rgba(5, 15, 5, 0.85);
-        --bg-card: rgba(10, 25, 10, 0.6);
-        --bg-card-hover: rgba(20, 40, 20, 0.8);
-        --bg-input: rgba(0, 0, 0, 0.7);
+        --paper:        #c7c3b1;   /* the beige field everything sits on */
+        --paper-2:      #bfbaa6;   /* panels, one shade down */
+        --paper-3:      #b4af9a;   /* insets, sliders, the console field */
+        --ink:          #454138;   /* the near-black brown of every line and glyph */
+        --ink-soft:     #565248;
+        --ink-faint:    #6f6b5e;   /* dimmed labels */
+        --ink-ghost:    rgba(69, 65, 56, 0.28);
 
-        --text-main: #ffffff;
-        --text-dim: #75c485;
-        --text-dimmer: #3a7546;
+        --accent:       #454138;   /* monochrome by design; on-states fill with ink */
+        --accent-bright:#454138;
+        --accent-dim:   rgba(69, 65, 56, 0.12);
+        --accent-glow:  rgba(69, 65, 56, 0.35);
 
-        --accent: #00ff41;
-        --accent-bright: #4dff79;
-        --accent-dim: rgba(0, 255, 65, 0.15);
-        --accent-glow: rgba(0, 255, 65, 0.6);
+        --border:       #6f6b5e;
+        --border-active:#454138;
 
-        --border: rgba(0, 255, 65, 0.15);
-        --border-active: rgba(0, 255, 65, 0.8);
+        --shadow-sm: 0 2px 0 rgba(69,65,56,0.25);
+        --shadow-lg: 0 0 0 2px var(--ink), 6px 6px 0 rgba(69,65,56,0.35);
 
-        --shadow-sm: 0 4px 12px rgba(0, 255, 65, 0.1);
-        --shadow-lg: 0 0 30px rgba(0, 255, 65, 0.3);
+        --switch-off: #a6a08c;
+        --knob: #454138;
 
-        --switch-off: #0b1a0b;
-        --knob: #00ff41;
+        --text-main:  var(--ink);
+        --text-dim:   var(--ink-faint);
+        --text-dimmer:var(--ink-ghost);
+        --bg-input:   var(--paper-3);
+        --bg-card:    var(--paper-2);
+        --bg-card-hover: var(--paper-2);
     }
 
-    /* THEME OVERRIDES */
-    .t-nvg { --accent: #10b981; --accent-bright: #34d399; --accent-dim: rgba(16, 185, 129, 0.15); --accent-glow: rgba(16, 185, 129, 0.5); --border-active: rgba(16, 185, 129, 0.6); }
-    .t-ice { --accent: #0ea5e9; --accent-bright: #38bdf8; --accent-dim: rgba(14, 165, 233, 0.15); --accent-glow: rgba(14, 165, 233, 0.5); --border-active: rgba(14, 165, 233, 0.6); }
-    .t-red { --accent: #ef4444; --accent-bright: #f87171; --accent-dim: rgba(239, 68, 68, 0.15); --accent-glow: rgba(239, 68, 68, 0.5); --border-active: rgba(239, 68, 68, 0.6); }
-    .t-void { --accent: #d946ef; --accent-bright: #e879f9; --accent-dim: rgba(217, 70, 239, 0.15); --accent-glow: rgba(217, 70, 239, 0.5); --border-active: rgba(217, 70, 239, 0.6); }
+    /* THEME OVERRIDES — kept working, but reframed as YoRHa's real console tints:
+       the default beige, plus the game's alert-red and its rarer washes. */
+    .t-nvg  { --paper:#b9bcac; --paper-2:#b0b3a3; --paper-3:#a6a998; --ink:#3f453b; --border:#666c5f; --border-active:#3f453b; --switch-off:#9ba08c; --knob:#3f453b; }
+    .t-ice  { --paper:#b4bdc0; --paper-2:#abb4b7; --paper-3:#a1abae; --ink:#39434a; --border:#5f6a70; --border-active:#39434a; --switch-off:#95a1a6; --knob:#39434a; }
+    .t-red  { --paper:#c9b7ac; --paper-2:#c1aea2; --paper-3:#b6a396; --ink:#6b2b24; --border:#9a5148; --border-active:#6b2b24; --switch-off:#c0968c; --knob:#6b2b24; --accent:#8a352c; --accent-bright:#8a352c; }
+    .t-void { --paper:#bfb6c0; --paper-2:#b6adb7; --paper-3:#aaa1ac; --ink:#463b4a; --border:#6b5f70; --border-active:#463b4a; --switch-off:#a294a6; --knob:#463b4a; }
 
     /* CORE RESET */
-    .deltek-root * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; outline: none; }
+    .deltek-root * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Jost', 'Century Gothic', sans-serif; outline: none; }
 
     /* MAIN CONTAINER */
     .deltek-root {
         position: fixed; top: 50%; left: 50%;
-        transform: translate(-50%, -50%) scale(0.95);
+        transform: translate(-50%, -50%) scale(0.97);
         width: 900px; height: 620px;
-        background: var(--bg-root);
-        background-image: radial-gradient(circle at 0% 0%, var(--accent-dim) 0%, transparent 40%), radial-gradient(circle at 100% 100%, var(--accent-dim) 0%, transparent 40%);
-        border: 1px solid var(--border);
-        border-radius: 20px;
-        box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.05) inset;
-        color: var(--text-main);
-        display: grid; grid-template-columns: 240px 1fr;
+        background: var(--paper);
+        border: 2px solid var(--ink);
+        border-radius: 0;
+        box-shadow: var(--shadow-lg);
+        color: var(--ink);
+        display: grid; grid-template-columns: 248px 1fr;
         grid-template-rows: minmax(0, 1fr);
         opacity: 0; pointer-events: none;
         z-index: 999999; overflow: hidden;
-        backdrop-filter: blur(24px);
-        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+    }
+    /* faint horizontal scanlines + a paper tint, the whole way across */
+    .deltek-root::before {
+        content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+        background:
+            repeating-linear-gradient(0deg, rgba(69,65,56,0.05) 0px, rgba(69,65,56,0.05) 1px, transparent 1px, transparent 4px),
+            radial-gradient(circle at 50% 0%, rgba(255,255,255,0.10), transparent 60%);
+        mix-blend-mode: multiply;
     }
 
     .deltek-root.active {
@@ -24273,274 +24290,283 @@ for (let tree of trees) {
 
     /* SIDEBAR */
     .deltek-sidebar {
-        background: var(--bg-panel);
-        border-right: 1px solid var(--border);
+        background: var(--paper-2);
+        border-right: 2px solid var(--ink);
         display: flex; flex-direction: column;
-        padding: 24px 16px;
-        backdrop-filter: blur(10px);
+        padding: 22px 14px;
     }
 
     .deltek-logo {
-        padding-bottom: 20px;
-        margin-bottom: 12px;
-        border-bottom: 1px solid var(--border);
-        text-align: center;
+        padding-bottom: 16px;
+        margin-bottom: 14px;
+        border-bottom: 2px solid var(--ink);
+        text-align: left;
+        position: relative;
+    }
+    /* the little filled square that heads every YoRHa title */
+    .deltek-logo::before {
+        content: ''; display: inline-block;
+        width: 15px; height: 15px; margin-right: 9px;
+        background: var(--ink); vertical-align: -2px;
     }
 
     .deltek-logo h1 {
-        font-size: 32px; font-weight: 900;
-        background: linear-gradient(135deg, #fff 30%, var(--accent-bright));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        letter-spacing: -1px;
-        filter: drop-shadow(0 0 15px var(--accent-dim));
+        display: inline-block;
+        font-size: 26px; font-weight: 500;
+        color: var(--ink);
+        letter-spacing: 3px; text-transform: uppercase;
+        -webkit-text-fill-color: currentColor;
     }
 
     .deltek-logo span {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 10px; color: var(--text-dim);
-        letter-spacing: 4px; text-transform: uppercase;
-        display: block; margin-top: -4px;
+        font-size: 10px; color: var(--ink-faint);
+        letter-spacing: 5px; text-transform: uppercase;
+        display: block; margin-top: 4px; margin-left: 24px;
     }
 
     /* NAVIGATION */
-    .nav-container { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+    .nav-container { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
     .nav-container::-webkit-scrollbar { width: 0; }
 
     .nav-item {
-        padding: 12px 16px;
-        border-radius: 12px;
+        padding: 11px 14px;
+        border-radius: 0;
         cursor: pointer;
-        color: var(--text-dim);
-        font-size: 13px; font-weight: 600;
+        color: var(--ink-soft);
+        font-size: 13px; font-weight: 400;
+        letter-spacing: 1.5px; text-transform: uppercase;
         display: flex; align-items: center; gap: 12px;
-        transition: all 0.2s ease;
-        border: 1px solid transparent;
+        transition: background 0.12s ease, color 0.12s ease, padding-left 0.12s ease;
+        border: none; position: relative;
+    }
+    /* the selection marker: a filled block that grows on the left */
+    .nav-item::before {
+        content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+        width: 0; background: var(--ink); transition: width 0.12s ease;
     }
 
-    .nav-item svg { width: 18px; height: 18px; fill: currentColor; opacity: 0.7; transition: transform 0.2s; }
+    .nav-item svg { width: 17px; height: 17px; fill: currentColor; opacity: 0.85; transition: none; z-index: 1; }
 
     .nav-item:hover {
-        background: rgba(255, 255, 255, 0.03);
-        color: var(--text-main);
-        transform: translateX(2px);
+        background: rgba(69,65,56,0.10);
+        color: var(--ink);
+        padding-left: 20px;
     }
 
+    /* selected row: the whole strip inverts to solid ink */
     .nav-item.active {
-        background: var(--accent-dim);
-        color: var(--accent-bright);
-        border-color: rgba(255,255,255,0.05);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        background: var(--ink);
+        color: var(--paper);
+        padding-left: 20px;
     }
-
-    .nav-item.active svg { transform: scale(1.1); opacity: 1; fill: var(--accent-bright); }
+    .nav-item.active::before { width: 6px; background: var(--paper); }
+    .nav-item.active svg { opacity: 1; fill: var(--paper); }
 
     /* MAIN CONTENT AREA */
     .deltek-main { display: flex; flex-direction: column; height: 100%; min-height: 0; position: relative; overflow: hidden; }
 
     /* HEADER */
     .deltek-header {
-        height: 72px; padding: 0 32px;
+        height: 68px; padding: 0 28px;
         display: flex; align-items: center; justify-content: space-between;
-        border-bottom: 1px solid var(--border);
-        background: rgba(255,255,255,0.01);
+        border-bottom: 2px solid var(--ink);
+        background: transparent;
     }
 
     .header-title {
-        font-size: 18px; font-weight: 800;
-        color: var(--text-main);
-        letter-spacing: 0.5px;
-        text-shadow: 0 0 20px var(--accent-dim);
+        font-size: 16px; font-weight: 500;
+        color: var(--ink);
+        letter-spacing: 4px; text-transform: uppercase;
+        position: relative; padding-left: 20px;
+    }
+    .header-title::before {
+        content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+        width: 11px; height: 11px; background: var(--ink);
     }
 
     .search-input {
-        background: var(--bg-input);
-        border: 1px solid var(--border);
-        color: var(--text-main);
-        padding: 10px 16px 10px 40px;
-        width: 200px; border-radius: 50px;
-        font-size: 12px; font-weight: 500;
-        transition: all 0.3s ease;
+        background: var(--paper-3);
+        border: 2px solid var(--ink);
+        color: var(--ink);
+        padding: 9px 14px 9px 36px;
+        width: 210px; border-radius: 0;
+        font-size: 12px; font-weight: 400; letter-spacing: 1px;
+        transition: width 0.2s ease;
     }
-
+    .search-input::placeholder { color: var(--ink-faint); }
     .search-input:focus {
-        width: 260px;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px var(--accent-dim);
+        width: 250px;
+        background: var(--paper);
+        box-shadow: 3px 3px 0 rgba(69,65,56,0.3);
     }
 
     .search-wrap { position: relative; }
     .search-wrap::before {
-        content: '🔍'; position: absolute; left: 14px; top: 50%;
-        transform: translateY(-50%); font-size: 12px; opacity: 0.5; filter: grayscale(1);
+        content: '⌕'; position: absolute; left: 12px; top: 50%;
+        transform: translateY(-50%); font-size: 16px; color: var(--ink); opacity: 0.7;
     }
 
-    /* GRID LAYOUT FOR CARDS (Replaces Float System) */
+    /* GRID LAYOUT FOR CARDS */
     .deltek-content {
-        padding: 24px;
+        padding: 22px;
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         grid-auto-rows: min-content;
-        gap: 20px;
+        gap: 18px;
         align-content: start;
     }
 
-    /* SCROLLBAR CUSTOMIZATION */
-    .deltek-content::-webkit-scrollbar { width: 6px; }
-    .deltek-content::-webkit-scrollbar-track { background: transparent; }
-    .deltek-content::-webkit-scrollbar-thumb {
-        background: #333;
-        border-radius: 10px;
-    }
-    .deltek-content::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+    /* SCROLLBAR */
+    .deltek-content::-webkit-scrollbar { width: 10px; }
+    .deltek-content::-webkit-scrollbar-track { background: var(--paper-2); border-left: 2px solid var(--ink); }
+    .deltek-content::-webkit-scrollbar-thumb { background: var(--ink); border-radius: 0; }
+    .deltek-content::-webkit-scrollbar-thumb:hover { background: var(--ink-soft); }
 
     /* CARDS */
     .deltek-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 16px;
+        background: var(--paper-2);
+        border: 2px solid var(--ink);
+        border-radius: 0;
         overflow: hidden;
         height: fit-content;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition: box-shadow 0.15s, transform 0.15s;
         display: flex; flex-direction: column;
     }
-
     .deltek-card:hover {
-        border-color: rgba(255,255,255,0.15);
         transform: translateY(-2px);
-        box-shadow: var(--shadow-sm);
-        background: var(--bg-card-hover);
+        box-shadow: 4px 4px 0 rgba(69,65,56,0.3);
     }
 
     .card-title {
-        padding: 14px 20px;
-        font-size: 11px; font-weight: 800;
-        color: var(--accent-bright);
+        padding: 11px 18px;
+        font-size: 11px; font-weight: 500;
+        color: var(--paper);
         text-transform: uppercase;
-        letter-spacing: 1px;
-        border-bottom: 1px solid var(--border);
-        background: rgba(0, 0, 0, 0.2);
+        letter-spacing: 3px;
+        border-bottom: 2px solid var(--ink);
+        background: var(--ink);
     }
 
     /* ROWS & CONTROLS */
     .feature-row {
-        padding: 12px 20px;
-        border-bottom: 1px solid rgba(255,255,255,0.03);
+        padding: 11px 18px;
+        border-bottom: 1px solid var(--ink-ghost);
         display: flex; align-items: center; justify-content: space-between;
-        min-height: 52px;
+        min-height: 50px;
+        transition: background 0.1s ease;
     }
+    .feature-row:hover { background: rgba(69,65,56,0.06); }
     .feature-row:last-child { border-bottom: none; }
-    .feature-row.stacked { flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px 20px; }
+    .feature-row.stacked { flex-direction: column; align-items: flex-start; gap: 10px; padding: 15px 18px; }
 
-    .feat-label { font-size: 13px; font-weight: 500; color: #d4d4d8; }
+    .feat-label { font-size: 13px; font-weight: 400; color: var(--ink); letter-spacing: 0.6px; }
 
-    /* SWITCH */
+    /* SWITCH — a hard rectangular toggle; on = filled ink, knob slides */
     .switch {
-        width: 42px; height: 22px;
+        width: 46px; height: 20px;
         background: var(--switch-off);
-        border-radius: 20px;
+        border: 2px solid var(--ink);
+        border-radius: 0;
         position: relative; cursor: pointer;
-        transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+        transition: background 0.15s ease;
     }
     .knob {
-        position: absolute; top: 3px; left: 3px;
-        width: 16px; height: 16px;
-        background: #fff; border-radius: 50%;
-        transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        position: absolute; top: 1px; left: 1px;
+        width: 14px; height: 14px;
+        background: var(--ink); border-radius: 0;
+        transition: left 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.15s;
     }
-    .switch.active { background: var(--accent); box-shadow: 0 0 15px var(--accent-dim); }
-    .switch.active .knob { left: 23px; transform: scale(1.1); }
+    .switch.active { background: var(--ink); }
+    .switch.active .knob { left: 27px; background: var(--paper); }
 
     /* SLIDER */
     .slider-wrapper { width: 100%; display: flex; align-items: center; gap: 12px; }
     .slider-val {
-        font-family: 'JetBrains Mono', monospace; font-size: 11px;
-        color: var(--accent-bright);
-        padding: 2px 8px; background: rgba(0,0,0,0.3);
-        border-radius: 4px; min-width: 32px; text-align: center; border: 1px solid var(--border);
+        font-size: 12px; font-weight: 500;
+        color: var(--ink);
+        padding: 3px 8px; background: var(--paper);
+        border-radius: 0; min-width: 34px; text-align: center; border: 2px solid var(--ink);
     }
 
-    input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; }
+    input[type=range] { -webkit-appearance: none; width: 100%; height: 3px; background: var(--ink); border-radius: 0; }
     input[type=range]::-webkit-slider-thumb {
-        -webkit-appearance: none; width: 14px; height: 14px;
-        background: var(--accent-bright); border-radius: 50%;
-        cursor: pointer; box-shadow: 0 0 10px var(--accent-glow);
-        transition: transform 0.2s;
+        -webkit-appearance: none; width: 14px; height: 18px;
+        background: var(--ink); border-radius: 0;
+        cursor: pointer; border: none;
+        transition: transform 0.12s;
     }
-    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scaleX(1.4); }
 
     /* TEXT INPUT */
     .input-wrapper { width: 100%; }
     .text-input-styled {
-        width: 100%; background: var(--bg-input);
-        border: 1px solid var(--border);
-        color: #fff; padding: 8px 12px;
-        font-size: 12px; border-radius: 6px;
-        font-family: 'JetBrains Mono', monospace;
-        transition: 0.2s;
+        width: 100%; background: var(--paper);
+        border: 2px solid var(--ink);
+        color: var(--ink); padding: 8px 12px;
+        font-size: 12px; border-radius: 0;
+        letter-spacing: 0.5px;
+        transition: box-shadow 0.15s;
     }
-    .text-input-styled:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+    .text-input-styled::placeholder { color: var(--ink-faint); }
+    .text-input-styled:focus { box-shadow: 3px 3px 0 rgba(69,65,56,0.28); }
+    select.text-input-styled { cursor: pointer; }
 
-    /* BOT CONSOLE */
+    /* CONSOLE / SERVER LOG */
     .bot-console-log {
         width: 100%; height: 132px; overflow-y: auto;
-        background: var(--bg-input);
-        border: 1px solid var(--border);
-        border-radius: 6px;
+        background: var(--paper);
+        border: 2px solid var(--ink);
+        border-radius: 0;
         padding: 8px 10px; margin-bottom: 8px;
-        font-family: 'JetBrains Mono', monospace;
         font-size: 11px; line-height: 1.7;
-        color: var(--text-main);
+        color: var(--ink);
         white-space: pre-wrap; word-break: break-word;
     }
-    .bot-console-log .bc-time { color: var(--text-dimmer); margin-right: 6px; }
+    .bot-console-log .bc-time { color: var(--ink-faint); margin-right: 6px; }
     .server-log { height: 340px; }
     .server-log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .log-btns { display: flex; gap: 8px; margin-top: 8px; }
     .log-btns .keybind-btn { flex: 1; }
-    .bot-console-log::-webkit-scrollbar { width: 6px; }
-    .bot-console-log::-webkit-scrollbar-thumb { background: var(--accent-dim); border-radius: 3px; }
+    .bot-console-log::-webkit-scrollbar { width: 8px; }
+    .bot-console-log::-webkit-scrollbar-track { background: var(--paper-2); }
+    .bot-console-log::-webkit-scrollbar-thumb { background: var(--ink); border-radius: 0; }
 
-    /* KEYBIND BUTTON */
+    /* KEYBIND / ACTION BUTTON */
     .keybind-btn {
-        background: rgba(255,255,255,0.05);
-        border: 1px solid var(--border);
-        color: var(--text-main);
-        padding: 6px 14px; border-radius: 6px;
-        font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
-        cursor: pointer; min-width: 50px; text-align: center;
-        transition: 0.2s; text-transform: uppercase;
+        background: var(--paper);
+        border: 2px solid var(--ink);
+        color: var(--ink);
+        padding: 6px 14px; border-radius: 0;
+        font-size: 11px; font-weight: 500; letter-spacing: 1.5px;
+        cursor: pointer; min-width: 52px; text-align: center;
+        transition: background 0.12s, color 0.12s; text-transform: uppercase;
     }
-    .keybind-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--accent-bright); }
+    .keybind-btn:hover { background: var(--ink); color: var(--paper); }
     .keybind-btn.recording {
-        background: var(--accent); color: #fff;
-        border-color: var(--accent);
-        box-shadow: 0 0 12px var(--accent-glow);
-        animation: pulse 1.5s infinite;
+        background: var(--ink); color: var(--paper);
+        animation: yorha-blink 1s steps(2, start) infinite;
     }
-
-    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+    @keyframes yorha-blink { 0% { opacity: 1; } 50% { opacity: 0.45; } 100% { opacity: 1; } }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.45; } 100% { opacity: 1; } }
 
     /* THEME GRID */
-    .theme-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; padding: 12px 20px; }
+    .theme-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; padding: 12px 18px; }
     .theme-btn {
-        height: 40px; border-radius: 8px; cursor: pointer;
-        border: 2px solid rgba(255,255,255,0.1);
-        transition: all 0.2s; position: relative;
+        height: 38px; border-radius: 0; cursor: pointer;
+        border: 2px solid var(--ink);
+        transition: transform 0.12s; position: relative;
     }
     .theme-btn:hover { transform: translateY(-3px); }
-    .theme-btn.active { border-color: #fff; transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .theme-btn.active { box-shadow: 0 0 0 2px var(--paper-2), 0 0 0 4px var(--ink); }
 
-    .tb-def { background: linear-gradient(135deg, #2a2a35, #16161f); }
-    .tb-nvg { background: linear-gradient(135deg, #064e3b, #065f46); }
-    .tb-ice { background: linear-gradient(135deg, #0c4a6e, #075985); }
-    .tb-red { background: linear-gradient(135deg, #7f1d1d, #991b1b); }
-    .tb-void { background: linear-gradient(135deg, #581c87, #6b21a8); }
+    .tb-def  { background: #c7c3b1; }
+    .tb-nvg  { background: #b9bcac; }
+    .tb-ice  { background: #b4bdc0; }
+    .tb-red  { background: #c9b7ac; }
+    .tb-void { background: #bfb6c0; }
 `;
 
     const styleSheet = document.createElement('style');
@@ -24551,7 +24577,7 @@ for (let tree of trees) {
     const html = `
         <div class="deltek-root active">
             <div class="deltek-sidebar">
-                <div class="deltek-logo"><h1>rageok</h1><span>PRESTIGE V1</span></div>
+                <div class="deltek-logo"><h1>NovaStorm</h1><span>YoRHa // Type-N</span></div>
                 <div class="nav-container">
                     <div class="nav-item active" data-tab="keybinds"><svg viewBox="0 0 24 24"><path d="M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg>Keybinds</div>
                     <div class="nav-item" data-tab="combat"><svg viewBox="0 0 24 24"><path d="M7 22h13v-5l-4-3l-2 3h-3v-6l-3-4l-8 5v2l6 3v5z"/></svg>Combat</div>
