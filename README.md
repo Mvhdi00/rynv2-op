@@ -2206,3 +2206,63 @@ the thing being verified.
 - The test's body extractor used `split('} catch (e) {}')[1]`, which cuts at the
   *second* occurrence as well — that shape appears in the body too — and so
   compared two truncations and called them equal. `indexOf` and one slice.
+
+# Auditing somebody else's mod
+
+Five arrived at once with "is there spying, passwords or tracking in these".
+Two tools came out of answering that.
+
+## `tools/audit-mod.js`
+
+Lists every host the file names, every call that can send something, and a set
+of patterns worth a second look — password gates, cookie and clipboard reads,
+keystroke capture, runtime code assembly. It names things to read; it does not
+pass judgement, because half of what it finds is an icon on a CDN and the other
+half is the same call with a player's name in the query string.
+
+The first version read the source with regexes and reported Genessis — 533 KB,
+obfuscated — as having no URLs and no calls that can send. That was a clean
+bill of health for a file it had not read: Genessis keeps every string in one
+array and reaches them as `_0x50dfda(0x2fc)`.
+
+So it parses instead. The URL sweep walks the AST (5,415 string literals in
+Genessis, where the text scan saw a handful), and since obfuscated code reaches
+an API by name — `window['fetch']` — the API names present in the string table
+are reported next to the source scan for direct calls. Neither is sufficient
+alone. Together they cover both ways of getting at `fetch`, `XMLHttpRequest`,
+`sendBeacon`, `WebSocket`, `cookie` and `clipboard`.
+
+## `tools/declaw.js`
+
+Removes the phone-home and nothing else. A fixed table of exact snippets, each
+of which must match exactly once or the run stops — a rule that no longer
+matches means the file changed and somebody should look, not that the rule
+should be loosened. Two principles, both from breaking working mods earlier in
+this project:
+
+- **Never delete a binding something still refers to.** `project` is used in
+  three places besides its own line, so the socket becomes an inert object of
+  the same shape. Nothing throws, nothing connects.
+- **Prefer the smallest edit that stops the traffic.** Emptying a list of
+  servers stops every connection to them without touching the loop — which is
+  what one of these authors did himself, with the comment `// REMOVED!!! so
+  they cant abuse :)`.
+
+Three checks run afterwards: the line count must be identical (replacements pad
+with the newlines they consumed), the result must parse, and each host name must
+appear strictly fewer times than before. That last one earned its keep
+immediately — the first replacement comment named the host it was removing,
+which put the string back in the file, and the check refused to write.
+
+What it found in the five, and what came out:
+
+| | phone-home | removed |
+|---|---|---|
+| Genessis 3.0.3 | none — no way to send at all | — |
+| starrclient | none | — |
+| Ae86 2.8 | other players' chat POSTed to an AI server, off by default | the POST and its URL |
+| blisma v5 | a socket opened to a third party on page load; fill-bot servers handed your game URL and captcha token | both |
+| unknown 3.15 | identical to blisma, same servers | both |
+
+No passwords, no fingerprinting, no keystroke capture, no analytics, no Discord
+webhooks in any of the five.
