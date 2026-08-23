@@ -10802,8 +10802,12 @@ let pps = 0;
             message = String(message);
             if (handleBotCommand(message)) return; // local command, don't send
             const line = message.slice(0, 30);
-            if (actAsBot("6", line)) return;       // talking as the bot you drive
-            io.send("6", line);
+            // Send it publicly first — everyone sees you talk, as normal.
+            if (!actAsBot("6", line)) io.send("6", line);
+            // Then let the Pod hear you too, if that is on. Its reply is LOCAL —
+            // panel / your own bubble / voice — never sent, so no other player
+            // ever sees the Pod.
+            try { if (window.vars && window.vars.podListenChat && window.Pod) window.Pod.handle(message); } catch (e) {}
         }
         function closeChat() {
             chatBox.value = "";
@@ -10878,64 +10882,94 @@ let pps = 0;
             const px = podX - xOffset, py = podY - yOffset + bob;
             const sx = self.x - xOffset, sy = self.y - yOffset;
             const V = podVariant();
+            const t2 = t;
 
             mainContext.save();
 
-            // The targeting line: a thin dashed ink beam from the pod out along
-            // your aim, ending in a small reticle. It reads your angle at a glance.
-            const beamLen = 900;
-            const bx = sx + Math.cos(aim) * beamLen;
-            const by = sy + Math.sin(aim) * beamLen;
-            mainContext.globalAlpha = 0.28;
-            mainContext.strokeStyle = V.beam;
-            mainContext.lineWidth = 2;
-            mainContext.setLineDash([10, 8]);
-            mainContext.beginPath();
-            mainContext.moveTo(px, py);
-            mainContext.lineTo(bx, by);
-            mainContext.stroke();
-            mainContext.setLineDash([]);
-            // A reticle where the beam points, a little way out from the body.
-            const rx = sx + Math.cos(aim) * 190, ry = sy + Math.sin(aim) * 190;
-            mainContext.globalAlpha = 0.5;
-            mainContext.strokeStyle = V.beam;
-            mainContext.lineWidth = 2;
-            mainContext.beginPath();
-            mainContext.arc(rx, ry, 9, 0, Math.PI * 2);
-            mainContext.moveTo(rx - 14, ry); mainContext.lineTo(rx + 14, ry);
-            mainContext.moveTo(rx, ry - 14); mainContext.lineTo(rx, ry + 14);
-            mainContext.stroke();
-
-            // The pod body: a small rounded shell, ink-outlined, with a single
-            // eye that looks the way you aim. Colours come from the variant.
-            mainContext.globalAlpha = 1;
-            mainContext.lineWidth = 2.5;
-            mainContext.strokeStyle = V.outline;
-            mainContext.fillStyle = V.body;
-            mainContext.beginPath();
-            mainContext.arc(px, py, 12, 0, Math.PI * 2);
-            mainContext.fill();
-            mainContext.stroke();
-            // Two little fins.
-            mainContext.fillStyle = V.fin;
-            mainContext.beginPath();
-            mainContext.ellipse(px - 13, py, 5, 8, aim, 0, Math.PI * 2);
-            mainContext.ellipse(px + 13, py, 5, 8, aim, 0, Math.PI * 2);
-            mainContext.fill();
-            mainContext.stroke();
-            // The eye, offset toward the aim.
-            mainContext.fillStyle = V.eye;
-            mainContext.beginPath();
-            mainContext.arc(px + Math.cos(aim) * 4, py + Math.sin(aim) * 4, 4.5, 0, Math.PI * 2);
-            mainContext.fill();
-
-            // A speech bubble over the pod for a few seconds after it talks, so
-            // the conversation happens on the battlefield and not only in the panel.
+            // ---- POINTERS (replaces the old laser) --------------------------
+            // Short markers from the pod: red toward the nearest hostile, green
+            // toward the nearest resource. They point; they do not draw a beam.
             try {
-                if (Pod._bubble && Date.now() < Pod._bubbleUntil) {
+                const foe = Pod._nearestFoe(self);
+                if (foe && foe.d < 1400) {
+                    const a = Math.atan2(foe.p.y - self.y, foe.p.x - self.x);
+                    Pod._drawPointer(mainContext, px, py, a, "#c0402f", "enemy");
+                }
+                if (window.vars.podPointFarm) {
+                    const r = Pod._nearestResource(self);
+                    if (r) {
+                        const a = Math.atan2(r.y - self.y, r.x - self.x);
+                        Pod._drawPointer(mainContext, px, py, a, "#5f7a4a", "farm");
+                    }
+                }
+            } catch (e) {}
+
+            // ---- THE DRONE --------------------------------------------------
+            // A rounded shell with a panel seam, side thrusters, a thin antenna
+            // with a blinking tip, and a pulsing eye that tracks your aim.
+            mainContext.translate(px, py);
+            mainContext.save();
+            mainContext.rotate(aim + Math.PI / 2);
+
+            // antenna
+            mainContext.strokeStyle = V.outline;
+            mainContext.lineWidth = 2;
+            mainContext.beginPath();
+            mainContext.moveTo(0, -8); mainContext.lineTo(0, -18);
+            mainContext.stroke();
+            mainContext.fillStyle = (Math.floor(t2 / 400) % 2) ? "#c0402f" : V.fin;
+            mainContext.beginPath(); mainContext.arc(0, -19, 2.4, 0, Math.PI * 2); mainContext.fill();
+
+            // side thrusters
+            mainContext.fillStyle = V.fin;
+            mainContext.strokeStyle = V.outline;
+            mainContext.lineWidth = 2;
+            for (const sgn of [-1, 1]) {
+                mainContext.beginPath();
+                mainContext.ellipse(sgn * 13, 2, 4.5, 7.5, 0, 0, Math.PI * 2);
+                mainContext.fill(); mainContext.stroke();
+            }
+
+            // body shell (rounded rect)
+            mainContext.fillStyle = V.body;
+            mainContext.strokeStyle = V.outline;
+            mainContext.lineWidth = 2.5;
+            const bw = 11, bh = 13, rr = 5;
+            mainContext.beginPath();
+            mainContext.moveTo(-bw + rr, -bh);
+            mainContext.arcTo(bw, -bh, bw, -bh + rr, rr);
+            mainContext.arcTo(bw, bh, bw - rr, bh, rr);
+            mainContext.arcTo(-bw, bh, -bw, bh - rr, rr);
+            mainContext.arcTo(-bw, -bh, -bw + rr, -bh, rr);
+            mainContext.closePath();
+            mainContext.fill(); mainContext.stroke();
+            // panel seam
+            mainContext.lineWidth = 1.5;
+            mainContext.beginPath(); mainContext.moveTo(-bw, -1); mainContext.lineTo(bw, -1); mainContext.stroke();
+            mainContext.restore();
+
+            // eye — pulses, sits toward the aim
+            const pulse = 0.7 + 0.3 * Math.sin(t2 / 260);
+            const ex = Math.cos(aim) * 4, ey = Math.sin(aim) * 4;
+            mainContext.globalAlpha = 0.35 * pulse;
+            mainContext.fillStyle = V.eye;
+            mainContext.beginPath(); mainContext.arc(ex, ey, 7, 0, Math.PI * 2); mainContext.fill();
+            mainContext.globalAlpha = 1;
+            mainContext.beginPath(); mainContext.arc(ex, ey, 4, 0, Math.PI * 2); mainContext.fill();
+            mainContext.fillStyle = V.body;
+            mainContext.beginPath(); mainContext.arc(ex - 1, ey - 1, 1.3, 0, Math.PI * 2); mainContext.fill();
+
+            mainContext.restore();
+
+            // ---- SPEECH BUBBLE over the drone -------------------------------
+            // Only when the talk style is the drone bubble (the player-chat
+            // style paints over your own head via the game's chat instead).
+            try {
+                if (Pod._bubble && Date.now() < Pod._bubbleUntil &&
+                    (!window.vars || window.vars.podTalkStyle !== "player")) {
                     mainContext.font = "13px Jost, 'Century Gothic', sans-serif";
                     const tw = Math.min(260, mainContext.measureText(Pod._bubble).width);
-                    const bxp = px - tw / 2 - 8, byp = py - 44;
+                    const bxp = px - tw / 2 - 8, byp = py - 46;
                     mainContext.globalAlpha = 0.92;
                     mainContext.fillStyle = "#e7e2ce";
                     mainContext.strokeStyle = V.outline;
@@ -10949,7 +10983,6 @@ let pps = 0;
                 }
             } catch (e) {}
 
-            mainContext.restore();
             mainContext.globalAlpha = 1;
         }
 
@@ -10958,7 +10991,10 @@ let pps = 0;
         const POD_VARIANTS = [
             { name: "042", body: "#dedacb", fin: "#c2bda8", eye: "#26231e", outline: "#2f2c26", beam: "#2f2c26" },
             { name: "153", body: "#b8b4a4", fin: "#9c988a", eye: "#3a2320", outline: "#2f2c26", beam: "#3a352c" },
-            { name: "A2",  body: "#3f3b34", fin: "#2b2823", eye: "#c0402f", outline: "#1c1a16", beam: "#7a2a20" }
+            { name: "A2",  body: "#3f3b34", fin: "#2b2823", eye: "#c0402f", outline: "#1c1a16", beam: "#7a2a20" },
+            { name: "M2",  body: "#4a4f57", fin: "#343941", eye: "#54b0c0", outline: "#1c1e22", beam: "#2f6b76" },
+            { name: "P-33",body: "#cdae6a", fin: "#a98f52", eye: "#2a2113", outline: "#3a2f18", beam: "#6a5a2e" },
+            { name: "R-9", body: "#c86a6a", fin: "#a85252", eye: "#2a1313", outline: "#3a1818", beam: "#7a2e2e" }
         ];
         function podVariant() {
             const i = (window.vars && window.vars.podVariant) | 0;
@@ -10989,7 +11025,74 @@ let pps = 0;
             "resources (wood, food, stone, gold, points), ages and upgrades, clans, and tactics like trapping, spike-ticking, insta-kill combos, healing and building. " +
             "If asked about anything NOT related to moomoo.io, refuse briefly in character: 'Query outside operational scope. This unit is limited to moomoo.io.' Do not answer it. " +
             "Use the live match state given in each message to ground tactical advice. Keep replies to 1-2 short sentences. Reply in Arabic when the user writes Arabic. " +
+            "Vary your wording — never repeat a sentence you have already said. " +
             "Do not include internal or system XML tags in your response.";
+
+        // Providers you can talk to, free and paid. Each one adapts the same
+        // (system, messages) into its own request/response shape, so the Pod
+        // brain does not care which is selected. All are called straight from
+        // the page — the free ones need no key.
+        //   pollinations : free, NO key, OpenAI-compatible
+        //   gemini       : Google, free tier, key from aistudio.google.com
+        //   groq         : free tier, very fast, key from console.groq.com
+        //   anthropic    : paid, key from console.anthropic.com
+        //   openai       : paid, key from platform.openai.com
+        const POD_PROVIDERS = {
+            pollinations: {
+                label: "Pollinations (free, no key)", needsKey: false, defaultModel: "openai",
+                url: () => "https://text.pollinations.ai/openai",
+                headers: () => ({ "content-type": "application/json" }),
+                body: (sys, msgs, model) => JSON.stringify({
+                    model: model || "openai",
+                    messages: [{ role: "system", content: sys }].concat(msgs)
+                }),
+                parse: (d) => { try { return d.choices[0].message.content.trim(); } catch (e) { return ""; } }
+            },
+            gemini: {
+                label: "Google Gemini (free key)", needsKey: true, defaultModel: "gemini-2.0-flash",
+                url: (model, key) => "https://generativelanguage.googleapis.com/v1beta/models/" +
+                    (model || "gemini-2.0-flash") + ":generateContent?key=" + encodeURIComponent(key),
+                headers: () => ({ "content-type": "application/json" }),
+                body: (sys, msgs, model) => JSON.stringify({
+                    system_instruction: { parts: [{ text: sys }] },
+                    contents: msgs.map(m => ({ role: m.role === "assistant" ? "model" : "user",
+                                               parts: [{ text: m.content }] }))
+                }),
+                parse: (d) => { try { return d.candidates[0].content.parts.map(p => p.text).join(" ").trim(); } catch (e) { return ""; } }
+            },
+            groq: {
+                label: "Groq (free key, fast)", needsKey: true, defaultModel: "llama-3.3-70b-versatile",
+                url: () => "https://api.groq.com/openai/v1/chat/completions",
+                headers: (key) => ({ "content-type": "application/json", "authorization": "Bearer " + key }),
+                body: (sys, msgs, model) => JSON.stringify({
+                    model: model || "llama-3.3-70b-versatile", max_tokens: 512,
+                    messages: [{ role: "system", content: sys }].concat(msgs)
+                }),
+                parse: (d) => { try { return d.choices[0].message.content.trim(); } catch (e) { return ""; } }
+            },
+            anthropic: {
+                label: "Anthropic Claude (paid)", needsKey: true, defaultModel: POD_AI_MODEL,
+                url: () => "https://api.anthropic.com/v1/messages",
+                headers: (key) => ({ "content-type": "application/json", "x-api-key": key,
+                                     "anthropic-version": "2023-06-01",
+                                     "anthropic-dangerous-direct-browser-access": "true" }),
+                body: (sys, msgs, model) => JSON.stringify({
+                    model: model || POD_AI_MODEL, max_tokens: 512,
+                    output_config: { effort: "low" }, system: sys, messages: msgs
+                }),
+                parse: (d) => { try { return (d.content || []).filter(b => b.type === "text").map(b => b.text).join(" ").trim(); } catch (e) { return ""; } }
+            },
+            openai: {
+                label: "OpenAI GPT (paid)", needsKey: true, defaultModel: "gpt-4o-mini",
+                url: () => "https://api.openai.com/v1/chat/completions",
+                headers: (key) => ({ "content-type": "application/json", "authorization": "Bearer " + key }),
+                body: (sys, msgs, model) => JSON.stringify({
+                    model: model || "gpt-4o-mini", max_tokens: 512,
+                    messages: [{ role: "system", content: sys }].concat(msgs)
+                }),
+                parse: (d) => { try { return d.choices[0].message.content.trim(); } catch (e) { return ""; } }
+            }
+        };
 
         // =====================================================================
         // THE POD  —  a support unit you can actually talk to
@@ -11021,14 +11124,52 @@ let pps = 0;
             },
             isOpen() { return !!this._open; },
 
-            // A pod line: into the panel log AND up as a battlefield bubble.
+            // A pod line: into the panel log, up as a bubble (over the drone or,
+            // in "player" style, over your own head like real game chat), and
+            // spoken aloud when voice is on. Everything is local — nothing is
+            // ever sent to the server, so no other player can see the Pod.
+            _recent: [],
             say(text) {
                 text = String(text);
                 this.lines.push({ t: Date.now(), time: this.now(), who: "pod", text: text });
                 if (this.lines.length > this.max) this.lines.shift();
+                // remember the last few lines so the brain can avoid repeats
+                this._recent.push(text.toLowerCase());
+                if (this._recent.length > 8) this._recent.shift();
+
                 this._bubble = text;
                 this._bubbleUntil = Date.now() + 4200;
+
+                // Game-chat style: paint the line over your own character using
+                // the game's own chat bubble, so it reads like in-game chat.
+                try {
+                    if (window.vars && window.vars.podTalkStyle === "player") {
+                        const s = this._self();
+                        if (s) { s.chatMessage = text.slice(0, 120); s.chatCountdown = config.chatCountdown; }
+                    }
+                } catch (e) {}
+
+                // Voice: speak it. Arabic or English, whichever the line is.
+                try {
+                    if (window.vars && window.vars.podVoice && window.speechSynthesis && window.SpeechSynthesisUtterance) {
+                        const u = new window.SpeechSynthesisUtterance(text);
+                        u.rate = 1.05; u.pitch = 0.7; u.volume = 0.9;
+                        if (/[؀-ۿ]/.test(text)) u.lang = "ar";
+                        window.speechSynthesis.cancel();
+                        window.speechSynthesis.speak(u);
+                    }
+                } catch (e) {}
+
                 this._render();
+            },
+            // True if a candidate line was said very recently — the brain uses
+            // this to keep its call-outs from repeating word for word.
+            _isRepeat(text) { return this._recent.indexOf(String(text).toLowerCase()) >= 0; },
+            // Pick from a list, preferring something not said recently.
+            _freshPick(a) {
+                const fresh = a.filter(x => !this._isRepeat(x));
+                const pool = fresh.length ? fresh : a;
+                return pool[(Math.random() * pool.length) | 0];
             },
             youSaid(text) {
                 this.lines.push({ t: Date.now(), time: this.now(), who: "you", text: String(text) });
@@ -11079,18 +11220,92 @@ let pps = 0;
             _hasItem(s, slot) {
                 try { return (s.items && s.items[slot] !== undefined); } catch (e) { return false; }
             },
+            // Nearest harvestable resource (trees / bushes / stone / gold), for
+            // the "farm this way" pointer and suggestions.
+            _nearestResource(s) {
+                try {
+                    const pool = (inBotView() && typeof botViewObjects !== "undefined") ? botViewObjects
+                               : (typeof gameObjects !== "undefined" ? gameObjects : []);
+                    let best = null, bd = Infinity;
+                    for (const o of pool) {
+                        if (!o || o.active === false) continue;
+                        // resource objects carry a type (0 tree,1 bush,2 stone,3 gold);
+                        // buildings have an owner sid, resources do not.
+                        const isRes = (o.type !== undefined && o.type !== null && o.type <= 3) &&
+                                      (o.owner === undefined || o.owner === null || o.owner < 0);
+                        if (!isRes) continue;
+                        const d = UTILS.getDistance(s.x, s.y, o.x, o.y);
+                        if (d < bd) { bd = d; best = o; }
+                    }
+                    return best;
+                } catch (e) { return null; }
+            },
+            // A short arrow from the pod toward a target angle, with a tiny tag.
+            _drawPointer(ctx, px, py, ang, color, tag) {
+                ctx.save();
+                ctx.translate(px, py);
+                ctx.rotate(ang);
+                ctx.globalAlpha = 0.85;
+                ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.5;
+                ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(30, 0); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(34, 0); ctx.lineTo(27, -4); ctx.lineTo(27, 4); ctx.closePath(); ctx.fill();
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            },
+
+            // ---- memory: it remembers, across games -------------------------
+            _mem: null,
+            _loadMem() {
+                if (this._mem) return this._mem;
+                let m = { deathsBy: {}, killsOf: {}, games: 0, notes: [] };
+                try { const raw = localStorage.getItem("podMemory"); if (raw) m = Object.assign(m, JSON.parse(raw)); } catch (e) {}
+                this._mem = m; return m;
+            },
+            _saveMem() { try { localStorage.setItem("podMemory", JSON.stringify(this._mem)); } catch (e) {} },
+            // A one-line memory digest fed to the AI so its advice reflects your
+            // history — who keeps killing you, who you dominate.
+            _memDigest() {
+                const m = this._loadMem();
+                const top = (obj) => Object.keys(obj).sort((a, b) => obj[b] - obj[a]).slice(0, 3)
+                    .map(n => n + "×" + obj[n]).join(", ");
+                const d = top(m.deathsBy), k = top(m.killsOf);
+                let out = "games:" + (m.games || 0);
+                if (d) out += "; killed most by: " + d;
+                if (k) out += "; you beat most: " + k;
+                return out;
+            },
 
             // ---- the proactive brain, one call a tick ------------------------
             tick() {
                 try {
                     if (!(window.vars && window.vars.podEnabled)) return;
                     const s = this._self();
-                    if (!s || !s.alive || s.x === undefined) return;
+                    if (!s || s.x === undefined) return;
 
-                    // Kills: watch the counter climb.
+                    // Death bookkeeping — memory that survives games. On death,
+                    // credit the most recent nearby hostile as the likely killer.
+                    if (this._wasAlive && !s.alive) {
+                        this._wasAlive = false;
+                        try {
+                            const m = this._loadMem();
+                            m.games = (m.games || 0) + 1;
+                            if (this._lastFoeName) m.deathsBy[this._lastFoeName] = (m.deathsBy[this._lastFoeName] || 0) + 1;
+                            this._saveMem();
+                        } catch (e) {}
+                        if (this._can("death", 2000)) this.say(this._pick([
+                            "Unit down. Redeploy when ready.", "سقطت الوحدة. أعد النشر عند الجاهزية."]));
+                    }
+                    if (s.alive) this._wasAlive = true;
+                    if (!s.alive) return;
+
+                    // Kills: watch the counter climb, and remember who you beat.
                     const kills = (s.kills || (typeof killCount !== "undefined" ? killCount : 0)) | 0;
                     if (kills > this._lastKills) {
                         this._lastKills = kills;
+                        try {
+                            const vic = (typeof killedName !== "undefined" && killedName && killedName !== "Unknown") ? killedName : null;
+                            if (vic) { const m = this._loadMem(); m.killsOf[vic] = (m.killsOf[vic] || 0) + 1; this._saveMem(); }
+                        } catch (e) {}
                         if (this._can("kill", 1500)) this.say(this._pick([
                             "Enemy unit eliminated.", "Target neutralised. Well done.",
                             "قتلة مؤكدة. إحسنت.", "هدف أُسقط. استمر."
@@ -11123,9 +11338,18 @@ let pps = 0;
                     // Threat and its bearing.
                     const foe = this._nearestFoe(s);
                     if (foe) {
+                        this._lastFoeName = foe.p.name || this._lastFoeName;
                         const ang = Math.atan2(foe.p.y - s.y, foe.p.x - s.x);
                         const bear = this._bearing(ang);
-                        if (foe.d < 320) {
+                        // Have they killed you before? Memory turns a stranger into
+                        // a known threat, and the warning is specific to them.
+                        let known = 0;
+                        try { const m = this._loadMem(); known = (foe.p.name && m.deathsBy[foe.p.name]) || 0; } catch (e) {}
+                        if (foe.d < 900 && known >= 2 && this._can("known", 11000)) {
+                            this.say(this._pick([
+                                "Alert: " + foe.p.name + " has killed you " + known + " times. Keep distance " + bear[0] + ".",
+                                "تحذير: " + foe.p.name + " قتلك " + known + " مرات. خذ حذرك " + bear[1] + "."]));
+                        } else if (foe.d < 320) {
                             if (this._hasItem(s, 2) && this._can("suggestSpike", 7000))
                                 this.say(this._pick([
                                     "Proposal: deploy spike toward " + bear[0] + " and tick them.",
@@ -11139,9 +11363,17 @@ let pps = 0;
                                 "Alert: hostile approaching from " + bear[0] + ", " + Math.round(foe.d) + " units.",
                                 "تنبيه: عدو جاي من " + bear[1] + "، على بعد " + Math.round(foe.d) + "."]));
                         }
-                    } else if (this._can("clear", 30000)) {
-                        this.say(this._pick(["Area clear. Suggest gathering while it holds.",
-                                             "المنطقة آمنة. اقترح تجمع موارد.", "No hostiles detected. Standing by."]));
+                    } else if (this._can("clear", 25000)) {
+                        // No hostiles — point you at the nearest resource to farm.
+                        const r = this._nearestResource(s);
+                        if (r) {
+                            const rb = this._bearing(Math.atan2(r.y - s.y, r.x - s.x));
+                            this.say(this._pick([
+                                "Area clear. Resource node " + rb[0] + " — farm while it holds.",
+                                "المنطقة آمنة. مورد " + rb[1] + " — اجمع الحين."]));
+                        } else {
+                            this.say(this._pick(["Area clear. Standing by.", "المنطقة آمنة. بانتظارك."]));
+                        }
                     }
 
                     // Cornered against the world edge.
@@ -11155,7 +11387,7 @@ let pps = 0;
                     } catch (e) {}
                 } catch (e) {}
             },
-            _pick(a) { return a[(Math.random() * a.length) | 0]; },
+            _pick(a) { return this._freshPick(a); },
 
             // ---- the AI link -------------------------------------------------
             _ai: { history: [], busy: false },
@@ -11163,8 +11395,16 @@ let pps = 0;
                 try { if (window.vars && window.vars.podAIKey) return String(window.vars.podAIKey).trim(); } catch (e) {}
                 return String(POD_AI_KEY || "").trim();
             },
+            _provider() {
+                const id = (window.vars && window.vars.podProvider) || "pollinations";
+                return POD_PROVIDERS[id] || POD_PROVIDERS.pollinations;
+            },
             _aiOn() {
-                try { return !!(window.vars && window.vars.podAI && this._apiKey()); } catch (e) { return false; }
+                try {
+                    if (!(window.vars && window.vars.podAI)) return false;
+                    const p = this._provider();
+                    return p.needsKey ? !!this._apiKey() : true;   // free providers need no key
+                } catch (e) { return false; }
             },
             // A compact, factual snapshot of the match, fed to Claude each turn so
             // its advice is about the fight you are actually in.
@@ -11181,51 +11421,102 @@ let pps = 0;
                 }
                 let res = "";
                 try { const st = s.stats; if (st) res = ", resources wood:" + (st.wood || 0) + " food:" + (st.food || 0) + " stone:" + (st.stone || 0) + " gold:" + (st.gold || 0); } catch (e) {}
-                return "hp:" + hp + "%, kills:" + k + ", nearest hostile:" + f + ", age:" + (s.age || 1) + res + ".";
+                let mem = "";
+                try { mem = " | memory: " + this._memDigest(); } catch (e) {}
+                return "hp:" + hp + "%, kills:" + k + ", nearest hostile:" + f + ", age:" + (s.age || 1) + res + mem + ".";
             },
+            // Route a typed message to whichever provider is selected. Adapters
+            // hide each provider's request/response shape, so this stays one path.
             _askAI(userText) {
+                const prov = this._provider();
                 const key = this._apiKey();
-                if (!key) { this._ruleReply(userText); return; }
+                if (prov.needsKey && !key) { this._ruleReply(userText); return; }
                 if (this._ai.busy) { this.say("Standby — processing previous query."); return; }
                 this._ai.busy = true;
-                const model = (window.vars && window.vars.podAIModel) || POD_AI_MODEL;
+                const model = (window.vars && window.vars.podAIModel) || prov.defaultModel;
                 const stateMsg = "[MATCH STATE] " + this._stateSnapshot() + "\n[PLAYER] " + userText;
                 const messages = this._ai.history.concat([{ role: "user", content: stateMsg }]);
                 const pending = { t: Date.now(), time: this.now(), who: "pod", text: "…analysing" };
                 this.lines.push(pending); this._render();
                 const drop = () => { const i = this.lines.indexOf(pending); if (i >= 0) this.lines.splice(i, 1); };
-                fetch("https://api.anthropic.com/v1/messages", {
-                    method: "POST",
-                    headers: {
-                        "content-type": "application/json",
-                        "x-api-key": key,
-                        "anthropic-version": "2023-06-01",
-                        "anthropic-dangerous-direct-browser-access": "true"
-                    },
-                    body: JSON.stringify({
-                        model: model,
-                        max_tokens: 512,
-                        output_config: { effort: "low" },
-                        system: POD_SYSTEM,
-                        messages: messages
-                    })
-                }).then(r => r.json()).then(data => {
-                    this._ai.busy = false; drop();
-                    let reply = "";
-                    try { reply = (data.content || []).filter(b => b.type === "text").map(b => b.text).join(" ").trim(); } catch (e) {}
-                    if (!reply) {
-                        if (data && data.error) return this.say("Alert: link error — " + (data.error.message || "unknown") + ".");
-                        this.say("Query failed. Verify the API key."); return;
+                let url, headers, body;
+                try {
+                    url = prov.url(model, key);
+                    headers = prov.headers(key);
+                    body = prov.body(POD_SYSTEM, messages, model);
+                } catch (e) { this._ai.busy = false; drop(); this._ruleReply(userText); return; }
+                fetch(url, { method: "POST", headers: headers, body: body })
+                    .then(r => r.json()).then(data => {
+                        this._ai.busy = false; drop();
+                        let reply = "";
+                        try { reply = prov.parse(data); } catch (e) {}
+                        if (!reply) {
+                            const em = data && (data.error && (data.error.message || data.error)) ;
+                            if (em) return this.say("Alert: link error — " + em + ".");
+                            this.say("Query failed. Check the provider / key."); return;
+                        }
+                        this._ai.history.push({ role: "user", content: userText });
+                        this._ai.history.push({ role: "assistant", content: reply });
+                        if (this._ai.history.length > 12) this._ai.history = this._ai.history.slice(-12);
+                        this.say(reply);
+                    }).catch(e => {
+                        this._ai.busy = false; drop();
+                        this.say("Alert: AI link unreachable. Reverting to local analysis.");
+                        this._ruleReply(userText);
+                    });
+            },
+
+            // ---- AUTOPILOT: the Pod plays your unit --------------------------
+            // A real-time driver — an LLM is far too slow to fight, so this is
+            // the mod's own fast logic: it aims, swings, kites, and farms your
+            // OWN player. Toggle it on and step back; toggle off and you have
+            // control again. It never runs while you are possessing a bot.
+            _auto: { attacking: false },
+            autopilotToggle(force) {
+                const on = (force === undefined) ? !(window.vars && window.vars.podAuto) : !!force;
+                try { window.vars.podAuto = on; } catch (e) {}
+                if (on) {
+                    try { autoaim = true; } catch (e) {}
+                    try { window.vars.autoPlay = true; } catch (e) {}
+                    this.say(this._pick(["Autopilot engaged. I have your unit.", "القيادة الآلية مفعّلة. الوحدة تحت سيطرتي."]));
+                } else {
+                    try { autoaim = false; } catch (e) {}
+                    try { if (typeof attackState !== "undefined") { attackState = 0; sendAtckState(); } io.send("9", null); } catch (e) {}
+                    this._auto.attacking = false;
+                    this.say(this._pick(["Autopilot released. You have control.", "سلّمتك القيادة."]));
+                }
+                try { if (window.saveConfig) window.saveConfig(); } catch (e) {}
+            },
+            autopilotTick() {
+                try {
+                    if (!(window.vars && window.vars.podAuto)) return;
+                    if (typeof RynBots !== "undefined" && RynBots.possessed) return; // drive YOU, not a bot
+                    const s = (typeof myPlayer !== "undefined") ? myPlayer : null;
+                    if (!s || !s.alive) return;
+                    const foe = this._nearestFoe(s);
+                    let moveAng = null, aimAng = null, attack = false;
+                    if (foe && foe.d < 700) {
+                        aimAng = Math.atan2(foe.p.y - s.y, foe.p.x - s.x);
+                        attack = foe.d < 340;
+                        if (foe.d > 240) moveAng = aimAng;              // close in
+                        else if (foe.d < 150) moveAng = aimAng + Math.PI; // too close, back off
+                        else moveAng = aimAng + Math.PI / 2;            // strafe at range
+                    } else {
+                        const r = this._nearestResource(s);
+                        if (r) {
+                            aimAng = Math.atan2(r.y - s.y, r.x - s.x);
+                            const rd = UTILS.getDistance(s.x, s.y, r.x, r.y);
+                            attack = rd < 150;                          // gather
+                            if (rd > 125) moveAng = aimAng;
+                        }
                     }
-                    this._ai.history.push({ role: "user", content: userText });
-                    this._ai.history.push({ role: "assistant", content: reply });
-                    if (this._ai.history.length > 12) this._ai.history = this._ai.history.slice(-12);
-                    this.say(reply);
-                }).catch(e => {
-                    this._ai.busy = false; drop();
-                    this.say("Alert: AI link unreachable. Reverting to local analysis.");
-                    this._ruleReply(userText);
-                });
+                    try { if (aimAng !== null) io.send("D", aimAng); } catch (e) {}
+                    try { io.send("9", moveAng); } catch (e) {}          // null = stop
+                    if (attack !== this._auto.attacking) {
+                        this._auto.attacking = attack;
+                        try { attackState = attack ? 1 : 0; sendAtckState(); } catch (e) {}
+                    }
+                } catch (e) {}
             },
 
             // ---- answering what you type -------------------------------------
@@ -11353,6 +11644,8 @@ let pps = 0;
         try { window.Pod = Pod; } catch (e) {}
         // The brain runs on its own clock, independent of frame rate.
         try { setInterval(function () { try { Pod.tick(); } catch (e) {} }, 700); } catch (e) {}
+        // Autopilot drives on a faster clock so combat feels responsive.
+        try { setInterval(function () { try { Pod.autopilotTick(); } catch (e) {} }, 120); } catch (e) {}
 
         function resetZoom() {
             var newW = config.maxScreenWidth * factor;
@@ -11780,6 +12073,9 @@ let pps = 0;
                     }
                     else if (keyStr === window.vars.keyPodChat) {
                         try { Pod.toggle(); } catch (e) {}
+                    }
+                    else if (keyStr === window.vars.keyPodAuto) {
+                        try { Pod.autopilotToggle(); } catch (e) {}
                     }
                 }
             }
@@ -24475,6 +24771,7 @@ for (let tree of trees) {
         keyBotAttack: "M",
         keyPacketSpam: "B",
         keyPodChat: "Y",
+        keyPodAuto: "K",
 
 
         // Combat
@@ -24564,9 +24861,15 @@ for (let tree of trees) {
         yorhaVisual: true,       // full-screen YoRHa atmosphere wash
         podEnabled: true,        // the YoRHa Pod: a drone that follows + a targeting line
         podVariant: 0,           // 0 = 042, 1 = 153, 2 = A2
-        podAI: false,            // route typed pod chat through Claude (needs a key)
-        podAIKey: "",            // your Anthropic key, kept only in this browser
-        podAIModel: "",          // blank = use POD_AI_MODEL; e.g. "claude-haiku-4-5"
+        podAI: false,            // route typed pod chat through an AI provider
+        podProvider: "pollinations", // pollinations(free) | gemini | groq | anthropic | openai
+        podAIKey: "",            // provider key (blank for the free provider), browser-only
+        podAIModel: "",          // blank = provider default
+        podListenChat: false,    // also hear what you type in the game's public chat
+        podTalkStyle: "player",  // "player" = bubble over your head (game-like) | "drone"
+        podVoice: false,         // speak the pod's lines aloud (text-to-speech)
+        podPointFarm: true,      // draw the green "farm this way" pointer
+        podAuto: false,          // AUTOPILOT — the pod plays your unit
 
         // Settings
         theme: "",
@@ -24595,6 +24898,8 @@ for (let tree of trees) {
     function saveConfig() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(window.vars));
     }
+    // The Pod lives in a different scope; let it persist its own toggles.
+    try { window.saveConfig = saveConfig; } catch (e) {}
 
     // YoRHa Visual also recolours the HUD, which is the game's own DOM rather
     // than something the canvas hook can reach. A body class does it, kept in
@@ -24891,12 +25196,31 @@ for (let tree of trees) {
                     { type: 'select', name: "Pod Unit", id: "podVariant", options: [
                         { value: 0, label: "042 (cream)" },
                         { value: 1, label: "153 (grey)" },
-                        { value: 2, label: "A2 (black / red)" }
+                        { value: 2, label: "A2 (black / red)" },
+                        { value: 3, label: "M2 (steel / cyan)" },
+                        { value: 4, label: "P-33 (gold)" },
+                        { value: 5, label: "R-9 (crimson)" }
                     ] },
                     { type: 'keybind', name: "Open Pod Chat", id: "keyPodChat" },
-                    { type: 'toggle', name: "Pod AI (Claude conversation)", id: "podAI" },
-                    { type: 'input', name: "Anthropic API Key (sk-ant-…)", id: "podAIKey" },
-                    { type: 'input', name: "AI Model (blank = Opus 5)", id: "podAIModel" }
+                    { type: 'toggle', name: "Point to farm (green arrow)", id: "podPointFarm" },
+                    { type: 'select', name: "Pod talk style", id: "podTalkStyle", options: [
+                        { value: "player", label: "Over my head (game style)" },
+                        { value: "drone", label: "Over the drone" }
+                    ] },
+                    { type: 'toggle', name: "Pod voice (text-to-speech)", id: "podVoice" },
+                    { type: 'toggle', name: "Hear my game chat", id: "podListenChat" },
+                    { type: 'toggle', name: "AUTOPILOT — Pod plays for me", id: "podAuto" },
+                    { type: 'keybind', name: "Autopilot toggle key", id: "keyPodAuto" },
+                    { type: 'toggle', name: "Pod AI (smart conversation)", id: "podAI" },
+                    { type: 'select', name: "AI Provider", id: "podProvider", options: [
+                        { value: "pollinations", label: "Pollinations (free, no key)" },
+                        { value: "gemini", label: "Google Gemini (free key)" },
+                        { value: "groq", label: "Groq (free key, fast)" },
+                        { value: "anthropic", label: "Anthropic Claude (paid)" },
+                        { value: "openai", label: "OpenAI GPT (paid)" }
+                    ] },
+                    { type: 'input', name: "AI API Key (blank for free)", id: "podAIKey" },
+                    { type: 'input', name: "AI Model (blank = default)", id: "podAIModel" }
                 ]
             }
         ],
