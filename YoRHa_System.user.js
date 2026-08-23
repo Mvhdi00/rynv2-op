@@ -10975,22 +10975,25 @@ let pps = 0;
             const bw = 9 * s, bh = 12 * s;
             const sway = Math.sin(t / 520) * 0.16;
 
-            // arms first, so the body overlaps the shoulders
+            // arms first, so the body overlaps the shoulders. They HANG DOWN,
+            // like the real unit — a small outward spread and a gentle sway, not
+            // folded across the front.
             ctx.lineJoin = "round";
             for (const sgn of [-1, 1]) {
                 ctx.save();
                 ctx.translate(sgn * (bw - 2 * s), bh - 3 * s);
-                ctx.rotate(sgn * (0.45 + sway * sgn));
-                podCapsule(ctx, 0, 0, 0, 9 * s, 3.1 * s, V.body, V.outline, s);
-                ctx.translate(0, 9 * s);
+                ctx.rotate(sgn * (0.16 + sway * sgn));           // slight spread + sway
+                podCapsule(ctx, 0, 0, 0, 10 * s, 3.1 * s, V.body, V.outline, s);
+                ctx.translate(0, 10 * s);
                 ctx.fillStyle = "#3a352c"; ctx.beginPath(); ctx.arc(0, 0, 2.2 * s, 0, 7); ctx.fill();
-                ctx.rotate(0.5 + Math.sin(t / 460 + sgn) * 0.12);
-                podCapsule(ctx, 0, 0, 0, 8.5 * s, 2.7 * s, V.body, V.outline, s);
-                ctx.translate(0, 8.5 * s);
+                ctx.rotate(sgn * 0.10 + Math.sin(t / 460 + sgn) * 0.05);  // continues down
+                podCapsule(ctx, 0, 0, 0, 9 * s, 2.7 * s, V.body, V.outline, s);
+                ctx.translate(0, 9 * s);
+                // claw: three prongs pointing down, slightly open
                 ctx.strokeStyle = "#26231e"; ctx.lineWidth = 1.7 * s; ctx.lineCap = "round";
-                for (const a of [-0.5, 0, 0.5]) {
+                for (const a of [-0.32, 0, 0.32]) {
                     ctx.save(); ctx.rotate(a);
-                    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 4.5 * s); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 4.6 * s); ctx.stroke();
                     ctx.restore();
                 }
                 ctx.restore();
@@ -11006,14 +11009,20 @@ let pps = 0;
             }
             ctx.globalAlpha = 1;
 
-            // optic band + tracking pupil
-            ctx.fillStyle = "#26231e";
-            podRoundRect(ctx, -bw + 1.5 * s, bh * 0.12, (bw - 1.5 * s) * 2, 4.6 * s, 1.5 * s);
-            ctx.fill();
+            // optic — a single round camera lens (the Pod's one eye), with a
+            // glowing pupil that shifts toward your aim.
+            const lensY = bh * 0.36;
+            ctx.fillStyle = "#201d18"; ctx.strokeStyle = V.outline; ctx.lineWidth = 1.5 * s;
+            ctx.beginPath(); ctx.arc(0, lensY, 4.4 * s, 0, 7); ctx.fill(); ctx.stroke();
             const pulse = 0.6 + 0.4 * Math.sin(t / 260);
-            const ex = Math.max(-bw + 3 * s, Math.min(bw - 3 * s, Math.cos(aim) * bw));
-            ctx.globalAlpha = pulse; ctx.fillStyle = V.eye;
-            ctx.beginPath(); ctx.arc(ex, bh * 0.12 + 2.3 * s, 1.7 * s, 0, 7); ctx.fill();
+            const ex = Math.max(-2.2 * s, Math.min(2.2 * s, Math.cos(aim) * 3 * s));
+            const ey = lensY + Math.max(-1.5 * s, Math.min(1.5 * s, Math.sin(aim) * 2.2 * s));
+            ctx.globalAlpha = 0.4 * pulse; ctx.fillStyle = V.eye;
+            ctx.beginPath(); ctx.arc(ex, ey, 3.4 * s, 0, 7); ctx.fill();
+            ctx.globalAlpha = 1; ctx.fillStyle = V.eye;
+            ctx.beginPath(); ctx.arc(ex, ey, 2 * s, 0, 7); ctx.fill();
+            ctx.fillStyle = "#fff"; ctx.globalAlpha = 0.5;
+            ctx.beginPath(); ctx.arc(ex - 0.7 * s, ey - 0.7 * s, 0.7 * s, 0, 7); ctx.fill();
             ctx.globalAlpha = 1;
 
             // beacon on top (the Pod's amber light)
@@ -12716,7 +12725,7 @@ let pps = 0;
                         if (tmpObj.skinIndex != 10 || (tmpObj == myPlayer) || (tmpObj.team && tmpObj.team == myPlayer.team)) {
                             var tmpText = (tmpObj.team ? `[${tmpObj.team}] ` : ``) + (tmpObj.name || ``);
                             if (tmpText != "") {
-                                mainContext.font = (tmpObj.nameScale || 30) + "px Hammersmith One";
+                                mainContext.font = (tmpObj.nameScale || 30) + "px " + (yorhaOn() ? "Jost, 'Hammersmith One'" : "Hammersmith One");
                                 mainContext.fillStyle = "#fff";
                                 mainContext.textBaseline = "middle";
                                 mainContext.textAlign = "center";
@@ -24856,6 +24865,8 @@ for (let tree of trees) {
         yorhaCRT: false,         // full-screen CRT / scanline veil
         yorhaToasts: true,       // slide-in YoRHa system notifications
         yorhaScreens: true,      // NieR GAME OVER + pause overlays
+        yorhaCursor: true,       // YoRHa crosshair mouse cursor
+        yorhaMinimap: true,      // reskin the minimap frame
         podEnabled: true,        // the YoRHa Pod: a drone that follows + a targeting line
         podVariant: 0,           // 0 = 042, 1 = 153, 2 = A2
         podAI: false,            // route typed pod chat through an AI provider
@@ -24903,6 +24914,8 @@ for (let tree of trees) {
     // generic toggle handler, and always correct.
     function applyYorhaHud() {
         try { document.body.classList.toggle("yorha-hud", !!(window.vars && window.vars.yorhaVisual)); } catch (e) {}
+        try { document.body.classList.toggle("yorha-cursor", !!(window.vars && window.vars.yorhaCursor)); } catch (e) {}
+        try { document.body.classList.toggle("yorha-minimap", !!(window.vars && window.vars.yorhaMinimap)); } catch (e) {}
         // The menu backdrop: show it only while the landing screen is up (the
         // setup card / menu holder visible), hide it the moment you are in game
         // so it never covers the world or the weapon bar.
@@ -24979,8 +24992,9 @@ for (let tree of trees) {
                     document.body.appendChild(el);
                     el.addEventListener("click", () => el.classList.remove("show"));
                 }
-                const lines = ["everything that lives is designed to end.", "a future is not given to you.",
-                               "we cannot hope without despair.", "ends have meaning.", "glory to mankind."];
+                const lines = ["unit signal lost.", "combat data archived.", "the field falls quiet.",
+                               "reboot when ready.", "another cycle begins.", "the record remains.",
+                               "no data is ever truly lost.", "stand by for redeployment."];
                 el.querySelector(".go-sub").textContent = lines[(Math.random() * lines.length) | 0];
                 el.classList.add("show");
                 setTimeout(() => el.classList.remove("show"), 4600);
@@ -25285,6 +25299,8 @@ for (let tree of trees) {
                     { type: 'toggle', name: "CRT / Scanlines (whole screen)", id: "yorhaCRT" },
                     { type: 'toggle', name: "System Notifications", id: "yorhaToasts" },
                     { type: 'toggle', name: "GAME OVER / Pause screens", id: "yorhaScreens" },
+                    { type: 'toggle', name: "YoRHa cursor (crosshair)", id: "yorhaCursor" },
+                    { type: 'toggle', name: "Minimap reskin", id: "yorhaMinimap" },
                     { type: 'keybind', name: "Pause menu key", id: "keyPause" },
                     { type: 'toggle', name: "Pod (drone + pointers)", id: "podEnabled" },
                     { type: 'select', name: "Pod Unit", id: "podVariant", options: [
@@ -26015,6 +26031,21 @@ for (let tree of trees) {
     #yorha-pause .pz-item { padding: 11px 10px; border-top: 1px solid rgba(69,65,56,0.3);
         letter-spacing: 4px; font-size: 14px; cursor: pointer; transition: background .12s, color .12s; }
     #yorha-pause .pz-item:hover { background: #454138; color: #c7c3b1; }
+
+    /* ===== YoRHa CURSOR ===== a square crosshair with an amber centre dot */
+    body.yorha-cursor, body.yorha-cursor #gameCanvas, body.yorha-cursor canvas {
+        cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cg fill='none' stroke='%232f2c26' stroke-width='4'%3E%3Crect x='10' y='10' width='12' height='12'/%3E%3Cline x1='16' y1='1' x2='16' y2='8'/%3E%3Cline x1='16' y1='24' x2='16' y2='31'/%3E%3Cline x1='1' y1='16' x2='8' y2='16'/%3E%3Cline x1='24' y1='16' x2='31' y2='16'/%3E%3C/g%3E%3Cg fill='none' stroke='%23e7e2ce' stroke-width='2'%3E%3Crect x='10' y='10' width='12' height='12'/%3E%3Cline x1='16' y1='1' x2='16' y2='8'/%3E%3Cline x1='16' y1='24' x2='16' y2='31'/%3E%3Cline x1='1' y1='16' x2='8' y2='16'/%3E%3Cline x1='24' y1='16' x2='31' y2='16'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='1.6' fill='%23c0402f'/%3E%3C/svg%3E") 16 16, crosshair;
+    }
+
+    /* ===== MINIMAP RESKIN ===== ink frame + parchment grid over #mapDisplay */
+    body.yorha-minimap #mapDisplay {
+        border: 2px solid #454138 !important; border-radius: 0 !important;
+        box-shadow: 4px 4px 0 rgba(69,65,56,0.30) !important;
+        filter: sepia(0.35) saturate(0.7) brightness(0.96) !important;
+        background-image:
+            repeating-linear-gradient(rgba(69,65,56,.12) 0 1px, transparent 1px 18px),
+            repeating-linear-gradient(90deg, rgba(69,65,56,.12) 0 1px, transparent 1px 18px) !important;
+    }
 
     /* ===== THE POD TERMINAL ===== a floating YoRHa chat window for Pod 042 */
     #pod-panel {
