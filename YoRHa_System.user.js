@@ -24806,7 +24806,6 @@ for (let tree of trees) {
         millRotation: false,
         spikeRotation: false,
         yorhaVisual: true,       // full-screen YoRHa atmosphere wash
-        yorhaSound: true,        // YoRHa menu blips (WebAudio, synthesised)
         yorhaCRT: false,         // full-screen CRT / scanline veil
         yorhaToasts: true,       // slide-in YoRHa system notifications
         yorhaScreens: true,      // NieR GAME OVER + pause overlays
@@ -24882,34 +24881,6 @@ for (let tree of trees) {
     // Everything here is synthesised or drawn in-page; no external assets. Each
     // piece is gated by its own setting so the whole layer is opt-out.
     const YoRHaFX = {
-        ac: null,
-        _ctx() {
-            try {
-                if (!this.ac) this.ac = new (window.AudioContext || window.webkitAudioContext)();
-                if (this.ac && this.ac.state === "suspended") this.ac.resume();
-            } catch (e) {}
-            return this.ac;
-        },
-        // A short YoRHa-flavoured blip: soft tone, quick decay.
-        _blip(freq, dur, type, vol) {
-            if (!(window.vars && window.vars.yorhaSound)) return;
-            const ac = this._ctx(); if (!ac) return;
-            try {
-                const o = ac.createOscillator(), g = ac.createGain();
-                o.type = type || "sine"; o.frequency.value = freq;
-                o.connect(g); g.connect(ac.destination);
-                const t = ac.currentTime;
-                g.gain.setValueAtTime(0.0001, t);
-                g.gain.exponentialRampToValueAtTime(vol || 0.05, t + 0.008);
-                g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.08));
-                o.start(t); o.stop(t + (dur || 0.08) + 0.02);
-            } catch (e) {}
-        },
-        hover()   { this._blip(640, 0.045, "sine", 0.025); },
-        click()   { this._blip(900, 0.06, "triangle", 0.05); this._blip(1350, 0.05, "sine", 0.025); },
-        confirm() { this._blip(520, 0.06, "sine", 0.05); setTimeout(() => this._blip(800, 0.09, "sine", 0.05), 55); },
-        back()    { this._blip(300, 0.10, "sine", 0.05); },
-
         // Sliding YoRHa system notifications. Untrusted text via textContent.
         toast(kind, text) {
             if (!(window.vars && window.vars.yorhaToasts)) return;
@@ -24924,7 +24895,6 @@ for (let tree of trees) {
                 el.appendChild(tag); el.appendChild(msg);
                 host.appendChild(el);
                 requestAnimationFrame(() => el.classList.add("show"));
-                this._blip(880, 0.04, "sine", 0.02);
                 setTimeout(() => { el.classList.remove("show"); setTimeout(() => { try { host.removeChild(el); } catch (e) {} }, 400); }, 4200);
             } catch (e) {}
         },
@@ -24966,7 +24936,6 @@ for (let tree of trees) {
                                "we cannot hope without despair.", "ends have meaning.", "glory to mankind."];
                 el.querySelector(".go-sub").textContent = lines[(Math.random() * lines.length) | 0];
                 el.classList.add("show");
-                this.back();
                 setTimeout(() => el.classList.remove("show"), 4600);
             } catch (e) {}
         },
@@ -24993,26 +24962,12 @@ for (let tree of trees) {
                 }
                 const on = (force === undefined) ? !el.classList.contains("show") : !!force;
                 el.classList.toggle("show", on);
-                if (on) this.confirm(); else this.back();
             } catch (e) {}
         }
     };
     try { window.YoRHaFX = YoRHaFX; window._yorhaToast = (k, t) => YoRHaFX.toast(k, t); } catch (e) {}
     // CRT veil + death watch on their own light poll.
     try { setInterval(() => { YoRHaFX.crt(); YoRHaFX.deathWatch(); }, 400); } catch (e) {}
-    // Menu sound effects, by delegation over the mod's own UI.
-    try {
-        document.addEventListener("mouseover", (e) => {
-            const t = e.target;
-            if (t && t.closest && t.closest('.deltek-root, #pod-panel, #yorha-pause') &&
-                t.matches && t.matches('.nav-item, .switch, .feature-row, .pz-item, button, .storeTab, .theme-swatch, select'))
-                YoRHaFX.hover();
-        }, true);
-        document.addEventListener("click", (e) => {
-            const t = e.target;
-            if (t && t.closest && t.closest('.deltek-root, #pod-panel, #yorha-pause')) YoRHaFX.click();
-        }, true);
-    } catch (e) {}
 
     // =========================================================================
     //  >>> MENU CONFIGURATION MAPPING <<<
@@ -25280,7 +25235,6 @@ for (let tree of trees) {
                 title: "YoRHa",
                 items: [
                     { type: 'toggle', name: "YoRHa Visual (atmosphere)", id: "yorhaVisual" },
-                    { type: 'toggle', name: "UI Sounds (YoRHa blips)", id: "yorhaSound" },
                     { type: 'toggle', name: "CRT / Scanlines (whole screen)", id: "yorhaCRT" },
                     { type: 'toggle', name: "System Notifications", id: "yorhaToasts" },
                     { type: 'toggle', name: "GAME OVER / Pause screens", id: "yorhaScreens" },
