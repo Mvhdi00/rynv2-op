@@ -11466,59 +11466,6 @@ let pps = 0;
                     });
             },
 
-            // ---- AUTOPILOT: the Pod plays your unit --------------------------
-            // A real-time driver — an LLM is far too slow to fight, so this is
-            // the mod's own fast logic: it aims, swings, kites, and farms your
-            // OWN player. Toggle it on and step back; toggle off and you have
-            // control again. It never runs while you are possessing a bot.
-            _auto: { attacking: false },
-            autopilotToggle(force) {
-                const on = (force === undefined) ? !(window.vars && window.vars.podAuto) : !!force;
-                try { window.vars.podAuto = on; } catch (e) {}
-                if (on) {
-                    try { autoaim = true; } catch (e) {}
-                    try { window.vars.autoPlay = true; } catch (e) {}
-                    this.say(this._pick(["Autopilot engaged. I have your unit.", "القيادة الآلية مفعّلة. الوحدة تحت سيطرتي."]));
-                } else {
-                    try { autoaim = false; } catch (e) {}
-                    try { if (typeof attackState !== "undefined") { attackState = 0; sendAtckState(); } io.send("9", null); } catch (e) {}
-                    this._auto.attacking = false;
-                    this.say(this._pick(["Autopilot released. You have control.", "سلّمتك القيادة."]));
-                }
-                try { if (window.saveConfig) window.saveConfig(); } catch (e) {}
-            },
-            autopilotTick() {
-                try {
-                    if (!(window.vars && window.vars.podAuto)) return;
-                    if (typeof RynBots !== "undefined" && RynBots.possessed) return; // drive YOU, not a bot
-                    const s = (typeof myPlayer !== "undefined") ? myPlayer : null;
-                    if (!s || !s.alive) return;
-                    const foe = this._nearestFoe(s);
-                    let moveAng = null, aimAng = null, attack = false;
-                    if (foe && foe.d < 700) {
-                        aimAng = Math.atan2(foe.p.y - s.y, foe.p.x - s.x);
-                        attack = foe.d < 340;
-                        if (foe.d > 240) moveAng = aimAng;              // close in
-                        else if (foe.d < 150) moveAng = aimAng + Math.PI; // too close, back off
-                        else moveAng = aimAng + Math.PI / 2;            // strafe at range
-                    } else {
-                        const r = this._nearestResource(s);
-                        if (r) {
-                            aimAng = Math.atan2(r.y - s.y, r.x - s.x);
-                            const rd = UTILS.getDistance(s.x, s.y, r.x, r.y);
-                            attack = rd < 150;                          // gather
-                            if (rd > 125) moveAng = aimAng;
-                        }
-                    }
-                    try { if (aimAng !== null) io.send("D", aimAng); } catch (e) {}
-                    try { io.send("9", moveAng); } catch (e) {}          // null = stop
-                    if (attack !== this._auto.attacking) {
-                        this._auto.attacking = attack;
-                        try { attackState = attack ? 1 : 0; sendAtckState(); } catch (e) {}
-                    }
-                } catch (e) {}
-            },
-
             // ---- answering what you type -------------------------------------
             // AI on and a key set → Claude answers; otherwise the local matcher.
             handle(text) {
@@ -11644,8 +11591,6 @@ let pps = 0;
         try { window.Pod = Pod; } catch (e) {}
         // The brain runs on its own clock, independent of frame rate.
         try { setInterval(function () { try { Pod.tick(); } catch (e) {} }, 700); } catch (e) {}
-        // Autopilot drives on a faster clock so combat feels responsive.
-        try { setInterval(function () { try { Pod.autopilotTick(); } catch (e) {} }, 120); } catch (e) {}
 
         function resetZoom() {
             var newW = config.maxScreenWidth * factor;
@@ -12073,9 +12018,6 @@ let pps = 0;
                     }
                     else if (keyStr === window.vars.keyPodChat) {
                         try { Pod.toggle(); } catch (e) {}
-                    }
-                    else if (keyStr === window.vars.keyPodAuto) {
-                        try { Pod.autopilotToggle(); } catch (e) {}
                     }
                 }
             }
@@ -24771,7 +24713,6 @@ for (let tree of trees) {
         keyBotAttack: "M",
         keyPacketSpam: "B",
         keyPodChat: "Y",
-        keyPodAuto: "K",
 
 
         // Combat
@@ -24869,7 +24810,6 @@ for (let tree of trees) {
         podTalkStyle: "player",  // "player" = bubble over your head (game-like) | "drone"
         podVoice: false,         // speak the pod's lines aloud (text-to-speech)
         podPointFarm: true,      // draw the green "farm this way" pointer
-        podAuto: false,          // AUTOPILOT — the pod plays your unit
 
         // Settings
         theme: "",
@@ -25209,8 +25149,6 @@ for (let tree of trees) {
                     ] },
                     { type: 'toggle', name: "Pod voice (text-to-speech)", id: "podVoice" },
                     { type: 'toggle', name: "Hear my game chat", id: "podListenChat" },
-                    { type: 'toggle', name: "AUTOPILOT — Pod plays for me", id: "podAuto" },
-                    { type: 'keybind', name: "Autopilot toggle key", id: "keyPodAuto" },
                     { type: 'toggle', name: "Pod AI (smart conversation)", id: "podAI" },
                     { type: 'select', name: "AI Provider", id: "podProvider", options: [
                         { value: "pollinations", label: "Pollinations (free, no key)" },
