@@ -9010,6 +9010,8 @@ let pps = 0;
                 this.lines.push({ t: Date.now(), time: this.now(), kind: kind, text: String(text) });
                 if (this.lines.length > this.max) this.lines.shift();
                 try { if (window._novaServerLogSink) window._novaServerLogSink(); } catch (e) {}
+                // Mirror the event as a sliding YoRHa system toast.
+                try { if (window._yorhaToast) window._yorhaToast(kind, text); } catch (e) {}
             },
             clear() {
                 this.lines.length = 0;
@@ -12018,6 +12020,9 @@ let pps = 0;
                     }
                     else if (keyStr === window.vars.keyPodChat) {
                         try { Pod.toggle(); } catch (e) {}
+                    }
+                    else if (keyStr === window.vars.keyPause) {
+                        try { if (window.YoRHaFX) window.YoRHaFX.pauseToggle(); } catch (e) {}
                     }
                 }
             }
@@ -24713,6 +24718,7 @@ for (let tree of trees) {
         keyBotAttack: "M",
         keyPacketSpam: "B",
         keyPodChat: "Y",
+        keyPause: "K",
 
 
         // Combat
@@ -24800,6 +24806,10 @@ for (let tree of trees) {
         millRotation: false,
         spikeRotation: false,
         yorhaVisual: true,       // full-screen YoRHa atmosphere wash
+        yorhaSound: true,        // YoRHa menu blips (WebAudio, synthesised)
+        yorhaCRT: false,         // full-screen CRT / scanline veil
+        yorhaToasts: true,       // slide-in YoRHa system notifications
+        yorhaScreens: true,      // NieR GAME OVER + pause overlays
         podEnabled: true,        // the YoRHa Pod: a drone that follows + a targeting line
         podVariant: 0,           // 0 = 042, 1 = 153, 2 = A2
         podAI: false,            // route typed pod chat through an AI provider
@@ -24865,6 +24875,144 @@ for (let tree of trees) {
         } catch (e) {}
     }
     try { applyYorhaHud(); setInterval(applyYorhaHud, 500); } catch (e) {}
+
+    // =========================================================================
+    // NieR:Automata UI LAYER  —  sound, CRT, toasts, game-over, pause
+    // =========================================================================
+    // Everything here is synthesised or drawn in-page; no external assets. Each
+    // piece is gated by its own setting so the whole layer is opt-out.
+    const YoRHaFX = {
+        ac: null,
+        _ctx() {
+            try {
+                if (!this.ac) this.ac = new (window.AudioContext || window.webkitAudioContext)();
+                if (this.ac && this.ac.state === "suspended") this.ac.resume();
+            } catch (e) {}
+            return this.ac;
+        },
+        // A short YoRHa-flavoured blip: soft tone, quick decay.
+        _blip(freq, dur, type, vol) {
+            if (!(window.vars && window.vars.yorhaSound)) return;
+            const ac = this._ctx(); if (!ac) return;
+            try {
+                const o = ac.createOscillator(), g = ac.createGain();
+                o.type = type || "sine"; o.frequency.value = freq;
+                o.connect(g); g.connect(ac.destination);
+                const t = ac.currentTime;
+                g.gain.setValueAtTime(0.0001, t);
+                g.gain.exponentialRampToValueAtTime(vol || 0.05, t + 0.008);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.08));
+                o.start(t); o.stop(t + (dur || 0.08) + 0.02);
+            } catch (e) {}
+        },
+        hover()   { this._blip(640, 0.045, "sine", 0.025); },
+        click()   { this._blip(900, 0.06, "triangle", 0.05); this._blip(1350, 0.05, "sine", 0.025); },
+        confirm() { this._blip(520, 0.06, "sine", 0.05); setTimeout(() => this._blip(800, 0.09, "sine", 0.05), 55); },
+        back()    { this._blip(300, 0.10, "sine", 0.05); },
+
+        // Sliding YoRHa system notifications. Untrusted text via textContent.
+        toast(kind, text) {
+            if (!(window.vars && window.vars.yorhaToasts)) return;
+            if (kind === "chat") return;   // chat already shows in-game
+            try {
+                let host = document.getElementById("yorha-toasts");
+                if (!host) { host = document.createElement("div"); host.id = "yorha-toasts"; document.body.appendChild(host); }
+                const el = document.createElement("div");
+                el.className = "yorha-toast k-" + (kind || "server");
+                const tag = document.createElement("span"); tag.className = "yt-tag"; tag.textContent = (kind || "system").toUpperCase();
+                const msg = document.createElement("span"); msg.className = "yt-msg"; msg.textContent = String(text);
+                el.appendChild(tag); el.appendChild(msg);
+                host.appendChild(el);
+                requestAnimationFrame(() => el.classList.add("show"));
+                this._blip(880, 0.04, "sine", 0.02);
+                setTimeout(() => { el.classList.remove("show"); setTimeout(() => { try { host.removeChild(el); } catch (e) {} }, 400); }, 4200);
+            } catch (e) {}
+        },
+
+        // The full-screen CRT / scanline veil, toggled on the HUD poll.
+        crt() {
+            try {
+                let el = document.getElementById("yorha-crt");
+                if (!el) { el = document.createElement("div"); el.id = "yorha-crt"; document.body.appendChild(el); }
+                el.style.display = (window.vars && window.vars.yorhaCRT) ? "block" : "none";
+            } catch (e) {}
+        },
+
+        // GAME OVER — watch your life and fade the black screen in on death.
+        _wasAlive: true,
+        deathWatch() {
+            try {
+                // myPlayer lives in the game scope; reach it through the Pod,
+                // which is defined there and exposes _self().
+                const p = (window.Pod && window.Pod._self) ? window.Pod._self() : null;
+                if (!p) return;
+                if (this._wasAlive && p.alive === false) {
+                    this._wasAlive = false;
+                    if (window.vars && window.vars.yorhaScreens) this.gameOver();
+                }
+                if (p.alive) this._wasAlive = true;
+            } catch (e) {}
+        },
+        gameOver() {
+            try {
+                let el = document.getElementById("yorha-gameover");
+                if (!el) {
+                    el = document.createElement("div"); el.id = "yorha-gameover";
+                    el.innerHTML = '<div class="go-inner"><div class="go-top">GAME OVER</div><div class="go-sub"></div></div>';
+                    document.body.appendChild(el);
+                    el.addEventListener("click", () => el.classList.remove("show"));
+                }
+                const lines = ["everything that lives is designed to end.", "a future is not given to you.",
+                               "we cannot hope without despair.", "ends have meaning.", "glory to mankind."];
+                el.querySelector(".go-sub").textContent = lines[(Math.random() * lines.length) | 0];
+                el.classList.add("show");
+                this.back();
+                setTimeout(() => el.classList.remove("show"), 4600);
+            } catch (e) {}
+        },
+
+        // A cosmetic YoRHa pause overlay — the game keeps running (multiplayer),
+        // so it says so; it is a menu, not a freeze.
+        pauseToggle(force) {
+            try {
+                let el = document.getElementById("yorha-pause");
+                if (!el) {
+                    el = document.createElement("div"); el.id = "yorha-pause";
+                    el.innerHTML = '<div class="pz-box"><div class="pz-title">PAUSED</div>' +
+                        '<div class="pz-note">the world does not stop — you are still vulnerable</div>' +
+                        '<div class="pz-item" data-a="resume">RESUME</div>' +
+                        '<div class="pz-item" data-a="menu">SYSTEM SETTINGS</div>' +
+                        '<div class="pz-item" data-a="pod">POD TERMINAL</div></div>';
+                    document.body.appendChild(el);
+                    el.addEventListener("click", (e) => {
+                        const a = e.target && e.target.getAttribute && e.target.getAttribute("data-a");
+                        if (e.target === el || a === "resume") this.pauseToggle(false);
+                        else if (a === "menu") { this.pauseToggle(false); try { const r = document.querySelector('.deltek-root'); if (r) r.classList.add('active'); } catch (_) {} }
+                        else if (a === "pod") { this.pauseToggle(false); try { if (window.Pod) window.Pod.toggle(true); } catch (_) {} }
+                    });
+                }
+                const on = (force === undefined) ? !el.classList.contains("show") : !!force;
+                el.classList.toggle("show", on);
+                if (on) this.confirm(); else this.back();
+            } catch (e) {}
+        }
+    };
+    try { window.YoRHaFX = YoRHaFX; window._yorhaToast = (k, t) => YoRHaFX.toast(k, t); } catch (e) {}
+    // CRT veil + death watch on their own light poll.
+    try { setInterval(() => { YoRHaFX.crt(); YoRHaFX.deathWatch(); }, 400); } catch (e) {}
+    // Menu sound effects, by delegation over the mod's own UI.
+    try {
+        document.addEventListener("mouseover", (e) => {
+            const t = e.target;
+            if (t && t.closest && t.closest('.deltek-root, #pod-panel, #yorha-pause') &&
+                t.matches && t.matches('.nav-item, .switch, .feature-row, .pz-item, button, .storeTab, .theme-swatch, select'))
+                YoRHaFX.hover();
+        }, true);
+        document.addEventListener("click", (e) => {
+            const t = e.target;
+            if (t && t.closest && t.closest('.deltek-root, #pod-panel, #yorha-pause')) YoRHaFX.click();
+        }, true);
+    } catch (e) {}
 
     // =========================================================================
     //  >>> MENU CONFIGURATION MAPPING <<<
@@ -25132,7 +25280,12 @@ for (let tree of trees) {
                 title: "YoRHa",
                 items: [
                     { type: 'toggle', name: "YoRHa Visual (atmosphere)", id: "yorhaVisual" },
-                    { type: 'toggle', name: "Pod (drone + targeting line)", id: "podEnabled" },
+                    { type: 'toggle', name: "UI Sounds (YoRHa blips)", id: "yorhaSound" },
+                    { type: 'toggle', name: "CRT / Scanlines (whole screen)", id: "yorhaCRT" },
+                    { type: 'toggle', name: "System Notifications", id: "yorhaToasts" },
+                    { type: 'toggle', name: "GAME OVER / Pause screens", id: "yorhaScreens" },
+                    { type: 'keybind', name: "Pause menu key", id: "keyPause" },
+                    { type: 'toggle', name: "Pod (drone + pointers)", id: "podEnabled" },
                     { type: 'select', name: "Pod Unit", id: "podVariant", options: [
                         { value: 0, label: "042 (cream)" },
                         { value: 1, label: "153 (grey)" },
@@ -25798,6 +25951,69 @@ for (let tree of trees) {
     .yb-skip { position: absolute; bottom: 22px; right: 28px; font-size: 11px; color: #6f6b5e; letter-spacing: 3px; }
     .yb-cursor { animation: yb-blink 1s steps(2,start) infinite; }
     @keyframes yb-blink { 50% { opacity: 0; } }
+
+    /* ===== CRT / SCANLINES ===== a full-screen veil over everything */
+    #yorha-crt {
+        display: none; position: fixed; inset: 0; z-index: 2147483000; pointer-events: none;
+        background:
+            repeating-linear-gradient(rgba(0,0,0,0.10) 0 1px, transparent 1px 3px),
+            radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(20,18,14,0.42) 100%);
+        mix-blend-mode: multiply;
+    }
+    #yorha-crt::after {
+        content: ""; position: absolute; inset: 0;
+        background: linear-gradient(rgba(199,195,177,0.03), rgba(199,195,177,0));
+        animation: yorha-flicker 6s infinite steps(60);
+    }
+    @keyframes yorha-flicker { 0%,97%,100% { opacity: 1; } 98% { opacity: 0.86; } 99% { opacity: 0.94; } }
+
+    /* ===== SYSTEM NOTIFICATIONS ===== YoRHa slide-in toasts */
+    #yorha-toasts {
+        position: fixed; top: 74px; right: 18px; z-index: 2147483100;
+        display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+        font-family: 'Jost', 'Century Gothic', sans-serif;
+    }
+    .yorha-toast {
+        display: flex; align-items: center; gap: 9px; min-width: 210px; max-width: 340px;
+        padding: 8px 12px; background: #c7c3b1; color: #2f2c26;
+        border: 2px solid #454138; box-shadow: 4px 4px 0 rgba(69,65,56,0.30);
+        transform: translateX(120%); opacity: 0; transition: transform .35s cubic-bezier(.2,.7,.3,1), opacity .35s;
+    }
+    .yorha-toast.show { transform: translateX(0); opacity: 1; }
+    .yorha-toast .yt-tag { font-size: 10px; letter-spacing: 2px; font-weight: 600;
+        background: #454138; color: #d8d4c4; padding: 2px 6px; }
+    .yorha-toast .yt-msg { font-size: 12.5px; letter-spacing: .3px; }
+    .yorha-toast.k-death .yt-tag { background: #7a2e26; }
+    .yorha-toast.k-join  .yt-tag { background: #46583e; }
+    .yorha-toast.k-leave .yt-tag { background: #5a5040; }
+    .yorha-toast.k-clan  .yt-tag { background: #3d4a58; }
+
+    /* ===== GAME OVER ===== the NieR black card */
+    #yorha-gameover {
+        position: fixed; inset: 0; z-index: 2147483200; display: flex;
+        align-items: center; justify-content: center; background: #0b0a08;
+        opacity: 0; pointer-events: none; transition: opacity .8s ease;
+        font-family: 'Jost', 'Century Gothic', serif;
+    }
+    #yorha-gameover.show { opacity: 0.97; pointer-events: auto; }
+    #yorha-gameover .go-inner { text-align: center; color: #d8d4c4; }
+    #yorha-gameover .go-top { font-size: 58px; letter-spacing: 14px; font-weight: 300; }
+    #yorha-gameover .go-sub { margin-top: 20px; font-size: 15px; letter-spacing: 5px; color: #8a8676; text-transform: lowercase; }
+
+    /* ===== PAUSE ===== a cosmetic YoRHa menu overlay */
+    #yorha-pause {
+        position: fixed; inset: 0; z-index: 2147483150; display: none;
+        align-items: center; justify-content: center; background: rgba(11,10,8,0.55);
+        font-family: 'Jost', 'Century Gothic', sans-serif;
+    }
+    #yorha-pause.show { display: flex; }
+    #yorha-pause .pz-box { background: #c7c3b1; color: #2f2c26; border: 2px solid #454138;
+        box-shadow: 8px 8px 0 rgba(69,65,56,0.35); padding: 26px 40px; min-width: 300px; text-align: center; }
+    #yorha-pause .pz-title { font-size: 30px; letter-spacing: 10px; font-weight: 400; }
+    #yorha-pause .pz-note { font-size: 11px; letter-spacing: 2px; color: #6f6b5e; margin: 8px 0 20px; }
+    #yorha-pause .pz-item { padding: 11px 10px; border-top: 1px solid rgba(69,65,56,0.3);
+        letter-spacing: 4px; font-size: 14px; cursor: pointer; transition: background .12s, color .12s; }
+    #yorha-pause .pz-item:hover { background: #454138; color: #c7c3b1; }
 
     /* ===== THE POD TERMINAL ===== a floating YoRHa chat window for Pod 042 */
     #pod-panel {
