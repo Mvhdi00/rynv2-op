@@ -10886,8 +10886,6 @@ let pps = 0;
             const V = podVariant();
             const t2 = t;
 
-            mainContext.save();
-
             // ---- POINTERS (replaces the old laser) --------------------------
             // Short markers from the pod: red toward the nearest hostile, green
             // toward the nearest resource. They point; they do not draw a beam.
@@ -10906,62 +10904,8 @@ let pps = 0;
                 }
             } catch (e) {}
 
-            // ---- THE DRONE --------------------------------------------------
-            // A rounded shell with a panel seam, side thrusters, a thin antenna
-            // with a blinking tip, and a pulsing eye that tracks your aim.
-            mainContext.translate(px, py);
-            mainContext.save();
-            mainContext.rotate(aim + Math.PI / 2);
-
-            // antenna
-            mainContext.strokeStyle = V.outline;
-            mainContext.lineWidth = 2;
-            mainContext.beginPath();
-            mainContext.moveTo(0, -8); mainContext.lineTo(0, -18);
-            mainContext.stroke();
-            mainContext.fillStyle = (Math.floor(t2 / 400) % 2) ? "#c0402f" : V.fin;
-            mainContext.beginPath(); mainContext.arc(0, -19, 2.4, 0, Math.PI * 2); mainContext.fill();
-
-            // side thrusters
-            mainContext.fillStyle = V.fin;
-            mainContext.strokeStyle = V.outline;
-            mainContext.lineWidth = 2;
-            for (const sgn of [-1, 1]) {
-                mainContext.beginPath();
-                mainContext.ellipse(sgn * 13, 2, 4.5, 7.5, 0, 0, Math.PI * 2);
-                mainContext.fill(); mainContext.stroke();
-            }
-
-            // body shell (rounded rect)
-            mainContext.fillStyle = V.body;
-            mainContext.strokeStyle = V.outline;
-            mainContext.lineWidth = 2.5;
-            const bw = 11, bh = 13, rr = 5;
-            mainContext.beginPath();
-            mainContext.moveTo(-bw + rr, -bh);
-            mainContext.arcTo(bw, -bh, bw, -bh + rr, rr);
-            mainContext.arcTo(bw, bh, bw - rr, bh, rr);
-            mainContext.arcTo(-bw, bh, -bw, bh - rr, rr);
-            mainContext.arcTo(-bw, -bh, -bw + rr, -bh, rr);
-            mainContext.closePath();
-            mainContext.fill(); mainContext.stroke();
-            // panel seam
-            mainContext.lineWidth = 1.5;
-            mainContext.beginPath(); mainContext.moveTo(-bw, -1); mainContext.lineTo(bw, -1); mainContext.stroke();
-            mainContext.restore();
-
-            // eye — pulses, sits toward the aim
-            const pulse = 0.7 + 0.3 * Math.sin(t2 / 260);
-            const ex = Math.cos(aim) * 4, ey = Math.sin(aim) * 4;
-            mainContext.globalAlpha = 0.35 * pulse;
-            mainContext.fillStyle = V.eye;
-            mainContext.beginPath(); mainContext.arc(ex, ey, 7, 0, Math.PI * 2); mainContext.fill();
-            mainContext.globalAlpha = 1;
-            mainContext.beginPath(); mainContext.arc(ex, ey, 4, 0, Math.PI * 2); mainContext.fill();
-            mainContext.fillStyle = V.body;
-            mainContext.beginPath(); mainContext.arc(ex - 1, ey - 1, 1.3, 0, Math.PI * 2); mainContext.fill();
-
-            mainContext.restore();
+            // ---- THE POD (boxy body, beacon, dangling clawed arms) ----------
+            drawPodShape(mainContext, px, py, 1, V, t2, aim);
 
             // ---- SPEECH BUBBLE over the drone -------------------------------
             // Only when the talk style is the drone bubble (the player-chat
@@ -10990,17 +10934,98 @@ let pps = 0;
 
         // The three units, by their NieR designations. Only colours change; the
         // silhouette stays the same little drone.
+        // Each unit is a colourway drawn from a corner of NieR:Automata's world.
         const POD_VARIANTS = [
-            { name: "042", body: "#dedacb", fin: "#c2bda8", eye: "#26231e", outline: "#2f2c26", beam: "#2f2c26" },
-            { name: "153", body: "#b8b4a4", fin: "#9c988a", eye: "#3a2320", outline: "#2f2c26", beam: "#3a352c" },
-            { name: "A2",  body: "#3f3b34", fin: "#2b2823", eye: "#c0402f", outline: "#1c1a16", beam: "#7a2a20" },
-            { name: "M2",  body: "#4a4f57", fin: "#343941", eye: "#54b0c0", outline: "#1c1e22", beam: "#2f6b76" },
-            { name: "P-33",body: "#cdae6a", fin: "#a98f52", eye: "#2a2113", outline: "#3a2f18", beam: "#6a5a2e" },
-            { name: "R-9", body: "#c86a6a", fin: "#a85252", eye: "#2a1313", outline: "#3a1818", beam: "#7a2e2e" }
+            { name: "042",  body: "#e8e4d6", fin: "#cfcaba", eye: "#c94f3a", outline: "#2f2c26" }, // YoRHa off-white
+            { name: "153",  body: "#cfcbbd", fin: "#b3ae9e", eye: "#d98a2e", outline: "#2f2c26" }, // field-worn parchment
+            { name: "A2",   body: "#3a3833", fin: "#26241f", eye: "#c0402f", outline: "#16150f" }, // black, red optic
+            { name: "M2",   body: "#6f7681", fin: "#4c525b", eye: "#5fc6d6", outline: "#1c1e22" }, // machine steel, cyan
+            { name: "P-33", body: "#d8c68a", fin: "#b8a568", eye: "#7a3320", outline: "#3a2f18" }, // desert gold
+            { name: "R-9",  body: "#b85248", fin: "#93413a", eye: "#f0d8a0", outline: "#2a1513" }  // resistance crimson
         ];
         function podVariant() {
             const i = (window.vars && window.vars.podVariant) | 0;
             return POD_VARIANTS[i] || POD_VARIANTS[0];
+        }
+
+        // ---- the real Pod silhouette ----------------------------------------
+        // A boxy, ridged body that stays upright, an amber beacon blinking on
+        // top, a dark optic band across the lower front whose pupil tracks your
+        // aim, and two dangling two-segment arms ending in claws that sway. The
+        // same routine draws it in-game and on the spec page, so they match.
+        function podRoundRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+        }
+        function podCapsule(ctx, x1, y1, x2, y2, rad, fill, stroke, s) {
+            ctx.lineCap = "round";
+            ctx.strokeStyle = stroke; ctx.lineWidth = rad * 2 + 1.2 * s;
+            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+            ctx.strokeStyle = fill; ctx.lineWidth = Math.max(0.5, rad * 2 - 1.2 * s);
+            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        }
+        function drawPodShape(ctx, px, py, s, V, t, aim) {
+            ctx.save();
+            ctx.translate(px, py);
+            const bw = 9 * s, bh = 12 * s;
+            const sway = Math.sin(t / 520) * 0.16;
+
+            // arms first, so the body overlaps the shoulders
+            ctx.lineJoin = "round";
+            for (const sgn of [-1, 1]) {
+                ctx.save();
+                ctx.translate(sgn * (bw - 2 * s), bh - 3 * s);
+                ctx.rotate(sgn * (0.45 + sway * sgn));
+                podCapsule(ctx, 0, 0, 0, 9 * s, 3.1 * s, V.body, V.outline, s);
+                ctx.translate(0, 9 * s);
+                ctx.fillStyle = "#3a352c"; ctx.beginPath(); ctx.arc(0, 0, 2.2 * s, 0, 7); ctx.fill();
+                ctx.rotate(0.5 + Math.sin(t / 460 + sgn) * 0.12);
+                podCapsule(ctx, 0, 0, 0, 8.5 * s, 2.7 * s, V.body, V.outline, s);
+                ctx.translate(0, 8.5 * s);
+                ctx.strokeStyle = "#26231e"; ctx.lineWidth = 1.7 * s; ctx.lineCap = "round";
+                for (const a of [-0.5, 0, 0.5]) {
+                    ctx.save(); ctx.rotate(a);
+                    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 4.5 * s); ctx.stroke();
+                    ctx.restore();
+                }
+                ctx.restore();
+            }
+
+            // body
+            ctx.fillStyle = V.body; ctx.strokeStyle = V.outline; ctx.lineWidth = 2.4 * s;
+            podRoundRect(ctx, -bw, -bh, bw * 2, bh * 2, 2.5 * s);
+            ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = V.fin; ctx.lineWidth = 1 * s; ctx.globalAlpha = 0.7;
+            for (const x of [-bw * 0.45, 0, bw * 0.45]) {
+                ctx.beginPath(); ctx.moveTo(x, -bh + 3 * s); ctx.lineTo(x, bh - 3 * s); ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+
+            // optic band + tracking pupil
+            ctx.fillStyle = "#26231e";
+            podRoundRect(ctx, -bw + 1.5 * s, bh * 0.12, (bw - 1.5 * s) * 2, 4.6 * s, 1.5 * s);
+            ctx.fill();
+            const pulse = 0.6 + 0.4 * Math.sin(t / 260);
+            const ex = Math.max(-bw + 3 * s, Math.min(bw - 3 * s, Math.cos(aim) * bw));
+            ctx.globalAlpha = pulse; ctx.fillStyle = V.eye;
+            ctx.beginPath(); ctx.arc(ex, bh * 0.12 + 2.3 * s, 1.7 * s, 0, 7); ctx.fill();
+            ctx.globalAlpha = 1;
+
+            // beacon on top (the Pod's amber light)
+            ctx.strokeStyle = V.outline; ctx.lineWidth = 2 * s;
+            ctx.beginPath(); ctx.moveTo(0, -bh); ctx.lineTo(0, -bh - 4 * s); ctx.stroke();
+            const blink = (Math.floor(t / 500) % 2) === 0;
+            if (blink) { ctx.globalAlpha = 0.4; ctx.fillStyle = "#e8892e"; ctx.beginPath(); ctx.arc(0, -bh - 5.5 * s, 4.6 * s, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+            ctx.fillStyle = blink ? "#e8892e" : "#7a4a1e";
+            ctx.beginPath(); ctx.arc(0, -bh - 5.5 * s, 2.6 * s, 0, 7); ctx.fill();
+            ctx.strokeStyle = V.outline; ctx.lineWidth = 1.2 * s; ctx.stroke();
+
+            ctx.restore();
         }
 
         // =====================================================================
@@ -11131,8 +11156,30 @@ let pps = 0;
             // spoken aloud when voice is on. Everything is local — nothing is
             // ever sent to the server, so no other player can see the Pod.
             _recent: [],
+            // say() never speaks two lines in the same instant: it enqueues, and
+            // a serialiser emits one line at a time, ~1.7s apart. That is what
+            // stops the pod from writing several messages at once and breaking
+            // the bubble. Duplicates already queued are dropped, and the queue is
+            // capped so a burst cannot pile up.
+            _queue: [], _emitTimer: null,
             say(text) {
                 text = String(text);
+                if (!text) return;
+                if (this._queue[this._queue.length - 1] === text) return;
+                this._queue.push(text);
+                if (this._queue.length > 4) this._queue.shift();
+                this._pump();
+            },
+            _pump() {
+                if (this._emitTimer) return;
+                const step = () => {
+                    if (!this._queue.length) { this._emitTimer = null; return; }
+                    this._emit(this._queue.shift());
+                    this._emitTimer = setTimeout(step, 1700);
+                };
+                step();
+            },
+            _emit(text) {
                 this.lines.push({ t: Date.now(), time: this.now(), who: "pod", text: text });
                 if (this.lines.length > this.max) this.lines.shift();
                 // remember the last few lines so the brain can avoid repeats
