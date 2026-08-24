@@ -9653,20 +9653,6 @@ let pps = 0;
                 name: name
             });
 
-            // AUTO-ACCEPT: the same call the green tick makes. aJoinReq always
-            // answers allianceNotifications[0] and splices it, so this drains
-            // the queue instead of answering the newest request twice and
-            // leaving anyone who asked while the menu was shut still waiting.
-            // The counter is not paranoia about the loop's own arithmetic —
-            // aJoinReq always splices — it is that this runs inside the packet
-            // handler, where a future aJoinReq that fails to splice would hang
-            // the game rather than misbehave visibly.
-            if (window.vars.autoAccept) {
-                let guard = 0;
-                while (allianceNotifications.length && guard++ < 32) aJoinReq(1);
-                if (!allianceNotifications.length) return;
-            }
-
             updateNotifications();
         }
         function updateNotifications() {
@@ -11192,19 +11178,6 @@ let pps = 0;
                         $("#modMenus").toggle();
                     }
                 }
-            } else if (ghostRoam) {
-                // Dead and roaming: the branch below never runs (it needs
-                // myPlayer.alive), so ghost input is handled here or nowhere.
-                // Up leaves — without it you are stranded over a dead map with
-                // no respawn menu, since the menu stays hidden while spectating.
-                var gNum = event.which || event.keyCode || 0;
-                if (gNum == 38) {
-                    event.preventDefault();
-                    onSpectateEnd();
-                } else if (GHOST_MOVE[gNum]) {
-                    event.preventDefault();
-                    ghostKeys[gNum] = 1;
-                }
             } else if (myPlayer && myPlayer.alive && keysActive()) {
                 // Bot control: left steps to the next bot, right to the one
                 // before it, up hands you back your own character. The arrows
@@ -11321,13 +11294,6 @@ let pps = 0;
             if (keyStr.startsWith("Key")) keyStr = keyStr.slice(3);
             if (keyStr.startsWith("Digit")) keyStr = keyStr.slice(5);
             keyStr = keyStr.toUpperCase();
-            if (ghostRoam) {
-                // Same gate problem as keydown: without this the camera keeps
-                // drifting after you let go.
-                var gUp = event.which || event.keyCode || 0;
-                if (ghostKeys[gUp]) ghostKeys[gUp] = 0;
-                return;
-            }
             if (myPlayer && myPlayer.alive) {
                 var keyNum = event.which || event.keyCode || 0;
                 if (possessKeys[keyNum]) possessKeys[keyNum] = 0;
@@ -11470,12 +11436,6 @@ let pps = 0;
             diedText.style.fontSize = "0px";
             deathTextScale = 0;
 
-            // SPECTATE ON DEATH: possession already switches the render source,
-            // the player/object/ai lists and the HUD over to a bot — that is
-            // what the arrow keys do while you are alive. Dying is just the
-            // moment to ask for it. The menu stays down while you are in a bot's
-            // eyes; releasing (Up arrow) brings it back through onSpectateEnd.
-            if (window.vars.spectateOnDeath && enterSpectate()) return;
 
             setTimeout(function () {
                 menuCardHolder.style.display = "block";
@@ -11485,72 +11445,6 @@ let pps = 0;
             }, config.deathFadeout);
         }
 
-        // GHOST ROAM state. Set only while dead and spectating without a bot.
-        //
-        // It keeps its OWN key map rather than using the game's `keys`. Two
-        // reasons, both load-bearing: the keydown handler stops recording into
-        // `keys` the moment you die (its whole body sits behind
-        // `myPlayer && myPlayer.alive`), and anything left set in `keys` when
-        // you respawn is read by the movement code as you walking that way.
-        let ghostRoam = false, ghostX = 0, ghostY = 0, ghostKeys = {};
-
-        // WASD only. Up is the way out — the same key that hands a possessed
-        // bot back — so the arrows are deliberately not steering here.
-        const GHOST_MOVE = { 87: [0, -1], 83: [0, 1], 65: [-1, 0], 68: [1, 0] };
-
-        function ghostMoveAngle() {
-            let dx = 0, dy = 0;
-            for (const k in GHOST_MOVE) {
-                if (!ghostKeys[k]) continue;
-                dx += GHOST_MOVE[k][0];
-                dy += GHOST_MOVE[k][1];
-            }
-            if (dx === 0 && dy === 0) return null;
-            return Math.atan2(dy, dx);
-        }
-
-        // Two ways to watch after dying, in order of how much they show you:
-        // a living bot's eyes (a live world, because the bot's own socket is
-        // still being fed), or failing that a free camera over your last known
-        // map. Returns true once one of them has the screen, which is the only
-        // condition under which it is safe to keep the respawn menu hidden.
-        function enterSpectate() {
-            try {
-                if (RynBots && RynBots.list.some(b => b.alive && b.ws && b.ws.readyState === 1)) {
-                    RynBots.possess(1);
-                    if (RynBots.possessed) {
-                        diedText.style.display = "none";
-                        gameUI.style.display = "block";
-                        return true;
-                    }
-                }
-
-                // No bot: roam from where you fell.
-                ghostX = lastDeath ? lastDeath.x : (myPlayer ? myPlayer.x : config.mapScale / 2);
-                ghostY = lastDeath ? lastDeath.y : (myPlayer ? myPlayer.y : config.mapScale / 2);
-                ghostRoam = true;
-                ghostKeys = {};
-                diedText.style.display = "none";
-                gameUI.style.display = "none";
-                return true;
-            } catch (e) {
-                ghostRoam = false;
-                return false;
-            }
-        }
-
-        // Called when possession ends while you are dead — put the respawn menu
-        // back, otherwise there is no way out of the spectator seat.
-        function onSpectateEnd() {
-            try {
-                ghostRoam = false;
-                ghostKeys = {};
-                if (myPlayer && myPlayer.alive) return;
-                gameUI.style.display = "none";
-                menuCardHolder.style.display = "block";
-                mainMenu.style.display = "block";
-            } catch (e) {}
-        }
 
         // KILL ALL OBJECTS BY A PLAYER:
         function killObjects(sid) {
@@ -11730,26 +11624,7 @@ let pps = 0;
                 // the bot is far outside anything your own client can see.
                 let camBot = null;
                 try { if (RynBots.possessed && RynBots.possessed.alive) camBot = RynBots.possessed; } catch (e) {}
-                // GHOST ROAM: dead with no bot to borrow eyes from. The world
-                // stops updating the moment you die — the server sends a
-                // spectator nothing — so this is your last known map, walked
-                // over rather than watched live. That is the honest limit of
-                // it, and it is still how you find out what killed you and
-                // where their base was.
-                // Alive again with the flag still set means something respawned
-                // you without coming through onSpectateEnd. Drop it here rather
-                // than leave the camera parked off your body.
-                if (ghostRoam && myPlayer && myPlayer.alive) { ghostRoam = false; ghostKeys = {}; }
-                if (ghostRoam) {
-                    const ang = ghostMoveAngle();
-                    if (ang !== null) {
-                        const spd = 0.55 * delta;
-                        ghostX = Math.max(0, Math.min(config.mapScale, ghostX + spd * Math.cos(ang)));
-                        ghostY = Math.max(0, Math.min(config.mapScale, ghostY + spd * Math.sin(ang)));
-                    }
-                    camX = ghostX;
-                    camY = ghostY;
-                } else if (camBot) {
+                if (camBot) {
                     let tmpDist = UTILS.getDistance(camX, camY, camBot.x, camBot.y);
                     let tmpDir = UTILS.getDirection(camBot.x, camBot.y, camX, camY);
                     // Snap rather than glide when the jump is a whole screen or
@@ -11964,30 +11839,6 @@ let pps = 0;
 
                     mainContext.rotate(object.angle);
                     mainContext.restore();
-                }
-
-                // GHOST: you, translucent, wherever the free camera is. Without
-                // it the screen is a map with nothing on it and no sense of
-                // where you are standing — and no reminder of the way out.
-                if (ghostRoam) {
-                    const gx = ghostX - xOffset, gy = ghostY - yOffset;
-                    mainContext.save();
-                    mainContext.globalAlpha = 0.45;
-                    mainContext.fillStyle = "#cfc7b0";
-                    mainContext.strokeStyle = darkOutlineColor;
-                    mainContext.lineWidth = 5.5;
-                    mainContext.beginPath();
-                    mainContext.arc(gx, gy, 35, 0, Math.PI * 2);
-                    mainContext.fill();
-                    mainContext.stroke();
-
-                    mainContext.globalAlpha = 0.8;
-                    mainContext.font = "16px Hammersmith One";
-                    mainContext.textAlign = "center";
-                    mainContext.fillStyle = "#cfc7b0";
-                    mainContext.fillText("↑ to respawn", gx, gy + 62);
-                    mainContext.restore();
-                    mainContext.globalAlpha = 1;
                 }
 
                 // ITEM HP: the arc below rings every item within 300 units,
@@ -17422,9 +17273,6 @@ for (let tree of trees) {
                 // resync — just stop reading the view.
                 try { botViewReset(null); } catch (e) {}
                 try { botHudRestore(); } catch (e) {}
-                // Released while dead: you were spectating, so give the respawn
-                // menu back — there is no other way out of that seat.
-                try { onSpectateEnd(); } catch (e) {}
                 if (this._autoPlayForced) { window.vars.autoPlay = false; this._autoPlayForced = false; }
             },
             // Hand the bot back to the AI cleanly: stop the swing, drop the
@@ -17458,16 +17306,11 @@ for (let tree of trees) {
                     if (bot.ws.readyState === 1 && window.vars.botAutoSpawn) return;
                     this.possessed = null;
                     this.possess(1);
-                    // Last bot down while you were spectating your own death:
-                    // possess() found nobody, so nothing is driving the view and
-                    // the respawn menu is still hidden. Hand it back.
-                    if (!this.possessed) { try { onSpectateEnd(); } catch (e) {} }
                     return;
                 }
                 if (bot.ws.readyState !== 1) {
                     this.possessed = null;
                     this.possess(1);
-                    if (!this.possessed) { try { onSpectateEnd(); } catch (e) {} }
                     return;
                 }
                 // You still get the auto-heal reflex while driving — losing a bot
@@ -24779,14 +24622,6 @@ for (let tree of trees) {
         reloadBars: false,
         itemHealthBar: false,
 
-        // Clan requests answered for you, the same call the green tick makes.
-        autoAccept: false,
-
-        // On death, drop into a living bot's view instead of the death screen.
-        // Pure reuse: possession already switches the render source and the HUD
-        // (RynBots.possess), this only asks for it at the right moment.
-        spectateOnDeath: false,
-
         // Velocity tick (Glotus)
         velocityTick: false,
 
@@ -25117,8 +24952,6 @@ for (let tree of trees) {
                 title: "ACTIONS",
                 items: [
                     { type: 'toggle', name: "Autobuy", id: "autoBuy" },
-                    { type: 'toggle', name: "Auto-accept Clan Requests", id: "autoAccept" },
-                    { type: 'toggle', name: "Spectate on Death (needs a live bot)", id: "spectateOnDeath" }
                 ]
             },
             {

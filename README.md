@@ -219,7 +219,7 @@ checks all of the above, including that the boost-off path is unchanged.
 
 ## Added on top of the YoRHa build
 
-Three groups, all off by default, all built on machinery the file already had.
+Two groups, both off by default, both built on machinery the file already had.
 
 ### Manual Insta — Combat → Instakills, key in Keybinds → Combat Keys
 
@@ -254,29 +254,6 @@ hat, no enemy.
 
 Neither sends anything. They are paint over state the client already holds.
 
-### Utilities — Auto-accept Clan Requests, Spectate on Death
-
-- **Auto-accept** answers with the same call the green tick makes, and drains
-  the whole pending queue rather than the newest request, so anyone who asked
-  while the menu was shut is not stranded. The drain is capped at 32 — it runs
-  inside the packet handler, where a future `aJoinReq` that failed to splice
-  would hang the game.
-- **Spectate on Death** replaces the respawn menu with one of two views, best
-  first: a **living bot's eyes**, which is a live world because that bot's own
-  socket is still being fed (possession already switches the render source, the
-  lists, the HUD and the camera, so this is only the request at the right
-  moment); or, with no bot to borrow, a **free ghost camera** over your last
-  known map — WASD pans it, a translucent you marks the spot. The server sends a
-  dead player nothing, so the ghost view is a still map walked over, not a live
-  one. That is the honest limit; it still shows you what killed you and where
-  their base was. Up leaves either view and brings the respawn menu back.
-
-  Both ghost input branches sit **ahead of** the `myPlayer && myPlayer.alive`
-  gate that wraps the keydown and keyup bodies — behind it the camera would not
-  move and Up would not release, stranding you over a dead map with no menu. The
-  ghost also keeps its own key map rather than the game's `keys`, which stops
-  recording at death and would otherwise carry a held key into your respawn.
-
 ### A fix to an older key
 
 `keyPacketSpam` defaulted to `"B"` — the same key as `keyAutoMills`, which is
@@ -288,6 +265,5 @@ R, Q, Space, the number row). Those are matched by raw `keyNum`, so a rebind
 onto one of them would be swallowed before the chain reached any `keyStr` test.
 Its default is `Y`, which is not one of them.
 
-`node tools/test-yorha-additions.js` covers all of it — 78 checks over the
-lifted combo logic, the clan-queue drain, the spectate seat, the ghost camera,
-the keybind-chain ordering, and the render guards.
+`node tools/test-yorha-additions.js` covers all of it — 36 checks over the
+lifted combo logic, the keybind-chain ordering, and the render guards.
