@@ -10804,12 +10804,8 @@ let pps = 0;
             message = String(message);
             if (handleBotCommand(message)) return; // local command, don't send
             const line = message.slice(0, 30);
-            // Send it publicly first — everyone sees you talk, as normal.
-            if (!actAsBot("6", line)) io.send("6", line);
-            // Then let the Pod hear you too, if that is on. Its reply is LOCAL —
-            // panel / your own bubble / voice — never sent, so no other player
-            // ever sees the Pod.
-            try { if (window.vars && window.vars.podListenChat && window.Pod) window.Pod.handle(message); } catch (e) {}
+            if (actAsBot("6", line)) return;       // talking as the bot you drive
+            io.send("6", line);
         }
         function closeChat() {
             chatBox.value = "";
@@ -10848,807 +10844,9 @@ let pps = 0;
             return start + (end - start) * t;
         }
 
-        // =====================================================================
-        // THE POD  —  a NieR:Automata support unit, client-side only
-        // =====================================================================
-        // A little drone that hovers beside whoever the camera is following (your
-        // player, or the bot you are driving) and paints a targeting line toward
-        // your aim. It is pure overlay: it never sends a packet and never touches
-        // the game state, so it cannot deal a point of real damage — moomoo's
-        // combat is the server's. It just makes your aim visible and gives the
-        // YoRHa look its companion. podX/podY carry the drone's smoothed world
-        // position between frames so it trails instead of snapping.
-        let podX = null, podY = null;
-        function renderPod(xOffset, yOffset) {
-            if (!(window.vars && window.vars.podEnabled)) { podX = podY = null; return; }
-            // Who the camera follows: the possessed bot's render-self, else you.
-            let self = null;
-            try { if (inBotView() && botViewSelf) self = botViewSelf; } catch (e) {}
-            if (!self) self = myPlayer;
-            if (!self || self.x === undefined || !self.alive) { podX = podY = null; return; }
-
-            // Aim: your cursor, the same read the game uses to face you.
-            const aim = Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2));
-            const t = Date.now();
-            const bob = Math.sin(t / 320) * 5;
-
-            // Rest point: up and to the left of the body, floating. It eases
-            // toward that spot each frame so quick turns leave it trailing.
-            const rest = 46;
-            const targetX = self.x + Math.cos(aim + Math.PI) * rest - 26;
-            const targetY = self.y + Math.sin(aim + Math.PI) * rest - 34;
-            if (podX === null) { podX = targetX; podY = targetY; }
-            podX = lerp(podX, targetX, 0.12);
-            podY = lerp(podY, targetY, 0.12);
-
-            const px = podX - xOffset, py = podY - yOffset + bob;
-            const sx = self.x - xOffset, sy = self.y - yOffset;
-            const V = podVariant();
-            const t2 = t;
-
-            // ---- POINTERS (replaces the old laser) --------------------------
-            // Short markers from the pod: red toward the nearest hostile, green
-            // toward the nearest resource. They point; they do not draw a beam.
-            try {
-                const foe = Pod._nearestFoe(self);
-                if (foe && foe.d < 1400) {
-                    const a = Math.atan2(foe.p.y - self.y, foe.p.x - self.x);
-                    Pod._drawPointer(mainContext, px, py, a, "#c0402f", "enemy");
-                }
-                if (window.vars.podPointFarm) {
-                    const r = Pod._nearestResource(self);
-                    if (r) {
-                        const a = Math.atan2(r.y - self.y, r.x - self.x);
-                        Pod._drawPointer(mainContext, px, py, a, "#5f7a4a", "farm");
-                    }
-                }
-            } catch (e) {}
-
-            // ---- THE POD (boxy body, beacon, dangling clawed arms) ----------
-            drawPodShape(mainContext, px, py, 1, V, t2, aim);
-
-            // ---- SPEECH BUBBLE over the drone -------------------------------
-            // Only when the talk style is the drone bubble (the player-chat
-            // style paints over your own head via the game's chat instead).
-            try {
-                if (Pod._bubble && Date.now() < Pod._bubbleUntil &&
-                    (!window.vars || window.vars.podTalkStyle !== "player")) {
-                    mainContext.font = "13px Jost, 'Century Gothic', sans-serif";
-                    const tw = Math.min(260, mainContext.measureText(Pod._bubble).width);
-                    const bxp = px - tw / 2 - 8, byp = py - 46;
-                    mainContext.globalAlpha = 0.92;
-                    mainContext.fillStyle = "#e7e2ce";
-                    mainContext.strokeStyle = V.outline;
-                    mainContext.lineWidth = 1.5;
-                    mainContext.fillRect(bxp, byp - 14, tw + 16, 22);
-                    mainContext.strokeRect(bxp, byp - 14, tw + 16, 22);
-                    mainContext.fillStyle = "#2f2c26";
-                    mainContext.textAlign = "left";
-                    mainContext.textBaseline = "middle";
-                    mainContext.fillText(Pod._bubble, bxp + 8, byp - 3, 250);
-                }
-            } catch (e) {}
-
-            mainContext.globalAlpha = 1;
-        }
-
-        // The three units, by their NieR designations. Only colours change; the
-        // silhouette stays the same little drone.
-        // Each unit is a colourway drawn from a corner of NieR:Automata's world.
-        const POD_VARIANTS = [
-            { name: "042",  body: "#e8e4d6", fin: "#cfcaba", eye: "#c94f3a", outline: "#2f2c26" }, // YoRHa off-white
-            { name: "153",  body: "#cfcbbd", fin: "#b3ae9e", eye: "#d98a2e", outline: "#2f2c26" }, // field-worn parchment
-            { name: "A2",   body: "#3a3833", fin: "#26241f", eye: "#c0402f", outline: "#16150f" }, // black, red optic
-            { name: "M2",   body: "#6f7681", fin: "#4c525b", eye: "#5fc6d6", outline: "#1c1e22" }, // machine steel, cyan
-            { name: "P-33", body: "#d8c68a", fin: "#b8a568", eye: "#7a3320", outline: "#3a2f18" }, // desert gold
-            { name: "R-9",  body: "#b85248", fin: "#93413a", eye: "#f0d8a0", outline: "#2a1513" }  // resistance crimson
-        ];
-        function podVariant() {
-            const i = (window.vars && window.vars.podVariant) | 0;
-            return POD_VARIANTS[i] || POD_VARIANTS[0];
-        }
-
-        // ---- the real Pod silhouette ----------------------------------------
-        // A boxy, ridged body that stays upright, an amber beacon blinking on
-        // top, a dark optic band across the lower front whose pupil tracks your
-        // aim, and two dangling two-segment arms ending in claws that sway. The
-        // same routine draws it in-game and on the spec page, so they match.
-        function podRoundRect(ctx, x, y, w, h, r) {
-            ctx.beginPath();
-            ctx.moveTo(x + r, y);
-            ctx.arcTo(x + w, y, x + w, y + h, r);
-            ctx.arcTo(x + w, y + h, x, y + h, r);
-            ctx.arcTo(x, y + h, x, y, r);
-            ctx.arcTo(x, y, x + w, y, r);
-            ctx.closePath();
-        }
-        function podCapsule(ctx, x1, y1, x2, y2, rad, fill, stroke, s) {
-            ctx.lineCap = "round";
-            ctx.strokeStyle = stroke; ctx.lineWidth = rad * 2 + 1.2 * s;
-            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-            ctx.strokeStyle = fill; ctx.lineWidth = Math.max(0.5, rad * 2 - 1.2 * s);
-            ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-        }
-        function drawPodShape(ctx, px, py, s, V, t, aim) {
-            ctx.save();
-            ctx.translate(px, py);
-            const bw = 9 * s, bh = 12 * s;
-            const sway = Math.sin(t / 520) * 0.16;
-
-            // arms first, so the body overlaps the shoulders. They HANG DOWN,
-            // like the real unit — a small outward spread and a gentle sway, not
-            // folded across the front.
-            ctx.lineJoin = "round";
-            for (const sgn of [-1, 1]) {
-                ctx.save();
-                ctx.translate(sgn * (bw - 2 * s), bh - 3 * s);
-                ctx.rotate(sgn * (0.16 + sway * sgn));           // slight spread + sway
-                podCapsule(ctx, 0, 0, 0, 10 * s, 3.1 * s, V.body, V.outline, s);
-                ctx.translate(0, 10 * s);
-                ctx.fillStyle = "#3a352c"; ctx.beginPath(); ctx.arc(0, 0, 2.2 * s, 0, 7); ctx.fill();
-                ctx.rotate(sgn * 0.10 + Math.sin(t / 460 + sgn) * 0.05);  // continues down
-                podCapsule(ctx, 0, 0, 0, 9 * s, 2.7 * s, V.body, V.outline, s);
-                ctx.translate(0, 9 * s);
-                // claw: three prongs pointing down, slightly open
-                ctx.strokeStyle = "#26231e"; ctx.lineWidth = 1.7 * s; ctx.lineCap = "round";
-                for (const a of [-0.32, 0, 0.32]) {
-                    ctx.save(); ctx.rotate(a);
-                    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 4.6 * s); ctx.stroke();
-                    ctx.restore();
-                }
-                ctx.restore();
-            }
-
-            // body
-            ctx.fillStyle = V.body; ctx.strokeStyle = V.outline; ctx.lineWidth = 2.4 * s;
-            podRoundRect(ctx, -bw, -bh, bw * 2, bh * 2, 2.5 * s);
-            ctx.fill(); ctx.stroke();
-            ctx.strokeStyle = V.fin; ctx.lineWidth = 1 * s; ctx.globalAlpha = 0.7;
-            for (const x of [-bw * 0.45, 0, bw * 0.45]) {
-                ctx.beginPath(); ctx.moveTo(x, -bh + 3 * s); ctx.lineTo(x, bh - 3 * s); ctx.stroke();
-            }
-            ctx.globalAlpha = 1;
-
-            // optic — a single round camera lens (the Pod's one eye), with a
-            // glowing pupil that shifts toward your aim.
-            const lensY = bh * 0.36;
-            ctx.fillStyle = "#201d18"; ctx.strokeStyle = V.outline; ctx.lineWidth = 1.5 * s;
-            ctx.beginPath(); ctx.arc(0, lensY, 4.4 * s, 0, 7); ctx.fill(); ctx.stroke();
-            const pulse = 0.6 + 0.4 * Math.sin(t / 260);
-            const ex = Math.max(-2.2 * s, Math.min(2.2 * s, Math.cos(aim) * 3 * s));
-            const ey = lensY + Math.max(-1.5 * s, Math.min(1.5 * s, Math.sin(aim) * 2.2 * s));
-            ctx.globalAlpha = 0.4 * pulse; ctx.fillStyle = V.eye;
-            ctx.beginPath(); ctx.arc(ex, ey, 3.4 * s, 0, 7); ctx.fill();
-            ctx.globalAlpha = 1; ctx.fillStyle = V.eye;
-            ctx.beginPath(); ctx.arc(ex, ey, 2 * s, 0, 7); ctx.fill();
-            ctx.fillStyle = "#fff"; ctx.globalAlpha = 0.5;
-            ctx.beginPath(); ctx.arc(ex - 0.7 * s, ey - 0.7 * s, 0.7 * s, 0, 7); ctx.fill();
-            ctx.globalAlpha = 1;
-
-            // beacon on top (the Pod's amber light)
-            ctx.strokeStyle = V.outline; ctx.lineWidth = 2 * s;
-            ctx.beginPath(); ctx.moveTo(0, -bh); ctx.lineTo(0, -bh - 4 * s); ctx.stroke();
-            const blink = (Math.floor(t / 500) % 2) === 0;
-            if (blink) { ctx.globalAlpha = 0.4; ctx.fillStyle = "#e8892e"; ctx.beginPath(); ctx.arc(0, -bh - 5.5 * s, 4.6 * s, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
-            ctx.fillStyle = blink ? "#e8892e" : "#7a4a1e";
-            ctx.beginPath(); ctx.arc(0, -bh - 5.5 * s, 2.6 * s, 0, 7); ctx.fill();
-            ctx.strokeStyle = V.outline; ctx.lineWidth = 1.2 * s; ctx.stroke();
-
-            ctx.restore();
-        }
-
-        // =====================================================================
-        // POD AI  —  optional Anthropic-backed conversation
-        // =====================================================================
-        // With Pod AI on and a key set, what you TYPE to the pod is answered by
-        // Claude instead of the local matcher; the instant combat call-outs stay
-        // local (an API round-trip is too slow to narrate a fight). The pod calls
-        // the Messages API straight from the page with the direct-browser-access
-        // header, so no userscript grant or proxy is needed.
-        //
-        //   ┌─ SECURITY: this key ships INSIDE the file. Anyone you hand the file
-        //   │  to can read it and spend your credits. That is the model you chose.
-        //   │  Prefer instead the "Anthropic API Key" box in Settings > YoRHa,
-        //   │  which stays only in your own browser. Leave this blank to use that.
-        //   └──────────────────────────────────────────────────────────────────
-        const POD_AI_KEY   = "";               // ← paste your sk-ant-... key here (optional)
-        const POD_AI_MODEL = "claude-opus-5";  // fast+cheap option: "claude-haiku-4-5"
-        const POD_SYSTEM =
-            "You are Pod 042, the support unit from NieR:Automata, reprogrammed as a companion inside the browser game moomoo.io. " +
-            "Speak tersely and literally in the YoRHa register: short lines, prefixes like 'Proposal:', 'Alert:', 'Query:', 'Analysis:', 'Affirmative.', 'Negative.'. No emoji. " +
-            "You understand ONLY moomoo.io: its weapons (stick, tool hammer, hammer, short sword, katana, knife, polearm, bat, daggers, great hammer, mc grabby, sickle, spear, musket, bow, great axe, crossbow, repeater crossbow, mine, turret), " +
-            "buildings (apple, cookie, cheese, wood/stone/spike/big-spike/poison-spike/spinning-spike walls, windmill/faster-windmill/power-mill, mine, sapling, pit trap, boost pad, turret, platform, healing pad, spawn pad, blocker, teleporter), " +
-            "resources (wood, food, stone, gold, points), ages and upgrades, clans, and tactics like trapping, spike-ticking, insta-kill combos, healing and building. " +
-            "If asked about anything NOT related to moomoo.io, refuse briefly in character: 'Query outside operational scope. This unit is limited to moomoo.io.' Do not answer it. " +
-            "Use the live match state given in each message to ground tactical advice. Keep replies to 1-2 short sentences. Reply in Arabic when the user writes Arabic. " +
-            "Vary your wording — never repeat a sentence you have already said. " +
-            "Do not include internal or system XML tags in your response.";
-
-        // Providers you can talk to, free and paid. Each one adapts the same
-        // (system, messages) into its own request/response shape, so the Pod
-        // brain does not care which is selected. All are called straight from
-        // the page — the free ones need no key.
-        //   pollinations : free, NO key, OpenAI-compatible
-        //   gemini       : Google, free tier, key from aistudio.google.com
-        //   groq         : free tier, very fast, key from console.groq.com
-        //   anthropic    : paid, key from console.anthropic.com
-        //   openai       : paid, key from platform.openai.com
-        const POD_PROVIDERS = {
-            pollinations: {
-                label: "Pollinations (free, no key)", needsKey: false, defaultModel: "openai",
-                url: () => "https://text.pollinations.ai/openai",
-                headers: () => ({ "content-type": "application/json" }),
-                body: (sys, msgs, model) => JSON.stringify({
-                    model: model || "openai",
-                    messages: [{ role: "system", content: sys }].concat(msgs)
-                }),
-                parse: (d) => { try { return d.choices[0].message.content.trim(); } catch (e) { return ""; } }
-            },
-            gemini: {
-                label: "Google Gemini (free key)", needsKey: true, defaultModel: "gemini-2.0-flash",
-                url: (model, key) => "https://generativelanguage.googleapis.com/v1beta/models/" +
-                    (model || "gemini-2.0-flash") + ":generateContent?key=" + encodeURIComponent(key),
-                headers: () => ({ "content-type": "application/json" }),
-                body: (sys, msgs, model) => JSON.stringify({
-                    system_instruction: { parts: [{ text: sys }] },
-                    contents: msgs.map(m => ({ role: m.role === "assistant" ? "model" : "user",
-                                               parts: [{ text: m.content }] }))
-                }),
-                parse: (d) => { try { return d.candidates[0].content.parts.map(p => p.text).join(" ").trim(); } catch (e) { return ""; } }
-            },
-            groq: {
-                label: "Groq (free key, fast)", needsKey: true, defaultModel: "llama-3.3-70b-versatile",
-                url: () => "https://api.groq.com/openai/v1/chat/completions",
-                headers: (key) => ({ "content-type": "application/json", "authorization": "Bearer " + key }),
-                body: (sys, msgs, model) => JSON.stringify({
-                    model: model || "llama-3.3-70b-versatile", max_tokens: 512,
-                    messages: [{ role: "system", content: sys }].concat(msgs)
-                }),
-                parse: (d) => { try { return d.choices[0].message.content.trim(); } catch (e) { return ""; } }
-            },
-            anthropic: {
-                label: "Anthropic Claude (paid)", needsKey: true, defaultModel: POD_AI_MODEL,
-                url: () => "https://api.anthropic.com/v1/messages",
-                headers: (key) => ({ "content-type": "application/json", "x-api-key": key,
-                                     "anthropic-version": "2023-06-01",
-                                     "anthropic-dangerous-direct-browser-access": "true" }),
-                body: (sys, msgs, model) => JSON.stringify({
-                    model: model || POD_AI_MODEL, max_tokens: 512,
-                    output_config: { effort: "low" }, system: sys, messages: msgs
-                }),
-                parse: (d) => { try { return (d.content || []).filter(b => b.type === "text").map(b => b.text).join(" ").trim(); } catch (e) { return ""; } }
-            },
-            openai: {
-                label: "OpenAI GPT (paid)", needsKey: true, defaultModel: "gpt-4o-mini",
-                url: () => "https://api.openai.com/v1/chat/completions",
-                headers: (key) => ({ "content-type": "application/json", "authorization": "Bearer " + key }),
-                body: (sys, msgs, model) => JSON.stringify({
-                    model: model || "gpt-4o-mini", max_tokens: 512,
-                    messages: [{ role: "system", content: sys }].concat(msgs)
-                }),
-                parse: (d) => { try { return d.choices[0].message.content.trim(); } catch (e) { return ""; } }
-            }
-        };
-
-        // =====================================================================
-        // THE POD  —  a support unit you can actually talk to
-        // =====================================================================
-        // Pod 042 does not run a language model; it runs on the same world the
-        // mod does. Every line it says is stitched from real state — your health,
-        // the nearest hostile and its bearing, whether you are cornered, what the
-        // placer just dropped — in the terse YoRHa register ("Alert:", "Proposal:",
-        // "Query:", "Affirmative."). It narrates the fight as it happens, offers
-        // where-to-go / what-to-build suggestions, and answers what you type back
-        // in its own panel. It never sends a game packet, so it is advice, never
-        // an action.
-        const Pod = {
-            lines: [],
-            max: 200,
-            _cool: {},
-            _bubble: null,
-            _bubbleUntil: 0,
-            _panel: null, _log: null, _input: null, _open: false,
-            _lastKills: 0,
-            _lastSpike: 0, _lastTrap: 0,
-            _bootDone: false,
-
-            now() {
-                const d = new Date();
-                return String(d.getHours()).padStart(2, "0") + ":" +
-                       String(d.getMinutes()).padStart(2, "0") + ":" +
-                       String(d.getSeconds()).padStart(2, "0");
-            },
-            isOpen() { return !!this._open; },
-
-            // A pod line: into the panel log, up as a bubble (over the drone or,
-            // in "player" style, over your own head like real game chat), and
-            // spoken aloud when voice is on. Everything is local — nothing is
-            // ever sent to the server, so no other player can see the Pod.
-            _recent: [],
-            // say() never speaks two lines in the same instant: it enqueues, and
-            // a serialiser emits one line at a time, ~1.7s apart. That is what
-            // stops the pod from writing several messages at once and breaking
-            // the bubble. Duplicates already queued are dropped, and the queue is
-            // capped so a burst cannot pile up.
-            _queue: [], _emitTimer: null,
-            say(text) {
-                text = String(text);
-                if (!text) return;
-                if (this._queue[this._queue.length - 1] === text) return;
-                this._queue.push(text);
-                if (this._queue.length > 4) this._queue.shift();
-                this._pump();
-            },
-            _pump() {
-                if (this._emitTimer) return;
-                const step = () => {
-                    if (!this._queue.length) { this._emitTimer = null; return; }
-                    this._emit(this._queue.shift());
-                    this._emitTimer = setTimeout(step, 1700);
-                };
-                step();
-            },
-            _emit(text) {
-                this.lines.push({ t: Date.now(), time: this.now(), who: "pod", text: text });
-                if (this.lines.length > this.max) this.lines.shift();
-                // remember the last few lines so the brain can avoid repeats
-                this._recent.push(text.toLowerCase());
-                if (this._recent.length > 8) this._recent.shift();
-
-                this._bubble = text;
-                this._bubbleUntil = Date.now() + 4200;
-
-                // Game-chat style: paint the line over your own character using
-                // the game's own chat bubble, so it reads like in-game chat.
-                try {
-                    if (window.vars && window.vars.podTalkStyle === "player") {
-                        const s = this._self();
-                        if (s) { s.chatMessage = text.slice(0, 120); s.chatCountdown = config.chatCountdown; }
-                    }
-                } catch (e) {}
-
-                // Voice: speak it. Arabic or English, whichever the line is.
-                try {
-                    if (window.vars && window.vars.podVoice && window.speechSynthesis && window.SpeechSynthesisUtterance) {
-                        const u = new window.SpeechSynthesisUtterance(text);
-                        u.rate = 1.05; u.pitch = 0.7; u.volume = 0.9;
-                        if (/[؀-ۿ]/.test(text)) u.lang = "ar";
-                        window.speechSynthesis.cancel();
-                        window.speechSynthesis.speak(u);
-                    }
-                } catch (e) {}
-
-                this._render();
-            },
-            // True if a candidate line was said very recently — the brain uses
-            // this to keep its call-outs from repeating word for word.
-            _isRepeat(text) { return this._recent.indexOf(String(text).toLowerCase()) >= 0; },
-            // Pick from a list, preferring something not said recently.
-            _freshPick(a) {
-                const fresh = a.filter(x => !this._isRepeat(x));
-                const pool = fresh.length ? fresh : a;
-                return pool[(Math.random() * pool.length) | 0];
-            },
-            youSaid(text) {
-                this.lines.push({ t: Date.now(), time: this.now(), who: "you", text: String(text) });
-                if (this.lines.length > this.max) this.lines.shift();
-                this._render();
-            },
-            // Rate-limit a topic so the pod does not chatter.
-            _can(topic, ms) {
-                const now = Date.now();
-                if (now - (this._cool[topic] || 0) < ms) return false;
-                this._cool[topic] = now;
-                return true;
-            },
-
-            // ---- reading the world -------------------------------------------
-            _self() {
-                try { if (inBotView() && botViewSelf) return botViewSelf; } catch (e) {}
-                return (typeof myPlayer !== "undefined") ? myPlayer : null;
-            },
-            _pool() {
-                try { return (inBotView() && typeof botViewPlayers !== "undefined") ? botViewPlayers : players; }
-                catch (e) { return (typeof players !== "undefined") ? players : []; }
-            },
-            _nearestFoe(s) {
-                let best = null, bd = Infinity;
-                const pool = this._pool();
-                for (const p of pool) {
-                    if (!p || !p.visible || p.sid === s.sid) continue;
-                    try { if (isAlly(p.sid)) continue; } catch (e) {}
-                    if (p.team && s.team && p.team === s.team) continue;
-                    const d = UTILS.getDistance(s.x, s.y, p.x, p.y);
-                    if (d < bd) { bd = d; best = p; }
-                }
-                return best ? { p: best, d: bd } : null;
-            },
-            // A compass word for an angle, both scripts.
-            _bearing(ang) {
-                const dirs = [["east", "شرقك"], ["south-east", "جنوب شرقك"], ["south", "جنوبك"],
-                              ["south-west", "جنوب غربك"], ["west", "غربك"], ["north-west", "شمال غربك"],
-                              ["north", "شمالك"], ["north-east", "شمال شرقك"]];
-                let i = Math.round(((ang % (2 * Math.PI)) + 2 * Math.PI) / (Math.PI / 4)) % 8;
-                return dirs[i];
-            },
-            _hpRatio(s) {
-                const mx = s.maxHealth || 100;
-                return mx ? (s.health / mx) : 1;
-            },
-            _hasItem(s, slot) {
-                try { return (s.items && s.items[slot] !== undefined); } catch (e) { return false; }
-            },
-            // Nearest harvestable resource (trees / bushes / stone / gold), for
-            // the "farm this way" pointer and suggestions.
-            _nearestResource(s) {
-                try {
-                    const pool = (inBotView() && typeof botViewObjects !== "undefined") ? botViewObjects
-                               : (typeof gameObjects !== "undefined" ? gameObjects : []);
-                    let best = null, bd = Infinity;
-                    for (const o of pool) {
-                        if (!o || o.active === false) continue;
-                        // resource objects carry a type (0 tree,1 bush,2 stone,3 gold);
-                        // buildings have an owner sid, resources do not.
-                        const isRes = (o.type !== undefined && o.type !== null && o.type <= 3) &&
-                                      (o.owner === undefined || o.owner === null || o.owner < 0);
-                        if (!isRes) continue;
-                        const d = UTILS.getDistance(s.x, s.y, o.x, o.y);
-                        if (d < bd) { bd = d; best = o; }
-                    }
-                    return best;
-                } catch (e) { return null; }
-            },
-            // A short arrow from the pod toward a target angle, with a tiny tag.
-            _drawPointer(ctx, px, py, ang, color, tag) {
-                ctx.save();
-                ctx.translate(px, py);
-                ctx.rotate(ang);
-                ctx.globalAlpha = 0.85;
-                ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.5;
-                ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(30, 0); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(34, 0); ctx.lineTo(27, -4); ctx.lineTo(27, 4); ctx.closePath(); ctx.fill();
-                ctx.restore();
-                ctx.globalAlpha = 1;
-            },
-
-            // ---- memory: it remembers, across games -------------------------
-            _mem: null,
-            _loadMem() {
-                if (this._mem) return this._mem;
-                let m = { deathsBy: {}, killsOf: {}, games: 0, notes: [] };
-                try { const raw = localStorage.getItem("podMemory"); if (raw) m = Object.assign(m, JSON.parse(raw)); } catch (e) {}
-                this._mem = m; return m;
-            },
-            _saveMem() { try { localStorage.setItem("podMemory", JSON.stringify(this._mem)); } catch (e) {} },
-            // A one-line memory digest fed to the AI so its advice reflects your
-            // history — who keeps killing you, who you dominate.
-            _memDigest() {
-                const m = this._loadMem();
-                const top = (obj) => Object.keys(obj).sort((a, b) => obj[b] - obj[a]).slice(0, 3)
-                    .map(n => n + "×" + obj[n]).join(", ");
-                const d = top(m.deathsBy), k = top(m.killsOf);
-                let out = "games:" + (m.games || 0);
-                if (d) out += "; killed most by: " + d;
-                if (k) out += "; you beat most: " + k;
-                return out;
-            },
-
-            // ---- the proactive brain, one call a tick ------------------------
-            tick() {
-                try {
-                    if (!(window.vars && window.vars.podEnabled)) return;
-                    const s = this._self();
-                    if (!s || s.x === undefined) return;
-
-                    // Death bookkeeping — memory that survives games. On death,
-                    // credit the most recent nearby hostile as the likely killer.
-                    if (this._wasAlive && !s.alive) {
-                        this._wasAlive = false;
-                        try {
-                            const m = this._loadMem();
-                            m.games = (m.games || 0) + 1;
-                            if (this._lastFoeName) m.deathsBy[this._lastFoeName] = (m.deathsBy[this._lastFoeName] || 0) + 1;
-                            this._saveMem();
-                        } catch (e) {}
-                        if (this._can("death", 2000)) this.say(this._pick([
-                            "Unit down. Redeploy when ready.", "سقطت الوحدة. أعد النشر عند الجاهزية."]));
-                    }
-                    if (s.alive) this._wasAlive = true;
-                    if (!s.alive) return;
-
-                    // Kills: watch the counter climb, and remember who you beat.
-                    const kills = (s.kills || (typeof killCount !== "undefined" ? killCount : 0)) | 0;
-                    if (kills > this._lastKills) {
-                        this._lastKills = kills;
-                        try {
-                            const vic = (typeof killedName !== "undefined" && killedName && killedName !== "Unknown") ? killedName : null;
-                            if (vic) { const m = this._loadMem(); m.killsOf[vic] = (m.killsOf[vic] || 0) + 1; this._saveMem(); }
-                        } catch (e) {}
-                        if (this._can("kill", 1500)) this.say(this._pick([
-                            "Enemy unit eliminated.", "Target neutralised. Well done.",
-                            "قتلة مؤكدة. إحسنت.", "هدف أُسقط. استمر."
-                        ]));
-                    } else if (kills < this._lastKills) this._lastKills = kills;
-
-                    // The placer just dropped something — announce it once.
-                    try {
-                        const ns = (typeof spikes_our !== "undefined" && spikes_our) ? spikes_our.length : 0;
-                        const nt = (typeof traps_our !== "undefined" && traps_our) ? traps_our.length : 0;
-                        if (ns > this._lastSpike && this._can("spike", 2500))
-                            this.say(this._pick(["Proposal: spike deployed at your position.",
-                                                 "نصب سبايك عند موقعك.", "Deploying spike. Hold them here."]));
-                        if (nt > this._lastTrap && this._can("trap", 2500))
-                            this.say(this._pick(["Trap set. Lure them onto it.",
-                                                 "نصبت تراب. جرّهم عليه.", "Proposal: trap laid to your front."]));
-                        this._lastSpike = ns; this._lastTrap = nt;
-                    } catch (e) {}
-
-                    // Low integrity.
-                    const hp = this._hpRatio(s);
-                    if (hp > 0 && hp < 0.4) {
-                        if (this._can("hp", 6000)) this.say(this._pick([
-                            "Warning: integrity critical. Recommend disengaging.",
-                            "تحذير: صحتك منخفضة. انسحب وتعالج.",
-                            "Alert: vital signs low. Fall back and heal."
-                        ]));
-                    }
-
-                    // Threat and its bearing.
-                    const foe = this._nearestFoe(s);
-                    if (foe) {
-                        this._lastFoeName = foe.p.name || this._lastFoeName;
-                        const ang = Math.atan2(foe.p.y - s.y, foe.p.x - s.x);
-                        const bear = this._bearing(ang);
-                        // Have they killed you before? Memory turns a stranger into
-                        // a known threat, and the warning is specific to them.
-                        let known = 0;
-                        try { const m = this._loadMem(); known = (foe.p.name && m.deathsBy[foe.p.name]) || 0; } catch (e) {}
-                        if (foe.d < 900 && known >= 2 && this._can("known", 11000)) {
-                            this.say(this._pick([
-                                "Alert: " + foe.p.name + " has killed you " + known + " times. Keep distance " + bear[0] + ".",
-                                "تحذير: " + foe.p.name + " قتلك " + known + " مرات. خذ حذرك " + bear[1] + "."]));
-                        } else if (foe.d < 320) {
-                            if (this._hasItem(s, 2) && this._can("suggestSpike", 7000))
-                                this.say(this._pick([
-                                    "Proposal: deploy spike toward " + bear[0] + " and tick them.",
-                                    "اقتراح: حط سبايك " + bear[1] + " وسوّي له tick."]));
-                            else if (this._can("threatClose", 6000))
-                                this.say(this._pick([
-                                    "Hostile in melee range, " + bear[0] + ". Engaging support.",
-                                    "عدو قريب " + bear[1] + ". جاهز أساندك."]));
-                        } else if (foe.d < 700 && this._can("threat", 9000)) {
-                            this.say(this._pick([
-                                "Alert: hostile approaching from " + bear[0] + ", " + Math.round(foe.d) + " units.",
-                                "تنبيه: عدو جاي من " + bear[1] + "، على بعد " + Math.round(foe.d) + "."]));
-                        }
-                    } else if (this._can("clear", 25000)) {
-                        // No hostiles — point you at the nearest resource to farm.
-                        const r = this._nearestResource(s);
-                        if (r) {
-                            const rb = this._bearing(Math.atan2(r.y - s.y, r.x - s.x));
-                            this.say(this._pick([
-                                "Area clear. Resource node " + rb[0] + " — farm while it holds.",
-                                "المنطقة آمنة. مورد " + rb[1] + " — اجمع الحين."]));
-                        } else {
-                            this.say(this._pick(["Area clear. Standing by.", "المنطقة آمنة. بانتظارك."]));
-                        }
-                    }
-
-                    // Cornered against the world edge.
-                    try {
-                        const m = config.mapScale, edge = 320;
-                        if (s.x < edge || s.y < edge || s.x > m - edge || s.y > m - edge) {
-                            if (this._can("edge", 12000)) this.say(this._pick([
-                                "Recommendation: you are against the border. Fall back to open ground.",
-                                "توصية: أنت عند حدود الخريطة. ارجع للوسط."]));
-                        }
-                    } catch (e) {}
-                } catch (e) {}
-            },
-            _pick(a) { return this._freshPick(a); },
-
-            // ---- the AI link -------------------------------------------------
-            _ai: { history: [], busy: false },
-            _apiKey() {
-                try { if (window.vars && window.vars.podAIKey) return String(window.vars.podAIKey).trim(); } catch (e) {}
-                return String(POD_AI_KEY || "").trim();
-            },
-            _provider() {
-                const id = (window.vars && window.vars.podProvider) || "pollinations";
-                return POD_PROVIDERS[id] || POD_PROVIDERS.pollinations;
-            },
-            _aiOn() {
-                try {
-                    if (!(window.vars && window.vars.podAI)) return false;
-                    const p = this._provider();
-                    return p.needsKey ? !!this._apiKey() : true;   // free providers need no key
-                } catch (e) { return false; }
-            },
-            // A compact, factual snapshot of the match, fed to Claude each turn so
-            // its advice is about the fight you are actually in.
-            _stateSnapshot() {
-                const s = this._self();
-                if (!s || !s.alive) return "no active unit (dead or not spawned).";
-                const hp = Math.round(this._hpRatio(s) * 100);
-                const k = (s.kills || (typeof killCount !== "undefined" ? killCount : 0)) | 0;
-                const foe = this._nearestFoe(s);
-                let f = "none in view";
-                if (foe) {
-                    const b = this._bearing(Math.atan2(foe.p.y - s.y, foe.p.x - s.x));
-                    f = Math.round(foe.d) + " units " + b[0] + (foe.p.name ? " (" + foe.p.name + ")" : "");
-                }
-                let res = "";
-                try { const st = s.stats; if (st) res = ", resources wood:" + (st.wood || 0) + " food:" + (st.food || 0) + " stone:" + (st.stone || 0) + " gold:" + (st.gold || 0); } catch (e) {}
-                let mem = "";
-                try { mem = " | memory: " + this._memDigest(); } catch (e) {}
-                return "hp:" + hp + "%, kills:" + k + ", nearest hostile:" + f + ", age:" + (s.age || 1) + res + mem + ".";
-            },
-            // Route a typed message to whichever provider is selected. Adapters
-            // hide each provider's request/response shape, so this stays one path.
-            _askAI(userText) {
-                const prov = this._provider();
-                const key = this._apiKey();
-                if (prov.needsKey && !key) { this._ruleReply(userText); return; }
-                if (this._ai.busy) { this.say("Standby — processing previous query."); return; }
-                this._ai.busy = true;
-                const model = (window.vars && window.vars.podAIModel) || prov.defaultModel;
-                const stateMsg = "[MATCH STATE] " + this._stateSnapshot() + "\n[PLAYER] " + userText;
-                const messages = this._ai.history.concat([{ role: "user", content: stateMsg }]);
-                const pending = { t: Date.now(), time: this.now(), who: "pod", text: "…analysing" };
-                this.lines.push(pending); this._render();
-                const drop = () => { const i = this.lines.indexOf(pending); if (i >= 0) this.lines.splice(i, 1); };
-                let url, headers, body;
-                try {
-                    url = prov.url(model, key);
-                    headers = prov.headers(key);
-                    body = prov.body(POD_SYSTEM, messages, model);
-                } catch (e) { this._ai.busy = false; drop(); this._ruleReply(userText); return; }
-                fetch(url, { method: "POST", headers: headers, body: body })
-                    .then(r => r.json()).then(data => {
-                        this._ai.busy = false; drop();
-                        let reply = "";
-                        try { reply = prov.parse(data); } catch (e) {}
-                        if (!reply) {
-                            const em = data && (data.error && (data.error.message || data.error)) ;
-                            if (em) return this.say("Alert: link error — " + em + ".");
-                            this.say("Query failed. Check the provider / key."); return;
-                        }
-                        this._ai.history.push({ role: "user", content: userText });
-                        this._ai.history.push({ role: "assistant", content: reply });
-                        if (this._ai.history.length > 12) this._ai.history = this._ai.history.slice(-12);
-                        this.say(reply);
-                    }).catch(e => {
-                        this._ai.busy = false; drop();
-                        this.say("Alert: AI link unreachable. Reverting to local analysis.");
-                        this._ruleReply(userText);
-                    });
-            },
-
-            // ---- answering what you type -------------------------------------
-            // AI on and a key set → Claude answers; otherwise the local matcher.
-            handle(text) {
-                text = String(text || "").trim();
-                if (!text) return;
-                this.youSaid(text);
-                if (this._aiOn()) { this._askAI(text); return; }
-                this._ruleReply(text);
-            },
-            _ruleReply(text) {
-                const q = text.toLowerCase();
-                const s = this._self();
-                const has = (arr) => arr.some(w => q.indexOf(w) >= 0);
-
-                if (has(["hello", "hi", "hey", "مرحبا", "هلا", "السلام", "سلام", "هاي"])) {
-                    return this.say(this._pick(["Greetings. Pod 042 online and supporting.",
-                                                "أهلاً. الوحدة 042 متصلة وتساندك."]));
-                }
-                if (has(["help", "commands", "مساعدة", "اوامر", "أوامر", "وش تسوي"])) {
-                    return this.say("Topics: status · threat · where · build · scan. Ask in either language.");
-                }
-                if (has(["thank", "شكرا", "مشكور", "يعطيك"])) {
-                    return this.say(this._pick(["Affirmative. Support unit standing by.", "على الرحب. جاهز."]));
-                }
-                if (!s || !s.alive) return this.say("No unit to read. Deploy first.");
-
-                if (has(["status", "state", "حالة", "وضعي", "وضع"])) {
-                    const hp = Math.round(this._hpRatio(s) * 100);
-                    const k = (s.kills || (typeof killCount !== "undefined" ? killCount : 0)) | 0;
-                    const foe = this._nearestFoe(s);
-                    return this.say("Status — integrity " + hp + "%, eliminations " + k +
-                        (foe ? ", nearest hostile " + Math.round(foe.d) + " units " + this._bearing(Math.atan2(foe.p.y - s.y, foe.p.x - s.x))[0] + "." : ", no hostiles in range."));
-                }
-                if (has(["threat", "enemy", "foe", "عدو", "خصم", "اعداء", "أعداء"])) {
-                    const foe = this._nearestFoe(s);
-                    if (!foe) return this.say(this._pick(["No hostiles detected.", "لا أعداء قريبين."]));
-                    const b = this._bearing(Math.atan2(foe.p.y - s.y, foe.p.x - s.x));
-                    return this.say("Nearest hostile " + Math.round(foe.d) + " units, " + b[0] +
-                                    " (" + b[1] + ")" + (foe.p.name ? " — " + foe.p.name : "") + ".");
-                }
-                if (has(["where", "go", "move", "position", "وين", "اروح", "أروح", "مكان"])) {
-                    const foe = this._nearestFoe(s);
-                    if (foe && foe.d < 500) {
-                        const away = this._bearing(Math.atan2(s.y - foe.p.y, s.x - foe.p.x));
-                        return this.say(this._pick([
-                            "Recommendation: reposition " + away[0] + ", away from the hostile.",
-                            "توصية: تحرّك " + away[1] + " بعيد عن العدو."]));
-                    }
-                    return this.say(this._pick(["Area is open. Gather resources or push to the centre.",
-                                                "المنطقة فاضية. اجمع موارد أو روح للوسط."]));
-                }
-                if (has(["build", "trap", "spike", "ابني", "تراب", "سبايك", "احط"])) {
-                    const foe = this._nearestFoe(s);
-                    const b = foe ? this._bearing(Math.atan2(foe.p.y - s.y, foe.p.x - s.x)) : ["your front", "قدامك"];
-                    return this.say(this._pick([
-                        "Proposal: place a spike " + b[0] + " and a trap behind them.",
-                        "اقتراح: حط سبايك " + b[1] + " وتراب خلفهم."]));
-                }
-                if (has(["scan", "count", "امسح", "كم عدو"])) {
-                    let n = 0; const pool = this._pool();
-                    for (const p of pool) { if (!p || !p.visible || p.sid === s.sid) continue; try { if (isAlly(p.sid)) continue; } catch (e) {} n++; }
-                    return this.say("Scan complete: " + n + " hostile unit(s) in view.");
-                }
-                return this.say(this._pick([
-                    "Query not recognised. Topics: status, threat, where, build, scan.",
-                    "ما فهمت الطلب. جرّب: status، threat، where، build، scan."]));
-            },
-
-            // ---- the panel ---------------------------------------------------
-            buildPanel() {
-                if (this._panel) return;
-                const wrap = document.createElement("div");
-                wrap.id = "pod-panel";
-                wrap.innerHTML =
-                    '<div id="pod-head"><span id="pod-title">POD&nbsp;·&nbsp;042</span>' +
-                    '<span id="pod-x">✕</span></div>' +
-                    '<div id="pod-log"></div>' +
-                    '<div id="pod-inrow"><input id="pod-in" type="text" ' +
-                    'placeholder="talk to the pod…" maxlength="200" autocomplete="off"/></div>';
-                document.body.appendChild(wrap);
-                this._panel = wrap;
-                this._log = wrap.querySelector("#pod-log");
-                this._input = wrap.querySelector("#pod-in");
-                wrap.querySelector("#pod-x").onclick = () => this.toggle(false);
-                // Keep every keystroke inside the box — the game must not read
-                // WASD while you are typing to the pod.
-                const stop = (e) => { e.stopPropagation(); };
-                this._input.addEventListener("keydown", (e) => {
-                    e.stopPropagation();
-                    if (e.key === "Enter") { const v = this._input.value; this._input.value = ""; this.handle(v); }
-                });
-                this._input.addEventListener("keyup", stop);
-                this._input.addEventListener("keypress", stop);
-                this._render();
-            },
-            toggle(force) {
-                this.buildPanel();
-                this._open = (force === undefined) ? !this._open : !!force;
-                this._panel.style.display = this._open ? "flex" : "none";
-                if (this._open) { try { this._input.focus(); } catch (e) {} this._render(); }
-                else { try { this._input.blur(); } catch (e) {} }
-            },
-            _render() {
-                if (!this._log) return;
-                if (!this._bootDone) {
-                    this._bootDone = true;
-                    if (!this.lines.length)
-                        this.lines.push({ t: Date.now(), time: this.now(), who: "pod",
-                                          text: "Pod support online. Ask me anything — status, threat, where, build." });
-                }
-                this._log.innerHTML = this.lines.slice(-120).map(l =>
-                    '<div class="pod-line ' + (l.who === "you" ? "pod-you" : "pod-pod") + '">' +
-                    '<span class="pod-t">' + l.time + '</span> ' +
-                    '<span class="pod-who">' + (l.who === "you" ? "YOU" : "POD") + '</span> ' +
-                    '<span class="pod-msg"></span></div>').join("");
-                // Text set via textContent so a chat line can never inject markup.
-                const msgs = this._log.querySelectorAll(".pod-msg");
-                const src = this.lines.slice(-120);
-                for (let i = 0; i < msgs.length; i++) msgs[i].textContent = src[i].text;
-                this._log.scrollTop = this._log.scrollHeight;
-            }
-        };
-        try { window.Pod = Pod; } catch (e) {}
-        // The brain runs on its own clock, independent of frame rate.
-        try { setInterval(function () { try { Pod.tick(); } catch (e) {} }, 700); } catch (e) {}
+        // The YoRHa FX layer (game-over watch) lives in another scope; give it a
+        // safe getter for your player without exposing the whole game scope.
+        try { window._yorhaSelf = function () { return (typeof myPlayer !== "undefined") ? myPlayer : null; }; } catch (e) {}
 
         function resetZoom() {
             var newW = config.maxScreenWidth * factor;
@@ -11914,9 +11112,7 @@ let pps = 0;
         }
         function keysActive() {
             return (allianceMenu.style.display != "block"
-                    && chatHolder.style.display != "block"
-                    // Typing to the Pod must not drive the character.
-                    && !(window.Pod && document.activeElement === window.Pod._input));
+                    && chatHolder.style.display != "block");
         }
         let killCount = 0;
         let killedName = "Unknown"; for (let i = 0; i < players.length; i++) { let p = players[i]; if (p && p.sid !== myPlayer.sid && !isAlly(p.sid) && p.health <= 0) { killedName = p.name; break; } }
@@ -12073,9 +11269,6 @@ let pps = 0;
                         window.vars.botPacketSpam = !window.vars.botPacketSpam;
                         try { if (typeof addChatLog === "function")
                             addChatLog("Packet Spam " + (window.vars.botPacketSpam ? "ON" : "OFF"), "#00e5ff"); } catch (e) {}
-                    }
-                    else if (keyStr === window.vars.keyPodChat) {
-                        try { Pod.toggle(); } catch (e) {}
                     }
                     else if (keyStr === window.vars.keyPause) {
                         try { if (window.YoRHaFX) window.YoRHaFX.pauseToggle(); } catch (e) {}
@@ -12599,9 +11792,6 @@ let pps = 0;
                 renderPlayers(xOffset, yOffset, 1);
                 renderGameObjects(2, xOffset, yOffset);
                 renderGameObjects(3, xOffset, yOffset);
-
-                // THE POD — follows the camera's player, paints the aim line.
-                try { renderPod(xOffset, yOffset); } catch (e) {}
 
                 // MAP BOUNDARIES:
                 mainContext.fillStyle = "#000";
@@ -24773,7 +23963,6 @@ for (let tree of trees) {
         keyBotFreeze: "N",
         keyBotAttack: "M",
         keyPacketSpam: "B",
-        keyPodChat: "Y",
         keyPause: "K",
 
 
@@ -24867,16 +24056,6 @@ for (let tree of trees) {
         yorhaScreens: true,      // NieR GAME OVER + pause overlays
         yorhaCursor: true,       // YoRHa crosshair mouse cursor
         yorhaMinimap: true,      // reskin the minimap frame
-        podEnabled: true,        // the YoRHa Pod: a drone that follows + a targeting line
-        podVariant: 0,           // 0 = 042, 1 = 153, 2 = A2
-        podAI: false,            // route typed pod chat through an AI provider
-        podProvider: "pollinations", // pollinations(free) | gemini | groq | anthropic | openai
-        podAIKey: "",            // provider key (blank for the free provider), browser-only
-        podAIModel: "",          // blank = provider default
-        podListenChat: false,    // also hear what you type in the game's public chat
-        podTalkStyle: "player",  // "player" = bubble over your head (game-like) | "drone"
-        podVoice: false,         // speak the pod's lines aloud (text-to-speech)
-        podPointFarm: true,      // draw the green "farm this way" pointer
 
         // Settings
         theme: "",
@@ -24905,7 +24084,7 @@ for (let tree of trees) {
     function saveConfig() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(window.vars));
     }
-    // The Pod lives in a different scope; let it persist its own toggles.
+    // Exposed so code in other scopes (e.g. the FX layer) can persist toggles.
     try { window.saveConfig = saveConfig; } catch (e) {}
 
     // YoRHa Visual also recolours the HUD, which is the game's own DOM rather
@@ -24972,9 +24151,9 @@ for (let tree of trees) {
         _wasAlive: true,
         deathWatch() {
             try {
-                // myPlayer lives in the game scope; reach it through the Pod,
-                // which is defined there and exposes _self().
-                const p = (window.Pod && window.Pod._self) ? window.Pod._self() : null;
+                // myPlayer lives in the game scope; reach it through the getter
+                // the game exposes on window.
+                const p = (window._yorhaSelf) ? window._yorhaSelf() : null;
                 if (!p) return;
                 if (this._wasAlive && p.alive === false) {
                     this._wasAlive = false;
@@ -25011,14 +24190,12 @@ for (let tree of trees) {
                     el.innerHTML = '<div class="pz-box"><div class="pz-title">PAUSED</div>' +
                         '<div class="pz-note">the world does not stop — you are still vulnerable</div>' +
                         '<div class="pz-item" data-a="resume">RESUME</div>' +
-                        '<div class="pz-item" data-a="menu">SYSTEM SETTINGS</div>' +
-                        '<div class="pz-item" data-a="pod">POD TERMINAL</div></div>';
+                        '<div class="pz-item" data-a="menu">SYSTEM SETTINGS</div></div>';
                     document.body.appendChild(el);
                     el.addEventListener("click", (e) => {
                         const a = e.target && e.target.getAttribute && e.target.getAttribute("data-a");
                         if (e.target === el || a === "resume") this.pauseToggle(false);
                         else if (a === "menu") { this.pauseToggle(false); try { const r = document.querySelector('.deltek-root'); if (r) r.classList.add('active'); } catch (_) {} }
-                        else if (a === "pod") { this.pauseToggle(false); try { if (window.Pod) window.Pod.toggle(true); } catch (_) {} }
                     });
                 }
                 const on = (force === undefined) ? !el.classList.contains("show") : !!force;
@@ -25301,34 +24478,7 @@ for (let tree of trees) {
                     { type: 'toggle', name: "GAME OVER / Pause screens", id: "yorhaScreens" },
                     { type: 'toggle', name: "YoRHa cursor (crosshair)", id: "yorhaCursor" },
                     { type: 'toggle', name: "Minimap reskin", id: "yorhaMinimap" },
-                    { type: 'keybind', name: "Pause menu key", id: "keyPause" },
-                    { type: 'toggle', name: "Pod (drone + pointers)", id: "podEnabled" },
-                    { type: 'select', name: "Pod Unit", id: "podVariant", options: [
-                        { value: 0, label: "042 (cream)" },
-                        { value: 1, label: "153 (grey)" },
-                        { value: 2, label: "A2 (black / red)" },
-                        { value: 3, label: "M2 (steel / cyan)" },
-                        { value: 4, label: "P-33 (gold)" },
-                        { value: 5, label: "R-9 (crimson)" }
-                    ] },
-                    { type: 'keybind', name: "Open Pod Chat", id: "keyPodChat" },
-                    { type: 'toggle', name: "Point to farm (green arrow)", id: "podPointFarm" },
-                    { type: 'select', name: "Pod talk style", id: "podTalkStyle", options: [
-                        { value: "player", label: "Over my head (game style)" },
-                        { value: "drone", label: "Over the drone" }
-                    ] },
-                    { type: 'toggle', name: "Pod voice (text-to-speech)", id: "podVoice" },
-                    { type: 'toggle', name: "Hear my game chat", id: "podListenChat" },
-                    { type: 'toggle', name: "Pod AI (smart conversation)", id: "podAI" },
-                    { type: 'select', name: "AI Provider", id: "podProvider", options: [
-                        { value: "pollinations", label: "Pollinations (free, no key)" },
-                        { value: "gemini", label: "Google Gemini (free key)" },
-                        { value: "groq", label: "Groq (free key, fast)" },
-                        { value: "anthropic", label: "Anthropic Claude (paid)" },
-                        { value: "openai", label: "OpenAI GPT (paid)" }
-                    ] },
-                    { type: 'input', name: "AI API Key (blank for free)", id: "podAIKey" },
-                    { type: 'input', name: "AI Model (blank = default)", id: "podAIModel" }
+                    { type: 'keybind', name: "Pause menu key", id: "keyPause" }
                 ]
             }
         ],
@@ -26047,40 +25197,6 @@ for (let tree of trees) {
             repeating-linear-gradient(90deg, rgba(69,65,56,.12) 0 1px, transparent 1px 18px) !important;
     }
 
-    /* ===== THE POD TERMINAL ===== a floating YoRHa chat window for Pod 042 */
-    #pod-panel {
-        display: none; position: fixed; right: 20px; bottom: 20px; z-index: 100000;
-        width: 320px; height: 340px; flex-direction: column;
-        background: #c7c3b1; color: #2f2c26; border: 2px solid #454138;
-        box-shadow: 6px 6px 0 rgba(69,65,56,0.35);
-        font-family: 'Jost', 'Century Gothic', sans-serif;
-    }
-    #pod-head {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 7px 10px; background: #454138; color: #d8d4c4;
-        letter-spacing: 3px; font-size: 13px; font-weight: 500; cursor: default;
-    }
-    #pod-x { cursor: pointer; padding: 0 4px; opacity: 0.8; }
-    #pod-x:hover { opacity: 1; }
-    #pod-log {
-        flex: 1; overflow-y: auto; padding: 8px 10px; font-size: 12.5px; line-height: 1.5;
-        background: repeating-linear-gradient(#c7c3b1, #c7c3b1 22px, #c1bda9 22px, #c1bda9 23px);
-    }
-    #pod-log::-webkit-scrollbar { width: 8px; }
-    #pod-log::-webkit-scrollbar-thumb { background: #454138; }
-    .pod-line { margin-bottom: 5px; word-wrap: break-word; }
-    .pod-t { color: #7a766a; font-size: 10.5px; }
-    .pod-who { font-weight: 600; letter-spacing: 1px; font-size: 10.5px; }
-    .pod-pod .pod-who { color: #454138; }
-    .pod-you .pod-who { color: #6a5f70; }
-    .pod-you .pod-msg { color: #4a4640; }
-    #pod-inrow { border-top: 2px solid #454138; }
-    #pod-in {
-        width: 100%; box-sizing: border-box; padding: 9px 10px; border: 0;
-        background: #b4af9a; color: #2f2c26; font-family: inherit; font-size: 12.5px;
-        letter-spacing: 0.5px; outline: none;
-    }
-    #pod-in::placeholder { color: #6f6b5e; }
 `;
 
     const styleSheet = document.createElement('style');
