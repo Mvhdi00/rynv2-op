@@ -24933,22 +24933,32 @@ for (let tree of trees) {
     }
     #nameInput::placeholder { color: #6f6b5e !important; }
     /* the big ENTER button, and the game's own buttons, in the ink/parchment
-       invert -- ink by default, parchment ground on hover */
+       invert -- ink by default, parchment ground on hover. background-COLOR
+       (not the shorthand) so any icon carried as a background-image survives.
+       The whole HUD button row is covered here, not just the clan button:
+       store, chat, settings, leaderboard, party. */
     #enterGame, .menuButton, #storeHolder .storeTab, #allianceButton,
-    #partyButton, #joinPartyButton {
-        background: #454138 !important;
+    #partyButton, #joinPartyButton, #storeButton, #chatButton,
+    #settingsButton, #leaderboardButton {
+        background-color: #454138 !important;
         color: #c7c3b1 !important;
         border: 2px solid #454138 !important;
         border-radius: 0 !important;
         text-transform: uppercase !important;
         letter-spacing: 2px !important;
         font-weight: 500 !important;
-        transition: background 0.12s, color 0.12s !important;
+        box-shadow: 3px 3px 0 rgba(69,65,56,0.25) !important;
+        transition: background-color 0.12s, color 0.12s !important;
     }
-    #enterGame:hover, .menuButton:hover {
-        background: #c7c3b1 !important;
+    #enterGame:hover, .menuButton:hover, #storeButton:hover, #chatButton:hover,
+    #settingsButton:hover, #allianceButton:hover, #leaderboardButton:hover,
+    #partyButton:hover, #joinPartyButton:hover {
+        background-color: #c7c3b1 !important;
         color: #454138 !important;
     }
+    /* icons/labels inside HUD buttons follow the button's ink text colour */
+    #storeButton *, #chatButton *, #settingsButton *, #allianceButton *,
+    #leaderboardButton * { color: inherit !important; }
     /* item tooltip is text only, so a fill is safe here */
     #itemInfoHolder {
         background: #bfbaa6 !important;
