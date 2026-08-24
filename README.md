@@ -177,3 +177,42 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# YoRHa System (Falcon Replace) — Nova Boost
+
+`YoRHa_System_replace_falcon.user.js` is a second, separate userscript in this
+repo: the YoRHa build with the Falcon-derived Replace. It carries one addition
+on top of the file it came from, **Nova Boost** — the three preplacer ideas
+worth taking from the Novastorm client, rebuilt on inputs that are actually
+measured.
+
+Placers → Preplacer → **Nova Boost (2 spikes + path test)**. Off by default;
+with it off every code path below reduces to the constants the file already had.
+
+| | What it does |
+|---|---|
+| Speed-scaled lookahead | The LOS lookahead grows with how fast the enemy is moving (200 → 300) instead of sitting at a flat 222. Shared with the autoplacer so both agree on what counts as blocked. |
+| Enemy-path test | Asks whether a footprint stands on the ground the enemy is running through. A **trap** there earns the slot — they walk into it. A **spike** there loses it while they are trapped — it walls off the hit you are lining up. |
+| Second spike | One preplace can queue two spikes when their angles are more than 1.2 rad apart, so the pair covers two approach lines instead of stacking on one. |
+
+### Why it is not a straight copy
+
+Novastorm computes enemy speed as `sqrt(xVel² + yVel²)`. In this codebase
+`objectManager` writes `xVel = x2 * 2 - lastX` — next tick's **position**, not a
+velocity, which is how every other reader in the file treats it. So that
+expression is the length of a map coordinate, some thousands of units:
+`200 + min(speed * 10, 100)` is pinned at its 300 cap forever, `speed > 1` is
+always true, and `x2 + xVel * 2` lands about 3× off a 14400-unit map, pointing
+away from the origin rather than along the enemy's path.
+
+Nova Boost measures the per-tick step as the distance between `(x2, y2)` and
+`(xVel, yVel)` instead, and steps two ticks from the enemy's own position for
+the path ray. The second-spike separation test uses `UTILS.getAngleDist`, the
+wrapped distance, rather than Novastorm's raw subtraction — which reads 0.1 and
+6.1 rad as 6.0 apart when they are 0.28 apart. The pair is budgeted against the
+same 119-packet ceiling the replacer respects.
+
+`node tools/test-nova-boost.js` lifts the two helpers out of the userscript and
+checks all of the above, including that the boost-off path is unchanged.
