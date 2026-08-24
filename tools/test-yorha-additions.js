@@ -161,31 +161,84 @@ console.log("\nspectate on death");
 const el = () => ({ style: {} });
 let diedText = el(), gameUI = el(), menuCardHolder = el(), mainMenu = el();
 let RynBots = null;
+let ghostRoam = false, ghostX = 0, ghostY = 0, ghostKeys = {};
+let lastDeath = null;
+const config = { mapScale: 14400 };
+const GHOST_MOVE = eval("(" + liftObjectLiteral("GHOST_MOVE") + ")");
+eval(lift("ghostMoveAngle"));
 eval(lift("enterSpectate"));
 eval(lift("onSpectateEnd"));
 
-RynBots = { list: [], possessed: null, possess() { this.possessed = null; } };
-ok("no bots at all: refuses, so the death menu still runs", enterSpectate() === false);
-
-RynBots = { list: [{ alive: false, ws: { readyState: 1 } }], possessed: null, possess() {} };
-ok("only dead bots: refuses", enterSpectate() === false);
-
-RynBots = { list: [{ alive: true, ws: { readyState: 3 } }], possessed: null, possess() {} };
-ok("bot alive but socket closed: refuses", enterSpectate() === false);
-
-// possess() finding nobody must not leave us claiming a seat we never took.
-RynBots = { list: [{ alive: true, ws: { readyState: 1 } }], possessed: null, possess() {} };
-ok("possess() that seats nobody: refuses", enterSpectate() === false);
+function resetGhost() {
+    ghostRoam = false; ghostX = 0; ghostY = 0; ghostKeys = {};
+    diedText = el(); gameUI = el(); menuCardHolder = el(); mainMenu = el();
+    myPlayer = { alive: false, x: 100, y: 200 };
+    lastDeath = null;
+}
 
 const bot = { alive: true, ws: { readyState: 1 } };
+resetGhost();
 RynBots = { list: [bot], possessed: null, possess() { this.possessed = bot; } };
-diedText = el(); gameUI = el();
 ok("live bot: takes the seat", enterSpectate() === true);
 ok("...hides the DIED text", diedText.style.display === "none");
 ok("...and puts the game HUD back up", gameUI.style.display === "block");
+ok("...and does NOT start the free camera", ghostRoam === false);
 
-RynBots = null;   // bots never loaded at all
-ok("no bot system: refuses instead of throwing", enterSpectate() === false);
+// Every bot path that cannot seat you falls through to the ghost camera —
+// none of them may hand back false, because false leaves the death menu to
+// run over a screen that spectate already took.
+resetGhost();
+RynBots = { list: [], possessed: null, possess() {} };
+ok("no bots: falls back to the free camera", enterSpectate() === true && ghostRoam === true);
+
+resetGhost();
+RynBots = { list: [{ alive: false, ws: { readyState: 1 } }], possessed: null, possess() {} };
+ok("only dead bots: free camera", enterSpectate() === true && ghostRoam === true);
+
+resetGhost();
+RynBots = { list: [{ alive: true, ws: { readyState: 3 } }], possessed: null, possess() {} };
+ok("bot alive but socket closed: free camera", enterSpectate() === true && ghostRoam === true);
+
+resetGhost();
+RynBots = { list: [{ alive: true, ws: { readyState: 1 } }], possessed: null, possess() {} };
+ok("possess() that seats nobody: free camera", enterSpectate() === true && ghostRoam === true);
+
+resetGhost(); RynBots = null;
+ok("no bot system at all: free camera", enterSpectate() === true && ghostRoam === true);
+
+console.log("\nghost camera");
+resetGhost(); RynBots = null; lastDeath = { x: 4000, y: 5000 };
+enterSpectate();
+ok("starts where you fell", ghostX === 4000 && ghostY === 5000);
+resetGhost(); RynBots = null;
+enterSpectate();
+ok("falls back to your body when there is no death mark",
+   ghostX === 100 && ghostY === 200);
+ok("the HUD is hidden — there is nothing of yours to show", gameUI.style.display === "none");
+
+ghostKeys = {};
+ok("no keys held: no drift", ghostMoveAngle() === null);
+ghostKeys[87] = 1;
+ok("W goes up", ghostMoveAngle() === Math.atan2(-1, 0));
+ghostKeys = { 68: 1 };
+ok("D goes right", ghostMoveAngle() === 0);
+ghostKeys = { 87: 1, 68: 1 };
+ok("W+D is a diagonal", Math.abs(ghostMoveAngle() - Math.atan2(-1, 1)) < 1e-12);
+ghostKeys = { 87: 1, 83: 1 };
+ok("opposite keys cancel", ghostMoveAngle() === null);
+ghostKeys = { 38: 1, 37: 1, 39: 1, 40: 1 };
+ok("arrows do not steer — Up is the way out", ghostMoveAngle() === null);
+ok("...and are absent from the move table",
+   !GHOST_MOVE[38] && !GHOST_MOVE[37] && !GHOST_MOVE[39] && !GHOST_MOVE[40]);
+
+resetGhost(); RynBots = null; enterSpectate();
+ghostKeys[87] = 1;
+onSpectateEnd();
+ok("leaving clears the roam flag", ghostRoam === false);
+ok("...and the held keys, so nothing leaks into your respawn",
+   Object.keys(ghostKeys).length === 0);
+ok("...and brings the respawn menu back",
+   menuCardHolder.style.display === "block" && mainMenu.style.display === "block");
 
 myPlayer = { alive: false };
 gameUI = el(); menuCardHolder = el(); mainMenu = el();
@@ -199,10 +252,46 @@ gameUI = el(); menuCardHolder = el(); mainMenu = el();
 onSpectateEnd();
 ok("released while alive: menu is NOT forced up", menuCardHolder.style.display === undefined);
 
+// The keydown handler is one else-if chain. The vanilla game keys in it are
+// matched by RAW keyNum, so any of them bound to a mod feature is swallowed
+// before the chain reaches a keyStr test — the key just silently does its
+// vanilla thing. These checks keep every default clear of that, and keep the
+// manual-insta test ahead of the raw ones so an explicit rebind still wins.
+console.log("\nkeybind chain — no key is swallowed");
+const VANILLA = { 69: "E", 67: "C", 88: "X", 82: "R", 81: "Q", 32: "Space" };
+const vanillaLetters = Object.values(VANILLA);
+const varsBlock = src.slice(src.indexOf("window.vars = {"), src.indexOf("window.vars = {") + 4000);
+const binds = {};
+for (const m of varsBlock.matchAll(/^\s+(key[A-Za-z0-9]+): "([^"]+)",/gm)) binds[m[1]] = m[2];
+
+ok("found the keybind defaults", Object.keys(binds).length >= 15, Object.keys(binds).length + " found");
+
+const clashing = Object.entries(binds).filter(([, k]) => vanillaLetters.includes(k));
+ok("no default sits on a vanilla hardcoded key", clashing.length === 0, JSON.stringify(clashing));
+
+const seen = {}, dupes = [];
+for (const [id, k] of Object.entries(binds)) {
+    if (seen[k]) dupes.push(seen[k] + " and " + id + " both on " + k);
+    seen[k] = id;
+}
+ok("no two keybinds share a default", dupes.length === 0, dupes.join("; "));
+
+const chain = src.slice(src.indexOf("let keyStr = event.code;"));
+const instaAt = chain.indexOf("keyStr === window.vars.keyInsta");
+const firstRawAt = Math.min(...Object.keys(VANILLA).map(n => {
+    const at = chain.indexOf("keyNum == " + n);
+    return at < 0 ? Infinity : at;
+}));
+ok("manual insta is tested before every raw keyNum branch",
+   instaAt > -1 && instaAt < firstRawAt, instaAt + " vs " + firstRawAt);
+ok("...and only once", chain.split("window.vars.keyInsta").length - 1 === 2);
+ok("...guarded so an empty binding matches nothing",
+   /if \(window\.vars\.keyInsta && keyStr === window\.vars\.keyInsta\)/.test(src));
+
 console.log("\nsource-level guarantees");
 ok("manual insta is bound to its own key", /keyStr === window\.vars\.keyInsta/.test(src));
 ok("the key has a default and a menu entry",
-   /keyInsta: "R",/.test(src) && /id: "keyInsta"/.test(src));
+   /keyInsta: "[A-Z]",/.test(src) && /id: "keyInsta"/.test(src));
 ok("combo select offers every list in INSTA_COMBOS",
    Object.keys(INSTA_COMBOS).every(k => new RegExp('value: "' + k + '"').test(src)));
 // Inside killPlayer, the spectate attempt has to come BEFORE the timer that
@@ -214,6 +303,22 @@ ok("spectate is asked for inside killPlayer", spectateAt > -1);
 ok("...before the respawn-menu timer", spectateAt > -1 && menuAt > -1 && spectateAt < menuAt,
    spectateAt + " vs " + menuAt);
 ok("releasing possession hands the menu back", /try \{ onSpectateEnd\(\); \} catch \(e\) \{\}/.test(src));
+
+// The keydown and keyup bodies both sit behind `myPlayer && myPlayer.alive`.
+// Ghost input handled inside those would never run — the camera would not move
+// and Up would not release, stranding you over a dead map with no menu. Both
+// ghost branches must come FIRST.
+const kd = src.slice(src.indexOf("let keyStr = event.code;"));
+ok("ghost keydown is ahead of the alive gate",
+   kd.indexOf("} else if (ghostRoam) {") > -1 &&
+   kd.indexOf("} else if (ghostRoam) {") < kd.indexOf("} else if (myPlayer && myPlayer.alive && keysActive())"));
+const ku = src.slice(src.indexOf("if (ghostKeys[gUp]) ghostKeys[gUp] = 0;") - 400);
+ok("ghost keyup is ahead of its alive gate",
+   ku.indexOf("if (ghostRoam) {") < ku.indexOf("if (myPlayer && myPlayer.alive) {"));
+ok("ghost keeps its own key map, not the game's",
+   /ghostKeys\[gNum\] = 1;/.test(src) && !/(?<!ghost)keys\[gNum\]/.test(src));
+ok("respawning any other way still drops the roam flag",
+   /if \(ghostRoam && myPlayer && myPlayer\.alive\) \{ ghostRoam = false; ghostKeys = \{\}; \}/.test(src));
 ok("the arc and the bar never draw together",
    /if\(!window\.vars\.itemHealthBar && UTILS\.getDistance/.test(src));
 ok("item bars only mark damaged objects",

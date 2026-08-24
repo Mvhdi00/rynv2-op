@@ -261,13 +261,33 @@ Neither sends anything. They are paint over state the client already holds.
   while the menu was shut is not stranded. The drain is capped at 32 — it runs
   inside the packet handler, where a future `aJoinReq` that failed to splice
   would hang the game.
-- **Spectate on Death** asks possession for a living bot instead of showing the
-  respawn menu. Possession already switches the render source, the player/object
-  lists, the HUD and the camera (`updateGame` rides `RynBots.possessed`), so this
-  is only the request at the right moment. Releasing (Up arrow) or losing the
-  last bot hands the respawn menu back; with no bots alive it declines and the
-  normal death screen runs.
+- **Spectate on Death** replaces the respawn menu with one of two views, best
+  first: a **living bot's eyes**, which is a live world because that bot's own
+  socket is still being fed (possession already switches the render source, the
+  lists, the HUD and the camera, so this is only the request at the right
+  moment); or, with no bot to borrow, a **free ghost camera** over your last
+  known map — WASD pans it, a translucent you marks the spot. The server sends a
+  dead player nothing, so the ghost view is a still map walked over, not a live
+  one. That is the honest limit; it still shows you what killed you and where
+  their base was. Up leaves either view and brings the respawn menu back.
 
-`node tools/test-yorha-additions.js` covers all of it — 54 checks over the
-lifted combo logic, the clan-queue drain, the spectate seat, and the render
-guards.
+  Both ghost input branches sit **ahead of** the `myPlayer && myPlayer.alive`
+  gate that wraps the keydown and keyup bodies — behind it the camera would not
+  move and Up would not release, stranding you over a dead map with no menu. The
+  ghost also keeps its own key map rather than the game's `keys`, which stops
+  recording at death and would otherwise carry a held key into your respawn.
+
+### A fix to an older key
+
+`keyPacketSpam` defaulted to `"B"` — the same key as `keyAutoMills`, which is
+tested first in the keydown chain, so Packet Spam never fired for anyone who did
+not rebind it. Default is now `"L"`. Saved settings keep whatever you chose.
+
+Manual Insta is likewise tested *ahead* of the vanilla hardcoded keys (E, C, X,
+R, Q, Space, the number row). Those are matched by raw `keyNum`, so a rebind
+onto one of them would be swallowed before the chain reached any `keyStr` test.
+Its default is `Y`, which is not one of them.
+
+`node tools/test-yorha-additions.js` covers all of it — 78 checks over the
+lifted combo logic, the clan-queue drain, the spectate seat, the ghost camera,
+the keybind-chain ordering, and the render guards.

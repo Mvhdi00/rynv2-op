@@ -11192,6 +11192,19 @@ let pps = 0;
                         $("#modMenus").toggle();
                     }
                 }
+            } else if (ghostRoam) {
+                // Dead and roaming: the branch below never runs (it needs
+                // myPlayer.alive), so ghost input is handled here or nowhere.
+                // Up leaves — without it you are stranded over a dead map with
+                // no respawn menu, since the menu stays hidden while spectating.
+                var gNum = event.which || event.keyCode || 0;
+                if (gNum == 38) {
+                    event.preventDefault();
+                    onSpectateEnd();
+                } else if (GHOST_MOVE[gNum]) {
+                    event.preventDefault();
+                    ghostKeys[gNum] = 1;
+                }
             } else if (myPlayer && myPlayer.alive && keysActive()) {
                 // Bot control: left steps to the next bot, right to the one
                 // before it, up hands you back your own character. The arrows
@@ -11219,7 +11232,18 @@ let pps = 0;
                         && RynBots.possessSlot(keyNum - 49)) {
                         return;
                     }
-                    if (keyNum == 69) {
+                    // Manual insta is checked FIRST, ahead of the vanilla
+                    // hardcoded keys below (E, C, X, R, Q, Space, the number
+                    // row). Those are matched by raw keyNum, so any of them
+                    // bound here would be swallowed before this chain ever
+                    // reached a keyStr test — a rebind to R would silently do
+                    // nothing but ping the map. Binding a key IS the request
+                    // for it, so an explicit binding wins; the default is Y,
+                    // which is not one of the vanilla keys, so nothing is
+                    // taken away from anyone who leaves it alone.
+                    if (window.vars.keyInsta && keyStr === window.vars.keyInsta) {
+                        fireManualInsta();
+                    } else if (keyNum == 69) {
                         ePress = !ePress;
                     } else if (keyNum == 67) {
                         updateMapMarker();
@@ -11249,9 +11273,6 @@ let pps = 0;
                     }
                     else if (keyStr === window.vars.keyPathBreak) {
                         pathBreak = !pathBreak
-                    }
-                    else if (keyStr === window.vars.keyInsta) {
-                        fireManualInsta();
                     }
                     else if (keyStr === window.vars.keyVelocityTick) {
                         window.vars.velocityTick = !window.vars.velocityTick;
@@ -11300,6 +11321,13 @@ let pps = 0;
             if (keyStr.startsWith("Key")) keyStr = keyStr.slice(3);
             if (keyStr.startsWith("Digit")) keyStr = keyStr.slice(5);
             keyStr = keyStr.toUpperCase();
+            if (ghostRoam) {
+                // Same gate problem as keydown: without this the camera keeps
+                // drifting after you let go.
+                var gUp = event.which || event.keyCode || 0;
+                if (ghostKeys[gUp]) ghostKeys[gUp] = 0;
+                return;
+            }
             if (myPlayer && myPlayer.alive) {
                 var keyNum = event.which || event.keyCode || 0;
                 if (possessKeys[keyNum]) possessKeys[keyNum] = 0;
@@ -11457,17 +11485,56 @@ let pps = 0;
             }, config.deathFadeout);
         }
 
-        // True once we are actually inside a bot; only then is it safe to keep
-        // the respawn menu hidden.
+        // GHOST ROAM state. Set only while dead and spectating without a bot.
+        //
+        // It keeps its OWN key map rather than using the game's `keys`. Two
+        // reasons, both load-bearing: the keydown handler stops recording into
+        // `keys` the moment you die (its whole body sits behind
+        // `myPlayer && myPlayer.alive`), and anything left set in `keys` when
+        // you respawn is read by the movement code as you walking that way.
+        let ghostRoam = false, ghostX = 0, ghostY = 0, ghostKeys = {};
+
+        // WASD only. Up is the way out — the same key that hands a possessed
+        // bot back — so the arrows are deliberately not steering here.
+        const GHOST_MOVE = { 87: [0, -1], 83: [0, 1], 65: [-1, 0], 68: [1, 0] };
+
+        function ghostMoveAngle() {
+            let dx = 0, dy = 0;
+            for (const k in GHOST_MOVE) {
+                if (!ghostKeys[k]) continue;
+                dx += GHOST_MOVE[k][0];
+                dy += GHOST_MOVE[k][1];
+            }
+            if (dx === 0 && dy === 0) return null;
+            return Math.atan2(dy, dx);
+        }
+
+        // Two ways to watch after dying, in order of how much they show you:
+        // a living bot's eyes (a live world, because the bot's own socket is
+        // still being fed), or failing that a free camera over your last known
+        // map. Returns true once one of them has the screen, which is the only
+        // condition under which it is safe to keep the respawn menu hidden.
         function enterSpectate() {
             try {
-                if (!RynBots || !RynBots.list.some(b => b.alive && b.ws && b.ws.readyState === 1)) return false;
-                RynBots.possess(1);
-                if (!RynBots.possessed) return false;
+                if (RynBots && RynBots.list.some(b => b.alive && b.ws && b.ws.readyState === 1)) {
+                    RynBots.possess(1);
+                    if (RynBots.possessed) {
+                        diedText.style.display = "none";
+                        gameUI.style.display = "block";
+                        return true;
+                    }
+                }
+
+                // No bot: roam from where you fell.
+                ghostX = lastDeath ? lastDeath.x : (myPlayer ? myPlayer.x : config.mapScale / 2);
+                ghostY = lastDeath ? lastDeath.y : (myPlayer ? myPlayer.y : config.mapScale / 2);
+                ghostRoam = true;
+                ghostKeys = {};
                 diedText.style.display = "none";
-                gameUI.style.display = "block";
+                gameUI.style.display = "none";
                 return true;
             } catch (e) {
+                ghostRoam = false;
                 return false;
             }
         }
@@ -11476,6 +11543,8 @@ let pps = 0;
         // back, otherwise there is no way out of the spectator seat.
         function onSpectateEnd() {
             try {
+                ghostRoam = false;
+                ghostKeys = {};
                 if (myPlayer && myPlayer.alive) return;
                 gameUI.style.display = "none";
                 menuCardHolder.style.display = "block";
@@ -11661,7 +11730,26 @@ let pps = 0;
                 // the bot is far outside anything your own client can see.
                 let camBot = null;
                 try { if (RynBots.possessed && RynBots.possessed.alive) camBot = RynBots.possessed; } catch (e) {}
-                if (camBot) {
+                // GHOST ROAM: dead with no bot to borrow eyes from. The world
+                // stops updating the moment you die — the server sends a
+                // spectator nothing — so this is your last known map, walked
+                // over rather than watched live. That is the honest limit of
+                // it, and it is still how you find out what killed you and
+                // where their base was.
+                // Alive again with the flag still set means something respawned
+                // you without coming through onSpectateEnd. Drop it here rather
+                // than leave the camera parked off your body.
+                if (ghostRoam && myPlayer && myPlayer.alive) { ghostRoam = false; ghostKeys = {}; }
+                if (ghostRoam) {
+                    const ang = ghostMoveAngle();
+                    if (ang !== null) {
+                        const spd = 0.55 * delta;
+                        ghostX = Math.max(0, Math.min(config.mapScale, ghostX + spd * Math.cos(ang)));
+                        ghostY = Math.max(0, Math.min(config.mapScale, ghostY + spd * Math.sin(ang)));
+                    }
+                    camX = ghostX;
+                    camY = ghostY;
+                } else if (camBot) {
                     let tmpDist = UTILS.getDistance(camX, camY, camBot.x, camBot.y);
                     let tmpDir = UTILS.getDirection(camBot.x, camBot.y, camX, camY);
                     // Snap rather than glide when the jump is a whole screen or
@@ -11876,6 +11964,30 @@ let pps = 0;
 
                     mainContext.rotate(object.angle);
                     mainContext.restore();
+                }
+
+                // GHOST: you, translucent, wherever the free camera is. Without
+                // it the screen is a map with nothing on it and no sense of
+                // where you are standing — and no reminder of the way out.
+                if (ghostRoam) {
+                    const gx = ghostX - xOffset, gy = ghostY - yOffset;
+                    mainContext.save();
+                    mainContext.globalAlpha = 0.45;
+                    mainContext.fillStyle = "#cfc7b0";
+                    mainContext.strokeStyle = darkOutlineColor;
+                    mainContext.lineWidth = 5.5;
+                    mainContext.beginPath();
+                    mainContext.arc(gx, gy, 35, 0, Math.PI * 2);
+                    mainContext.fill();
+                    mainContext.stroke();
+
+                    mainContext.globalAlpha = 0.8;
+                    mainContext.font = "16px Hammersmith One";
+                    mainContext.textAlign = "center";
+                    mainContext.fillStyle = "#cfc7b0";
+                    mainContext.fillText("↑ to respawn", gx, gy + 62);
+                    mainContext.restore();
+                    mainContext.globalAlpha = 1;
                 }
 
                 // ITEM HP: the arc below rings every item within 300 units,
@@ -24605,9 +24717,12 @@ for (let tree of trees) {
         keyReleaseBots: "U",
         keyBotFreeze: "N",
         keyBotAttack: "M",
-        keyPacketSpam: "B",
+        // Was "B", the same default as keyAutoMills — and keyAutoMills is tested
+        // first in the keydown chain, so this key never fired for anyone who did
+        // not rebind it. (Saved settings keep whatever you already chose.)
+        keyPacketSpam: "L",
         keyPause: "K",
-        keyInsta: "R",
+        keyInsta: "Y",
 
 
         // Manual insta. Every other insta in this file is situational — the
