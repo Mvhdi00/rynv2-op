@@ -11116,9 +11116,77 @@ let pps = 0;
                     && chatHolder.style.display != "block");
         }
         let killCount = 0;
-        let killedName = "Unknown"; for (let i = 0; i < players.length; i++) { let p = players[i]; if (p && p.sid !== myPlayer.sid && !isAlly(p.sid) && p.health <= 0) { killedName = p.name; break; } }
+        let killedName = "Unknown";
+
+        // Who just went down. The server never says "you killed X" — all you
+        // get is your own kill count going up — so this reads the one thing
+        // that does arrive: a non-ally sitting at zero health. Each sid is
+        // claimed once, otherwise a body that stays in view answers for every
+        // later kill too.
+        //
+        // (The line this replaced ran the same scan ONCE, at load, as a
+        // declaration initialiser rather than a function — so the kill toast
+        // said "Unknown has died." forever. Now it is asked per kill.)
+        const previousDeadPlayers = new Set();
+        function takeKilledName() {
+            if (!myPlayer || !players) return null;
+            for (let i = 0; i < players.length; i++) {
+                const p = players[i];
+                if (!p || p.sid === myPlayer.sid || isAlly(p.sid)) continue;
+                if (p.health > 0 || previousDeadPlayers.has(p.sid)) continue;
+                previousDeadPlayers.add(p.sid);
+                return p.name || null;
+            }
+            return null;
+        }
+        // A player who respawns is fair game again.
+        function clearDeadName(sid) { previousDeadPlayers.delete(sid); }
+
+        // AUTO TRAP ANIMAL
+        //
+        // Called the moment YOU take damage. A bull or a wolf on you is a hit
+        // every second until one of you stops, and the answer is a trap in its
+        // path — but only while something is actually chewing on you, which is
+        // why this hangs off the damage hook rather than running every tick.
+        //
+        // Cows, pigs and chickens are ignored; they do not chase. Each animal
+        // gets one trap per 5s, so a bull that keeps coming does not empty your
+        // trap count into the grass.
+        const TRAP_ANIMALS = ["bull_1", "bull_2", "wolf_1", "wolf_2"];
+        const animalTrapAt = new Map();          // ai.sid -> when we last answered it
+        function autoTrapAnimal() {
+            if (!window.vars.autoTrapAnimal) return false;
+            if (!myPlayer || !myPlayer.alive || myPlayer.items[4] == null) return false;
+            if (typeof ais === "undefined" || !ais) return false;
+
+            const now = Date.now();
+            let target = null, best = 350;
+            for (let i = 0; i < ais.length; i++) {
+                const ai = ais[i];
+                if (!ai || !ai.visible || ai.health <= 0) continue;
+                const type = aiManager.aiTypes[ai.index];
+                if (!type || TRAP_ANIMALS.indexOf(type.src) < 0) continue;
+                const since = animalTrapAt.get(ai.sid);
+                if (since !== undefined && now - since < 5000) continue;
+                const dist = UTILS.getDistance(myPlayer.x2, myPlayer.y2, ai.x2, ai.y2);
+                if (dist < best) { best = dist; target = ai; }
+            }
+            if (!target) return false;
+
+            const angle = Math.atan2(target.y2 - myPlayer.y2, target.x2 - myPlayer.x2);
+            if (!canPlace(myPlayer.items[4], angle)) return false;
+
+            place(myPlayer.items[4], angle);
+            animalTrapAt.set(target.sid, now);
+            // The map is keyed by sid and animals respawn under new ones, so
+            // old entries are dropped rather than left to pile up.
+            for (const [sid, t] of animalTrapAt) if (now - t > 30000) animalTrapAt.delete(sid);
+            return true;
+        }
+
         function showKillMessage(victimName) {
             killCount++;
+            if (victimName) killedName = victimName;
             const messageDiv = document.createElement('div');
             messageDiv.textContent = `${killedName} has died.`;
 
@@ -15248,6 +15316,9 @@ for (let tree of trees) {
                 let damage = tmpObj.health - value;
                 tmpObj.health = value;
 
+                // Back on their feet: they can be named as a kill again.
+                if (value > 0) clearDeadName(sid);
+
                 if (damage > 0) {
                     tmpObj.hitTime = Date.now();
 
@@ -15256,6 +15327,8 @@ for (let tree of trees) {
 
                         damages.push(UTILS.fixTo(damage, 2));
                         deathDamages.push({ damage: UTILS.fixTo(damage, 2), tick: damageTick });
+
+                        autoTrapAnimal();
                     } else {
                         if ([20, 30, 35, 45, (20 * .75), (30 * .75), (35 * .75), (45 * .75)].includes(damage)) {
                             tmpObj.spikeDamage = damage;
@@ -19152,9 +19225,35 @@ for (let tree of trees) {
                     }
 
                     // KILL CHAT
-                    if(myPlayer && myPlayer.kills > prevKills && window.vars.killChat) {
-                        showKillMessage();
-                        sendChat(window.vars.chatMsg || "No killchat msg");
+                    if (myPlayer && myPlayer.kills > prevKills) {
+                        const victim = takeKilledName();
+
+                        if (window.vars.killChat) {
+                            showKillMessage(victim);
+                            sendChat(window.vars.chatMsg || "No killchat msg");
+
+                            // Second line, addressed to whoever went down. It is
+                            // sent late on purpose: two chats in the same tick
+                            // and the game shows you only the last one.
+                            const msg2 = (window.vars.chatMsg2 || "").trim();
+                            if (msg2) {
+                                setTimeout(function () {
+                                    if (!myPlayer || !myPlayer.alive) return;
+                                    sendChat(victim ? victim + " " + msg2 : msg2);
+                                }, Math.max(0, window.vars.killChatDelay || 0));
+                            }
+                        }
+
+                        // EQUIP ON KILL: the kill leaves you holding whatever
+                        // finished it — a musket you now have to reload, or a
+                        // polearm mid-swing. This puts your chosen slot back in
+                        // hand before the next person arrives. Slot, not a raw
+                        // item id: you can only hold what you actually carry,
+                        // and myPlayer.weapons is what you carry.
+                        if (window.vars.equipOnKill) {
+                            const want = myPlayer.weapons[window.vars.equipOnKillSlot === 1 ? 1 : 0];
+                            if (want != null) selectWeapon(want, false);
+                        }
                     }
                     prevKills = myPlayer.kills;
 
@@ -24697,6 +24796,27 @@ for (let tree of trees) {
         usernameIndex: 0,
         killChat: false,
         chatMsg: "L Bozo",
+
+        // Second killchat line, sent after a pause and addressed to whoever
+        // died: "<their name> <chatMsg2>". Empty means one line, as before.
+        chatMsg2: "",
+        killChatDelay: 1500,
+
+        // Swap to a weapon the moment a kill lands, so you are not caught mid
+        // fight holding the one that finished the last person.
+        equipOnKill: false,
+        equipOnKillSlot: 0,      // 0 = primary, 1 = secondary
+
+        // Take a hit with a bull or a wolf on you and a trap goes down in its
+        // face. One per animal per 5s, so a long chase does not become a wall.
+        autoTrapAnimal: false,
+
+        // Weather and time of day. Purely cosmetic overlays over the canvas.
+        nightMode: false,
+        morningMode: false,
+        rainMode: false,
+        starMode: false,
+        leafMode: false,
     };
 
     // --- LOAD SAVED SETTINGS ---
@@ -24768,6 +24888,73 @@ for (let tree of trees) {
             } catch (e) {}
         },
 
+        // WEATHER & TIME OF DAY — stars, rain, leaves, and a night/morning tint.
+        //
+        // Particles are DOM nodes on CSS animations, which is what makes them
+        // free to run: the compositor animates them, not the game loop. They are
+        // built the first time their mode is switched on and kept after, so a
+        // toggle you never touch costs nothing at all — the original built all
+        // 230 nodes at load whether or not anything was ever enabled.
+        //
+        // Night and morning are one overlay with two looks, because they are one
+        // choice: turning night on turns morning off. Everything sits under the
+        // CRT veil's z-index and takes no pointer events, so nothing here can
+        // swallow a click or cover the menu.
+        _weatherBuilt: {},
+        _weatherKind: {
+            star: { n: 50,  cls: "yorha-star", html: "✦" },
+            rain: { n: 150, cls: "yorha-rain", html: "" },
+            leaf: { n: 30,  cls: "yorha-leaf", html: "🍃" }
+        },
+        _weatherLayer(kind) {
+            const id = "yorha-wx-" + kind;
+            let el = document.getElementById(id);
+            if (el) return el;
+
+            const spec = this._weatherKind[kind];
+            el = document.createElement("div");
+            el.id = id;
+            el.className = "yorha-wx";
+            for (let i = 0; i < spec.n; i++) {
+                const p = document.createElement("div");
+                p.className = spec.cls;
+                if (spec.html) p.innerHTML = spec.html;
+                if (kind !== "rain") p.style.fontSize = (Math.random() * (kind === "leaf" ? 15 : 10) + (kind === "leaf" ? 10 : 5)) + "px";
+                p.style.left = (Math.random() * 100) + "vw";
+                p.style.top = (-Math.random() * 100) + "vh";
+                p.style.animationDuration = kind === "rain" ? (Math.random() * 1.5 + 1.2) + "s"
+                                          : kind === "leaf" ? (Math.random() * 6 + 4) + "s"
+                                          : (Math.random() * 5 + 5) + "s";
+                p.style.animationDelay = (Math.random() * (kind === "rain" ? 2 : kind === "leaf" ? 5 : 10)) + "s";
+                el.appendChild(p);
+            }
+            document.body.appendChild(el);
+            return el;
+        },
+        weather() {
+            try {
+                const V = window.vars || {};
+                // Named literally rather than built from the kind — a setting
+                // only ever reached through `V[kind + "Mode"]` reads as a dead
+                // toggle to anything grepping for who uses it.
+                const layers = [["star", V.starMode], ["rain", V.rainMode], ["leaf", V.leafMode]];
+                for (const [kind, on] of layers) {
+                    if (!on && !this._weatherBuilt[kind]) continue;   // never built, never needed
+                    if (on) this._weatherBuilt[kind] = true;
+                    this._weatherLayer(kind).style.display = on ? "block" : "none";
+                }
+
+                let tint = document.getElementById("yorha-wx-tint");
+                if (!tint && !V.nightMode && !V.morningMode) return;
+                if (!tint) {
+                    tint = document.createElement("div");
+                    tint.id = "yorha-wx-tint";
+                    document.body.appendChild(tint);
+                }
+                tint.className = V.nightMode ? "night" : V.morningMode ? "morning" : "";
+            } catch (e) {}
+        },
+
         // The full-screen CRT / scanline veil, toggled on the HUD poll.
         crt() {
             try {
@@ -24835,7 +25022,7 @@ for (let tree of trees) {
     };
     try { window.YoRHaFX = YoRHaFX; window._yorhaToast = (k, t) => YoRHaFX.toast(k, t); } catch (e) {}
     // CRT veil + death watch on their own light poll.
-    try { setInterval(() => { YoRHaFX.crt(); YoRHaFX.deathWatch(); }, 400); } catch (e) {}
+    try { setInterval(() => { YoRHaFX.crt(); YoRHaFX.deathWatch(); YoRHaFX.weather(); }, 400); } catch (e) {}
 
     // =========================================================================
     //  >>> MENU CONFIGURATION MAPPING <<<
@@ -24960,6 +25147,22 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Reload Bars", id: "reloadBars" },
                     { type: 'toggle', name: "Item HP Bars (replaces the ring)", id: "itemHealthBar" }
                 ]
+            },
+            {
+                title: "On Kill",
+                items: [
+                    { type: 'toggle', name: "Equip on Kill", id: "equipOnKill" },
+                    { type: 'select', name: "Weapon to equip", id: "equipOnKillSlot", options: [
+                        { value: 0, label: "Primary" },
+                        { value: 1, label: "Secondary" }
+                    ] }
+                ]
+            },
+            {
+                title: "Animals",
+                items: [
+                    { type: 'toggle', name: "Auto Trap Animal (bulls & wolves)", id: "autoTrapAnimal" }
+                ]
             }
         ],
         misc: [
@@ -24973,7 +25176,9 @@ for (let tree of trees) {
                 title: "Killchat",
                 items: [
                     { type: 'toggle', name: "Enable Killchat", id: "killChat" },
-                    { type: 'input', name: "Change Killchat", id: "chatMsg" }
+                    { type: 'input', name: "Change Killchat", id: "chatMsg" },
+                    { type: 'input', name: "Second Line (after their name)", id: "chatMsg2" },
+                    { type: 'slider', name: "Second Line Delay (ms)", id: "killChatDelay", min: 0, max: 5000, step: 250 }
                 ]
             },
             {
@@ -25124,6 +25329,21 @@ for (let tree of trees) {
                     { type: 'toggle', name: "YoRHa cursor (crosshair)", id: "yorhaCursor" },
                     { type: 'toggle', name: "Minimap reskin", id: "yorhaMinimap" },
                     { type: 'keybind', name: "Pause menu key", id: "keyPause" }
+                ]
+            },
+            {
+                title: "Weather",
+                items: [
+                    { type: 'toggle', name: "Rain", id: "rainMode" },
+                    { type: 'toggle', name: "Falling Stars", id: "starMode" },
+                    { type: 'toggle', name: "Falling Leaves", id: "leafMode" }
+                ]
+            },
+            {
+                title: "Time of Day",
+                items: [
+                    { type: 'toggle', name: "Night", id: "nightMode", exclusive: "morningMode" },
+                    { type: 'toggle', name: "Morning", id: "morningMode", exclusive: "nightMode" }
                 ]
             }
         ],
@@ -25775,6 +25995,48 @@ for (let tree of trees) {
     @keyframes yb-blink { 50% { opacity: 0; } }
 
     /* ===== CRT / SCANLINES ===== a full-screen veil over everything */
+    /* WEATHER & TIME OF DAY. All of it sits under the CRT veil and takes no
+       pointer events. The particle layers start hidden — YoRHaFX.weather()
+       shows them — and each particle is a single transform/opacity animation,
+       which the compositor runs without touching the game loop. */
+    .yorha-wx {
+        display: none; position: fixed; inset: 0; overflow: hidden;
+        pointer-events: none; z-index: 2147482900;
+    }
+    .yorha-star, .yorha-leaf, .yorha-rain {
+        position: absolute; top: -60px; pointer-events: none;
+        animation-timing-function: linear; animation-iteration-count: infinite;
+        animation-fill-mode: backwards; will-change: transform, opacity;
+    }
+    .yorha-star { color: rgba(255,255,255,0.8); animation-name: yorhaStarFall; }
+    .yorha-leaf { color: #6f8f5a; animation-name: yorhaLeafFall; }
+    .yorha-rain {
+        width: 2px; height: 25px; animation-name: yorhaRainFall;
+        background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(150,200,255,0.7));
+    }
+    @keyframes yorhaStarFall {
+        0%   { transform: translateY(-20px) translateX(0) rotate(0deg); opacity: 0; }
+        10%,90% { opacity: 0.8; }
+        100% { transform: translateY(105vh) translateX(50px) rotate(360deg); opacity: 0; }
+    }
+    @keyframes yorhaLeafFall {
+        0%   { transform: translateY(-50px) translateX(0) rotate(0deg); opacity: 0; }
+        10%,90% { opacity: 0.9; }
+        100% { transform: translateY(110vh) translateX(30px) rotate(360deg); opacity: 0; }
+    }
+    @keyframes yorhaRainFall {
+        0%   { transform: translateY(-30px); opacity: 0; }
+        10%,90% { opacity: 1; }
+        100% { transform: translateY(110vh); opacity: 0; }
+    }
+    /* No class = neither mode on, so the element is inert rather than removed. */
+    #yorha-wx-tint {
+        position: fixed; inset: 0; pointer-events: none; z-index: 2147482800;
+        background: transparent; transition: background 0.5s ease;
+    }
+    #yorha-wx-tint.night   { background: rgba(0,0,40,0.45); mix-blend-mode: multiply; }
+    #yorha-wx-tint.morning { background: rgba(255,250,240,0.05); backdrop-filter: saturate(1.2) brightness(1.05); }
+
     #yorha-crt {
         display: none; position: fixed; inset: 0; z-index: 2147483000; pointer-events: none;
         background:

@@ -267,3 +267,53 @@ Its default is `Y`, which is not one of them.
 
 `node tools/test-yorha-additions.js` covers all of it — 36 checks over the
 lifted combo logic, the keybind-chain ordering, and the render guards.
+
+
+## Ported from Novastorm
+
+Four features from the Novastorm client that are live there — its combat layer
+is not (see below), but these four run. All off by default.
+
+| Feature | Where |
+|---|---|
+| **Second killchat line** | Misc → Killchat. A second message, sent after a delay and addressed to whoever went down: `<their name> <your text>`. Leave it empty for one line, as before. |
+| **Equip on Kill** | Utilities → On Kill. Puts your chosen slot back in hand the moment a kill lands, so the next fight does not open with a musket you have to reload. |
+| **Auto Trap Animal** | Utilities → Animals. Take a hit with a bull or a wolf on you and a trap goes down in its face. One per animal per 5s. |
+| **Weather / Time of Day** | Visuals. Rain, falling stars, falling leaves; night and morning tints as two exclusive tiles. |
+
+### Where these differ from the original
+
+- **Equip on Kill takes a slot, not a weapon id.** Novastorm exposes a 0-20
+  "Weapon ID" slider and sends it raw. You can only hold the two weapons you
+  actually carry, so every other value is a packet the server discards. This
+  offers Primary / Secondary and reads `myPlayer.weapons`.
+- **The victim's name is looked up per kill.** Novastorm polls `myPlayer.kills`
+  on a 100ms timer; this hangs off the kill check the mod already runs each
+  tick. It also fixes a bug in the file it landed in: `killedName` was assigned
+  by a *declaration initialiser* that ran its scan once, at load, so the kill
+  toast read "Unknown has died." forever. It is now asked per kill, each sid
+  claimed once, and released when that player respawns.
+- **Auto Trap Animal reads `ais`.** Novastorm's version needs a
+  `window._visibleAnimals` array that only its own build maintains. This walks
+  the game's own AI list and resolves `aiManager.aiTypes[ai.index].src`, which
+  is where the `bull_1` / `wolf_2` names actually live.
+- **Weather particles are built on first use.** The original creates all 230
+  animated nodes at load and hides them, and polls a 200ms timer to toggle
+  visibility. Here a layer you never switch on is never built, and the sync
+  rides the FX interval that already runs — no new timer.
+- **The night tint is a DOM overlay only.** Novastorm also paints the canvas in
+  the render path, which would fight YoRHa's own vignette. The overlay reaches
+  the same look without touching rendering.
+
+### Not ported, deliberately
+
+Novastorm's combat layer never executes: `findNearestEnemy()` is called on the
+fourth line of its 60fps loop and is defined nowhere in the file, with no
+try/catch around it, so every tick throws. Fourteen of its menu toggles — the
+four anti-insta, the four anti-KB, auto sync, hit on spike, trap tick, tick KB,
+spike KB, autohit KB, hat predict, triangulation — appear exactly once each in
+the whole file, in the menu definition, read by nothing.
+
+`node tools/test-novastorm-ports.js` — 51 checks over the victim-name claim,
+the animal picker and its cooldown, and source-level guarantees on the killchat
+timing, the equip slot, and the overlay layering.
