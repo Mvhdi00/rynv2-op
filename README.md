@@ -216,3 +216,58 @@ same 119-packet ceiling the replacer respects.
 
 `node tools/test-nova-boost.js` lifts the two helpers out of the userscript and
 checks all of the above, including that the boost-off path is unchanged.
+
+## Added on top of the YoRHa build
+
+Three groups, all off by default, all built on machinery the file already had.
+
+### Manual Insta — Combat → Instakills, key in Keybinds → Combat Keys
+
+Every insta in YoRHa is situational: `canTrapTick()`, `canSmartTick()`,
+`canVelocitySpikeTick()`, `doSmartTickAnti()` and the ally-damage sync each
+assign a token list to `instaKill`, and the executor spends one token per tick.
+There was no way to simply ask for one. The key writes the same lists through
+the same executor, so aim, tail handling and reload checks are unchanged.
+
+| Combo | Tokens |
+|---|---|
+| Ranged → Melee | `secondary, primary, stop` |
+| Turret → Melee | `turret, primary, stop` |
+| Turret Hat + Primary | `primaryturret, stop` |
+| Ranged → Melee → Turret | `secondary, primary, turret, stop` |
+
+A press is refused while a combo is in flight (overwriting `instaKill` mid-list
+strands `insta.primary`/`insta.secondary` with no token left to clear them), and
+refused when the first token cannot fire — a cold secondary, a missing turret
+hat, no enemy.
+
+### Overlays — Utilities → Overlays
+
+- **Reload Bars.** `primaryReload` / `secondaryReload` / `turretReload` are
+  already kept per sid for every visible player; the mod reads them for its own
+  instas and throws them away. Drawn under the health bar: the weapon they are
+  actually holding (`weaponIndex < 9` is a primary, the same split
+  `doWeaponStuff` uses), plus a turret bar only while the turret is down.
+- **Item HP Bars.** The existing 300-unit health *ring* is drawn on every item,
+  whole or not. This trades it for reach and readability — a bar under every
+  **damaged** item on screen, owner-coloured. The two never draw together.
+
+Neither sends anything. They are paint over state the client already holds.
+
+### Utilities — Auto-accept Clan Requests, Spectate on Death
+
+- **Auto-accept** answers with the same call the green tick makes, and drains
+  the whole pending queue rather than the newest request, so anyone who asked
+  while the menu was shut is not stranded. The drain is capped at 32 — it runs
+  inside the packet handler, where a future `aJoinReq` that failed to splice
+  would hang the game.
+- **Spectate on Death** asks possession for a living bot instead of showing the
+  respawn menu. Possession already switches the render source, the player/object
+  lists, the HUD and the camera (`updateGame` rides `RynBots.possessed`), so this
+  is only the request at the right moment. Releasing (Up arrow) or losing the
+  last bot hands the respawn menu back; with no bots alive it declines and the
+  normal death screen runs.
+
+`node tools/test-yorha-additions.js` covers all of it — 54 checks over the
+lifted combo logic, the clan-queue drain, the spectate seat, and the render
+guards.

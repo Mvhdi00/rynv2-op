@@ -9652,6 +9652,21 @@ let pps = 0;
                 sid: sid,
                 name: name
             });
+
+            // AUTO-ACCEPT: the same call the green tick makes. aJoinReq always
+            // answers allianceNotifications[0] and splices it, so this drains
+            // the queue instead of answering the newest request twice and
+            // leaving anyone who asked while the menu was shut still waiting.
+            // The counter is not paranoia about the loop's own arithmetic —
+            // aJoinReq always splices — it is that this runs inside the packet
+            // handler, where a future aJoinReq that fails to splice would hang
+            // the game rather than misbehave visibly.
+            if (window.vars.autoAccept) {
+                let guard = 0;
+                while (allianceNotifications.length && guard++ < 32) aJoinReq(1);
+                if (!allianceNotifications.length) return;
+            }
+
             updateNotifications();
         }
         function updateNotifications() {
@@ -11235,6 +11250,9 @@ let pps = 0;
                     else if (keyStr === window.vars.keyPathBreak) {
                         pathBreak = !pathBreak
                     }
+                    else if (keyStr === window.vars.keyInsta) {
+                        fireManualInsta();
+                    }
                     else if (keyStr === window.vars.keyVelocityTick) {
                         window.vars.velocityTick = !window.vars.velocityTick;
                     }
@@ -11423,12 +11441,46 @@ let pps = 0;
             diedText.style.display = "block";
             diedText.style.fontSize = "0px";
             deathTextScale = 0;
+
+            // SPECTATE ON DEATH: possession already switches the render source,
+            // the player/object/ai lists and the HUD over to a bot — that is
+            // what the arrow keys do while you are alive. Dying is just the
+            // moment to ask for it. The menu stays down while you are in a bot's
+            // eyes; releasing (Up arrow) brings it back through onSpectateEnd.
+            if (window.vars.spectateOnDeath && enterSpectate()) return;
+
             setTimeout(function () {
                 menuCardHolder.style.display = "block";
                 mainMenu.style.display = "block";
                 // Sound.play("menu", 1, true);
                 diedText.style.display = "none";
             }, config.deathFadeout);
+        }
+
+        // True once we are actually inside a bot; only then is it safe to keep
+        // the respawn menu hidden.
+        function enterSpectate() {
+            try {
+                if (!RynBots || !RynBots.list.some(b => b.alive && b.ws && b.ws.readyState === 1)) return false;
+                RynBots.possess(1);
+                if (!RynBots.possessed) return false;
+                diedText.style.display = "none";
+                gameUI.style.display = "block";
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        // Called when possession ends while you are dead — put the respawn menu
+        // back, otherwise there is no way out of the spectator seat.
+        function onSpectateEnd() {
+            try {
+                if (myPlayer && myPlayer.alive) return;
+                gameUI.style.display = "none";
+                menuCardHolder.style.display = "block";
+                mainMenu.style.display = "block";
+            } catch (e) {}
         }
 
         // KILL ALL OBJECTS BY A PLAYER:
@@ -11826,9 +11878,38 @@ let pps = 0;
                     mainContext.restore();
                 }
 
+                // ITEM HP: the arc below rings every item within 300 units,
+                // whole or not. The bar mode trades that for reach and
+                // readability — every DAMAGED item on screen, drawn as a bar you
+                // can read at a glance, so you can see which spike is one hit
+                // from going down and which of theirs is worth finishing. The
+                // two never draw together; the toggle picks one.
+                if (window.vars.itemHealthBar) {
+                    for (let i in visibleObjects) {
+                        const object = visibleObjects[i];
+                        if (!object.isItem || !object.owner) continue;
+                        if (!(object.health < object.maxHealth)) continue;   // whole: nothing to say
+                        const ox = object.x - xOffset, oy = object.y - yOffset;
+                        if (!isOnScreen(ox, oy, object.scale + 40)) continue;
+
+                        const w = 34, h = 6, frac = Math.max(0, object.health / object.maxHealth);
+                        const by = oy + object.scale + 10;
+
+                        mainContext.globalAlpha = 1;
+                        mainContext.fillStyle = darkOutlineColor;
+                        mainContext.roundRect(ox - w / 2 - 2, by - 2, w + 4, h + 4, 4);
+                        mainContext.fill();
+
+                        mainContext.fillStyle = object.owner.sid == myPlayer.sid ? "#e9b3e9"
+                                              : isAlly(object.owner.sid) ? "#5b8dd9" : "#ff5151";
+                        mainContext.roundRect(ox - w / 2, by, w * frac, h, 3);
+                        mainContext.fill();
+                    }
+                }
+
                 for(let i in visibleObjects){
                     let object = visibleObjects[i];
-                    if(UTILS.getDistance(myPlayer.x, myPlayer.y, object.x, object.y) < 300 && object.isItem){
+                    if(!window.vars.itemHealthBar && UTILS.getDistance(myPlayer.x, myPlayer.y, object.x, object.y) < 300 && object.isItem){
                         let radius = object.id > 5 && object.id < 10 ? 33 : 22;
                         let healthArc = object.health * (Math.PI * 2 / object.maxHealth);
                         let color = object.owner.sid == myPlayer.sid ? "#e9b3e9" : isAlly(object.owner.sid) ? "0000FF" : "#ff0000";
@@ -11987,6 +12068,44 @@ let pps = 0;
                                                       (tmpObj.y - yOffset + tmpObj.scale) + config.nameY + config.healthBarPad,
                                                       ((config.healthBarWidth * 2) * (tmpObj.health / tmpObj.maxHealth)), 17 - config.healthBarPad * 2, 7);
                                 mainContext.fill();
+
+                                // RELOAD BARS: primaryReload/secondaryReload/
+                                // turretReload are already kept per sid for
+                                // every visible player — the mod reads them to
+                                // decide its own instas and then throws them
+                                // away. Drawn, they tell you when THEIR musket
+                                // comes back, which is the whole engage/disengage
+                                // decision. Nothing is sent; this is only paint.
+                                if (window.vars.reloadBars && tmpObj.sid !== undefined) {
+                                    const rbX = tmpObj.x - xOffset - config.healthBarWidth - config.healthBarPad;
+                                    const rbW = (config.healthBarWidth * 2) + (config.healthBarPad * 2);
+                                    let rbY = (tmpObj.y - yOffset + tmpObj.scale) + config.nameY + 19;
+
+                                    // The weapon they are actually holding: index
+                                    // under 9 is a melee/primary, 9 and up is a
+                                    // secondary (the same split the mod uses).
+                                    const secondaryOut = tmpObj.weaponIndex >= 9;
+                                    const wRaw = secondaryOut ? secondaryReload[tmpObj.sid] : primaryReload[tmpObj.sid];
+                                    const drawBar = (frac, full, charging) => {
+                                        const f = Math.max(0, Math.min(1, frac));
+                                        mainContext.fillStyle = darkOutlineColor;
+                                        mainContext.roundRect(rbX, rbY, rbW, 8, 4);
+                                        mainContext.fill();
+                                        mainContext.fillStyle = f >= 1 ? full : charging;
+                                        mainContext.roundRect(rbX + 1.5, rbY + 1.5, (rbW - 3) * f, 5, 2.5);
+                                        mainContext.fill();
+                                        rbY += 10;
+                                    };
+
+                                    drawBar(wRaw === undefined ? 1 : wRaw,
+                                            secondaryOut ? "#7fd4ff" : "#8ecc51", "#ffb300");
+
+                                    // Turret only while it is actually down —
+                                    // a permanent full bar over every player on
+                                    // screen is noise, a draining one is news.
+                                    const tRaw = turretReload[tmpObj.sid];
+                                    if (tRaw !== undefined && tRaw < 1) drawBar(tRaw, "#c58cff", "#c58cff");
+                                }
                             }
                         }
                     }
@@ -13180,6 +13299,55 @@ for (let tree of trees) {
 
         // BULLTICKS
         // =====================================================================
+        // MANUAL INSTA
+        //
+        // Every insta in this file is situational: canTrapTick(), canSmartTick(),
+        // canVelocitySpikeTick(), doSmartTickAnti() and the ally-damage sync all
+        // do the same one thing — assign a token list to instaKill — and the
+        // executor spends one token per tick. There was no way to simply ask for
+        // one. This is that ask, on a key, writing the same lists through the
+        // same executor, so it obeys the same aim, tail and reload handling.
+        //
+        // It will not interrupt a combo already in flight: overwriting instaKill
+        // mid-list strands insta.primary/secondary set with no matching token to
+        // clear them, and you end up aiming with the wrong weapon out.
+        // =====================================================================
+        const INSTA_COMBOS = {
+            secondary:     ["secondary", "primary", "stop"],           // ranged, then melee
+            turret:        ["turret", "primary", "stop"],              // turret shot, then melee
+            primaryturret: ["primaryturret", "stop"],                  // hat 53 + primary, one tick
+            full:          ["secondary", "primary", "turret", "stop"]  // the trap-tick list
+        };
+
+        // What the FIRST token needs before the press is worth spending. The
+        // later tokens look after themselves — the executor holds on a token
+        // while isBadTail() is true rather than dropping it.
+        function canFireInstaToken(token) {
+            switch (token) {
+                case "secondary":
+                    return myPlayer.weapons[1] != null && secondaryReload[myPlayer.sid] == 1;
+                case "primary":
+                    return primaryReload[myPlayer.sid] == 1;
+                case "turret":
+                    return isBoughtHat(53, 0) && turretReload[myPlayer.sid] == 1;
+                case "primaryturret":
+                    return isBoughtHat(53, 0) && turretReload[myPlayer.sid] == 1 &&
+                           primaryReload[myPlayer.sid] == 1;
+            }
+            return false;
+        }
+
+        function fireManualInsta() {
+            if (!myPlayer || !myPlayer.alive || !nearestEnemy) return false;
+            if (instaKill.length > 0) return false;
+
+            const combo = INSTA_COMBOS[window.vars.instaCombo] || INSTA_COMBOS.secondary;
+            if (!canFireInstaToken(combo[0])) return false;
+
+            instaKill = combo.slice();
+            return true;
+        }
+
         // VELOCITY TICK  (ported from Glotus)
         //
         // Glotus's velocity tick fires the turret hat (53) together with a
@@ -17142,6 +17310,9 @@ for (let tree of trees) {
                 // resync — just stop reading the view.
                 try { botViewReset(null); } catch (e) {}
                 try { botHudRestore(); } catch (e) {}
+                // Released while dead: you were spectating, so give the respawn
+                // menu back — there is no other way out of that seat.
+                try { onSpectateEnd(); } catch (e) {}
                 if (this._autoPlayForced) { window.vars.autoPlay = false; this._autoPlayForced = false; }
             },
             // Hand the bot back to the AI cleanly: stop the swing, drop the
@@ -17175,11 +17346,16 @@ for (let tree of trees) {
                     if (bot.ws.readyState === 1 && window.vars.botAutoSpawn) return;
                     this.possessed = null;
                     this.possess(1);
+                    // Last bot down while you were spectating your own death:
+                    // possess() found nobody, so nothing is driving the view and
+                    // the respawn menu is still hidden. Hand it back.
+                    if (!this.possessed) { try { onSpectateEnd(); } catch (e) {} }
                     return;
                 }
                 if (bot.ws.readyState !== 1) {
                     this.possessed = null;
                     this.possess(1);
+                    if (!this.possessed) { try { onSpectateEnd(); } catch (e) {} }
                     return;
                 }
                 // You still get the auto-heal reflex while driving — losing a bot
@@ -24431,7 +24607,16 @@ for (let tree of trees) {
         keyBotAttack: "M",
         keyPacketSpam: "B",
         keyPause: "K",
+        keyInsta: "R",
 
+
+        // Manual insta. Every other insta in this file is situational — the
+        // executor is handed a token list by canTrapTick(), canSmartTick(),
+        // canVelocityTick() and friends, and there was no way to ask for one.
+        // This key fills that gap: it writes the same token list the automatic
+        // paths write, so it runs through the same executor and obeys the same
+        // reload and tail checks. instaCombo picks which list.
+        instaCombo: "secondary",
 
         // Combat
         shameTick: false,
@@ -24466,6 +24651,26 @@ for (let tree of trees) {
         // placeAngles144; placeAngles72 is only the mirror tile.
         placeAngles144: true,
         placeAngles72: false,
+
+        // Overlays. Both read state the mod already tracks and draw it —
+        // no packets, nothing sent, purely what you can see.
+        //   reloadBars    — primaryReload/secondaryReload/turretReload are kept
+        //                   per sid for every visible player and were never
+        //                   drawn. Knowing an enemy's musket is 3 ticks out is
+        //                   the difference between engaging and dying.
+        //   itemHealthBar — replaces the 300-unit health ARC with a readable
+        //                   bar under every DAMAGED object on screen, so you
+        //                   can see which spike is one hit from going down.
+        reloadBars: false,
+        itemHealthBar: false,
+
+        // Clan requests answered for you, the same call the green tick makes.
+        autoAccept: false,
+
+        // On death, drop into a living bot's view instead of the death screen.
+        // Pure reuse: possession already switches the render source and the HUD
+        // (RynBots.possess), this only asks for it at the right moment.
+        spectateOnDeath: false,
 
         // Velocity tick (Glotus)
         velocityTick: false,
@@ -24708,6 +24913,7 @@ for (let tree of trees) {
                 title: "Combat Keys",
                 items: [
                     { type: 'keybind', name: "Velocity Tick", id: "keyVelocityTick" },
+                    { type: 'keybind', name: "Manual Insta", id: "keyInsta" },
                     { type: 'keybind', name: "Placers (Auto/Pre/Replace)", id: "keyPlacers" }
                 ]
             },
@@ -24727,7 +24933,13 @@ for (let tree of trees) {
             {
                 title: "Instakills",
                 items: [
-                    { type: 'toggle', name: "Velocity Tick", id: "velocityTick" }
+                    { type: 'toggle', name: "Velocity Tick", id: "velocityTick" },
+                    { type: 'select', name: "Manual Insta Combo", id: "instaCombo", options: [
+                        { value: "secondary",     label: "Ranged → Melee" },
+                        { value: "turret",        label: "Turret → Melee" },
+                        { value: "primaryturret", label: "Turret Hat + Primary" },
+                        { value: "full",          label: "Ranged → Melee → Turret" }
+                    ] }
                 ]
             },
             {
@@ -24790,6 +25002,15 @@ for (let tree of trees) {
                 title: "ACTIONS",
                 items: [
                     { type: 'toggle', name: "Autobuy", id: "autoBuy" },
+                    { type: 'toggle', name: "Auto-accept Clan Requests", id: "autoAccept" },
+                    { type: 'toggle', name: "Spectate on Death (needs a live bot)", id: "spectateOnDeath" }
+                ]
+            },
+            {
+                title: "Overlays",
+                items: [
+                    { type: 'toggle', name: "Reload Bars", id: "reloadBars" },
+                    { type: 'toggle', name: "Item HP Bars (replaces the ring)", id: "itemHealthBar" }
                 ]
             }
         ],
