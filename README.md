@@ -117,9 +117,12 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+YoRHa_System.user.js      YoRHa System 1.5 with Falcon's Replace (see below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
+src/YoRHa_System_1.5.js   YoRHa System 1.5, unmodified (input)
+src/Falcon_0.4.7.js       Falcon 0.4.7, unmodified (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
@@ -177,3 +180,114 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# YoRHa System — Replace, from Falcon
+
+A second, separate script lives here: **`YoRHa_System.user.js`**. It is YoRHa
+System 1.5 with its Replace feature taken out and Falcon 0.4.7's auto-replace
+put in its place, written in YoRHa's own primitives. Nothing else in YoRHa
+changes — the packet layer above all is untouched.
+
+## Why the old one had to go
+
+YoRHa 1.5's replacer was dead code. `rynDoReplace()` ran at the top of
+`getPredictObjects()` and added through `addPredictObject(...)`, but the very
+next statements were `predictObjects = []` and `spamPrePlacer = false` — so
+every object it queued and the spam flag it set were thrown away before
+anything could send them. The feature was on by default and had never placed
+anything.
+
+## What Falcon's replacer does differently
+
+It does not drop something back on the exact ground that was freed. When a
+building dies within reach it rebuilds the whole placement ring around *you*,
+grades every slot on it, puts the best spike and the best trap down, then fills
+up to four more non-overlapping slots behind them. The hole is the trigger, not
+the target — which is why the wall closes in one tick instead of one object at
+a time.
+
+The whole algorithm came across: the candidate ring, the grading table
+(re-trap, deny-the-enemy's-ring, knock-them-into-a-building, pusher count), the
+knock-into test with its bounce bonus, the block-my-own-movement veto, and the
+best-spike / best-trap / four-fill selection.
+
+## How it is written in YoRHa terms
+
+| Falcon | YoRHa |
+|---|---|
+| `Je.find()` 30-angle ring | `getPrePlaceAngles()` (the 72 / 144 sweep) |
+| `nn.checkItemPlacement()` | `objectManager.checkItemLocation()`, via `canPlace()` |
+| `me.checkMarkers()` | `addPredictObject()`'s overlap reject |
+| `me.usedAngles` / `isUsed` | `bannedAngles` |
+| `_e.fetch(sid).possible` | `replaceEnemyRing()` |
+| `Jt.closeObjects` | `visibleObjects` |
+| `Fr.isFriendly(o.owner.sid)` | `isObjectOur(o)` |
+| `enemy.trapData` | `traps_our.find(... < trap.scale)` |
+| `J.withinPath()` | `pathfindingState.currentPath` |
+| `Ae.dataSent.move` | `predictMoveAngle` / `lastMoveDir` |
+| `this.place(id, angle)` | `addPredictObject(id, angle, false)` |
+| `W.toggles.autoReplace` / `autoReplaceRange` | `window.vars.replace` / `replaceRange` |
+
+Two Falcon expressions did not survive contact, and neither is a behaviour
+change. `checkItemPlacement()` allows a slot whose only blockers carry
+`breakPotential` — but nothing in Falcon 0.4.7 ever sets that flag, so the test
+reduces to "the ground is empty", which is what `canPlace()` answers. And
+Falcon's spike-vs-enemy-ring overlap test reuses the *trap* candidate's cached
+distance plus a `spikeScale - 50` fudge in place of the spike's own radius,
+reading `undefined` (→ `NaN` → "free") whenever no trap candidate shares that
+angle; the real distance is measured here instead.
+
+## Deliberate departures
+
+1. **When it runs.** Falcon fires it synchronously out of `killObject()`. YoRHa
+   collects every placement for a tick in `getPredictObjects()` and spends them
+   through one packet-budgeted loop, so `killObject()` queues the break (with
+   the dead object's measurements, taken while it still exists) and
+   `getPredictObjects()` answers it. It still lands on the same tick, in the
+   immediate — non-preplace — lane.
+2. **Who it grades against.** Falcon grades against every enemy on screen and
+   hands enemies beyond 300 a `placementDistance` of `Infinity`, which is a flat
+   +1 to every candidate per distant player and pushes junk slots over the
+   `grade > 0` bar. Only enemies inside the replace range are graded here.
+3. **The spike tick.** Falcon's `spiketick` flag calls `It.do()`, its own
+   weapon-swap trick. YoRHa already owns that ground (`shameTick` /
+   `canTrapTick`), so the flag stays a grading signal and nothing is swapped
+   from the replacer. YoRHa's spike tick is untouched.
+
+A fourth, smaller one: a slot vetoed for walling in your own walk stays vetoed.
+Falcon re-grades it from zero on the next enemy in the loop, which can lift it
+back above the bar even though the veto was never about that enemy.
+
+## Sync with Auto Place and Preplace
+
+The replacer runs between the two, and that order is the sync:
+
+- the **preplacer** guesses the break that is about to happen and keeps first
+  claim on the ring;
+- the **replacer** answers the breaks that already happened;
+- the **autoplacer** fills whatever ground the two of them left.
+
+All three add through `addPredictObject()`, which now returns whether the slot
+was taken — YoRHa's equivalent of Falcon's markers. None of them can take a
+slot another one already holds, so there is no double-place inside a tick.
+Across ticks they share one book: the angles all three spend land in
+`placedAngles` in the same send loop, and the ban pass `updateAngles()` runs for
+the autoplacer now also runs in the replacer's sweep, so an angle spent last
+tick that still reads as free is held back rather than spent twice — including
+when the autoplacer is switched off.
+
+Bot contexts are covered too: `replaceQueue` is in `MOD_CTX_KEYS` and in
+`ctxCapture` / `ctxRestore`, so a bot's breaks never leak into yours.
+
+**Packets are untouched.** The replacer sends nothing itself. Its objects ride
+the ordinary immediate lane and stop at the same `packets + 5 > 119` budget as
+every other placement.
+
+## Menu
+
+Placers now reads Autoplacer / Preplacer / **Replace** / Placer Resolution. The
+toggle keeps the `replace` id it had in 1.5, so saved settings and the one-key
+Auto+Pre+Replace hotkey carry over untouched; `replaceRange` (100–500,
+default 300) is Falcon's `autoReplaceRange`.
