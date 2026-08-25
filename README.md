@@ -578,6 +578,42 @@ layer**. A full port of RYN's architecture — 136 globals into a client object,
 every behaviour into a module — is a rewrite of the mod rather than an edit to
 it; this is the half of it that pays now.
 
+### Driving one does not switch its brain off
+
+`_botTick` used to return outright while you possessed a bot, so stepping into
+one cost it everything at once — no healing, no mills, no gathering. But the
+master player runs the whole mod while you steer, and a bot you have stepped
+into is the same situation: you take the walking, the aim and the attack, and
+everything that does not fight you for those has no reason to stop.
+
+The stages run now and `ctx.driven` tells each module you are at the controls —
+the module's own call, the way `!c.full` already was. Farming stands aside,
+because it walks the bot to a tree. Mills still go down, behind where *you* are
+steering (`bot.moveSent`), and the move packet stays yours. The return moved to
+just below the stages, so the formation and the combat stay out of it.
+
+### The chat you could not see, and the players who were not there
+
+A bot's world learned who exists only from `addPlayer`. A bot's socket carries
+that for spawns *after* it joined — everyone already on the field turns up in
+the position stream instead, where `botViewFeed` did this:
+
+```js
+const p = botViewFindPlayer(d[i]);
+if (!p) continue;                    // never met -> never met
+```
+
+So they were never built into the view: never drawn, and never able to hold a
+chat bubble. Your own line showed, because the bot itself arrives through
+`addPlayer` — which is exactly what made it look like chat was half-broken
+rather than the player list being half-empty.
+
+They are built from the stream now, with the name off the bot's own player map,
+which had been tracking them all along. `addPlayer` also matches on **either**
+identity (`x.id === d[0] || x.sid === d[1]`), so a player the stream or a seed
+already built is updated rather than duplicated — a twin would split their
+updates, and the one drawn would not be the one holding the chat.
+
 ### What a bot still cannot do
 
 - **Chat, at all.** `modSend` swallows opcode `"6"` — deliberately, since forty

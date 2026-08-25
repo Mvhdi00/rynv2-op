@@ -10133,7 +10133,11 @@ let pps = 0;
             case "D": {                                 // addPlayer
                 const d = args[0];
                 if (!d) break;
-                let p = botViewPlayers.find(x => x.id === d[0]);
+                // Either identity: a player the view built from the position
+                // stream below, or from a seed, carries its sid as its id, so
+                // matching on id alone would build a second copy of the same
+                // person and split their updates across the two.
+                let p = botViewPlayers.find(x => x.id === d[0] || x.sid === d[1]);
                 if (!p) {
                     p = new Player(d[0], d[1], config, UTILS, projectileManager,
                                    botViewObjectManager, botViewPlayers, botViewAis,
@@ -10157,8 +10161,31 @@ let pps = 0;
                 const now = Date.now();
                 for (const p of botViewPlayers) { p.forcePos = !p.visible; p.visible = false; }
                 for (let i = 0; i + 12 < d.length; i += 13) {
-                    const p = botViewFindPlayer(d[i]);
-                    if (!p) continue;
+                    let p = botViewFindPlayer(d[i]);
+                    if (!p) {
+                        // Somebody the view has never met. The master client
+                        // learns who exists from addPlayer, but a bot's socket
+                        // only carries that for spawns AFTER it joined —
+                        // everyone already on the field when it arrived shows up
+                        // here, in the position stream, and this used to skip
+                        // them forever. They were never drawn, and never able to
+                        // hold a chat bubble, which is why driving a bot showed
+                        // your own line and nobody else's.
+                        //
+                        // The bot's own player map has been tracking them all
+                        // along, so it supplies the name; the rest comes off
+                        // this packet.
+                        const known = bot.players && bot.players.get(d[i]);
+                        p = new Player(d[i], d[i], config, UTILS, projectileManager,
+                                       botViewObjectManager, botViewPlayers, botViewAis,
+                                       items, hats, accessories);
+                        p.spawn(null);
+                        p.setData([d[i], d[i], (known && known.name) || "",
+                                   d[i + 1], d[i + 2], d[i + 3], 100, 100, 35, 0]);
+                        p.x1 = p.x2 = d[i + 1];
+                        p.y1 = p.y2 = d[i + 2];
+                        botViewPlayers.push(p);
+                    }
                     // Same interpolation bookkeeping the master's updatePlayers
                     // does, so the render loop can lerp these exactly the same.
                     p.t1 = (p.t2 === undefined) ? now : p.t2;
@@ -16518,6 +16545,9 @@ for (let tree of trees) {
             {
                 name: "farm", stage: "target",
                 run: (c) => {
+                    // Gathering walks the bot to a tree, so not while you are
+                    // the one steering it.
+                    if (c.driven) return false;
                     const bot = c.bot, V = c.V;
                     const enemy = RynBots._nearestEnemy(bot);
                     const busy = c.role || V.botFreeze || V.botRandomMove || V.botFollowCursor
@@ -16544,8 +16574,15 @@ for (let tree of trees) {
                     // It borrows the attack packet, so not on a tick the mod
                     // has already swung on.
                     if (c.full && c.bot.modAttacked) return false;
-                    if (!RynBots._autoMills(c.bot, c.moveAngle)) return false;
-                    RynBots._sendMove(c.bot, c.moveAngle);
+
+                    // Driving it, the trail goes behind where YOU are steering,
+                    // and the move packet stays yours — laying mills must not
+                    // become a second hand on the stick.
+                    const angle = c.driven
+                        ? (typeof c.bot.moveSent === "number" ? c.bot.moveSent : null)
+                        : c.moveAngle;
+                    if (!RynBots._autoMills(c.bot, angle)) return false;
+                    if (!c.driven) RynBots._sendMove(c.bot, angle);
                     return true;
                 },
             },
@@ -18490,8 +18527,19 @@ for (let tree of trees) {
                 // Full throttle first, and for every bot -- even the one you are
                 // driving and the frozen ones, because the point is raw load.
                 this._packetSpam(bot);
-                // You are driving this one by hand — the AI keeps its hands off.
-                if (this.possessed === bot) return;
+                // Driving one does not switch its brain off.
+                //
+                // This used to return outright, so stepping into a bot cost it
+                // everything at once — no healing, no mills, no gathering. But
+                // the master player runs the whole mod while you steer, and a
+                // bot you have stepped into is the same situation: you take the
+                // walking, the aim and the attack, and everything that does not
+                // fight you for those has no reason to stop.
+                //
+                // So the stages still run and ctx.driven tells each module you
+                // are at the controls — the module's own call, the way `!c.full`
+                // already was. The return moved to just below them.
+                const driven = (this.possessed === bot);
                 const V = window.vars;
                 const now = Date.now();
                 const idx = this.list.indexOf(bot);
@@ -18507,7 +18555,7 @@ for (let tree of trees) {
                 // nothing else — no global is swapped to build it, which is the
                 // whole point of the arrangement.
                 const ctx = { bot: bot, V: V, now: now, idx: idx, total: total,
-                              full: full, role: null, moveAngle: null };
+                              full: full, driven: driven, role: null, moveAngle: null };
 
                 // --- stage: open ---------------------------------------------------
                 if (this._runBotModules("open", ctx)) return;
@@ -18586,6 +18634,10 @@ for (let tree of trees) {
                 // decisions below start swinging.
                 ctx.moveAngle = moveAngle;
                 if (this._runBotModules("walk", ctx)) return;
+
+                // From here down is the formation, the aim and the swinging —
+                // all of it yours while you are driving.
+                if (driven) return;
 
                 // --- Full Mod: the mod already fought this tick --------------------
                 // Where the bot walks is the one thing the mod cannot decide, so
