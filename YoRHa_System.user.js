@@ -17631,6 +17631,37 @@ for (let tree of trees) {
                 const nowMs = Date.now();
                 if (nowMs - (bot.pktAt || 0) >= 1000) { bot.pktAt = nowMs; bot.pktCount = 0; }
                 bot.mod.packets = bot.pktCount || 0;
+
+                // MIRROR MY KEYS
+                //
+                // Everything in window.vars already reaches a bot on its own —
+                // autoPlace, prePlace, replace, autoBuy, the shame and tick
+                // toggles — because window.vars is one object the mod reads
+                // wherever it runs. What does NOT reach it is the state your
+                // keyboard drives: autoMills, Auto Grind, Path Break and the
+                // three place keys are module-scope runtime state, they are in
+                // MOD_CTX_KEYS, and ctxFresh zeroes every one of them for a new
+                // bot. Nothing ever set them again, so a bot could run the whole
+                // mod and still never lay a mill, because as far as its copy of
+                // the mod was concerned you never pressed the key.
+                //
+                // ctxFresh is right not to INHERIT them: a held key copied in as
+                // `true` has no keyup coming in the bot and would stay down for
+                // good. Mirroring every tick is the opposite of inheriting —
+                // release the key and the very next tick carries the false
+                // across too, so a key can never stick.
+                //
+                // Written unconditionally rather than only when mirroring is on,
+                // so switching it off mid-game cannot leave a key held down in a
+                // bot that is no longer listening.
+                const mirror = !!(window.vars && window.vars.botMirrorKeys);
+                bot.mod.autoMills   = mirror ? autoMills   : false;
+                bot.mod.gPressed    = mirror ? gPressed    : false;
+                bot.mod.pathBreak   = mirror ? pathBreak   : false;
+                bot.mod.spikePress  = mirror ? spikePress  : false;
+                bot.mod.trapPress   = mirror ? trapPress   : false;
+                bot.mod.turretPress = mirror ? turretPress : false;
+
                 ctxRun(bot, function () { updatePlayers(data); return true; });
                 // Now the formation, with whatever the mod already decided.
                 try { this._botTick(bot); } catch (e) {}
@@ -25498,6 +25529,8 @@ for (let tree of trees) {
         botFarmShare: 2,         // how many bots may work the same tree
         botSpikeTick: true,      // spike beside a trapped enemy, then pop the trap
         botFullMod: true,        // run the WHOLE mod on every bot, as that bot
+        botMirrorKeys: true,     // your Auto Mills / Grind / Path Break / place
+                                 // keys drive the bots too (Full Mod only)
 
         // ---- SERVER LOG ------------------------------------------------------
         serverLog: true,         // record what the server tells you, timestamped
@@ -25891,6 +25924,7 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Auto Mills (trail behind)", id: "botAutoMills" },
                     { type: 'toggle', name: "Auto Push (trap into spike)", id: "botAutoPush" },
                     { type: 'toggle', name: "Full Mod (bots run the whole mod)", id: "botFullMod" },
+                    { type: 'toggle', name: "Mirror My Keys (mills/grind/place)", id: "botMirrorKeys" },
                     { type: 'toggle', name: "Spike Tick (trap tick)", id: "botSpikeTick" },
                     { type: 'toggle', name: "Auto Buy Hats (copy mine)", id: "botAutoBuyHats" }
                 ]

@@ -430,6 +430,35 @@ Bot Join Alerts toast below is there to tell you when they do.
 Against a stubbed 120ms captcha, twelve bots take ~360ms instead of ~1440ms at
 four in flight — the parallelism, with nothing else changed.
 
+## What a bot inherits from you, and what it did not
+
+Under Full Mod a bot runs the whole mod as itself, and everything in
+`window.vars` already reaches it — autoPlace, prePlace, replace, **autoBuy**,
+the shame and tick toggles — because `window.vars` is one object the mod reads
+wherever it runs. Auto Buy in particular goes out on the bot's own socket:
+`storeBuy` sends through `io.send`, which is the bot's `modSend` for the length
+of the tick.
+
+What did **not** reach a bot is the state your keyboard drives. Auto Mills, Auto
+Grind, Path Break and the three place keys are module-scope runtime variables,
+they are in `MOD_CTX_KEYS`, and `ctxFresh` zeroes every one of them for a new
+bot. Nothing ever set them again — so a bot could run the entire mod and still
+never lay a mill, because as far as its copy of the mod was concerned you never
+pressed the key.
+
+`ctxFresh` is right not to *inherit* them, and says so: a held key copied in as
+`true` has no keyup coming in the bot and would stay down for good. But
+mirroring every tick is the opposite of inheriting — release the key and the
+very next tick carries the `false` across too, so a key cannot stick. That is
+**Mirror My Keys** in the Bots tab, and the six values are written every tick
+whether it is on or off, so switching it off mid-game releases them rather than
+freezing them down. The suite covers the hazard directly: hold, tick, release,
+tick.
+
+Note this is separate from the bots' own `botAutoMills` / `botAutoPlace`
+behaviour layer, which is what they do without Full Mod and answers to its own
+toggles.
+
 ## Alerts
 
 Under Server Log → **Alerts**.
