@@ -300,6 +300,60 @@ toggle keeps the `replace` id it had in 1.5, so saved settings and the one-key
 Auto+Pre+Replace hotkey carry over untouched; `replaceRange` (100–500,
 default 300) is Falcon's `autoReplaceRange`.
 
+## Past Falcon
+
+Three changes on top of the port. The first is a YoRHa bug that happens to hit
+the replacer hardest; the other two are places where Falcon leaves value on the
+table.
+
+### `isItemLimit` never fired
+
+It read `group.sandboxLimit || 99` and never looked at `group.limit`. Only
+three groups carry a `sandboxLimit` — mill, booster, platform — so for
+everything else the cap came out as 99:
+
+| group | real limit | what the placer enforced |
+|---|---|---|
+| spikes | 15 | 99 |
+| trap | 6 | 99 |
+| turret | 2 | 99 |
+| mine | 1 | 99 |
+| mill | 7 | 299 |
+
+Outside sandbox the gate therefore never fired, and every placer that asks
+through `canPlace()` — autoplacer, preplacer, replacer — kept queueing
+placements the server rejects and spending packets on them. The game's own
+authority is `ClientPlayer.canBuild`: sandbox lifts the caps entirely, and
+elsewhere `group.limit` is the number. `isItemLimit` now says the same thing.
+
+This is the same expression the mix already fixed once in `AutoPlacer` — see
+[the placer](#the-placer) above.
+
+### Replace reads what actually broke
+
+`killObject` records each dead building's owner and kind, and Falcon's
+algorithm throws that away: it rebuilds the ring without ever looking at the
+hole it is answering. Two things follow from reading it.
+
+**An enemy's building coming down is not a hole in your wall.** It frees
+ground, which is the autoplacer's and the preplacer's business. Only your own
+losses trigger the replacer now.
+
+**What you lost is the strongest hint on the table.** A trap that was holding
+them pulls a re-trap up a grade; a spike that was cutting them off pulls a
+spike that still reaches them up a grade.
+
+### A grade floor on the four fills
+
+Falcon spends all four on whatever is left, graded or not. A grade of zero
+means the slot earned nothing from any enemy on the table, and four of those is
+four buildings out of a stock the caps keep small. The best spike and the best
+trap already refused to go down at zero; the fills hold to the same bar.
+
+In the scenes the harness runs, an enemy held in an uncovered trap went from
+three placements to two, and the knock-in case from five to four — the dropped
+ones were the grade-zero slots in both.
+
 ---
 
 # Combat Readout, from Falcon

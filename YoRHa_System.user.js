@@ -14662,13 +14662,29 @@ for (let tree of trees) {
             return true;
         }
 
+        // Is this item at its cap?
+        //
+        // This used to read `group.sandboxLimit || 99` and never look at
+        // `group.limit`. Only three groups carry a sandboxLimit — mill, booster
+        // and platform — so for everything else the cap came out as 99: spikes
+        // (really 15), traps (6), turrets (2), mines (1). Outside sandbox the
+        // gate therefore never fired, and every placer that asks through
+        // canPlace() — autoplacer, preplacer, replacer — kept queueing
+        // placements the server rejects, spending packets on them.
+        //
+        // The game's own authority is ClientPlayer.canBuild: sandbox lifts the
+        // caps entirely, and elsewhere `group.limit` is the number. This now
+        // says the same thing, so the placers stop asking at the same point the
+        // server stops answering.
         function isItemLimit(id) {
-            let group = items.list[id].group;
-            let limit = (group.sandboxLimit || 99);
+            const group = items.list[id].group;
+            if (!group) return false;
+            if (config.inSandbox) return false;
 
-            if (myPlayer.itemCounts[group.id] >= limit) {
-                return true;
-            }
+            const limit = (config.isSandbox && group.sandboxLimit) || group.limit;
+            if (!limit) return false;
+
+            return (myPlayer.itemCounts[group.id] || 0) >= limit;
         }
 
         function lineInCircle(x, y, x2, y2, circleX, circleY, scale) {
@@ -15389,8 +15405,12 @@ for (let tree of trees) {
             return found;
         }
 
-        // Falcon's Ve.grade(), table for table.
-        function replaceGrade(found, enemies, objects) {
+        // Falcon's Ve.grade(), table for table — plus one thing Falcon throws
+        // away. `lost` says what actually broke, and that is the strongest hint
+        // on the table: a trap that was holding them wants a trap back, a spike
+        // that was cutting them off wants a spike back. Falcon rebuilds the ring
+        // without ever looking at the hole it is answering.
+        function replaceGrade(found, enemies, objects, lost) {
             const ourDamagers = objects.filter(object => object && object.owner && object.dmg && isObjectOur(object));
 
             for (const enemy of enemies) {
@@ -15433,6 +15453,10 @@ for (let tree of trees) {
                     }
 
                     if (dist <= ring.placementDistance) candidate.grade += free ? 1 : 0.5;
+
+                    // A trap of ours died and they are loose: re-trapping is
+                    // the move the hole is asking for.
+                    if (lost.trap && !enemyTrapped && candidate.reTrap) candidate.grade++;
                 }
 
                 // ---- spikes -----------------------------------------------
@@ -15495,6 +15519,10 @@ for (let tree of trees) {
                     }
 
                     if (free && dist <= ring.placementDistance) candidate.grade++;
+
+                    // A spike of ours died: put the damage back where it was
+                    // doing work, on a slot that still reaches them.
+                    if (lost.spike && candidate.hitEnemy) candidate.grade++;
                 }
             }
 
@@ -15529,6 +15557,19 @@ for (let tree of trees) {
             const dead = broken.filter(object => UTILS.getDistance(myPlayer.x2, myPlayer.y2, object.x, object.y) <= range);
             if (!dead.length) return;
 
+            // Replace answers a hole in YOUR wall. An enemy building coming
+            // down is not that — it frees ground, which is the autoplacer's and
+            // the preplacer's business, not a reason to spend your whole ring.
+            // Falcon reacts to any break at all; killObject already records who
+            // owned each one, so this can tell the difference.
+            const ourDead = dead.filter(object => object.ours);
+            if (!ourDead.length) return;
+
+            const lost = {
+                trap: ourDead.some(object => object.trap),
+                spike: ourDead.some(object => object.dmg && !object.trap),
+            };
+
             const enemies = enemiesNear.filter(enemy => UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2) <= range);
             if (!enemies.length) return;
 
@@ -15537,7 +15578,7 @@ for (let tree of trees) {
             const gone = new Set(dead.map(object => object.sid));
             const objects = visibleObjects.filter(object => object && object.active !== false && !gone.has(object.sid));
 
-            const found = replaceGrade(replaceCandidates(objects), enemies, objects);
+            const found = replaceGrade(replaceCandidates(objects), enemies, objects, lost);
             if (!found.traps.length && !found.spikes.length) return;
 
             const bestSpike = found.bestSpike;
@@ -15572,9 +15613,17 @@ for (let tree of trees) {
                                                                  b.grade === a.grade && a.trap !== b.trap ? (a.trap ? -1 : 1) : b.grade - a.grade
                                                                 );
 
+            // Falcon spends all four on whatever is left, graded or not, and a
+            // grade of zero means the slot earned nothing from any enemy on the
+            // table. Four of those is four buildings out of a stock the caps
+            // keep small — six traps, fifteen spikes. The best spike and the
+            // best trap above already refuse to go down at zero; the fills hold
+            // to the same bar. The list is sorted by grade, so the first
+            // candidate at or below zero ends it.
             let filled = 0;
             for (const candidate of spread) {
                 if (filled >= REPLACE_FILL_LIMIT) break;
+                if (candidate.grade <= 0) break;
                 if (!addPredictObject(candidate.id, candidate.angle, false)) continue;
 
                 filled++;
