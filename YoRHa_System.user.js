@@ -12142,10 +12142,17 @@ let pps = 0;
                     else if (keyStr === window.vars.keyPlacers) {
                         // One key toggles Auto Place + Preplace + Replace together:
                         // if any is off, turn all on; otherwise turn all off.
-                        const on = !(window.vars.autoPlace && window.vars.prePlace && window.vars.replace);
+                        // "All placers on/off". This used to drive three ids
+                        // because there were three lanes; FORGE is one engine
+                        // for what prePlace and replace used to be, so it is
+                        // two now. Leaving the old ids here would have made
+                        // this key a plain autoPlace toggle: prePlace and
+                        // replace are read by nothing any more, so setting them
+                        // would toggle nothing and the condition could never
+                        // come back false.
+                        const on = !(window.vars.autoPlace && window.vars.forge);
                         window.vars.autoPlace = on;
-                        window.vars.prePlace = on;
-                        window.vars.replace = on;
+                        window.vars.forge = on;
                     }
                     else if (keyStr === window.vars.keySpawnBot) {
                         RynBots.spawn(window.vars.botCount);
@@ -14862,7 +14869,6 @@ for (let tree of trees) {
 
         }
 
-        let lastPrePlaceObject = null;
         let removedObjects = [];
 
         // REPLACE: buildings that died since the last tick, measured by
@@ -18686,7 +18692,7 @@ for (let tree of trees) {
         // that carry state across ticks". Being wrong about one of those would
         // be a silent leak between your player and a bot, and copying 136
         // properties a few times a tick costs nothing worth measuring.
-        const MOD_CTX_KEYS = ["myPlayer", "myPlayerSID", "players", "ais", "gameObjects", "projectiles", "alliances", "objectManager", "aiManager", "projectileManager", "keys", "attackState", "autoMills", "autoBreak", "autoBreakAngle", "breakObject", "nearestTrap", "enemiesNear", "nearestEnemy", "ePress", "rightClick", "leftClick", "checkGather", "lastGatherState", "damageTick", "tick", "hits", "shoots", "removeShoots", "primaryReload", "secondaryReload", "turretReload", "placeTick", "predictObjects", "prePlaceObjects", "predictEnemyTraps", "predictWeapon", "keyCodeWeapon", "healing", "autoReload", "deathDamages", "spikeDmg", "spikeDmgCount", "spikeDamages", "damageObjects", "objectHits", "objectShoots", "antiReverse", "antiInsta", "damageByPoisonTick", "damagesByTurrets", "damagesByHits", "damagesByShoots", "damages", "qPress", "spikePress", "trapPress", "turretPress", "spikeKnockPosLine", "visibleObjects", "spikes_enemy", "trap_where_im_in", "cactuses", "enemySpikes", "antiVelocitySpikeSync", "trapBreaked", "trapBreakedTick", "soldierAnti", "predictMoveAngle", "lastMoveAngle", "nearestEnemiesCount", "antiTick", "antiTickTimeout", "predictDamage", "antiPush", "autoPush", "autoPushAngle", "pushPositions", "predictMove", "autoaim", "instaKill", "insta", "spamPrePlacer", "prePlaceInterval", "lastPrePlaceObject", "forgeAhead", "forgeHeadings", "removedObjects", "replaceQueue", "antiPushAngle", "spawnedObjectSids", "promiseResolve", "tickPromiseResolve", "squeezablePointsCache", "pathfindingState", "lastMoveDir", "killCount", "killedName", "pathBreak", "grindObjects", "prevKills", "path", "autoaimAngle", "autogathering", "currentHat", "imTrapped", "shouldResetShame", "totalDmgPot", "lastcolliding", "spikeTickAnti", "grindAngle", "smartTickObject", "iWasTrapped", "lastPredicted", "gatherGrind", "lastPosX", "lastPosY", "canStillGather", "autoBreakWeapon", "spikes_our", "traps_our", "enemy_lastcollidngspike", "enemy_collidingspike", "placedAngles", "bannedAngles", "smartTickSpike", "gPressed", "turrets_our", "pathPosition", "filteredObjectsCache", "shouldntPathfind", "packets", "followTarget", "pathMode", "tmpObj"];
+        const MOD_CTX_KEYS = ["myPlayer", "myPlayerSID", "players", "ais", "gameObjects", "projectiles", "alliances", "objectManager", "aiManager", "projectileManager", "keys", "attackState", "autoMills", "autoBreak", "autoBreakAngle", "breakObject", "nearestTrap", "enemiesNear", "nearestEnemy", "ePress", "rightClick", "leftClick", "checkGather", "lastGatherState", "damageTick", "tick", "hits", "shoots", "removeShoots", "primaryReload", "secondaryReload", "turretReload", "placeTick", "predictObjects", "prePlaceObjects", "predictEnemyTraps", "predictWeapon", "keyCodeWeapon", "healing", "autoReload", "deathDamages", "spikeDmg", "spikeDmgCount", "spikeDamages", "damageObjects", "objectHits", "objectShoots", "antiReverse", "antiInsta", "damageByPoisonTick", "damagesByTurrets", "damagesByHits", "damagesByShoots", "damages", "qPress", "spikePress", "trapPress", "turretPress", "spikeKnockPosLine", "visibleObjects", "spikes_enemy", "trap_where_im_in", "cactuses", "enemySpikes", "antiVelocitySpikeSync", "trapBreaked", "trapBreakedTick", "soldierAnti", "predictMoveAngle", "lastMoveAngle", "nearestEnemiesCount", "antiTick", "antiTickTimeout", "predictDamage", "antiPush", "autoPush", "autoPushAngle", "pushPositions", "predictMove", "autoaim", "instaKill", "insta", "spamPrePlacer", "prePlaceInterval", "forgeAhead", "forgeHeadings", "removedObjects", "replaceQueue", "antiPushAngle", "spawnedObjectSids", "promiseResolve", "tickPromiseResolve", "squeezablePointsCache", "pathfindingState", "lastMoveDir", "killCount", "killedName", "pathBreak", "grindObjects", "prevKills", "path", "autoaimAngle", "autogathering", "currentHat", "imTrapped", "shouldResetShame", "totalDmgPot", "lastcolliding", "spikeTickAnti", "grindAngle", "smartTickObject", "iWasTrapped", "lastPredicted", "gatherGrind", "lastPosX", "lastPosY", "canStillGather", "autoBreakWeapon", "spikes_our", "traps_our", "enemy_lastcollidngspike", "enemy_collidingspike", "placedAngles", "bannedAngles", "smartTickSpike", "gPressed", "turrets_our", "pathPosition", "filteredObjectsCache", "shouldntPathfind", "packets", "followTarget", "pathMode", "tmpObj"];
 
         function ctxCapture() {
             return {
@@ -18774,7 +18780,6 @@ for (let tree of trees) {
                 insta: insta,
                 spamPrePlacer: spamPrePlacer,
                 prePlaceInterval: prePlaceInterval,
-                lastPrePlaceObject: lastPrePlaceObject,
                 forgeAhead: forgeAhead,
                 forgeHeadings: forgeHeadings,
                 removedObjects: removedObjects,
@@ -18912,7 +18917,6 @@ for (let tree of trees) {
             insta = s.insta;
             spamPrePlacer = s.spamPrePlacer;
             prePlaceInterval = s.prePlaceInterval;
-            lastPrePlaceObject = s.lastPrePlaceObject;
             forgeAhead = s.forgeAhead || new Map();
             forgeHeadings = s.forgeHeadings || new Map();
             removedObjects = s.removedObjects;
@@ -25623,20 +25627,21 @@ for (let tree of trees) {
         autoPlace: false,
         placeRange: 300,
 
-        // FORGE — the trap & spike engine. One engine for preplace and replace,
-        // which used to be two lanes with two sets of rules. `prePlace` is kept
-        // as its id so saved settings and the Placers hotkey carry over.
+        // FORGE — the trap & spike engine. One engine for what used to be two
+        // lanes with two sets of rules.
+        //
+        // `prePlace`, `replace` and `replaceRange` are gone with them. A saved
+        // config from before still carries those keys and they are simply
+        // ignored; keeping them declared would have left three settings in the
+        // menu's own data that nothing on either side reads.
         forge: true,
         forgeRange: 320,         // beyond this the engine sleeps entirely
         forgePerTick: 5,         // most structures one tick may spend
         forgeReserve: 24,        // packets/sec kept back for heal, insta, hats
-        prePlace: true,
 
         // Replace — Falcon 0.4.7's auto-replace. `replace` is the same id the
         // 1.5 menu and the Placers hotkey already used, so saved settings and
         // the one-key Auto/Pre/Replace toggle carry over untouched.
-        replace: true,
-        replaceRange: 300,       // Falcon's autoReplaceRange
 
         // Placer resolution — two mutually-exclusive tiles. 144 mode sweeps the
         // classic 72 grid first (so the spike tick lands exactly where it always

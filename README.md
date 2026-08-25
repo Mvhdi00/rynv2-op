@@ -183,7 +183,7 @@ understood.
 # YoRHa System — FORGE
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-forge.js` — 115 checks.
+revision). Verified by `node tools/verify-forge.js` — 138 checks (139 with `FORGE_BASE` set).
 
 FORGE is one engine for trap and spike placement. It **replaces** YoRHa's
 preplacer and replacer outright — `isPrePlaceAngle`, `getPrePlaceObject`,
@@ -284,17 +284,48 @@ sliders are read fresh each tick, so changes apply without a reload.
 ## Verifying
 
 ```
-node tools/verify-forge.js [path/to/YoRHa_System.user.js]
+node tools/verify-forge.js [path/to/client.js]     # 138 checks
+node tools/check-scopes.js [path/to/client.js]     # whole-file scope analysis
+
+# 139th check: compare the scope report against the untouched base
+FORGE_BASE=/path/to/pristine.user.js node tools/verify-forge.js
 ```
 
-Lifts the real function bodies out of the client by name — nothing is
-re-implemented — and runs them in a stub world with a recording
-`addPredictObject`. Covers physics, confidence, sensing, each role, scoring,
-knockback, budget, boundaries, cost, ledger, safety gates, robustness against
-malformed wire data, and integration.
+`verify-forge.js` lifts the real function bodies out of the client by name —
+nothing is re-implemented, including `addPredictObject` itself, since testing
+the no-conflict claim against a stand-in would only prove the stand-in. It runs
+the **whole** `getPredictObjects` pipeline, not just the engine: FORGE and the
+autoplacer both contribute to one list, and nothing in that list overlaps
+anything else in it.
 
-Three defects caught during the build: a `null` in the break list threw inside
-the tick body; a non-finite enemy position made every distance `NaN` — which
-compares false against every threshold, so the engine would have sailed straight
-past its own range gates instead of stopping at them; and the fixed priority
-walk described above, which a worked scenario exposed.
+`check-scopes.js` parses the client with acorn, builds the real scope chain, and
+reports every identifier read without a declaration anywhere up it. `node
+--check` proves a file *parses*; it does not prove a name still resolves after
+550 lines were deleted — and a dangling name does not fail at load, it throws
+the first time its branch runs, mid-fight. The client reports 7, and the
+untouched base reports the same 7 (they belong to the vendored game bundle), so
+the edits added none.
+
+### Measured
+
+| | |
+|---|---|
+| Cost of a busy combat tick | **~1.4 ms** — 1.2% of the 111 ms server tick |
+| Placement sweeps per tick | **2**, flat, regardless of angle count |
+| Bot-context keys | 134 declared / 134 captured / 134 restored, no mismatch |
+| Dead settings | 0 — every entry in `window.vars` is read by something |
+
+Defects caught during the build, each by a different check:
+
+1. A `null` in the break list threw inside the tick body — found by feeding the
+   engine malformed wire data.
+2. A non-finite enemy position made every distance `NaN`, which compares false
+   against every threshold, so the engine would have sailed past its own range
+   gates instead of stopping at them.
+3. The fixed priority walk described above — found by working through one real
+   duel frame by hand.
+4. **The Placers hotkey was left driving `prePlace` and `replace`**, two ids
+   nothing reads once the lanes they belonged to are gone. The key kept working
+   and silently stopped doing its job: it could only ever toggle `autoPlace`,
+   and its "all placers off" condition could never come back false. Found by
+   scanning for settings that are declared but read by nothing.

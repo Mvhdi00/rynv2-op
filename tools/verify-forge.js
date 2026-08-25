@@ -17,6 +17,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const { execFileSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const CLIENT_PATH = process.argv[2]
@@ -120,10 +121,15 @@ eval(liftLine(String.raw`module\.exports\.playerSpeed = [\d.]+;`).replace("modul
 eval(liftLine(String.raw`module\.exports\.playerDecel = [\d.]+;`).replace("module.exports", "config"));
 eval(liftAssign("module.exports.buildLimit", "config") + ";");
 
-let ctx, placed;
+let ctx;
+
+// Everything the tick queued. This IS the client's predictObjects — the tests
+// read the real output list rather than a parallel record of it.
+Object.defineProperty(globalThis, "placed", {
+  get() { return ctx ? ctx.predictObjects : []; },
+});
 
 function world(over = {}) {
-  placed = [];
 
   const myPlayer = over.myPlayer || {
     sid: 1, x2: 1000, y2: 1000, x: 1000, y: 1000, scale: 35, dir: 0, alive: true,
@@ -163,6 +169,17 @@ function world(over = {}) {
     forgeSlotsTick: -1, forgeSlotsOwner: null, forgeSlotsCache: null,
     _placeAnglesTick: -1, _placeAnglesCache: new Map(),
 
+    // What getPredictObjects and the autoplacer touch beyond FORGE's own state.
+    predictObjects: [], removedObjects: [], replaceQueue: over.replaceQueue || [],
+    placedAngles: [], bannedAngles: new Map(), placeTick: 0,
+    autoMills: false, lastMoveAngle: null, grindObjects: [],
+    predictMoveAngle: over.predictMoveAngle != null ? over.predictMoveAngle : 0,
+    smartTickSpike: null, spikes_enemy: [], enemySpikes: [],
+    trapPress: false, turretPress: false, spikePress: false,
+    getAttackDir: () => 0,
+    canTrapTick: over.canTrapTick || (() => false),
+    canShamePlace: over.canShamePlace || (() => false),
+
     getPlayerInfo: over.getPlayerInfo || ((p, type) => {
       const primary = (p && p.weapons && p.weapons[0]) || 5;
       if (type === "primaryRange") return items.weapons[primary].range;
@@ -173,14 +190,6 @@ function world(over = {}) {
       return 0;
     }),
 
-    addPredictObject: (id, angle, preplace) => {
-      const cfg = ctx.getConfig(id, angle);
-      for (const o of placed) {
-        if (UTILS.getDistance(cfg.x, cfg.y, o.x, o.y) < cfg.scale + o.scale) return false;
-      }
-      placed.push({ id, angle, preplace, x: cfg.x, y: cfg.y, scale: cfg.scale });
-      return true;
-    },
   };
 
   base.blockers = over.blockers || [];
@@ -189,6 +198,10 @@ function world(over = {}) {
   vm.runInContext([
     lift("getConfig"),
     lift("isItemLimit"),
+    // The client's OWN addPredictObject, not a stand-in. It is the marker check
+    // every lane adds through, so the entire no-conflict claim rests on it —
+    // testing against a reimplementation would only prove the reimplementation.
+    lift("addPredictObject"),
     `function canPlace(id, angle, objects) {
        if (isItemLimit(id)) return false;
        const c = getConfig(id, angle);
@@ -227,6 +240,17 @@ function world(over = {}) {
     lift("forgeRoom"),
     lift("forgeCommit"),
     lift("forgeTick"),
+
+    // The autoplacer, lifted whole. FORGE claims not to have touched it; the
+    // only way to mean that is to run it.
+    lift("isAutoPlaceAngle"),
+    lift("checkPredictObjects"),
+    lift("updateAngles"),
+    lift("setPlaceTick"),
+
+    // And the orchestrator itself, so the claim is about the real pipeline
+    // rather than about forgeTick in isolation.
+    lift("getPredictObjects"),
   ].join("\n\n"), ctx);
 
   return ctx;
@@ -758,6 +782,177 @@ section("ROBUSTNESS — degenerate input must not throw inside a packet handler"
 }
 
 // ===========================================================================
+section("AUTOPLACER — untouched means it still runs, not that I did not edit it");
+{
+  // The autoplacer's own chain, on its own, with FORGE switched off.
+  const c = world({
+    nearestEnemy: enemyAt(1080, 1000), traps_our: [trapAt(1080, 1000)],
+    primaryReload: { 1: 1 }, vars: { forge: false, autoPlace: true },
+  });
+
+  let threw = null;
+  try {
+    c.updateAngles(c.myPlayer.items[2]);
+    c.updateAngles(c.myPlayer.items[4]);
+  } catch (e) { threw = e.message; }
+
+  ok("updateAngles -> checkPredictObjects -> isAutoPlaceAngle runs clean", threw === null, threw);
+  ok("and it places on its own with FORGE off", placed.length > 0, `placed ${placed.length}`);
+  ok("its objects ride the immediate lane, not the preplace one",
+     placed.every(p => p.preplace === false));
+
+  // Its ban book still works: an angle spent last tick that still reads free is
+  // held back rather than spent twice.
+  const b = world({
+    nearestEnemy: enemyAt(1080, 1000), traps_our: [trapAt(1080, 1000)],
+    primaryReload: { 1: 1 }, vars: { forge: false, autoPlace: true },
+  });
+  b.placedAngles = [0];
+  b.updateAngles(b.myPlayer.items[2]);
+  ok("the autoplacer's ban book still fills", b.bannedAngles.size > 0,
+     `banned ${b.bannedAngles.size}`);
+}
+
+// ===========================================================================
+section("PIPELINE — the whole tick, not just the engine in isolation");
+{
+  // getPredictObjects is what the tick body actually calls. Running it proves
+  // the seam FORGE was spliced into is whole.
+  const c = world({
+    nearestEnemy: enemyAt(1080, 1000), traps_our: [trapAt(1080, 1000)],
+    primaryReload: { 1: 1 }, vars: { forge: true, autoPlace: true },
+    replaceQueue: [{ sid: 9, x: 1000, y: 1070, scale: 35, id: 6, trap: false, dmg: true, ours: true }],
+  });
+
+  let threw = null;
+  try { c.getPredictObjects(); } catch (e) { threw = e.message + "\n      " + (e.stack || "").split("\n")[1]; }
+  ok("getPredictObjects runs end to end", threw === null, threw);
+
+  ok("the tick produced placements", c.predictObjects.length > 0,
+     `predictObjects ${c.predictObjects.length}`);
+  ok("the replace queue was drained", c.replaceQueue.length === 0);
+  ok("FORGE and the autoplacer both contributed to one list",
+     c.predictObjects.some(o => o.preplace === true) &&
+     c.predictObjects.some(o => o.preplace === false),
+     JSON.stringify(c.predictObjects.map(o => o.preplace)));
+
+  // No two objects in that list may overlap — that is the whole no-conflict claim.
+  let overlap = null;
+  for (let i = 0; i < c.predictObjects.length; i++) {
+    for (let j = i + 1; j < c.predictObjects.length; j++) {
+      const a = c.predictObjects[i], b = c.predictObjects[j];
+      if (a.id === 17 || b.id === 17) continue;
+      if (UTILS.getDistance(a.x, a.y, b.x, b.y) < a.scale + b.scale) overlap = [i, j];
+    }
+  }
+  ok("nothing in the tick's output overlaps anything else in it", overlap === null,
+     overlap ? `objects ${overlap} collide` : "");
+
+  // With FORGE off the pipeline still runs — the autoplacer alone.
+  const off = world({
+    nearestEnemy: enemyAt(1080, 1000), traps_our: [trapAt(1080, 1000)],
+    primaryReload: { 1: 1 }, vars: { forge: false, autoPlace: true },
+  });
+  let threw2 = null;
+  try { off.getPredictObjects(); } catch (e) { threw2 = e.message; }
+  ok("the pipeline runs with FORGE switched off", threw2 === null, threw2);
+  ok("and only the autoplacer's objects are in it",
+     off.predictObjects.every(o => o.preplace === false));
+
+  // With everything off it still runs and produces nothing.
+  const dark = world({
+    nearestEnemy: enemyAt(1080, 1000), primaryReload: { 1: 1 },
+    vars: { forge: false, autoPlace: false },
+  });
+  let threw3 = null;
+  try { dark.getPredictObjects(); } catch (e) { threw3 = e.message; }
+  ok("the pipeline runs with every placer off", threw3 === null, threw3);
+  ok("and places nothing", dark.predictObjects.length === 0);
+}
+
+// ===========================================================================
+section("NO DEAD CONTROLS — every setting and key still drives something");
+{
+  // Deleting two lanes is the way to leave a hotkey pointing at ids nothing
+  // reads: the key keeps working, and silently stops doing its job.
+  ok("the Placers hotkey drives FORGE, not the removed ids",
+     /const on = !\(window\.vars\.autoPlace && window\.vars\.forge\);/.test(src) &&
+     /window\.vars\.forge = on;/.test(src));
+  ok("and no longer writes prePlace or replace",
+     !/window\.vars\.prePlace = /.test(src) && !/window\.vars\.replace = /.test(src));
+
+  for (const dead of ["prePlace", "replace", "replaceRange"]) {
+    ok(`${dead} is fully gone, not just unread`,
+       !new RegExp(`\\n\\s*${dead}: `).test(src) &&
+       !new RegExp(`vars\\.${dead}\\b`).test(src) &&
+       !new RegExp(`id: "${dead}"`).test(src));
+  }
+
+  // Every menu tile must point at a setting that exists, and every FORGE
+  // setting must be reachable from the menu.
+  // Menu tiles only. A bare `id: "..."` also matches every DOM element the
+  // client builds, so the type marker is what separates a setting tile from a
+  // div — otherwise this reports the game's own HTML as broken settings.
+  const tileIds = [...src.matchAll(/type: '(?:toggle|slider)'[^}]*?id: "([A-Za-z_][A-Za-z0-9_]*)"/g)]
+        .map(m => m[1]);
+  const varsBlock = (() => {
+    const at = src.indexOf("window.vars = {");
+    let i = src.indexOf("{", at), d = 0;
+    for (; i < src.length; i++) {
+      if (src[i] === "{") d++;
+      else if (src[i] === "}") { d--; if (!d) return src.slice(at, i + 1); }
+    }
+  })();
+  const declared = new Set([...varsBlock.matchAll(/^\s{4,8}([A-Za-z_][A-Za-z0-9_]*)\s*:/gm)].map(m => m[1]));
+
+  const orphanTiles = [...new Set(tileIds)].filter(id => !declared.has(id));
+  ok("every menu tile points at a declared setting", orphanTiles.length === 0,
+     JSON.stringify(orphanTiles));
+
+  ok("every FORGE setting has a tile",
+     ["forge", "forgeRange", "forgePerTick", "forgeReserve"].every(v => tileIds.includes(v)));
+}
+
+// ===========================================================================
+section("BUDGET IN TIME — the engine has to fit inside a server tick");
+{
+  const objs = [];
+  for (let i = 0; i < 40; i++) {
+    objs.push({ sid: 100 + i, x: 1000 + Math.cos(i) * 180, y: 1000 + Math.sin(i) * 180,
+                scale: 35, health: 200, active: true, isItem: true, dmg: true });
+  }
+  const hole = [{ sid: 9, x: 1000, y: 1070, scale: 35, id: 6, trap: false, dmg: true, ours: true }];
+
+  // A busy combat frame, run on one context so this measures the engine and
+  // not the harness building a VM.
+  const c = world({
+    nearestEnemy: enemyAt(1080, 1000), traps_our: [trapAt(1080, 1000)],
+    spikes_our: [{ sid: 61, x: 1200, y: 1000, scale: 35, dmg: 20, active: true }],
+    visibleObjects: objs, players: [enemyAt(1080, 1000)], primaryReload: { 1: 1, 2: 1 },
+  });
+
+  for (let i = 0; i < 200; i++) { c.tick = 100 + i; c.predictObjects = []; c.forgeTick(hole); }
+
+  const N = 500;
+  const t0 = process.hrtime.bigint();
+  for (let i = 0; i < N; i++) { c.tick = 1000 + i; c.predictObjects = []; c.forgeTick(hole); }
+  const perTick = Number(process.hrtime.bigint() - t0) / 1e6 / N;
+
+  // A server tick is 1000/9 ms. Anything approaching that is a frame-rate
+  // problem no matter how good the placements are.
+  ok(`a busy tick costs ${(perTick * 1000).toFixed(0)}us — under 5% of a server tick`,
+     perTick < (1000 / 9) * 0.05, `${perTick.toFixed(3)}ms of ${(1000 / 9).toFixed(1)}ms`);
+
+  let sweeps = 0;
+  const real = c.buildPlaceAngles;
+  c.buildPlaceAngles = function (...a) { sweeps++; return real.apply(this, a); };
+  for (let i = 0; i < 100; i++) { c.tick = 9000 + i; c.predictObjects = []; c.forgeTick(hole); }
+  c.buildPlaceAngles = real;
+
+  ok(`${sweeps / 100} placement sweeps per tick, flat`, sweeps === 200, `got ${sweeps} over 100 ticks`);
+}
+
+// ===========================================================================
 section("INTEGRATION — the client still parses and the old engine is gone");
 {
   let parsed = true, err = "";
@@ -793,6 +988,34 @@ section("INTEGRATION — the client still parses and the old engine is gone");
        new RegExp(`id: "${v}"`).test(src)));
   ok("the sliders actually reach the engine", /FORGE\.engageRange = v\.forgeRange/.test(src));
   ok("stats are reachable without a debugger", /window\.FORGE_STATS = function/.test(src));
+}
+
+// ===========================================================================
+section("SCOPES — nothing in the whole file reads a name that was never declared");
+{
+  // Deleting 550 lines is exactly how a reference is left pointing at nothing.
+  // A dangling name does not fail at load; it throws the first time its branch
+  // runs, mid-fight. check-scopes walks the real scope chain over the whole
+  // client and reports every one — and the bar is the untouched base, because
+  // the game bundle vendored into this file has a handful of its own.
+  const run = (file) => {
+    try {
+      return execFileSync("node", [path.join(__dirname, "check-scopes.js"), file],
+                          { encoding: "utf8" });
+    } catch (e) { return (e.stdout || "") + (e.stderr || ""); }
+  };
+  const names = (out) => (out.match(/^   ([A-Za-z_$][\w$]*)/gm) || []).map(s => s.trim()).sort();
+
+  const mine = names(run(CLIENT_PATH));
+  const BASE = process.env.FORGE_BASE;
+  ok(`the client has ${mine.length} undeclared name(s), all from the vendored bundle`,
+     mine.length <= 8, JSON.stringify(mine));
+
+  if (BASE && fs.existsSync(BASE)) {
+    ok("and exactly the same set as the untouched base — the edits added none",
+       JSON.stringify(names(run(BASE))) === JSON.stringify(mine),
+       `base ${JSON.stringify(names(run(BASE)))}\n      mine ${JSON.stringify(mine)}`);
+  }
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
