@@ -299,3 +299,45 @@ Placers now reads Autoplacer / Preplacer / **Replace** / Placer Resolution. The
 toggle keeps the `replace` id it had in 1.5, so saved settings and the one-key
 Auto+Pre+Replace hotkey carry over untouched; `replaceRange` (100–500,
 default 300) is Falcon's `autoReplaceRange`.
+
+---
+
+# Combat Readout, from Falcon
+
+Three more Falcon features came across, under Visuals → **Combat Readout**.
+All three are pure drawing over data YoRHa already keeps; none of them send
+anything, and none touch the placers.
+
+| Toggle | Falcon | What YoRHa already had |
+|---|---|---|
+| **Reload bars** | `renderReloadingBars` | `primaryReload[sid]` / `secondaryReload[sid]`, a 0–1 fraction per player that its own combat logic reads every tick — that fraction *is* the bar |
+| **Building health** | `renderBuildingHealth` | `GameObject.health` / `.maxHealth`, kept current by `changeObjectHealth()` off the hit packets |
+| **Red enemy spikes / traps** | `renderRedOverlay` | `isObjectOur()`, and an item-sprite cache to key the tinted copy into |
+
+A reload bar is only up while its weapon is loading, so a player with both bars
+gone is a player who can swing right now. Building health is drawn only for
+damaged buildings within 400, coloured green / yellow / red by owner, after
+every object layer and before the player labels — where Falcon has it, so a bar
+never hides under the building it belongs to.
+
+The red wash departs from Falcon in one place. Falcon re-fills the current path,
+which only tints the silhouette if the last shape drawn happens to be it;
+compositing `source-atop` over the finished sprite paints exactly the pixels
+already there, outline included, whatever branch of the item switch ran. The
+tinted sprite gets its own cache slot (`itemSpriteKey`), or the first spike
+drawn would decide the colour of every spike on the map.
+
+## What was left in Falcon, and why
+
+- **Auto Upgrade** — not the configurable age path it looks like. It substring-
+  matches the upgrade element's DOM id against a hardcoded `["17","31","23",
+  7thSlot]`, which also mis-matches (`"17"` hits `"117"`). YoRHa's bot age-path
+  config (`botPrimary` / `botSecondary` / `botAgeTrap` / `botAge8`) is the
+  better shape to build the player's own on.
+- **Shame count and sid over players, placement ghosts** — YoRHa already draws
+  all three.
+- **One Tick / ATOS / Auto KB Insta / Melee Turret Sync / Spiek Tick** — YoRHa
+  has its own insta (`instaKill`, `insta`), spike tick (`shameTick`,
+  `canTrapTick`, `velocityTick`) and shame systems. Falcon's versions contend
+  for weapon selection and packet ordering with them.
+- **Moomoo Pet** — the Pod covers it and more.

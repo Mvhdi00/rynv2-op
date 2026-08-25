@@ -12730,6 +12730,44 @@ let pps = 0;
 
                 // FROM HERE
 
+                // BUILDING HEALTH  (Falcon 0.4.7's renderBuildingHealth)
+                //
+                // Drawn after every object layer and before the player labels,
+                // where Falcon has it, so a bar never hides under the building
+                // it belongs to. Only damaged buildings get one — an untouched
+                // wall would just be clutter — and only within 400, which is
+                // the range the rest of the mod already reasons about.
+                //
+                // YoRHa's GameObject carries health and maxHealth already, and
+                // changeObjectHealth() keeps health current off the hit
+                // packets, so this reads what the mod already knows: whether
+                // one more swing takes that trap down.
+                if (window.vars.buildingHealth && myPlayer) {
+                    mainContext.globalAlpha = 1;
+                    const healthObjects = renderObjectSource();
+                    for (var i = 0; i < healthObjects.length; ++i) {
+                        const building = healthObjects[i];
+                        if (!building.active || !building.isItem || !building.owner) continue;
+                        if (!building.maxHealth || building.health >= building.maxHealth) continue;
+                        if (UTILS.getDistance(building.x, building.y, myPlayer.x2, myPlayer.y2) > 400) continue;
+
+                        const barX = building.x + building.xWiggle - xOffset - (config.healthBarWidth / 2);
+                        const barY = building.y + building.yWiggle - yOffset;
+
+                        mainContext.fillStyle = darkOutlineColor;
+                        mainContext.roundRect(barX - config.healthBarPad, barY - config.healthBarPad,
+                                              config.healthBarWidth + (config.healthBarPad * 2), 17, 8);
+                        mainContext.fill();
+
+                        mainContext.fillStyle = building.owner.sid == myPlayer.sid ? "#8ecc51" :
+                                                isAlly(building.owner.sid) ? "#e0c655" : "#cc5151";
+                        mainContext.roundRect(barX, barY,
+                                              config.healthBarWidth * (Math.max(0, building.health) / building.maxHealth),
+                                              17 - (config.healthBarPad * 2), 7);
+                        mainContext.fill();
+                    }
+                }
+
                 // RENDER PLAYER AND AI UI / PLAYERINFOS:
                 // Names, health bars and crowns follow whichever world is on
                 // screen, so the bot's view is labelled like the real thing.
@@ -12815,6 +12853,41 @@ let pps = 0;
                                                       (tmpObj.y - yOffset + tmpObj.scale) + config.nameY + config.healthBarPad,
                                                       ((config.healthBarWidth * 2) * (tmpObj.health / tmpObj.maxHealth)), 17 - config.healthBarPad * 2, 7);
                                 mainContext.fill();
+
+                                // RELOAD BARS  (Falcon 0.4.7's renderReloadingBars)
+                                //
+                                // Nothing is computed here. YoRHa already keeps
+                                // primaryReload[sid] and secondaryReload[sid] as
+                                // a 0..1 fraction — 1 means ready — because its
+                                // own combat logic reads them every tick, and
+                                // that fraction IS the bar. All Falcon had over
+                                // YoRHa on this was the drawing.
+                                //
+                                // A bar is only up while its weapon is loading,
+                                // so a player with both bars gone is a player
+                                // who can swing right now.
+                                if (window.vars.reloadBars && tmpObj.isPlayer && tmpObj.alive) {
+                                    const reloadY = (tmpObj.y - yOffset + tmpObj.scale) + config.nameY - 20;
+                                    const reloadW = config.healthBarWidth - config.healthBarPad;
+                                    const reloadCentre = tmpObj.x - xOffset;
+
+                                    const drawReloadBar = function (fraction, onLeft, colour) {
+                                        if (typeof fraction != "number" || fraction >= 1) return;
+
+                                        const x = onLeft ? reloadCentre - config.healthBarWidth - config.healthBarPad
+                                                         : reloadCentre + config.healthBarPad;
+                                        mainContext.fillStyle = darkOutlineColor;
+                                        mainContext.roundRect(x, reloadY, reloadW + (config.healthBarPad * 2), 13, 6);
+                                        mainContext.fill();
+                                        mainContext.fillStyle = colour;
+                                        mainContext.roundRect(x + config.healthBarPad, reloadY + config.healthBarPad,
+                                                              reloadW * Math.max(0, fraction), 13 - (config.healthBarPad * 2), 5);
+                                        mainContext.fill();
+                                    };
+
+                                    drawReloadBar(primaryReload[tmpObj.sid], true, "#d8a657");
+                                    drawReloadBar(secondaryReload[tmpObj.sid], false, "#7daea3");
+                                }
                             }
                         }
                     }
@@ -12994,6 +13067,13 @@ let pps = 0;
                         mainContext.globalAlpha = tmpObj.hideFromEnemy ? 0.6 : 1;
 
                         if (tmpObj.isItem) {
+
+                            // Enemy spikes and traps get the red wash, so the
+                            // ground you can stand on is readable at a glance.
+                            // Recomputed per frame rather than stamped once, so
+                            // the toggle takes effect without a reload.
+                            tmpObj.enemyBuilding = !!(window.vars.enemyBuildingTint && myPlayer &&
+                                                      (tmpObj.dmg || tmpObj.trap) && tmpObj.owner && !isObjectOur(tmpObj));
 
                             tmpSprite = getItemSprite(tmpObj);
 
@@ -13327,8 +13407,18 @@ for (let tree of trees) {
         }
         // GET ITEM SPRITE:
         var itemSprites = [];
+
+        // One cache slot per way an item can be drawn. `enemyBuilding` is the
+        // Falcon red wash below, and it needs its own slot or the first spike
+        // drawn would decide the colour of every spike on the map.
+        function itemSpriteKey(obj) {
+            return obj.id +
+                (obj.predictEnemyTrap ? 100 : (obj.prediction ? (obj.preplace ? 200 : 300) : 0)) +
+                (obj.enemyBuilding ? 400 : 0);
+        }
+
         function getItemSprite(obj, asIcon) {
-            var tmpSprite = itemSprites[obj.id + (obj.predictEnemyTrap ? 100 : (obj.prediction ? (obj.preplace ? 200 : 300) : 0))];
+            var tmpSprite = itemSprites[itemSpriteKey(obj)];
             if (!tmpSprite || asIcon) {
                 var tmpCanvas = document.createElement('canvas');
                 tmpCanvas.width = tmpCanvas.height = (obj.scale * 2.5) + outlineWidth +
@@ -13559,9 +13649,28 @@ for (let tree of trees) {
                     tmpContext.fillStyle = "#d76edb";
                     renderCircle(0, 0, obj.scale * 0.5, tmpContext, true);
                 }
+                // ENEMY BUILDING TINT  (Falcon 0.4.7's renderRedOverlay)
+                //
+                // Falcon washes the shape in dark red by re-filling the current
+                // path, which only works while the last shape drawn happens to
+                // be the silhouette. Compositing source-atop over the finished
+                // canvas is the same wash without that assumption: it paints
+                // exactly the pixels already drawn, outline included, whatever
+                // the branch above ended on. The transform is reset first
+                // because the branches rotate and translate as they go.
+                if (obj.enemyBuilding) {
+                    tmpContext.setTransform(1, 0, 0, 1, 0, 0);
+                    tmpContext.globalCompositeOperation = "source-atop";
+                    tmpContext.globalAlpha = 0.55;
+                    tmpContext.fillStyle = "#780c0c";
+                    tmpContext.fillRect(0, 0, tmpCanvas.width, tmpCanvas.height);
+                    tmpContext.globalAlpha = 1;
+                    tmpContext.globalCompositeOperation = "source-over";
+                }
+
                 tmpSprite = tmpCanvas;
                 if (!asIcon)
-                    itemSprites[obj.id + (obj.predictEnemyTrap ? 100 : (obj.prediction ? (obj.preplace ? 200 : 300) : 0))] = tmpSprite;
+                    itemSprites[itemSpriteKey(obj)] = tmpSprite;
             }
             return tmpSprite;
         }
@@ -25198,6 +25307,13 @@ for (let tree of trees) {
         // Visuals
         millRotation: false,
         spikeRotation: false,
+
+        // Combat readout — ported from Falcon 0.4.7. All three are pure
+        // drawing over data YoRHa already keeps; none of them send anything.
+        reloadBars: true,          // Falcon's renderReloadingBars
+        buildingHealth: true,      // Falcon's renderBuildingHealth
+        enemyBuildingTint: true,   // Falcon's renderRedOverlay
+
         yorhaVisual: true,       // full-screen YoRHa atmosphere wash
         yorhaCRT: false,         // full-screen CRT / scanline veil
         yorhaToasts: true,       // slide-in YoRHa system notifications
@@ -25633,6 +25749,14 @@ for (let tree of trees) {
                 items: [
                     { type: 'toggle', name: "Spikes rotation", id: "spikeRotation" },
                     { type: 'toggle', name: "Mills rotation", id: "millRotation" }
+                ]
+            },
+            {
+                title: "Combat Readout",
+                items: [
+                    { type: 'toggle', name: "Reload bars", id: "reloadBars" },
+                    { type: 'toggle', name: "Building health", id: "buildingHealth" },
+                    { type: 'toggle', name: "Red enemy spikes / traps", id: "enemyBuildingTint" }
                 ]
             },
             {
