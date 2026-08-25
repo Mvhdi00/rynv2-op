@@ -183,7 +183,7 @@ understood.
 # YoRHa System — Replace
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-replace.js` — 60 checks.
+revision). Verified by `node tools/verify-replace.js` — 78 checks.
 
 YoRHa's replacer is **Falcon 0.4.7's grading table**, already carefully ported
 with four documented fixes to Falcon's own bugs. Reading the replacers in nine
@@ -285,11 +285,42 @@ takes the rest of the tick with it.
 ## Verifying
 
 ```
-node tools/verify-replace.js [path/to/client.js]     # 60 checks
-node tools/check-scopes.js   [path/to/client.js]     # whole-file scope analysis
+node tools/verify-replace.js [client.js]                  # 76 checks
+node tools/check-scopes.js   [client.js]                  # names READ but never declared
+node tools/check-dead.js     [client.js] --base [base.js] # names DECLARED but never used
 
+# 78 checks: the two static passes fold in when a baseline is given
 YORHA_BASE=/path/to/pristine.user.js node tools/verify-replace.js
 ```
+
+`node --check` proves a file parses. It does not prove a name still resolves
+after an edit, and it does not prove a function you added is ever called —
+neither fails at load, both fail mid-fight. Two static passes over the **whole**
+file cover that:
+
+- **check-scopes** — every identifier read resolves to a declaration somewhere
+  up the real scope chain. 7 do not, all from the vendored game bundle, and the
+  untouched base reports the same 7.
+- **check-dead** — every name declared is referenced, and no scope declares one
+  name twice (the later silently wins, so the earlier is dead but reads live).
+  Reported as a **delta** against a baseline, since a vendored bundle carries
+  plenty of its own.
+
+Both were calibrated against clients whose defects are already known, so a clean
+report means something:
+
+| | check-dead / check-scopes finds |
+|---|---|
+| NOVASTORM | `replacer` declared and never called · `optimizedPreplacer`, `beastModeReplacer`, `ultraSmartReplacer` each **defined twice** · `batchPlaceTrap` **called 10× and never defined**, `isTrapBlocked` 4×, `canPlaceTrap` 1× |
+| AI Client 44 | `AutoReplace` declared and never called |
+
+On this file: **0 dead, 0 shadowed, 0 undeclared introduced.**
+
+The pre-existing 33 unreferenced names are all vendored-bundle leftovers and
+debug renderers (`drawGrid`, `drawPath`, `drawCompassDirection`, `MapManager`,
+msgpack internals). The 2 shadowed are benign `var` redeclarations
+(`keys` 9426/11997, `data` 25267/25270). None is in the placer region; all are
+identical in the untouched base.
 
 Lifts the real function bodies out of the client by name — nothing is
 re-implemented, including `addPredictObject`, since the no-double-spend claim

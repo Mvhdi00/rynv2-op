@@ -131,6 +131,17 @@ function world(over = {}) {
     _placeAnglesTick: -1, _placeAnglesCache: new Map(),
     _trapTickMemoTick: -1, _trapTickMemoOwner: null, _trapTickMemo: false,
 
+    // What getPredictObjects and the two other placers touch.
+    replaceQueue: over.replaceQueue || [], removedObjects: [], placeTick: 0,
+    lastPrePlaceObject: null, spamPrePlacer: false, smartTickSpike: null,
+    autoMills: false, lastMoveAngle: null, grindObjects: [],
+    trapPress: false, turretPress: false, spikePress: false,
+    nearestEnemiesCount: 0, spikes_enemy: [], enemySpikes: [], players: [],
+    autogathering: false, predictWeapon: 5,
+    getAttackDir: () => 0,
+    isBoughtHat: () => false,
+    isItemSetted: [],
+
     isObjectOur: (o) => !!(o && o.owner && o.owner.sid === 1),
     getPlayerInfo: over.getPlayerInfo || ((p, t) => {
       if (t === "secondaryWeapon") return "hammer";
@@ -172,6 +183,16 @@ function world(over = {}) {
     lift("replaceCandidates"),
     lift("replaceGrade"),
     lift("doReplace"),
+
+    // The autoplacer and the orchestrator, so "untouched" can be RUN rather
+    // than asserted, and so the claim is about the real pipeline.
+    lift("isAutoPlaceAngle"),
+    lift("checkPredictObjects"),
+    lift("updateAngles"),
+    lift("setPlaceTick"),
+    lift("isPrePlaceAngle"),
+    lift("getPrePlaceObject"),
+    lift("getPredictObjects"),
   ].join("\n\n"), ctx);
 
   return ctx;
@@ -490,6 +511,123 @@ section("ROBUSTNESS — doReplace runs inside the tick body");
 }
 
 // ===========================================================================
+section("PIPELINE — the real tick body, with all three placers");
+{
+  const enemy = enemyAt(1060, 1000);
+  const c = world({
+    nearestEnemy: enemy, enemiesNear: [enemy],
+    traps_our: [{ x: 1060, y: 1000, scale: 50, health: 500 }],
+    primaryReload: { 1: 1 }, secondaryReload: { 1: 1 },
+    vars: { replace: true, replaceRange: 300, autoPlace: true, prePlace: true,
+            shameTick: false, shameGrind: true, placeAngles144: true },
+    replaceQueue: [hole(1050, 1000)],
+  });
+
+  let threw = null;
+  try { c.getPredictObjects(); }
+  catch (e) { threw = e.message + "\n      " + (e.stack || "").split("\n")[1]; }
+  ok("getPredictObjects runs end to end with replace, preplace and autoplace on",
+     threw === null, threw);
+
+  ok("the tick queued something", c.predictObjects.length > 0,
+     `queued ${c.predictObjects.length}`);
+  ok("the replace queue was drained", c.replaceQueue.length === 0);
+
+  // The whole no-conflict claim, on the real output list.
+  let overlap = null;
+  for (let i = 0; i < c.predictObjects.length; i++) {
+    for (let j = i + 1; j < c.predictObjects.length; j++) {
+      const a = c.predictObjects[i], b = c.predictObjects[j];
+      if (a.id === 17 || b.id === 17) continue;
+      if (UTILS.getDistance(a.x, a.y, b.x, b.y) < a.scale + b.scale) overlap = [i, j];
+    }
+  }
+  ok("nothing in the tick's output overlaps anything else in it", overlap === null,
+     overlap ? `objects ${overlap} collide` : "");
+
+  // No group past its cap, across every lane in one tick.
+  const perGroup = {};
+  for (const o of c.predictObjects) {
+    const g = items.list[o.id] && items.list[o.id].group;
+    if (g) perGroup[g.id] = (perGroup[g.id] || 0) + 1;
+  }
+  ok("no group is queued past its cap across the whole tick",
+     Object.entries(perGroup).every(([g, n]) => n <= (+g === 5 ? 6 : 15)),
+     JSON.stringify(perGroup));
+
+  // The other two placers still work with replace switched off.
+  const noReplace = world({
+    nearestEnemy: enemy, enemiesNear: [enemy],
+    traps_our: [{ x: 1060, y: 1000, scale: 50, health: 500 }],
+    primaryReload: { 1: 1 },
+    vars: { replace: false, autoPlace: true, prePlace: true, placeAngles144: true },
+    replaceQueue: [hole(1050, 1000)],
+  });
+  let threw2 = null;
+  try { noReplace.getPredictObjects(); } catch (e) { threw2 = e.message; }
+  ok("the pipeline runs with replace off", threw2 === null, threw2);
+  ok("and the autoplacer still fills on its own", noReplace.predictObjects.length > 0,
+     `queued ${noReplace.predictObjects.length}`);
+
+  // And with every placer off it still runs and places nothing.
+  const dark = world({
+    nearestEnemy: enemy, enemiesNear: [enemy], primaryReload: { 1: 1 },
+    vars: { replace: false, autoPlace: false, prePlace: false },
+    replaceQueue: [hole(1050, 1000)],
+  });
+  let threw3 = null;
+  try { dark.getPredictObjects(); } catch (e) { threw3 = e.message; }
+  ok("the pipeline runs with every placer off", threw3 === null, threw3);
+  ok("and queues nothing", dark.predictObjects.length === 0,
+     `queued ${dark.predictObjects.length}`);
+}
+
+// ===========================================================================
+section("NO DEAD CODE — every change is reached, no control is orphaned");
+{
+  // A change nothing calls is the disease this borrows from. Each new name has
+  // to be defined once AND reached.
+  for (const name of ["replaceFineAim", "replaceNearestHole", "computeCanTrapTick"]) {
+    const defs = (src.match(new RegExp(`function ${name}\\(`, "g")) || []).length;
+    const refs = (src.match(new RegExp(`[^a-zA-Z]${name}\\(`, "g")) || []).length;
+    ok(`${name}: defined once, reached ${refs - defs}x`, defs === 1 && refs - defs >= 1,
+       `defs ${defs}, calls ${refs - defs}`);
+  }
+
+  // Every setting must be read by something, and every tile must point at a
+  // setting that exists. This is what caught a hotkey left driving ids nothing
+  // read, in an earlier round of this work.
+  const varsBlock = (() => {
+    const at = src.indexOf("window.vars = {");
+    let i = src.indexOf("{", at), d = 0;
+    for (; i < src.length; i++) {
+      if (src[i] === "{") d++;
+      else if (src[i] === "}") { d--; if (!d) return src.slice(at, i + 1); }
+    }
+  })();
+  const declaredVars = new Set([...varsBlock.matchAll(/^\s{4,8}([A-Za-z_][A-Za-z0-9_]*)\s*:/gm)].map(m => m[1]));
+  const rest = src.replace(varsBlock, "");
+
+  const deadSettings = [...declaredVars].filter(k =>
+    !new RegExp(`vars\\.${k}\\b`).test(rest) &&
+    !new RegExp(`vars\\[["']${k}["']\\]`).test(rest) &&
+    !new RegExp(`["']${k}["']`).test(rest));
+  ok(`all ${declaredVars.size} settings are read by something`, deadSettings.length === 0,
+     JSON.stringify(deadSettings));
+
+  const tileIds = [...src.matchAll(/type: '(?:toggle|slider)'[^}]*?id: "([A-Za-z_][A-Za-z0-9_]*)"/g)].map(m => m[1]);
+  const orphanTiles = [...new Set(tileIds)].filter(id => !declaredVars.has(id));
+  ok("every menu tile points at a declared setting", orphanTiles.length === 0,
+     JSON.stringify(orphanTiles));
+
+  // The Placers hotkey must drive ids something actually reads.
+  for (const id of ["autoPlace", "prePlace", "replace"]) {
+    ok(`the hotkey's vars.${id} has a real reader`,
+       (src.match(new RegExp(`vars\\.${id}\\b`, "g")) || []).length > 1);
+  }
+}
+
+// ===========================================================================
 section("INTEGRATION");
 {
   let parsed = true, err = "";
@@ -504,21 +642,39 @@ section("INTEGRATION");
        `defs ${defs}, calls ${refs - defs}`);
   }
 
-  const run = (file) => {
+  // Two static passes over the WHOLE file, not just the region that changed.
+  // A large edit is exactly how a reference is left pointing at nothing, or a
+  // function is left declared and never called — and neither fails at load.
+  const runTool = (tool, extra = []) => {
     try {
-      return execFileSync("node", [path.join(__dirname, "check-scopes.js"), file], { encoding: "utf8" });
+      return execFileSync("node", [path.join(__dirname, tool), CLIENT_PATH, ...extra],
+                          { encoding: "utf8" });
     } catch (e) { return (e.stdout || "") + (e.stderr || ""); }
   };
-  const names = (out) => (out.match(/^   ([A-Za-z_$][\w$]*)/gm) || []).map(s => s.trim()).sort();
 
-  const mine = names(run(CLIENT_PATH));
-  ok(`${mine.length} undeclared names, all from the vendored bundle`, mine.length <= 8,
-     JSON.stringify(mine));
+  // check-scopes: every name READ resolves to a declaration.
+  const scopeOut = runTool("check-scopes.js");
+  const undeclared = (scopeOut.match(/^   ([A-Za-z_$][\w$]*)/gm) || []).map(s => s.trim()).sort();
+  ok(`${undeclared.length} undeclared names, all from the vendored bundle`,
+     undeclared.length <= 8, JSON.stringify(undeclared));
 
   const BASE = process.env.YORHA_BASE;
   if (BASE && fs.existsSync(BASE)) {
+    const baseOut = (() => {
+      try { return execFileSync("node", [path.join(__dirname, "check-scopes.js"), BASE], { encoding: "utf8" }); }
+      catch (e) { return (e.stdout || "") + (e.stderr || ""); }
+    })();
+    const baseNames = (baseOut.match(/^   ([A-Za-z_$][\w$]*)/gm) || []).map(s => s.trim()).sort();
     ok("the same set as the untouched base — these edits added none",
-       JSON.stringify(names(run(BASE))) === JSON.stringify(mine));
+       JSON.stringify(baseNames) === JSON.stringify(undeclared));
+
+    // check-dead: every name DECLARED is used, and nothing shadows anything.
+    // Reported as a delta against the base, since a vendored bundle carries
+    // plenty of its own that is not this work's to answer for.
+    const deadOut = runTool("check-dead.js", ["--base", BASE]);
+    ok("no dead or shadowed name was introduced by these edits",
+       /nothing\. No name declared by these edits goes unused/.test(deadOut),
+       deadOut.split("\n").filter(l => l.includes("✗")).join("\n      "));
   }
 }
 
