@@ -459,6 +459,35 @@ Note this is separate from the bots' own `botAutoMills` / `botAutoPlace`
 behaviour layer, which is what they do without Full Mod and answers to its own
 toggles.
 
+### One switch, every client — RYN's arrangement
+
+RYN v5.4 runs **one module list for every client it owns**, you and every bot
+alike: `for (const m of this.modules) m.postTick()`, with bots getting a short
+`botModules` list on top. A module reads `this.client` — its player, its enemy
+manager, its socket — so a setting means the same thing wherever it is read and
+nothing is ever swapped in first.
+
+YoRHa has two layers, and only one of them has that shape:
+
+| | how it runs | how it fails |
+|---|---|---|
+| `_botTick` — `_autoMills`, `_autoPlaceSpike`, `_autoHeal`, `_autoFarm`, `_autoBreak` | takes `bot`, reads the bot's own world, sends on `bot.ws` | it doesn't; there is no `ctxRun` near it |
+| Full Mod — `_runFullMod` → `ctxRun` | swaps 136 module-scope globals in and out per bot | anything escaping the swap window lands on the wrong player — see the pathfinder above |
+
+So the robust layer already exists and already has RYN's shape. What YoRHa grew
+instead was a **second set of switches** beside the master's — `botAutoMills`
+next to `autoMills`, `botAutoPlace` next to `autoPlace` — several defaulting
+off. Turning Auto Mills on did nothing for the bots because they answer to a
+different switch, and the only thing carrying yours across was the context
+swap: the fragile half.
+
+`_botWants(botKey, mineOn)` puts them back together. The bot switch still forces
+a behaviour on by itself, for a squad meant to act differently from you; and
+with Mirror My Keys on, your own switch drives them **through the reliable
+layer**. A full port of RYN's architecture — 136 globals into a client object,
+every behaviour into a module — is a rewrite of the mod rather than an edit to
+it; this is the half of it that pays now.
+
 ### What a bot still cannot do
 
 - **Chat, at all.** `modSend` swallows opcode `"6"` — deliberately, since forty

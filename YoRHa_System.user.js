@@ -16547,6 +16547,37 @@ for (let tree of trees) {
             },
 
             // =================================================================
+            // ONE SWITCH, EVERY CLIENT   (RYN's arrangement, in YoRHa's terms)
+            // =================================================================
+            // RYN runs one module list for every client it owns — you and every
+            // bot — so a setting means the same thing wherever it is read, and
+            // a module reads its client rather than a global that has to be
+            // swapped in first.
+            //
+            // The behaviours below already have that shape: _autoMills,
+            // _autoPlaceSpike, _autoHeal, _autoFarm and _autoBreak take `bot`,
+            // read the bot's own world and send on the bot's own socket. There
+            // is no ctxRun anywhere near them, which is why they are the ones
+            // that never break.
+            //
+            // What YoRHa grew instead was a SECOND set of switches beside the
+            // master's — botAutoMills next to autoMills, botAutoPlace next to
+            // autoPlace — and several of them default off. So turning Auto
+            // Mills on did nothing for the bots: they answer to a different
+            // switch, and the only thing carrying your switch across was the
+            // context swap, which is the fragile half.
+            //
+            // This puts them back together. The bot switch still forces a
+            // behaviour on by itself, for a squad meant to act differently from
+            // you — and with Mirror My Keys on, your own switch drives them too,
+            // through THIS layer rather than through the swap.
+            _botWants(botKey, mineOn) {
+                const v = window.vars || {};
+                if (v[botKey]) return true;
+                return !!(v.botMirrorKeys && mineOn);
+            },
+
+            // =================================================================
             // WHY IS A BOT DOING NOTHING?
             // =================================================================
             // Type RynBots.diag() in the console. Per bot:
@@ -17462,7 +17493,7 @@ for (let tree of trees) {
             // Guarded by !nearestTrap there; here that is "not stuck", which is
             // the bot's equivalent of being pinned.
             _autoMills(bot, moveAngle) {
-                if (!window.vars.botAutoMills) return false;
+                if (!this._botWants("botAutoMills", autoMills)) return false;
                 if (moveAngle === null || moveAngle === undefined) return false;
                 if (bot.stuckTicks > 0) return false;              // pinned, not walking
                 const mill = (bot.itemsOwned || [])[3];
@@ -18016,7 +18047,8 @@ for (let tree of trees) {
             // inside placing range, drop the best spike the bot owns in their
             // direction, at the offset the game itself uses.
             _autoPlaceSpike(bot, enemy) {
-                if (!window.vars.botAutoPlace || !enemy) return false;
+                if (!enemy) return false;
+                if (!this._botWants("botAutoPlace", window.vars.autoPlace)) return false;
                 if (enemy.d > 250) return false;
                 const now = Date.now();
                 if (now - bot.placeAt < 400) return false;
@@ -25604,7 +25636,8 @@ for (let tree of trees) {
         botAutoAttack: true,     // hit enemy players that come into reach
         botAutoHeal: true,       // eat the moment they take damage
         botAutoPlace: true,      // drop a spike on whoever closes in
-        botAutoMills: false,     // lay the mod's three-mill trail behind them
+        botAutoMills: false,     // force mills on for the squad; with Mirror My
+                                 // Keys your own Auto Mills key drives them anyway
         botAutoPush: true,       // shove a trapped enemy onto your spike
         botAutoFarm: false,      // gather, so the bot can actually afford to build
         botPacketSpam: false,    // every bot floods its own socket — combined rate past 120/s
@@ -26005,7 +26038,7 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Packet Spam (flood the server)", id: "botPacketSpam" },
                     { type: 'slider', name: "Spam Rate (per bot/tick)", id: "botSpamRate", min: 1, max: 200 },
                     { type: 'toggle', name: "Auto Place (spike on contact)", id: "botAutoPlace" },
-                    { type: 'toggle', name: "Auto Mills (trail behind)", id: "botAutoMills" },
+                    { type: 'toggle', name: "Auto Mills (force on)", id: "botAutoMills" },
                     { type: 'toggle', name: "Auto Push (trap into spike)", id: "botAutoPush" },
                     { type: 'toggle', name: "Full Mod (bots run the whole mod)", id: "botFullMod" },
                     { type: 'toggle', name: "Mirror My Keys (mills/grind/place)", id: "botMirrorKeys" },
