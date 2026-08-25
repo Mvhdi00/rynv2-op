@@ -17,14 +17,17 @@ Supported line formats
 `scheme` (http, https, socks5, socks4, socks) overrides the default type
 for that single line, so a mixed list keeps each entry's real protocol.
 
+With --chain the profile also gets a proxy chain that lists every proxy
+by id, in ProxyList order, without copying any of them.
+
 Usage
     python3 tools/make-proxifier-profile.py INPUT OUTPUT.ppx [--type HTTPS]
+        [--chain "Webshare Chain" [--chain-type simple]]
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import ipaddress
 import re
 import sys
@@ -49,7 +52,14 @@ SCHEME_TO_TYPE = {
 
 HOSTNAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$")
 
+# Chain modes Proxifier accepts in <Chain type="...">: sequential hops,
+# failover, or load balancing over the members.
+VALID_CHAIN_TYPES = ("simple", "redundancy", "load_balancing")
+
 FIRST_PROXY_ID = 100
+# Proxies and chains are numbered independently, but keeping the ranges apart
+# makes a rule's <Action type="Chain">200</Action> unambiguous to read.
+FIRST_CHAIN_ID = 200
 
 
 class ParseError(Exception):
@@ -139,12 +149,12 @@ def parse_line(line: str, default_type: str) -> dict:
     }
 
 
-def encode_password(password: str) -> str:
-    """Proxifier stores proxy passwords base64-encoded (Encryption mode="basic")."""
-    return base64.b64encode(password.encode("utf-8")).decode("ascii")
-
-
-def build_profile(proxies: list[dict], profile_name: str) -> str:
+def build_profile(
+    proxies: list[dict],
+    chain_name: str | None = None,
+    chain_type: str = "simple",
+    chain_id: int = FIRST_CHAIN_ID,
+) -> str:
     out: list[str] = []
     add = out.append
 
@@ -161,7 +171,10 @@ def build_profile(proxies: list[dict], profile_name: str) -> str:
     add("      </ViaProxy>")
     add("      <ExclusionList>%ComputerName%; localhost; *.local</ExclusionList>")
     add("    </Resolve>")
-    add('    <Encryption mode="basic"/>')
+    # Proxifier only stores proxy passwords as clear text in mode "disabled";
+    # every other mode encrypts them with a key derived from the machine, the
+    # Windows account or a master password, which cannot be reproduced here.
+    add('    <Encryption mode="disabled"/>')
     add('    <ConnectionLoopDetection enabled="true"/>')
     add('    <ProcessOtherUsers enabled="false"/>')
     add('    <ProcessServices enabled="false"/>')
@@ -179,18 +192,30 @@ def build_profile(proxies: list[dict], profile_name: str) -> str:
         if proxy["user"] or proxy["password"]:
             add('      <Authentication enabled="true">')
             add(f"        <Username>{escape(proxy['user'])}</Username>")
-            add(f"        <Password>{encode_password(proxy['password'])}</Password>")
+            add(f"        <Password>{escape(proxy['password'])}</Password>")
             add("      </Authentication>")
         else:
             add('      <Authentication enabled="false"/>')
         add("    </Proxy>")
     add("  </ProxyList>")
 
-    add("  <ChainList/>")
+    # A chain references the proxies by the ids assigned above; it never
+    # duplicates them. Members keep the ProxyList order, and Proxifier reads
+    # the id from the node text (<Proxy enabled="true">100</Proxy>).
+    if chain_name:
+        add("  <ChainList>")
+        add(f'    <Chain id="{chain_id}" type="{chain_type}">')
+        add(f"      <Name>{escape(chain_name)}</Name>")
+        for index in range(len(proxies)):
+            add(f'      <Proxy enabled="true">{FIRST_PROXY_ID + index}</Proxy>')
+        add("    </Chain>")
+        add("  </ChainList>")
+    else:
+        add("  <ChainList/>")
 
-    # No proxy is wired into a rule: every entry stays a selectable item in
-    # Proxifier's proxy list, and traffic keeps flowing Direct until the
-    # user picks one.
+    # No proxy or chain is wired into a rule: every entry stays a selectable
+    # item in Proxifier, and traffic keeps flowing Direct until the user
+    # picks one.
     add("  <RuleList>")
     add('    <Rule enabled="true">')
     add("      <Name>Localhost</Name>")
@@ -220,9 +245,23 @@ def main() -> int:
         "(default: HTTPS = HTTP proxy with CONNECT support)",
     )
     ap.add_argument(
-        "--name",
-        default="Webshare",
-        help="profile name used in the report output",
+        "--chain",
+        metavar="NAME",
+        help="also build a proxy chain with this name holding every proxy, "
+        "in ProxyList order (omit for no chain)",
+    )
+    ap.add_argument(
+        "--chain-type",
+        default="simple",
+        choices=VALID_CHAIN_TYPES,
+        help="chain mode: simple = hop through every member in order, "
+        "redundancy = failover, load_balancing = spread connections",
+    )
+    ap.add_argument(
+        "--chain-id",
+        type=int,
+        default=FIRST_CHAIN_ID,
+        help=f"id of the generated chain (default: {FIRST_CHAIN_ID})",
     )
     args = ap.parse_args()
 
@@ -245,7 +284,7 @@ def main() -> int:
             print(f"  line {lineno}: {line!r} -> {reason}", file=sys.stderr)
         return 1
 
-    xml_text = build_profile(proxies, args.name)
+    xml_text = build_profile(proxies, args.chain, args.chain_type, args.chain_id)
 
     # Validate before writing anything to disk.
     root = ET.fromstring(xml_text)
@@ -258,6 +297,21 @@ def main() -> int:
     if len(ids) != len(proxies):
         print("Proxy count mismatch after XML build - aborting.", file=sys.stderr)
         return 1
+
+    members: list[str] = []
+    if args.chain:
+        chain = root.find("ChainList/Chain")
+        if chain is None or chain.findtext("Name") != args.chain:
+            print("Chain missing from the generated profile - aborting.", file=sys.stderr)
+            return 1
+        members = [m.text or "" for m in chain.findall("Proxy")]
+        dangling = [m for m in members if m not in set(ids)]
+        if dangling:
+            print(f"Chain references unknown proxy ids: {dangling}", file=sys.stderr)
+            return 1
+        if members != ids:
+            print("Chain order does not match the ProxyList - aborting.", file=sys.stderr)
+            return 1
 
     with open(args.output, "w", encoding="utf-8", newline="\r\n") as fh:
         fh.write(xml_text)
@@ -273,6 +327,10 @@ def main() -> int:
     print(f"With credentials  : {with_auth}")
     print(f"Types             : {', '.join(f'{k}={v}' for k, v in sorted(types.items()))}")
     print(f"ID range          : {ids[0]}..{ids[-1]}")
+    if args.chain:
+        print(f"Chain             : {args.chain!r} id={args.chain_id} "
+              f"type={args.chain_type}")
+        print(f"Proxies in chain  : {len(members)} (order matches ProxyList)")
     if skipped:
         print(f"Skipped lines     : {len(skipped)}")
         for lineno, line, reason in skipped:
