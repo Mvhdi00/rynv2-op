@@ -513,6 +513,35 @@ They are siblings now. The mod goes first, because the walking decision has to
 come after it; the module list runs afterwards **whatever the mod did or failed
 to do**. The suite pins it directly: with the mod throwing, `botTick` still runs.
 
+### And the second nesting, one level in
+
+Un-nesting `_botTick` got it called. It then returned before doing the thing:
+
+```js
+if (full) {
+    ... attack, move ...
+    return;                 // <- and the stages were BELOW this
+}
+// --- stage: target ---    (farming)
+// --- stage: walk ---      (mills)
+```
+
+Full Mod is on by default, so the tick ended there. `_autoFarm` and `_autoMills`
+were unreachable no matter what `botAutoMills` said — the mod was assumed to
+cover them, and the mod's own mills run only through `ctxRun`, the half that
+fails.
+
+RYN's `botModules` are **additive**: it walks that list and then the module
+list, and a bot behaviour is never skipped because an owner behaviour exists. So
+the stages run above the return now, and each module decides for itself whether
+to stand aside under Full Mod — which is what `!c.full` in the heal module has
+always been. The mills module gained the matching guard: not on a tick the mod
+has already swung on, which is the reason the old comment gave for putting them
+before the combat decisions.
+
+Twelve checks pin the order, including the old shape for contrast, where the
+walk stage was never reached at all.
+
 ### The module list
 
 RYN keeps its behaviours in a list and walks it once a tick:

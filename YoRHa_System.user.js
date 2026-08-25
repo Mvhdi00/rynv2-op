@@ -16541,6 +16541,9 @@ for (let tree of trees) {
             {
                 name: "mills", stage: "walk",
                 run: (c) => {
+                    // It borrows the attack packet, so not on a tick the mod
+                    // has already swung on.
+                    if (c.full && c.bot.modAttacked) return false;
                     if (!RynBots._autoMills(c.bot, c.moveAngle)) return false;
                     RynBots._sendMove(c.bot, c.moveAngle);
                     return true;
@@ -18563,22 +18566,6 @@ for (let tree of trees) {
                     }
                 }
 
-                // --- Full Mod: the mod already fought this tick --------------------
-                // Where the bot walks is the one thing it cannot decide, so that
-                // is all that is left to do -- and only when the mod itself did
-                // not move it (a dodge, a push, a pre-place step).
-                if (full) {
-                    // Sync and the manual attack key are yours, not the mod's,
-                    // so they still apply — but only on a tick the mod did not
-                    // already decide the attack state for itself.
-                    if (!bot.modAttacked && !this.ceasefire && role !== "spot") {
-                        const s = V.botSync ? (now < this._syncUntil) : this._manualAttack;
-                        if (s || bot.attacking) this._sendAttack(bot, s);
-                    }
-                    if (!bot.modMoved) this._sendMove(bot, moveAngle);
-                    return;
-                }
-
                 // --- stage: target -------------------------------------------------
                 // The hunt has said what this bot is for, so gathering can now
                 // tell whether it is free to go and get wood.
@@ -18599,6 +18586,36 @@ for (let tree of trees) {
                 // decisions below start swinging.
                 ctx.moveAngle = moveAngle;
                 if (this._runBotModules("walk", ctx)) return;
+
+                // --- Full Mod: the mod already fought this tick --------------------
+                // Where the bot walks is the one thing the mod cannot decide, so
+                // that is all that is left to do -- and only when the mod itself
+                // did not move it (a dodge, a push, a pre-place step).
+                //
+                // This return used to sit ABOVE the two stages, which is what
+                // made every switch above it look broken. Full Mod is on by
+                // default, so the tick ended here, and _autoFarm and _autoMills
+                // were unreachable no matter what botAutoMills said — the mod
+                // was assumed to be covering them, and its own mills only run
+                // through ctxRun, the half that fails.
+                //
+                // RYN's answer is that botModules are ADDITIVE: it walks that
+                // list and then the module list, and a bot behaviour is never
+                // skipped because an owner behaviour exists. So the stages run
+                // first now and each module decides for itself whether to stand
+                // aside under Full Mod — which is what `!c.full` in the heal
+                // module has always been.
+                if (full) {
+                    // Sync and the manual attack key are yours, not the mod's,
+                    // so they still apply — but only on a tick the mod did not
+                    // already decide the attack state for itself.
+                    if (!bot.modAttacked && !this.ceasefire && role !== "spot") {
+                        const s = V.botSync ? (now < this._syncUntil) : this._manualAttack;
+                        if (s || bot.attacking) this._sendAttack(bot, s);
+                    }
+                    if (!bot.modMoved) this._sendMove(bot, moveAngle);
+                    return;
+                }
 
                 // --- what is in the way ------------------------------------------
                 const breakAim = this._autoBreak(bot, moveAngle);
