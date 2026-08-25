@@ -2266,3 +2266,54 @@ What it found in the five, and what came out:
 
 No passwords, no fingerprinting, no keystroke capture, no analytics, no Discord
 webhooks in any of the five.
+
+# Six traps in sandbox
+
+The cap is not the bug. Which flag the cap is read behind is.
+
+The mod carries two sandbox flags, and uses the wrong one:
+
+```js
+module.exports.inSandbox = process && process.env.VULTR_SCHEME === "mm_exp";
+module.exports.isSandbox = window.location.hostname == "sandbox.moomoo.io";
+```
+
+The first is moomoo's **server** config, carried into the client bundle by
+accident. `process.env` in a browser is webpack's empty shim, so `inSandbox` is
+false everywhere, always — and it is the one `canBuild` and `isItemLimit`
+consult. So on sandbox the client goes on enforcing the live-server numbers.
+The game's own bundle has the identical dead line (`Vs = Ut && {}.IS_SANDBOX`);
+what it actually uses in the browser is a hostname test, `Cn`.
+
+The number to use when it *is* sandbox is the game's, not one I picked:
+
+```js
+const w = i.inSandbox ? f.group.sandboxLimit || Math.max(f.group.limit * 3, 99)
+                      : f.group.limit;          // ClientPlayer.canBuild
+```
+
+`tools/patch-sandbox-limits.js` puts that in one helper next to the config
+module's own flags and routes every site that reads a cap through it —
+including the counter that draws "3/6" under the item, which would otherwise
+disagree with what you can actually build and get the fix reported as broken.
+Resources are left alone: the game bypasses `hasRes` on the same dead flag, so
+granting them here would be a change nobody asked for.
+
+Measured on the running mod, by serving the probe page as each host
+(`probe-entry.js --host`):
+
+| group | moomoo.io | sandbox.moomoo.io |
+|---|---|---|
+| trap | 6 | 99 |
+| spikes | 15 | 99 |
+| walls | 30 | 99 |
+| turret | 2 | 99 |
+| mill (sandboxLimit 299) | 7 | 299 |
+
+## And one of my own
+
+`npm install acorn-walk` for the audit tool pruned `playwright` — it had been
+installed by hand and was in no dependency list, so npm was within its rights.
+Every browser probe in the repo stopped working, which surfaced as
+`Cannot find module 'playwright'` in the middle of an unrelated check. It is a
+devDependency now.

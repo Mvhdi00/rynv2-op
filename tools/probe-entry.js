@@ -51,6 +51,10 @@ const SERVER = argv.includes('--server');
 const WITH_UNPATCHER = argv.includes('--unpatcher');
 const TURNSTILE = flag('turnstile', 'solve');
 const WAIT = parseInt(flag('wait', '6000'), 10);
+// Which hostname the page is served as. The game's sandbox behaviour is chosen
+// by hostname in the browser, so "does the sandbox cap apply" is not a question
+// that can be answered on moomoo.io.
+const HOST = flag('host', 'moomoo.io');
 if (!['solve', 'never', 'blocked', 'expire'].includes(TURNSTILE)) {
   console.error('--turnstile must be solve, never, blocked or expire'); process.exit(2);
 }
@@ -375,7 +379,7 @@ window.FRVR = {
   }
   if (MOD) await page.addInitScript({ content: fs.readFileSync(MOD, 'utf8') });
 
-  await page.goto('https://moomoo.io/');
+  await page.goto('https://' + HOST + '/');
   await page.waitForTimeout(WAIT);
 
   const before = await page.evaluate(() => ({
@@ -501,6 +505,22 @@ window.FRVR = {
       return w ? { kids: w.childElementCount, inDoc: document.contains(w) } : null;
     })(),
     fallback: !!document.getElementById('moo-turnstile-fallback'),
+    // A client replacement publishes its config; if it carries a build-cap
+    // helper, ask it what the caps are on THIS host rather than reasoning about
+    // it. Synthetic groups, because the real ones live in the items module and
+    // are not on config -- which is what the first version of this check got
+    // wrong, and it reported nothing at all rather than saying so.
+    caps: (() => {
+      const c = window.config;
+      if (!c || typeof c.buildLimit !== 'function') return null;
+      return {
+        'trap (6)': c.buildLimit({ limit: 6 }),
+        'spikes (15)': c.buildLimit({ limit: 15 }),
+        'walls (30)': c.buildLimit({ limit: 30 }),
+        'turret (2)': c.buildLimit({ limit: 2 }),
+        'mill (7, sandboxLimit 299)': c.buildLimit({ limit: 7, sandboxLimit: 299 }),
+      };
+    })(),
     drawOrder: (window.__drawOrder || []).slice(-16).join(' -> '),
     loops: [...(window.__rafLoops || new Map())].filter(([, n]) => n > 20)
              .sort((a, b) => b[1] - a[1]).slice(0, 6),
@@ -526,6 +546,10 @@ window.FRVR = {
   console.log('  sockets opened  : ' + (after.sockets.length ? after.sockets.join('\n                    ') : '(none)'));
   console.log('  red banner      : ' + after.banner);
   if (after.io) console.log('  bundled client  : ' + JSON.stringify(after.io));
+  if (after.caps) {
+    console.log('  build caps on ' + HOST + ':');
+    for (const [k, v] of Object.entries(after.caps)) console.log('      ' + k.padEnd(30) + v);
+  }
   console.log('  #turnstileWidget: ' + JSON.stringify(after.widget) +
               '   shim fallback on page: ' + after.fallback);
   if (after.loops && after.loops.length) {
