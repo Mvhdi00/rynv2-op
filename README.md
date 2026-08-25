@@ -374,6 +374,26 @@ damaged buildings within 400, coloured green / yellow / red by owner, after
 every object layer and before the player labels — where Falcon has it, so a bar
 never hides under the building it belongs to.
 
+### Reading a toggle from inside the render loop
+
+These three were the first render-path code in the file to read
+`window.vars` directly, and that is a green screen.
+
+`doUpdate()` is called synchronously at the bottom of the game bundle,
+thousands of lines before the settings block at the end of the userscript
+assigns `window.vars`. So the first frame paints with it still undefined. And
+`doUpdate()` calls `updateGame()` and only *then* schedules the next frame — so
+a throw inside the render escapes before `requestAnimationFrame` is reached.
+The loop never starts again, and the canvas is left showing the one thing that
+did get painted: the full-screen grass fill at the top of the render.
+
+`yorhaOn()` already existed as a guard for exactly this. Everything the render
+path reads now goes through `visualOn(name)` beside it, and each of the three
+features is wrapped so a cosmetic overlay can never take the game down with it.
+The render suite covers the case: with `window.vars` undefined, all three draw
+nothing and throw nothing, and all three come back once the settings block has
+run.
+
 The red wash departs from Falcon in one place. Falcon re-fills the current path,
 which only tints the silhouette if the last shape drawn happens to be it;
 compositing `source-atop` over the finished sprite paints exactly the pixels

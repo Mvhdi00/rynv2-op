@@ -12742,7 +12742,7 @@ let pps = 0;
                 // changeObjectHealth() keeps health current off the hit
                 // packets, so this reads what the mod already knows: whether
                 // one more swing takes that trap down.
-                if (window.vars.buildingHealth && myPlayer) {
+                if (visualOn("buildingHealth") && myPlayer) try {
                     mainContext.globalAlpha = 1;
                     const healthObjects = renderObjectSource();
                     for (var i = 0; i < healthObjects.length; ++i) {
@@ -12766,7 +12766,7 @@ let pps = 0;
                                               17 - (config.healthBarPad * 2), 7);
                         mainContext.fill();
                     }
-                }
+                } catch (e) {}
 
                 // RENDER PLAYER AND AI UI / PLAYERINFOS:
                 // Names, health bars and crowns follow whichever world is on
@@ -12866,7 +12866,7 @@ let pps = 0;
                                 // A bar is only up while its weapon is loading,
                                 // so a player with both bars gone is a player
                                 // who can swing right now.
-                                if (window.vars.reloadBars && tmpObj.isPlayer && tmpObj.alive) {
+                                if (visualOn("reloadBars") && tmpObj.isPlayer && tmpObj.alive) try {
                                     const reloadY = (tmpObj.y - yOffset + tmpObj.scale) + config.nameY - 20;
                                     const reloadW = config.healthBarWidth - config.healthBarPad;
                                     const reloadCentre = tmpObj.x - xOffset;
@@ -12887,7 +12887,7 @@ let pps = 0;
 
                                     drawReloadBar(primaryReload[tmpObj.sid], true, "#d8a657");
                                     drawReloadBar(secondaryReload[tmpObj.sid], false, "#7daea3");
-                                }
+                                } catch (e) {}
                             }
                         }
                     }
@@ -13072,8 +13072,11 @@ let pps = 0;
                             // ground you can stand on is readable at a glance.
                             // Recomputed per frame rather than stamped once, so
                             // the toggle takes effect without a reload.
-                            tmpObj.enemyBuilding = !!(window.vars.enemyBuildingTint && myPlayer &&
-                                                      (tmpObj.dmg || tmpObj.trap) && tmpObj.owner && !isObjectOur(tmpObj));
+                            tmpObj.enemyBuilding = false;
+                            try {
+                                tmpObj.enemyBuilding = !!(visualOn("enemyBuildingTint") && myPlayer &&
+                                                          (tmpObj.dmg || tmpObj.trap) && tmpObj.owner && !isObjectOur(tmpObj));
+                            } catch (e) {}
 
                             tmpSprite = getItemSprite(tmpObj);
 
@@ -13176,6 +13179,24 @@ let pps = 0;
         // hitbox reads exactly where it looks. The whole effect is a single
         // full-screen mood wash drawn in updateGame, gated by yorhaOn().
         function yorhaOn() { return !!(window.vars && window.vars.yorhaVisual); }
+
+        // Read a toggle from inside the render loop.
+        //
+        // The loop starts at `doUpdate()` further down THIS bundle, which runs
+        // synchronously — thousands of lines before `window.vars` is assigned
+        // by the settings block at the bottom of the userscript. So the first
+        // frame paints with window.vars still undefined, and a bare
+        // `window.vars.something` there is a TypeError.
+        //
+        // That is not a dropped frame. doUpdate() calls updateGame() and only
+        // then schedules the next frame, so a throw inside the render escapes
+        // before requestAnimationFrame is ever reached: the loop never starts
+        // again, and the canvas is left showing the one thing that did get
+        // painted — the full-screen grass fill. A solid green screen.
+        //
+        // yorhaOn() above guards for exactly this reason. Anything else the
+        // render path reads goes through here.
+        function visualOn(name) { return !!(window.vars && window.vars[name]); }
 
         function renderPlayer(obj, ctxt) {
             ctxt = ctxt || mainContext;
