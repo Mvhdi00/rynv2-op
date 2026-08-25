@@ -6,6 +6,10 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+A second client is built here too: **`YoRHa_System.user.js`**, from
+`src/YoRHa_System_1.5.js`. Same idea, different base — see
+[YoRHa: bots that play the game](#yorha-bots-that-play-the-game).
+
 ---
 
 ## Why RYN is the base
@@ -161,10 +165,63 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+## YoRHa: bots that play the game
+
+`YoRHa_System.user.js` is a separate client with a separate build
+(`tools/build-yorha.js`). It is a fork of the game bundle — not a userscript
+over it — with its own bot system, `RynBots`, that opens a socket per bot and
+runs the whole mod as each of them (`botFullMod`, on by default): the placer,
+the pre-placer, the insta-kills, the spike and trap ticks, auto heal, AUTOBUY
+and `hatFc`, each on that bot's own world through a context swap.
+
+So its bots fight well and did nothing else. **The bot code for the rest was
+already written and simply unreachable**: `_botTick` returns inside
+`if (full)`, above every line of it, and Full Mod is the default. `_autoFarm`
+and `_autoMills` were dead code on a normal game.
+
+Nothing in the mod covers for them. It has no farm at all — it was written for
+a human who gathers by hand — and its own mill trail is a keyboard toggle
+(`autoMills`, key B) that no bot can press. The consequences chain:
+
+```
+no gathering -> no resources -> every place packet refused, silently
+             -> no mills     -> no gold -> AUTOBUY never fires
+             -> no hats      -> hatFc dresses the bot in nothing
+             -> no XP        -> the bot never ages past its upgrade picks
+```
+
+Follow and swing is what is left, which is exactly what it looks like in game.
+
+What the build changes:
+
+| | |
+|---|---|
+| **`_peacetime`** | The pair RynBots already had, called in the order that makes both work: gather, and lay the mill trail behind the walk while doing it. Reached from both `_botTick` paths. |
+| **The Full Mod gate** | Peacetime runs on a tick the mod did nothing with — it did not swing, did not move, no hunt, nothing in reach, and nothing on you. The fight always keeps its tick. |
+| **`_ownerEngaged`** | Anything within 900 of you stands the whole squad's gathering down and the formation brings them back. Your fight is their fight. |
+| **`isItemLimit`** | Read `group.sandboxLimit \|\| 99` and never looked at `group.limit`, so off sandbox the cap read 99 for spikes (15), traps (6), turrets (2) and mines (1) and the gate never fired. The file already knew — `frRoomFor` says so in its comment. Now that every bot runs this placer, a bot at its trap cap was spending its whole placement budget on traps that could never land. |
+| **The mill cap** | The trail had no cap of its own, and a walking bot always has clear ground ahead, so past seven mills it spent nine packets every 400ms on refusals. |
+| **The hat mirror** | `botAutoBuyHats` re-equipped your hat on every bot every 1.5s while `hatFc` was dressing each bot for its own situation — two writers, one slot, a flicker for as long as both ran. Under Full Mod the mod's pick wins. |
+
+And the defaults, because a capability that ships off is a capability nobody
+has: `autoPlace`, `botAutoFarm` and `botAutoMills` are on, and `botFarmLimit`
+moves from 0 to 500. 0 meant "never stop gathering", which also meant never
+rejoining you and never spending what was gathered; 500 of each is a mill
+trail, a fight's worth of spikes and change, and the bot tops up when building
+spends it back down.
+
+Settings load with `Object.assign(window.vars, saved)`, so a saved config would
+have kept every one of those off forever. A one-time migration
+(`botCapability`) writes them once and then leaves the choice alone.
+
 ## Layout
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+YoRHa_System.user.js      the YoRHa build output
+src/YoRHa_System_1.5.js   YoRHa System 1.5 (input)
+tools/build-yorha.js      src/YoRHa_System_1.5.js -> YoRHa_System.user.js
+tools/test-yorha-bots.js  YoRHa's bot tick against stub bots
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -195,6 +252,10 @@ node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
 node tools/test-bot-modules.js
 node --check ReUp_Mix.user.js
+
+node tools/build-yorha.js
+node tools/test-yorha-bots.js
+node --check YoRHa_System.user.js
 ```
 
 Current state of the build:
@@ -213,6 +274,13 @@ Current state of the build:
   bot clearance, the angle fallback, the buy order, the throttle and the
   retry cap. The buy plan's hat and accessory ids are checked against
   `drivers/game-drivers.json`, so a wrong id fails the run.
+- **YoRHa bots** — 49/49 checks. `test-yorha-bots.js` lifts `_peacetime`,
+  `_ownerEngaged` and `_botTick` out of the YoRHa build and runs them with
+  every collaborator stubbed, so what is checked is the decision: which ticks a
+  bot spends gathering and building, and which it leaves to the fight (the mod
+  swung, the mod moved, a hunt, someone in its reach, someone on you, frozen,
+  cursor-driven, possessed). It also asserts the shipped defaults, the
+  migration, and that `groupLimit` is declared where the bots can reach it.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here

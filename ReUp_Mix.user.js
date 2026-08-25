@@ -22250,7 +22250,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-25T02:27:10.839Z",
+      "builtAt": "2026-08-25T02:55:22.065Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
