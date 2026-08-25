@@ -180,196 +180,123 @@ understood.
 
 ---
 
-# YoRHa System — FORGE
+# YoRHa System — Replace
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-forge.js` — 159 checks (160 with `FORGE_BASE` set).
+revision). Verified by `node tools/verify-replace.js` — 60 checks.
 
-FORGE is one engine for trap and spike placement. It **replaces** YoRHa's
-preplacer and replacer outright — `isPrePlaceAngle`, `getPrePlaceObject`,
-`replaceWithinPath`, `replaceCandidates`, `replaceGrade` and `doReplace` are
-deleted, not wrapped. The **autoplacer is untouched**.
+YoRHa's replacer is **Falcon 0.4.7's grading table**, already carefully ported
+with four documented fixes to Falcon's own bugs. Reading the replacers in nine
+other clients turned up nothing better than it — so this does not replace it.
+The grading table, `replaceKnockInto`, `replaceEnemyRing`, `replaceWithinPath`,
+`replaceBlocksMyMove` and the four-slot fill limit are all untouched. So are the
+preplacer and the autoplacer.
 
-Tuned for **1v1**.
+Four surgical changes, each taken from a specific client, each closing a
+specific hole.
 
-## What was wrong with what it replaces
+## 1. Fine aim — from AI Client 44
 
-| | Old | FORGE |
+Falcon and YoRHa both choose from a fixed ring: 72 angles at 5°, or 144 at 2.5°.
+That grid is what makes grading every slot affordable, and also a floor on
+precision — the nearest grid angle to a hole can sit half a step away, and half
+a step out on the placement ring is ground an enemy can still walk through.
+
+AI Client 44 walks outward from the hole's **own** angle at `π/360` — half a
+degree — both directions at once, taking the first slot that fits.
+
+Applied here as a **refinement, not a replacement**, and that ordering is the
+whole point: the grid still decides *which* slot to spend, because that is what
+carries the grade. This only slides the chosen slot along the ring toward the
+hole it answers, never further than one grid step, so the geometry that earned
+the grade still holds.
+
+Measured: a hole at 1.25° off-grid went from **1.25° → 0.00°**, in **1**
+`canPlace` call. AI Client's own version would spend up to 720.
+
+> Its copy never ran. `AutoReplace` is not called anywhere in that file, and the
+> `customCheckItemLocation` it depends on is not defined in it either.
+
+## 2. In-flight cap — from blisma mod v5
+
+`isItemLimit()` reads `myPlayer.itemCounts`, and that is written **only** by the
+server's `"S"` packet. Every placement queued inside the current tick is
+invisible to it. Queue three traps with one slot left under the cap of **6** and
+the server refuses two — with their packets already spent and the hole they were
+for still open.
+
+blisma keeps a `replacedObjs` tally and adds it to its own cap check. Same here,
+and kept replace-local exactly as blisma keeps it: what the autoplacer spends is
+not this function's business.
+
+All three of `doReplace`'s placement points now go through **one** `spend()`
+path, so neither the cap nor the fine aim can be forgotten at one of them.
+
+## 3. Danger gate — from Ae86 2.8 / blisma
+
+Both ask their `checkSpikeTick()` before placing: while the enemy is mid
+spike-sync on you, the tick belongs to getting out, not to building. Falcon never
+asked, so neither did this.
+
+The reading is YoRHa's own — `nearestTrap && spikeDmgCount > 0`, the same pair
+the preplacer already gates on. One without the other is not the sync, and those
+cases still build.
+
+## 4. Cost
+
+`replaceGrade` reached `canTrapTick()` **once per spike candidate**, inside its
+per-enemy loop, and each call swept a whole placement ring. Forty placeable
+spikes and two enemies is eighty sweeps for an answer that cannot change inside
+one tick.
+
+- `canTrapTick()` memoises per tick, keyed on the context's `myPlayer` as well —
+  `ctxRun` swaps `tick` along with everything else to run this code on a bot's
+  world, so two contexts on the same tick number is ordinary.
+- `getPrePlaceAngles()` caches per tick, keyed on the **object array itself**
+  rather than its length (a length key collides between different sets of equal
+  size). `updateAngles()` still calls `buildPlaceAngles()` directly for a
+  guaranteed-fresh sweep.
+
+Measured with Shame Tick on and 40 visible objects: **2 sweeps** per replace,
+~2.9 ms — 2.7% of the 111 ms server tick.
+
+> An earlier claim of mine, that `replaceEnemyRing` needed caching, was wrong:
+> `doReplace` runs once per tick, so the ring was already computed once per
+> enemy per tick. The cost was where the measurement said it was.
+
+## What was rejected, and why
+
+| Idea | From | Why not |
 |---|---|---|
-| Prediction | one linear step | game-physics simulation, 4 ticks, with a confidence figure |
-| Decisions | 6-branch if/else, first match wins | every slot scored for every role on one scale |
-| Cost | shame gates re-swept **per candidate angle** (~288/tick) | one sweep per item per tick |
-| Packets | 4 scattered `packets + 5 > 119` checks | one budget, priority-ordered, with a reserve |
-| Measurement | none | every emission logged and confirmed against the world |
+| Randomised start angle and step | Nova Recode | Trades placement quality for anti-detection, and a random step **misses valid slots**. |
+| Rolling 5-angle average + sine jitter | Genessis, unknown v3.15 | Averaging angles across *different* holes is meaningless — 0° and 180° average to 90°, serving neither. Both copies also crash (TDZ). |
+| `tickSpeed - ping` delay | AI Client 44 | YoRHa already lands in the same tick on the immediate lane. Adding delay is a regression. |
+| `game.tickBase(fn, 1)` | Ae86 2.8 | `getPredictObjects` collects and spends in one budgeted loop — tick-synced by construction. |
+| `spikeKb` | blisma | `replaceKnockInto` is strictly better: it detects the bounce and grades 2.5 / 3 / 5. |
+| `isObjectBroken(health < 20)` | Ae86 2.8 | A *predictive* signal in a reactive replacer. That is preplace's job. |
 
-### Prediction
+## Also fixed
 
-`xVel` in this client is **not a velocity** — `updatePlayers` writes
-`x2 * 2 - lastX`, the position one tick ahead if the enemy keeps doing exactly
-what they just did. No acceleration, no decay, no error bar.
-
-FORGE uses the game's own integration, with the game's own constants:
-
-```
-vel += playerSpeed * delta * cos(dir)     while a key is held
-pos += vel * delta
-vel *= playerDecel ^ delta
-```
-
-A tick is 1000/9 ms, so one tick's decay is `0.993^111 ≈ 0.458`, not `0.993`.
-Holding a direction converges on ~36 units/tick — which is what a player
-actually covers, and the harness asserts it.
-
-Two futures are run — they keep holding the key, or they let go — and the gap
-between them is the honest error bar. **Confidence** comes from the *mean
-resultant length* of their recent headings (correct across the 0/2π seam, where
-averaging the raw numbers is not): a straight line reads ~1.0, juking reads
-<0.35. Aim interpolates from their known position toward the held future by that
-confidence, so a low-trust read collapses onto the only thing actually known.
-
-### Roles, scored on one scale
-
-`RETRAP 1000 · TRAP 620 · TICK 560 · MEND 430 · AHEAD 360 · KNOCK 300 · SEAL 180`
-
-Those numbers are the priority. There is **no separate priority list** — every
-intent from every role goes into one queue sorted by score, and the best one
-gets the packet. Per-role caps stop any one role eating the tick.
-
-This was not the first design. The engine originally walked a fixed priority
-order and sorted by score only *within* a role, which made the weights
-decorative: in a real duel frame a perfect wall-fill scoring **430** lost its
-packet to a marginal spike scoring **210**, purely because "spike" sat higher in
-a list. That is the same first-branch-wins failure the engine exists to remove,
-so the list went and the scores decide.
-
-Costs subtracted from every score: standing in our own line of retreat, breaking
-our own line to them, spending the last of a small stock, and — for roles that
-depend on the prediction — a penalty scaled by `1 - confidence`.
-
-A spike that would knock the enemy **toward** us is refused outright: it undoes
-the hold it was meant to punish.
-
-### Send lanes — the one that mattered most
-
-`getPredictObjects` hands its output to two senders. Objects flagged `preplace`
-are held back and sent from a timer at `(111 - ping)` ms; everything else goes
-out in the immediate loop, this tick.
-
-FORGE originally flagged **everything** `preplace`. So a re-trap on a hold that
-was failing, a spike on a body held right now, a fill for a hole already open —
-all arrived a full server tick late. Against a moving player that is the
-difference between landing and not, and it is what "inaccurate" felt like.
-
-`AHEAD` is now the only role on the deferred lane, which is what that lane is
-for: a structure aimed at a break that has not happened yet has to land *when*
-it does, not before.
-
-### Packets
-
-One ledger, spending by score with per-role caps. `reserve` is **0** by default
-— the send loops already stop at `packets + 5 > 119`, the rule every placer in
-this file has always spent by, and a reserve on top of that was a second
-throttle that made the engine hold back structures the game would have accepted.
-The slider is still there for anyone who wants headroom kept clear.
-
-### Doom — seeing the break instead of reacting to it
-
-Filling a hole when `killObject` reports one is already too late: the event
-arrives, the tick is spent queuing a fill, and it lands a tick after the enemy
-was standing in the gap. Players are faster than that.
-
-Two independent readings run every tick, and both are kept:
-
-- **The loaded swing** — the old preplacer's read. The nearest enemy's primary
-  (or great hammer) has just come off cooldown, a building of ours is inside its
-  reach, and it has less health than that swing does damage. Fires the moment
-  their reload completes, the earliest the information exists.
-- **The damage map** — every visible player's loaded damage summed per building.
-  Sees what a single-enemy read cannot: a wall two people are splitting for less
-  than a one-shot each.
-
-Anything either reading names goes into a book with a sighting count. A fill is
-queued on the **first** sighting — waiting for confirmation would repeat the
-mistake — and trust rises with each further sighting, reaching full at
-`doomConfirm`, or immediately if both readings agree at once.
-
-The book is also what makes a fill survive not landing. While a building is
-still doomed and its fill still unanswered, the entry re-fires every
-`doomRetry` ticks instead of being forgotten after one attempt. A building that
-actually dies leaves the book; one that stops reading doomed ages out after
-`doomForget`.
-
-### Recording
-
-Every emission is written down with the spot it was aimed at. Later ticks look
-for one of our structures there: found is a confirm, the window expiring is a
-reject. Reachable live at `window.FORGE_STATS()` — tuning, ledger, per-role
-accuracy, the current world model, and the last twelve decisions.
-
-## Why it cannot conflict with the autoplacer
-
-- Emits **only** through `addPredictObject()` — the same marker check the
-  autoplacer adds through. A held slot is refused and FORGE takes its next
-  candidate.
-- Runs **before** `updateAngles()`, so its angles are in `placedAngles` for the
-  autoplacer's ban pass on the next tick — the existing mechanism, unchanged.
-- Never calls `place()` or `io.send()`; output is ordinary `predictObjects`.
-- Never writes `bannedAngles` or `placedAngles`, never mutates a sweep result.
-- Never calls `canTrapTick()` / `canShamePlace()` — they survive untouched for
-  the autoplacer, and not calling them per-angle is what removes the FPS drop.
-
-All six are asserted against the engine's source with comments stripped.
-
-## Menu
-
-**Placers → FORGE**: Enable, Engage Range, Structures/Tick, Packet Reserve. The
-sliders are read fresh each tick, so changes apply without a reload.
+`doReplace`'s break-list filter threw on a `null` entry. Pre-existing, from the
+Falcon port. `killObject` only ever writes well-formed entries so it should not
+happen — but this runs inside the tick body, where "should not happen" throwing
+takes the rest of the tick with it.
 
 ## Verifying
 
 ```
-node tools/verify-forge.js [path/to/client.js]     # 159 checks
-node tools/check-scopes.js [path/to/client.js]     # whole-file scope analysis
+node tools/verify-replace.js [path/to/client.js]     # 60 checks
+node tools/check-scopes.js   [path/to/client.js]     # whole-file scope analysis
 
-# 139th check: compare the scope report against the untouched base
-FORGE_BASE=/path/to/pristine.user.js node tools/verify-forge.js
+YORHA_BASE=/path/to/pristine.user.js node tools/verify-replace.js
 ```
 
-`verify-forge.js` lifts the real function bodies out of the client by name —
-nothing is re-implemented, including `addPredictObject` itself, since testing
-the no-conflict claim against a stand-in would only prove the stand-in. It runs
-the **whole** `getPredictObjects` pipeline, not just the engine: FORGE and the
-autoplacer both contribute to one list, and nothing in that list overlaps
-anything else in it.
+Lifts the real function bodies out of the client by name — nothing is
+re-implemented, including `addPredictObject`, since the no-double-spend claim
+rests on it. Covers the fine aim's accuracy, bound and cost; the cap against a
+counter only the server writes; the gate in all four combinations; the sweep
+count; that the grading table and both other placers are untouched; robustness
+against a malformed break list; and that the file's undeclared-identifier set is
+unchanged from the pristine base.
 
-`check-scopes.js` parses the client with acorn, builds the real scope chain, and
-reports every identifier read without a declaration anywhere up it. `node
---check` proves a file *parses*; it does not prove a name still resolves after
-550 lines were deleted — and a dangling name does not fail at load, it throws
-the first time its branch runs, mid-fight. The client reports 7, and the
-untouched base reports the same 7 (they belong to the vendored game bundle), so
-the edits added none.
-
-### Measured
-
-| | |
-|---|---|
-| Cost of a busy combat tick | **~1.5 ms** — 1.3% of the 111 ms server tick |
-| Placement sweeps per tick | **2**, flat, regardless of angle count |
-| Bot-context keys | 135 declared / 135 captured / 135 restored, no mismatch |
-| Dead settings | 0 — every entry in `window.vars` is read by something |
-
-Defects caught during the build, each by a different check:
-
-1. A `null` in the break list threw inside the tick body — found by feeding the
-   engine malformed wire data.
-2. A non-finite enemy position made every distance `NaN`, which compares false
-   against every threshold, so the engine would have sailed past its own range
-   gates instead of stopping at them.
-3. The fixed priority walk described above — found by working through one real
-   duel frame by hand.
-4. **The Placers hotkey was left driving `prePlace` and `replace`**, two ids
-   nothing reads once the lanes they belonged to are gone. The key kept working
-   and silently stopped doing its job: it could only ever toggle `autoPlace`,
-   and its "all placers off" condition could never come back false. Found by
-   scanning for settings that are declared but read by nothing.
+**Diff against the base: 198 lines added, 6 replaced, in 8 hunks.**

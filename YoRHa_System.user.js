@@ -12142,17 +12142,10 @@ let pps = 0;
                     else if (keyStr === window.vars.keyPlacers) {
                         // One key toggles Auto Place + Preplace + Replace together:
                         // if any is off, turn all on; otherwise turn all off.
-                        // "All placers on/off". This used to drive three ids
-                        // because there were three lanes; FORGE is one engine
-                        // for what prePlace and replace used to be, so it is
-                        // two now. Leaving the old ids here would have made
-                        // this key a plain autoPlace toggle: prePlace and
-                        // replace are read by nothing any more, so setting them
-                        // would toggle nothing and the condition could never
-                        // come back false.
-                        const on = !(window.vars.autoPlace && window.vars.forge);
+                        const on = !(window.vars.autoPlace && window.vars.prePlace && window.vars.replace);
                         window.vars.autoPlace = on;
-                        window.vars.forge = on;
+                        window.vars.prePlace = on;
+                        window.vars.replace = on;
                     }
                     else if (keyStr === window.vars.keySpawnBot) {
                         RynBots.spawn(window.vars.botCount);
@@ -14658,7 +14651,30 @@ for (let tree of trees) {
         }
 
 
+        // replaceGrade asks this once per SPIKE CANDIDATE, inside its per-enemy
+        // loop, and each call sweeps a whole placement ring. With forty
+        // placeable spikes and two enemies that is eighty sweeps for an answer
+        // that cannot change inside one tick — it takes no argument and reads
+        // only per-tick state.
+        //
+        // Keyed on the context's own player as well as the tick: ctxRun swaps
+        // the whole mod state, tick included, to run this code on a bot's world,
+        // so two contexts sitting on the same tick number is ordinary. A
+        // tick-only key would hand one bot another's answer.
+        let _trapTickMemoTick = -1;
+        let _trapTickMemoOwner = null;
+        let _trapTickMemo = false;
+
         function canTrapTick() {
+            if (_trapTickMemoTick === tick && _trapTickMemoOwner === myPlayer) return _trapTickMemo;
+
+            _trapTickMemoTick = tick;
+            _trapTickMemoOwner = myPlayer;
+            _trapTickMemo = computeCanTrapTick();
+            return _trapTickMemo;
+        }
+
+        function computeCanTrapTick() {
             if (!nearestEnemy) return false;
             if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
             if (secondaryReload[myPlayer.sid] < 1) return false;
@@ -14869,11 +14885,12 @@ for (let tree of trees) {
 
         }
 
+        let lastPrePlaceObject = null;
         let removedObjects = [];
 
         // REPLACE: buildings that died since the last tick, measured by
         // killObject() while they still existed. getPredictObjects() empties it
-        // once a tick BEFORE forgeTick() looks at anything, so it does not grow
+        // once a tick BEFORE doReplace() looks at anything, so it does not grow
         // while Replace is switched off either. killObject() caps it as well,
         // for the stretches where no tick runs at all (dead, sitting in a menu).
         let replaceQueue = [];
@@ -15044,8 +15061,43 @@ for (let tree of trees) {
             }
         }
 
+        // A sweep is 72 to 144 canPlace calls, each walking the visible-object
+        // table, and replaceGrade reaches one indirectly for every spike
+        // candidate it grades (see the canTrapTick memo below). Within a tick
+        // the answer cannot change: nothing this client queues enters the world
+        // until the server says so.
+        //
+        // Keyed on the object array ITSELF rather than on its length, which is
+        // what a client this code descends from used — two different sets of
+        // equal size read as the same entry there, and one gets the other's
+        // answer. Identity cannot collide, and it makes the cache context-safe
+        // for free: ctxRun gives each bot its own arrays.
+        //
+        // Safe because nothing mutates what this hands back — callers read, or
+        // filter first (which copies) and sort the copy. updateAngles() wants a
+        // guaranteed-fresh sweep and calls buildPlaceAngles() directly; it still
+        // does.
+        let _placeAnglesTick = -1;
+        let _placeAnglesCache = new Map();
+
         function getPrePlaceAngles(id, customObjects) {
-            return buildPlaceAngles(id, customObjects);
+            if (_placeAnglesTick !== tick) {
+                _placeAnglesTick = tick;
+                _placeAnglesCache.clear();
+            }
+
+            const set = customObjects || visibleObjects;
+            let byId = _placeAnglesCache.get(set);
+            if (!byId) {
+                byId = new Map();
+                _placeAnglesCache.set(set, byId);
+            }
+
+            if (byId.has(id)) return byId.get(id);
+
+            const built = buildPlaceAngles(id, customObjects);
+            byId.set(id, built);
+            return built;
         }
 
         // =====================================================================
@@ -15118,6 +15170,104 @@ for (let tree of trees) {
                 }
             }
         }
+
+        function isPrePlaceAngle(config, prePlaceObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb) {
+            if (!nearestEnemy) return false;
+            if (UTILS.getDistance(nearestEnemy.x2, nearestEnemy.y2, myPlayer.x2, myPlayer.y2) > 350) return false;
+
+            const isSpike = config.id === myPlayer.items[2] && !isItemLimit(myPlayer.items[2]);
+            const isTrap = config.id === myPlayer.items[4] && !isItemLimit(myPlayer.items[4]);
+
+            const enemyTrapped = traps_our.find(trap =>
+                                                UTILS.getDistance(trap.x, trap.y, nearestEnemy.x2, nearestEnemy.y2) < trap.scale
+                                               );
+
+            // Calculate future position for line-of-sight checks
+            const LOOKAHEAD = 222;
+            const START_OFFSET = 35;
+            const futureX = myPlayer.x2 + Math.cos(predictMoveAngle) * LOOKAHEAD;
+            const futureY = myPlayer.y2 + Math.sin(predictMoveAngle) * LOOKAHEAD;
+            const startX = myPlayer.x2 + Math.cos(predictMoveAngle) * START_OFFSET;
+            const startY = myPlayer.y2 + Math.sin(predictMoveAngle) * START_OFFSET;
+
+            // Check if spike blocks line of sight to future position
+            const spikeWillBlockLOSToFuture = UTILS.lineInRect(
+                config.x - config.scale - 5,
+                config.y - config.scale - 5,
+                config.x + config.scale + 5,
+                config.y + config.scale + 5,
+                startX, startY,
+                futureX, futureY
+            );
+
+
+
+            // Check if spike blocks line of sight to enemy
+            const spikeWillBlockLOSToEnemy = UTILS.lineInRect(
+                config.x - config.scale - 5,
+                config.y - config.scale - 5,
+                config.x + config.scale + 5,
+                config.y + config.scale + 5,
+                myPlayer.xVel, myPlayer.yVel,
+                nearestEnemy.xVel, nearestEnemy.yVel
+            );
+
+            let canSpikeTick = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < config.scale + 55;
+
+            let canRetrap = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < 50;
+
+            if (canSpikeTick) {
+                // Knockback direction: from spike to enemy
+                let kbAngle = Math.atan2(nearestEnemy.y2 - config.y, nearestEnemy.x2 - config.x);
+
+                // Direction from enemy to player
+                let enemyToPlayerAngle = Math.atan2(myPlayer.y - nearestEnemy.y2, myPlayer.x - nearestEnemy.x2);
+
+                // Check if knockback direction is similar to enemy->player direction
+                let angleDiff = Math.abs(kbAngle - enemyToPlayerAngle);
+                if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+
+                // If knockback would push enemy towards player (angle diff < 90°), it's BAD
+                canSpikeTick = angleDiff >= Math.PI / 5;
+            }
+
+
+            if (isSpike && canSpikeTick && canTrapTick())
+                return true;
+
+            if (isTrap && canRetrap && canShamePlace())
+                return true;
+
+
+
+            // Priority 1: Place spike if it hits trapped enemy
+            if (isSpike && enemyTrapped && prePlaceObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) {
+                return true;
+            }
+
+            // Priority 2: Retrap colliding enemy
+            if (isTrap && nearestEnemy.spikeDamage > 0 && enemyTrapped && prePlaceObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) {
+                return true;
+            }
+
+            // Priority 3: Place spike that knockbacks enemy into other spikes
+            if (isSpike && closestSpikeToKb && config === closestSpikeToKb && !canShamePlace()) {
+                return true;
+            }
+
+            // Priority 4: Place spikes that don't block LOS when enemy is trapped
+            if (isSpike && enemyTrapped && !spikeWillBlockLOSToFuture && !spikeWillBlockLOSToEnemy && prePlaceObject !== enemyTrapped) {
+                return true;
+            }
+
+            // Priority 6: Place trap when neither player is trapped
+            if (isTrap) {
+                return true;
+            }
+
+            return false;
+        }
+
 
         function isAutoPlaceAngle(config, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb) {
             if (!nearestEnemy) return false;
@@ -15217,1001 +15367,594 @@ for (let tree of trees) {
             }, configs[0]);
         };
 
+        function getPrePlaceObject() {
+            let findObject;
+
+            if (autogathering) {
+                if ((predictWeapon < 9 && primaryReload[myPlayer.sid] == 1) || (predictWeapon > 8 && secondaryReload[myPlayer.sid] == 1)) {
+                    let dmg = items.weapons[predictWeapon].dmg * (items.weapons[predictWeapon].sDmg || 1) * (config.weaponVariants[myPlayer.weaponVariants[predictWeapon]].val) * (isBoughtHat(40, 0) ? 3.3 : 1);
+
+                    findObject = visibleObjects.filter((object) => (UTILS.getDistance(myPlayer.xVel, myPlayer.yVel, object.x, object.y) - object.scale) <= items.weapons[predictWeapon].range
+                                                       && UTILS.getAngleDist(UTILS.getDirection(object.x, object.y, myPlayer.xVel, myPlayer.yVel), getAttackDir()) <= config.gatherAngle
+                                                       && object.health <= dmg).sort((a, b) => UTILS.getDistance(a.x, a.y, nearestEnemy.x2, nearestEnemy.y2) - UTILS.getDistance(b.x, b.y, nearestEnemy.x2, nearestEnemy.y2))[0];
+                }
+            }
+
+            if (nearestEnemy && !findObject) {
+                let weapon = null;
+                if (nearestEnemy.weapons[1] == 10 && secondaryReload[nearestEnemy.sid] == 1 && nearestEnemy.lastSecondaryReload < secondaryReload[nearestEnemy.sid]) {
+                    weapon = nearestEnemy.weapons[1];
+                } else {
+                    if (items.weapons[nearestEnemy.weapons[0]].speed <= 400 && primaryReload[nearestEnemy.sid] == 1 && nearestEnemy.lastPrimaryReload < primaryReload[nearestEnemy.sid]) {
+                        weapon = nearestEnemy.weapons[0];
+                    }
+                }
+
+                if (weapon != null) {
+                    let dmg = items.weapons[weapon].dmg * (items.weapons[weapon].sDmg || 1) * (config.weaponVariants[nearestEnemy.weaponVariants[weapon]].val || 1) * 3.3;
+
+                    findObject = visibleObjects.filter((object) => !object.hideFromEnemy && UTILS.getDistance(nearestEnemy.x2, nearestEnemy.y2, object.x, object.y) <= (object.scale + items.weapons[weapon].range)
+                                                       && object.health <= dmg).sort((a, b) => UTILS.getDistance(a.x, a.y, nearestEnemy.x2, nearestEnemy.y2) - UTILS.getDistance(b.x, b.y, nearestEnemy.x2, nearestEnemy.y2))[0];
+                }
+            }
+
+            if (findObject) {
+                spamPrePlacer = true;
+            }
+
+            return findObject;
+        }
+
         // =====================================================================
-        //  F O R G E  —  the trap & spike engine
+        // REPLACE  —  Falcon 0.4.7's auto-replace, rebuilt on YoRHa primitives
         // =====================================================================
+        // Falcon does not drop something back on the exact ground that was
+        // freed. When a building dies within reach it rebuilds the whole
+        // placement ring around YOU, grades every slot on it, puts the best
+        // spike and the best trap down, and then fills up to four more
+        // non-overlapping slots behind them. The hole is the trigger, not the
+        // target — which is why the wall closes in one tick instead of one
+        // object at a time. That is the behaviour ported here, whole.
         //
-        // Replaces the preplacer and the replacer outright. The autoplacer is
-        // untouched and still owns its own lane; FORGE simply never fights it,
-        // for the reasons under BOUNDARIES below.
+        // Everything below is Falcon's algorithm — its candidate ring, its
+        // grading table, its knock-into-a-building test, its block-my-own-
+        // movement veto, its best-spike / best-trap / four-fill selection —
+        // written in YoRHa's own primitives:
         //
-        // WHAT WAS WRONG WITH WHAT THIS REPLACES
+        //   Falcon                        YoRHa
+        //   ----------------------------  --------------------------------------
+        //   Je.find() 30-angle ring       getPrePlaceAngles() (the 72/144 sweep)
+        //   nn.checkItemPlacement()       objectManager.checkItemLocation(),
+        //                                 reached through canPlace() in the sweep
+        //   me.checkMarkers()             addPredictObject()'s overlap reject
+        //   me.usedAngles / isUsed        bannedAngles
+        //   _e.fetch(sid).possible        replaceEnemyRing()
+        //   Jt.closeObjects               visibleObjects
+        //   Fr.isFriendly(o.owner.sid)    isObjectOur(o)
+        //   enemy.trapData                traps_our.find(... < trap.scale)
+        //   J.withinPath()                pathfindingState.currentPath
+        //   Ae.dataSent.move              predictMoveAngle / lastMoveDir
+        //   this.place(id, angle)         addPredictObject(id, angle, false)
         //
-        //   1. Prediction was one linear step. `xVel` in this client is not a
-        //      velocity — updatePlayers writes `x2 * 2 - lastX`, which is the
-        //      position one tick ahead if the enemy keeps doing exactly what
-        //      they just did. No acceleration, no decay, no confidence. A duel
-        //      is won on where somebody will be in three ticks, not one, and on
-        //      knowing how sure you are.
+        // Falcon's checkItemPlacement() allows a slot whose only blockers are
+        // "breakPotential" objects — but nothing in Falcon 0.4.7 ever sets that
+        // flag, so the test reduces to "the ground is empty", which is exactly
+        // what canPlace() answers. Falcon's spike/enemy-ring overlap test also
+        // reuses the TRAP candidate's cached distance plus a (spikeScale - 50)
+        // fudge to stand in for the spike's own radius, and reads undefined
+        // (-> NaN -> "free") whenever no trap candidate shares that angle. The
+        // real distance is measured here instead; same intent, no NaN.
         //
-        //   2. Decisions were an if/else cascade. isPrePlaceAngle had six
-        //      branches that each returned true on their own, in a fixed order,
-        //      so a slot that was slightly good at the top of the list beat a
-        //      slot that was excellent at the bottom. Nothing could be compared
-        //      against anything else.
+        // Three deliberate departures, all so this cannot fight the rest of the
+        // mod:
         //
-        //   3. The same work was redone per candidate angle. canTrapTick() and
-        //      canShamePlace() were called from inside isPrePlaceAngle — once
-        //      per angle, up to 288 times a tick — and each one swept a whole
-        //      placement ring. That is the FPS drop these clients are known for.
+        //   1. Falcon fires this synchronously out of killObject(). YoRHa
+        //      collects every placement for a tick in getPredictObjects() and
+        //      spends them through one packet-budgeted loop, so the break is
+        //      queued in killObject() and answered here. It still lands on the
+        //      same tick, in the immediate (non-preplace) lane.
+        //   2. Falcon grades against every enemy on screen and hands enemies
+        //      beyond 300 a placementDistance of Infinity, which is a flat +1
+        //      to every candidate per distant player and pushes junk slots over
+        //      the `grade > 0` bar. Only enemies inside the replace range are
+        //      graded here.
+        //   3. Falcon's `spiketick` flag calls It.do(), its own weapon-swap
+        //      trick. YoRHa already owns that ground (shameTick / canTrapTick),
+        //      so the flag stays a grading signal and nothing is swapped from
+        //      here. YoRHa's spike tick is untouched.
+        //   4. Falcon's `points` is never initialised on a candidate and never
+        //      read, so the two things it scores count for nothing. It is
+        //      initialised here and spent as a tiebreak between candidates of
+        //      equal grade — see the sort at the end of replaceGrade().
         //
-        //   4. Packets were spent first-come-first-served. Four separate
-        //      `packets + 5 > 119` checks, no priority: a speculative fill could
-        //      spend the room a re-trap needed later in the same tick.
-        //
-        //   5. Nothing was ever measured. No engine can be tuned if it does not
-        //      record what it did and whether the server agreed.
-        //
-        // HOW FORGE IS BUILT
-        //
-        //   SENSE  once a tick, build one world model: the enemy's predicted
-        //          path under the game's real physics, how much to trust it,
-        //          what they can do to us, what is about to break.
-        //   SUPPLY one placement sweep per item, cached for the tick.
-        //   SCORE  every slot scored for every role it could serve, on one
-        //          scale, so a re-trap and a wall-fill can be compared.
-        //   SPEND  one budget with priorities and per-role caps.
-        //   RECORD every emission logged and later confirmed against the world.
-        //
-        // BOUNDARIES  (why this cannot conflict with the autoplacer)
-        //
-        //   * FORGE emits only through addPredictObject(), the same marker check
-        //     the autoplacer adds through. A slot either lane holds is refused.
-        //   * FORGE runs BEFORE updateAngles() in getPredictObjects, so the
-        //     angles it takes are in placedAngles by the time the autoplacer's
-        //     ban pass reads them on the next tick — the existing mechanism,
-        //     unchanged.
-        //   * FORGE never calls place() or io.send(). Its output is ordinary
-        //     predictObjects on the existing send lanes.
-        //   * FORGE never mutates a sweep result, bannedAngles, or placedAngles.
-        //   * canTrapTick() and canShamePlace() still exist untouched for the
-        //     autoplacer; FORGE does not call them per-angle.
+        // Gated by window.vars.replace, ranged by window.vars.replaceRange.
+        // =====================================================================
+        const REPLACE_FILL_LIMIT = 4;   // Falcon stops the spread at four slots
+        const REPLACE_RING_ANGLES = 30; // Falcon's me.anglesArray, for the enemy ring
 
-        // ---------------------------------------------------------------------
-        // TUNABLES  —  weighted for 1v1
-        // ---------------------------------------------------------------------
-        // The weights are a duel's priorities: hold them still, hurt them while
-        // they are held, and do not spend a trap out of a stock of six on a
-        // guess. Crowd play would raise SEAL and lower TICK; this does not.
-        const FORGE = {
-            // Reach
-            engageRange: 320,        // beyond this the engine sleeps entirely
-            trapReach: 55,           // a trap catches a body within this
-            tickReach: 58,           // a spike ticks a held body within this
+        // Falcon's J.withinPath(): is this slot standing on the walk we are
+        // about to take? YoRHa keeps that walk in pathfindingState.
+        function replaceWithinPath(x, y) {
+            const walk = pathfindingState && pathfindingState.currentPath;
+            if (!walk || !walk.length) return false;
 
-            // Doom — how a break is seen coming instead of reacted to
-            doomConfirm: 2,          // sightings before a fill is fully trusted
-            doomForget: 6,           // ticks a doomed building survives unseen
-            doomRetry: 3,            // ticks before an unanswered fill is re-sent
-            doomReach: 110,          // how near a slot must be to the hole
+            return walk.some(point => UTILS.getDistance(x, y, point.x, point.y) <= 35);
+        }
 
-            // Prediction
-            horizon: 4,              // ticks simulated ahead in combat range
-            headingWindow: 5,        // samples used to judge how steady they are
-            minConfidence: 0.18,     // below this, stop trusting the point
+        // Falcon's ti.spike(): a spike here shoves the enemy straight away from
+        // it — does that shove land them on something of ours? A trap is worth
+        // something, a spike lined up with the shove is worth more.
+        function replaceKnockInto(config, enemy) {
+            const result = { building: null, bounce: false };
+            let closest = Infinity;
+            const kbAngle = Math.atan2(enemy.y2 - config.y, enemy.x2 - config.x);
 
-            // Scores. One scale, so every role is comparable.
-            wRetrap: 1000,           // they are held and the hold is failing
-            wTrap: 620,              // land a hold
-            wTick: 560,              // damage a held body
-            wMend: 430,              // close a hole in our own ring
-            wAhead: 360,             // fill a hole that is about to open
-            wKnock: 300,             // push them into our damage
-            wSeal: 180,              // take an escape lane away
+            for (const object of visibleObjects) {
+                if (!object || !object.owner) continue;
+                if (!(object.trap || object.dmg)) continue;
+                if (!isObjectOur(object)) continue;
 
-            // Penalties
-            pSelfBlock: 260,         // it stands in our own way out
-            pSelfLos: 120,           // it breaks our line to them
-            pScarce: 90,             // spends the last of a small stock
-            pLowTrust: 340,          // scaled by (1 - confidence)
+                const dist = UTILS.getDistance(enemy.x2, enemy.y2, object.x, object.y);
+                if (dist >= closest) continue;
 
-            // Spending
-            // The send loops already stop at `packets + 5 > 119`, which is the
-            // rule every placer in this file has always spent by. FORGE asks the
-            // same question rather than a stricter one: a reserve on top of it
-            // was a second throttle that made the engine hold back structures
-            // the game would have accepted, and a placement not made is a
-            // hole not closed.
-            //
-            // The reserve stays as a slider for anyone who wants headroom kept
-            // clear, but it is zero by default — the old spending, exactly.
-            packetCap: 119,          // the server's ceiling, per second
-            packetsPerPlace: 4,      // selectToBuild + 2 attacks + selectWeapon
-            reserve: 0,              // headroom held back; 0 = spend like the old placers
-            perTick: 8,              // most structures one tick may spend
-            perRole: { RETRAP: 3, TRAP: 2, TICK: 3, MEND: 4, AHEAD: 3, KNOCK: 1, SEAL: 2 },
+                const reach = Math.min(170, dist);
+                const landX = enemy.x2 + Math.cos(kbAngle) * reach;
+                const landY = enemy.y2 + Math.sin(kbAngle) * reach;
+                if (UTILS.getDistance(landX, landY, object.x, object.y) > (object.trap ? 50 : object.scale + 35)) continue;
 
-            // Bookkeeping
-            confirmWindow: 27,       // ticks an emission waits for the world
-            logSize: 60,             // decisions kept for inspection
-        };
-
-        // The roles, and the most of each one tick may spend. This is a cap, not
-        // an order: the ORDER comes out of the scores, because the role weights
-        // above already encode priority (a re-trap is worth 1000 and a seal 180,
-        // so a re-trap wins on the numbers without needing a rule that says so).
-        //
-        // Walking a fixed priority list instead would make those weights
-        // decorative — and worse, wrong. A perfect wall-fill scoring 430 losing
-        // its packet to a marginal spike scoring 210, purely because "spike"
-        // sits higher in a list, is the same first-branch-wins failure this
-        // engine was built to get rid of. One scale, or none.
-        const FORGE_ROLES = ["RETRAP", "TICK", "TRAP", "MEND", "AHEAD", "KNOCK", "SEAL"];
-
-        // WHICH SEND LANE EACH ROLE RIDES  —  and why this matters more than
-        // anything else in the file.
-        //
-        // getPredictObjects hands its output to two different senders. Objects
-        // flagged `preplace` are held back and sent from a deferred timer at
-        // (111 - ping) ms; everything else goes out in the immediate loop, this
-        // tick. The deferred lane exists for ONE case: a structure aimed at a
-        // break that has not happened yet, which has to land at the moment the
-        // break does and not before.
-        //
-        // Every other role is answering something that is already true. A
-        // re-trap on a hold that is failing, a spike on a body that is held
-        // right now, a fill for a hole that is already open — putting any of
-        // those on the deferred lane delays them by a full server tick, which
-        // against a moving player is the difference between landing and not.
-        // AHEAD is the only role that belongs there.
-        const FORGE_DEFERRED = new Set(["AHEAD"]);
-
-        // ---------------------------------------------------------------------
-        // LEDGER  —  what we did, and whether the world agreed
-        // ---------------------------------------------------------------------
-        // Every emission is written down with the spot it was meant for. Later
-        // ticks look for one of our objects at that spot: found is a confirm,
-        // and the confirm window expiring is a reject. A rejected placement is
-        // one the server refused — a cap we misread, ground we thought was open,
-        // a packet that never landed — and the rate of them is the only honest
-        // measure of whether the engine is aimed correctly.
-        //
-        // Reachable at window.FORGE_STATS.
-        let forgeLedger = {
-            pending: [],
-            emitted: 0, confirmed: 0, rejected: 0,
-            byRole: {},
-            log: [],
-        };
-
-        // Buildings we have already placed ahead of, and the tick we did it on.
-        // getPredictObjects asks this when something dies: if it is one of ours,
-        // the placement queued for it has to be let out of this tick's budget
-        // rather than waiting for the next one.
-        let forgeAhead = new Map();
-
-        function forgeAwaiting(sids) {
-            if (!forgeAhead.size) return false;
-
-            let hit = false;
-            for (const sid of sids) {
-                forgeDoom.delete(sid);          // it died; the book is done with it
-                if (forgeAhead.delete(sid)) hit = true;
+                closest = dist;
+                result.building = object;
+                result.bounce = dist <= 150 && dist >= 50 && !!object.dmg &&
+                    UTILS.getAngleDist(kbAngle, Math.atan2(object.y - config.y, object.x - config.x)) <= 0.17;
             }
 
-            // A prediction that never came true would otherwise sit here for the
-            // rest of the round.
-            if (forgeAhead.size > 32) {
-                for (const [sid, when] of forgeAhead) {
-                    if (tick - when > FORGE.confirmWindow) forgeAhead.delete(sid);
+            return result;
+        }
+
+        // Falcon's Ve.isBlockMovement(): would this slot wall in the direction
+        // we are about to walk? A slot beside the trap the enemy is standing in
+        // is allowed anyway — that one is the whole point.
+        function replaceBlocksMyMove(config, enemyTrapped) {
+            if (enemyTrapped && UTILS.getDistance(config.x, config.y, enemyTrapped.x, enemyTrapped.y) <= config.scale + 75) return false;
+
+            const moveDir = typeof predictMoveAngle === "number" ? predictMoveAngle :
+                            typeof lastMoveDir === "number" ? lastMoveDir : null;
+            if (moveDir === null) return false;
+
+            return UTILS.getAngleDist(Math.atan2(config.y - myPlayer.y2, config.x - myPlayer.x2), moveDir) <= Math.PI / 3;
+        }
+
+        // Falcon's _e: every slot the enemy could still drop a spike on. One of
+        // our candidates landing on one of those is denying them the spot, which
+        // is what Falcon marks `priority`. Id 9 is the widest spike, and the one
+        // YoRHa already predicts enemy spikes with elsewhere.
+        function replaceEnemyRing(enemy, objects) {
+            const id = 9;
+            const item = items.list[id];
+            const radius = 35 + item.scale + (item.placeOffset || 0);
+            const ring = { possible: [], placementDistance: radius };
+
+            for (let i = 0; i < REPLACE_RING_ANGLES; i++) {
+                const angle = UTILS.toRad(i * (360 / REPLACE_RING_ANGLES));
+                const x = enemy.x2 + radius * Math.cos(angle);
+                const y = enemy.y2 + radius * Math.sin(angle);
+
+                if (!objectManager.checkItemLocation(x, y, item.scale, 0.6, id, false, enemy, objects)) continue;
+
+                ring.possible.push({ x: x, y: y, scale: item.scale, angle: angle });
+            }
+
+            return ring;
+        }
+
+        // ---------------------------------------------------------------------
+        // FINE AIM  —  AI Client 44's half-degree search, as a refinement
+        // ---------------------------------------------------------------------
+        // Falcon and YoRHa both choose from a fixed ring: 72 angles at 5deg, or
+        // 144 at 2.5deg. That grid is what makes grading every slot affordable,
+        // but it is also a floor on precision — the nearest grid angle to a hole
+        // can sit half a step away, and half a step out on the placement ring is
+        // real ground the enemy can still walk through.
+        //
+        // AI Client 44 walks outward from the hole's OWN angle at PI/360 — half
+        // a degree — in both directions at once, and takes the first slot that
+        // fits: the closest placeable angle to that hole there physically is.
+        // (Its own copy never ran. AutoReplace is never called anywhere in that
+        // file, and the customCheckItemLocation it depends on is not defined in
+        // it either. The idea is sound; the code never executed once.)
+        //
+        // Here it is a refinement rather than a replacement, and that ordering
+        // matters. The grid still decides WHICH slot to spend — that is what
+        // carries the grade, and the grade is what this replacer is good at.
+        // This only slides the chosen slot along the ring toward the hole it is
+        // answering, and never further than one grid step, so the geometry that
+        // earned the grade still holds. A slot that is already as near as half a
+        // degree is left exactly where it is.
+        const REPLACE_FINE_STEP = Math.PI / 360;        // AI Client 44's half-degree
+
+        function replaceFineAim(candidate, hole, objects) {
+            if (!hole || !isFinite(hole.x) || !isFinite(hole.y)) return candidate.angle;
+
+            // How far the grid could have been off in the first place. Anything
+            // beyond one step is a different slot, not a refinement of this one.
+            const coarse = (typeof window !== "undefined" && window.vars &&
+                            window.vars.placeAngles144 === false)
+                  ? (Math.PI * 2) / 72
+                  : (Math.PI * 2) / 144;
+
+            const toHole = Math.atan2(hole.y - myPlayer.y2, hole.x - myPlayer.x2);
+            const gridGap = UTILS.getAngleDist(candidate.angle, toHole);
+            if (gridGap <= REPLACE_FINE_STEP) return candidate.angle;
+
+            // Outward from the hole's own angle, nearest first. The first hit is
+            // by construction the closest fit to the hole; the two guards keep
+            // it inside the graded slot and make sure it actually improves on
+            // what the grid already had.
+            for (let off = 0; off <= coarse; off += REPLACE_FINE_STEP) {
+                const tries = off === 0 ? [toHole] : [toHole + off, toHole - off];
+
+                for (const angle of tries) {
+                    if (UTILS.getAngleDist(angle, candidate.angle) > coarse) continue;
+                    if (UTILS.getAngleDist(angle, toHole) >= gridGap) continue;
+                    if (!canPlace(candidate.id, angle, objects)) continue;
+
+                    return angle;
                 }
             }
 
-            return hit;
+            return candidate.angle;
         }
 
-        function forgeRoleStat(role) {
-            let s = forgeLedger.byRole[role];
-            if (!s) s = forgeLedger.byRole[role] = { emitted: 0, confirmed: 0, rejected: 0 };
-            return s;
-        }
-
-        function forgeNote(role, id, angle, spot, score) {
-            forgeLedger.emitted++;
-            forgeRoleStat(role).emitted++;
-            forgeLedger.pending.push({ role, id, tick, x: spot.x, y: spot.y, scale: spot.scale });
-
-            if (forgeLedger.log.length >= FORGE.logSize) forgeLedger.log.shift();
-            forgeLedger.log.push({ tick, role, id, angle: +angle.toFixed(3), score: Math.round(score) });
-        }
-
-        // Settle what is old enough to have an answer. Cheap: it only walks the
-        // pending list, and only compares against our own structures.
-        function forgeSettle() {
-            if (!forgeLedger.pending.length) return;
-
-            const mine = spikes_our.concat(traps_our);
-            const still = [];
-
-            for (const entry of forgeLedger.pending) {
-                const age = tick - entry.tick;
-
-                const landed = mine.some(object =>
-                    UTILS.getDistance(entry.x, entry.y, object.x, object.y) < entry.scale);
-
-                if (landed) {
-                    forgeLedger.confirmed++;
-                    forgeRoleStat(entry.role).confirmed++;
-                    continue;
-                }
-
-                if (age > FORGE.confirmWindow) {
-                    forgeLedger.rejected++;
-                    forgeRoleStat(entry.role).rejected++;
-                    continue;
-                }
-
-                still.push(entry);
-            }
-
-            forgeLedger.pending = still;
-        }
-
-        // ---------------------------------------------------------------------
-        // PHYSICS  —  where they will actually be
-        // ---------------------------------------------------------------------
-        // The game integrates movement as, per frame of `delta` ms:
-        //
-        //     vel += playerSpeed * mult * delta * cos(dir)     (while holding a key)
-        //     pos += vel * delta                               (then)
-        //     vel *= playerDecel ^ delta                       (then)
-        //
-        // A server tick is 1000/9 ms. Accel and decay both compound over it, so
-        // one tick's decay is playerDecel^111 — about 0.458, not 0.993. Holding
-        // a direction converges on a terminal step of
-        //
-        //     a*delta / (1 - decel^delta) * delta  ~=  36 units per tick
-        //
-        // which is what a player actually covers. That is the model below.
-        //
-        // What we observe is one tick of displacement: the client already stores
-        // `xVel = x2 * 2 - lastX`, so (xVel - x2) IS the last tick's step. From
-        // that we run two futures — they keep holding the key, or they let go —
-        // and the gap between the two is the honest error bar on the answer.
-        const FORGE_TICK_MS = 1000 / 9;
-
-        function forgeStep() {
-            // Per-tick decay, from the game's own constant.
-            return Math.pow(config.playerDecel, FORGE_TICK_MS);
-        }
-
-        function forgeAccel() {
-            // Per-tick velocity gain from a held key, in units/ms.
-            return config.playerSpeed * FORGE_TICK_MS;
-        }
-
-        // Simulate `ticks` ahead from a position and a last-tick step.
-        // hold=true keeps the key down along the step's own heading.
-        function forgeProject(x, y, stepX, stepY, ticks, hold) {
-            const D = forgeStep();
-            const A = forgeAccel();
-
-            let vx = stepX / FORGE_TICK_MS;      // units per ms
-            let vy = stepY / FORGE_TICK_MS;
-
-            const mag = Math.hypot(vx, vy);
-            const hx = mag > 1e-6 ? vx / mag : 0;
-            const hy = mag > 1e-6 ? vy / mag : 0;
-
-            let px = x, py = y;
-
-            for (let i = 0; i < ticks; i++) {
-                if (hold) { vx += A * hx; vy += A * hy; }
-                px += vx * FORGE_TICK_MS;
-                py += vy * FORGE_TICK_MS;
-                vx *= D;
-                vy *= D;
-            }
-
-            return { x: px, y: py };
-        }
-
-        // How steady a heading has been. 1 means they have held one line for the
-        // whole window; 0 means they are juking. This is what decides whether a
-        // precise spike is worth spending or whether a trap that covers an arc
-        // is the better buy — the single most useful number in a duel.
-        let forgeHeadings = new Map();
-
-        function forgeTrackHeading(player, stepX, stepY) {
-            const mag = Math.hypot(stepX, stepY);
-            if (mag < 1) return;                       // standing still tells us nothing
-
-            let list = forgeHeadings.get(player.sid);
-            if (!list) forgeHeadings.set(player.sid, list = []);
-
-            list.push(Math.atan2(stepY, stepX));
-            if (list.length > FORGE.headingWindow) list.shift();
-        }
-
-        function forgeSteadiness(player) {
-            const list = forgeHeadings.get(player.sid);
-            if (!list || list.length < 2) return 0.5;   // no opinion yet
-
-            // Mean resultant length of the heading samples: the standard way to
-            // measure how tightly a set of angles clusters, and correct across
-            // the 0/2pi seam where averaging the numbers is not.
-            let sx = 0, sy = 0;
-            for (const a of list) { sx += Math.cos(a); sy += Math.sin(a); }
-            return Math.hypot(sx, sy) / list.length;
-        }
-
-        // ---------------------------------------------------------------------
-        // SENSE  —  one world model per tick
-        // ---------------------------------------------------------------------
-        let forgeWorld = null;
-        let forgeWorldTick = -1;
-        let forgeWorldOwner = null;
-
-        function forgeSense() {
-            // Keyed on the context's player as well as the tick: ctxRun swaps the
-            // whole mod state, tick included, to run this code on a bot's world.
-            if (forgeWorldTick === tick && forgeWorldOwner === myPlayer) return forgeWorld;
-            forgeWorldTick = tick;
-            forgeWorldOwner = myPlayer;
-
-            const enemy = nearestEnemy;
-            if (!enemy) return (forgeWorld = null);
-
-            // Wire data. A position that is not a finite number cannot be
-            // reasoned about, and every distance downstream would come back NaN
-            // — which compares false against every threshold and would quietly
-            // let the whole engine run on nonsense.
-            if (!isFinite(enemy.x2) || !isFinite(enemy.y2) ||
-                !isFinite(myPlayer.x2) || !isFinite(myPlayer.y2)) return (forgeWorld = null);
-
-            const dist = UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2);
-            if (!(dist <= FORGE.engageRange)) return (forgeWorld = null);
-
-            // Their last observed step. xVel/yVel are next-tick positions here,
-            // so the difference from the current position is the step itself.
-            const stepX = (enemy.xVel || enemy.x2) - enemy.x2;
-            const stepY = (enemy.yVel || enemy.y2) - enemy.y2;
-            forgeTrackHeading(enemy, stepX, stepY);
-
-            const steady = forgeSteadiness(enemy);
-            const speed = Math.hypot(stepX, stepY);
-
-            // Two futures, and the honest error bar between them.
-            const held = forgeProject(enemy.x2, enemy.y2, stepX, stepY, FORGE.horizon, true);
-            const let_go = forgeProject(enemy.x2, enemy.y2, stepX, stepY, FORGE.horizon, false);
-            const spread = UTILS.getDistance(held.x, held.y, let_go.x, let_go.y);
-
-            // Confidence: steadiness is most of it, and a wide spread between the
-            // two futures pulls it down. A standing enemy is highly predictable
-            // even with no heading history at all.
-            let confidence = speed < 2 ? 0.9 : steady * (1 - Math.min(0.6, spread / 400));
-            confidence = Math.max(0, Math.min(1, confidence));
-
-            // Where to aim. Full trust follows the held future; no trust collapses
-            // onto where they already are, which is the only thing we know.
-            const aim = {
-                x: enemy.x2 + (held.x - enemy.x2) * confidence,
-                y: enemy.y2 + (held.y - enemy.y2) * confidence,
-            };
-
-            // One tick ahead is what a trap has to cover — it is placed now and
-            // lands on the next server frame.
-            const next = forgeProject(enemy.x2, enemy.y2, stepX, stepY, 1, true);
-
-            const heldBy = traps_our.find(trap =>
-                UTILS.getDistance(trap.x, trap.y, enemy.x2, enemy.y2) < trap.scale);
-
-            // What they can do to us right now.
-            const theirReach = getPlayerInfo(enemy, "primaryRange") + enemy.scale * 1.8;
-            const theirSwingUp = primaryReload[enemy.sid] >= 1;
-
-            return (forgeWorld = {
-                enemy, dist, speed, steady, confidence,
-                aim, next, held, spread,
-                heldBy,
-                weTrapped: !!nearestTrap,
-                takingSpikes: spikeDmgCount > 0,
-                inTheirReach: dist <= theirReach,
-                theirSwingUp,
-                spikeId: myPlayer.items[2],
-                trapId: myPlayer.items[4] || 15,
-            });
-        }
-
-        // ---------------------------------------------------------------------
-        // SUPPLY  —  one sweep per item, per tick
-        // ---------------------------------------------------------------------
-        // getPrePlaceAngles is the expensive call in this file. FORGE asks for
-        // each item exactly once a tick and every role reads the same answer.
-        let forgeSlotsTick = -1;
-        let forgeSlotsOwner = null;
-        let forgeSlotsCache = null;
-
-        function forgeSlots(id) {
-            if (forgeSlotsTick !== tick || forgeSlotsOwner !== myPlayer) {
-                forgeSlotsTick = tick;
-                forgeSlotsOwner = myPlayer;
-                forgeSlotsCache = new Map();
-            }
-
-            if (forgeSlotsCache.has(id)) return forgeSlotsCache.get(id);
-
-            const slots = (id == null || isItemLimit(id))
-                  ? []
-                  : getPrePlaceAngles(id, visibleObjects).filter(slot => slot.placeable);
-
-            forgeSlotsCache.set(id, slots);
-            return slots;
-        }
-
-        // How much of this item is left, as a fraction. Spending the last trap
-        // out of six should cost more than spending the fourth spike out of
-        // fifteen, and this is what tells the scorer that.
-        function forgeStock(id) {
-            const group = items.list[id] && items.list[id].group;
-            if (!group) return 1;
-
-            const limit = config.buildLimit(group);
-            if (!limit) return 1;
-
-            const used = myPlayer.itemCounts[group.id] || 0;
-            return Math.max(0, (limit - used) / limit);
-        }
-
-        // ---------------------------------------------------------------------
-        // SCORING  —  one scale for every role
-        // ---------------------------------------------------------------------
-        // Every candidate is scored as: what the role is worth, times how well
-        // this particular slot serves it, minus what it costs us. Because all
-        // roles land on the same scale, the arbiter can genuinely choose — an
-        // excellent wall-fill can outrank a mediocre seal, which the old
-        // first-branch-wins cascade could never express.
-
-        // Does a structure at `slot` touch a body of `scale` at (x, y)?
-        function forgeTouches(slot, x, y, scale) {
-            return UTILS.getDistance(slot.x, slot.y, x, y) < slot.scale + scale;
-        }
-
-        // Cost of standing in our own way. A slot behind us on our own line of
-        // retreat is worse than one anywhere else, because in a duel the ability
-        // to leave is half the fight.
-        function forgeSelfCost(slot, w) {
-            let cost = 0;
-
-            const myStep = Math.atan2(
-                (myPlayer.yVel || myPlayer.y2) - myPlayer.y2,
-                (myPlayer.xVel || myPlayer.x2) - myPlayer.x2);
-
-            const toSlot = Math.atan2(slot.y - myPlayer.y2, slot.x - myPlayer.x2);
-
-            // Directly along our own movement, and close enough to collide.
-            if (UTILS.getAngleDist(myStep, toSlot) < Math.PI / 4 &&
-                UTILS.getDistance(myPlayer.x2, myPlayer.y2, slot.x, slot.y) < slot.scale + myPlayer.scale + 20) {
-                cost += FORGE.pSelfBlock;
-            }
-
-            // Sitting on the line between us and them: our own swing has to get
-            // through it too.
-            if (UTILS.lineInRect(
-                slot.x - slot.scale, slot.y - slot.scale,
-                slot.x + slot.scale, slot.y + slot.scale,
-                myPlayer.x2, myPlayer.y2, w.enemy.x2, w.enemy.y2)) {
-                cost += FORGE.pSelfLos;
-            }
-
-            return cost;
-        }
-
-        // Fraction of the enemy's escape arc this slot removes. A body pinned
-        // against structures has fewer ways out, and each one taken is worth
-        // something even when nothing is caught this tick.
-        function forgeSeal(slot, w) {
-            const away = Math.atan2(w.enemy.y2 - myPlayer.y2, w.enemy.x2 - myPlayer.x2);
-            const toSlot = Math.atan2(slot.y - w.enemy.y2, slot.x - w.enemy.x2);
-
-            // Only lanes on the far side of them are escapes worth denying; the
-            // near side is where we already are.
-            const off = UTILS.getAngleDist(away, toSlot);
-            if (off > Math.PI / 2) return 0;
-
-            const reach = UTILS.getDistance(slot.x, slot.y, w.enemy.x2, w.enemy.y2);
-            if (reach > 120) return 0;
-
-            return (1 - off / (Math.PI / 2)) * (1 - reach / 120);
-        }
-
-        // Would a spike here throw them into something of ours that hurts?
-        function forgeKnock(slot, w) {
-            if (!spikes_our.length) return 0;
-
-            const push = Math.atan2(w.enemy.y2 - slot.y, w.enemy.x2 - slot.x);
-            const endX = w.enemy.x2 + Math.cos(push) * 200;
-            const endY = w.enemy.y2 + Math.sin(push) * 200;
-
-            let best = 0;
-            for (const spike of spikes_our) {
-                if (spike.x === slot.x && spike.y === slot.y) continue;
-
-                if (UTILS.lineInRect(
-                    spike.x - spike.scale, spike.y - spike.scale,
-                    spike.x + spike.scale, spike.y + spike.scale,
-                    w.enemy.x2, w.enemy.y2, endX, endY)) {
-
-                    // Nearer along the push line lands sooner and is worth more.
-                    const d = UTILS.getDistance(w.enemy.x2, w.enemy.y2, spike.x, spike.y);
-                    best = Math.max(best, 1 - Math.min(1, d / 200));
-                }
+        // Which hole is this candidate answering? The nearest one that actually
+        // belongs to us — a fill on the far side of the ring is not refined
+        // toward a hole it has nothing to do with.
+        function replaceNearestHole(candidate, holes) {
+            let best = null, bestDist = Infinity;
+
+            for (const hole of holes) {
+                if (!hole || !isFinite(hole.x) || !isFinite(hole.y)) continue;
+
+                const d = UTILS.getDistance(candidate.x, candidate.y, hole.x, hole.y);
+                if (d >= bestDist) continue;
+
+                best = hole;
+                bestDist = d;
             }
 
             return best;
         }
 
-        // ---------------------------------------------------------------------
-        // INTENTS  —  what the tick would like to do, scored
-        // ---------------------------------------------------------------------
-        function forgeIntents(w, broken) {
-            const out = [];
-            const spikes = forgeSlots(w.spikeId);
-            const traps = forgeSlots(w.trapId);
+        // Falcon's Je.find(): one candidate per placeable angle, for the spike
+        // and for the trap. YoRHa's sweep already runs the collision test and
+        // the item-limit test, and bannedAngles is YoRHa's answer to Falcon's
+        // "this angle was just used" — so the autoplacer and the replacer can
+        // never spend the same angle twice.
+        function replaceCandidates(objects) {
+            const found = { spikes: [], traps: [] };
 
-            const trust = w.confidence;
-            const distrust = (1 - trust) * FORGE.pLowTrust;
+            const sweep = function (id, bucket) {
+                if (id == null || !items.list[id] || isItemLimit(id)) return;
 
-            const push = (role, slot, quality, extra, targetSid) => {
-                if (quality <= 0) return;
+                const slots = getPrePlaceAngles(id, objects);
 
-                const weight = FORGE["w" + role.charAt(0) + role.slice(1).toLowerCase()];
-                const scarcity = (1 - forgeStock(slot.id)) * FORGE.pScarce;
+                // The same ban pass updateAngles() runs for the autoplacer: an
+                // angle spent last tick that STILL reads as free has not been
+                // answered by the server yet, so it is held back rather than
+                // spent twice. Running it here too is what keeps the replacer
+                // and the autoplacer on one book — including when the
+                // autoplacer is switched off and nothing else fills the map.
+                for (const placedAngle of placedAngles) {
+                    const match = slots.find(slot => Math.abs(slot.angle - placedAngle) < 0.01);
+                    if (match && match.placeable) bannedAngles.set(placedAngle, tick + 18);
+                }
 
-                const score = weight * quality
-                      - forgeSelfCost(slot, w)
-                      - scarcity
-                      - (extra || 0);
+                for (const slot of slots) {
+                    if (!slot.placeable) continue;
+                    if (bannedAngles.has(slot.angle)) continue;
 
-                if (score <= 0) return;
-                out.push({ role, id: slot.id, angle: slot.angle, slot, score, targetSid });
+                    found[bucket].push({
+                        id: id, angle: slot.angle, x: slot.x, y: slot.y, scale: slot.scale,
+                        trap: bucket === "traps",
+                        grade: 0,
+                        points: 0,          // Falcon tracks this and never sorts on it; kept for parity
+                        into: null, priority: false, canPush: false, reTrap: false,
+                        spikeTrap: false, spiketick: false, hitEnemy: null,
+                    });
+                }
             };
 
-            // --- RETRAP ------------------------------------------------------
-            // They are held and the hold is about to go: either the trap itself
-            // is on the break list, or it is one swing from dying. Nothing else
-            // in a duel is worth more than keeping a body still.
-            if (w.heldBy) {
-                // Three ways to know the hold is going: the book saw it coming
-                // (earliest), it is one swing from dead, or it is already on the
-                // break list (latest, and the one that used to be the only one).
-                const doomed = forgeDoom.get(w.heldBy.sid);
-                const dying = doomed ||
-                      w.heldBy.health <= getPlayerInfo(w.enemy, "primaryStructureDmg") ||
-                      broken.some(b => b && b.sid === w.heldBy.sid);
+            sweep(myPlayer.items[2], "spikes");
+            sweep(myPlayer.items[4] || 15, "traps");
 
-                if (dying) {
-                    for (const slot of traps) {
-                        if (!forgeTouches(slot, w.enemy.x2, w.enemy.y2, w.enemy.scale)) continue;
-                        push("RETRAP", slot, 1);
+            return found;
+        }
+
+        // Falcon's Ve.grade(), table for table — plus one thing Falcon throws
+        // away. `lost` says what actually broke, and that is the strongest hint
+        // on the table: a trap that was holding them wants a trap back, a spike
+        // that was cutting them off wants a spike back. Falcon rebuilds the ring
+        // without ever looking at the hole it is answering.
+        function replaceGrade(found, enemies, objects, lost) {
+            const ourDamagers = objects.filter(object => object && object.owner && object.dmg && isObjectOur(object));
+
+            for (const enemy of enemies) {
+                const ring = replaceEnemyRing(enemy, objects);
+                const enemyTrapped = traps_our.find(trap =>
+                                                    UTILS.getDistance(trap.x, trap.y, enemy.x2, enemy.y2) < trap.scale
+                                                   );
+                const trapCovered = !enemyTrapped || ourDamagers.some(object =>
+                                                                      UTILS.getDistance(enemyTrapped.x, enemyTrapped.y, object.x, object.y) <= 75 + object.scale
+                                                                     );
+
+                // ---- traps ------------------------------------------------
+                for (const candidate of found.traps) {
+                    if (candidate.grade < 0) continue;
+
+                    let free = true;
+                    for (const spot of ring.possible) {
+                        if (UTILS.getDistance(candidate.x, candidate.y, spot.x, spot.y) > candidate.scale + spot.scale) continue;
+
+                        candidate.priority = true;
+                        free = false;
+                        break;
                     }
+
+                    const dist = UTILS.getDistance(candidate.x, candidate.y, enemy.x2, enemy.y2);
+
+                    if (dist <= 235 && !enemyTrapped) candidate.grade++;
+                    if (dist <= 50) {
+                        candidate.reTrap = true;
+                        candidate.grade++;
+                        if (dist <= 20) candidate.grade++;
+                    }
+
+                    const pushers = ourDamagers.filter(object =>
+                                                       UTILS.getDistance(candidate.x, candidate.y, object.x, object.y) <= 75 + object.scale
+                                                      );
+                    if (pushers.length) {
+                        candidate.canPush = true;
+                        candidate.grade += pushers.length;
+                    }
+
+                    if (dist <= ring.placementDistance) candidate.grade += free ? 1 : 0.5;
+
+                    // A trap of ours died and they are loose: re-trapping is
+                    // the move the hole is asking for.
+                    if (lost.trap && !enemyTrapped && candidate.reTrap) candidate.grade++;
+                }
+
+                // ---- spikes -----------------------------------------------
+                for (const candidate of found.spikes) {
+                    // A slot vetoed for walling in our own walk stays vetoed:
+                    // that veto is about US, not about this enemy, so a later
+                    // enemy in the loop must not grade it back above zero the
+                    // way Falcon's does.
+                    if (candidate.grade < 0) continue;
+                    if (replaceWithinPath(candidate.x, candidate.y)) continue;
+
+                    let free = true;
+                    for (const spot of ring.possible) {
+                        if (UTILS.getDistance(candidate.x, candidate.y, spot.x, spot.y) > candidate.scale + spot.scale) continue;
+
+                        candidate.priority = true;
+                        free = false;
+                        break;
+                    }
+
+                    const dist = UTILS.getDistance(candidate.x, candidate.y, enemy.x2, enemy.y2);
+
+                    if (dist <= 35 + candidate.scale) {
+                        candidate.hitEnemy = enemy;
+
+                        if (!enemyTrapped) {
+                            const knock = replaceKnockInto(candidate, enemy);
+                            if (knock.building) {
+                                candidate.into = knock;
+                                candidate.grade += knock.building.trap ? 2.5 : knock.bounce ? 5 : 3;
+                            }
+
+                            // Falcon swaps weapons here. YoRHa's own spike tick
+                            // owns that, so this only records that the slot is
+                            // a tick slot.
+                            if (window.vars.shameTick && canTrapTick()) {
+                                candidate.spiketick = true;
+                                candidate.points++;
+                            }
+                        } else {
+                            candidate.points += 2;
+                            candidate.spikeTrap = true;
+                            candidate.canPush = true;
+                        }
+                    }
+
+                    if (!candidate.into && replaceBlocksMyMove(candidate, enemyTrapped)) {
+                        candidate.grade = -1;
+                        continue;
+                    }
+
+                    if (!trapCovered && UTILS.getDistance(candidate.x, candidate.y, enemyTrapped.x, enemyTrapped.y) <= 75 + candidate.scale) {
+                        candidate.grade++;
+                        candidate.canPush = true;
+                    }
+
+                    if (enemyTrapped && dist <= 250 &&
+                        UTILS.getAngleDist(candidate.angle, Math.atan2(myPlayer.y2 - enemy.y2, myPlayer.x2 - enemy.x2)) >= 1.5) {
+                        candidate.points += 2;
+                    }
+
+                    if (free && dist <= ring.placementDistance) candidate.grade++;
+
+                    // A spike of ours died: put the damage back where it was
+                    // doing work, on a slot that still reaches them.
+                    if (lost.spike && candidate.hitEnemy) candidate.grade++;
                 }
             }
 
-            // --- TICK --------------------------------------------------------
-            // A held body inside spike reach. Certain, so trust does not enter.
-            if (w.heldBy) {
-                for (const slot of spikes) {
-                    const d = UTILS.getDistance(slot.x, slot.y, w.enemy.x2, w.enemy.y2);
-                    if (d > slot.scale + FORGE.tickReach) continue;
+            // Falcon sorts on grade alone and leaves ties to sweep order. Its
+            // `points` field is never initialised on a candidate — so every
+            // `points +=` in the table above lands on undefined — and never
+            // read, which makes the two things it scores (a spike beside a
+            // trapped enemy, a spike on their far side) count for nothing.
+            // Here it is initialised and spent as the tiebreak it was plainly
+            // meant to be: it cannot reorder anything Falcon ordered by grade,
+            // it only settles the ties Falcon settled by accident.
+            const byGrade = (a, b) => (b.grade - a.grade) || (b.points - a.points);
+            found.traps = found.traps.filter(candidate => candidate.grade >= 0).sort(byGrade);
+            found.spikes = found.spikes.filter(candidate => candidate.grade >= 0).sort(byGrade);
+            found.bestTrap = found.traps[0] || null;
+            found.bestSpike = found.spikes[0] || null;
 
-                    // A spike that would knock them TOWARDS us undoes the hold.
-                    const kb = Math.atan2(w.enemy.y2 - slot.y, w.enemy.x2 - slot.x);
-                    const toMe = Math.atan2(myPlayer.y2 - w.enemy.y2, myPlayer.x2 - w.enemy.x2);
-                    if (UTILS.getAngleDist(kb, toMe) < Math.PI / 5) continue;
-
-                    push("TICK", slot, 1 - d / (slot.scale + FORGE.tickReach));
-                }
-            }
-
-            // --- TRAP --------------------------------------------------------
-            // Land a hold where they are going. This is the one role that lives
-            // or dies on the prediction, so it pays the distrust penalty.
-            if (!w.heldBy && trust >= FORGE.minConfidence) {
-                for (const slot of traps) {
-                    const dNow = UTILS.getDistance(slot.x, slot.y, w.enemy.x2, w.enemy.y2);
-                    const dNext = UTILS.getDistance(slot.x, slot.y, w.next.x, w.next.y);
-                    const dAim = UTILS.getDistance(slot.x, slot.y, w.aim.x, w.aim.y);
-
-                    const best = Math.min(dNow, dNext, dAim);
-                    if (best > slot.scale + FORGE.trapReach) continue;
-
-                    push("TRAP", slot,
-                         (1 - best / (slot.scale + FORGE.trapReach)) * trust,
-                         distrust * 0.5);
-                }
-            }
-
-            // --- MEND --------------------------------------------------------
-            // A hole in our own ring, already open. The value is in closing the
-            // gap nearest the threat, not in rebuilding where the object stood.
-            for (const hole of broken) {
-                if (!hole || !hole.ours) continue;
-                if (!isFinite(hole.x) || !isFinite(hole.y)) continue;
-
-                const pool = hole.trap ? traps : spikes;
-                for (const slot of pool) {
-                    const d = UTILS.getDistance(slot.x, slot.y, hole.x, hole.y);
-                    if (d > 120) continue;
-
-                    push("MEND", slot, 1 - d / 120);
-                }
-            }
-
-            // --- AHEAD -------------------------------------------------------
-            // A hole that has not opened yet, from the doom book rather than
-            // from a single tick's snapshot. Quality is how near the slot is to
-            // the hole, scaled by how sure the book is that the hole is coming —
-            // so a first sighting still buys a fill, and a wall that has read
-            // doomed three ticks running buys a better one.
-            for (const entry of forgeDoom.values()) {
-                if (!forgeDoomOpen(entry)) continue;
-                if (UTILS.getDistance(w.enemy.x2, w.enemy.y2, entry.x, entry.y) > 90) continue;
-
-                const trustDoom = forgeDoomTrust(entry);
-                const pool = entry.trap ? traps : spikes;
-
-                for (const slot of pool) {
-                    const d = UTILS.getDistance(slot.x, slot.y, entry.x, entry.y);
-                    if (d > FORGE.doomReach) continue;
-
-                    // The sid rides along so the tick that sees this object
-                    // actually die can tell it was one we placed ahead of, and
-                    // so the book can mark it answered.
-                    push("AHEAD", slot, (1 - d / FORGE.doomReach) * trustDoom, 0, entry.sid);
-                }
-            }
-
-            // --- KNOCK -------------------------------------------------------
-            if (!w.heldBy) {
-                for (const slot of spikes) {
-                    if (!forgeTouches(slot, w.enemy.x2, w.enemy.y2, w.enemy.scale + 8)) continue;
-
-                    const q = forgeKnock(slot, w);
-                    if (q <= 0) continue;
-
-                    push("KNOCK", slot, q);
-                }
-            }
-
-            // --- SEAL --------------------------------------------------------
-            // Only worth buying when we can afford to, and never with the last
-            // of a stock — the scarcity penalty handles that on its own.
-            for (const slot of spikes.concat(traps)) {
-                const q = forgeSeal(slot, w);
-                if (q <= 0) continue;
-
-                push("SEAL", slot, q * trust, distrust);
-            }
-
-            return out;
+            return found;
         }
 
-        // ---------------------------------------------------------------------
-        // DOOM  —  seeing a break coming, not reacting to it
-        // ---------------------------------------------------------------------
-        // The engine used to fill a hole when killObject told it one had opened.
-        // Against a fast player that is already too late: the break event
-        // arrives, the tick is spent queuing a fill, and it lands a tick after
-        // they were standing in the gap.
-        //
-        // So the question is asked earlier, and asked repeatedly. Every tick,
-        // two independent readings say which buildings are about to die:
-        //
-        //   THE LOADED SWING  — the old preplacer's read, kept. The nearest
-        //     enemy's primary (or great hammer) has just come off cooldown, a
-        //     building of ours is inside its reach, and that building has less
-        //     health than the swing does damage. This one fires the moment their
-        //     reload completes, which is the earliest the information exists.
-        //
-        //   THE DAMAGE MAP    — every visible player's loaded damage summed per
-        //     building. This one sees what a single-enemy read cannot: a wall
-        //     two people are splitting for less than a one-shot each.
-        //
-        // A building either reading names goes in the book with a sighting
-        // count. Fills start at the first sighting and get more confident with
-        // each one — `doomConfirm` sightings is full trust — so a wall that
-        // reads doomed once from a glancing angle is not treated the same as one
-        // that has read doomed three ticks running.
-        //
-        // The book is also what makes a fill survive not landing. A queued
-        // placement can be refused, lost to the packet ceiling, or beaten to the
-        // ground; while a building is still doomed and its fill is still
-        // unanswered, the entry re-fires every `doomRetry` ticks instead of
-        // being forgotten after one attempt.
-        let forgeDoom = new Map();
+        // Falcon's Placer.autoreplace(), driven by the objects that died since
+        // the last tick (killObject fills replaceQueue with their measurements
+        // while they still exist).
+        function doReplace(broken) {
+            if (!window.vars.replace) return;
+            if (!myPlayer || !nearestEnemy) return;
+            if (gPressed) return;                       // Falcon's autoGrind gate
 
-        function forgeDoomScan(w) {
-            const seenNow = new Set();
-
-            const mark = (object, source) => {
-                if (!object || object.sid == null) return;
-                if (!isFinite(object.x) || !isFinite(object.y)) return;
-
-                seenNow.add(object.sid);
-
-                let entry = forgeDoom.get(object.sid);
-                if (!entry) {
-                    entry = { sid: object.sid, seen: 0, since: tick, placedAt: -99, sources: 0 };
-                    forgeDoom.set(object.sid, entry);
-                }
-
-                entry.seen++;
-                entry.lastSeen = tick;
-                entry.x = object.x;
-                entry.y = object.y;
-                entry.scale = object.scale;
-                entry.trap = !!object.trap;
-                entry.object = object;
-                entry.sources |= source;
-            };
-
-            // --- reading one: the enemy's loaded swing -----------------------
-            const enemy = w.enemy;
-            let swing = null;
-
-            if (enemy.weapons) {
-                const secondary = enemy.weapons[1];
-                const primary = enemy.weapons[0];
-
-                if (secondary === 10 && secondaryReload[enemy.sid] >= 1 &&
-                    (enemy.lastSecondaryReload || 0) < secondaryReload[enemy.sid]) {
-                    swing = secondary;
-                } else if (primary != null && items.weapons[primary] &&
-                           items.weapons[primary].speed <= 400 &&
-                           primaryReload[enemy.sid] >= 1 &&
-                           (enemy.lastPrimaryReload || 0) < primaryReload[enemy.sid]) {
-                    swing = primary;
-                }
-            }
-
-            if (swing != null) {
-                const spec = items.weapons[swing];
-                const variantIndex = (enemy.weaponVariants && enemy.weaponVariants[swing] != null)
-                      ? enemy.weaponVariants[swing] : 0;
-                const variant = config.weaponVariants[variantIndex];
-
-                // Tank gear is assumed on an enemy: over-reading their damage
-                // costs a building, under-reading it costs the wall.
-                const dmg = spec.dmg * (spec.sDmg || 1) * ((variant && variant.val) || 1) * 3.3;
-
-                for (const object of visibleObjects) {
-                    if (!object || object.hideFromEnemy) continue;
-                    if (!(object.health > 0) || object.health > dmg) continue;
-                    if (UTILS.getDistance(enemy.x2, enemy.y2, object.x, object.y) > object.scale + spec.range) continue;
-
-                    mark(object, 1);
-                }
-            }
-
-            // --- reading two: everything loaded, from everyone ----------------
-            for (const [object, damage] of forgeDamageMap(w)) {
-                if (damage >= object.health) mark(object, 2);
-            }
-
-            // --- age the book out --------------------------------------------
-            for (const [sid, entry] of forgeDoom) {
-                if (seenNow.has(sid)) continue;
-                if (tick - (entry.lastSeen || entry.since) > FORGE.doomForget) forgeDoom.delete(sid);
-            }
-
-            return forgeDoom;
-        }
-
-        // Is this doomed building still worth a fill this tick? Either it has not
-        // been answered yet, or the answer never arrived and enough ticks have
-        // passed to try again.
-        function forgeDoomOpen(entry) {
-            if (entry.placedAt < 0) return true;
-            return (tick - entry.placedAt) >= FORGE.doomRetry;
-        }
-
-        // How much to trust a sighting. One reading is a guess worth acting on;
-        // `doomConfirm` of them, or both readings agreeing at once, is as sure
-        // as this engine gets.
-        function forgeDoomTrust(entry) {
-            const bySeen = Math.min(1, entry.seen / FORGE.doomConfirm);
-            const bothAgree = (entry.sources & 1) && (entry.sources & 2) ? 1 : 0;
-            return Math.max(bySeen, bothAgree);
-        }
-
-        // Predicted damage already loaded against each building near us, summed
-        // across every visible player. One wall two enemies are splitting is
-        // dying even though neither of them can one-shot it.
-        function forgeDamageMap(w) {
-            const map = new Map();
-
-            const near = visibleObjects.filter(object =>
-                object && object.active !== false && object.health > 0 &&
-                UTILS.getDistance(myPlayer.x2, myPlayer.y2, object.x, object.y) <= myPlayer.scale + object.scale * 2);
-
-            if (!near.length) return map;
-
-            for (const player of players) {
-                if (!player || !player.visible) continue;
-                if (player.weaponIndex == null) continue;
-
-                // Only the primary, and the great hammer, do real damage to a
-                // wall; everything else contributes nothing.
-                let weapon = null;
-                if (player.weaponIndex === 10 && secondaryReload[player.sid] >= 1) weapon = 10;
-                else if (player.weaponIndex < 9 && primaryReload[player.sid] >= 1) weapon = player.weaponIndex;
-                if (weapon == null) continue;
-
-                const spec = items.weapons[weapon];
-                if (!spec) continue;
-
-                const variantIndex = (player.weaponVariants && player.weaponVariants[weapon] != null)
-                      ? player.weaponVariants[weapon]
-                      : (player.weaponVariant || 0);
-                const variant = config.weaponVariants[variantIndex];
-
-                const dmg = spec.dmg * (spec.sDmg || 1) *
-                      (player.skinIndex === 40 ? 3.3 : 1) * ((variant && variant.val) || 1);
-                if (dmg <= 0) continue;
-
-                const px = player.x2 != null ? player.x2 : player.x;
-                const py = player.y2 != null ? player.y2 : player.y;
-
-                for (const object of near) {
-                    if (UTILS.getDistance(px, py, object.x, object.y) > object.scale + spec.range) continue;
-                    map.set(object, (map.get(object) || 0) + dmg);
-                }
-            }
-
-            return map;
-        }
-
-        // ---------------------------------------------------------------------
-        // SPEND  —  one budget, priority first, best-score within
-        // ---------------------------------------------------------------------
-        // The three menu sliders, read fresh each tick so a change takes effect
-        // without a reload. Everything else in FORGE is a constant on purpose:
-        // these are the three a player has a reason to move.
-        function forgeSync() {
-            const v = window.vars;
-            if (typeof v.forgeRange === "number") FORGE.engageRange = v.forgeRange;
-            if (typeof v.forgePerTick === "number") FORGE.perTick = v.forgePerTick;
-            if (typeof v.forgeReserve === "number") FORGE.reserve = v.forgeReserve;
-        }
-
-        function forgeRoom() {
-            // What is left of this second, in whole placements, after the
-            // reserve that heal and insta live in.
-            const free = FORGE.packetCap - FORGE.reserve - packets;
-            return Math.max(0, Math.floor(free / FORGE.packetsPerPlace));
-        }
-
-        function forgeCommit(intents) {
-            let room = Math.min(FORGE.perTick, forgeRoom());
-            if (room <= 0) return 0;
-
-            const spentByRole = {};
-            let spent = 0;
-
-            // Best score first, across every role at once. The per-role caps are
-            // what stop one role eating the tick; the weights are what decide
-            // which role deserves the packet.
+            // Ae86 and blisma both ask their checkSpikeTick() before placing
+            // anything: while the enemy is mid spike-sync on you, the tick
+            // belongs to getting out, not to building, and a structure queued
+            // through it is a packet spent on the wrong problem. Falcon never
+            // asked, so neither did this.
             //
-            // addPredictObject is the marker check: a slot the autoplacer or an
-            // earlier intent already holds comes back false, and the next
-            // candidate — whatever role it belongs to — gets the chance instead.
-            const queue = intents.slice().sort((a, b) => b.score - a.score);
+            // The reading is YoRHa's own, not an import — the preplacer already
+            // gates on exactly this pair, and it is the same question.
+            if (nearestTrap && spikeDmgCount > 0) return;
 
-            for (const intent of queue) {
-                if (room <= 0) break;
+            const range = window.vars.replaceRange || 300;
+            if (UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2) > range) return;
 
-                const cap = FORGE.perRole[intent.role] || 1;
-                if ((spentByRole[intent.role] || 0) >= cap) continue;
-                if (isItemLimit(intent.id)) continue;
+            // The break list is built by killObject from objects that were real
+            // a moment ago, so an entry with no position should not happen — but
+            // this runs inside the tick body, where "should not happen" throwing
+            // takes the rest of the tick with it.
+            const dead = broken.filter(object =>
+                object && isFinite(object.x) && isFinite(object.y) &&
+                UTILS.getDistance(myPlayer.x2, myPlayer.y2, object.x, object.y) <= range);
+            if (!dead.length) return;
 
-                if (!addPredictObject(intent.id, intent.angle, FORGE_DEFERRED.has(intent.role))) continue;
+            // Replace answers a hole in YOUR wall. An enemy building coming
+            // down is not that — it frees ground, which is the autoplacer's and
+            // the preplacer's business, not a reason to spend your whole ring.
+            // Falcon reacts to any break at all; killObject already records who
+            // owned each one, so this can tell the difference.
+            const ourDead = dead.filter(object => object.ours);
+            if (!ourDead.length) return;
 
-                spentByRole[intent.role] = (spentByRole[intent.role] || 0) + 1;
-                room--;
-                spent++;
+            const lost = {
+                trap: ourDead.some(object => object.trap),
+                spike: ourDead.some(object => object.dmg && !object.trap),
+            };
 
-                forgeNote(intent.role, intent.id, intent.angle, intent.slot, intent.score);
-                if (intent.targetSid != null) {
-                    forgeAhead.set(intent.targetSid, tick);
+            const enemies = enemiesNear.filter(enemy => UTILS.getDistance(myPlayer.x2, myPlayer.y2, enemy.x2, enemy.y2) <= range);
+            if (!enemies.length) return;
 
-                    // Mark the book: this one has been answered. It will not be
-                    // asked again until doomRetry ticks have passed without the
-                    // fill showing up, which is what makes a lost placement
-                    // recoverable instead of forgotten.
-                    const entry = forgeDoom.get(intent.targetSid);
-                    if (entry) entry.placedAt = tick;
-                }
+            // The ground the dead objects stood on is free now, even when this
+            // tick's visibleObjects was built before they died.
+            const gone = new Set(dead.map(object => object.sid));
+            const objects = visibleObjects.filter(object => object && object.active !== false && !gone.has(object.sid));
+
+            const found = replaceGrade(replaceCandidates(objects), enemies, objects, lost);
+            if (!found.traps.length && !found.spikes.length) return;
+
+            // ---- one spend path, so the cap and the fine aim cannot be
+            // ---- forgotten at one of the three places that place things.
+            //
+            // blisma keeps a `replacedObjs` tally and adds it to its cap check
+            // before spending another building, which is answering a real hole:
+            // itemCounts is written ONLY by the server's "S" packet, so every
+            // placement queued inside the current tick is invisible to
+            // isItemLimit(). Queue three traps with one slot left under the cap
+            // of six and the server refuses two — with their packets already
+            // spent, and the hole they were meant for still open.
+            //
+            // Kept replace-local, exactly as blisma keeps it. What the
+            // autoplacer spends is not this function's business.
+            const spentByGroup = new Map();
+
+            const capLeft = function (id) {
+                const item = items.list[id];
+                const group = item && item.group;
+                if (!group) return true;
+
+                const limit = config.buildLimit(group);
+                if (!limit) return true;
+
+                const confirmed = myPlayer.itemCounts[group.id] || 0;
+                const inFlight = spentByGroup.get(group.id) || 0;
+                return confirmed + inFlight < limit;
+            };
+
+            const spend = function (candidate) {
+                if (!candidate) return false;
+                if (!capLeft(candidate.id)) return false;
+
+                const angle = replaceFineAim(candidate, replaceNearestHole(candidate, ourDead), objects);
+                if (!addPredictObject(candidate.id, angle, false)) return false;
+
+                const group = items.list[candidate.id] && items.list[candidate.id].group;
+                if (group) spentByGroup.set(group.id, (spentByGroup.get(group.id) || 0) + 1);
+
+                return true;
+            };
+
+            const bestSpike = found.bestSpike;
+            const bestTrap = found.bestTrap;
+
+            // Falcon: the best spike goes down unless the best trap is a re-trap
+            // that already has a pusher beside it and the spike was only ever
+            // worth its knock-in.
+            if (bestSpike && bestSpike.grade > 0 &&
+                !(bestTrap && bestTrap.canPush && bestTrap.reTrap && bestSpike.into)) {
+                spend(bestSpike);
             }
 
-            return spent;
+            // Falcon: and the best trap, unless the spike is sitting on top of
+            // it and on our own walk. canPush and a re-trap override that.
+            if (bestTrap && (
+                (bestTrap.grade > 0 && !(bestSpike && bestSpike.grade > 0 &&
+                                         UTILS.getDistance(bestSpike.x, bestSpike.y, bestTrap.x, bestTrap.y) <= 50 + bestSpike.scale &&
+                                         replaceWithinPath(bestSpike.x, bestSpike.y))) ||
+                bestTrap.canPush ||
+                (bestTrap.reTrap && !(bestSpike && bestSpike.into))
+            )) {
+                spend(bestTrap);
+            }
+
+            // Falcon: then close the rest of the ring — traps first on a tie —
+            // with up to four more slots. addPredictObject is the marker check:
+            // it refuses anything overlapping what this tick already holds,
+            // which covers the two above, the ones taken here, and whatever the
+            // preplacer put down first.
+            const spread = found.traps.concat(found.spikes).sort((a, b) =>
+                                                                 b.grade === a.grade && a.trap !== b.trap ? (a.trap ? -1 : 1) : b.grade - a.grade
+                                                                );
+
+            // Falcon spends all four on whatever is left, graded or not, and a
+            // grade of zero means the slot earned nothing from any enemy on the
+            // table. Four of those is four buildings out of a stock the caps
+            // keep small — six traps, fifteen spikes. The best spike and the
+            // best trap above already refuse to go down at zero; the fills hold
+            // to the same bar. The list is sorted by grade, so the first
+            // candidate at or below zero ends it.
+            let filled = 0;
+            for (const candidate of spread) {
+                if (filled >= REPLACE_FILL_LIMIT) break;
+                if (candidate.grade <= 0) break;
+                if (!spend(candidate)) continue;
+
+                filled++;
+            }
         }
-
-        // ---------------------------------------------------------------------
-        // THE TICK
-        // ---------------------------------------------------------------------
-        function forgeTick(broken) {
-            forgeSettle();
-
-            if (!window.vars.forge) return;
-            if (!myPlayer || !myPlayer.alive) return;
-
-            forgeSync();
-            if (gPressed) return;                       // the grind gate, as before
-
-            const w = forgeSense();
-            if (!w) return;
-
-            // Being spiked while held is the one state where placing is wrong:
-            // every packet belongs to getting out, not to building.
-            if (w.weTrapped && w.takingSpikes) return;
-
-            // Look for breaks coming before deciding anything. This is what
-            // lets a fill be queued a tick or more before the hole opens rather
-            // than a tick after.
-            forgeDoomScan(w);
-
-            const intents = forgeIntents(w, broken || []);
-            if (!intents.length) return;
-
-            const spent = forgeCommit(intents);
-
-            // The late resend lane exists for exactly this: a placement aimed at
-            // a break that has not landed yet. Raise it only when something was
-            // actually queued.
-            if (spent > 0) spamPrePlacer = true;
-        }
-
-        // Inspection surface. Everything the engine believes and everything it
-        // has done, without a debugger.
-        try {
-            window.FORGE_STATS = function () {
-                const w = forgeWorld;
-                return {
-                    tuning: FORGE,
-                    ledger: {
-                        emitted: forgeLedger.emitted,
-                        confirmed: forgeLedger.confirmed,
-                        rejected: forgeLedger.rejected,
-                        pending: forgeLedger.pending.length,
-                        accuracy: forgeLedger.emitted
-                            ? +(forgeLedger.confirmed / forgeLedger.emitted).toFixed(3) : null,
-                        byRole: forgeLedger.byRole,
-                    },
-                    world: w && {
-                        dist: Math.round(w.dist),
-                        speed: +w.speed.toFixed(1),
-                        steady: +w.steady.toFixed(2),
-                        confidence: +w.confidence.toFixed(2),
-                        spread: Math.round(w.spread),
-                        held: !!w.heldBy,
-                        inTheirReach: w.inTheirReach,
-                    },
-                    recent: forgeLedger.log.slice(-12),
-                };
-            };
-        } catch (e) {}
-
 
         function getPredictObjects() {
             // FIX STACK PACKETS
-            // A structure we placed ahead of a break has to reopen the place
-            // tick when that break actually lands, or the queued placement sits
-            // on the budget of the tick it was queued in. FORGE's ledger already
-            // knows every spot it is waiting on, so the question is asked of
-            // that instead of a single remembered object.
             if (removedObjects.length > 0) {
-                if (forgeAwaiting(removedObjects)) {
+                if (lastPrePlaceObject && removedObjects.some((sid) => lastPrePlaceObject.sid == sid)) {
                     for (const object of predictObjects) {
                         if (!object.preplace) continue;
 
@@ -16224,20 +15967,195 @@ for (let tree of trees) {
 
             predictObjects = [];
 
-            // FORGE  —  preplace and replace, as one engine.
-            //
-            // Runs here, ahead of the autoplacer, for the same reason the two
-            // lanes it replaces ran here: the angles it takes land in
-            // placedAngles in this tick's send loop, which is what
-            // updateAngles() bans on the next one. It emits only through
-            // addPredictObject(), so a slot the autoplacer holds is refused and
-            // FORGE moves to its next candidate rather than fighting for it.
+            // PRE PLACER
+            lastPrePlaceObject = null;
             spamPrePlacer = false;
 
-            const forgeBroken = replaceQueue;
-            replaceQueue = [];
-            forgeTick(forgeBroken);
+            if (window.vars.prePlace && nearestEnemy && UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2) < 300 && !(nearestTrap && spikeDmgCount > 0)) {
+                let findObject = getPrePlaceObject();
+                smartTickSpike = null;
 
+                let customObjects = [];
+                for (let object of visibleObjects) {
+                    customObjects.push(object);
+                }
+
+                if (findObject) {
+                    customObjects.splice(customObjects.indexOf(findObject), 1);
+
+                    let findAngle;
+
+                    const spikeAngles = getPrePlaceAngles(myPlayer.items[2], customObjects);
+                    const trapAngles = getPrePlaceAngles(myPlayer.items[4] || 15, customObjects);
+
+                    const placeableSpikeAngles = spikeAngles.filter(obj => obj.placeable);
+                    const placeableTrapAngles = trapAngles.filter(obj => obj.placeable);
+
+                    // Find closest spike that will hit enemy
+                    const closestSpikeToEnemy = placeableSpikeAngles
+                    .filter(a => {
+                        return UTILS.lineInRect(
+                            a.x - (nearestEnemy.scale + a.scale - 1),
+                            a.y - (nearestEnemy.scale + a.scale - 1),
+                            a.x + (nearestEnemy.scale + a.scale - 1),
+                            a.y + (nearestEnemy.scale + a.scale - 1),
+                            nearestEnemy.x2, nearestEnemy.y2,
+                            nearestEnemy.xVel, nearestEnemy.yVel
+                        );
+                    })
+                    .sort((a, b) =>
+                          UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, a.x, a.y) -
+                          UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, b.x, b.y)
+                         )[0];
+
+                    // Find closest trap that will hit enemy
+                    const closestTrapToEnemy = placeableTrapAngles
+                    .filter(a => {
+                        return UTILS.lineInRect(
+                            a.x - a.scale,
+                            a.y - a.scale,
+                            a.x + a.scale,
+                            a.y + a.scale,
+                            nearestEnemy.x2, nearestEnemy.y2,
+                            nearestEnemy.xVel, nearestEnemy.yVel
+                        );
+                    })
+                    .sort((a, b) =>
+                          UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, a.x, a.y) -
+                          UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, b.x, b.y)
+                         )[0];
+
+                    // Find closest spike that will knockback enemy into other spikes with best alignment
+                    const closestSpikeToKb = (() => {
+                        const validAngles = placeableSpikeAngles
+                        .filter(a => {
+                            const canHitEnemy = UTILS.lineInRect(
+                                a.x - (nearestEnemy.scale + a.scale - 2),
+                                a.y - (nearestEnemy.scale + a.scale - 2),
+                                a.x + (nearestEnemy.scale + a.scale - 2),
+                                a.y + (nearestEnemy.scale + a.scale - 2),
+                                nearestEnemy.x2, nearestEnemy.y2,
+                                nearestEnemy.xVel, nearestEnemy.yVel
+                            );
+
+                            if (!canHitEnemy) return false;
+
+                            // Check if knockback will push enemy into our spikes
+                            const knockbackAngle = Math.atan2(nearestEnemy.yVel - a.y, nearestEnemy.xVel - a.x);
+                            const projectedX = nearestEnemy.xVel + 200 * Math.cos(knockbackAngle);
+                            const projectedY = nearestEnemy.yVel + 200 * Math.sin(knockbackAngle);
+
+                            for (let spike of spikes_our) {
+                                if (UTILS.lineInRect(
+                                    spike.x - spike.scale, spike.y - spike.scale,
+                                    spike.x + spike.scale, spike.y + spike.scale,
+                                    nearestEnemy.xVel, nearestEnemy.yVel,
+                                    projectedX, projectedY
+                                )) {
+                                    return true;
+                                }
+                            }
+                            return false;
+                        })
+                        .map(a => {
+                            // Calculate alignment score
+                            const knockbackAngle = Math.atan2(nearestEnemy.yVel - a.y, nearestEnemy.xVel - a.x);
+                            const projectedX = nearestEnemy.xVel + 200 * Math.cos(knockbackAngle);
+                            const projectedY = nearestEnemy.yVel + 200 * Math.sin(knockbackAngle);
+
+                            let bestAlignment = Infinity;
+
+                            for (let spike of spikes_our) {
+                                if (UTILS.lineInRect(
+                                    spike.x - spike.scale, spike.y - spike.scale,
+                                    spike.x + spike.scale, spike.y + spike.scale,
+                                    nearestEnemy.xVel, nearestEnemy.yVel,
+                                    projectedX, projectedY
+                                )) {
+                                    smartTickSpike = spike;
+                                    const angleToEnemy = Math.atan2(nearestEnemy.yVel - a.y, nearestEnemy.xVel - a.x);
+                                    const enemyToSpike = Math.atan2(spike.y - nearestEnemy.yVel, spike.x - nearestEnemy.xVel);
+
+                                    let angleDiff = Math.abs(angleToEnemy - enemyToSpike);
+                                    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+
+                                    bestAlignment = Math.min(bestAlignment, angleDiff);
+                                }
+                            }
+
+                            return { angle: a, alignment: bestAlignment };
+                        });
+
+                        if (validAngles.length === 0) return undefined;
+
+                        // Find the best alignment score
+                        const bestAlignmentScore = Math.min(...validAngles.map(v => v.alignment));
+
+                        // Filter to only angles with the best alignment, then pick closest to enemy
+                        return validAngles
+                            .filter(v => v.alignment === bestAlignmentScore)
+                            .sort((a, b) =>
+                                  UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, a.angle.x, a.angle.y) -
+                                  UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, b.angle.x, b.angle.y)
+                                 )[0]?.angle;
+                    })();
+
+                    const getFindAngle = function (findAngleFunc) {
+                        if (findAngle) return;
+
+                        findAngleFunc();
+                        if (findAngle) {
+                            addPredictObject(findAngle.id, findAngle.angle, true);
+                        }
+                    }
+
+                    getFindAngle(function () {
+                        const object = spikeAngles
+                        .filter(obj => obj.placeable)
+                        .filter(obj => isPrePlaceAngle(obj, findObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb))
+                        .sort((a, b) => UTILS.getDistance(findObject.x, findObject.y, a.x, a.y) - UTILS.getDistance(findObject.x, findObject.y, b.x, b.y))[0];
+
+                        if (object) {
+                            findAngle = object;
+                        }
+                    });
+
+                    getFindAngle(function () {
+                        const object = trapAngles
+                        .filter(obj => obj.placeable)
+                        .filter(obj => isPrePlaceAngle(obj, findObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb))
+                        .sort((a, b) => UTILS.getDistance(findObject.x, findObject.y, a.x, a.y) - UTILS.getDistance(findObject.x, findObject.y, b.x, b.y))[0];
+
+                        if (object) {
+                            findAngle = object;
+                        }
+                    });
+                    for (let i in predictObjects) {
+                        if (!predictObjects[i].preplace) continue;
+
+                        lastPrePlaceObject = findObject;
+                        break;
+                    }
+                }
+            }
+
+            // REPLACE
+            // Runs between the preplacer and the autoplacer, and that order is
+            // the whole sync story: the preplacer's guess for the break that is
+            // about to happen keeps first claim on the ring, the replacer then
+            // answers the breaks that already happened, and the autoplacer fills
+            // whatever ground the two of them left. All three add through
+            // addPredictObject(), so none of them can take a slot another one
+            // already holds, and the angles they spend all land in placedAngles
+            // in the same send loop — which is what updateAngles() bans on the
+            // next tick. Nothing here touches the packet layer: the replace's
+            // objects ride the ordinary immediate lane and stop at the same
+            // packet budget as every other placement.
+            if (replaceQueue.length > 0) {
+                const broken = replaceQueue;
+                replaceQueue = [];
+                doReplace(broken);
+            }
 
             // GET AUTOPLACE ANGLES
             if (window.vars.autoPlace && nearestEnemy) {
@@ -18879,7 +18797,7 @@ for (let tree of trees) {
         // that carry state across ticks". Being wrong about one of those would
         // be a silent leak between your player and a bot, and copying 136
         // properties a few times a tick costs nothing worth measuring.
-        const MOD_CTX_KEYS = ["myPlayer", "myPlayerSID", "players", "ais", "gameObjects", "projectiles", "alliances", "objectManager", "aiManager", "projectileManager", "keys", "attackState", "autoMills", "autoBreak", "autoBreakAngle", "breakObject", "nearestTrap", "enemiesNear", "nearestEnemy", "ePress", "rightClick", "leftClick", "checkGather", "lastGatherState", "damageTick", "tick", "hits", "shoots", "removeShoots", "primaryReload", "secondaryReload", "turretReload", "placeTick", "predictObjects", "prePlaceObjects", "predictEnemyTraps", "predictWeapon", "keyCodeWeapon", "healing", "autoReload", "deathDamages", "spikeDmg", "spikeDmgCount", "spikeDamages", "damageObjects", "objectHits", "objectShoots", "antiReverse", "antiInsta", "damageByPoisonTick", "damagesByTurrets", "damagesByHits", "damagesByShoots", "damages", "qPress", "spikePress", "trapPress", "turretPress", "spikeKnockPosLine", "visibleObjects", "spikes_enemy", "trap_where_im_in", "cactuses", "enemySpikes", "antiVelocitySpikeSync", "trapBreaked", "trapBreakedTick", "soldierAnti", "predictMoveAngle", "lastMoveAngle", "nearestEnemiesCount", "antiTick", "antiTickTimeout", "predictDamage", "antiPush", "autoPush", "autoPushAngle", "pushPositions", "predictMove", "autoaim", "instaKill", "insta", "spamPrePlacer", "prePlaceInterval", "forgeAhead", "forgeDoom", "forgeHeadings", "removedObjects", "replaceQueue", "antiPushAngle", "spawnedObjectSids", "promiseResolve", "tickPromiseResolve", "squeezablePointsCache", "pathfindingState", "lastMoveDir", "killCount", "killedName", "pathBreak", "grindObjects", "prevKills", "path", "autoaimAngle", "autogathering", "currentHat", "imTrapped", "shouldResetShame", "totalDmgPot", "lastcolliding", "spikeTickAnti", "grindAngle", "smartTickObject", "iWasTrapped", "lastPredicted", "gatherGrind", "lastPosX", "lastPosY", "canStillGather", "autoBreakWeapon", "spikes_our", "traps_our", "enemy_lastcollidngspike", "enemy_collidingspike", "placedAngles", "bannedAngles", "smartTickSpike", "gPressed", "turrets_our", "pathPosition", "filteredObjectsCache", "shouldntPathfind", "packets", "followTarget", "pathMode", "tmpObj"];
+        const MOD_CTX_KEYS = ["myPlayer", "myPlayerSID", "players", "ais", "gameObjects", "projectiles", "alliances", "objectManager", "aiManager", "projectileManager", "keys", "attackState", "autoMills", "autoBreak", "autoBreakAngle", "breakObject", "nearestTrap", "enemiesNear", "nearestEnemy", "ePress", "rightClick", "leftClick", "checkGather", "lastGatherState", "damageTick", "tick", "hits", "shoots", "removeShoots", "primaryReload", "secondaryReload", "turretReload", "placeTick", "predictObjects", "prePlaceObjects", "predictEnemyTraps", "predictWeapon", "keyCodeWeapon", "healing", "autoReload", "deathDamages", "spikeDmg", "spikeDmgCount", "spikeDamages", "damageObjects", "objectHits", "objectShoots", "antiReverse", "antiInsta", "damageByPoisonTick", "damagesByTurrets", "damagesByHits", "damagesByShoots", "damages", "qPress", "spikePress", "trapPress", "turretPress", "spikeKnockPosLine", "visibleObjects", "spikes_enemy", "trap_where_im_in", "cactuses", "enemySpikes", "antiVelocitySpikeSync", "trapBreaked", "trapBreakedTick", "soldierAnti", "predictMoveAngle", "lastMoveAngle", "nearestEnemiesCount", "antiTick", "antiTickTimeout", "predictDamage", "antiPush", "autoPush", "autoPushAngle", "pushPositions", "predictMove", "autoaim", "instaKill", "insta", "spamPrePlacer", "prePlaceInterval", "lastPrePlaceObject", "removedObjects", "replaceQueue", "antiPushAngle", "spawnedObjectSids", "promiseResolve", "tickPromiseResolve", "squeezablePointsCache", "pathfindingState", "lastMoveDir", "killCount", "killedName", "pathBreak", "grindObjects", "prevKills", "path", "autoaimAngle", "autogathering", "currentHat", "imTrapped", "shouldResetShame", "totalDmgPot", "lastcolliding", "spikeTickAnti", "grindAngle", "smartTickObject", "iWasTrapped", "lastPredicted", "gatherGrind", "lastPosX", "lastPosY", "canStillGather", "autoBreakWeapon", "spikes_our", "traps_our", "enemy_lastcollidngspike", "enemy_collidingspike", "placedAngles", "bannedAngles", "smartTickSpike", "gPressed", "turrets_our", "pathPosition", "filteredObjectsCache", "shouldntPathfind", "packets", "followTarget", "pathMode", "tmpObj"];
 
         function ctxCapture() {
             return {
@@ -18967,9 +18885,7 @@ for (let tree of trees) {
                 insta: insta,
                 spamPrePlacer: spamPrePlacer,
                 prePlaceInterval: prePlaceInterval,
-                forgeAhead: forgeAhead,
-                forgeDoom: forgeDoom,
-                forgeHeadings: forgeHeadings,
+                lastPrePlaceObject: lastPrePlaceObject,
                 removedObjects: removedObjects,
                 replaceQueue: replaceQueue,
                 antiPushAngle: antiPushAngle,
@@ -19105,9 +19021,7 @@ for (let tree of trees) {
             insta = s.insta;
             spamPrePlacer = s.spamPrePlacer;
             prePlaceInterval = s.prePlaceInterval;
-            forgeAhead = s.forgeAhead || new Map();
-            forgeDoom = s.forgeDoom || new Map();
-            forgeHeadings = s.forgeHeadings || new Map();
+            lastPrePlaceObject = s.lastPrePlaceObject;
             removedObjects = s.removedObjects;
             replaceQueue = s.replaceQueue;
             antiPushAngle = s.antiPushAngle;
@@ -25815,22 +25729,13 @@ for (let tree of trees) {
         // Placers
         autoPlace: false,
         placeRange: 300,
-
-        // FORGE — the trap & spike engine. One engine for what used to be two
-        // lanes with two sets of rules.
-        //
-        // `prePlace`, `replace` and `replaceRange` are gone with them. A saved
-        // config from before still carries those keys and they are simply
-        // ignored; keeping them declared would have left three settings in the
-        // menu's own data that nothing on either side reads.
-        forge: true,
-        forgeRange: 320,         // beyond this the engine sleeps entirely
-        forgePerTick: 8,         // most structures one tick may spend
-        forgeReserve: 0,         // packets/sec held back; 0 spends like the old placers
+        prePlace: true,
 
         // Replace — Falcon 0.4.7's auto-replace. `replace` is the same id the
         // 1.5 menu and the Placers hotkey already used, so saved settings and
         // the one-key Auto/Pre/Replace toggle carry over untouched.
+        replace: true,
+        replaceRange: 300,       // Falcon's autoReplaceRange
 
         // Placer resolution — two mutually-exclusive tiles. 144 mode sweeps the
         // classic 72 grid first (so the spike tick lands exactly where it always
@@ -26177,12 +26082,16 @@ for (let tree of trees) {
                 ]
             },
             {
-                title: "FORGE (Trap & Spike Engine)",
+                title: "Preplacer",
                 items: [
-                    { type: 'toggle', name: "Enable FORGE", id: "forge" },
-                    { type: 'slider', name: "Engage Range", id: "forgeRange", min: 150, max: 500 },
-                    { type: 'slider', name: "Structures / Tick", id: "forgePerTick", min: 1, max: 8 },
-                    { type: 'slider', name: "Packet Reserve", id: "forgeReserve", min: 0, max: 60 }
+                    { type: 'toggle', name: "Enable Preplacer", id: "prePlace" }
+                ]
+            },
+            {
+                title: "Replace",
+                items: [
+                    { type: 'toggle', name: "Enable Replace", id: "replace" },
+                    { type: 'slider', name: "Activation Range", id: "replaceRange", min: 100, max: 500 }
                 ]
             },
             {
