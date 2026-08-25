@@ -16546,6 +16546,48 @@ for (let tree of trees) {
                 this._spawning = false;
             },
 
+            // =================================================================
+            // WHY IS A BOT DOING NOTHING?
+            // =================================================================
+            // Type RynBots.diag() in the console. Per bot:
+            //
+            //   calls  packets that reached the mod tick
+            //   ran    ticks that got past every guard and actually ran it
+            //   sent   packets the mod put on THAT bot's socket
+            //   bail   why the last tick stopped early, if it did
+            //   err    the last thing the tick threw
+            //
+            // ran = 0 means it never ran, and `bail` says which guard closed.
+            // ran high with sent = 0 means the mod ran and decided to do
+            // nothing — a world or a settings problem, not a plumbing one.
+            // `err` set means it throws every frame, and that is the bug.
+            diag() {
+                const rows = this.list.map(b => ({
+                    name: b.name,
+                    alive: !!b.alive,
+                    fullMod: !!(window.vars && window.vars.botFullMod),
+                    calls: (b.diag && b.diag.calls) || 0,
+                    ran: (b.diag && b.diag.ran) || 0,
+                    sent: (b.diag && b.diag.sent) || 0,
+                    bail: (b.diag && b.diag.bail) || "",
+                    err: (b.diag && b.diag.err) || "",
+                }));
+                try { console.table ? console.table(rows) : console.log(rows); } catch (e) { console.log(rows); }
+                return rows;
+            },
+
+            // The mod tick throws every frame when it throws at all, so this
+            // says it once and then stays out of the way.
+            _noteModThrow(bot, e) {
+                const msg = String((e && e.message) || e);
+                if (this._lastThrow === msg) return;
+                this._lastThrow = msg;
+                try { this._push("[bot mod] " + (bot && bot.name ? bot.name + ": " : "") + msg); } catch (_) {}
+                try {
+                    if (window._yorhaToast) window._yorhaToast("alert", "bot mod tick threw: " + msg + " — RynBots.diag()");
+                } catch (_) {}
+            },
+
             // A bot's join fell over. One toast per burst rather than one per
             // bot, because when the server is turning connections away it turns
             // a lot of them away at once — the count is the useful part, and it
@@ -16733,7 +16775,8 @@ for (let tree of trees) {
                     // mod on it (heal, mills, placers, spike tick, push, aim),
                     // the same suite your own player gets.
                     if (msg.type === "a" && (RynBots.possessed === bot || window.vars.botFullMod)) {
-                        try { RynBots._runFullMod(bot, msg.args && msg.args[0]); } catch (e) {}
+                        try { RynBots._runFullMod(bot, msg.args && msg.args[0]); }
+                        catch (e) { try { RynBots._noteModThrow(bot, e); } catch (_) {} }
                     }
                 });
                 ws.addEventListener("close", (e) => { try { console.warn("[NovaBot] socket closed", e && e.code, e && e.reason); } catch (_) {} this._remove(bot); });
@@ -17615,9 +17658,23 @@ for (let tree of trees) {
             // placer, the pre-placer, shame combat, the insta-kills, spike and
             // trap ticks, anti-tick, anti bow insta, auto push, auto mills.
             _runFullMod(bot, data) {
-                if (!bot.alive || !data) return;
+                // Every step below used to fail silently — three empty catches
+                // and four bare returns between the packet and the mod. A bot
+                // that does nothing looked exactly like a bot whose world was
+                // not seeded, whose tick threw, or whose sends went nowhere.
+                // Each one now says which, and RynBots.diag() prints it.
+                const d = bot.diag || (bot.diag = { calls: 0, ran: 0, sent: 0, bail: null, err: null });
+                d.calls++;
+
+                if (!bot.alive) { d.bail = "bot is dead"; return; }
+                if (!data) { d.bail = "no player data in the packet"; return; }
                 const w = botWorldFor(bot);
-                if (!w.self) return;                       // world not seeded yet
+                if (!w.self) { d.bail = "world not seeded (no self yet)"; return; }
+                if (!window.vars.botFullMod && RynBots.possessed !== bot) { d.bail = "Full Mod is off"; return; }
+
+                d.bail = null;
+                d.ran++;
+
                 if (!bot.mod) {
                     bot.mod = ctxFresh(w);
                     bot.modSend = this._makeModSend(bot);
@@ -17677,6 +17734,7 @@ for (let tree of trees) {
                 return function (type) {
                     const args = Array.prototype.slice.call(arguments, 1);
                     bot.pktCount = (bot.pktCount || 0) + 1;
+                    if (bot.diag) bot.diag.sent++;
                     if (type === "9") { bot.modMoved = true; bot.moveSent = undefined; }
                     else if (type === "F") { bot.modAttacked = true; bot.attacking = args[0] === 1; }
                     else if (type === "z") { bot.wantWeapon = null; }
@@ -18918,6 +18976,15 @@ for (let tree of trees) {
                 out = fn();
             } catch (e) {
                 try { console.warn("[NovaBot] mod tick threw", e); } catch (_) {}
+                // Keep it ON the bot as well: the console line scrolls away and
+                // the tick throws every frame, so the last one is the useful one.
+                try {
+                    if (bot.diag) {
+                        bot.diag.err = String((e && e.message) || e);
+                        bot.diag.errAt = Date.now();
+                    }
+                    RynBots._noteModThrow(bot, e);
+                } catch (_) {}
             } finally {
                 try { bot.mod = ctxCapture(); } catch (_) {}
                 ctxRestore(savedState);
