@@ -401,6 +401,66 @@ already there, outline included, whatever branch of the item switch ran. The
 tinted sprite gets its own cache slot (`itemSpriteKey`), or the first spike
 drawn would decide the colour of every spike on the map.
 
+---
+
+# Bots, alerts and the HUD
+
+## Bots come in as a pool, not a queue
+
+Spawning was strictly one bot at a time with an 800ms gap on top, on the belief
+that a captcha per bot needed the screen to itself. It does not — `_takeSlot` /
+`_freeSlot` already stack the Turnstile widgets up the right-hand edge, a slot
+allocator built for several at once and then never used that way.
+
+Turnstile is also the entire cost of a bot: a second or two of silent
+verification in front of a connection that takes milliseconds. Solving them one
+after another is what made a squad take minutes.
+
+Now a pool of workers pulls from one counter, so `botSpawnParallel` captchas are
+in flight at any moment and each bot connects the instant its own token lands.
+Two smaller things went with it: the ready-wait polled every 100ms after the bot
+was already there and now resolves on the io-init packet itself, and the
+Turnstile load poll went from 200ms to 50ms.
+
+The gap stays, because the limit that is real is the server's connection rate,
+not the captcha — but it is a setting now (`botSpawnGap`, default 150ms, per
+worker) rather than a hardcoded 800. **Raise it if joins start failing**; the
+Bot Join Alerts toast below is there to tell you when they do.
+
+Against a stubbed 120ms captcha, twelve bots take ~360ms instead of ~1440ms at
+four in flight — the parallelism, with nothing else changed.
+
+## Alerts
+
+Under Server Log → **Alerts**.
+
+**Repeated Joins.** The server tells this client about every spawn on it, by
+name — that is what the join log is already built on. Counting those per name
+over a rolling window turns the same feed into an answer the log cannot give by
+eye: who keeps coming back. Defaults to 3 joins inside 90s, both sliders. One
+toast per name per window, so a determined rejoiner does not become the spam
+itself. Keyed by name rather than sid, because a rejoin *is* a new sid — the
+name is the only thread between the two. The name table is an LRU capped at 200,
+and a name that keeps being seen keeps itself warm, so a rejoiner's history is
+never what gets evicted.
+
+**Bot Join Alerts.** One toast per burst when bots are refused a join, with the
+count, because a server turning connections away turns a lot of them away at
+once. It is the difference between "spawning is slow" and "the server is
+refusing me", which look identical from the outside otherwise.
+
+## Server population
+
+`Players: n` sits beside FPS / Ping / Bots. The server sends `addPlayer` for
+everyone in the room and `removePlayer` when they leave — the same packets the
+join/leave log reads — so `players` *is* the population, you and your bots
+included. The HUD lives outside the game scope and `players` is rebound by the
+bot context swap, so it reads through `window._novaServerPop()` rather than
+holding the array: the swap is synchronous inside a tick, so a frame can never
+catch a bot's world there.
+
+---
+
 ## What was left in Falcon, and why
 
 - **Auto Upgrade** — not the configurable age path it looks like. It substring-

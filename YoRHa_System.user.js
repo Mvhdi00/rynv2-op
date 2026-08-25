@@ -1425,6 +1425,13 @@ function updateStats() {
         lastTime = now;
     }
     let ping = window.pingTime || 0;
+    let popStr = "";
+    try {
+        const pop = window._novaServerPop && window._novaServerPop();
+        if (typeof pop === "number" && pop > 0) {
+            popStr = ` <span style="color:#FFF;">|</span> Players: <span style="color:#ffcc00;">${pop}</span>`;
+        }
+    } catch (e) {}
     let botStr = "";
     try {
         if (window.RynBots && window.RynBots.list && window.RynBots.list.length) {
@@ -1447,7 +1454,7 @@ function updateStats() {
             if (pb) botStr += ` <span style="color:#FFF;">|</span> <span style="color:#00e5ff;">▶ ${pb.name}</span>`;
         }
     } catch (e) {}
-    statsDiv.innerHTML = `FPS: ${currentFps} <span style="color:#FFF;">|</span> Ping: ${ping}ms${botStr}`;
+    statsDiv.innerHTML = `FPS: ${currentFps} <span style="color:#FFF;">|</span> Ping: ${ping}ms${popStr}${botStr}`;
     requestAnimationFrame(updateStats);
 }
 requestAnimationFrame(updateStats);
@@ -8997,7 +9004,11 @@ let pps = 0;
             },
             on(kind) {
                 const v = window.vars;
-                if (!v || !v.serverLog) return false;
+                if (!v) return false;
+                // A rejoin alert answers to its own toggle, not to whether the
+                // log happens to be recording — watchRejoins has already asked.
+                if (kind === "alert") return true;
+                if (!v.serverLog) return false;
                 if (kind === "chat"  && !v.logChat) return false;
                 if (kind === "join"  && !v.logJoins) return false;
                 if (kind === "leave" && !v.logJoins) return false;
@@ -9005,6 +9016,62 @@ let pps = 0;
                 if (kind === "clan"  && !v.logClans) return false;
                 return true;
             },
+            // REPEATED JOINS
+            //
+            // The server tells this client about every spawn on it, by name —
+            // that is what the join log is built on. Counting those per name
+            // over a rolling window turns the same feed into an answer to a
+            // question the log cannot answer by eye: who keeps coming back.
+            //
+            // A player cycling in and out is either hunting a spawn, dodging a
+            // fight, or farming the join — all three are worth knowing about
+            // before they are standing next to you. One toast per name per
+            // cooldown, so a determined rejoiner does not become the spam.
+            //
+            // Keyed by name rather than sid because a rejoin IS a new sid;
+            // the name is the only thread between the two.
+            watchRejoins(name) {
+                if (!(window.vars && window.vars.notifyRejoin)) return;
+                if (!name) return;
+
+                const now = Date.now();
+                const window_ = Math.max(10, window.vars.rejoinWindow || 90) * 1000;
+                const limit = Math.max(2, window.vars.rejoinLimit || 3);
+
+                if (!this._rejoins) this._rejoins = new Map();
+                const seen = (this._rejoins.get(name) || []).filter(t => now - t < window_);
+                seen.push(now);
+                // Delete before set so the map's insertion order is least-seen
+                // first: that is what makes the eviction below an LRU rather
+                // than a lottery that can throw out the very name being watched.
+                this._rejoins.delete(name);
+                this._rejoins.set(name, seen);
+
+                // Names nobody has seen in a while stop costing anything. A
+                // busy server can still show more than that many live names at
+                // once, so the table is capped as well and the coldest go first.
+                const KEEP = 200;
+                if (this._rejoins.size > KEEP) {
+                    for (const [k, v] of this._rejoins) {
+                        if (!v.length || now - v[v.length - 1] > window_) this._rejoins.delete(k);
+                    }
+                    while (this._rejoins.size > KEEP) {
+                        const coldest = this._rejoins.keys().next().value;
+                        if (coldest === undefined) break;
+                        this._rejoins.delete(coldest);
+                        if (this._rejoinToldAt) this._rejoinToldAt.delete(coldest);
+                    }
+                }
+
+                if (seen.length < limit) return;
+                if (!this._rejoinToldAt) this._rejoinToldAt = new Map();
+                if (now - (this._rejoinToldAt.get(name) || 0) < window_) return;
+                this._rejoinToldAt.set(name, now);
+
+                this.push("alert", name + " has joined " + seen.length + " times in the last "
+                          + Math.round(window_ / 1000) + "s");
+            },
+
             push(kind, text) {
                 if (!this.on(kind)) return;
                 this.lines.push({ t: Date.now(), time: this.now(), kind: kind, text: String(text) });
@@ -9097,7 +9164,10 @@ let pps = 0;
                         if (!d) break;
                         this._names[d[1]] = d[2];
                         if (args[1]) this.push("join", "you spawned as " + d[2]);
-                        else if (Date.now() > this._synced) this.push("join", d[2] + " spawned");
+                        else if (Date.now() > this._synced) {
+                            this.push("join", d[2] + " spawned");
+                            this.watchRejoins(d[2]);
+                        }
                         break;
                     }
                     case "g": {                                // addAlliance(data)
@@ -14001,6 +14071,19 @@ for (let tree of trees) {
             }
         }
 
+        // How many people are on this server.
+        //
+        // The server sends addPlayer for everyone in the room, not only for who
+        // is on your screen, and removePlayer when they leave — which is what
+        // the join/leave log is built on — so `players` IS the population, you
+        // included and your bots included.
+        //
+        // The HUD that shows it lives outside this scope and `players` is
+        // rebound by the bot context swap, so it reads through a function
+        // rather than holding the array: the swap is synchronous inside a tick,
+        // so a frame can never catch a bot's world here.
+        try { window._novaServerPop = function () { return players.length; }; } catch (e) {}
+
         // UPDATE PLAYER ITEM VALUES:
         function updateItemCounts(index, value) {
             if (myPlayer) {
@@ -16420,21 +16503,71 @@ for (let tree of trees) {
                 if (this._spawning) return;
                 this._spawning = true;
                 const count = Math.max(1, Math.min(n || 1, 40));
-                try { console.log("[NovaBot] spawning", count, "bot(s) — one by one"); } catch (e) {}
-                // One at a time: fully bring in each bot (its captcha appears,
-                // gets solved, the bot enters) BEFORE starting the next one. So
-                // captchas never pile up or lag — they come one after another —
-                // and the spaced-out connections avoid the server rate-limit.
-                for (let k = 0; k < count; k++) {
-                    if (!this._spawning) break; // killAll can cancel a batch
-                    try { await this._spawnOne(); }
-                    catch (e) {
-                        try { console.warn("[NovaBot] bot", k + 1, "aborted:", e && e.message); } catch (_) {}
-                        if (e && e.message === "cancelled") break;
+
+                // Bots used to come in strictly one at a time, with an 800ms
+                // gap on top, because a captcha per bot was thought to need the
+                // screen to itself. It does not: _takeSlot / _freeSlot already
+                // stack the widgets up the right-hand edge, which is a slot
+                // allocator built for several at once and then never used that
+                // way. Turnstile is also the whole cost of a bot — a second or
+                // two of silent verification against a connection that takes
+                // milliseconds — so solving them one after another is the
+                // difference between seconds and minutes for a full squad.
+                //
+                // Now a small pool of workers pulls from one counter, so
+                // `botSpawnParallel` captchas are in flight at any moment and
+                // each bot connects the instant its own token lands.
+                //
+                // The gap stays, because the limit that is real is the server's
+                // connection rate, not the captcha. It is a setting now, and
+                // per worker rather than per bot: raise it if joins start
+                // failing (the Bot Join Alerts toast tells you when they do),
+                // lower it on a quiet server.
+                const parallel = Math.max(1, Math.min(window.vars.botSpawnParallel || 4, 8, count));
+                const gap = Math.max(0, Math.min(window.vars.botSpawnGap == null ? 150 : window.vars.botSpawnGap, 3000));
+                try { console.log("[NovaBot] spawning", count, "bot(s) —", parallel, "at a time, " + gap + "ms apart"); } catch (e) {}
+
+                let next = 0;
+                const worker = async () => {
+                    while (this._spawning) {
+                        const k = next++;
+                        if (k >= count) break;
+                        try { await this._spawnOne(); }
+                        catch (e) {
+                            const why = (e && e.message) || "unknown";
+                            try { console.warn("[NovaBot] bot", k + 1, "aborted:", why); } catch (_) {}
+                            if (why === "cancelled") break;
+                            RynBots._noteJoinFailure(why);
+                        }
+                        if (gap) await new Promise(r => setTimeout(r, gap));
                     }
-                    if (k < count - 1) await new Promise(r => setTimeout(r, 800)); // small gap
-                }
+                };
+                await Promise.all(Array.from({ length: parallel }, worker));
                 this._spawning = false;
+            },
+
+            // A bot's join fell over. One toast per burst rather than one per
+            // bot, because when the server is turning connections away it turns
+            // a lot of them away at once — the count is the useful part, and it
+            // is the difference between "spawning is slow" and "the server is
+            // refusing me", which look identical from the outside otherwise.
+            _noteJoinFailure(why) {
+                if (!(window.vars && window.vars.notifyBotRetry)) return;
+                this._failCount = (this._failCount || 0) + 1;
+                this._failWhy = why;
+                if (this._failTimer) return;
+                this._failTimer = setTimeout(() => {
+                    const n = this._failCount;
+                    this._failCount = 0;
+                    this._failTimer = null;
+                    try {
+                        if (window._yorhaToast) {
+                            window._yorhaToast("alert", n === 1
+                                ? "a bot could not join (" + this._failWhy + ")"
+                                : n + " bots could not join (" + this._failWhy + ") — the server may be limiting you");
+                        }
+                    } catch (e) {}
+                }, 1200);
             },
 
             // Make sure Cloudflare Turnstile is loaded.
@@ -16447,11 +16580,13 @@ for (let tree of trees) {
                         s.async = true; s.defer = true;
                         (document.head || document.documentElement).appendChild(s);
                     }
+                    // 50ms, not 200: this is the very first thing a spawn waits
+                    // on, and the script usually lands mid-interval.
                     let waited = 0;
                     const iv = setInterval(() => {
                         if (window.turnstile && typeof window.turnstile.render === "function") { clearInterval(iv); resolve(true); }
-                        else if ((waited += 200) > 12000) { clearInterval(iv); resolve(false); }
-                    }, 200);
+                        else if ((waited += 50) > 12000) { clearInterval(iv); resolve(false); }
+                    }, 50);
                 });
             },
             // Auto captcha: appearance "interaction-only" means the widget stays
@@ -16576,6 +16711,9 @@ for (let tree of trees) {
                         } else {
                             RynBots._spawnBot(bot);
                         }
+                        // Release the worker waiting on this bot right here,
+                        // rather than letting it notice on its next poll.
+                        try { if (bot._onReady) bot._onReady(); } catch (e) {}
                         return;
                     }
                     try { RynBots._onPacket(bot, msg.type, msg.args); } catch (e) {}
@@ -16601,14 +16739,24 @@ for (let tree of trees) {
                 ws.addEventListener("close", (e) => { try { console.warn("[NovaBot] socket closed", e && e.code, e && e.reason); } catch (_) {} this._remove(bot); });
                 ws.addEventListener("error", () => { try { console.warn("[NovaBot] socket error"); } catch (e) {} });
 
-                // Resolve only once this bot is spawned (or gave up), so the
-                // caller can bring bots in ONE BY ONE — the next captcha only
-                // appears after this one has entered.
+                // Resolve once this bot is framed and in (or gave up), so the
+                // worker can move on to the next one. This used to poll every
+                // 100ms, which is up to a tenth of a second of doing nothing
+                // per bot after the bot was already there; io-init now resolves
+                // it the moment it lands.
                 await new Promise((res) => {
-                    const t0 = Date.now();
-                    const chk = setInterval(() => {
-                        if (bot.ready || bot.ws.readyState > 1 || Date.now() - t0 > 12000) { clearInterval(chk); res(); }
-                    }, 100);
+                    let done = false;
+                    const finish = () => {
+                        if (done) return;
+                        done = true;
+                        bot._onReady = null;
+                        clearTimeout(timer);
+                        res();
+                    };
+                    const timer = setTimeout(finish, 12000);
+                    bot._onReady = finish;
+                    ws.addEventListener("close", finish);
+                    if (bot.ready || ws.readyState > 1) finish();
                 });
             },
 
@@ -25328,6 +25476,13 @@ for (let tree of trees) {
         botHold: false,
         botRandomNames: false,   // word + 1, 2, 3 ... instead of <name><n>
 
+        // How fast a squad comes in. Turnstile is the whole cost of a bot, so
+        // several at once is the difference between seconds and minutes; the
+        // gap is per worker and exists for the server's connection rate, not
+        // for the captcha. Raise the gap if Bot Join Alerts start firing.
+        botSpawnParallel: 4,     // 1 .. 8   — captchas in flight at once
+        botSpawnGap: 150,        // 0 .. 3000 ms between bots, per worker
+
         // Bots — behaviour
         botAutoSpawn: true,      // dead -> straight back in, no menu
         botAutoBreak: true,      // swing through whatever blocks the walk
@@ -25347,6 +25502,12 @@ for (let tree of trees) {
         // ---- SERVER LOG ------------------------------------------------------
         serverLog: true,         // record what the server tells you, timestamped
         logJoins: true,          // spawns and disconnects
+
+        // ---- ALERTS ----------------------------------------------------------
+        notifyRejoin: true,      // toast a player who keeps rejoining the server
+        rejoinLimit: 3,          // 2 .. 10  — joins inside the window to trigger
+        rejoinWindow: 90,        // 10 .. 600 s — the rolling window
+        notifyBotRetry: true,    // toast when your bots are refused a join
         logDeaths: true,         // anyone dropping to 0 health, and your own death
         logClans: true,          // created, disbanded, joined, left, join requests
         logChat: true,           // every chat line, by name
@@ -25698,6 +25859,8 @@ for (let tree of trees) {
                 items: [
                     { type: 'input', name: "Bot Name", id: "botName" },
                     { type: 'slider', name: "Bot Count", id: "botCount", min: 1, max: 40 },
+                    { type: 'slider', name: "Spawn At Once", id: "botSpawnParallel", min: 1, max: 8 },
+                    { type: 'slider', name: "Spawn Gap (ms)", id: "botSpawnGap", min: 0, max: 3000 },
                     { type: 'toggle', name: "Auto Random Bots Name", id: "botRandomNames" }
                 ]
             },
@@ -25809,6 +25972,15 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Deaths", id: "logDeaths" },
                     { type: 'toggle', name: "Clans", id: "logClans" },
                     { type: 'toggle', name: "Chat", id: "logChat" }
+                ]
+            },
+            {
+                title: "Alerts",
+                items: [
+                    { type: 'toggle', name: "Repeated Joins", id: "notifyRejoin" },
+                    { type: 'slider', name: "Joins To Trigger", id: "rejoinLimit", min: 2, max: 10 },
+                    { type: 'slider', name: "Within (seconds)", id: "rejoinWindow", min: 10, max: 600 },
+                    { type: 'toggle', name: "Bot Join Alerts", id: "notifyBotRetry" }
                 ]
             }
         ],
@@ -26541,6 +26713,8 @@ for (let tree of trees) {
     .yorha-toast.k-join  .yt-tag { background: #46583e; }
     .yorha-toast.k-leave .yt-tag { background: #5a5040; }
     .yorha-toast.k-clan  .yt-tag { background: #3d4a58; }
+    .yorha-toast.k-alert .yt-tag { background: #8a5a1c; }
+    .yorha-toast.k-alert { border-color: #8a5a1c; }
 
     /* ===== GAME OVER ===== the NieR black card */
     #yorha-gameover {
