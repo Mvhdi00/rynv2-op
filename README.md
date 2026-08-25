@@ -183,7 +183,7 @@ understood.
 # YoRHa System — FORGE
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-forge.js` — 114 checks.
+revision). Verified by `node tools/verify-forge.js` — 115 checks.
 
 FORGE is one engine for trap and spike placement. It **replaces** YoRHa's
 preplacer and replacer outright — `isPrePlaceAngle`, `getPrePlaceObject`,
@@ -229,11 +229,18 @@ confidence, so a low-trust read collapses onto the only thing actually known.
 
 ### Roles, scored on one scale
 
-`RETRAP → TICK → TRAP → MEND → AHEAD → KNOCK → SEAL`
+`RETRAP 1000 · TRAP 620 · TICK 560 · MEND 430 · AHEAD 360 · KNOCK 300 · SEAL 180`
 
-Because every role lands on the same scale, an excellent wall-fill can genuinely
-outrank a mediocre seal. The old cascade could not express that — whichever
-branch came first won.
+Those numbers are the priority. There is **no separate priority list** — every
+intent from every role goes into one queue sorted by score, and the best one
+gets the packet. Per-role caps stop any one role eating the tick.
+
+This was not the first design. The engine originally walked a fixed priority
+order and sorted by score only *within* a role, which made the weights
+decorative: in a real duel frame a perfect wall-fill scoring **430** lost its
+packet to a marginal spike scoring **210**, purely because "spike" sat higher in
+a list. That is the same first-branch-wins failure the engine exists to remove,
+so the list went and the scores decide.
 
 Costs subtracted from every score: standing in our own line of retreat, breaking
 our own line to them, spending the last of a small stock, and — for roles that
@@ -286,7 +293,8 @@ re-implemented — and runs them in a stub world with a recording
 knockback, budget, boundaries, cost, ledger, safety gates, robustness against
 malformed wire data, and integration.
 
-Two defects it caught during the build: a `null` in the break list threw inside
-the tick body, and a non-finite enemy position made every distance `NaN` — which
+Three defects caught during the build: a `null` in the break list threw inside
+the tick body; a non-finite enemy position made every distance `NaN` — which
 compares false against every threshold, so the engine would have sailed straight
-past its own range gates instead of stopping at them.
+past its own range gates instead of stopping at them; and the fixed priority
+walk described above, which a worked scenario exposed.

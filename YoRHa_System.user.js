@@ -15315,9 +15315,17 @@ for (let tree of trees) {
             logSize: 60,             // decisions kept for inspection
         };
 
-        // Priority order. A tick spends down this list, never across it, so a
-        // re-trap can never lose its packet to a speculative seal.
-        const FORGE_ORDER = ["RETRAP", "TICK", "TRAP", "MEND", "AHEAD", "KNOCK", "SEAL"];
+        // The roles, and the most of each one tick may spend. This is a cap, not
+        // an order: the ORDER comes out of the scores, because the role weights
+        // above already encode priority (a re-trap is worth 1000 and a seal 180,
+        // so a re-trap wins on the numbers without needing a rule that says so).
+        //
+        // Walking a fixed priority list instead would make those weights
+        // decorative — and worse, wrong. A perfect wall-fill scoring 430 losing
+        // its packet to a marginal spike scoring 210, purely because "spike"
+        // sits higher in a list, is the same first-branch-wins failure this
+        // engine was built to get rid of. One scale, or none.
+        const FORGE_ROLES = ["RETRAP", "TICK", "TRAP", "MEND", "AHEAD", "KNOCK", "SEAL"];
 
         // ---------------------------------------------------------------------
         // LEDGER  —  what we did, and whether the world agreed
@@ -15912,32 +15920,30 @@ for (let tree of trees) {
             const spentByRole = {};
             let spent = 0;
 
-            // Down the priority list, never across it. Within a role, best score
-            // first. addPredictObject is the marker check: a slot the autoplacer
-            // or an earlier intent already holds comes back false, and the next
-            // candidate for that role gets the chance instead.
-            for (const role of FORGE_ORDER) {
+            // Best score first, across every role at once. The per-role caps are
+            // what stop one role eating the tick; the weights are what decide
+            // which role deserves the packet.
+            //
+            // addPredictObject is the marker check: a slot the autoplacer or an
+            // earlier intent already holds comes back false, and the next
+            // candidate — whatever role it belongs to — gets the chance instead.
+            const queue = intents.slice().sort((a, b) => b.score - a.score);
+
+            for (const intent of queue) {
                 if (room <= 0) break;
 
-                const cap = FORGE.perRole[role] || 1;
-                const queue = intents
-                      .filter(i => i.role === role)
-                      .sort((a, b) => b.score - a.score);
+                const cap = FORGE.perRole[intent.role] || 1;
+                if ((spentByRole[intent.role] || 0) >= cap) continue;
+                if (isItemLimit(intent.id)) continue;
 
-                for (const intent of queue) {
-                    if (room <= 0) break;
-                    if ((spentByRole[role] || 0) >= cap) break;
-                    if (isItemLimit(intent.id)) break;
+                if (!addPredictObject(intent.id, intent.angle, true)) continue;
 
-                    if (!addPredictObject(intent.id, intent.angle, true)) continue;
+                spentByRole[intent.role] = (spentByRole[intent.role] || 0) + 1;
+                room--;
+                spent++;
 
-                    spentByRole[role] = (spentByRole[role] || 0) + 1;
-                    room--;
-                    spent++;
-
-                    forgeNote(role, intent.id, intent.angle, intent.slot, intent.score);
-                    if (intent.targetSid != null) forgeAhead.set(intent.targetSid, tick);
-                }
+                forgeNote(intent.role, intent.id, intent.angle, intent.slot, intent.score);
+                if (intent.targetSid != null) forgeAhead.set(intent.targetSid, tick);
             }
 
             return spent;

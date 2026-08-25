@@ -202,7 +202,7 @@ function world(over = {}) {
     lift("getPrePlaceAngles"),
 
     liftObject("FORGE"),
-    liftLine(String.raw`const FORGE_ORDER = \[[^\]]*\];`),
+    liftLine(String.raw`const FORGE_ROLES = \[[^\]]*\];`),
     liftLine(String.raw`const FORGE_TICK_MS = [^;]+;`),
 
     lift("forgeAwaiting"),
@@ -528,9 +528,28 @@ section("BUDGET — priority first, and the reserve is never touched");
   });
   one.forgeTick([{ sid: 9, x: 1300, y: 1300, scale: 35, id: 6, trap: false, dmg: true, ours: true }]);
   const spentRoles = rolesIn(one);
-  ok("with room for one, the tick spends it on the highest-priority role",
-     spentRoles.length === 1 &&
-     ["RETRAP", "TICK"].includes(spentRoles[0]), JSON.stringify(spentRoles));
+  ok("with room for one, exactly one structure is spent",
+     spentRoles.length === 1, JSON.stringify(spentRoles));
+
+  // And it is the highest-SCORING intent, whatever role that turns out to be.
+  // A fixed priority walk would make the role weights decorative — and would
+  // hand the packet to a marginal spike over a perfect wall-fill purely on
+  // list position, which is the failure this engine exists to remove.
+  const race = world({
+    nearestEnemy: enemyAt(1080, 1000), traps_our: [trapAt(1080, 1000)],
+    spikes_our: [{ sid: 61, x: 1200, y: 1000, scale: 35, dmg: 20, active: true }],
+    primaryReload: { 1: 1 }, packets: 0, vars: { forgePerTick: 1 },
+  });
+  const hole = [{ sid: 9, x: 1000, y: 1070, scale: 35, id: 6, trap: false, dmg: true, ours: true }];
+  const offered = race.forgeIntents(race.forgeSense(), hole);
+  const topScore = Math.max(...offered.map(i => i.score));
+  const topRole = offered.find(i => i.score === topScore).role;
+
+  race.forgeTick(hole);
+  const took = race.forgeLedger.log[0];
+  ok(`the packet goes to the best score (${topRole} @ ${Math.round(topScore)}), not to list position`,
+     took && took.role === topRole && Math.abs(took.score - topScore) < 1,
+     `offered ${JSON.stringify(offered.map(i => i.role + ":" + Math.round(i.score)))}, took ${JSON.stringify(took)}`);
 }
 
 // ===========================================================================
