@@ -16919,8 +16919,34 @@ for (let tree of trees) {
                     // toggle says — stepping into a bot means you want the whole
                     // mod on it (heal, mills, placers, spike tick, push, aim),
                     // the same suite your own player gets.
-                    if (msg.type === "a" && (RynBots.possessed === bot || window.vars.botFullMod)) {
-                        try { RynBots._runFullMod(bot, msg.args && msg.args[0]); }
+                    // ---- the bot's tick -------------------------------------
+                    // Two layers, and RYN's arrangement is that both of them
+                    // always run: `for (const m of this.botModules)` and then
+                    // `for (const m of this.modules)`, one after the other, for
+                    // every client it owns. Neither is nested in the other.
+                    //
+                    // YoRHa had them nested. _botTick — the module list, the
+                    // formation, the walking, everything that reads the bot and
+                    // sends on the bot's own socket — was called from ONE of two
+                    // places: from _onPacket when Full Mod was off, and from the
+                    // END of _runFullMod when it was on. Full Mod is on by
+                    // default, so the second was the live path, and it sits
+                    // behind four early returns and a ctxRun. A bot whose world
+                    // was not seeded yet, or whose mod tick threw, lost its
+                    // entire reliable layer along with the fragile one — no
+                    // mills, no farming, no formation, nothing. That is why
+                    // turning Auto Mills on did nothing: the code that lays them
+                    // was never reached.
+                    //
+                    // So they are siblings now. The mod goes first, because the
+                    // walking decision has to come after it, and the module list
+                    // runs afterwards WHATEVER the mod did or failed to do.
+                    if (msg.type === "a") {
+                        if (RynBots.possessed === bot || window.vars.botFullMod) {
+                            try { RynBots._runFullMod(bot, msg.args && msg.args[0]); }
+                            catch (e) { try { RynBots._noteModThrow(bot, e); } catch (_) {} }
+                        }
+                        try { RynBots._botTick(bot); }
                         catch (e) { try { RynBots._noteModThrow(bot, e); } catch (_) {} }
                     }
                 });
@@ -17120,10 +17146,10 @@ for (let tree of trees) {
                             bot.alive = true;
                         }
                     }
-                    // Everything a bot does, it does on its own server tick.
-                    // Under Full Mod the walking decision has to come AFTER the
-                    // mod has had its go, so _runFullMod calls this instead.
-                    if (!window.vars.botFullMod) this._botTick(bot);
+                    // The bot's own module list used to be called from here
+                    // when Full Mod was off, and from the end of _runFullMod
+                    // when it was on. It is driven from the packet handler now,
+                    // once, unconditionally — see the note there.
                     break;
                 }
                 case "H": { // loadGameObject
@@ -17865,8 +17891,6 @@ for (let tree of trees) {
                 bot.mod.turretPress = mirror ? turretPress : false;
 
                 ctxRun(bot, function () { updatePlayers(data); return true; });
-                // Now the formation, with whatever the mod already decided.
-                try { this._botTick(bot); } catch (e) {}
             },
 
             // io.send has a positional signature -- io.send("z", index, true).

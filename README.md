@@ -481,6 +481,38 @@ off. Turning Auto Mills on did nothing for the bots because they answer to a
 different switch, and the only thing carrying yours across was the context
 swap: the fragile half.
 
+### Why none of it fired: the layers were nested
+
+RYN walks **both** its lists, one after the other, for every client it owns:
+
+```js
+if (!isOwner) for (const m of this.botModules) m.postTick();
+for (const m of this.modules) m.postTick();
+```
+
+Neither is inside the other. YoRHa's were. `_botTick` — the module list, the
+formation, the walking, everything that reads the bot and sends on the bot's own
+socket — was reached from exactly one of two places:
+
+```js
+if (!window.vars.botFullMod) this._botTick(bot);   // _onPacket, Full Mod OFF
+...
+try { this._botTick(bot); } catch (e) {}           // end of _runFullMod, Full Mod ON
+```
+
+Full Mod is **on by default**, so the second was the live path — and it sits
+behind four early returns and a `ctxRun`. A bot whose world was not seeded yet,
+or whose mod tick threw, lost its entire *reliable* layer along with the fragile
+one. No mills, no farming, no formation, nothing.
+
+That is why turning Auto Mills on did nothing, and why the two previous fixes —
+routing your switch to `_autoMills`, then giving the behaviours a proper list —
+changed nothing either. Both were downstream of a call that was never made.
+
+They are siblings now. The mod goes first, because the walking decision has to
+come after it; the module list runs afterwards **whatever the mod did or failed
+to do**. The suite pins it directly: with the mod throwing, `botTick` still runs.
+
 ### The module list
 
 RYN keeps its behaviours in a list and walks it once a tick:
