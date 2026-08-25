@@ -180,152 +180,113 @@ understood.
 
 ---
 
-# YoRHa System — extra placer lanes
+# YoRHa System — FORGE
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-placers.js` — 82 checks.
+revision). Verified by `node tools/verify-forge.js` — 114 checks.
 
-Two placer families sit under **Placers**. Preplace and replace are each **one
-job with two families**, and the two are **mutually exclusive** — one family
-holds the ring per job. blisma is off by default; the YoRHa lanes are the
-better-graded ones.
+FORGE is one engine for trap and spike placement. It **replaces** YoRHa's
+preplacer and replacer outright — `isPrePlaceAngle`, `getPrePlaceObject`,
+`replaceWithinPath`, `replaceCandidates`, `replaceGrade` and `doReplace` are
+deleted, not wrapped. The **autoplacer is untouched**.
 
-Two preplacers on one ring do not "cover more": they read the same tick
-differently, and the second spends buildings closing ground the first already
-judged not worth a building. The lock is enforced in three places — the menu
-tiles (`exclusive`), a runtime guard in each blisma lane, and a normalisation
-pass at config load for settings saved before this was a choice. The Placers
-hotkey remembers which family was up (`placerFamilyPre` / `placerFamilyReplace`)
-so pressing it twice does not quietly move a blisma user back to YoRHa's lane.
+Tuned for **1v1**.
 
-## Why they could not just be pasted in
+## What was wrong with what it replaces
 
-YoRHa's preplacer is already the NOVASTORM family — `getPrePlaceAngles`,
-`isPrePlaceAngle`, `getPredictObjects` — and it is a cleaner build of it: a
-72/144 adaptive angle grid where NOVASTORM has a flat 36, and a knockback
-sanity check on the spike tick that NOVASTORM never had. So "add NOVASTORM's
-preplacer" meant finding what NOVASTORM's grading does that YoRHa's does *not*,
-and adding only that.
-
-blisma is a different family and did port as a lane of its own — but it could
-not be pasted either, because it calls `place()` directly and would have fought
-every other placer for the same ground.
-
-## NOVASTORM grading — `prePlaceNova`
-
-Grades the existing preplacer. Off, every branch reads exactly as 1.5's did.
-
-| Added | 1.5 | NOVASTORM |
+| | Old | FORGE |
 |---|---|---|
-| Lookahead | flat 222 | `200 + min(speed × 10, 100)` |
-| Enemy's own path | not tested | third `lineInRect`, 2 ticks of their velocity |
-| Trapped enemy in spike reach | needed the whole shame kit up | earns a spike on its own |
-| Re-trap while they run | any side | only the side they are heading for (< π/3) |
-| Priority 1 candidates | the single closest spike | every spike that reaches them |
-| Spikes per tick | one | two, when ≥ 1.2 rad apart |
-| Angle preference | nearest slot, perfect or not | perfect slots first, then plain |
+| Prediction | one linear step | game-physics simulation, 4 ticks, with a confidence figure |
+| Decisions | 6-branch if/else, first match wins | every slot scored for every role on one scale |
+| Cost | shame gates re-swept **per candidate angle** (~288/tick) | one sweep per item per tick |
+| Packets | 4 scattered `packets + 5 > 119` checks | one budget, priority-ordered, with a reserve |
+| Measurement | none | every emission logged and confirmed against the world |
 
-Two things were fixed rather than copied:
+### Prediction
 
-- NOVASTORM compares its two spike angles with `Math.abs(a - b)`, which misreads
-  the 0/2π seam — 0.05 and 6.23 read as 6.18 apart and get spent as "two walls".
-  This uses YoRHa's wrap-safe `getAngleDist`.
-- Selection order stays YoRHa's (nearest to the hole that is about to open), not
-  NOVASTORM's raw ring order.
+`xVel` in this client is **not a velocity** — `updatePlayers` writes
+`x2 * 2 - lastX`, the position one tick ahead if the enemy keeps doing exactly
+what they just did. No acceleration, no decay, no error bar.
 
-## blisma lanes — `blismaPre`, `blismaReplace`
+FORGE uses the game's own integration, with the game's own constants:
 
-**Preplacer.** YoRHa's lane picks one object a tick — the one the *nearest*
-enemy is about to break. blisma totals what every visible player has loaded
-against every building near you, so a wall two enemies are splitting for less
-than a one-shot each counts as dying, and so does a wall dying to somebody who
-is not your nearest enemy. Damage uses `changeObjectHealth`'s formula, already
-this file's building-damage rule.
+```
+vel += playerSpeed * delta * cos(dir)     while a key is held
+pos += vel * delta
+vel *= playerDecel ^ delta
+```
 
-**Replacer.** Three lanes on a break: the knock (a spike that pushes them into
-one of ours), the re-trap, and a fill sized by how far off your facing the hole
-is.
+A tick is 1000/9 ms, so one tick's decay is `0.993^111 ≈ 0.458`, not `0.993`.
+Holding a direction converges on ~36 units/tick — which is what a player
+actually covers, and the harness asserts it.
 
-### Why it cannot fight the other placers
+Two futures are run — they keep holding the key, or they let go — and the gap
+between them is the honest error bar. **Confidence** comes from the *mean
+resultant length* of their recent headings (correct across the 0/2π seam, where
+averaging the raw numbers is not): a straight line reads ~1.0, juking reads
+<0.35. Aim interpolates from their known position toward the held future by that
+confidence, so a low-trust read collapses onto the only thing actually known.
 
-- It never calls `place()`. Every slot goes through `addPredictObject`, the same
-  marker check the preplacer, replacer and autoplacer add through.
-- It runs at a fixed point in `getPredictObjects` — after the preplacer, and
-  after `doReplace` inside the replace block — so the lane with better
-  information about a tick keeps first claim.
-- Its output is ordinary `predictObjects`, on the same lane and the same packet
-  budget as everything else.
-- A hole its preplacer filled is recorded in `blismaPrePlaced` and skipped by
-  its replacer when it dies — blisma's own `preplaceObj != findObj` guard.
-- When a slot *is* held, it routes around to the next candidate instead of
-  dropping the hole.
+### Roles, scored on one scale
 
-### Bugs fixed in the port
+`RETRAP → TICK → TRAP → MEND → AHEAD → KNOCK → SEAL`
 
-- **`spikSync` never resets.** In blisma it is set true on first fire and never
-  cleared anywhere in the file, so the branch it guards is dead for the rest of
-  the session. Not carried over; the lanes it tried to alternate are written out.
-- **The dot product is in degrees.** blisma computes it in degrees and hands it
-  straight to a sweep whose bound is read in radians — a hole 90° off your facing
-  asks for a bound of 90, about fourteen times round the circle at π/24 steps.
-  Kept as an idea, in radians, capped at one ring: ~24 probes instead of ~688.
-- **Blind placement.** blisma places at the raw angle to the hole without
-  checking it. Here `canPlace` answers first, and the sweep escalates to the
-  checked ring when the narrow arc is spoken for.
+Because every role lands on the same scale, an excellent wall-fill can genuinely
+outrank a mediocre seal. The old cascade could not express that — whichever
+branch came first won.
 
-### The sweep explosion
+Costs subtracted from every score: standing in our own line of retreat, breaking
+our own line to them, spending the last of a small stock, and — for roles that
+depend on the prediction — a penalty scaled by `1 - confidence`.
 
-`canTrapTick()` and `canShamePlace()` are called from inside `isPrePlaceAngle`,
-and `isPrePlaceAngle` runs **once per candidate angle** — up to 144 for spikes
-and 144 again for traps. `canTrapTick` sweeps one full placement ring;
-`canShamePlace` sweeps two. So one preplace pass could ask the collision table
-on the order of a hundred thousand questions per tick, for an answer that cannot
-change inside a tick — neither takes an argument, and both read only per-tick
-state.
+A spike that would knock the enemy **toward** us is refused outright: it undoes
+the hold it was meant to punish.
 
-This is the FPS drop the source clients are known for; one of them says
-*"preplacer causes fps drops"* in its own header. NOVASTORM answers it with a
-per-tick cache, and YoRHa had dropped that cache. It is back, in three parts:
+### Packets
 
-- **`shameMemo()`** — one answer per tick for both gates. Keyed on the context's
-  `myPlayer` as well as the tick, because `ctxRun` swaps the whole mod state
-  (tick included) to run this same code on each bot's world; a tick-only key
-  would hand one bot another's answer.
-- **`getPrePlaceAngles` cache** — keyed on the object array *itself*, not
-  NOVASTORM's `id + '_' + customObjects.length`, which collides whenever two
-  different sets happen to be the same size. Keying on identity also makes it
-  context-safe for free. `updateAngles()` still calls `buildPlaceAngles()`
-  directly for a guaranteed-fresh sweep.
-- The NOVASTORM spike lane grades the ring **once** and splits it, instead of
-  grading the perfect slots and then grading the whole ring again.
+One ledger. `perTick` structures maximum, never below `reserve` packets/sec so
+heal, insta and hat swaps always have room. Spending walks the priority list and
+never across it — a re-trap can't lose its packet to a speculative seal.
 
-### Send lanes
+### Recording
 
-blisma's predictions ride the same three lanes as the YoRHa lane's: immediate,
-30ms, and the 111ms resend. That last one is gated on `spamPrePlacer`, which
-only `getPrePlaceObject()` raised — and since the two preplacers are exclusive,
-nothing would raise it while blisma held the ring. blisma raises it itself. The
-same applies to the place-tick re-fire: a landed prediction reopens the tick for
-either family, not just the YoRHa one.
+Every emission is written down with the spot it was aimed at. Later ticks look
+for one of our structures there: found is a confirm, the window expiring is a
+reject. Reachable live at `window.FORGE_STATS()` — tuning, ledger, per-role
+accuracy, the current world model, and the last twelve decisions.
 
-### One thing the harness caught
+## Why it cannot conflict with the autoplacer
 
-The route-around cap started at 8, then 24. Both are unreachable: two spikes on
-a 70-radius ring stop overlapping at 2·asin(35/70) = 60° apart, and since both
-candidate lists are ordered nearest-the-hole-first, the first slot far enough
-out lands ~37 entries into an 86-entry list. Anything under that silently turns
-every routed break into a dropped one. The cap is now the ring itself (144).
+- Emits **only** through `addPredictObject()` — the same marker check the
+  autoplacer adds through. A held slot is refused and FORGE takes its next
+  candidate.
+- Runs **before** `updateAngles()`, so its angles are in `placedAngles` for the
+  autoplacer's ban pass on the next tick — the existing mechanism, unchanged.
+- Never calls `place()` or `io.send()`; output is ordinary `predictObjects`.
+- Never writes `bannedAngles` or `placedAngles`, never mutates a sweep result.
+- Never calls `canTrapTick()` / `canShamePlace()` — they survive untouched for
+  the autoplacer, and not calling them per-angle is what removes the FPS drop.
+
+All six are asserted against the engine's source with comments stripped.
+
+## Menu
+
+**Placers → FORGE**: Enable, Engage Range, Structures/Tick, Packet Reserve. The
+sliders are read fresh each tick, so changes apply without a reload.
 
 ## Verifying
 
 ```
-node tools/verify-placers.js [path/to/YoRHa_System.user.js]
+node tools/verify-forge.js [path/to/YoRHa_System.user.js]
 ```
 
-It lifts the real function bodies out of the script by name — nothing is
-re-implemented — and runs them against a stub world with a recording
-`addPredictObject`. It also asserts every new function is defined exactly once
-*and reached*, which is the disease the source clients were full of: NOVASTORM
-calls `batchPlaceTrap` in six places and never defines it, AI Client's
-`AutoReplace` is never called, starrclient's better preplacer is shadowed by a
-second assignment to the same name.
+Lifts the real function bodies out of the client by name — nothing is
+re-implemented — and runs them in a stub world with a recording
+`addPredictObject`. Covers physics, confidence, sensing, each role, scoring,
+knockback, budget, boundaries, cost, ledger, safety gates, robustness against
+malformed wire data, and integration.
+
+Two defects it caught during the build: a `null` in the break list threw inside
+the tick body, and a non-finite enemy position made every distance `NaN` — which
+compares false against every threshold, so the engine would have sailed straight
+past its own range gates instead of stopping at them.
