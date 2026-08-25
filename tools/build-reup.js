@@ -445,7 +445,389 @@ ${themeButtons}\r
 }
 
 /* ------------------------------------------------------------------ *
- * 10. Driver manifest + runtime drift check
+ * 10. Bot capability layer
+ *
+ * A bot runs the same module list as the owner, so it fights the way the
+ * owner fights. What it never does is anything outside a fight, and that is
+ * not an accident of the bot code — it falls out of three gates in the base
+ * client:
+ *
+ *   - every placement module is a *combat* placement module. AutoPlacer,
+ *     SpikeTrap, AutoRetrap, PlacementDefense and the rest all return early
+ *     without an EnemyManager.nearestEnemy to place against.
+ *   - the two peacetime paths are sandbox-only. Automill.canAutomill and
+ *     AutoBuy.postTick both require `myPlayer.isSandbox`.
+ *   - ModuleHandler._buy refuses to send a store packet outside sandbox
+ *     unless the call is `force`d, and the only force call sites are the
+ *     owner's own store clicks (the handleBuy / handleEquip hooks) and the
+ *     Placer's hotkey path.
+ *
+ * A bot has neither a store UI nor a keyboard, so on a normal server it farms
+ * wood, stone and gold it can never spend: no windmills, so no income and no
+ * age; no purchases, so `canBuy(0, id)` is false for every hat and the hat
+ * modules that drive the owner's gear (DefaultHat, AutoHat, UtilityHat) all
+ * resolve to "no hat" for a bot. Follow and swing is all that is left, which
+ * is exactly what it looks like in game.
+ *
+ * BotBuilder is the missing placement half, BotShopper the missing store
+ * half. Both run only for bots, both stand down the moment the tick is needed
+ * for a fight, and neither changes anything about how the owner plays. Owning
+ * the hats is the whole unlock on the gear side: once a purchase lands,
+ * `bought` has the id and every existing hat module starts driving the bot
+ * the same way it drives the owner.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "settings: bot control keys",
+  `    _botFarmLimit: 0,
+    _botFarmMode: "single",`,
+  `    _botFarmLimit: 0,
+    _botFarmMode: "single",
+    _botBuilder: false,
+    _botBuildMills: true,
+    _botBuildSpikes: false,
+    _botBuildTraps: false,
+    _botBuildLimit: 7,
+    _botAutoBuy: false,`
+);
+
+edit(
+  "module: BotBuilder + BotShopper",
+  `  class ModuleHandler {`,
+  `  /* Peacetime building for bots.
+   *
+   * Placement order is the settings order: windmills first because they are
+   * the only thing that turns farmed wood into the gold the store runs on.
+   * The tick is given up to the combat modules on any sign of a fight, and to
+   * whichever placement module already claimed it this tick (placedOnce). */
+  const BOT_BUILD_PLAN = [ {
+    key: "_botBuildMills",
+    type: 5,
+    capped: true
+  }, {
+    key: "_botBuildSpikes",
+    type: 4,
+    capped: false
+  }, {
+    key: "_botBuildTraps",
+    type: 7,
+    capped: false
+  } ];
+  const BOT_BUILD_ANGLES = 16;
+  const BOT_BUILD_COOLDOWN = 3;
+  const BOT_BUILD_SAFE_DISTANCE = 500;
+  const BOT_BUILD_CLEARANCE = 90;
+  class BotBuilder {
+    moduleName="botBuilder";
+    client;
+    cooldown=0;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.cooldown = 0;
+    }
+    /* A spike tick or a retrap needs the placement tick more than a windmill
+     * does, so anything that reads as a fight stands the builder down. */
+    _isFighting() {
+      const {EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      if (myPlayer.isTrapped) {
+        return true;
+      }
+      if (EnemyManager2.detectedEnemy || EnemyManager2.detectedDangerEnemy) {
+        return true;
+      }
+      const enemy = EnemyManager2.nearestEnemy;
+      return enemy !== null && myPlayer.pos.current.distance(enemy.pos.current) <= BOT_BUILD_SAFE_DISTANCE;
+    }
+    _ownerPosition() {
+      const owner = this.client.ownerClient;
+      const player = owner && owner.myPlayer;
+      return player && player.inGame ? player.pos.current : null;
+    }
+    /* Build away from the owner and work outwards: a bot that drops a mill
+     * between itself and the player it is following walls off its own way
+     * back, and mills are a solid layer. */
+    _angles() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      const ownerPos = this._ownerPosition();
+      const away = ownerPos !== null ? reverseAngle(myPlayer.pos.current.angle(ownerPos)) : ModuleHandler.reverse_move_dir !== null ? ModuleHandler.reverse_move_dir : 0;
+      const step = Math.PI * 2 / BOT_BUILD_ANGLES;
+      const angles = [];
+      for (let i = 0; i < BOT_BUILD_ANGLES; i++) {
+        const offset = Math.ceil(i / 2) * step;
+        angles.push(i % 2 === 0 ? away + offset : away - offset);
+      }
+      return angles;
+    }
+    /* ObjectManager.canPlaceItem only knows about objects, so the owner and
+     * the other bots have to be kept clear here. */
+    _tooCloseToUs(id, angle) {
+      const {myPlayer: myPlayer, ownerClient: owner} = this.client;
+      const position = myPlayer.getPlacePosition(myPlayer.pos.current, id, angle);
+      const ownerPos = this._ownerPosition();
+      if (ownerPos !== null && position.distance(ownerPos) < BOT_BUILD_CLEARANCE) {
+        return true;
+      }
+      if (owner !== null && owner !== undefined) {
+        for (const other of owner.clients) {
+          if (other === this.client) {
+            continue;
+          }
+          const player = other.myPlayer;
+          if (player && player.inGame && position.distance(player.pos.current) < BOT_BUILD_CLEARANCE) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    _tryPlace(plan) {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (!Settings_default[plan.key] || !myPlayer.canPlace(plan.type)) {
+        return false;
+      }
+      const id = myPlayer.getItemByType(plan.type);
+      if (plan.capped) {
+        const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
+        if (count >= Math.min(limit, Settings_default._botBuildLimit)) {
+          return false;
+        }
+      }
+      for (const angle of this._angles()) {
+        if (!myPlayer.canPlaceObject(plan.type, angle) || this._tooCloseToUs(id, angle)) {
+          continue;
+        }
+        ModuleHandler.place(plan.type, angle);
+        ModuleHandler.placedOnce = true;
+        ModuleHandler.placeAngles[0] = plan.type;
+        ModuleHandler.placeAngles[1].push(angle);
+        ModuleHandler.moduleActive = true;
+        return true;
+      }
+      return false;
+    }
+    postTick() {
+      const {isOwner: isOwner, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (isOwner || !Settings_default._botBuilder || !myPlayer.inGame) {
+        return;
+      }
+      if (this.cooldown > 0) {
+        this.cooldown -= 1;
+        return;
+      }
+      if (ModuleHandler.placedOnce || ModuleHandler.healedOnce) {
+        return;
+      }
+      if (ModuleHandler.packetCount > ModuleHandler.packetLimit - 8) {
+        return;
+      }
+      if (this._isFighting()) {
+        return;
+      }
+      for (const plan of BOT_BUILD_PLAN) {
+        if (this._tryPlace(plan)) {
+          this.cooldown = BOT_BUILD_COOLDOWN;
+          return;
+        }
+      }
+    }
+  }
+  /* The store, for bots.
+   *
+   * Every id here is one the client's own gear modules already ask for by
+   * number, in the order a bot gets the most out of them: Soldier Helmet is
+   * what _antienemy reaches for on every threat, Monkey Tail is the cheapest
+   * real upgrade, and the 10k+ gear only starts landing once the windmills
+   * have been paying for a while. A bot buys the highest-priority item it can
+   * afford right now rather than saving up, so a slow farmer still ends up
+   * wearing something.
+   *
+   * The buy goes through ModuleHandler._buy with force, which is the same
+   * call the owner's own store clicks make - it checks what is already
+   * bought, checks the gold, sends the packet and books the spend. That
+   * bought set is only
+   * written when the server confirms the purchase (packet "5"), so a rejected
+   * buy is retried, and the attempt cap is what stops that becoming a loop. */
+  const BOT_STORE_PLAN = [ [ 0, 6 ], [ 1, 11 ], [ 0, 31 ], [ 0, 15 ], [ 0, 12 ], [ 0, 22 ], [ 0, 7 ], [ 0, 53 ], [ 0, 11 ], [ 0, 40 ], [ 1, 19 ], [ 1, 21 ], [ 1, 13 ], [ 1, 18 ], [ 0, 5 ] ];
+  const BOT_STORE_ATTEMPTS = 4;
+  const BOT_STORE_COOLDOWN = 18;
+  class BotShopper {
+    moduleName="botShopper";
+    client;
+    cooldown=0;
+    attempts=new Map;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.cooldown = 0;
+      this.attempts.clear();
+    }
+    postTick() {
+      const {isOwner: isOwner, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (isOwner || !Settings_default._botAutoBuy) {
+        return;
+      }
+      if (!myPlayer.inGame || myPlayer.isSandbox) {
+        return;
+      }
+      if (this.cooldown > 0) {
+        this.cooldown -= 1;
+        return;
+      }
+      if (ModuleHandler.packetCount > ModuleHandler.packetLimit - 4) {
+        return;
+      }
+      for (const [type, id] of BOT_STORE_PLAN) {
+        if (ModuleHandler.hasStoreItem(type, id)) {
+          continue;
+        }
+        const price = DataHandler_default.getStore(type)[id].price;
+        if (price === 0 || myPlayer.tempGold < price) {
+          continue;
+        }
+        const key = type + ":" + id;
+        const tried = this.attempts.get(key) || 0;
+        if (tried >= BOT_STORE_ATTEMPTS) {
+          continue;
+        }
+        this.attempts.set(key, tried + 1);
+        ModuleHandler._buy(type, id, true);
+        this.cooldown = BOT_STORE_COOLDOWN;
+        return;
+      }
+    }
+  }
+  class ModuleHandler {`
+);
+
+edit(
+  "modules: construct BotBuilder + BotShopper",
+  `        autoMill: new Automill_default(client2),
+        autoGrind: new AutoGrind(client2),`,
+  `        autoMill: new Automill_default(client2),
+        botBuilder: new BotBuilder(client2),
+        botShopper: new BotShopper(client2),
+        autoGrind: new AutoGrind(client2),`
+);
+
+/* Both go in the shared module list rather than botModules: botModules run
+ * first, before any combat module has had the chance to claim the tick, and
+ * a windmill must never be what stops a retrap from going down. Sitting here,
+ * right after Automill, they see placedOnce already set by whatever placement
+ * module needed it, and they still land before UpdateAttack / UpdateAngle
+ * finalise the tick. Each one returns immediately for the owner. */
+edit(
+  "modules: run BotBuilder + BotShopper in the tick",
+  `this.staticModules.autoMill, this.staticModules.autoGrind,`,
+  `this.staticModules.autoMill, this.staticModules.botBuilder, this.staticModules.botShopper, this.staticModules.autoGrind,`
+);
+
+/* Chat commands, next to the ones that already steer bots from chat. */
+edit(
+  "commands: !bbuild / !bbuy",
+  `            if (message === "!abot") {`,
+  `            if (message === "!bbuild" || message === "!sbbuild") {
+              const enable = message === "!bbuild";
+              Settings_default._botBuilder = enable;
+              if (enable) {
+                Settings_default._botBuildMills = true;
+              }
+              SaveSettings();
+              try {
+                syncCheckboxUI("_botBuilder");
+                syncCheckboxUI("_botBuildMills");
+              } catch (e) {}
+            }
+            if (message === "!bbuy" || message === "!sbbuy") {
+              Settings_default._botAutoBuy = message === "!bbuy";
+              SaveSettings();
+              try {
+                syncCheckboxUI("_botAutoBuy");
+              } catch (e) {}
+            }
+            if (message === "!abot") {`
+);
+
+/* Menu: Bots -> Full Control, above the Auto Farm block it feeds off. */
+patchPage(
+  "Bots_default",
+  `\r\n\r\n    <div class="section">\r\n        <div class="section" style="margin-top:6px;">`,
+  `\r
+\r
+    <div class="section">\r
+        <div class="section-title">Full Control</div>\r
+        <div class="section-content">\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Bots build</span>\r
+                <label class="switch-checkbox">\r
+                    <input id="_botBuilder" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Bots place their own buildings whenever no enemy is near them. Combat placement always wins the tick.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Build windmills</span>\r
+                <label class="switch-checkbox">\r
+                    <input id="_botBuildMills" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">50 wood and 10 stone each, and the only thing that earns a bot gold. Set Farm Mode to Nearest so bots gather both.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Windmill limit</span>\r
+                <label class="slider">\r
+                    <span class="slider-value"></span>\r
+                    <input id="_botBuildLimit" type="range" step="1" min="1" max="30">\r
+                </label>\r
+                <span class="option-description">Per bot. The server caps mills at 7 outside sandbox, so anything above that only matters in sandbox.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Build spikes</span>\r
+                <label class="switch-checkbox">\r
+                    <input id="_botBuildSpikes" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Off by default: spikes are solid for everyone, so a following bot lays them along your path.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Build traps</span>\r
+                <label class="switch-checkbox">\r
+                    <input id="_botBuildTraps" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Needs age 4 with Trap picked in Age 4 Building.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
+                <span class="option-title">Bots buy gear</span>\r
+                <label class="switch-checkbox">\r
+                    <input id="_botAutoBuy" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Bots spend their own gold on the hats and accessories the client already asks for. Once a bot owns one, your hat logic equips it for the bot exactly like it does for you.</span>\r
+            </div>\r
+\r
+        </div>\r
+    </div>\r
+`
+);
+
+/* Menu: the same two commands on the Chat Commands page. */
+edit(
+  "menu: bot building commands page section",
+  `${"$"}{card("!sabot", t.sabot_title || "Stop auto-attack mode", "!sabot", t.sabot_example || "Bots stop attacking and return to follow or idle", t.sabot_note || "Use this to avoid triggering unwanted fights.")}\\n</div></div>`,
+  `${"$"}{card("!sabot", t.sabot_title || "Stop auto-attack mode", "!sabot", t.sabot_example || "Bots stop attacking and return to follow or idle", t.sabot_note || "Use this to avoid triggering unwanted fights.")}\\n</div></div>\\n<div class="section"><div class="section-title">${"$"}{t.bot_building || "Bot Building"}</div>\\n<div class="section-content" style="display:flex;flex-direction:column;gap:8px;padding:8px 0">\\n${"$"}{card("!bbuild", t.bbuild_title || "Let bots build for themselves", "!bbuild", t.bbuild_example || "Bots place windmills whenever no enemy is near", t.bbuild_note || "Turns on Bots build and Build windmills on the Bots page.")}\\n${"$"}{card("!sbbuild", t.sbbuild_title || "Stop bots from building", "!sbbuild", t.sbbuild_example || "Bots stop placing buildings of their own", t.sbbuild_note || "Combat placement is unaffected either way.")}\\n${"$"}{card("!bbuy", t.bbuy_title || "Let bots spend their own gold", "!bbuy", t.bbuy_example || "Bots buy hats and accessories as they can afford them", t.bbuy_note || "Once bought, your hat logic equips them for the bot.")}\\n${"$"}{card("!sbbuy", t.sbbuy_title || "Stop bots from buying", "!sbbuy", t.sbbuy_example || "Bots keep their gold", t.sbbuy_note || "Anything already bought stays bought.")}\\n</div></div>`
+);
+
+/* ------------------------------------------------------------------ *
+ * 11. Driver manifest + runtime drift check
  *
  * The tables the client carries were checked against the shipped bundle at
  * build time (tools/verify-drivers.js). This records what they were checked

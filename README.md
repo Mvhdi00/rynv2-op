@@ -83,6 +83,54 @@ only when actually in sandbox and falls back to `group.limit` otherwise, and
 `AutoRetrap._isItemLimit` is written against that. `AutoPlacer` now makes the
 same call, so all three agree.
 
+### Bot capabilities
+
+Bots run the same module list as the owner, so they fight the way the owner
+fights. What they never did was anything *outside* a fight: no buildings, no
+windmills, no purchases. Follow and swing was the whole repertoire.
+
+That is not the bot code's doing — it falls out of three gates in the base
+client:
+
+- **Every placement module is a combat placement module.** `AutoPlacer`,
+  `SpikeTrap`, `AutoRetrap`, `PlacementDefense` and the rest all return early
+  without an `EnemyManager.nearestEnemy` to place against.
+- **The two peacetime paths are sandbox-only.** `Automill.canAutomill` and
+  `AutoBuy.postTick` both require `myPlayer.isSandbox`.
+- **`ModuleHandler._buy` will not send a store packet outside sandbox** unless
+  the call is `force`d, and the only force call sites are the owner's own store
+  clicks (the `handleBuy` / `handleEquip` hooks).
+
+A bot has neither a store UI nor a keyboard, so on a normal server it farms
+wood, stone and gold it can never spend. And because `canBuy(0, id)` answers
+`bought.has(id)` outside sandbox, a bot that owns no hats makes every hat
+module — `DefaultHat`, `AutoHat`, `UtilityHat` — resolve to "no hat", which is
+why bots also never wore gear.
+
+Two modules close that, both bot-only, both registered next to `Automill` in
+the shared module list so combat placement always gets the tick first:
+
+| | |
+|---|---|
+| **`BotBuilder`** | Places windmills, and optionally spikes and traps, whenever no enemy is near. Builds away from the owner and outwards, keeps 90 units clear of the owner and of the other bots, honours the real item-group limits, and yields the tick to any placement module that already used it. |
+| **`BotShopper`** | Spends the bot's own gold on the hats and accessories the client already asks for by id, cheapest useful thing first. It goes through `_buy(type, id, true)` — the same call the owner's store clicks make. |
+
+Owning the hats is the whole unlock on the gear side: once a purchase is
+confirmed, `bought` has the id and every existing hat module starts driving the
+bot the same way it drives the owner. Windmills are what pays for it — 50 wood
+and 10 stone each, so Auto Farm wants **Nearest** mode to gather both.
+
+Controls live in **Bots → Full Control** (`_botBuilder`, `_botBuildMills`,
+`_botBuildLimit`, `_botBuildSpikes`, `_botBuildTraps`, `_botAutoBuy`), and in
+chat as `!bbuild` / `!sbbuild` and `!bbuy` / `!sbbuy` alongside the existing bot
+commands. Spikes and traps default to off: spikes are solid for everyone, so a
+following bot lays them along your path.
+
+What already worked and was left alone: bots mirror the owner's placement
+hotkeys (`InputHandler.placementHandler` broadcasts `startPlacement`), the
+owner's store buys and equips (both hooks force the call across every bot), and
+the owner's upgrade order (`_applyBotWeaponPatch`).
+
 ### Driver correction
 
 `ItemGroups[8]` — the platform group — carried `layer: -1` in RYN. The shipped
@@ -125,6 +173,7 @@ src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
+tools/test-bot-modules.js BotBuilder / BotShopper against stub clients
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 
@@ -144,6 +193,7 @@ a newer RYN will surface as a build error rather than a half-merged script.
 ```sh
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
+node tools/test-bot-modules.js
 node --check ReUp_Mix.user.js
 ```
 
@@ -156,6 +206,13 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
+- **Bot modules** — 39/39 checks. `test-bot-modules.js` lifts `BotBuilder` and
+  `BotShopper` out of the build output and runs them against stub clients, so
+  the gating is exercised rather than just parsed: owner short-circuit, combat
+  stand-down, tick and packet-budget yielding, item limits, owner and
+  bot clearance, the angle fallback, the buy order, the throttle and the
+  retry cap. The buy plan's hat and accessory ids are checked against
+  `drivers/game-drivers.json`, so a wrong id fails the run.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
@@ -177,3 +234,6 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+- The bot control toggles are *not* excluded from Legit Mode. They are
+  automation, so Legit Mode switches them off with everything else and restores
+  them from its backup when you turn it off again.
