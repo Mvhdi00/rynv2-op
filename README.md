@@ -481,7 +481,36 @@ off. Turning Auto Mills on did nothing for the bots because they answer to a
 different switch, and the only thing carrying yours across was the context
 swap: the fragile half.
 
-`_botWants(botKey, mineOn)` puts them back together. The bot switch still forces
+### The module list
+
+RYN keeps its behaviours in a list and walks it once a tick:
+`for (const m of this.modules) m.postTick()`. YoRHa's bot behaviours had the
+right shape but no list — they were a hand-written chain of `if`s and early
+returns inside a 200-line `_botTick`, so the order was implicit, adding a
+behaviour meant editing the middle of that function, and one that threw took
+every behaviour after it down with it.
+
+`BOT_MODULES` is the same list in YoRHa's terms:
+
+```js
+{ name, stage, run(ctx) -> bool }
+```
+
+Returning `true` means "this module spent the tick" — the exact meaning
+`if (this._autoX(bot)) return;` already had. The **stages** are the chain's real
+structure, named: `open` before anything is decided, `target` once the hunt has
+said what this bot is for, `walk` once the heading is settled — which is what a
+behaviour borrowing the attack packet while moving has to wait for. Order inside
+a stage is list order, as in RYN.
+
+`ctx` is the bot's own tick state and nothing else; no global is swapped to
+build it, which is the whole point. Each module is isolated: one that throws is
+recorded on the bot and skipped, and every module after it still gets its turn.
+
+Adding a bot behaviour is now one entry in the list. `RynBots.diag()` shows
+which module last fired, how many have, and the last one to throw.
+
+`_botWants(botKey, mineOn)` puts the switches back together. The bot switch still forces
 a behaviour on by itself, for a squad meant to act differently from you; and
 with Mirror My Keys on, your own switch drives them **through the reliable
 layer**. A full port of RYN's architecture — 136 globals into a client object,

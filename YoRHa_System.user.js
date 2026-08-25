@@ -16471,6 +16471,83 @@ for (let tree of trees) {
             return v < lo ? lo : (v > hi ? hi : v);
         }
 
+        // =====================================================================
+        // THE BOT MODULE LIST   (RYN's arrangement, written in YoRHa's terms)
+        // =====================================================================
+        // RYN v5.4 keeps its behaviours in a list and walks it once a tick for
+        // every client it owns — `for (const m of this.modules) m.postTick()` —
+        // with each module reading `this.client` rather than a global that has
+        // to be swapped in first. That is the whole of why RYN's bots do what
+        // its owner does: there was never a second code path for them.
+        //
+        // YoRHa's own bot behaviours already have that shape. _autoHeal,
+        // _autoFarm and _autoMills take `bot`, read the bot's own world model
+        // and send on the bot's own socket; there is no ctxRun anywhere near
+        // them, which is why they are the ones that never break. What they did
+        // not have was RYN's LIST — they were a hand-written chain of ifs and
+        // early returns inside _botTick, so the order was implicit, a new
+        // behaviour meant editing the middle of a 200-line function, and one
+        // that threw took every behaviour after it down with it.
+        //
+        // So: the same list, in YoRHa's terms. A module is
+        //
+        //     { name, stage, run(ctx) -> bool }
+        //
+        // and returning true means "this module spent the tick", which is the
+        // exact meaning the chain's `if (this._autoX(bot)) return;` already had.
+        //
+        // The stages are the chain's real structure, named. `open` runs before
+        // anything is decided; `target` once the hunt has said what this bot is
+        // for; `walk` once the heading is known, which is what a behaviour that
+        // borrows the attack packet while moving has to wait for. Ordering
+        // inside a stage is list order, as it is in RYN.
+        //
+        // Adding a bot behaviour is now one entry here.
+        const BOT_MODULES = [
+            // Food beats everything: the swings it costs have already left the
+            // attack state at 0, so falling through to combat would fight it.
+            // Full Mod on, the mod itself heals and this stands aside.
+            {
+                name: "heal", stage: "open",
+                run: (c) => !c.full && RynBots._autoHeal(c.bot),
+            },
+
+            // A bot with no wood cannot do any of the rest. Yields the moment
+            // something worth fighting is in reach, to the hunt, and to a bot
+            // you are steering by hand.
+            {
+                name: "farm", stage: "target",
+                run: (c) => {
+                    const bot = c.bot, V = c.V;
+                    const enemy = RynBots._nearestEnemy(bot);
+                    const busy = c.role || V.botFreeze || V.botRandomMove || V.botFollowCursor
+                              || (enemy && enemy.d <= RynBots._reach(bot) * 1.5);
+                    if (busy) { bot.farmTarget = null; return false; }
+
+                    const farm = RynBots._autoFarm(bot);
+                    if (!farm) return false;
+
+                    RynBots._sendWeapon(bot, farm.weapon);
+                    RynBots._sendAim(bot, farm.angle);
+                    RynBots._sendAttack(bot, farm.mode === "hit");
+                    RynBots._sendMove(bot, farm.mode === "walk" ? RynBots._safeWalk(bot, farm.angle) : null);
+                    return true;
+                },
+            },
+
+            // The mill trail. It borrows the attack packet, so it must not run
+            // on a tick that is already swinging — hence `walk`, after the push
+            // has had its say about where this bot is going.
+            {
+                name: "mills", stage: "walk",
+                run: (c) => {
+                    if (!RynBots._autoMills(c.bot, c.moveAngle)) return false;
+                    RynBots._sendMove(c.bot, c.moveAngle);
+                    return true;
+                },
+            },
+        ];
+
         const RynBots = {
             list: [],
             lockPos: null,
@@ -16571,6 +16648,38 @@ for (let tree of trees) {
             // behaviour on by itself, for a squad meant to act differently from
             // you — and with Mirror My Keys on, your own switch drives them too,
             // through THIS layer rather than through the swap.
+            // Walk BOT_MODULES for one stage. The first module that acts owns
+            // the tick and the walk stops there, which is what the chain of
+            // early returns this replaces already meant.
+            //
+            // Each module is isolated. One that throws is recorded on the bot
+            // and skipped, and every module after it still gets its turn — a
+            // single broken behaviour must never cost a bot all the others,
+            // which is the lesson the render loop taught the hard way. What
+            // fired, and what threw, is on RynBots.diag().
+            _runBotModules(stage, ctx) {
+                const d = ctx.bot.diag || (ctx.bot.diag = {});
+                for (const mod of BOT_MODULES) {
+                    if (mod.stage !== stage) continue;
+
+                    let acted = false;
+                    try {
+                        acted = !!mod.run(ctx);
+                    } catch (e) {
+                        d.modErr = mod.name + ": " + String((e && e.message) || e);
+                        this._noteModThrow(ctx.bot, e);
+                        continue;
+                    }
+
+                    if (acted) {
+                        d.lastModule = mod.name;
+                        d.ranModules = (d.ranModules || 0) + 1;
+                        return mod.name;
+                    }
+                }
+                return null;
+            },
+
             _botWants(botKey, mineOn) {
                 const v = window.vars || {};
                 if (v[botKey]) return true;
@@ -16602,6 +16711,11 @@ for (let tree of trees) {
                     sent: (b.diag && b.diag.sent) || 0,
                     bail: (b.diag && b.diag.bail) || "",
                     err: (b.diag && b.diag.err) || "",
+                    // the module list, which is the layer that does not use the
+                    // context swap and so is the one to look at first
+                    module: (b.diag && b.diag.lastModule) || "",
+                    modRan: (b.diag && b.diag.ranModules) || 0,
+                    modErr: (b.diag && b.diag.modErr) || "",
                 }));
                 try { console.table ? console.table(rows) : console.log(rows); } catch (e) { console.log(rows); }
                 return rows;
@@ -18362,12 +18476,14 @@ for (let tree of trees) {
                 // tick wins outright.
                 const full = !!V.botFullMod && !!bot.mod;
 
-                // --- eat first ----------------------------------------------------
-                // Food beats everything else this tick: the swings it costs have
-                // already left the attack state at 0, so falling through to the
-                // combat code below would fight it.
-                // The bot keeps whatever heading it already had while it eats.
-                if (!full && this._autoHeal(bot)) return;
+                // What every module reads. It is the bot's own tick state and
+                // nothing else — no global is swapped to build it, which is the
+                // whole point of the arrangement.
+                const ctx = { bot: bot, V: V, now: now, idx: idx, total: total,
+                              full: full, role: null, moveAngle: null };
+
+                // --- stage: open ---------------------------------------------------
+                if (this._runBotModules("open", ctx)) return;
 
                 // --- Scan and Kill: has this bot got eyes on the target? ---------
                 // The spotter is whoever last saw them; it keeps its distance and
@@ -18439,26 +18555,11 @@ for (let tree of trees) {
                     return;
                 }
 
-                // --- gather ------------------------------------------------------
-                // Before any of the combat below, because a bot with no wood is
-                // a bot that cannot do any of it. Yields the moment something
-                // worth fighting is in reach, and to the hunt, and to a bot you
-                // are already steering by hand.
-                const farmEnemy = this._nearestEnemy(bot);
-                const farmBusy = role || V.botFreeze || V.botRandomMove || V.botFollowCursor
-                              || (farmEnemy && farmEnemy.d <= this._reach(bot) * 1.5);
-                if (!farmBusy) {
-                    const farm = this._autoFarm(bot);
-                    if (farm) {
-                        this._sendWeapon(bot, farm.weapon);
-                        this._sendAim(bot, farm.angle);
-                        this._sendAttack(bot, farm.mode === "hit");
-                        this._sendMove(bot, farm.mode === "walk" ? this._safeWalk(bot, farm.angle) : null);
-                        return;
-                    }
-                } else {
-                    bot.farmTarget = null;
-                }
+                // --- stage: target -------------------------------------------------
+                // The hunt has said what this bot is for, so gathering can now
+                // tell whether it is free to go and get wood.
+                ctx.role = role;
+                if (this._runBotModules("target", ctx)) return;
 
                 // --- shove them onto the spike ------------------------------------
                 // The mod sets predictMoveAngle = autoPushAngle, overriding
@@ -18468,10 +18569,12 @@ for (let tree of trees) {
                 const pushAngle = this._autoPush(bot, pushEnemy);
                 if (pushAngle !== null) moveAngle = pushAngle;
 
-                // --- lay the mill trail -------------------------------------------
-                // Before the combat decisions: it borrows the attack packet, so
-                // it must not run on a tick that is already swinging.
-                if (this._autoMills(bot, moveAngle)) { this._sendMove(bot, moveAngle); return; }
+                // --- stage: walk ---------------------------------------------------
+                // The heading is settled, so anything that borrows the attack
+                // packet while moving can have its turn before the combat
+                // decisions below start swinging.
+                ctx.moveAngle = moveAngle;
+                if (this._runBotModules("walk", ctx)) return;
 
                 // --- what is in the way ------------------------------------------
                 const breakAim = this._autoBreak(bot, moveAngle);
