@@ -614,6 +614,38 @@ identity (`x.id === d[0] || x.sid === d[1]`), so a player the stream or a seed
 already built is updated rather than duplicated — a twin would split their
 updates, and the one drawn would not be the one holding the chat.
 
+### "It worked, and then it stopped"
+
+Three things ended a mill trail without a word.
+
+**The item cap was never asked about.** The same hole the master's `isItemLimit`
+had, on the bot side: nothing read `bot.itemCounts`, though the server's own
+`updateItemCounts` packet had been filling it all along. Mills cap at **7** and a
+bot lays three at a time, so within a couple of bursts every further mill was a
+packet the server threw away — silently, forever. `_botAtLimit` asks now, and
+`_botCanPlace` refuses before spending anything.
+
+**The budget was the wrong player's.** `if (packets + 5 > 119) break;` read the
+*master's* counter, so a busy tick of yours silenced every bot at once — while
+the bot's real rate went uncounted, because these sends never pass through
+`modSend`. Both halves wrong in one line. `_botBudget` / `_botSend` give each bot
+its own ceiling and its own second.
+
+**Wood runs out.** A mill costs 50 wood and bots do not gather unless Auto Farm
+is on, which defaults off. That is not a bug — it is the reason the trail dies a
+few bursts in, and it was invisible.
+
+So every gate now names itself. `RynBots.diag()` carries a `why` column:
+
+```
+why: {"mills":"out of wood — turn on Auto Farm (Bots tab)"}
+why: {"mills":"at the mill cap — needs some to break, or Auto Farm to rebuild elsewhere"}
+why: {"mills":"standing still"}   ...
+```
+
+and it clears the moment the behaviour works again. Twenty-two checks cover the
+gates, the cap arriving mid-session, and the budget being the bot's own.
+
 ### What a bot still cannot do
 
 - **Chat, at all.** `modSend` swallows opcode `"6"` — deliberately, since forty

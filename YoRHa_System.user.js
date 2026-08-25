@@ -16756,6 +16756,9 @@ for (let tree of trees) {
                     module: (b.diag && b.diag.lastModule) || "",
                     modRan: (b.diag && b.diag.ranModules) || 0,
                     modErr: (b.diag && b.diag.modErr) || "",
+                    mills: (b.diag && b.diag.mills) || 0,
+                    // the gate that stopped each behaviour, if one did
+                    why: (b.diag && b.diag.why) ? JSON.stringify(b.diag.why) : "",
                 }));
                 try { console.table ? console.table(rows) : console.log(rows); } catch (e) { console.log(rows); }
                 return rows;
@@ -17673,35 +17676,50 @@ for (let tree of trees) {
             // Guarded by !nearestTrap there; here that is "not stuck", which is
             // the bot's equivalent of being pinned.
             _autoMills(bot, moveAngle) {
-                if (!this._botWants("botAutoMills", autoMills)) return false;
-                if (moveAngle === null || moveAngle === undefined) return false;
-                if (bot.stuckTicks > 0) return false;              // pinned, not walking
+                if (!this._botWants("botAutoMills", autoMills)) return this._botBail(bot, "mills", "switched off");
+                if (moveAngle === null || moveAngle === undefined) return this._botBail(bot, "mills", "standing still");
+                if (bot.stuckTicks > 0) return this._botBail(bot, "mills", "pinned");
+
                 const mill = (bot.itemsOwned || [])[3];
-                if (mill === undefined || mill === null) return false;
+                if (mill === undefined || mill === null) return this._botBail(bot, "mills", "no mill in its build slots");
                 const item = items.list[mill];
-                if (!item) return false;
-                if (!this._canAfford(bot, mill)) return false;
+                if (!item) return this._botBail(bot, "mills", "no mill in its build slots");
+
+                // The two that end a trail without a word, and the reason "it
+                // worked and then stopped" is the usual way this is noticed:
+                // the cap arrives after a few bursts, and the wood runs out
+                // shortly after unless the bot is gathering.
+                if (this._botAtLimit(bot, mill)) return this._botBail(bot, "mills", "at the mill cap — needs some to break, or Auto Farm to rebuild elsewhere");
+                if (!this._canAfford(bot, mill)) return this._botBail(bot, "mills", "out of wood — turn on Auto Farm (Bots tab)");
+
                 const now = Date.now();
                 if (now - bot.millAt < 400) return false;
+
                 const back = moveAngle + Math.PI;
                 const off = UTILS.toRad(item.scale + item.scale / 2);
                 let placed = 0;
                 for (const a of [back, back - off, back + off]) {
-                    if (packets + 5 > 119) break;
+                    // This bot's budget and this bot's second — it used to read
+                    // the master's counter, so your busy tick silenced them all.
+                    if (!this._botBudget(bot, 4)) break;
                     if (!this._botCanPlace(bot, mill, a)) continue;
-                    try {
-                        EXP.send(bot.ws, "z", [mill, false]);
-                        EXP.send(bot.ws, "F", [1, a]);
-                        EXP.send(bot.ws, "F", [0, a]);
-                    } catch (e) {}
+
+                    this._botSend(bot, "z", [mill, false]);
+                    this._botSend(bot, "F", [1, a]);
+                    this._botSend(bot, "F", [0, a]);
                     placed++;
                 }
-                if (!placed) return false;
+                if (!placed) return this._botBail(bot, "mills", "nowhere clear behind it to place");
+
                 const backTo = (bot.weapons && bot.weapons[0] !== undefined) ? bot.weapons[0] : 0;
-                try { EXP.send(bot.ws, "z", [backTo, true]); } catch (e) {}
+                this._botSend(bot, "z", [backTo, true]);
                 bot.wantWeapon = backTo;
                 bot.attacking = false;
                 bot.millAt = now;
+
+                const d = bot.diag || (bot.diag = {});
+                if (d.why) delete d.why.mills;
+                d.mills = (d.mills || 0) + placed;
                 return true;
             },
 
@@ -17710,9 +17728,58 @@ for (let tree of trees) {
             // exceptSid: an object the caller is about to destroy, so it must not
             // count as being in the way. The mod does the same when it ticks a
             // trap (objects.filter(o => o != enemyTrapped)).
+            // Is this bot at the cap for the item's group?
+            //
+            // The same hole the master's isItemLimit had, on the bot side: it
+            // was never asked at all. Mills cap at 7, and a bot lays three at a
+            // time, so within a few bursts every further mill is a packet the
+            // server throws away — silently, forever, which reads exactly like
+            // "auto mills worked and then stopped".
+            //
+            // bot.itemCounts has been filled from the server's own
+            // updateItemCounts packet all along; nothing was reading it.
+            _botAtLimit(bot, id) {
+                const item = items.list[id];
+                const group = item && item.group;
+                if (!group) return false;
+                if (config.inSandbox) return false;
+
+                const limit = (config.isSandbox && group.sandboxLimit) || group.limit;
+                if (!limit) return false;
+
+                return ((bot.itemCounts && bot.itemCounts[group.id]) || 0) >= limit;
+            },
+
+            // A bot's own packet budget, and its own second.
+            //
+            // The placers used to read `packets` — the MASTER's counter — so a
+            // busy tick of yours silenced every bot at once, and the bot's real
+            // rate went uncounted because these sends never pass through
+            // modSend. Both halves were wrong in the same line.
+            _botBudget(bot, need) {
+                const now = Date.now();
+                if (now - (bot.pktAt || 0) >= 1000) { bot.pktAt = now; bot.pktCount = 0; }
+                return (bot.pktCount || 0) + (need || 1) <= 119;
+            },
+
+            _botSend(bot, type, args) {
+                bot.pktCount = (bot.pktCount || 0) + 1;
+                try { return EXP.send(bot.ws, type, args); } catch (e) { return false; }
+            },
+
+            // Why a behaviour did nothing, on the bot, for RynBots.diag().
+            // "It stopped working" is not a report anyone can act on; the gate
+            // that stopped it is.
+            _botBail(bot, name, why) {
+                const d = bot.diag || (bot.diag = {});
+                (d.why || (d.why = {}))[name] = why;
+                return false;
+            },
+
             _botCanPlace(bot, id, angle, exceptSid) {
                 const item = items.list[id];
                 if (!item) return false;
+                if (this._botAtLimit(bot, id)) return false;
                 const r = 35 + item.scale + (item.placeOffset || 0);
                 const px = bot.x + Math.cos(angle) * r;
                 const py = bot.y + Math.sin(angle) * r;
