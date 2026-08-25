@@ -21167,6 +21167,23 @@ for (let tree of trees) {
 
         // Main pathfinding function - call this every frame
         function pathfindTo(destination, pathMode) {
+            // A bot must never ask.
+            //
+            // There is ONE pathfindWorker for the whole script, and its
+            // onmessage is a module-scope callback: the reply arrives long
+            // after ctxRun has put your state back, so whatever it writes it
+            // writes to YOU — pathfindingState, and predictMoveAngle, which is
+            // the movement command itself. A bot asking for a path would walk
+            // your player down it. Two bots asking would also cross each
+            // other's answers, since the requests carry no id.
+            //
+            // Both routes into here run inside the mod tick, which is exactly
+            // what a Full Mod bot runs: auto grind sets pathPosition, and so
+            // does Autoplay's circle. Bots do not need it — where a bot walks
+            // is _botTick's formation, which is the one thing the mod has no
+            // opinion about because it has no keyboard.
+            if (inBotCtx()) return null;
+
             if (!destination || !myPlayer) return;
 
             const MAX_DIST = 600;

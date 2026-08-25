@@ -459,6 +459,27 @@ Note this is separate from the bots' own `botAutoMills` / `botAutoPlace`
 behaviour layer, which is what they do without Full Mod and answers to its own
 toggles.
 
+### What a bot still cannot do
+
+- **Chat, at all.** `modSend` swallows opcode `"6"` — deliberately, since forty
+  bots on the chat line is a ban. So Killchat, Auto Chat, the Music page and the
+  Pod's chat are yours alone.
+- **Pathfind.** There is one `pathfindWorker` for the whole script and its
+  `onmessage` is a module-scope callback, so the reply lands long after `ctxRun`
+  has put your state back — and writes `pathfindingState` and
+  `predictMoveAngle`, which *is* the movement command. A bot asking for a path
+  would have walked **your** player down it, and two bots asking would cross
+  each other's answers, since the requests carry no id. Both routes into it run
+  inside the mod tick a Full Mod bot runs: auto grind sets `pathPosition`, and
+  so does Autoplay's circle — and Mirror My Keys, above, is what put auto grind
+  within a bot's reach. `pathfindTo` now returns early in a bot context. Where a
+  bot walks is `_botTick`'s formation, which is the one thing the mod has no
+  opinion about because it has no keyboard.
+- **Aim at your cursor.** A bot has no mouse; its aim is whoever it is fighting.
+  Driving one hands it your cursor, which is the exception that proves it.
+- **Anything drawn.** The Pod, toasts, the minimap, the CRT veil and the new
+  combat readout are one screen's worth of yours, not per-bot.
+
 ## Alerts
 
 Under Server Log → **Alerts**.
