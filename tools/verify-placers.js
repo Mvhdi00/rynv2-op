@@ -146,9 +146,13 @@ function world(over = {}) {
   const base = {
     Math, JSON, console, Map, Set, Array, Object, Number, Infinity,
     UTILS: utils, items, config, myPlayer,
+    // Preplace and replace are each ONE job with two families, and only one
+    // family may hold the ring. The blisma scenarios below therefore run in a
+    // world where blisma is the SELECTED family — prePlace/replace off — which
+    // is the only configuration in which its lanes are allowed to do anything.
     window: { vars: Object.assign({
-      prePlace: true, prePlaceNova: true, blismaPre: true, blismaReplace: true,
-      replace: true, replaceRange: 300, placeAngles144: true,
+      prePlace: false, prePlaceNova: true, blismaPre: true, blismaReplace: true,
+      replace: false, replaceRange: 300, placeAngles144: true,
       shameTick: false, shameGrind: true,
     }, over.vars || {}) },
 
@@ -164,6 +168,13 @@ function world(over = {}) {
     gPressed: over.gPressed || false,
     tick: over.tick != null ? over.tick : 100,
     blismaPrePlaced: over.blismaPrePlaced || new Map(),
+
+    // The sweep cache's own state. getPrePlaceAngles is lifted from the client
+    // and reads these as free variables, so each scenario gets a fresh pair —
+    // which also means a stale entry can never leak between scenarios.
+    _placeAnglesTick: -1,
+    _placeAnglesCache: new Map(),
+    spamPrePlacer: false,
 
     getAttackDir: () => 0,
     canTrapTick: over.canTrapTick || (() => false),
@@ -478,7 +489,8 @@ section("isPrePlaceAngle — NOVASTORM grading is additive, off changes nothing"
 
   const mk = (vars) => world({
     nearestEnemy: enemy, traps_our: [trap], spikes_our: [],
-    primaryReload: { 1: 1 }, secondaryReload: { 1: 1 }, vars,
+    primaryReload: { 1: 1 }, secondaryReload: { 1: 1 },
+    vars: Object.assign({ prePlace: true, blismaPre: false }, vars),
   });
 
   // A slot right on the trapped enemy. Nova's Priority 0 takes it with no
@@ -506,7 +518,8 @@ section("isPrePlaceAngle — NOVASTORM grading is additive, off changes nothing"
   // Priority 1 as the only branch that can still say yes out here.
   const isolated = (vars) => world({
     nearestEnemy: enemy, traps_our: [trap], spikes_our: [],
-    primaryReload: { 1: 1 }, secondaryReload: { 1: 1 }, vars,
+    primaryReload: { 1: 1 }, secondaryReload: { 1: 1 },
+    vars: Object.assign({ prePlace: true, blismaPre: false }, vars),
     lineInRect: () => true,
   });
 
@@ -556,6 +569,123 @@ section("the two spikes NOVASTORM lays in one tick");
      `raw ${raw.toFixed(2)}, wrapped ${wrapped.toFixed(2)}`);
   ok("so those two would have been spent as 'two walls' by NOVASTORM's own test",
      raw > 1.2);
+}
+
+// ===========================================================================
+section("exclusivity — one family holds the ring, never both");
+{
+  const wall = wallAt(9, 1060, 1000, 50);
+  const a = enemyAt(1100, 1000, { sid: 2 });
+  const b = enemyAt(1020, 1000, { sid: 3 });
+  const broken = [{ sid: 9, x: 1060, y: 1000, scale: 35, id: 6, trap: false, dmg: true, ours: true }];
+
+  const preWorld = (vars) => world({
+    players: [a, b], visibleObjects: [wall], nearestEnemy: a,
+    primaryReload: { 1: 1, 2: 1, 3: 1 }, vars,
+  });
+
+  // blisma selected: it runs.
+  preWorld({ prePlace: false, blismaPre: true }).blismaPreplace();
+  ok("blisma preplacer runs when it is the selected family", placed.length > 0);
+
+  // YoRHa selected: blisma stands down even with its own toggle left on.
+  preWorld({ prePlace: true, blismaPre: true }).blismaPreplace();
+  ok("blisma preplacer stands down while prePlace holds the ring",
+     placed.length === 0, `placed ${placed.length}`);
+
+  // Neither: nothing.
+  preWorld({ prePlace: false, blismaPre: false }).blismaPreplace();
+  ok("neither selected means no preplace at all", placed.length === 0);
+
+  const repWorld = (vars) => world({
+    nearestEnemy: enemyAt(1060, 1000), primaryReload: { 1: 1 }, vars,
+  });
+
+  repWorld({ replace: false, blismaReplace: true }).blismaReplace(broken);
+  ok("blisma replacer runs when it is the selected family", placed.length > 0);
+
+  repWorld({ replace: true, blismaReplace: true }).blismaReplace(broken);
+  ok("blisma replacer stands down while Falcon's lane holds the ring",
+     placed.length === 0, `placed ${placed.length}`);
+
+  repWorld({ replace: false, blismaReplace: false }).blismaReplace(broken);
+  ok("neither selected means no replace at all", placed.length === 0);
+
+  // The menu has to express the same rule, or the tiles and the runtime
+  // disagree about what is on.
+  ok("the preplace tiles are declared exclusive to each other",
+     /id: "prePlace", exclusive: "blismaPre"/.test(src) &&
+     /id: "blismaPre", exclusive: "prePlace"/.test(src));
+  ok("the replace tiles are declared exclusive to each other",
+     /id: "replace", exclusive: "blismaReplace"/.test(src) &&
+     /id: "blismaReplace", exclusive: "replace"/.test(src));
+  ok("a saved config holding both sides is normalised on load",
+     /window\.vars\.prePlace && window\.vars\.blismaPre/.test(src) &&
+     /window\.vars\.replace && window\.vars\.blismaReplace/.test(src));
+  ok("the Placers hotkey restores the family that was up, not always YoRHa's",
+     src.includes("placerFamilyPre") && src.includes("placerFamilyReplace") &&
+     /PLACER_FAMILY_TILE/.test(src));
+  ok("blisma is off by default — the YoRHa lanes are the default choice",
+     /\n\s*blismaPre: false,/.test(src) && /\n\s*blismaReplace: false,/.test(src));
+}
+
+// ===========================================================================
+section("per-tick memo — the sweep explosion that caused the FPS drops");
+{
+  // canTrapTick/canShamePlace are reached once per candidate angle. Counting
+  // the sweeps they cause is the whole point of the memo.
+  let sweeps = 0;
+  const counted = world({
+    nearestEnemy: enemyAt(1060, 1000),
+    traps_our: [{ x: 1060, y: 1000, scale: 40 }],
+    primaryReload: { 1: 1 }, secondaryReload: { 1: 1 },
+    vars: { prePlace: true, blismaPre: false, shameTick: true, shameGrind: true },
+  });
+
+  ok("canTrapTick is a memo wrapper, not the compute itself",
+     /function canTrapTick\(\) \{ return shameMemo\(\)\.trapTick; \}/.test(src));
+  ok("canShamePlace is a memo wrapper too",
+     /function canShamePlace\(\) \{ return shameMemo\(\)\.shamePlace; \}/.test(src));
+  ok("the compute functions survive under new names",
+     /function computeCanTrapTick\(/.test(src) && /function computeCanShamePlace\(/.test(src));
+  ok("the memo is keyed on the context's player, not the tick alone",
+     /_shameMemoOwner !== myPlayer/.test(src));
+  ok("the sweep cache is keyed on the object set itself, not its length",
+     /_placeAnglesCache\.get\(set\)/.test(src));
+  ok("and cleared on YoRHa's tick counter",
+     /_placeAnglesTick !== tick/.test(src));
+  ok("updateAngles still bypasses the cache for a guaranteed-fresh sweep",
+     /function updateAngles\(id\) \{\s*\n\s*const angles = buildPlaceAngles\(id\);/.test(src));
+  ok("the NOVASTORM spike lane grades the ring once, not twice",
+     /const perfect = graded\.filter\(obj => obj\.perfect\);/.test(src) &&
+     !/gradeSpikes/.test(src));
+}
+
+// ===========================================================================
+section("blisma predictions ride the same send lanes as the YoRHa ones");
+{
+  const wall = wallAt(9, 1060, 1000, 50);
+  const a = enemyAt(1100, 1000, { sid: 2 });
+  const b = enemyAt(1020, 1000, { sid: 3 });
+
+  const c = world({
+    players: [a, b], visibleObjects: [wall], nearestEnemy: a,
+    primaryReload: { 1: 1, 2: 1, 3: 1 },
+    vars: { prePlace: false, blismaPre: true },
+  });
+  c.spamPrePlacer = false;
+  c.blismaPreplace();
+
+  ok("a blisma prediction opens the late 111ms resend lane",
+     c.spamPrePlacer === true, `spamPrePlacer ${c.spamPrePlacer}`);
+
+  // The two preplacers are exclusive, so nothing else can raise that flag while
+  // blisma holds the ring — which is exactly why blisma has to raise it itself.
+  ok("nothing else could have raised it — getPrePlaceObject is the YoRHa lane's",
+     (src.match(/spamPrePlacer = true;/g) || []).length === 2);
+
+  ok("a landed blisma prediction reopens the place tick",
+     /blismaPrePlaced\.size && removedObjects\.some\(\(sid\) => blismaPrePlaced\.has\(sid\)\)/.test(src));
 }
 
 // ===========================================================================

@@ -183,11 +183,20 @@ understood.
 # YoRHa System — extra placer lanes
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-placers.js` — 60 checks.
+revision). Verified by `node tools/verify-placers.js` — 82 checks.
 
-Two placer families were added on top of YoRHa's own, both as toggles under
-**Placers**, both defaulting on. Neither replaces anything that was already
-there.
+Two placer families sit under **Placers**. Preplace and replace are each **one
+job with two families**, and the two are **mutually exclusive** — one family
+holds the ring per job. blisma is off by default; the YoRHa lanes are the
+better-graded ones.
+
+Two preplacers on one ring do not "cover more": they read the same tick
+differently, and the second spends buildings closing ground the first already
+judged not worth a building. The lock is enforced in three places — the menu
+tiles (`exclusive`), a runtime guard in each blisma lane, and a normalisation
+pass at config load for settings saved before this was a choice. The Placers
+hotkey remembers which family was up (`placerFamilyPre` / `placerFamilyReplace`)
+so pressing it twice does not quietly move a blisma user back to YoRHa's lane.
 
 ## Why they could not just be pasted in
 
@@ -263,6 +272,41 @@ is.
 - **Blind placement.** blisma places at the raw angle to the hole without
   checking it. Here `canPlace` answers first, and the sweep escalates to the
   checked ring when the narrow arc is spoken for.
+
+### The sweep explosion
+
+`canTrapTick()` and `canShamePlace()` are called from inside `isPrePlaceAngle`,
+and `isPrePlaceAngle` runs **once per candidate angle** — up to 144 for spikes
+and 144 again for traps. `canTrapTick` sweeps one full placement ring;
+`canShamePlace` sweeps two. So one preplace pass could ask the collision table
+on the order of a hundred thousand questions per tick, for an answer that cannot
+change inside a tick — neither takes an argument, and both read only per-tick
+state.
+
+This is the FPS drop the source clients are known for; one of them says
+*"preplacer causes fps drops"* in its own header. NOVASTORM answers it with a
+per-tick cache, and YoRHa had dropped that cache. It is back, in three parts:
+
+- **`shameMemo()`** — one answer per tick for both gates. Keyed on the context's
+  `myPlayer` as well as the tick, because `ctxRun` swaps the whole mod state
+  (tick included) to run this same code on each bot's world; a tick-only key
+  would hand one bot another's answer.
+- **`getPrePlaceAngles` cache** — keyed on the object array *itself*, not
+  NOVASTORM's `id + '_' + customObjects.length`, which collides whenever two
+  different sets happen to be the same size. Keying on identity also makes it
+  context-safe for free. `updateAngles()` still calls `buildPlaceAngles()`
+  directly for a guaranteed-fresh sweep.
+- The NOVASTORM spike lane grades the ring **once** and splits it, instead of
+  grading the perfect slots and then grading the whole ring again.
+
+### Send lanes
+
+blisma's predictions ride the same three lanes as the YoRHa lane's: immediate,
+30ms, and the 111ms resend. That last one is gated on `spamPrePlacer`, which
+only `getPrePlaceObject()` raised — and since the two preplacers are exclusive,
+nothing would raise it while blisma held the ring. blisma raises it itself. The
+same applies to the place-tick re-fire: a landed prediction reopens the tick for
+either family, not just the YoRHa one.
 
 ### One thing the harness caught
 

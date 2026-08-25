@@ -12142,10 +12142,31 @@ let pps = 0;
                     else if (keyStr === window.vars.keyPlacers) {
                         // One key toggles Auto Place + Preplace + Replace together:
                         // if any is off, turn all on; otherwise turn all off.
-                        const on = !(window.vars.autoPlace && window.vars.prePlace && window.vars.replace);
+                        // "All placers on/off". The preplace and replace jobs
+                        // each have two families now and only one may hold the
+                        // ring, so this cannot just set both ids: it remembers
+                        // which family was up and puts that same one back.
+                        const preOn = window.vars.prePlace || window.vars.blismaPre;
+                        const repOn = window.vars.replace || window.vars.blismaReplace;
+                        const on = !(window.vars.autoPlace && preOn && repOn);
+
                         window.vars.autoPlace = on;
-                        window.vars.prePlace = on;
-                        window.vars.replace = on;
+
+                        if (on) {
+                            const pre = window.vars.placerFamilyPre === "blisma";
+                            const rep = window.vars.placerFamilyReplace === "blisma";
+                            window.vars.prePlace = !pre;
+                            window.vars.blismaPre = pre;
+                            window.vars.replace = !rep;
+                            window.vars.blismaReplace = rep;
+                        } else {
+                            if (preOn) window.vars.placerFamilyPre = window.vars.blismaPre ? "blisma" : "yorha";
+                            if (repOn) window.vars.placerFamilyReplace = window.vars.blismaReplace ? "blisma" : "yorha";
+                            window.vars.prePlace = false;
+                            window.vars.blismaPre = false;
+                            window.vars.replace = false;
+                            window.vars.blismaReplace = false;
+                        }
                     }
                     else if (keyStr === window.vars.keySpawnBot) {
                         RynBots.spawn(window.vars.botCount);
@@ -14548,7 +14569,52 @@ for (let tree of trees) {
 
         }
 
-        function canShamePlace() {
+        // ---------------------------------------------------------------------
+        // PER-TICK MEMO  —  NOVASTORM's _prePlaceCache, on YoRHa's tick counter
+        // ---------------------------------------------------------------------
+        // canTrapTick() and canShamePlace() are called from inside
+        // isPrePlaceAngle, and isPrePlaceAngle runs once per CANDIDATE ANGLE —
+        // up to 144 of them for spikes and 144 again for traps. canTrapTick
+        // sweeps one full placement ring; canShamePlace sweeps two. So a single
+        // preplace pass could ask the collision table on the order of a hundred
+        // thousand questions, every tick, for an answer that cannot change
+        // inside one tick: neither takes an argument, and both read only
+        // per-tick state (reloads, traps_our, nearestEnemy, visibleObjects).
+        //
+        // This is the FPS drop the clients these lanes came from are known for —
+        // "preplacer causes fps drops" is in the header of one of them. NOVASTORM
+        // answers it with a cache keyed on Date.now(); YoRHa has a real tick
+        // counter, which is both cheaper to compare and correct across a tick
+        // that spans more than a millisecond.
+        //
+        // One answer per tick is the same answer, for one sweep instead of
+        // hundreds. The compute functions below are untouched.
+        //
+        // Keyed on the context's own player as well as the tick, because ctxRun
+        // swaps the entire mod state — tick included — to run this same code on
+        // each bot's world. Two contexts sitting on the same tick number is
+        // ordinary; two contexts sharing a myPlayer object is not possible. A
+        // tick-only key would hand one bot another's answer.
+        let _shameMemoTick = -1;
+        let _shameMemoOwner = null;
+        let _shameMemo = { trapTick: false, shamePlace: false };
+
+        function shameMemo() {
+            if (_shameMemoTick !== tick || _shameMemoOwner !== myPlayer) {
+                _shameMemoTick = tick;
+                _shameMemoOwner = myPlayer;
+                _shameMemo = {
+                    trapTick: computeCanTrapTick(),
+                    shamePlace: computeCanShamePlace(),
+                };
+            }
+            return _shameMemo;
+        }
+
+        function canTrapTick() { return shameMemo().trapTick; }
+        function canShamePlace() { return shameMemo().shamePlace; }
+
+        function computeCanShamePlace() {
             if (!nearestEnemy) return false;
             if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
             if (nearestEnemy.spikeDamage > 0) return false;
@@ -14651,7 +14717,7 @@ for (let tree of trees) {
         }
 
 
-        function canTrapTick() {
+        function computeCanTrapTick() {
             if (!nearestEnemy) return false;
             if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
             if (secondaryReload[myPlayer.sid] < 1) return false;
@@ -15044,8 +15110,44 @@ for (let tree of trees) {
             }
         }
 
+        // NOVASTORM caches this per tick and YoRHa dropped the cache. It is
+        // worth having back — a sweep is 72 to 144 canPlace calls, each of them
+        // walking the visible-object table — but not in NOVASTORM's shape: its
+        // key is `id + '_' + customObjects.length`, so two DIFFERENT object sets
+        // that happen to be the same size read as the same entry and one gets
+        // the other's answer. Length is not identity.
+        //
+        // Keyed on the array itself instead, which cannot collide, and on
+        // YoRHa's tick counter rather than Date.now() — correct across a tick
+        // that spans more than a millisecond, and cheaper to compare. Keying on
+        // the object set also makes it context-safe for free: ctxRun gives each
+        // bot its own arrays, so no two contexts can share an entry.
+        //
+        // Safe because nothing mutates what it hands back — every caller either
+        // reads, or filters first (which copies) and sorts the copy. The one
+        // caller that wants a guaranteed-fresh sweep, updateAngles(), calls
+        // buildPlaceAngles() directly and still does.
+        let _placeAnglesTick = -1;
+        let _placeAnglesCache = new Map();
+
         function getPrePlaceAngles(id, customObjects) {
-            return buildPlaceAngles(id, customObjects);
+            if (_placeAnglesTick !== tick) {
+                _placeAnglesTick = tick;
+                _placeAnglesCache.clear();
+            }
+
+            const set = customObjects || visibleObjects;
+            let byId = _placeAnglesCache.get(set);
+            if (!byId) {
+                byId = new Map();
+                _placeAnglesCache.set(set, byId);
+            }
+
+            if (byId.has(id)) return byId.get(id);
+
+            const built = buildPlaceAngles(id, customObjects);
+            byId.set(id, built);
+            return built;
         }
 
         // =====================================================================
@@ -16043,6 +16145,14 @@ for (let tree of trees) {
         // THE PREPLACER
         function blismaPreplace() {
             if (!window.vars.blismaPre) return;
+
+            // Exclusive with the NOVASTORM lane, enforced here and not only in
+            // the menu: a config saved before these became a choice, the Placers
+            // hotkey, or a hand-edited window.vars can all leave both set. The
+            // YoRHa lane wins that tie because it is the better-graded one and
+            // the one the hotkey drives.
+            if (window.vars.prePlace) return;
+
             if (!myPlayer || !nearestEnemy) return;
             if (gPressed) return;                                  // the same grind gate doReplace holds
             if (UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2) >= 300) return;
@@ -16105,6 +16215,15 @@ for (let tree of trees) {
                 // available to the replace lanes.
                 if (blismaTake(id, blismaFillAngles(id, object), true)) {
                     blismaPrePlaced.set(object.sid, tick);
+
+                    // The same flag getPrePlaceObject() raises for the YoRHa
+                    // lane. It opens the late resend at 111ms, which is what
+                    // covers a predicted break that lands later than the 30ms
+                    // lane assumed. Without it a blisma prediction would ride
+                    // the first two lanes and never the third — and since the
+                    // two preplacers are exclusive, nothing else would ever
+                    // raise it while blisma is the selected family.
+                    spamPrePlacer = true;
                 }
             }
         }
@@ -16122,6 +16241,7 @@ for (let tree of trees) {
         // trying to alternate between are written out directly instead.
         function blismaReplace(broken) {
             if (!window.vars.blismaReplace) return;
+            if (window.vars.replace) return;      // exclusive with Falcon's lane
             if (!myPlayer || !nearestEnemy) return;
             if (gPressed) return;
             if (UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2) > 250) return;
@@ -16184,7 +16304,16 @@ for (let tree of trees) {
         function getPredictObjects() {
             // FIX STACK PACKETS
             if (removedObjects.length > 0) {
-                if (lastPrePlaceObject && removedObjects.some((sid) => lastPrePlaceObject.sid == sid)) {
+                // The YoRHa lane tracks the one object it predicted; blisma's
+                // tracks a map of them. Either landing is the same event — the
+                // break we placed ahead of actually happened — and both have to
+                // reopen the place tick, or a blisma prediction that came true
+                // would sit on the packet budget of the tick it was queued in.
+                const landed =
+                      (lastPrePlaceObject && removedObjects.some((sid) => lastPrePlaceObject.sid == sid)) ||
+                      (blismaPrePlaced.size && removedObjects.some((sid) => blismaPrePlaced.has(sid)));
+
+                if (landed) {
                     for (const object of predictObjects) {
                         if (!object.preplace) continue;
 
@@ -16365,12 +16494,19 @@ for (let tree of trees) {
                     // the hole that is about to open, not NOVASTORM's raw ring
                     // order — so the spike still lands where the break is.
                     if (novaPre) {
-                        const gradeSpikes = (list) => list
+                        // Grade the ring ONCE, then split it, rather than
+                        // grading the perfect slots and grading the whole ring
+                        // again when none of them qualified. isPrePlaceAngle is
+                        // the expensive call in this file — it reaches the shame
+                        // gates — so running it twice over the same slots to
+                        // answer one question is the sort of thing that turns a
+                        // preplacer into a frame-rate problem.
+                        const graded = placeableSpikeAngles
                             .filter(obj => isPrePlaceAngle(obj, findObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb))
                             .sort((a, b) => UTILS.getDistance(findObject.x, findObject.y, a.x, a.y) - UTILS.getDistance(findObject.x, findObject.y, b.x, b.y));
 
-                        let validSpikes = gradeSpikes(placeableSpikeAngles.filter(obj => obj.perfect));
-                        if (!validSpikes.length) validSpikes = gradeSpikes(placeableSpikeAngles);
+                        const perfect = graded.filter(obj => obj.perfect);
+                        const validSpikes = perfect.length ? perfect : graded;
 
                         if (validSpikes.length && addPredictObject(validSpikes[0].id, validSpikes[0].angle, true)) {
                             findAngle = validSpikes[0];
@@ -25992,6 +26128,16 @@ for (let tree of trees) {
 
     const STORAGE_KEY = "DELTEK_V4_CONFIG";
 
+    // Preplace and replace are each one job with two families, and only one
+    // family may hold the ring. These four tiles are that choice; this says
+    // which side of which pair each one is.
+    const PLACER_FAMILY_TILE = {
+        prePlace:      ["placerFamilyPre", "yorha"],
+        blismaPre:     ["placerFamilyPre", "blisma"],
+        replace:       ["placerFamilyReplace", "yorha"],
+        blismaReplace: ["placerFamilyReplace", "blisma"],
+    };
+
     // =========================================================================
     //  >>> EASY VARIABLES (DEFAULT SETTINGS) <<<
     // =========================================================================
@@ -26047,10 +26193,23 @@ for (let tree of trees) {
         // visible player has loaded against every building near you, so a wall
         // two enemies are splitting counts as dying; the replacer answers a break
         // with the knock, the re-trap, or a fill sized by how far off your facing
-        // the hole is. Both add through addPredictObject behind the lanes above,
-        // so neither can take a slot another placer already holds.
-        blismaPre: true,
-        blismaReplace: true,
+        // the hole is.
+        //
+        // EXCLUSIVE with the lanes above, not stacked on them. blismaPre is the
+        // other choice to prePlace, blismaReplace the other choice to replace —
+        // one family owns the ring per job. Two preplacers on one ring do not
+        // "cover more": they read the same tick differently, and the second one
+        // spends buildings closing ground the first already judged not worth a
+        // building. Off by default; the YoRHa lanes are the better-graded ones.
+        blismaPre: false,
+        blismaReplace: false,
+
+        // Which family the Placers hotkey puts back when it switches the lanes
+        // on again. The menu tiles keep these current. Without them the key
+        // would quietly move a blisma user back onto the YoRHa lane every time
+        // it was pressed twice.
+        placerFamilyPre: "yorha",
+        placerFamilyReplace: "yorha",
 
         // Replace — Falcon 0.4.7's auto-replace. `replace` is the same id the
         // 1.5 menu and the Placers hotkey already used, so saved settings and
@@ -26181,6 +26340,19 @@ for (let tree of trees) {
         try {
             const parsed = JSON.parse(savedSettings);
             Object.assign(window.vars, parsed);
+
+            // A config saved before the placer families became a choice can hold
+            // both sides of a pair. The runtime guards already resolve that the
+            // same way every tick, but the menu would show two lit tiles for one
+            // job; settle it once, here, so what is drawn is what runs.
+            if (window.vars.prePlace && window.vars.blismaPre) {
+                window.vars.blismaPre = false;
+                window.vars.placerFamilyPre = "yorha";
+            }
+            if (window.vars.replace && window.vars.blismaReplace) {
+                window.vars.blismaReplace = false;
+                window.vars.placerFamilyReplace = "yorha";
+            }
         } catch (e) {
             console.log("Deltek: Corrupt settings file, resetting.");
         }
@@ -26405,16 +26577,16 @@ for (let tree of trees) {
             {
                 title: "Preplacer",
                 items: [
-                    { type: 'toggle', name: "Enable Preplacer", id: "prePlace" },
+                    { type: 'toggle', name: "Preplacer (NOVASTORM)", id: "prePlace", exclusive: "blismaPre" },
                     { type: 'toggle', name: "NOVASTORM Grading", id: "prePlaceNova" },
-                    { type: 'toggle', name: "blisma Preplacer", id: "blismaPre" }
+                    { type: 'toggle', name: "Preplacer (blisma)", id: "blismaPre", exclusive: "prePlace" }
                 ]
             },
             {
                 title: "Replace",
                 items: [
-                    { type: 'toggle', name: "Enable Replace", id: "replace" },
-                    { type: 'toggle', name: "blisma Replacer", id: "blismaReplace" },
+                    { type: 'toggle', name: "Replace (Falcon)", id: "replace", exclusive: "blismaReplace" },
+                    { type: 'toggle', name: "Replace (blisma)", id: "blismaReplace", exclusive: "replace" },
                     { type: 'slider', name: "Activation Range", id: "replaceRange", min: 100, max: 500 }
                 ]
             },
@@ -27553,6 +27725,13 @@ for (let tree of trees) {
                     switchEl.onclick = () => {
                         window.vars[item.id] = !window.vars[item.id];
                         switchEl.classList.toggle('active');
+
+                        // The two placer pairs also record WHICH family is up, so
+                        // the Placers hotkey can put the same one back rather than
+                        // always reverting to YoRHa's. Runs before the exclusive
+                        // early-return below, which is why it is here and not there.
+                        const family = PLACER_FAMILY_TILE[item.id];
+                        if (family && window.vars[item.id]) window.vars[family[0]] = family[1];
                         // A pair of toggles marked `exclusive` are two names for
                         // one choice (Trap / Boost Pad): switching one on closes
                         // the other, and the page redraws so both tiles agree.
