@@ -256,7 +256,15 @@ angle; the real distance is measured here instead.
    `canTrapTick`), so the flag stays a grading signal and nothing is swapped
    from the replacer. YoRHa's spike tick is untouched.
 
-A fourth, smaller one: a slot vetoed for walling in your own walk stays vetoed.
+4. **`points` is spent.** Falcon never initialises `points` on a candidate — so
+   every `points +=` in the grading table lands on `undefined` — and never
+   reads it, which makes the two things it scores (a spike beside a trapped
+   enemy, a spike on their far side) count for nothing. It is initialised here
+   and used as a tiebreak between candidates of equal grade. That cannot
+   reorder anything Falcon ordered by grade; it only settles the ties Falcon
+   settled by accident.
+
+A fifth, smaller one: a slot vetoed for walling in your own walk stays vetoed.
 Falcon re-grades it from zero on the next enemy in the loop, which can lift it
 back above the bar even though the veto was never about that enemy.
 

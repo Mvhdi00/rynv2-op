@@ -15150,6 +15150,10 @@ for (let tree of trees) {
         //      trick. YoRHa already owns that ground (shameTick / canTrapTick),
         //      so the flag stays a grading signal and nothing is swapped from
         //      here. YoRHa's spike tick is untouched.
+        //   4. Falcon's `points` is never initialised on a candidate and never
+        //      read, so the two things it scores count for nothing. It is
+        //      initialised here and spent as a tiebreak between candidates of
+        //      equal grade — see the sort at the end of replaceGrade().
         //
         // Gated by window.vars.replace, ranged by window.vars.replaceRange.
         // =====================================================================
@@ -15385,7 +15389,15 @@ for (let tree of trees) {
                 }
             }
 
-            const byGrade = (a, b) => b.grade - a.grade;
+            // Falcon sorts on grade alone and leaves ties to sweep order. Its
+            // `points` field is never initialised on a candidate — so every
+            // `points +=` in the table above lands on undefined — and never
+            // read, which makes the two things it scores (a spike beside a
+            // trapped enemy, a spike on their far side) count for nothing.
+            // Here it is initialised and spent as the tiebreak it was plainly
+            // meant to be: it cannot reorder anything Falcon ordered by grade,
+            // it only settles the ties Falcon settled by accident.
+            const byGrade = (a, b) => (b.grade - a.grade) || (b.points - a.points);
             found.traps = found.traps.filter(candidate => candidate.grade >= 0).sort(byGrade);
             found.spikes = found.spikes.filter(candidate => candidate.grade >= 0).sort(byGrade);
             found.bestTrap = found.traps[0] || null;
