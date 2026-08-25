@@ -183,7 +183,7 @@ understood.
 # YoRHa System — FORGE
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-forge.js` — 138 checks (139 with `FORGE_BASE` set).
+revision). Verified by `node tools/verify-forge.js` — 159 checks (160 with `FORGE_BASE` set).
 
 FORGE is one engine for trap and spike placement. It **replaces** YoRHa's
 preplacer and replacer outright — `isPrePlaceAngle`, `getPrePlaceObject`,
@@ -249,11 +249,55 @@ depend on the prediction — a penalty scaled by `1 - confidence`.
 A spike that would knock the enemy **toward** us is refused outright: it undoes
 the hold it was meant to punish.
 
+### Send lanes — the one that mattered most
+
+`getPredictObjects` hands its output to two senders. Objects flagged `preplace`
+are held back and sent from a timer at `(111 - ping)` ms; everything else goes
+out in the immediate loop, this tick.
+
+FORGE originally flagged **everything** `preplace`. So a re-trap on a hold that
+was failing, a spike on a body held right now, a fill for a hole already open —
+all arrived a full server tick late. Against a moving player that is the
+difference between landing and not, and it is what "inaccurate" felt like.
+
+`AHEAD` is now the only role on the deferred lane, which is what that lane is
+for: a structure aimed at a break that has not happened yet has to land *when*
+it does, not before.
+
 ### Packets
 
-One ledger. `perTick` structures maximum, never below `reserve` packets/sec so
-heal, insta and hat swaps always have room. Spending walks the priority list and
-never across it — a re-trap can't lose its packet to a speculative seal.
+One ledger, spending by score with per-role caps. `reserve` is **0** by default
+— the send loops already stop at `packets + 5 > 119`, the rule every placer in
+this file has always spent by, and a reserve on top of that was a second
+throttle that made the engine hold back structures the game would have accepted.
+The slider is still there for anyone who wants headroom kept clear.
+
+### Doom — seeing the break instead of reacting to it
+
+Filling a hole when `killObject` reports one is already too late: the event
+arrives, the tick is spent queuing a fill, and it lands a tick after the enemy
+was standing in the gap. Players are faster than that.
+
+Two independent readings run every tick, and both are kept:
+
+- **The loaded swing** — the old preplacer's read. The nearest enemy's primary
+  (or great hammer) has just come off cooldown, a building of ours is inside its
+  reach, and it has less health than that swing does damage. Fires the moment
+  their reload completes, the earliest the information exists.
+- **The damage map** — every visible player's loaded damage summed per building.
+  Sees what a single-enemy read cannot: a wall two people are splitting for less
+  than a one-shot each.
+
+Anything either reading names goes into a book with a sighting count. A fill is
+queued on the **first** sighting — waiting for confirmation would repeat the
+mistake — and trust rises with each further sighting, reaching full at
+`doomConfirm`, or immediately if both readings agree at once.
+
+The book is also what makes a fill survive not landing. While a building is
+still doomed and its fill still unanswered, the entry re-fires every
+`doomRetry` ticks instead of being forgotten after one attempt. A building that
+actually dies leaves the book; one that stops reading doomed ages out after
+`doomForget`.
 
 ### Recording
 
@@ -284,7 +328,7 @@ sliders are read fresh each tick, so changes apply without a reload.
 ## Verifying
 
 ```
-node tools/verify-forge.js [path/to/client.js]     # 138 checks
+node tools/verify-forge.js [path/to/client.js]     # 159 checks
 node tools/check-scopes.js [path/to/client.js]     # whole-file scope analysis
 
 # 139th check: compare the scope report against the untouched base
@@ -310,9 +354,9 @@ the edits added none.
 
 | | |
 |---|---|
-| Cost of a busy combat tick | **~1.4 ms** — 1.2% of the 111 ms server tick |
+| Cost of a busy combat tick | **~1.5 ms** — 1.3% of the 111 ms server tick |
 | Placement sweeps per tick | **2**, flat, regardless of angle count |
-| Bot-context keys | 134 declared / 134 captured / 134 restored, no mismatch |
+| Bot-context keys | 135 declared / 135 captured / 135 restored, no mismatch |
 | Dead settings | 0 — every entry in `window.vars` is read by something |
 
 Defects caught during the build, each by a different check:

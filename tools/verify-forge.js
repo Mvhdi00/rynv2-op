@@ -163,6 +163,7 @@ function world(over = {}) {
 
     // FORGE's persistent state, fresh per scenario.
     forgeAhead: over.forgeAhead || new Map(),
+    forgeDoom: over.forgeDoom || new Map(),
     forgeHeadings: over.forgeHeadings || new Map(),
     forgeLedger: { pending: [], emitted: 0, confirmed: 0, rejected: 0, byRole: {}, log: [] },
     forgeWorld: null, forgeWorldTick: -1, forgeWorldOwner: null,
@@ -216,6 +217,7 @@ function world(over = {}) {
 
     liftObject("FORGE"),
     liftLine(String.raw`const FORGE_ROLES = \[[^\]]*\];`),
+    liftLine(String.raw`const FORGE_DEFERRED = new Set\(\[[^\]]*\]\);`),
     liftLine(String.raw`const FORGE_TICK_MS = [^;]+;`),
 
     lift("forgeAwaiting"),
@@ -236,6 +238,9 @@ function world(over = {}) {
     lift("forgeKnock"),
     lift("forgeIntents"),
     lift("forgeDamageMap"),
+    lift("forgeDoomScan"),
+    lift("forgeDoomOpen"),
+    lift("forgeDoomTrust"),
     lift("forgeSync"),
     lift("forgeRoom"),
     lift("forgeCommit"),
@@ -512,6 +517,143 @@ section("KNOCKBACK — a spike must not undo the hold it is meant to punish");
 }
 
 // ===========================================================================
+section("SEND LANES — only a fill for a break that has not happened may wait");
+{
+  // getPredictObjects hands `preplace` objects to a timer at (111 - ping) ms and
+  // everything else to the immediate loop. A role answering something already
+  // true must not be on the timer: against a moving player a tick of delay is
+  // the difference between landing and not.
+  const c = world({
+    nearestEnemy: enemyAt(1080, 1000), traps_our: [trapAt(1080, 1000)],
+    spikes_our: [{ sid: 61, x: 1200, y: 1000, scale: 35, dmg: 20, active: true }],
+    primaryReload: { 1: 1 }, packets: 0,
+  });
+  c.forgeTick([{ sid: 9, x: 1000, y: 1070, scale: 35, id: 6, trap: false, dmg: true, ours: true }]);
+
+  const byRole = new Map();
+  c.forgeLedger.log.forEach((e, i) => byRole.set(e.role, placed[i]));
+
+  ok("something was placed to check", placed.length > 0);
+  ok("AHEAD is the only role allowed on the deferred lane",
+     /const FORGE_DEFERRED = new Set\(\["AHEAD"\]\);/.test(src));
+
+  for (const [role, obj] of byRole) {
+    if (!obj) continue;
+    const shouldWait = role === "AHEAD";
+    ok(`${role} rides the ${shouldWait ? "deferred" : "immediate"} lane`,
+       obj.preplace === shouldWait, `preplace=${obj.preplace}`);
+  }
+
+  // The urgent roles specifically must never be deferred.
+  const urgent = c.forgeLedger.log
+        .map((e, i) => ({ role: e.role, o: placed[i] }))
+        .filter(x => x.o && ["RETRAP", "TICK", "MEND"].includes(x.role));
+  ok("no re-trap, spike-tick or wall-fill is ever held back a tick",
+     urgent.every(x => x.o.preplace === false),
+     JSON.stringify(urgent.map(x => x.role + ":" + x.o.preplace)));
+}
+
+// ===========================================================================
+section("DOOM — the break is seen coming, and the sighting is confirmed");
+{
+  const wall = wallAt(9, 1060, 1000, 50);
+  const attacker = enemyAt(1090, 1000, { sid: 2 });
+
+  // The enemy's swing has just come off cooldown and the wall cannot survive it.
+  // This is the earliest the information exists — a tick before killObject.
+  const c = world({
+    nearestEnemy: attacker, players: [attacker], visibleObjects: [wall],
+    primaryReload: { 1: 1, 2: 1 },
+  });
+  attacker.lastPrimaryReload = 0;
+
+  const w = c.forgeSense();
+  c.forgeDoomScan(w);
+  ok("a wall the loaded swing will kill enters the book before it dies",
+     c.forgeDoom.has(9), JSON.stringify([...c.forgeDoom.keys()]));
+
+  const entry = c.forgeDoom.get(9);
+  ok("with one sighting on the first tick", entry.seen >= 1);
+
+  // Trust grows with sightings — one glancing read is not three ticks running.
+  const first = c.forgeDoomTrust(entry);
+  c.tick = 101; c.forgeDoomScan(c.forgeSense());
+  const second = c.forgeDoomTrust(c.forgeDoom.get(9));
+  ok("and rises as the reading repeats", second >= first && second > 0,
+     `${first.toFixed(2)} -> ${second.toFixed(2)}`);
+  ok("reaching full trust at doomConfirm sightings", second >= 1, `got ${second}`);
+
+  // A fill goes out on the FIRST sighting — waiting for confirmation would be
+  // the same mistake as waiting for the break.
+  const d = world({
+    nearestEnemy: enemyAt(1090, 1000, { sid: 2, lastPrimaryReload: 0 }),
+    players: [enemyAt(1090, 1000, { sid: 2 })],
+    visibleObjects: [wallAt(9, 1060, 1000, 50)], primaryReload: { 1: 1, 2: 1 },
+  });
+  d.forgeTick([]);
+  ok("a fill is queued on the first sighting, not held for a confirmation",
+     d.forgeLedger.log.some(e => e.role === "AHEAD"),
+     JSON.stringify(d.forgeLedger.log.map(e => e.role)));
+
+  // An answered entry is not asked again next tick...
+  const answered = d.forgeDoom.get(9);
+  ok("an answered entry is marked", answered && answered.placedAt >= 0);
+  ok("and is not open again immediately", !d.forgeDoomOpen(answered));
+
+  // ...but re-opens if the fill never showed up, so a lost placement recovers.
+  d.tick = answered.placedAt + 3;
+  ok("it re-opens after doomRetry ticks if the fill never landed",
+     d.forgeDoomOpen(answered));
+
+  // The whole point, stated as a test: a re-trap goes out while the trap the
+  // enemy is standing in is STILL ALIVE, on the tick their swing came off
+  // cooldown. The old engine had nothing to react to until killObject fired,
+  // which against a fast player is a tick too late.
+  const trap = trapAt(1080, 1000, { sid: 50, health: 40 });
+  const foe = enemyAt(1090, 1000, { sid: 2, lastPrimaryReload: 0 });
+  const live = world({
+    nearestEnemy: foe, players: [foe], visibleObjects: [trap], traps_our: [trap],
+    primaryReload: { 1: 1, 2: 1 }, tick: 100,
+  });
+  live.forgeTick([]);                     // note: an EMPTY break list
+
+  ok("a re-trap is queued while the trap is still standing, with no break event",
+     live.forgeLedger.log.some(x => x.role === "RETRAP"),
+     JSON.stringify(live.forgeLedger.log.map(x => x.role)));
+  ok("and the trap is in the book before it dies", live.forgeDoom.has(50));
+
+  // Second sighting the next tick takes it to full trust.
+  live.tick = 101; live.predictObjects = [];
+  live.forgeTick([]);
+  ok("a second sighting reaches full trust",
+     live.forgeDoomTrust(live.forgeDoom.get(50)) >= 1);
+
+  // And an unanswered fill re-fires rather than being forgotten.
+  const attempts = live.forgeLedger.log.length;
+  live.tick = 104; live.predictObjects = [];
+  live.forgeTick([]);
+  ok("an unanswered fill re-fires after doomRetry, so a lost placement recovers",
+     live.forgeLedger.log.length > attempts,
+     `${attempts} attempts before, ${live.forgeLedger.log.length} after`);
+
+  // A building that actually died leaves the book.
+  d.forgeAwaiting([9]);
+  ok("a building that died is dropped from the book", !d.forgeDoom.has(9));
+
+  // And one that stopped reading doomed ages out.
+  const e = world({ nearestEnemy: enemyAt(1080, 1000), primaryReload: { 1: 1 } });
+  e.forgeDoom.set(55, { sid: 55, seen: 1, since: 100, lastSeen: 100, placedAt: -99, sources: 1, x: 1, y: 1, scale: 35 });
+  e.tick = 100 + 20;
+  e.forgeDoomScan(e.forgeSense());
+  ok("a building that stopped reading doomed ages out", !e.forgeDoom.has(55));
+
+  // Both readings agreeing is full trust on its own.
+  const both = { sid: 1, seen: 1, sources: 3, since: 100, lastSeen: 100, placedAt: -99 };
+  ok("the two readings agreeing is full trust by itself",
+     e.forgeDoomTrust(both) === 1);
+}
+
+// ===========================================================================
 section("BUDGET — priority first, and the reserve is never touched");
 {
   // Room is what is left of the second after the reserve, in whole placements.
@@ -591,7 +733,7 @@ section("BOUNDARIES — FORGE cannot fight the autoplacer");
   c.forgeTick([]);
   const mine = placed.slice(before);
 
-  ok("FORGE emits only through addPredictObject", mine.every(p => p.preplace === true));
+  ok("FORGE emitted through addPredictObject", mine.length > 0);
   ok("and never takes a slot another lane already holds",
      mine.every(p => UTILS.getDistance(p.x, p.y, held.x, held.y) >= p.scale + held.scale ||
                      (p.x === held.x && p.y === held.y) === false));
@@ -831,10 +973,16 @@ section("PIPELINE — the whole tick, not just the engine in isolation");
   ok("the tick produced placements", c.predictObjects.length > 0,
      `predictObjects ${c.predictObjects.length}`);
   ok("the replace queue was drained", c.replaceQueue.length === 0);
-  ok("FORGE and the autoplacer both contributed to one list",
-     c.predictObjects.some(o => o.preplace === true) &&
-     c.predictObjects.some(o => o.preplace === false),
-     JSON.stringify(c.predictObjects.map(o => o.preplace)));
+  // Both lanes contributed. Not a count comparison: FORGE aims its slots at the
+  // fight rather than packing the ring evenly, so it can spend four aimed slots
+  // where the autoplacer alone would have fitted six even ones. That is the
+  // trade, not a fault — what has to be true is that both lanes are in the list
+  // and neither was shut out.
+  ok("FORGE contributed to the combined list", c.forgeLedger.emitted > 0,
+     `FORGE emitted ${c.forgeLedger.emitted}`);
+  ok("and the autoplacer still got the ground FORGE left",
+     c.predictObjects.length > c.forgeLedger.emitted,
+     `total ${c.predictObjects.length}, FORGE ${c.forgeLedger.emitted}`);
 
   // No two objects in that list may overlap — that is the whole no-conflict claim.
   let overlap = null;

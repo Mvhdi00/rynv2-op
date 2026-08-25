@@ -15289,6 +15289,12 @@ for (let tree of trees) {
             trapReach: 55,           // a trap catches a body within this
             tickReach: 58,           // a spike ticks a held body within this
 
+            // Doom — how a break is seen coming instead of reacted to
+            doomConfirm: 2,          // sightings before a fill is fully trusted
+            doomForget: 6,           // ticks a doomed building survives unseen
+            doomRetry: 3,            // ticks before an unanswered fill is re-sent
+            doomReach: 110,          // how near a slot must be to the hole
+
             // Prediction
             horizon: 4,              // ticks simulated ahead in combat range
             headingWindow: 5,        // samples used to judge how steady they are
@@ -15310,11 +15316,20 @@ for (let tree of trees) {
             pLowTrust: 340,          // scaled by (1 - confidence)
 
             // Spending
+            // The send loops already stop at `packets + 5 > 119`, which is the
+            // rule every placer in this file has always spent by. FORGE asks the
+            // same question rather than a stricter one: a reserve on top of it
+            // was a second throttle that made the engine hold back structures
+            // the game would have accepted, and a placement not made is a
+            // hole not closed.
+            //
+            // The reserve stays as a slider for anyone who wants headroom kept
+            // clear, but it is zero by default — the old spending, exactly.
             packetCap: 119,          // the server's ceiling, per second
             packetsPerPlace: 4,      // selectToBuild + 2 attacks + selectWeapon
-            reserve: 24,             // heal, insta and hat swaps live here
-            perTick: 5,              // most structures one tick may spend
-            perRole: { RETRAP: 2, TRAP: 2, TICK: 2, MEND: 3, AHEAD: 2, KNOCK: 1, SEAL: 2 },
+            reserve: 0,              // headroom held back; 0 = spend like the old placers
+            perTick: 8,              // most structures one tick may spend
+            perRole: { RETRAP: 3, TRAP: 2, TICK: 3, MEND: 4, AHEAD: 3, KNOCK: 1, SEAL: 2 },
 
             // Bookkeeping
             confirmWindow: 27,       // ticks an emission waits for the world
@@ -15332,6 +15347,24 @@ for (let tree of trees) {
         // sits higher in a list, is the same first-branch-wins failure this
         // engine was built to get rid of. One scale, or none.
         const FORGE_ROLES = ["RETRAP", "TICK", "TRAP", "MEND", "AHEAD", "KNOCK", "SEAL"];
+
+        // WHICH SEND LANE EACH ROLE RIDES  —  and why this matters more than
+        // anything else in the file.
+        //
+        // getPredictObjects hands its output to two different senders. Objects
+        // flagged `preplace` are held back and sent from a deferred timer at
+        // (111 - ping) ms; everything else goes out in the immediate loop, this
+        // tick. The deferred lane exists for ONE case: a structure aimed at a
+        // break that has not happened yet, which has to land at the moment the
+        // break does and not before.
+        //
+        // Every other role is answering something that is already true. A
+        // re-trap on a hold that is failing, a spike on a body that is held
+        // right now, a fill for a hole that is already open — putting any of
+        // those on the deferred lane delays them by a full server tick, which
+        // against a moving player is the difference between landing and not.
+        // AHEAD is the only role that belongs there.
+        const FORGE_DEFERRED = new Set(["AHEAD"]);
 
         // ---------------------------------------------------------------------
         // LEDGER  —  what we did, and whether the world agreed
@@ -15362,6 +15395,7 @@ for (let tree of trees) {
 
             let hit = false;
             for (const sid of sids) {
+                forgeDoom.delete(sid);          // it died; the book is done with it
                 if (forgeAhead.delete(sid)) hit = true;
             }
 
@@ -15748,8 +15782,13 @@ for (let tree of trees) {
             // is on the break list, or it is one swing from dying. Nothing else
             // in a duel is worth more than keeping a body still.
             if (w.heldBy) {
-                const dying = broken.some(b => b && b.sid === w.heldBy.sid) ||
-                      w.heldBy.health <= getPlayerInfo(w.enemy, "primaryStructureDmg");
+                // Three ways to know the hold is going: the book saw it coming
+                // (earliest), it is one swing from dead, or it is already on the
+                // break list (latest, and the one that used to be the only one).
+                const doomed = forgeDoom.get(w.heldBy.sid);
+                const dying = doomed ||
+                      w.heldBy.health <= getPlayerInfo(w.enemy, "primaryStructureDmg") ||
+                      broken.some(b => b && b.sid === w.heldBy.sid);
 
                 if (dying) {
                     for (const slot of traps) {
@@ -15810,20 +15849,26 @@ for (let tree of trees) {
             }
 
             // --- AHEAD -------------------------------------------------------
-            // A hole that has not opened yet. Everything within reach of us that
-            // has less health than the damage already loaded against it.
-            for (const [object, damage] of forgeDamageMap(w)) {
-                if (damage < object.health) continue;
-                if (UTILS.getDistance(w.enemy.x2, w.enemy.y2, object.x, object.y) > 90) continue;
+            // A hole that has not opened yet, from the doom book rather than
+            // from a single tick's snapshot. Quality is how near the slot is to
+            // the hole, scaled by how sure the book is that the hole is coming —
+            // so a first sighting still buys a fill, and a wall that has read
+            // doomed three ticks running buys a better one.
+            for (const entry of forgeDoom.values()) {
+                if (!forgeDoomOpen(entry)) continue;
+                if (UTILS.getDistance(w.enemy.x2, w.enemy.y2, entry.x, entry.y) > 90) continue;
 
-                const pool = object.trap ? traps : spikes;
+                const trustDoom = forgeDoomTrust(entry);
+                const pool = entry.trap ? traps : spikes;
+
                 for (const slot of pool) {
-                    const d = UTILS.getDistance(slot.x, slot.y, object.x, object.y);
-                    if (d > 110) continue;
+                    const d = UTILS.getDistance(slot.x, slot.y, entry.x, entry.y);
+                    if (d > FORGE.doomReach) continue;
 
                     // The sid rides along so the tick that sees this object
-                    // actually die can tell it was one we placed ahead of.
-                    push("AHEAD", slot, 1 - d / 110, 0, object.sid);
+                    // actually die can tell it was one we placed ahead of, and
+                    // so the book can mark it answered.
+                    push("AHEAD", slot, (1 - d / FORGE.doomReach) * trustDoom, 0, entry.sid);
                 }
             }
 
@@ -15850,6 +15895,134 @@ for (let tree of trees) {
             }
 
             return out;
+        }
+
+        // ---------------------------------------------------------------------
+        // DOOM  —  seeing a break coming, not reacting to it
+        // ---------------------------------------------------------------------
+        // The engine used to fill a hole when killObject told it one had opened.
+        // Against a fast player that is already too late: the break event
+        // arrives, the tick is spent queuing a fill, and it lands a tick after
+        // they were standing in the gap.
+        //
+        // So the question is asked earlier, and asked repeatedly. Every tick,
+        // two independent readings say which buildings are about to die:
+        //
+        //   THE LOADED SWING  — the old preplacer's read, kept. The nearest
+        //     enemy's primary (or great hammer) has just come off cooldown, a
+        //     building of ours is inside its reach, and that building has less
+        //     health than the swing does damage. This one fires the moment their
+        //     reload completes, which is the earliest the information exists.
+        //
+        //   THE DAMAGE MAP    — every visible player's loaded damage summed per
+        //     building. This one sees what a single-enemy read cannot: a wall
+        //     two people are splitting for less than a one-shot each.
+        //
+        // A building either reading names goes in the book with a sighting
+        // count. Fills start at the first sighting and get more confident with
+        // each one — `doomConfirm` sightings is full trust — so a wall that
+        // reads doomed once from a glancing angle is not treated the same as one
+        // that has read doomed three ticks running.
+        //
+        // The book is also what makes a fill survive not landing. A queued
+        // placement can be refused, lost to the packet ceiling, or beaten to the
+        // ground; while a building is still doomed and its fill is still
+        // unanswered, the entry re-fires every `doomRetry` ticks instead of
+        // being forgotten after one attempt.
+        let forgeDoom = new Map();
+
+        function forgeDoomScan(w) {
+            const seenNow = new Set();
+
+            const mark = (object, source) => {
+                if (!object || object.sid == null) return;
+                if (!isFinite(object.x) || !isFinite(object.y)) return;
+
+                seenNow.add(object.sid);
+
+                let entry = forgeDoom.get(object.sid);
+                if (!entry) {
+                    entry = { sid: object.sid, seen: 0, since: tick, placedAt: -99, sources: 0 };
+                    forgeDoom.set(object.sid, entry);
+                }
+
+                entry.seen++;
+                entry.lastSeen = tick;
+                entry.x = object.x;
+                entry.y = object.y;
+                entry.scale = object.scale;
+                entry.trap = !!object.trap;
+                entry.object = object;
+                entry.sources |= source;
+            };
+
+            // --- reading one: the enemy's loaded swing -----------------------
+            const enemy = w.enemy;
+            let swing = null;
+
+            if (enemy.weapons) {
+                const secondary = enemy.weapons[1];
+                const primary = enemy.weapons[0];
+
+                if (secondary === 10 && secondaryReload[enemy.sid] >= 1 &&
+                    (enemy.lastSecondaryReload || 0) < secondaryReload[enemy.sid]) {
+                    swing = secondary;
+                } else if (primary != null && items.weapons[primary] &&
+                           items.weapons[primary].speed <= 400 &&
+                           primaryReload[enemy.sid] >= 1 &&
+                           (enemy.lastPrimaryReload || 0) < primaryReload[enemy.sid]) {
+                    swing = primary;
+                }
+            }
+
+            if (swing != null) {
+                const spec = items.weapons[swing];
+                const variantIndex = (enemy.weaponVariants && enemy.weaponVariants[swing] != null)
+                      ? enemy.weaponVariants[swing] : 0;
+                const variant = config.weaponVariants[variantIndex];
+
+                // Tank gear is assumed on an enemy: over-reading their damage
+                // costs a building, under-reading it costs the wall.
+                const dmg = spec.dmg * (spec.sDmg || 1) * ((variant && variant.val) || 1) * 3.3;
+
+                for (const object of visibleObjects) {
+                    if (!object || object.hideFromEnemy) continue;
+                    if (!(object.health > 0) || object.health > dmg) continue;
+                    if (UTILS.getDistance(enemy.x2, enemy.y2, object.x, object.y) > object.scale + spec.range) continue;
+
+                    mark(object, 1);
+                }
+            }
+
+            // --- reading two: everything loaded, from everyone ----------------
+            for (const [object, damage] of forgeDamageMap(w)) {
+                if (damage >= object.health) mark(object, 2);
+            }
+
+            // --- age the book out --------------------------------------------
+            for (const [sid, entry] of forgeDoom) {
+                if (seenNow.has(sid)) continue;
+                if (tick - (entry.lastSeen || entry.since) > FORGE.doomForget) forgeDoom.delete(sid);
+            }
+
+            return forgeDoom;
+        }
+
+        // Is this doomed building still worth a fill this tick? Either it has not
+        // been answered yet, or the answer never arrived and enough ticks have
+        // passed to try again.
+        function forgeDoomOpen(entry) {
+            if (entry.placedAt < 0) return true;
+            return (tick - entry.placedAt) >= FORGE.doomRetry;
+        }
+
+        // How much to trust a sighting. One reading is a guess worth acting on;
+        // `doomConfirm` of them, or both readings agreeing at once, is as sure
+        // as this engine gets.
+        function forgeDoomTrust(entry) {
+            const bySeen = Math.min(1, entry.seen / FORGE.doomConfirm);
+            const bothAgree = (entry.sources & 1) && (entry.sources & 2) ? 1 : 0;
+            return Math.max(bySeen, bothAgree);
         }
 
         // Predicted damage already loaded against each building near us, summed
@@ -15942,14 +16115,23 @@ for (let tree of trees) {
                 if ((spentByRole[intent.role] || 0) >= cap) continue;
                 if (isItemLimit(intent.id)) continue;
 
-                if (!addPredictObject(intent.id, intent.angle, true)) continue;
+                if (!addPredictObject(intent.id, intent.angle, FORGE_DEFERRED.has(intent.role))) continue;
 
                 spentByRole[intent.role] = (spentByRole[intent.role] || 0) + 1;
                 room--;
                 spent++;
 
                 forgeNote(intent.role, intent.id, intent.angle, intent.slot, intent.score);
-                if (intent.targetSid != null) forgeAhead.set(intent.targetSid, tick);
+                if (intent.targetSid != null) {
+                    forgeAhead.set(intent.targetSid, tick);
+
+                    // Mark the book: this one has been answered. It will not be
+                    // asked again until doomRetry ticks have passed without the
+                    // fill showing up, which is what makes a lost placement
+                    // recoverable instead of forgotten.
+                    const entry = forgeDoom.get(intent.targetSid);
+                    if (entry) entry.placedAt = tick;
+                }
             }
 
             return spent;
@@ -15973,6 +16155,11 @@ for (let tree of trees) {
             // Being spiked while held is the one state where placing is wrong:
             // every packet belongs to getting out, not to building.
             if (w.weTrapped && w.takingSpikes) return;
+
+            // Look for breaks coming before deciding anything. This is what
+            // lets a fill be queued a tick or more before the hole opens rather
+            // than a tick after.
+            forgeDoomScan(w);
 
             const intents = forgeIntents(w, broken || []);
             if (!intents.length) return;
@@ -18692,7 +18879,7 @@ for (let tree of trees) {
         // that carry state across ticks". Being wrong about one of those would
         // be a silent leak between your player and a bot, and copying 136
         // properties a few times a tick costs nothing worth measuring.
-        const MOD_CTX_KEYS = ["myPlayer", "myPlayerSID", "players", "ais", "gameObjects", "projectiles", "alliances", "objectManager", "aiManager", "projectileManager", "keys", "attackState", "autoMills", "autoBreak", "autoBreakAngle", "breakObject", "nearestTrap", "enemiesNear", "nearestEnemy", "ePress", "rightClick", "leftClick", "checkGather", "lastGatherState", "damageTick", "tick", "hits", "shoots", "removeShoots", "primaryReload", "secondaryReload", "turretReload", "placeTick", "predictObjects", "prePlaceObjects", "predictEnemyTraps", "predictWeapon", "keyCodeWeapon", "healing", "autoReload", "deathDamages", "spikeDmg", "spikeDmgCount", "spikeDamages", "damageObjects", "objectHits", "objectShoots", "antiReverse", "antiInsta", "damageByPoisonTick", "damagesByTurrets", "damagesByHits", "damagesByShoots", "damages", "qPress", "spikePress", "trapPress", "turretPress", "spikeKnockPosLine", "visibleObjects", "spikes_enemy", "trap_where_im_in", "cactuses", "enemySpikes", "antiVelocitySpikeSync", "trapBreaked", "trapBreakedTick", "soldierAnti", "predictMoveAngle", "lastMoveAngle", "nearestEnemiesCount", "antiTick", "antiTickTimeout", "predictDamage", "antiPush", "autoPush", "autoPushAngle", "pushPositions", "predictMove", "autoaim", "instaKill", "insta", "spamPrePlacer", "prePlaceInterval", "forgeAhead", "forgeHeadings", "removedObjects", "replaceQueue", "antiPushAngle", "spawnedObjectSids", "promiseResolve", "tickPromiseResolve", "squeezablePointsCache", "pathfindingState", "lastMoveDir", "killCount", "killedName", "pathBreak", "grindObjects", "prevKills", "path", "autoaimAngle", "autogathering", "currentHat", "imTrapped", "shouldResetShame", "totalDmgPot", "lastcolliding", "spikeTickAnti", "grindAngle", "smartTickObject", "iWasTrapped", "lastPredicted", "gatherGrind", "lastPosX", "lastPosY", "canStillGather", "autoBreakWeapon", "spikes_our", "traps_our", "enemy_lastcollidngspike", "enemy_collidingspike", "placedAngles", "bannedAngles", "smartTickSpike", "gPressed", "turrets_our", "pathPosition", "filteredObjectsCache", "shouldntPathfind", "packets", "followTarget", "pathMode", "tmpObj"];
+        const MOD_CTX_KEYS = ["myPlayer", "myPlayerSID", "players", "ais", "gameObjects", "projectiles", "alliances", "objectManager", "aiManager", "projectileManager", "keys", "attackState", "autoMills", "autoBreak", "autoBreakAngle", "breakObject", "nearestTrap", "enemiesNear", "nearestEnemy", "ePress", "rightClick", "leftClick", "checkGather", "lastGatherState", "damageTick", "tick", "hits", "shoots", "removeShoots", "primaryReload", "secondaryReload", "turretReload", "placeTick", "predictObjects", "prePlaceObjects", "predictEnemyTraps", "predictWeapon", "keyCodeWeapon", "healing", "autoReload", "deathDamages", "spikeDmg", "spikeDmgCount", "spikeDamages", "damageObjects", "objectHits", "objectShoots", "antiReverse", "antiInsta", "damageByPoisonTick", "damagesByTurrets", "damagesByHits", "damagesByShoots", "damages", "qPress", "spikePress", "trapPress", "turretPress", "spikeKnockPosLine", "visibleObjects", "spikes_enemy", "trap_where_im_in", "cactuses", "enemySpikes", "antiVelocitySpikeSync", "trapBreaked", "trapBreakedTick", "soldierAnti", "predictMoveAngle", "lastMoveAngle", "nearestEnemiesCount", "antiTick", "antiTickTimeout", "predictDamage", "antiPush", "autoPush", "autoPushAngle", "pushPositions", "predictMove", "autoaim", "instaKill", "insta", "spamPrePlacer", "prePlaceInterval", "forgeAhead", "forgeDoom", "forgeHeadings", "removedObjects", "replaceQueue", "antiPushAngle", "spawnedObjectSids", "promiseResolve", "tickPromiseResolve", "squeezablePointsCache", "pathfindingState", "lastMoveDir", "killCount", "killedName", "pathBreak", "grindObjects", "prevKills", "path", "autoaimAngle", "autogathering", "currentHat", "imTrapped", "shouldResetShame", "totalDmgPot", "lastcolliding", "spikeTickAnti", "grindAngle", "smartTickObject", "iWasTrapped", "lastPredicted", "gatherGrind", "lastPosX", "lastPosY", "canStillGather", "autoBreakWeapon", "spikes_our", "traps_our", "enemy_lastcollidngspike", "enemy_collidingspike", "placedAngles", "bannedAngles", "smartTickSpike", "gPressed", "turrets_our", "pathPosition", "filteredObjectsCache", "shouldntPathfind", "packets", "followTarget", "pathMode", "tmpObj"];
 
         function ctxCapture() {
             return {
@@ -18781,6 +18968,7 @@ for (let tree of trees) {
                 spamPrePlacer: spamPrePlacer,
                 prePlaceInterval: prePlaceInterval,
                 forgeAhead: forgeAhead,
+                forgeDoom: forgeDoom,
                 forgeHeadings: forgeHeadings,
                 removedObjects: removedObjects,
                 replaceQueue: replaceQueue,
@@ -18918,6 +19106,7 @@ for (let tree of trees) {
             spamPrePlacer = s.spamPrePlacer;
             prePlaceInterval = s.prePlaceInterval;
             forgeAhead = s.forgeAhead || new Map();
+            forgeDoom = s.forgeDoom || new Map();
             forgeHeadings = s.forgeHeadings || new Map();
             removedObjects = s.removedObjects;
             replaceQueue = s.replaceQueue;
@@ -25636,8 +25825,8 @@ for (let tree of trees) {
         // menu's own data that nothing on either side reads.
         forge: true,
         forgeRange: 320,         // beyond this the engine sleeps entirely
-        forgePerTick: 5,         // most structures one tick may spend
-        forgeReserve: 24,        // packets/sec kept back for heal, insta, hats
+        forgePerTick: 8,         // most structures one tick may spend
+        forgeReserve: 0,         // packets/sec held back; 0 spends like the old placers
 
         // Replace — Falcon 0.4.7's auto-replace. `replace` is the same id the
         // 1.5 menu and the Placers hotkey already used, so saved settings and
