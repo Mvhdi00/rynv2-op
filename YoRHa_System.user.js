@@ -10892,7 +10892,7 @@ let pps = 0;
             try {
                 const bot = RynBots.possessed;
                 if (!bot || !bot.alive || !bot.ws || bot.ws.readyState !== 1) return false;
-                EXP.send(bot.ws, type, Array.prototype.slice.call(arguments, 1));
+                RynBots._send(bot, type, Array.prototype.slice.call(arguments, 1));
                 return true;
             } catch (e) { return false; }
         }
@@ -12236,6 +12236,9 @@ let pps = 0;
         // menu, the chat box or the death screen has focus — otherwise the
         // squad keeps swinging with nothing holding the key down.
         window.addEventListener('blur', function () { try { RynBots.setManualAttack(false); } catch (e) {} });
+        // Leaving the page closes every bot socket. That is not a kick, so Auto
+        // Rejoin must not read it as one and start solving captchas on the way out.
+        window.addEventListener('beforeunload', function () { try { RynBots._closing = true; } catch (e) {} });
         window.addEventListener('keyup', function (e) {
             let k = e.code || "";
             if (k.startsWith("Key")) k = k.slice(3);
@@ -16495,6 +16498,12 @@ for (let tree of trees) {
             MINE: 13, SAPLING: 14, TRAP: 15, BOOST: 16, TURRET: 17,
             PLATFORM: 18, HEALING_PAD: 19, SPAWN_PAD: 20, BLOCKER: 21, TELEPORTER: 22
         };
+        // How many packets one bot may send in one second. The server's real
+        // allowance is about 119 and it closes the connection above it; the mod
+        // budgets your own player against 119 with five frames of slack, so a
+        // bot gets the same margin. Enforced in RynBots._send, which is the only
+        // way a packet leaves a bot.
+        const BOT_PKT_LIMIT = 110;
         // Buildings you walk straight over -- never the reason a bot is stuck.
         const BOT_WALKABLE = [BOT_ITEM.BOOST, BOT_ITEM.PLATFORM, BOT_ITEM.HEALING_PAD,
                               BOT_ITEM.SPAWN_PAD, BOT_ITEM.TELEPORTER];
@@ -16724,6 +16733,9 @@ for (let tree of trees) {
                 try { ws.binaryType = "arraybuffer"; } catch (e) {}
                 if (typeof ws.addEventListener !== "function") { try { console.warn("[NovaBot] no usable native WebSocket"); } catch (e) {} throw new Error("no native WebSocket"); }
                 const bot = this._newBot(ws);
+                // Carry the rejoin count onto the replacement, so a bot the
+                // server keeps refusing backs off instead of retrying forever.
+                if (this._rejoinTries) { bot._rejoins = this._rejoinTries; this._rejoinTries = 0; }
                 this.list.push(bot);
 
                 ws.addEventListener("open", () => { try { console.log("[NovaBot] socket open, waiting for io-init…"); } catch (e) {} });
@@ -16738,14 +16750,14 @@ for (let tree of trees) {
                     // wrapped in [ ].
                     if (!bot.ready && msg.type === "io-init") {
                         this._sniff(ws, msg.args);
-                        try { EXP.send(ws, "0", []); } catch (e) {} // ping first
+                        this._send(bot, "0", []);          // ping first
                         bot.ready = true; // connected + framed (not necessarily spawned)
                         // Keepalive starts NOW so the socket survives while it waits
                         // at the menu in Hold mode. moomoo drops a socket that stops
                         // pinging; the master pings every 2500ms and each bot matches.
                         if (!bot._pingIv) {
                             bot._pingIv = setInterval(() => {
-                                try { if (bot.ws.readyState === 1) EXP.send(bot.ws, "0", []); } catch (e) {}
+                                try { if (bot.ws.readyState === 1) RynBots._send(bot, "0", []); } catch (e) {}
                             }, 2500);
                         }
                         // Hold mode: connect + keep alive, but do NOT enter yet.
@@ -16781,7 +16793,7 @@ for (let tree of trees) {
                         try { RynBots._runFullMod(bot, msg.args && msg.args[0]); } catch (e) {}
                     }
                 });
-                ws.addEventListener("close", (e) => { try { console.warn("[NovaBot] socket closed", e && e.code, e && e.reason); } catch (_) {} this._remove(bot); });
+                ws.addEventListener("close", (e) => { this._onClose(bot, e); });
                 ws.addEventListener("error", () => { try { console.warn("[NovaBot] socket error"); } catch (e) {} });
 
                 // Resolve once this bot is framed and in (or gave up), so the
@@ -16830,6 +16842,11 @@ for (let tree of trees) {
                     wander: null, wanderUntil: 0,
                     search: null, searchUntil: 0,
                     healAt: 0, placeAt: 0, hurtAt: 0, millAt: 0,
+                    // Rate limiting (RynBots._send) and rejoin bookkeeping.
+                    pktAt: 0, pktCount: 0, pktDropped: 0,
+                    _rejoins: 0, _killed: false,
+                    // Buildings asked for but not yet echoed by the server.
+                    pending: [],
                     detourUntil: 0, detourSign: 1,
                     forceAttackUntil: 0, buyAt: 0,
                     // Spike-tick foundation. readyAt[weaponIndex] is the ms
@@ -16884,7 +16901,12 @@ for (let tree of trees) {
 
             killAll() {
                 this._spawning = false; // cancel any in-progress staggered batch
+                // Tell the close handler these are ours, so it does not treat a
+                // squad you dismissed as four kicks and spawn them all back.
+                this._closing = true;
+                setTimeout(() => { this._closing = false; }, 1500);
                 for (const b of this.list) {
+                    b._killed = true;
                     if (b._pingIv) { try { clearInterval(b._pingIv); } catch (e) {} b._pingIv = null; }
                     try { b.ws.close(); } catch (e) {}
                 }
@@ -16894,6 +16916,61 @@ for (let tree of trees) {
                 this.hunt = null;
                 this.possessed = null;
                 if (this._autoPlayForced) { window.vars.autoPlay = false; this._autoPlayForced = false; }
+            },
+            // -----------------------------------------------------------------
+            // A BOT WENT AWAY  —  say why, and put it back
+            // -----------------------------------------------------------------
+            // A dropped bot used to leave one console.warn nobody reads and then
+            // vanish from the squad. Two things change that.
+            //
+            // First the reason is reported where you will see it. The close code
+            // is the whole diagnosis and it is worth knowing which one you got:
+            //
+            //   4001  the server rejected the connection itself. On this
+            //         protocol that is the framing: every packet carries an
+            //         incrementing sequence number and a truncated HMAC, and a
+            //         gap or a bad tag ends the connection instantly. Running a
+            //         second script that also writes to these sockets will do
+            //         it -- two sequence counters on one socket cannot both be
+            //         right.
+            //   1006  closed with no close frame. The usual cause is the rate
+            //         limit: the server stops reading and the connection dies
+            //         without a word. That is what BOT_PKT_LIMIT is for.
+            //   1000/1001  an ordinary close -- the server sent you away, or
+            //         the page is going.
+            //
+            // Then, unless you asked for the bot to go, a replacement is spawned.
+            // A kick is not a reason for the squad to quietly shrink; the retry
+            // backs off (2s, 4s, 8s ... capped) so a server that is refusing
+            // everything is not hammered, and gives up after a few tries.
+            _onClose(bot, e) {
+                const code = (e && e.code) || 0;
+                const why = code === 4001 ? "rejected by the server (bad framing / sequence)"
+                          : code === 1006 ? "dropped with no close frame (usually the rate limit)"
+                          : (e && e.reason) ? String(e.reason)
+                          : "closed";
+                const deliberate = this._closing || bot._killed;
+                try { console.warn("[NovaBot] socket closed", code, e && e.reason); } catch (_) {}
+                if (!deliberate) {
+                    try { this.log(bot.name + " left the game — " + why + " [" + code + "]"); } catch (_) {}
+                    try { if (window.vars.notifyBotRetry && window._yorhaToast)
+                        window._yorhaToast("alert", bot.name + " disconnected (" + code + ")"); } catch (_) {}
+                }
+                const tries = (bot._rejoins || 0);
+                this._remove(bot);
+                if (deliberate) return;
+                if (!(window.vars && window.vars.botAutoRejoin)) return;
+                if (tries >= 4) { try { this.log(bot.name + ": gave up rejoining"); } catch (_) {} return; }
+                const wait = 2000 * Math.pow(2, tries);
+                const go = () => {
+                    if (this._closing) return;
+                    // A batch already in flight owns the spawner; wait it out
+                    // rather than dropping the rejoin on the floor.
+                    if (this._spawning) { setTimeout(go, 1200); return; }
+                    this._rejoinTries = tries + 1;   // read by the next _spawnOne
+                    this.spawn(1);
+                };
+                setTimeout(go, wait);
             },
             _remove(bot) {
                 if (bot && bot._pingIv) { try { clearInterval(bot._pingIv); } catch (e) {} bot._pingIv = null; }
@@ -16907,7 +16984,7 @@ for (let tree of trees) {
             },
             // Send the spawn packet — the moment a bot actually ENTERS the game.
             _spawnBot(bot) {
-                try { EXP.send(bot.ws, "M", [{ name: String(bot.name).slice(0, 15), moofoll: 1, skin: 0 }]); } catch (e) {}
+                try { RynBots._send(bot, "M", [{ name: String(bot.name).slice(0, 15), moofoll: 1, skin: 0 }]); } catch (e) {}
                 bot.pendingSpawn = false;
                 bot.spawnTry = Date.now();
                 try { console.log("[NovaBot] spawn sent as", bot.name); } catch (e) {}
@@ -17120,12 +17197,79 @@ for (let tree of trees) {
                 case 9: pick = WL + BOT_ITEM.SPINNING_SPIKES; break;
                 }
                 if (pick < 0) return;
-                try { EXP.send(bot.ws, "H", [pick]); } catch (e) {}
+                try { RynBots._send(bot, "H", [pick]); } catch (e) {}
             },
 
             // =================================================================
             // PACKET HELPERS — only send when something actually changed
             // =================================================================
+
+            // -----------------------------------------------------------------
+            // ONE DOOR  —  every packet a bot sends leaves through here
+            // -----------------------------------------------------------------
+            // This is the fix for bots dropping out of the game with no warning.
+            //
+            // moomoo's server allows a client about 119 frames a second and cuts
+            // the connection when one goes past it. The mod holds YOU under that
+            // number everywhere it sends (`packets + 5 > 119`). The bots had no
+            // such number: forty-odd call sites went straight to EXP.send, and
+            // the only counter in the file lived in the Full Mod adapter, which
+            // sees the mod's own frames and nothing else. So the tick's moves,
+            // aims, swings, heals, spike places, hat buys, the mill trail and the
+            // packet spammer were all invisible to the one budget that existed --
+            // and the mod, reading that budget, believed it still had room while
+            // the socket was already over the line.
+            //
+            // The spammer is the extreme case: up to 200 frames per bot per tick,
+            // about 1800 a second against an allowance of 119, with no check of
+            // any kind. Every bot running it is on a countdown to a close it
+            // never sees coming.
+            //
+            // So: one door. Every send goes through _send, the window is per bot
+            // and per second, and anything over the line is dropped HERE rather
+            // than by the server. The gate has to sit in front of EXP.send, not
+            // behind it: EXP.send stamps an incrementing sequence number into
+            // every secure frame, so a frame dropped after encoding would leave a
+            // hole in the sequence, and a hole in the sequence is exactly what
+            // close code 4001 ("Invalid Connection") is for.
+            //
+            // Two packets are never dropped. "0" is the keepalive -- lose it and
+            // the socket dies of silence, which is the failure this is meant to
+            // prevent. "M" is the spawn. Both still count, so the budget stays
+            // honest; they simply cannot be the frame that gets cut.
+            _send(bot, type, args) {
+                if (!bot || !bot.ws || bot.ws.readyState !== 1) return false;
+                const now = Date.now();
+                if (now - (bot.pktAt || 0) >= 1000) {
+                    // Carry the last window's drop count to the console once, so
+                    // a bot that is being held back says so instead of just
+                    // going quiet.
+                    if (bot.pktDropped > 0) {
+                        try { RynBots.log(bot.name + ": held back " + bot.pktDropped
+                            + " packet(s) — over the server's rate limit"); } catch (e) {}
+                    }
+                    bot.pktAt = now;
+                    bot.pktCount = 0;
+                    bot.pktDropped = 0;
+                }
+                const lifeline = (type === "0" || type === "M");
+                if (!lifeline && (bot.pktCount || 0) >= BOT_PKT_LIMIT) {
+                    bot.pktDropped = (bot.pktDropped || 0) + 1;
+                    return false;
+                }
+                bot.pktCount = (bot.pktCount || 0) + 1;
+                try { return EXP.send(bot.ws, type, args); } catch (e) { return false; }
+            },
+
+            // What is left of this bot's allowance this second. Callers that send
+            // in bursts ask first instead of firing into a wall.
+            _budgetLeft(bot) {
+                if (!bot) return 0;
+                const now = Date.now();
+                if (now - (bot.pktAt || 0) >= 1000) return BOT_PKT_LIMIT;
+                return Math.max(0, BOT_PKT_LIMIT - (bot.pktCount || 0));
+            },
+
             // =================================================================
             // PACKET SPAM  —  every bot on full throttle
             // =================================================================
@@ -17138,17 +17282,28 @@ for (let tree of trees) {
             // without costing your own connection a thing.
             //
             // The burst is spun aim ("D") packets: the server accepts and acts
-            // on every one, they change nothing about where the bot stands or
-            // what it hits, and they do not touch the mod's own budget because
-            // they go straight out on EXP.send rather than through modSend.
+            // on every one, and they change nothing about where the bot stands
+            // or what it hits.
+            //
+            // The rate is PER BOT PER SECOND, and the burst is whatever is left
+            // of that bot's allowance after the tick's real packets. It used to
+            // be per tick, unbudgeted: 200 a tick is ~1800 a second down one
+            // socket, roughly fifteen times what the server permits, and the
+            // squad was being disconnected for it within seconds. The squad
+            // total still scales with the number of bots -- that is the whole
+            // point of the feature -- but no single socket now asks to be cut.
             _packetSpam(bot) {
                 if (!window.vars.botPacketSpam) return;
-                const n = botClamp(window.vars.botSpamRate, 1, 200);
+                const want = botClamp(window.vars.botSpamRate, 1, BOT_PKT_LIMIT);
+                // Leave a little room for the rest of the tick (move, aim, swing)
+                // so the spam never starves the bot's actual behaviour.
+                const n = Math.min(want, Math.max(0, this._budgetLeft(bot) - 8));
+                if (n <= 0) return;
                 let a = bot._spamPhase || 0;
                 for (let i = 0; i < n; i++) {
                     a += 0.7;                       // a different angle each time
                     if (a > Math.PI) a -= Math.PI * 2;
-                    try { EXP.send(bot.ws, "D", [Math.round(a * 100) / 100]); } catch (e) {}
+                    this._send(bot, "D", [Math.round(a * 100) / 100]);
                 }
                 bot._spamPhase = a;
                 // The next real aim must re-send even if it matches the last
@@ -17163,20 +17318,20 @@ for (let tree of trees) {
                 // seam does not read as a full turn and re-send every tick.
                 if (a !== null && bot.moveSent !== null && bot.moveSent !== undefined
                     && UTILS.getAngleDist(a, bot.moveSent) < 0.12) return;
-                try { EXP.send(bot.ws, "9", [a]); } catch (e) {}
+                try { RynBots._send(bot, "9", [a]); } catch (e) {}
                 bot.moveSent = a;
             },
             _sendAim(bot, angle) {
                 if (angle === null || angle === undefined || !isFinite(angle)) return;
                 const a = Math.round(angle * 100) / 100;
                 if (bot.aimSent !== undefined && UTILS.getAngleDist(a, bot.aimSent) < 0.06) return;
-                try { EXP.send(bot.ws, "D", [a]); } catch (e) {}
+                try { RynBots._send(bot, "D", [a]); } catch (e) {}
                 bot.aimSent = a;
             },
             _sendAttack(bot, on) {
                 on = !!on;
                 if (on === bot.attacking) return;
-                try { EXP.send(bot.ws, "F", [on ? 1 : 0, null]); } catch (e) {}
+                try { RynBots._send(bot, "F", [on ? 1 : 0, null]); } catch (e) {}
                 bot.attacking = on;
             },
             _sendWeapon(bot, id) {
@@ -17184,7 +17339,7 @@ for (let tree of trees) {
                 const now = Date.now();
                 if (bot.wantWeapon === id && now - bot.weaponSentAt < 1000) return;
                 if (bot.wantWeapon === id && bot.weaponIndex === id) return;
-                try { EXP.send(bot.ws, "z", [id, true]); } catch (e) {}
+                try { RynBots._send(bot, "z", [id, true]); } catch (e) {}
                 bot.wantWeapon = id;
                 bot.weaponSentAt = now;
             },
@@ -17432,18 +17587,23 @@ for (let tree of trees) {
                 if (now - bot.healAt < 90) return false;
                 bot.healAt = now;
                 // ceil(missing / heal), exactly what the mod's loop works out to,
-                // trimmed only by what the socket can actually carry.
+                // trimmed only by what the socket can actually carry. Each bite
+                // is three packets and the swap back is a fourth, so the budget
+                // is taken off the top: a heal cut in half by the rate limiter
+                // would leave the bot standing there holding an apple.
                 const want = Math.ceil(missing / item.heal);
-                const n = Math.max(1, Math.min(want, 8));
+                const room = Math.floor((this._budgetLeft(bot) - 1) / 3);
+                const n = Math.min(want, 8, room);
+                if (n < 1) return false;
                 try {
                     for (let i = 0; i < n; i++) {
-                        EXP.send(bot.ws, "z", [food, false]);
-                        EXP.send(bot.ws, "F", [1, null]);
-                        EXP.send(bot.ws, "F", [0, null]);
+                        RynBots._send(bot, "z", [food, false]);
+                        RynBots._send(bot, "F", [1, null]);
+                        RynBots._send(bot, "F", [0, null]);
                     }
                     const back = (bot.weapons && bot.weapons[0] !== undefined) ? bot.weapons[0] : 0;
-                    EXP.send(bot.ws, "z", [back, true]);
-                    bot.wantWeapon = back;
+                    if (RynBots._send(bot, "z", [back, true])) bot.wantWeapon = back;
+                    else bot.wantWeapon = null;   // hand unknown — re-select next tick
                 } catch (e) {}
                 bot.attacking = false;   // the swings above left the state at 0
                 return true;
@@ -17458,51 +17618,70 @@ for (let tree of trees) {
             // the squad can be laying a trail while you are not, and the other
             // way round.
             //
-            // The shape is the mod's, on the bot's own world. The mod drops
-            // three mills BEHIND the direction of travel:
+            // Line for line, this is what the mod runs for you:
             //
-            //     angle = lastMoveAngle + toRad(180)
-            //     addPredictObject(items[3], angle)
-            //     addPredictObject(items[3], angle -/+ toRad(scale + scale/2))
+            //     if (autoMills && lastMoveAngle != null && !nearestTrap) {
+            //         let angle = lastMoveAngle + toRad(180);
+            //         if (canPlace(items[3], angle)) {                    // gate
+            //             if (canPlace(items[3], angle))          add(angle);
+            //             if (canPlace(items[3], angle - toRad(s + s/2))) add(...);
+            //             if (canPlace(items[3], angle + toRad(s + s/2))) add(...);
+            //         }
+            //     }
             //
-            // The offsets read as degrees taken off the mill's scale, which is
-            // odd arithmetic but it is what the mod does and what produces the
-            // familiar trail, so it is reproduced rather than "corrected".
-            // Guarded by !nearestTrap there; here that is "not stuck", which is
-            // the bot's equivalent of being pinned.
+            // and every part of that shape is kept here, including the parts
+            // that look like accidents:
             //
-            // Three things the old menu-toggle version got wrong, and this one
-            // does not:
+            //   * the OUTER GATE. The two side mills are only attempted when the
+            //     middle one can go down. Blocked behind you, the whole trail
+            //     skips this tick -- it does not fan out around the obstacle.
+            //     The first version tested each of the three on its own, which
+            //     is why the squad's trail came out in a different shape from
+            //     yours.
+            //   * the offsets, toRad(scale + scale/2), which read as degrees
+            //     taken off the mill's scale. Odd arithmetic, but it is what
+            //     makes the trail look the way it looks.
+            //   * the angle is the LAST MOVE ANGLE ACTUALLY SENT, not the
+            //     heading the tick is about to pick. `lastMoveAngle` is assigned
+            //     right after io.send("9", ...) for you; bot.moveSent is the same
+            //     value on the bot's socket. Behind means behind where it is
+            //     going, which is not always where it is about to turn.
+            //   * every tick, no cooldown of its own. The mod re-runs this on
+            //     every server tick and lets canPlace decide; the 400ms gate the
+            //     first version added is what made the squad's trail sparser
+            //     than yours.
             //
-            //   * it counted against `packets`, the MASTER's rate window. A bot
-            //     sends down its own socket, so that number said nothing about
-            //     the bot -- it could block a bot that had sent nothing, or wave
-            //     one through that was already flooding. The window kept here is
-            //     the bot's own (pktAt / pktCount, the same pair Full Mod feeds
-            //     the mod), maintained whether or not Full Mod is on.
-            //   * it never looked at the mill cap. Past the group limit the
-            //     server refuses every place packet, and the bot would keep
-            //     spending three of them a tick forever. itemCounts is the
-            //     server's own count, straight off the "S" packet.
-            //   * it trusted slot 3 to be a mill. It is, until a loadout says
-            //     otherwise -- and then the trail is made of whatever that slot
-            //     held. Checked against the mill group now.
+            // What is NOT copied is the delivery. You go through predictObjects
+            // -> place(), which already checks the item cap, the river and the
+            // packet budget on the way past. A bot has none of that pipeline, so
+            // the same three checks are made here explicitly: the mill cap from
+            // the server's own count, what the bot can actually pay for, and the
+            // per-second packet allowance. Skipping them does not place more
+            // mills -- the server refuses those packets -- it just spends the
+            // bot's rate limit on refusals until the connection is cut.
             _botAutoMills(bot, moveAngle) {
                 if (!botAutoMills) return false;
-                if (moveAngle === null || moveAngle === undefined) return false;
                 if (bot.stuckTicks > 0) return false;              // pinned, not walking
+                // lastMoveAngle: what actually went down the wire last, with the
+                // tick's own heading as the fallback for a bot that has not sent
+                // a move yet.
+                // A move of `null` is a full stop, and the mod stops laying mills
+                // there too (lastMoveAngle goes null with it) -- so a stopped bot
+                // returns here rather than falling through to the heading.
+                let travel = bot.moveSent;
+                if (travel === undefined) travel = moveAngle;   // none sent yet
+                if (travel === null || travel === undefined) return false;
+
                 const mill = (bot.itemsOwned || [])[3];
                 if (mill === undefined || mill === null) return false;
                 const item = items.list[mill];
                 if (!item || !item.group) return false;
                 // Slot 3 is the mill slot; make sure this loadout agrees before
                 // building a trail out of it.
-                const millGroup = items.list[BOT_ITEM.WINDMILL].group;
-                if (item.group.id !== millGroup.id) return false;
-                // How many mills may actually go down this pass. Three is the
-                // mod's pattern, but the cap and the bank both cut it short, and
-                // asking for a mill the bot cannot pay for or is not allowed to
-                // own is a place packet the server drops on the floor.
+                if (item.group.id !== items.list[BOT_ITEM.WINDMILL].group.id) return false;
+
+                // How many mills may actually go down this pass: the cap and the
+                // bank both cut the mod's three short.
                 const owned = (bot.itemCounts && bot.itemCounts[item.group.id]) || 0;
                 const cap = config.buildLimit(item.group);
                 let room = 3;
@@ -17518,37 +17697,57 @@ for (let tree of trees) {
                     }
                 }
                 if (room < 1) return false;
-                const now = Date.now();
-                if (now - bot.millAt < 400) return false;
+                // A mill is four packets: select, swing, release, swap back.
+                if (this._budgetLeft(bot) < 5) return false;
 
-                // The bot's own packet window: ~119/s, same ceiling the mod
-                // keeps for you. Each mill costs a select + two attack packets,
-                // and the swap back at the end costs one more.
-                if (now - (bot.pktAt || 0) >= 1000) { bot.pktAt = now; bot.pktCount = 0; }
-
-                const back = moveAngle + Math.PI;
+                const back = travel + UTILS.toRad(180);
                 const off = UTILS.toRad(item.scale + item.scale / 2);
+
+                // THE GATE — middle blocked, nothing goes down.
+                if (!this._botCanPlace(bot, mill, back)) return false;
+
+                const now = Date.now();
                 let placed = 0;
                 for (const a of [back, back - off, back + off]) {
                     if (placed >= room) break;
-                    if ((bot.pktCount || 0) + 4 > 119) break;
+                    if (this._budgetLeft(bot) < 5) break;
                     if (!this._botCanPlace(bot, mill, a)) continue;
-                    try {
-                        EXP.send(bot.ws, "z", [mill, false]);
-                        EXP.send(bot.ws, "F", [1, a]);
-                        EXP.send(bot.ws, "F", [0, a]);
-                    } catch (e) {}
-                    bot.pktCount = (bot.pktCount || 0) + 3;
+                    RynBots._send(bot, "z", [mill, false]);
+                    RynBots._send(bot, "F", [1, a]);
+                    RynBots._send(bot, "F", [0, a]);
+                    // The server has not echoed this mill yet, so bot.objects
+                    // will still call the spot empty on the next tick or two.
+                    // Remembering it here is what stops the bot re-buying the
+                    // same mill nine times a second while the packet is in
+                    // flight -- the mod does not need this because your own
+                    // predictObjects already stand in for the pending build.
+                    this._noteBotPlaced(bot, mill, a);
                     placed++;
                 }
                 if (!placed) return false;
                 const backTo = (bot.weapons && bot.weapons[0] !== undefined) ? bot.weapons[0] : 0;
-                try { EXP.send(bot.ws, "z", [backTo, true]); } catch (e) {}
-                bot.pktCount = (bot.pktCount || 0) + 1;
-                bot.wantWeapon = backTo;
+                if (RynBots._send(bot, "z", [backTo, true])) bot.wantWeapon = backTo;
+                else bot.wantWeapon = null;    // hand unknown — re-select next tick
                 bot.attacking = false;
                 bot.millAt = now;
                 return true;
+            },
+
+            // Where this bot just asked for a building, until the server says so.
+            // Kept short: two seconds is far longer than a round trip, and an
+            // entry that outlives the truth only costs one skipped attempt.
+            _noteBotPlaced(bot, id, angle) {
+                const item = items.list[id];
+                if (!item) return;
+                const r = 35 + item.scale + (item.placeOffset || 0);
+                if (!bot.pending) bot.pending = [];
+                const now = Date.now();
+                if (bot.pending.length > 24) bot.pending.splice(0, bot.pending.length - 24);
+                bot.pending.push({
+                    x: bot.x + Math.cos(angle) * r,
+                    y: bot.y + Math.sin(angle) * r,
+                    scale: item.scale, at: now
+                });
             },
 
             // canPlace for a bot: the same test the mod runs, against the bot's
@@ -17556,18 +17755,59 @@ for (let tree of trees) {
             // exceptSid: an object the caller is about to destroy, so it must not
             // count as being in the way. The mod does the same when it ticks a
             // trap (objects.filter(o => o != enemyTrapped)).
+            //
+            // The blocking radius is now the game's, not a guess. canPlace() ends
+            // up in ObjectManager.checkItemLocation, which asks each object for
+            //
+            //     getScale(0.6, isItem)
+            //       = scale * (isItem || type 2|3|4 ? 1 : 0.6 * 0.6) * (isItem ? 1 : colDiv)
+            //
+            // so a BUILDING blocks at its full scale, while a tree, bush or rock
+            // blocks at about a third of it. Treating everything as full scale --
+            // which is what this did -- refuses placements the game allows, and
+            // it refuses them exactly where a bot spends its time: standing in
+            // the resources. That is most of why the squad's mill trail came out
+            // thinner than yours near trees.
+            //
+            // The river is the game's other rule, and the one that costs packets:
+            // nothing but a platform may be built in the band across the middle
+            // of the map, and a bot walking the river would otherwise re-ask
+            // every tick for a build the server always refuses.
             _botCanPlace(bot, id, angle, exceptSid) {
                 const item = items.list[id];
                 if (!item) return false;
                 const r = 35 + item.scale + (item.placeOffset || 0);
                 const px = bot.x + Math.cos(angle) * r;
                 const py = bot.y + Math.sin(angle) * r;
+                // River band — checkItemLocation's own test, platforms excepted.
+                if (id !== BOT_ITEM.PLATFORM) {
+                    const half = (config.mapScale || 14400) / 2;
+                    const bank = (config.riverWidth || 724) / 2;
+                    if (py >= half - bank && py <= half + bank) return false;
+                }
                 for (const o of bot.objects.values()) {
                     if (exceptSid !== undefined && o.sid === exceptSid) continue;
-                    const oi = (o.id === null || o.id === undefined) ? null : items.list[o.id];
-                    const os = o.scale || (oi && oi.scale) || 40;
+                    const isItem = !(o.id === null || o.id === undefined);
+                    const conf = isItem ? items.list[o.id] : null;
+                    const scale = o.scale || (conf && conf.scale) || 40;
+                    // getScale(0.6, isItem), with colDiv 1 for natural objects
+                    // (they carry no item config, so the game reads none either).
+                    let blockS = (conf && conf.blocker) ? conf.blocker
+                               : (isItem || o.type === 2 || o.type === 3 || o.type === 4)
+                                   ? scale
+                                   : scale * 0.36;
                     const dx = o.x - px, dy = o.y - py;
-                    if (dx * dx + dy * dy < (item.scale + os) * (item.scale + os)) return false;
+                    if (dx * dx + dy * dy < (item.scale + blockS) * (item.scale + blockS)) return false;
+                }
+                // Buildings this bot has asked for but the server has not echoed.
+                if (bot.pending && bot.pending.length) {
+                    const now = Date.now();
+                    for (let i = bot.pending.length - 1; i >= 0; i--) {
+                        const p = bot.pending[i];
+                        if (now - p.at > 2000) { bot.pending.splice(i, 1); continue; }
+                        const dx = p.x - px, dy = p.y - py;
+                        if (dx * dx + dy * dy < (item.scale + p.scale) * (item.scale + p.scale)) return false;
+                    }
                 }
                 return true;
             },
@@ -17726,11 +17966,16 @@ for (let tree of trees) {
                 bot.modAttacked = false;
                 // The mod refuses to spam past ~119 packets a second. That
                 // counter lives in io.send, which a bot never reaches -- its
-                // sends go through modSend -- so the window is kept here and
-                // handed to the tick, or the limiter would never trip.
-                const nowMs = Date.now();
-                if (nowMs - (bot.pktAt || 0) >= 1000) { bot.pktAt = nowMs; bot.pktCount = 0; }
-                bot.mod.packets = bot.pktCount || 0;
+                // sends go through modSend -- so the number is handed to the
+                // tick from here, or the limiter would never trip.
+                //
+                // It reads _send's window rather than keeping one of its own.
+                // Two windows meant the mod was told "you have sent 12 frames"
+                // while the tick around it had already spent eighty on moves,
+                // aims, swings and hat buys -- the mod then budgeted against a
+                // number that had never been true, which is how a bot ends up
+                // over the server's limit while every counter says it is fine.
+                bot.mod.packets = BOT_PKT_LIMIT - this._budgetLeft(bot);
 
                 // MIRROR MY KEYS
                 //
@@ -17782,12 +18027,13 @@ for (let tree of trees) {
                 const self = this;
                 return function (type) {
                     const args = Array.prototype.slice.call(arguments, 1);
-                    bot.pktCount = (bot.pktCount || 0) + 1;
+                    // No counting here any more: _send is the only counter, and
+                    // counting in both places made every mod frame cost two.
                     if (type === "9") { bot.modMoved = true; bot.moveSent = undefined; }
                     else if (type === "F") { bot.modAttacked = true; bot.attacking = args[0] === 1; }
                     else if (type === "z") { bot.wantWeapon = null; }
                     else if (type === "6") return true;    // no chat from a bot
-                    try { return EXP.send(bot.ws, type, args); } catch (e) { return false; }
+                    try { return RynBots._send(bot, type, args); } catch (e) { return false; }
                 };
             },
 
@@ -17946,6 +18192,10 @@ for (let tree of trees) {
                     if (d < bestD) { bestD = d; best = s; }
                 }
                 if (!best) return false;
+                // Nine packets, and they only work as one sequence -- a tick cut
+                // short by the rate limiter leaves the bot holding a spike with
+                // the trap still standing. Take the whole cost up front or wait.
+                if (this._budgetLeft(bot) < 9) return false;
 
                 bot.tickAt = now;
                 bot.placeAt = now;
@@ -17959,17 +18209,17 @@ for (let tree of trees) {
                 const toTrap = Math.atan2(trap.y - bot.y, trap.x - bot.x);
                 const toEnemy = Math.atan2(e.y - bot.y, e.x - bot.x);
                 try {
-                    EXP.send(bot.ws, "D", [toTrap]);
-                    EXP.send(bot.ws, "z", [sec, true]);
-                    EXP.send(bot.ws, "F", [1, toTrap]);
-                    EXP.send(bot.ws, "F", [0, toTrap]);
+                    RynBots._send(bot, "D", [toTrap]);
+                    RynBots._send(bot, "z", [sec, true]);
+                    RynBots._send(bot, "F", [1, toTrap]);
+                    RynBots._send(bot, "F", [0, toTrap]);
 
-                    EXP.send(bot.ws, "z", [pick, false]);
-                    EXP.send(bot.ws, "F", [1, best.angle]);
-                    EXP.send(bot.ws, "F", [0, best.angle]);
+                    RynBots._send(bot, "z", [pick, false]);
+                    RynBots._send(bot, "F", [1, best.angle]);
+                    RynBots._send(bot, "F", [0, best.angle]);
 
-                    EXP.send(bot.ws, "z", [pri, true]);
-                    EXP.send(bot.ws, "D", [toEnemy]);
+                    RynBots._send(bot, "z", [pri, true]);
+                    RynBots._send(bot, "D", [toEnemy]);
                 } catch (err) {}
                 // The trap is gone as far as this bot is concerned; the server's
                 // own "Q" confirms it a tick later.
@@ -18088,14 +18338,16 @@ for (let tree of trees) {
                     const r = (o.scale || 40) + item.scale * 0.5;
                     if (dx * dx + dy * dy < r * r) return false;
                 }
+                // Select, swing, release, swap back: four packets, or none.
+                if (this._budgetLeft(bot) < 4) return false;
                 bot.placeAt = now;
                 try {
-                    EXP.send(bot.ws, "z", [pick, false]);
-                    EXP.send(bot.ws, "F", [1, angle]);
-                    EXP.send(bot.ws, "F", [0, angle]);
+                    RynBots._send(bot, "z", [pick, false]);
+                    RynBots._send(bot, "F", [1, angle]);
+                    RynBots._send(bot, "F", [0, angle]);
                     const back = (bot.weapons && bot.weapons[0] !== undefined) ? bot.weapons[0] : 0;
-                    EXP.send(bot.ws, "z", [back, true]);
-                    bot.wantWeapon = back;
+                    if (RynBots._send(bot, "z", [back, true])) bot.wantWeapon = back;
+                    else bot.wantWeapon = null;
                 } catch (e) {}
                 bot.attacking = false;
                 return true;
@@ -18339,7 +18591,7 @@ for (let tree of trees) {
                 const own = bot.itemsOwned || [];
                 const nW = wep.filter(w => w !== null && w !== undefined).length;
                 if (slot < nW) {
-                    try { EXP.send(bot.ws, "z", [wep[slot], true]); } catch (e) {}
+                    try { RynBots._send(bot, "z", [wep[slot], true]); } catch (e) {}
                     bot.wantWeapon = wep[slot];
                     return true;
                 }
@@ -18347,10 +18599,10 @@ for (let tree of trees) {
                 if (id === undefined) return false;
                 const angle = this._possessAim !== null ? this._possessAim : bot.dir;
                 try {
-                    EXP.send(bot.ws, "z", [id, false]);
-                    EXP.send(bot.ws, "F", [1, angle]);
-                    EXP.send(bot.ws, "F", [0, angle]);
-                    EXP.send(bot.ws, "z", [bot.weapons[0], true]);
+                    RynBots._send(bot, "z", [id, false]);
+                    RynBots._send(bot, "F", [1, angle]);
+                    RynBots._send(bot, "F", [0, angle]);
+                    RynBots._send(bot, "z", [bot.weapons[0], true]);
                 } catch (e) {}
                 bot.wantWeapon = bot.weapons[0];
                 bot.attacking = false;
@@ -18636,14 +18888,14 @@ for (let tree of trees) {
                         if (!b.alive || b.ws.readyState !== 1) continue;
                         if (b.skinIndex !== hat) {
                             try {
-                                if (hat && !b.skins[hat]) EXP.send(b.ws, "c", [1, hat, 0]);
-                                EXP.send(b.ws, "c", [0, hat, 0]);
+                                if (hat && !b.skins[hat]) RynBots._send(b, "c", [1, hat, 0]);
+                                RynBots._send(b, "c", [0, hat, 0]);
                             } catch (e) {}
                         }
                         if (b.tailIndex !== acc) {
                             try {
-                                if (acc && !b.tails[acc]) EXP.send(b.ws, "c", [1, acc, 1]);
-                                EXP.send(b.ws, "c", [0, acc, 1]);
+                                if (acc && !b.tails[acc]) RynBots._send(b, "c", [1, acc, 1]);
+                                RynBots._send(b, "c", [0, acc, 1]);
                             } catch (e) {}
                         }
                     }
@@ -25655,6 +25907,8 @@ for (let tree of trees) {
 
         // Bots — behaviour
         botAutoSpawn: true,      // dead -> straight back in, no menu
+        botAutoRejoin: true,     // kicked / dropped -> reconnect a replacement,
+                                 // backing off 2s, 4s, 8s ... and giving up at 4
         botAutoBreak: true,      // swing through whatever blocks the walk
         botAutoAttack: true,     // hit enemy players that come into reach
         botAutoHeal: true,       // eat the moment they take damage
@@ -25663,8 +25917,10 @@ for (let tree of trees) {
         // yours is. See keyBotAutoMills above.
         botAutoPush: true,       // shove a trapped enemy onto your spike
         botAutoFarm: false,      // gather, so the bot can actually afford to build
-        botPacketSpam: false,    // every bot floods its own socket — combined rate past 120/s
-        botSpamRate: 40,         // packets per bot per tick (~9 ticks/s), so ~360/s each
+        botPacketSpam: false,    // every bot fills its own rate allowance
+        botSpamRate: 40,         // packets per bot PER SECOND, inside the server's
+                                 // ~119/s ceiling. It was per TICK — ~360/s each —
+                                 // which is what was getting the squad kicked.
         botFarmLimit: 0,         // stop at this much of each resource; 0 = never stop
         botFarmShare: 2,         // how many bots may work the same tree
         botSpikeTick: true,      // spike beside a trapped enemy, then pop the trap
@@ -26044,6 +26300,7 @@ for (let tree of trees) {
                 items: [
                     { type: 'toggle', name: "Hold (wait to enter)", id: "botHold" },
                     { type: 'toggle', name: "Auto Spawn (respawn on death)", id: "botAutoSpawn" },
+                    { type: 'toggle', name: "Auto Rejoin (reconnect if kicked)", id: "botAutoRejoin" },
                     { type: 'keybind', name: "Spawn Bots", id: "keySpawnBot" },
                     { type: 'keybind', name: "Release (enter all)", id: "keyReleaseBots" },
                     { type: 'keybind', name: "Kill All Bots", id: "keyKillBots" }
@@ -26061,7 +26318,7 @@ for (let tree of trees) {
                     { type: 'slider', name: "Farm Until (0 = forever)", id: "botFarmLimit", min: 0, max: 2000 },
                     { type: 'slider', name: "Bots Per Resource", id: "botFarmShare", min: 1, max: 8 },
                     { type: 'toggle', name: "Packet Spam (flood the server)", id: "botPacketSpam" },
-                    { type: 'slider', name: "Spam Rate (per bot/tick)", id: "botSpamRate", min: 1, max: 200 },
+                    { type: 'slider', name: "Spam Rate (per bot/second)", id: "botSpamRate", min: 1, max: 100 },
                     { type: 'toggle', name: "Auto Place (spike on contact)", id: "botAutoPlace" },
                     { type: 'keybind', name: "Auto Mills Key (trail behind)", id: "keyBotAutoMills" },
                     { type: 'toggle', name: "Auto Push (trap into spike)", id: "botAutoPush" },
