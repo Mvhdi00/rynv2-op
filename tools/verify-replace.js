@@ -109,7 +109,7 @@ function world(over = {}) {
     Math, JSON, console, Map, Set, Array, Object, Number, Infinity, isFinite, isNaN,
     UTILS, items, config, myPlayer,
     window: { vars: Object.assign({
-      replace: true, replaceRange: 300, placeAngles144: true,
+      replace: true, replaceRange: 300, placeAngles144: true, replaceLead: true,
       shameTick: false, shameGrind: true, autoPlace: false,
     }, over.vars || {}) },
 
@@ -174,11 +174,24 @@ function world(over = {}) {
     liftLine(String.raw`const REPLACE_FILL_LIMIT = \d+;`),
     liftLine(String.raw`const REPLACE_RING_ANGLES = \d+;`),
     liftLine(String.raw`const REPLACE_FINE_STEP = [^;]+;`),
+    liftLine(String.raw`const REPLACE_LEAD_WINDOW = \d+;`),
+    liftLine(String.raw`const replaceHeadings = new Map\(\);`),
+    liftLine(String.raw`let replaceHeadingStamp = \d+;`),
+    lift("replaceTrackHeading"),
+    lift("replaceSteadiness"),
+    lift("replaceAim"),
+
+    // A `const` inside a vm script is not a property of the context, so the
+    // lead's book cannot be reached from out here without a handle. This one
+    // only reads the real bindings — the tests still drive the tracker through
+    // replaceTrackHeading, never by writing the map.
+    "function leadBook() { return { headings: replaceHeadings, window: REPLACE_LEAD_WINDOW }; }",
     lift("replaceFineAim"),
     lift("replaceNearestHole"),
     lift("replaceWithinPath"),
     lift("replaceKnockInto"),
     lift("replaceBlocksMyMove"),
+    lift("replaceNearness"),
     lift("replaceEnemyRing"),
     lift("replaceCandidates"),
     lift("replaceGrade"),
@@ -460,6 +473,305 @@ section("DANGER GATE — do not build through a spike sync");
 }
 
 // ===========================================================================
+section("LEAD — grade on where they will be, weighted by whether we know");
+{
+  // A moving enemy: x2/y2 is where the packet put them, xVel/yVel is the
+  // client's own next-frame extrapolation of the same packet.
+  const runner = (x, y, stepX, stepY) =>
+    enemyAt(x, y, { xVel: x + stepX, yVel: y + stepY });
+
+  // Feed a heading history in by replaying observations, exactly as the tick
+  // body does — not by writing the map, which would test nothing.
+  function walk(c, sid, x, y, stepX, stepY, n) {
+    for (let i = 0; i < n; i++) {
+      c.replaceTrackHeading({ sid, x2: x, y2: y, xVel: x + stepX, yVel: y + stepY });
+      x += stepX; y += stepY;
+    }
+    return { x, y };
+  }
+
+  // ---- the weight ---------------------------------------------------------
+  {
+    const c = world({ nearestEnemy: runner(1060, 1000, 25, 0) });
+    const e = runner(1060, 1000, 25, 0);
+
+    ok("with no history at all there is no lead — the enemy itself comes back",
+       c.replaceAim(e) === e);
+
+    c.replaceTrackHeading(e);
+    ok("one sample is not a line either", c.replaceAim(e) === e);
+
+    walk(c, e.sid, 1060, 1000, 25, 0, 6);
+    const steady = c.replaceSteadiness(e);
+    ok("six samples on one heading read as steady", steady > 0.99, `got ${steady}`);
+
+    const aim = c.replaceAim(e);
+    ok("and the aim point lands on the extrapolation, not the report",
+       Math.abs(aim.x2 - e.xVel) < 0.5 && Math.abs(aim.y2 - e.yVel) < 0.5,
+       `aim ${aim.x2.toFixed(1)},${aim.y2.toFixed(1)} vs xVel ${e.xVel}`);
+
+    // The lead is never longer than the step itself: it is a blend between two
+    // known points, so it cannot extrapolate past the further one.
+    ok("the lead never runs past the extrapolation it is blending toward",
+       UTILS.getDistance(e.x2, e.y2, aim.x2, aim.y2) <=
+       UTILS.getDistance(e.x2, e.y2, e.xVel, e.yVel) + 1e-9);
+  }
+
+  // ---- juking -------------------------------------------------------------
+  {
+    const c = world({ nearestEnemy: runner(1060, 1000, 25, 0) });
+    const e = runner(1060, 1000, 25, 0);
+
+    let x = 1060, y = 1000;
+    for (let i = 0; i < 6; i++) {
+      const sx = i % 2 ? 25 : -25;
+      c.replaceTrackHeading({ sid: e.sid, x2: x, y2: y, xVel: x + sx, yVel: y });
+      x += sx;
+    }
+
+    const steady = c.replaceSteadiness(e);
+    ok("a heading that reverses every frame reads as unsteady", steady < 0.2, `got ${steady}`);
+
+    const aim = c.replaceAim(e);
+    ok("so the aim point collapses back onto what is actually known",
+       UTILS.getDistance(aim.x2, aim.y2, e.x2, e.y2) < 5,
+       `${UTILS.getDistance(aim.x2, aim.y2, e.x2, e.y2).toFixed(1)} units of lead`);
+  }
+
+  // ---- the 0/2pi seam -----------------------------------------------------
+  {
+    // Headings of -0.05 and +0.05 rad are one line. Averaging the numbers says
+    // so too, by luck; averaging -3.1 and +3.1 says the opposite of the truth.
+    // Mean resultant length is right in both.
+    const c = world({ nearestEnemy: runner(1060, 1000, -25, 0) });
+    const e = runner(1060, 1000, -25, 0);
+
+    let x = 1060, y = 1000;
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI - 0.04 + (i % 2) * 0.08;      // straddling pi
+      const sx = Math.cos(a) * 25, sy = Math.sin(a) * 25;
+      c.replaceTrackHeading({ sid: e.sid, x2: x, y2: y, xVel: x + sx, yVel: y + sy });
+      x += sx; y += sy;
+    }
+
+    ok("headings straddling the pi seam read as one line, not two",
+       c.replaceSteadiness(e) > 0.99, `got ${c.replaceSteadiness(e)}`);
+  }
+
+  // ---- one packet, one observation ---------------------------------------
+  {
+    // ctxRun replays the tick body per bot. tick is swapped along with the rest,
+    // so the guard has to be the reading itself.
+    const c = world({ nearestEnemy: runner(1060, 1000, 25, 0) });
+    const e = runner(1060, 1000, 25, 0);
+    for (let i = 0; i < 10; i++) c.replaceTrackHeading(e);
+    ok("the same reading ten times over is one observation, not ten",
+       c.replaceSteadiness(e) === 0, `steadiness ${c.replaceSteadiness(e)}`);
+  }
+
+  // ---- bounds -------------------------------------------------------------
+  {
+    const c = world({ nearestEnemy: runner(1060, 1000, 25, 0) });
+    walk(c, 7, 1060, 1000, 25, 0, 40);
+    ok("the heading window is bounded by REPLACE_LEAD_WINDOW",
+       c.leadBook().headings.get(7).angles.length <= c.leadBook().window,
+       `${c.leadBook().headings.get(7).angles.length} kept`);
+
+    for (let sid = 100; sid < 260; sid++) walk(c, sid, 1000, 1000, 25, 0, 2);
+    ok("the heading map does not grow for the whole session",
+       c.leadBook().headings.size <= 96, `${c.leadBook().headings.size} tracked`);
+  }
+
+  // ---- a player who stopped ----------------------------------------------
+  {
+    const c = world({ nearestEnemy: runner(1060, 1000, 0, 0) });
+    const still = enemyAt(1060, 1000);                 // xVel === x, step 0
+    for (let i = 0; i < 6; i++) {
+      c.replaceTrackHeading({ sid: 2, x2: 1060 + i * 1e-6, y2: 1000, xVel: 1060 + i * 1e-6, yVel: 1000 });
+    }
+    ok("a player standing still records no heading", c.replaceSteadiness(still) === 0);
+    ok("and gets no lead", c.replaceAim(still) === still);
+  }
+
+  // ---- wire junk ----------------------------------------------------------
+  {
+    const c = world({ nearestEnemy: runner(1060, 1000, 25, 0) });
+    let threw = null;
+    try {
+      for (const bad of [null, {}, { sid: 3 }, { sid: 3, x2: NaN, y2: 1 },
+                         { sid: 3, x2: 1, y2: 1, xVel: Infinity, yVel: 1 }]) {
+        c.replaceTrackHeading(bad);
+        if (bad) c.replaceSteadiness(bad);
+      }
+      const junk = { sid: 3, x2: 1, y2: 1, xVel: NaN, yVel: 1 };
+      ok("a non-finite extrapolation takes no lead", c.replaceAim(junk) === junk);
+    } catch (e) { threw = e.message; }
+    ok("junk on the wire is survived, not thrown on", threw === null, threw);
+  }
+
+  // ---- the payoff, through the real doReplace ----------------------------
+  {
+    // A spike can only go on a ring of fixed radius around us, so how far it
+    // ends up from the enemy is floored by geometry no placer controls. What a
+    // placer DOES control is the BEARING it spends the slot on, so that is what
+    // this measures: the gap between the bearing of the spike we queued and the
+    // bearing to where the enemy will be when it exists.
+    //
+    // Swept over a grid of duels rather than one, because a single scene can
+    // flatter any change — and because the first version of this test measured
+    // distance on a bare ring, where the answer was identical either way and
+    // said nothing.
+    const duel = (lead, headingDeg, step, jitter, dense) => {
+      const a = UTILS.toRad(headingDeg);
+      const sx = Math.cos(a) * step, sy = Math.sin(a) * step;
+      const bearing = UTILS.toRad(headingDeg * 1.7 + 40);
+      const ex = 1000 + Math.cos(bearing) * 110, ey = 1000 + Math.sin(bearing) * 110;
+      const e = runner(ex, ey, sx, sy);
+
+      const field = [];
+      for (let i = 0; dense && i < 24; i++) {
+        const t = (i / 24) * Math.PI * 2, r = 170 + (i % 4) * 40;
+        field.push(hole(1000 + Math.cos(t) * r, 1000 + Math.sin(t) * r,
+                        { sid: 300 + i, ours: i % 3 !== 0, owner: { sid: i % 3 !== 0 ? 1 : 2 } }));
+      }
+
+      const c = world({
+        nearestEnemy: e, enemiesNear: [e], itemCounts: { 2: 0, 5: 0 },
+        visibleObjects: field, spikes_our: field.filter(o => o.ours),
+        vars: { replace: true, replaceRange: 300, placeAngles144: true, replaceLead: lead },
+      });
+
+      // Six observed frames. jitter is how far the heading swings between them:
+      // 0 is a straight line, 1.2 rad is a player juking every frame.
+      let x = ex - sx * 6, y = ey - sy * 6;
+      for (let i = 0; i < 6; i++) {
+        const w = a + (i % 2 ? jitter : -jitter);
+        const jx = Math.cos(w) * step, jy = Math.sin(w) * step;
+        c.replaceTrackHeading({ sid: e.sid, x2: x, y2: y, xVel: x + jx, yVel: y + jy });
+        x += jx; y += jy;
+      }
+
+      c.doReplace([hole(ex - sx, ey - sy)]);
+
+      const spikes = c.predictObjects.filter(o => o.id === 6);
+      if (!spikes.length) return null;
+
+      const want = Math.atan2(e.yVel - 1000, e.xVel - 1000);
+      return Math.min(...spikes.map(o =>
+        UTILS.getAngleDist(Math.atan2(o.y - 1000, o.x - 1000), want)));
+    };
+
+    // Paired: a scene any variant could not answer is dropped from all of them,
+    // so the three numbers are over the same duels.
+    const sweep = (jitter) => {
+      const on = [], off = [];
+      for (let h = 0; h < 360; h += 15) {
+        for (const step of [12, 25]) {
+          for (const dense of [false, true]) {
+            const a = duel(true, h, step, jitter, dense);
+            const b = duel(false, h, step, jitter, dense);
+            if (a === null || b === null) continue;
+            on.push(a); off.push(b);
+          }
+        }
+      }
+      const mean = (v) => v.reduce((s, x) => s + x, 0) / v.length * 180 / Math.PI;
+      return { n: on.length, on: mean(on), off: mean(off) };
+    };
+
+    const line = sweep(0), juke = sweep(1.2);
+
+    ok(`${line.n} duels answered by both settings`, line.n >= 40, `only ${line.n}`);
+    ok(`against a runner holding one line: ${line.on.toFixed(2)}deg led, ` +
+       `${line.off.toFixed(2)}deg unled`, line.on < line.off * 0.5,
+       `the lead bought ${(line.off - line.on).toFixed(2)}deg`);
+    ok("and it lands inside two degrees of where they will be",
+       line.on < 2, `${line.on.toFixed(2)}deg`);
+
+    // The confidence weight is the whole reason this is safe to leave on. A
+    // player who reverses every frame gives a reading worth less, and the lead
+    // must shrink toward what is known rather than commit to a guess.
+    ok(`against a juker it degrades to ${juke.on.toFixed(2)}deg rather than breaking`,
+       juke.on > line.on, `juking ${juke.on.toFixed(2)} vs line ${line.on.toFixed(2)}`);
+    ok("and even then is not worse than not leading at all",
+       juke.on <= juke.off, `juking ${juke.on.toFixed(2)} vs unled ${juke.off.toFixed(2)}`);
+
+    // Switched off, the grading measures to x2/y2 exactly as it did.
+    const step = 25;
+    const noHistory = (() => {
+      const e = runner(1040, 1000, 0, step);
+      const c = world({
+        nearestEnemy: e, enemiesNear: [e], itemCounts: { 2: 0, 5: 0 },
+        vars: { replace: true, replaceRange: 300, placeAngles144: true, replaceLead: true },
+      });
+      c.doReplace([hole(1040, 1000)]);          // lead on, but nothing observed
+      return c.predictObjects.map(o => `${o.id}@${o.angle.toFixed(6)}`).join(" ");
+    })();
+    const off = (() => {
+      const e = runner(1040, 1000, 0, step);
+      const c = world({
+        nearestEnemy: e, enemiesNear: [e], itemCounts: { 2: 0, 5: 0 },
+        vars: { replace: true, replaceRange: 300, placeAngles144: true, replaceLead: false },
+      });
+      walk(c, e.sid, 1040, 1000 - step * 6, 0, step, 6);
+      c.doReplace([hole(1040, 1000)]);
+      return { placed: c.predictObjects.slice() };
+    })();
+    ok("lead on with nothing observed is bit-for-bit lead off",
+       noHistory === off.placed.map(o => `${o.id}@${o.angle.toFixed(6)}`).join(" "),
+       `${noHistory}  vs  ${off.placed.map(o => `${o.id}@${o.angle.toFixed(6)}`).join(" ")}`);
+  }
+
+  // ---- what is deliberately NOT led --------------------------------------
+  {
+    const grade = (() => {
+      const at = src.indexOf("function replaceGrade(");
+      return balance(at);
+    })();
+    ok("the aim point is taken once per enemy, not per candidate",
+       (grade.match(/replaceAim\(/g) || []).length === 1);
+    ok("both distance readings are led",
+       (grade.match(/getDistance\(candidate\.x, candidate\.y, aim\.x2, aim\.y2\)/g) || []).length === 2);
+    ok("the trap-containment test still reads the present",
+       /getDistance\(trap\.x, trap\.y, enemy\.x2, enemy\.y2\) < trap\.scale/.test(grade));
+    ok("replaceKnockInto is still handed the real enemy",
+       /replaceKnockInto\(candidate, enemy\)/.test(grade));
+    ok("replaceEnemyRing is still handed the real enemy",
+       /replaceEnemyRing\(enemy, objects\)/.test(grade));
+
+    // The claim the whole change rests on: the rest of this client already
+    // aims at xVel/yVel, and the replacer was the one place that did not.
+    ok("the rest of the client already leads with xVel/yVel",
+       (src.match(/nearestEnemy\.xVel/g) || []).length > 10);
+    ok("and the extrapolation is the client's own, one frame wide",
+       /tmpObj\.xVel = tmpObj\.x2 \* 2 - lastX;/.test(src));
+  }
+
+  // ---- sampled every tick, not only on the ticks something broke ---------
+  {
+    const e = runner(1060, 1000, 25, 0);
+    const c = world({
+      nearestEnemy: e, enemiesNear: [e], primaryReload: { 1: 1 },
+      vars: { replace: true, replaceLead: true, autoPlace: false, prePlace: false,
+              placeAngles144: true },
+    });
+    const before = c.leadBook().headings.size;
+    c.getPredictObjects();                      // nothing in replaceQueue
+    ok("a tick with no break still records the heading",
+       c.leadBook().headings.size > before, `${before} -> ${c.leadBook().headings.size}`);
+
+    const off = world({
+      nearestEnemy: e, enemiesNear: [e], primaryReload: { 1: 1 },
+      vars: { replace: true, replaceLead: false, autoPlace: false, prePlace: false,
+              placeAngles144: true },
+    });
+    off.getPredictObjects();
+    ok("and switched off it costs nothing at all", off.leadBook().headings.size === 0,
+       `${off.leadBook().headings.size} tracked`);
+  }
+}
+
+// ===========================================================================
 section("COST — the sweep the grader reached once per candidate");
 {
   const enemy = enemyAt(1060, 1000);
@@ -671,7 +983,9 @@ section("NO DEAD CODE — every change is reached, no control is orphaned");
 {
   // A change nothing calls is the disease this borrows from. Each new name has
   // to be defined once AND reached.
-  for (const name of ["replaceFineAim", "replaceNearestHole", "computeCanTrapTick"]) {
+  for (const name of ["replaceFineAim", "replaceNearestHole", "computeCanTrapTick",
+                      "replaceTrackHeading", "replaceSteadiness", "replaceAim",
+                      "replaceNearness"]) {
     const defs = (src.match(new RegExp(`function ${name}\\(`, "g")) || []).length;
     const refs = (src.match(new RegExp(`[^a-zA-Z]${name}\\(`, "g")) || []).length;
     ok(`${name}: defined once, reached ${refs - defs}x`, defs === 1 && refs - defs >= 1,
@@ -719,7 +1033,9 @@ section("INTEGRATION");
   catch (e) { parsed = false; err = e.message; }
   ok("the client parses as a whole", parsed, err);
 
-  for (const name of ["replaceFineAim", "replaceNearestHole", "computeCanTrapTick"]) {
+  for (const name of ["replaceFineAim", "replaceNearestHole", "computeCanTrapTick",
+                      "replaceTrackHeading", "replaceSteadiness", "replaceAim",
+                      "replaceNearness"]) {
     const defs = (src.match(new RegExp(`function ${name}\\(`, "g")) || []).length;
     const refs = (src.match(new RegExp(`[^a-zA-Z]${name}\\(`, "g")) || []).length;
     ok(`${name}: defined once, reached ${refs - defs}x`, defs === 1 && refs - defs >= 1,

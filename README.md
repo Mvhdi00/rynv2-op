@@ -183,7 +183,7 @@ understood.
 # YoRHa System — Replace
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-replace.js` — 93 checks.
+revision). Verified by `node tools/verify-replace.js` — 131 checks.
 
 YoRHa's replacer is **Falcon 0.4.7's grading table**, already carefully ported
 with four documented fixes to Falcon's own bugs. Reading the replacers in nine
@@ -192,8 +192,9 @@ The grading table, `replaceKnockInto`, `replaceEnemyRing`, `replaceWithinPath`,
 `replaceBlocksMyMove` and the four-slot fill limit are all untouched. So are the
 preplacer and the autoplacer.
 
-Four surgical changes, each taken from a specific client, each closing a
-specific hole.
+Six surgical changes. Four are taken from a specific other client and each
+closes a specific hole. Two more came out of measuring the result: one made the
+replacer faster, one made it lead a moving target.
 
 ## 1. Fine aim — from AI Client 44
 
@@ -284,6 +285,91 @@ Measured with Shame Tick on and 40 visible objects: **2 sweeps** per replace,
 > `doReplace` runs once per tick, so the ring was already computed once per
 > enemy per tick. The cost was where the measurement said it was.
 
+## 5. Commit first, refine second
+
+The fine aim above was running on every candidate `spend()` was offered —
+including the ones `addPredictObject` was about to refuse for overlapping
+something already queued. Measured on one replace in a fight scene: **99 fine-aim
+searches for four placements**, and the `canPlace` calls behind them.
+
+`addPredictObject` is a handful of distance comparisons. The fine-aim search is
+up to a dozen collision tests. The cheap question belongs first, so `spend()` now
+commits on the grid angle and refines only what was accepted.
+
+Sliding an accepted slot toward its hole can move it into something else queued
+this tick — two spikes that clear each other at 60° apart do not still clear at
+58.75° — so the move is kept only if the ground it lands on is free of everything
+else in the list. That is a different question from the marker check: the marker
+check asks whether a **new** object may join, this asks whether one already in
+the list may **move**.
+
+| | before | after |
+|---|---|---|
+| `replaceFineAim` calls | 99 | **4** |
+| per replace | 5375 µs | **4506 µs** |
+| placements | identical | identical |
+
+## 6. Lead the target
+
+Every other aiming path in this file already leads. The insta check measures to
+`nearestEnemy.xVel/yVel`, the spike-knock search sorts on it, the velocity tick
+places against it. `replaceGrade` was the one placer still grading on `x2/y2` —
+the position the last packet reported, which by the time the building exists is a
+server frame old. A frame is 111 ms, and a player at speed covers most of 25
+units in it. The sharpest test on the spike table is `dist <= 35 + scale` —
+does this slot reach them at all — and 25 units is most of the margin it has.
+
+**There is nothing to simulate for this.** `updatePlayers` already writes
+
+```js
+tmpObj.xVel = tmpObj.x2 * 2 - lastX;
+```
+
+which is `x2` plus the step they just took: the client's own one-frame
+extrapolation, at exactly the horizon a placement has. (An earlier branch of this
+work carried a hand-rolled physics integrator for it. It was a worse copy of a
+number already in the data.)
+
+What the replacer cannot borrow from the aiming code is its **tolerance for being
+wrong**. A missed swing costs a swing; a mis-led ring costs buildings out of a
+stock the caps hold to six traps and fifteen spikes, and the replacer commits the
+whole ring on one reading. So the lead is weighted by what the reading is worth:
+the mean resultant length of the last six observed headings — the wrap-safe way
+to measure how tightly a set of angles clusters. Hold one line and the grade
+moves the whole way onto the extrapolation; juke and it collapses back onto
+`x2/y2`, which is the only thing actually known. With no history at all the
+weight is zero and the grading is bit-for-bit what it was.
+
+The window is sampled in the tick body, not in `doReplace` — `doReplace` only
+runs on the ticks something broke, and a window built from those measures across
+the gaps between them rather than along a line.
+
+**The prediction alone changes nothing, and that is the interesting part.**
+Falcon grades in small integers, and in a bare duel most of the ring scores the
+same: measured on one, **28 of 72 spike slots tie at grade 1 with identical
+points**, so the winner is whichever the sweep reached first. A tie broken by
+sweep order is a tie broken by nothing. So the slot's distance to the aim point
+now feeds `points` — the field this file already reserves for settling ties the
+grade left open — weighted so the contribution from every enemy together still
+sums to under one, which keeps that rule literally true.
+
+Measured as the **bearing error** of the queued spike against where the enemy
+will be when it exists, over 48 paired duels (a spike can only sit on a ring of
+fixed radius, so its distance to the enemy is floored by geometry no placer
+controls; the bearing is what a placer actually chooses):
+
+| | enemy holding one line | enemy juking every frame |
+|---|---|---|
+| before | 32.98° | 32.98° |
+| tiebreak only | 7.58° | 7.58° |
+| tiebreak + lead | **1.41°** | **4.89°** |
+
+The two are not separable: with the lead but **without** the tiebreak the error
+is **35.48°**, worse than not leading at all. Leading moves which slots qualify
+while sweep order still picks arbitrarily among them.
+
+Toggle: **Placers → Replace → Lead The Target** (`replaceLead`, on by default).
+
 ## What was rejected, and why
 
 | Idea | From | Why not |
@@ -305,11 +391,11 @@ takes the rest of the tick with it.
 ## Verifying
 
 ```
-node tools/verify-replace.js [client.js]                  # 91 checks
+node tools/verify-replace.js [client.js]                  # 129 checks
 node tools/check-scopes.js   [client.js]                  # names READ but never declared
 node tools/check-dead.js     [client.js] --base [base.js] # names DECLARED but never used
 
-# 93 checks: the two static passes fold in when a baseline is given
+# 131 checks: the two static passes fold in when a baseline is given
 YORHA_BASE=/path/to/pristine.user.js node tools/verify-replace.js
 ```
 
@@ -346,8 +432,30 @@ Lifts the real function bodies out of the client by name — nothing is
 re-implemented, including `addPredictObject`, since the no-double-spend claim
 rests on it. Covers the fine aim's accuracy, bound and cost; the cap against a
 counter only the server writes; the gate in all four combinations; the sweep
-count; that the grading table and both other placers are untouched; robustness
-against a malformed break list; and that the file's undeclared-identifier set is
-unchanged from the pristine base.
+count; the lead's weighting, bounds, wrap safety and graceful failure, and its
+bearing error swept over a grid of duels rather than asserted from one; that the
+grading table and both other placers are untouched; robustness against a
+malformed break list; and that the file's undeclared-identifier set is unchanged
+from the pristine base.
 
-**Diff against the base: 198 lines added, 6 replaced, in 8 hunks.**
+### The suite has been made to fail
+
+A test that has never failed has not been shown to test anything. Eight
+mutations of the client, applied one at a time, are each caught:
+
+| mutation | first check that fails |
+|---|---|
+| drop the proximity tiebreak | `against a runner holding one line: 35.48deg led, 32.98deg unled` |
+| grade on the present position again | `7.58deg led, 7.58deg unled` |
+| trust every reading completely | `a heading that reverses every frame reads as unsteady` |
+| average the heading numbers, not the vectors | `a heading that reverses every frame reads as unsteady` |
+| drop the one-packet-one-observation guard | `the same reading ten times over is one observation, not ten` |
+| stop sampling on ticks where nothing broke | `a tick with no break still records the heading` |
+| let the heading window grow unbounded | `the heading window is bounded by REPLACE_LEAD_WINDOW` |
+| let the lead run past the extrapolation | `the aim point lands on the extrapolation, not the report` |
+
+The same practice caught a real regression earlier in this work: the fine aim
+silently broke the ban book three ways at once, and the tests written for it were
+confirmed to produce six failures on the previous commit before being trusted.
+
+**Diff against the base: 405 lines added, 17 replaced, in 19 hunks.**

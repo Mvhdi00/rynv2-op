@@ -15538,10 +15538,148 @@ for (let tree of trees) {
             return UTILS.getAngleDist(Math.atan2(config.y - myPlayer.y2, config.x - myPlayer.x2), moveDir) <= Math.PI / 3;
         }
 
+        // ---------------------------------------------------------------------
+        // LEAD  —  grade on where they will be, not on where they were
+        // ---------------------------------------------------------------------
+        // Every other aiming path in this file already leads the target. The
+        // insta check measures to nearestEnemy.xVel/yVel, the spike-knock search
+        // sorts on it, the velocity tick places against it. The replacer was the
+        // one placer still grading on x2/y2 — the position the last packet
+        // reported, which by the time the building exists is a server frame old.
+        //
+        // A frame is 111ms, and a player at speed covers most of twenty-five
+        // units in it. The sharpest test on the spike table is
+        // `dist <= 35 + candidate.scale` — whether the slot reaches them at all
+        // — and twenty-five units is most of the margin that test has. A spike
+        // graded as reaching them, placed for where they stood, arrives beside
+        // them and the packet is gone.
+        //
+        // There is nothing to simulate for this. updatePlayers already writes
+        //
+        //     tmpObj.xVel = tmpObj.x2 * 2 - lastX
+        //
+        // which is x2 plus the step they just took: the client's own one-frame
+        // extrapolation, at exactly the horizon a placement has. The physics is
+        // already in the data, and a hand-rolled integrator over one frame would
+        // only be a worse copy of it.
+        //
+        // What the replacer cannot borrow from the aiming code is its tolerance
+        // for being wrong. A missed swing costs a swing. A mis-led ring costs
+        // buildings out of a stock the caps hold to six traps and fifteen
+        // spikes, and the replacer commits the whole ring on one reading. So the
+        // lead is weighted by what the reading is worth: hold one line and the
+        // grade moves the whole way onto the extrapolation, juke and it
+        // collapses back onto x2/y2, which is the only thing actually known.
+        // With no heading history at all the weight is zero and the grading is
+        // bit-for-bit what it was — today's behaviour, reached by having asked.
+        const REPLACE_LEAD_WINDOW = 6;              // ~0.67s of headings
+
+        // Keyed on the enemy's sid, and deliberately NOT in MOD_CTX_KEYS: which
+        // way a player is running is one fact about the game, the same in every
+        // context ctxRun switches into. For the same reason the resample guard
+        // is the reading itself and not `tick` — tick IS context-swapped, so a
+        // bot's pass would file the same packet under a different number and
+        // count one observation twice.
+        const replaceHeadings = new Map();
+        let replaceHeadingStamp = 0;
+
+        function replaceTrackHeading(enemy) {
+            if (!enemy || enemy.sid == null) return;
+            if (!isFinite(enemy.x2) || !isFinite(enemy.y2)) return;
+
+            const stepX = (enemy.xVel == null ? enemy.x2 : enemy.xVel) - enemy.x2;
+            const stepY = (enemy.yVel == null ? enemy.y2 : enemy.yVel) - enemy.y2;
+            if (!isFinite(stepX) || !isFinite(stepY)) return;
+
+            let track = replaceHeadings.get(enemy.sid);
+            if (!track) replaceHeadings.set(enemy.sid, track = { angles: [], seen: null, stamp: 0 });
+
+            const seen = enemy.x2 + "," + enemy.y2 + "," + stepX + "," + stepY;
+            if (track.seen === seen) return;
+            track.seen = seen;
+            track.stamp = ++replaceHeadingStamp;
+
+            // A player who stopped has no heading to record. Recording one
+            // anyway would hold their last direction in the window instead of
+            // letting it age out, and their lead is zero either way — the step
+            // is what the extrapolation is made of.
+            if (Math.hypot(stepX, stepY) < 1) return;
+
+            track.angles.push(Math.atan2(stepY, stepX));
+            if (track.angles.length > REPLACE_LEAD_WINDOW) track.angles.shift();
+
+            // Players leave. Nothing else prunes this, and it lives for the
+            // whole session.
+            if (replaceHeadings.size > 48) {
+                for (const [sid, other] of replaceHeadings) {
+                    if (replaceHeadingStamp - other.stamp > 96) replaceHeadings.delete(sid);
+                }
+            }
+        }
+
+        // How tightly the headings we have seen cluster. Mean resultant length:
+        // the standard measure for that, and the one that stays correct across
+        // the 0/2pi seam, where averaging the numbers is not. One sample is not
+        // a line, so it reads as no opinion — and no opinion means no lead.
+        function replaceSteadiness(enemy) {
+            const track = enemy && enemy.sid != null ? replaceHeadings.get(enemy.sid) : null;
+            if (!track || track.angles.length < 2) return 0;
+
+            let sx = 0, sy = 0;
+            for (const angle of track.angles) { sx += Math.cos(angle); sy += Math.sin(angle); }
+
+            return Math.hypot(sx, sy) / track.angles.length;
+        }
+
+        // The point the grading table measures distance to. Returns the enemy
+        // itself whenever there is no lead to take, so the common case allocates
+        // nothing and grades exactly as it did before.
+        function replaceAim(enemy) {
+            if (!window.vars.replaceLead) return enemy;
+            if (!enemy || !isFinite(enemy.x2) || !isFinite(enemy.y2)) return enemy;
+            if (!isFinite(enemy.xVel) || !isFinite(enemy.yVel)) return enemy;
+
+            const trust = replaceSteadiness(enemy);
+            if (trust <= 0) return enemy;
+
+            return {
+                x2: enemy.x2 + (enemy.xVel - enemy.x2) * trust,
+                y2: enemy.y2 + (enemy.yVel - enemy.y2) * trust,
+            };
+        }
+
+        // Knowing where they will be is worth nothing if the table cannot act on
+        // it. Falcon grades in small integers, and in a bare duel most of the
+        // ring scores the same: measured on one, twenty-eight of seventy-two
+        // spike slots tie at grade 1 with identical points, so the winner is
+        // whichever the sweep happened to reach first. A tie broken by sweep
+        // order is a tie broken by nothing — and it is why a correct lead can
+        // change the grading and still change no placement at all.
+        //
+        // Among slots the table already rates equally, the one nearest the point
+        // we expect them to occupy is strictly the better buy. That is the whole
+        // use of the prediction, and `points` is the field this file already
+        // reserves for settling ties the grade left open.
+        //
+        // Weighted so the proximity from EVERY enemy together still sums to less
+        // than one, which keeps the rule the file states about points literally
+        // true: it settles ties inside points the way points settles ties inside
+        // grade, and can never cross an award.
+        function replaceNearness(dist, span, weight) {
+            if (!isFinite(dist) || !(span > 0)) return 0;
+            if (dist >= span) return 0;
+
+            return (1 - dist / span) * weight;
+        }
+
         // Falcon's _e: every slot the enemy could still drop a spike on. One of
         // our candidates landing on one of those is denying them the spot, which
         // is what Falcon marks `priority`. Id 9 is the widest spike, and the one
         // YoRHa already predicts enemy spikes with elsewhere.
+        //
+        // Not led. This one hands the enemy object itself to
+        // objectManager.checkItemLocation, which is game code that wants a
+        // player, not a position stand-in.
         function replaceEnemyRing(enemy, objects) {
             const id = 9;
             const item = items.list[id];
@@ -15725,7 +15863,23 @@ for (let tree of trees) {
         function replaceGrade(found, enemies, objects, lost) {
             const ourDamagers = objects.filter(object => object && object.owner && object.dmg && isObjectOur(object));
 
+            // Split across the enemies, so the proximity tiebreak from all of
+            // them together still comes to less than one point.
+            const nearWeight = 0.99 / enemies.length;
+
             for (const enemy of enemies) {
+                // Where the table measures TO. Every other reading of this enemy
+                // below stays on x2/y2 on purpose:
+                //
+                //   enemyTrapped   whether they are in one of our traps is a fact
+                //                  about now, not a guess about next frame.
+                //   the ring       hands the enemy object to game code.
+                //   knockInto      the shove resolves when they touch the spike,
+                //                  so it is the contact line that sets its
+                //                  direction, and an extrapolated walking
+                //                  position is not nearer to that than x2/y2 is.
+                //   the far side   a trapped enemy has no heading to lead.
+                const aim = replaceAim(enemy);
                 const ring = replaceEnemyRing(enemy, objects);
                 const enemyTrapped = traps_our.find(trap =>
                                                     UTILS.getDistance(trap.x, trap.y, enemy.x2, enemy.y2) < trap.scale
@@ -15747,7 +15901,7 @@ for (let tree of trees) {
                         break;
                     }
 
-                    const dist = UTILS.getDistance(candidate.x, candidate.y, enemy.x2, enemy.y2);
+                    const dist = UTILS.getDistance(candidate.x, candidate.y, aim.x2, aim.y2);
 
                     if (dist <= 235 && !enemyTrapped) candidate.grade++;
                     if (dist <= 50) {
@@ -15769,6 +15923,8 @@ for (let tree of trees) {
                     // A trap of ours died and they are loose: re-trapping is
                     // the move the hole is asking for.
                     if (lost.trap && !enemyTrapped && candidate.reTrap) candidate.grade++;
+
+                    candidate.points += replaceNearness(dist, ring.placementDistance, nearWeight);
                 }
 
                 // ---- spikes -----------------------------------------------
@@ -15789,7 +15945,7 @@ for (let tree of trees) {
                         break;
                     }
 
-                    const dist = UTILS.getDistance(candidate.x, candidate.y, enemy.x2, enemy.y2);
+                    const dist = UTILS.getDistance(candidate.x, candidate.y, aim.x2, aim.y2);
 
                     if (dist <= 35 + candidate.scale) {
                         candidate.hitEnemy = enemy;
@@ -15835,6 +15991,8 @@ for (let tree of trees) {
                     // A spike of ours died: put the damage back where it was
                     // doing work, on a slot that still reaches them.
                     if (lost.spike && candidate.hitEnemy) candidate.grade++;
+
+                    candidate.points += replaceNearness(dist, ring.placementDistance, nearWeight);
                 }
             }
 
@@ -15937,12 +16095,44 @@ for (let tree of trees) {
                 return confirmed + inFlight < limit;
             };
 
+            // Commit FIRST, refine second — and that order is the whole cost of
+            // this function.
+            //
+            // Refining before asking addPredictObject meant every candidate the
+            // marker check was going to refuse still paid for a fine-aim search.
+            // Measured on one replace: 121 searches for at most six placements,
+            // and 148 canPlace calls behind them. addPredictObject is a handful
+            // of distance comparisons; the search is up to a dozen collision
+            // tests. The cheap question belongs first.
+            //
+            // Once a slot IS taken, sliding it toward its hole can move it into
+            // something else this tick — two spikes that clear each other on the
+            // ring at 60deg apart do not still clear at 58.75deg — so the move is
+            // only kept if the ground it lands on is free of everything else
+            // queued. That is a different question from the marker check, which
+            // asks whether a NEW object may join; this asks whether an object
+            // already in the list may move.
             const spend = function (candidate) {
                 if (!candidate) return false;
                 if (!capLeft(candidate.id)) return false;
 
+                if (!addPredictObject(candidate.id, candidate.angle, false)) return false;
+
+                const taken = predictObjects[predictObjects.length - 1];
                 const angle = replaceFineAim(candidate, replaceNearestHole(candidate, ourDead), objects);
-                if (!addPredictObject(candidate.id, angle, false)) return false;
+
+                if (angle !== candidate.angle) {
+                    const moved = getConfig(candidate.id, angle);
+                    const clash = predictObjects.some(object =>
+                        object !== taken && object.id != 17 &&
+                        UTILS.getDistance(moved.x, moved.y, object.x, object.y) < moved.scale + object.scale);
+
+                    if (!clash) {
+                        taken.angle = angle;
+                        taken.x = moved.x;
+                        taken.y = moved.y;
+                    }
+                }
 
                 const group = items.list[candidate.id] && items.list[candidate.id].group;
                 if (group) spentByGroup.set(group.id, (spentByGroup.get(group.id) || 0) + 1);
@@ -16199,6 +16389,16 @@ for (let tree of trees) {
             // next tick. Nothing here touches the packet layer: the replace's
             // objects ride the ordinary immediate lane and stop at the same
             // packet budget as every other placement.
+            //
+            // The heading window the lead is weighted by is sampled here rather
+            // than inside doReplace(), because doReplace only runs on the ticks
+            // something broke — and a window built out of those ticks alone
+            // measures across the gaps between them instead of along a line. It
+            // has to be every tick to mean anything. One atan2 per enemy.
+            if (window.vars.replace && window.vars.replaceLead) {
+                for (const enemy of enemiesNear) replaceTrackHeading(enemy);
+            }
+
             if (replaceQueue.length > 0) {
                 const broken = replaceQueue;
                 replaceQueue = [];
@@ -25785,6 +25985,11 @@ for (let tree of trees) {
         replace: true,
         replaceRange: 300,       // Falcon's autoReplaceRange
 
+        // Grade the ring against where the enemy will be one server frame from
+        // now, weighted by how steadily they have been holding a heading. Off,
+        // the table measures to x2/y2 exactly as Falcon's did.
+        replaceLead: true,
+
         // Placer resolution — two mutually-exclusive tiles. 144 mode sweeps the
         // classic 72 grid first (so the spike tick lands exactly where it always
         // did) and only spends the finer 2.5deg half when the 72 circle is fully
@@ -26139,6 +26344,7 @@ for (let tree of trees) {
                 title: "Replace",
                 items: [
                     { type: 'toggle', name: "Enable Replace", id: "replace" },
+                    { type: 'toggle', name: "Lead The Target", id: "replaceLead" },
                     { type: 'slider', name: "Activation Range", id: "replaceRange", min: 100, max: 500 }
                 ]
             },
