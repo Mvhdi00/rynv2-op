@@ -49,6 +49,35 @@ Luna features that were **not** ported, and why:
 - *"ai hat predict" (`autsh1`) and "ai triangulation" (`triangle2`)* — these
   are menu entries in Luna with no implementation behind them. Nothing to port.
 
+### Auto Mills Force
+
+Combat → **Auto Mills Force**, on its own key in Keybinds → Quick Actions
+(`N` by default; the mod's own `B` is taken here by Quad Traps). Replaces RYN's
+`Automill`.
+
+While it is on and you are moving it lays three mills behind you every tick —
+one straight back down your travel line, one to either side — and stops while
+you are sitting in an enemy trap. The mill cap and what the mills cost are the
+only other things that stop it.
+
+It is a port of the mill trail from the YoRHa mod rather than a fix to what was
+there. `Automill` was an opening routine wearing a toggle's clothes: sandbox
+only, age under 20, only before anything else had placed that tick, and it set
+`active = false` the first time the mill cap was hit, so on a normal server the
+key did nothing at all. The side spacing differs too — the port uses the mod's
+`scale + scale / 2` read as degrees, where `Automill` derived an angle from the
+placement radius.
+
+Two things carried across from the mod verbatim. The middle angle gates the
+whole set: if the mill straight behind you does not fit, nothing goes down that
+tick. And each mill is checked against the mills the same tick already spent,
+not just against the world — placements are sent rather than tracked, so the
+object manager does not know about them yet, and at mill size the trail leaves
+about four units between neighbours.
+
+Defaults **off**, and is not in the parity migration that force-enables the
+combat toggles: unlike `Automill` it spends mills the moment you move.
+
 ### The placer
 
 Luna's placer was already ported into RYN before this merge — `AutoPlacer`

@@ -516,6 +516,279 @@ edit(
   resetGame_default(loadedFast);`
 );
 
+/* ------------------------------------------------------------------ *
+ * 11. Auto Mills Force (replaces RYN's Automill)
+ *
+ * RYN's Automill was an opening routine, not a toggle: it only ran in sandbox,
+ * only before age 20, only until the first placement of the tick, and it shut
+ * itself off (`active = false`) the moment the mill cap was hit, so on a normal
+ * server the key did nothing at all. Its side spacing was also computed from
+ * the placement radius, which is not the spacing the YoRHa mod uses.
+ *
+ * It is dropped for a straight port of that mod's mill trail: a toggle on a key
+ * of its own that lays mills behind you for as long as you are moving, on any
+ * server, at any age, until the mill cap or your resources stop it. Everything
+ * the port keeps and everything it deliberately keeps quirky is written up on
+ * the class itself.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "module: Automill -> AutoMillsForce",
+  `  class Automill {
+    moduleName="autoMill";
+    toggle=false;
+    active=true;
+    client;
+    tickCount=0;
+    constructor(client2) {
+      this.client = client2;
+    }
+    get isActive() {
+      return this.toggle && this.active;
+    }
+    reset() {
+      this.active = true;
+    }
+    get canAutomill() {
+      const isOwner = this.client.isOwner;
+      const {attacking: attacking, placedOnce: placedOnce, staticModules: staticModules} = this.client._ModuleHandler;
+      return Settings_default._automill && this.client.myPlayer.isSandbox && !placedOnce && (!isOwner || !attacking) && this.active && !staticModules.autoBuy.boughtEverything() && this.client.myPlayer.age < 20;
+    }
+    canPlaceWindmill(angle) {
+      return this.client.myPlayer.canPlaceObject(5, angle);
+    }
+    placeWindmill(angle) {
+      const {_ModuleHandler: ModuleHandler} = this.client;
+      const type = 5;
+      ModuleHandler.place(type, angle);
+      ModuleHandler.placedOnce = true;
+      ModuleHandler.placeAngles[0] = type;
+      ModuleHandler.placeAngles[1].push(angle);
+    }
+    postTick() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      this.toggle = true;
+      if (!this.canAutomill) {
+        this.toggle = false;
+        return;
+      }
+      if (!myPlayer.canPlace(5)) {
+        this.toggle = false;
+        this.active = false;
+        return;
+      }
+      const angle = ModuleHandler.reverse_move_dir;
+      if (angle === null) {
+        return;
+      }
+      const item = Items[myPlayer.getItemByType(5)];
+      const distance = myPlayer.getItemPlaceScale(item.id);
+      const offset = Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2;
+      const leftAngle = angle - offset;
+      const rightAngle = angle + offset;
+      if (this.canPlaceWindmill(angle) && this.canPlaceWindmill(leftAngle) && this.canPlaceWindmill(rightAngle)) {
+        this.placeWindmill(angle);
+        this.placeWindmill(leftAngle);
+        this.placeWindmill(rightAngle);
+      }
+    }
+  }
+  const Automill_default = Automill;`,
+  `  /* Auto Mills Force — the YoRHa mod's mill trail, on this core.
+   *
+   * A toggle and nothing else: while it is on and you are moving, every tick it
+   * lays mills behind you — one straight back down your travel line and one to
+   * either side of it.
+   *
+   * The side offset is the mod's own — the mill's scale plus half of it, read
+   * as degrees — kept as written rather than recomputed from the placement
+   * radius the way the old Automill did it. On a 45-scale windmill placed at
+   * radius 85 that puts 94 units between neighbours against the 90 they need,
+   * so the trail is laid as tight as it will go and still fit.
+   *
+   * The middle angle gates the set the way the mod does — if the mill straight
+   * behind you does not fit, nothing goes down that tick — and each mill is
+   * checked both against the world and against the mills this tick has already
+   * spent, the job the mod's addPredictObject() does. Placements are sent, not
+   * tracked, so the object manager cannot answer that second question yet, and
+   * at four units of clearance it is not a question to skip.
+   *
+   * It stands down while you are sitting in an enemy trap. Past that only the
+   * mill cap and the cost stop it: none of the sandbox, age or
+   * first-placement-of-the-tick conditions the old Automill carried.
+   */
+  class AutoMillsForce {
+    moduleName="autoMillsForce";
+    client;
+    placed=[];
+    constructor(client2) {
+      this.client = client2;
+    }
+    get isActive() {
+      return this.placed.length !== 0;
+    }
+    reset() {
+      this.placed.length = 0;
+    }
+    _tryPlace(id, angle, distance) {
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2, _ModuleHandler: ModuleHandler} = this.client;
+      const position = myPlayer.pos.current.addDirection(angle, distance);
+      if (!ObjectManager2.canPlaceItem(id, position)) {
+        return false;
+      }
+      const scale = Items[id].scale;
+      for (const taken of this.placed) {
+        if (position.distance(taken) < scale * 2) {
+          return false;
+        }
+      }
+      const type = 5;
+      ModuleHandler.place(type, angle);
+      ModuleHandler.placedOnce = true;
+      ModuleHandler.placeAngles[0] = type;
+      ModuleHandler.placeAngles[1].push(angle);
+      this.placed.push(position);
+      return true;
+    }
+    postTick() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      this.placed.length = 0;
+      if (!Settings_default._autoMillsForce || !myPlayer.inGame || myPlayer.isTrapped) {
+        return;
+      }
+      const angle = ModuleHandler.reverse_move_dir;
+      if (angle === null || !myPlayer.canPlace(5)) {
+        return;
+      }
+      const id = myPlayer.getItemByType(5);
+      const item = Items[id];
+      const distance = myPlayer.getItemPlaceScale(id);
+      const offset = toRadians(item.scale + item.scale / 2);
+      if (!this._tryPlace(id, angle, distance)) {
+        return;
+      }
+      this._tryPlace(id, angle - offset, distance);
+      this._tryPlace(id, angle + offset, distance);
+    }
+  }
+  const AutoMillsForce_default = AutoMillsForce;`
+);
+
+edit(
+  "module: register autoMillsForce",
+  `        autoMill: new Automill_default(client2),`,
+  `        autoMillsForce: new AutoMillsForce_default(client2),`
+);
+
+edit(
+  "module: autoMillsForce in the run order",
+  `this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind`,
+  `this.staticModules.placer, this.staticModules.autoMillsForce, this.staticModules.autoGrind`
+);
+
+/* Auto Grind stands aside while the trail is being laid, same as it did for
+ * Automill — both want the tick's placement and the grind is the one that can
+ * wait. */
+edit(
+  "autogrind: defer to autoMillsForce",
+  `      const {autoMill: autoMill, reloading: reloading} = ModuleHandler.staticModules;
+      if (autoMill.isActive) return;`,
+  `      const {autoMillsForce: autoMillsForce, reloading: reloading} = ModuleHandler.staticModules;
+      if (autoMillsForce.isActive) return;`
+);
+
+/* The mod's key is B, which Quad Traps already holds here, so the trail keeps
+ * the key Automill was on. Both are rebindable in Keybinds -> Quick Actions.
+ *
+ * It also defaults off rather than on: Automill could only fire in a sandbox
+ * opening, this one spends mills the moment you move. */
+edit(
+  "settings: _autoMillsForceKey",
+  `    _autoMillKey: "KeyN",`,
+  `    _autoMillsForceKey: "KeyN",`
+);
+
+edit(
+  "settings: _autoMillsForce",
+  `    _automill: true,`,
+  `    _autoMillsForce: false,`
+);
+
+/* The parity migration force-enables everything in its list. The trail is not
+ * something to switch on behind the user's back, so it is not in it. */
+edit(
+  "settings: drop _automill from the parity migration",
+  `"_autoheal", "_automill", "_autoplacer"`,
+  `"_autoheal", "_autoplacer"`
+);
+
+edit(
+  "keys: toggle Auto Mills Force",
+  `      if (event.code === Settings_default._autoMillKey) {
+        try {
+          Settings_default._automill = !Settings_default._automill;
+          const autoMillEl = UI_default.frame && UI_default.frame.document && UI_default.frame.document.getElementById("_automill");
+          if (autoMillEl) autoMillEl.checked = Settings_default._automill;
+        } catch (_) {}
+      }`,
+  `      if (event.code === Settings_default._autoMillsForceKey) {
+        try {
+          Settings_default._autoMillsForce = !Settings_default._autoMillsForce;
+          const autoMillsEl = UI_default.frame && UI_default.frame.document && UI_default.frame.document.getElementById("_autoMillsForce");
+          if (autoMillsEl) autoMillsEl.checked = Settings_default._autoMillsForce;
+          RYNNotify.show("Auto Mills Force", Settings_default._autoMillsForce);
+        } catch (_) {}
+      }`
+);
+
+/* A second listener toggled the same setting from a hard-coded KeyN, so the
+ * bound key and this one both fired and cancelled each other out whenever the
+ * keybind was left at its default. The keybind above is the only toggle now. */
+edit(
+  "keys: drop the hard-coded KeyN toggle",
+  `    if (e.code === "KeyN") {
+      Settings_default._automill = !Settings_default._automill;
+    }
+`,
+  ``
+);
+
+edit(
+  "menu: Auto Mills Force hotkey",
+  String.raw`                <div class="content-option">\r\n                    <span class="option-title">Toggle Automill</span>\r\n                    <button id="_autoMillKey" class="hotkeyInput"></button>\r\n                </div>`,
+  String.raw`                <div class="content-option">\r\n                    <span class="option-title">Toggle Auto Mills Force</span>\r\n                    <button id="_autoMillsForceKey" class="hotkeyInput"></button>\r\n                </div>`
+);
+
+edit(
+  "menu: Auto Mills Force toggle",
+  String.raw`            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>`,
+  String.raw`            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoMillsForce\">Auto Mills Force</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoMillsForce\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n                <span class=\"option-description\">Lays a mill trail behind you the whole time you are moving: one straight back and one to either side. Toggle it in-game with the Auto Mills Force key (Keybinds -> Quick Actions).</span>\r\n            </div>`
+);
+
+edit(
+  "i18n: auto_mills_force",
+  `      automill: "Automill",`,
+  `      auto_mills_force: "Auto Mills Force",`
+);
+
+edit(
+  "i18n: toggle_auto_mills_force",
+  `      toggle_automill: "Toggle Automill",`,
+  `      toggle_auto_mills_force: "Toggle Auto Mills Force",`
+);
+
+edit(
+  "i18n: option map (toggle)",
+  `[ "Automill", t.automill ]`,
+  `[ "Auto Mills Force", t.auto_mills_force ]`
+);
+
+edit(
+  "i18n: option map (hotkey)",
+  `[ "Toggle Automill", t.toggle_automill ]`,
+  `[ "Toggle Auto Mills Force", t.toggle_auto_mills_force ]`
+);
+
 /* ------------------------------------------------------------------ */
 
 fs.writeFileSync(OUT, code);
