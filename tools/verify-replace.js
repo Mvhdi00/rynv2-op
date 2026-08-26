@@ -138,6 +138,12 @@ function world(over = {}) {
     trapPress: false, turretPress: false, spikePress: false,
     nearestEnemiesCount: 0, spikes_enemy: [], enemySpikes: [], players: [],
     autogathering: false, predictWeapon: 5,
+    // Read by isPrePlaceAngle's trap branch, which only fires when the
+    // preplacer runs with a trap candidate on the table — a combination the
+    // single-tick PIPELINE scene never reached, so this was missing until the
+    // twelve-tick run below found it. Client-side it is declared at top level.
+    imTrapped: over.imTrapped || false,
+    trap_where_im_in: over.trap_where_im_in || null,
     getAttackDir: () => 0,
     isBoughtHat: () => false,
     isItemSetted: [],
@@ -976,6 +982,248 @@ section("PIPELINE — the real tick body, with all three placers");
   ok("the pipeline runs with every placer off", threw3 === null, threw3);
   ok("and queues nothing", dark.predictObjects.length === 0,
      `queued ${dark.predictObjects.length}`);
+}
+
+// ===========================================================================
+section("INVARIANTS — the properties the rest of the placer rests on");
+{
+  const walk = (c, sid, x, y, sx, sy, n) => {
+    for (let i = 0; i < n; i++) {
+      c.replaceTrackHeading({ sid, x2: x, y2: y, xVel: x + sx, yVel: y + sy });
+      x += sx; y += sy;
+    }
+  };
+  const runner = (x, y, sx, sy) => enemyAt(x, y, { xVel: x + sx, yVel: y + sy });
+
+  // 1. doReplace's fill loop sorts with a comparator that ignores `points`. It
+  //    only reaches the fills because Array#sort is stable and replaceGrade
+  //    already ordered each bucket by points. If that ever stops holding, the
+  //    tiebreak silently does nothing for four of the six placements.
+  {
+    const e = runner(1060, 1000, 0, 25);
+    const c = world({ nearestEnemy: e, enemiesNear: [e], itemCounts: { 2: 0, 5: 0 } });
+    walk(c, e.sid, 1060, 1000 - 150, 0, 25, 6);
+
+    const graded = c.replaceGrade(c.replaceCandidates([]), [e], [], { trap: false, spike: true });
+    const spread = graded.traps.concat(graded.spikes).sort((a, b) =>
+      b.grade === a.grade && a.trap !== b.trap ? (a.trap ? -1 : 1) : b.grade - a.grade);
+
+    let inversions = 0;
+    for (let i = 1; i < spread.length; i++) {
+      const p = spread[i - 1], q = spread[i];
+      if (p.grade === q.grade && p.trap === q.trap && q.points > p.points + 1e-12) inversions++;
+    }
+    ok("the fill order still descends by points inside one grade (sort is stable)",
+       inversions === 0, `${inversions} inversions`);
+
+    const top = graded.spikes.filter(s => s.grade === graded.spikes[0].grade);
+    ok(`the top grade holds ${top.length} slots and points separates every one`,
+       new Set(top.map(s => +s.points.toFixed(9))).size === top.length,
+       `${new Set(top.map(s => +s.points.toFixed(9))).size} distinct of ${top.length}`);
+  }
+
+  // 2. The proximity term is split across enemies so it can never cross one of
+  //    the table's own +1 / +2 awards. With four enemies that has to still hold.
+  {
+    const mk = (x, y) => enemyAt(x, y, { xVel: x + 25, yVel: y, sid: x });
+    const es = [mk(1060, 1000), mk(1000, 1060), mk(940, 1000), mk(1000, 940)];
+    const c = world({ nearestEnemy: es[0], enemiesNear: es, itemCounts: { 2: 0, 5: 0 } });
+    for (const e of es) walk(c, e.sid, e.x2 - 150, e.y2, 25, 0, 6);
+
+    // Nothing in this scene fires one of the table's INTEGER points awards:
+    // shameTick is off, so no spiketick, and no trap holds an enemy, so neither
+    // enemyTrapped branch runs. Whatever lands in points here is the proximity
+    // term and nothing else — which is what makes the bound directly readable.
+    //
+    // A first cut of this measured `points - floor(points)` instead. That
+    // cannot fail: four enemies contributing 0.99 each sums to 3.96, whose
+    // fractional part is still under one. The test passed a client with the
+    // per-enemy split removed, which is the mutation it exists to catch.
+    const graded = c.replaceGrade(c.replaceCandidates([]), es, [], { trap: false, spike: false });
+    const all = graded.spikes.concat(graded.traps);
+    // Every integer award on the table sets a flag beside itself: `spiketick`
+    // for the +1, `spikeTrap` for one +2, and the other +2 needs a trapped
+    // enemy. None fires here, which is what makes the bound below readable
+    // straight off points.
+    ok("no integer points award fires in this scene, so points IS the term",
+       all.every(x => !x.spiketick && !x.spikeTrap),
+       JSON.stringify(all.filter(x => x.spiketick || x.spikeTrap).length + " flagged"));
+    ok(`with ${es.length} enemies the proximity term still totals under one point`,
+       Math.max(...all.map(x => x.points)) < 1,
+       `max points ${Math.max(...all.map(x => x.points))}`);
+    ok("and every points value is finite — a NaN here would poison the sort",
+       all.every(x => isFinite(x.points)));
+  }
+
+  // 3. The heading book is pruned by age. A player still being seen every tick
+  //    must never be the one pruned.
+  {
+    const c = world({ nearestEnemy: enemyAt(1060, 1000) });
+    const sids = [];
+    for (let s = 0; s < 60; s++) sids.push(s + 10);
+    for (let t = 0; t < 30; t++)
+      for (const sid of sids)
+        c.replaceTrackHeading({ sid, x2: 1000 + t * 25, y2: 1000 + sid,
+                                xVel: 1000 + (t + 1) * 25, yVel: 1000 + sid });
+
+    const book = c.leadBook().headings;
+    const kept = sids.filter(s => book.has(s) && book.get(s).angles.length >= 2).length;
+    ok(`sixty enemies seen every tick: all ${kept} keep a usable history`,
+       kept === 60, `${kept} of 60 — a live player was pruned`);
+    ok("and the book is still bounded", book.size <= 96, `${book.size} entries`);
+
+    // And someone who leaves ages out rather than sitting there for the session.
+    walk(c, 999, 1000, 1000, 25, 0, 6);
+    ok("a player present is tracked", book.has(999));
+    for (let t = 30; t < 70; t++)
+      for (const sid of sids)
+        c.replaceTrackHeading({ sid, x2: 1000 + t * 25, y2: 1000 + sid,
+                                xVel: 1000 + (t + 1) * 25, yVel: 1000 + sid });
+    ok("and is gone once he stops being seen", !book.has(999));
+  }
+
+  // 4. The fine aim MOVES an object that addPredictObject already accepted. The
+  //    no-overlap property has to survive that move, over many geometries.
+  {
+    let overlap = null, mismatch = null, worst = 0;
+    const perGroup = {};
+    for (let h = 0; h < 360; h += 11) {
+      const a = UTILS.toRad(h);
+      const at = (r) => [1000 + Math.cos(a) * r, 1000 + Math.sin(a) * r];
+      const e = runner(...at(90), Math.cos(a) * 25, Math.sin(a) * 25);
+      const c = world({ nearestEnemy: e, enemiesNear: [e], itemCounts: { 2: 0, 5: 0 } });
+      for (let i = 0, r = 40; i < 6; i++, r += 25)
+        c.replaceTrackHeading({ sid: e.sid, x2: 1000 + Math.cos(a) * r, y2: 1000 + Math.sin(a) * r,
+                                xVel: 1000 + Math.cos(a) * (r + 25), yVel: 1000 + Math.sin(a) * (r + 25) });
+
+      c.doReplace([
+        hole(...at(70), { sid: 91 }),
+        hole(1000 + Math.cos(a + 1) * 70, 1000 + Math.sin(a + 1) * 70, { sid: 92 }),
+        hole(1000 + Math.cos(a + 2) * 70, 1000 + Math.sin(a + 2) * 70, { sid: 93, trap: true, id: 15 }),
+      ]);
+
+      const p = c.predictObjects;
+      worst = Math.max(worst, p.length);
+      for (const o of p) {
+        const g = items.list[o.id].group.id;
+        perGroup[g] = Math.max(perGroup[g] || 0,
+                               p.filter(x => items.list[x.id].group.id === g).length);
+        // Position and angle must agree: the fine aim rewrites all three, and a
+        // stale pair puts the marker somewhere the packet is not.
+        const want = c.getConfig(o.id, o.angle);
+        if (UTILS.getDistance(o.x, o.y, want.x, want.y) > 1e-9)
+          mismatch = `id ${o.id} at ${o.angle.toFixed(4)}`;
+      }
+      for (let i = 0; i < p.length; i++)
+        for (let j = i + 1; j < p.length; j++)
+          if (p[i].id != 17 && p[j].id != 17 &&
+              UTILS.getDistance(p[i].x, p[i].y, p[j].x, p[j].y) < p[i].scale + p[j].scale)
+            overlap = `heading ${h}: ${i} and ${j}`;
+    }
+    ok("over 33 headings with three holes each, no two queued buildings overlap",
+       overlap === null, overlap);
+    ok("and every queued position matches getConfig(id, its own angle)",
+       mismatch === null, mismatch);
+
+    // The move's clash guard, on a geometry that actually reaches it.
+    //
+    // Adjacent ring slots always overlap, so addPredictObject refuses them
+    // outright and the guard never sees them. It only matters for two slots far
+    // enough apart to be accepted and close enough that one grid step of
+    // refinement closes the gap — for two traps (radius 80, scale 50) that is a
+    // narrow band around 77 degrees. None of the scenes above produced it: over
+    // 480 of them the fine aim moved a slot 388 times and the guard fired zero
+    // times, so removing it changed nothing and the tests "passed" a client with
+    // no guard at all.
+    //
+    // Found by sweeping 8400 geometries against a client with the guard removed
+    // and diffing: 121 of them differ. This is the first. Without the guard the
+    // third trap refines from 2.617994 to 2.656367 and lands 99.59 units from
+    // the trap at 4.0 — inside the 100 units two traps need.
+    {
+      const e = runner(1090, 1000, 25, 0);
+      const c = world({ nearestEnemy: e, enemiesNear: [e], itemCounts: { 2: 0, 5: 0 } });
+      c.addPredictObject(15, 4.0, false);          // the trap the move would hit
+
+      const broken = [];
+      for (let i = 0; i < 3; i++)
+        broken.push(hole(1000 + Math.cos(i * 1.35) * 70, 1000 + Math.sin(i * 1.35) * 70,
+                         { sid: 90 + i, trap: i % 2 === 1, id: i % 2 === 1 ? 15 : 6 }));
+      c.doReplace(broken);
+
+      const p = c.predictObjects;
+      let hit = null;
+      for (let i = 0; i < p.length; i++)
+        for (let j = i + 1; j < p.length; j++)
+          if (p[i].id != 17 && p[j].id != 17 &&
+              UTILS.getDistance(p[i].x, p[i].y, p[j].x, p[j].y) < p[i].scale + p[j].scale)
+            hit = `${p[i].id}@${p[i].angle.toFixed(6)} and ${p[j].id}@${p[j].angle.toFixed(6)} ` +
+                  `are ${UTILS.getDistance(p[i].x, p[i].y, p[j].x, p[j].y).toFixed(2)} apart`;
+
+      ok("the one geometry that reaches the clash guard is placed without overlap",
+         hit === null, hit);
+      ok("and the slot the guard declined to move stayed on its grid angle",
+         p.some(o => Math.abs(o.angle - 2.617994) < 1e-5),
+         JSON.stringify(p.map(o => `${o.id}@${o.angle.toFixed(6)}`)));
+    }
+
+    // Packet economy: the grading may reorder what gets placed, never how much.
+    ok(`a replace never queues more than the fill budget — worst was ${worst}`,
+       worst <= 6, `${worst} queued`);
+    ok("and no group is ever queued past its cap",
+       Object.entries(perGroup).every(([g, n]) => n <= (+g === 5 ? 6 : 15)),
+       JSON.stringify(perGroup));
+  }
+
+  // 5. The whole tick body, many ticks, every placer on and the lead engaged --
+  //    which is the one combination the PIPELINE section above does not run.
+  {
+    const e = runner(1060, 1000, 0, 25);
+    const c = world({
+      nearestEnemy: e, enemiesNear: [e], primaryReload: { 1: 1 }, secondaryReload: { 1: 1 },
+      traps_our: [{ x: 1060, y: 1000, scale: 50, health: 500 }],
+      vars: { replace: true, replaceLead: true, autoPlace: true, prePlace: true,
+              placeAngles144: true, shameTick: true, shameGrind: true, replaceRange: 300 },
+    });
+
+    let threw = null, worst = 0, overCap = null;
+    try {
+      for (let t = 0; t < 12; t++) {
+        c.tick = 100 + t;
+        c.predictObjects = [];
+        c.replaceQueue = t % 3 === 0 ? [hole(1050, 1000, { sid: 91 })] : [];
+        c.getPredictObjects();
+        worst = Math.max(worst, c.predictObjects.length);
+
+        const p = c.predictObjects;
+        for (let i = 0; i < p.length; i++)
+          for (let j = i + 1; j < p.length; j++)
+            if (p[i].id != 17 && p[j].id != 17 &&
+                UTILS.getDistance(p[i].x, p[i].y, p[j].x, p[j].y) < p[i].scale + p[j].scale)
+              throw new Error(`tick ${t}: queued ${i} and ${j} overlap`);
+
+        const per = {};
+        for (const o of p) {
+          const g = items.list[o.id] && items.list[o.id].group;
+          if (g) per[g.id] = (per[g.id] || 0) + 1;
+        }
+        for (const [g, n] of Object.entries(per))
+          if (n > (+g === 5 ? 6 : 15)) overCap = `tick ${t}: group ${g} queued ${n}`;
+
+        // The enemy keeps running, so the heading window keeps filling.
+        e.x2 = e.xVel; e.y2 = e.yVel; e.xVel = e.x2; e.yVel = e.y2 + 25;
+      }
+    } catch (err) { threw = err.message; }
+
+    ok("twelve ticks with every placer on and the lead engaged run clean",
+       threw === null, threw);
+    ok(`and nothing in any of those ticks overlaps anything else (peak ${worst} queued)`,
+       threw === null && worst > 0, threw || "nothing was queued at all");
+    ok("no group is ever queued past its cap across a whole tick",
+       overCap === null, overCap);
+    ok("the lead built a real reading over those ticks",
+       c.replaceSteadiness(e) > 0.9, `steadiness ${c.replaceSteadiness(e).toFixed(3)}`);
+  }
 }
 
 // ===========================================================================

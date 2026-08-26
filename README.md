@@ -183,7 +183,7 @@ understood.
 # YoRHa System — Replace
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-replace.js` — 131 checks.
+revision). Verified by `node tools/verify-replace.js` — 150 checks.
 
 YoRHa's replacer is **Falcon 0.4.7's grading table**, already carefully ported
 with four documented fixes to Falcon's own bugs. Reading the replacers in nine
@@ -411,11 +411,12 @@ takes the rest of the tick with it.
 ## Verifying
 
 ```
-node tools/verify-replace.js [client.js]                  # 129 checks
+node tools/verify-replace.js [client.js]                  # 148 checks
+node tools/mutate-replace.js [client.js]                  # does the suite have teeth?
 node tools/check-scopes.js   [client.js]                  # names READ but never declared
 node tools/check-dead.js     [client.js] --base [base.js] # names DECLARED but never used
 
-# 131 checks: the two static passes fold in when a baseline is given
+# 150 checks: the two static passes fold in when a baseline is given
 YORHA_BASE=/path/to/pristine.user.js node tools/verify-replace.js
 ```
 
@@ -460,8 +461,9 @@ from the pristine base.
 
 ### The suite has been made to fail
 
-A test that has never failed has not been shown to test anything. Eight
-mutations of the client, applied one at a time, are each caught:
+A suite that has never failed has not been shown to test anything.
+`node tools/mutate-replace.js` breaks the client one way at a time and confirms
+the suite notices each break. Thirteen mutations, all caught:
 
 | mutation | first check that fails |
 |---|---|
@@ -473,6 +475,31 @@ mutations of the client, applied one at a time, are each caught:
 | stop sampling on ticks where nothing broke | `a tick with no break still records the heading` |
 | let the heading window grow unbounded | `the heading window is bounded by REPLACE_LEAD_WINDOW` |
 | let the lead run past the extrapolation | `the aim point lands on the extrapolation, not the report` |
+| stop splitting the proximity term across enemies | `with 4 enemies the proximity term still totals under one point` |
+| never prune the heading book | `the heading map does not grow for the whole session` |
+| prune the heading book too aggressively | `sixty enemies seen every tick: all 0 keep a usable history` |
+| move the refined slot's angle but not its position | `every queued position matches getConfig(id, its own angle)` |
+| skip the clash check when sliding an accepted slot | `the one geometry that reaches the clash guard is placed without overlap` |
+
+**Two of those came back MISSED the first time**, which is the whole point of
+running it:
+
+- *Splitting the proximity term.* The test measured `points - floor(points)`.
+  That cannot fail — four enemies at 0.99 each sum to 3.96, whose fractional
+  part is still under one. The bound is now read straight off `points`, in a
+  scene built so no integer award fires.
+- *The clash guard* had **no test at all**. Adjacent ring slots always overlap,
+  so `addPredictObject` refuses them and the guard never sees them; it only
+  matters where two slots are far enough apart to be accepted and close enough
+  that one grid step of refinement closes the gap. Across 480 ordinary scenes
+  the fine aim moved a slot **388 times and the guard fired zero times**.
+  Sweeping 8400 geometries against a guard-removed client found **121 that
+  differ**; the first is now pinned as a test. Without the guard, a trap refines
+  from 2.617994 to 2.656367 and lands **99.59 units** from another trap — inside
+  the 100 two traps need.
+
+A mutation whose anchor no longer matches is reported `STALE` rather than
+counted as caught, so a rewritten function cannot quietly retire its own test.
 
 The same practice caught a real regression earlier in this work: the fine aim
 silently broke the ban book three ways at once, and the tests written for it were
