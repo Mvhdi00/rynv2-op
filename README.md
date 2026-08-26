@@ -177,3 +177,49 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# novastorm 1.4 (ryn)
+
+`novastorm_1.4_ryn.user.js` is a second, separate userscript kept in this repo
+— the novastorm 1.4 client, not the ReUp Mix build. Nothing above applies to
+it; it has its own menu, its own protocol layer, and its own placer.
+
+## Replace — removed
+
+The Whiteout-style replacer is gone from the script: the `rynUpdateSnapshot` /
+`rynReplacePick` / `rynDoReplace` block, both of its call sites in
+`getPredictObjects`, the `replace` config key, the **Placers → Preplacer →
+Enable Replace** toggle, and its share of the placers hotkey (which now toggles
+Auto Place + Preplace only). Saved settings are also filtered on load, so a
+`replace` key left in an old `localStorage` entry cannot put the flag back.
+
+## Hit On Spike — added
+
+**Combat → Instakills → Hit On Spike** (on by default, `hitOnSpike`).
+
+Fires the bull hat swing with the turret gear on top when the enemy is on a
+spike and reachable:
+
+1. **He is on the spike and I can reach him.** One of our spikes is under him
+   (now or at his predicted position), or my next swing knocks him into one,
+   and he is inside primary range both where he stands and where he is heading
+   — so the hit lands this tick.
+2. **His trap just broke and cannot be replaced.** The trap that was holding
+   him is destroyed, he is loose, no placeable trap slot would catch him again
+   (including the trap item being at its limit), but a spike of ours is next to
+   him — knock him into it at once instead of waiting on a re-trap that is not
+   coming. The spike search runs on a wider margin here, and the window stays
+   open for a few ticks after the break.
+
+Both go out through the instakill queue the script already uses: `"turret"`
+equips the turret gear (hat 53) so its shot fires, `"primary"` equips the bull
+hat (hat 7) and swings. The turret leg costs a tick, so it is only taken while
+he is pinned on the spike and cannot walk away; on a knockback, or with no
+turret shot ready, the bull hit goes out on the tick it was detected.
+
+```sh
+node tools/test-hit-on-spike.js   # geometry + gating cases for the block
+node --check novastorm_1.4_ryn.user.js
+```
