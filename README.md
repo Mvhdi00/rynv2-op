@@ -223,3 +223,65 @@ turret shot ready, the bull hit goes out on the tick it was detected.
 node tools/test-hit-on-spike.js   # geometry + gating cases for the block
 node --check novastorm_1.4_ryn.user.js
 ```
+
+## Performance — added
+
+New **Performance** tab in the menu.
+
+### Unlock FPS (`fpsUnlock`, on; `fpsLimit`, default 240)
+
+`requestAnimationFrame` is paced to the monitor, so the game loop could never
+run faster than the panel. The unlock drives the same loop from a
+`MessageChannel` port instead — a macrotask with no vsync gate and none of
+`setTimeout`'s 4ms clamp — so frames go out as fast as the main thread can
+produce them and the counter is no longer pinned to the refresh rate.
+`fpsLimit` paces the loop (0 = uncapped). Two deliberate exceptions: the first
+frames still go through `requestAnimationFrame`, because that is what makes the
+unpatch layer stop the bundle's own renderer painting over the mod; and a hidden
+tab is paced down to 60 whatever the setting says — `rAF` would have stopped
+there entirely, and a background tab eating a core is the one thing this must
+not do.
+
+The FPS readouts now count loop frames instead of screen refreshes, so the
+number shown is the rate the game is actually running at.
+
+### Light Render (`lightRender`, on)
+
+Quality-neutral render work, nothing about what gets drawn changes:
+
+- The five layer passes each walked the whole `gameObjects` array — destroyed
+  entries included — so a map full of bases was scanned five times a frame to
+  draw it once. The active objects are now collected once at the top of the
+  frame and bucketed by layer; only the layer 0 pass still takes the full list,
+  because it is the one that has to call `update()` on every active object.
+  `tools/test-performance.js` checks each layer draws exactly what the old full
+  pass drew, in the same order.
+- The spike markers skip objects that are off screen.
+- The minimap — a 300×300 canvas cleared and fully redrawn every frame — runs at
+  30Hz, with the skipped delta carried over so its ping animation keeps its
+  speed.
+- The main canvas is created with `alpha: false` (the game paints its own
+  background every frame) and `desynchronized: true` (takes a frame of input lag
+  out). Unknown hints are ignored by the browser.
+- The FPS/ping overlay writes to the DOM when its text changes rather than once
+  per frame.
+
+Turning the toggle off puts the original five full passes and the per-frame
+minimap back.
+
+### Ping Stabilizer (`pingStabilizer`, on)
+
+The round trip itself is the network's business; these two things were not:
+
+- Ping is sampled every second instead of every 2.5, over a rolling 20-sample
+  window, so the readout follows the line instead of lagging it and the average
+  no longer jumps when the buffer is wiped. Jitter (the spread of the window) is
+  shown next to it.
+- The placer's tick timer ran on the raw last round trip, so one spike moved the
+  placement window by that many ms. It runs on the median of the recent samples
+  now, clamped into the 111ms tick — a single spike no longer shifts when the
+  packets go out. Turning the toggle off restores the raw value.
+
+```sh
+node tools/test-performance.js   # scheduler, ping stats, render-list equivalence
+```

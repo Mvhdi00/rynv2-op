@@ -1415,7 +1415,15 @@ document.body.appendChild(statsDiv);
 let frames = 0;
 let lastTime = performance.now();
 let currentFps = 0;
+let lastStatsText = "";
 
+// This readout is still driven by requestAnimationFrame, which stays paced to
+// the monitor - fine for a HUD, but it must not report the screen's rate as the
+// game's. The game loop publishes what it is actually running at on
+// window.gameFps (see FPS UNLOCK), and counting rAF frames is only the fallback
+// for before the game has booted. The ping shown is the smoothed one while the
+// stabiliser is on, so the number stops bouncing on every sample. The DOM write
+// only happens when the text changes, instead of once per frame.
 function updateStats() {
     frames++;
     let now = performance.now();
@@ -1424,8 +1432,15 @@ function updateStats() {
         frames = 0;
         lastTime = now;
     }
-    let ping = window.pingTime || 0;
-    statsDiv.innerHTML = `FPS: ${currentFps} <span style="color:#FFF;">|</span> Ping: ${ping}ms`;
+    let fps = (typeof window.gameFps == "number") ? window.gameFps : currentFps;
+    let ping = (window.vars && window.vars.pingStabilizer === false)
+        ? (window.pingTime || 0)
+        : (window.pingSmooth || window.pingTime || 0);
+    let text = `FPS: ${fps} <span style="color:#FFF;">|</span> Ping: ${ping}ms`;
+    if (text !== lastStatsText) {
+        statsDiv.innerHTML = text;
+        lastStatsText = text;
+    }
     requestAnimationFrame(updateStats);
 }
 requestAnimationFrame(updateStats);
@@ -8946,7 +8961,7 @@ let pps = 0;
             // CONNECT:
             io.connect(wsAddress, function (error) {
                 pingSocket();
-                setInterval(() => pingSocket(), 2500);
+                setInterval(() => pingSocket(), PING_INTERVAL);
 
                 if (error) {
                     disconnect(error);
@@ -9177,7 +9192,15 @@ let pps = 0;
         var storeButton = document.getElementById("storeButton");
         var chatButton = document.getElementById("chatButton");
         var gameCanvas = document.getElementById("gameCanvas");
-        var mainContext = gameCanvas.getContext("2d");
+        // alpha: the game paints the full background every frame, so the canvas
+        // never needs to blend with the page behind it - saying so lets the
+        // compositor skip that work. desynchronized: lets the browser put the
+        // canvas on its own path to the screen instead of syncing it with the
+        // rest of the page, which is what takes a frame of input lag out.
+        // Neither touches how anything is drawn; if the browser does not know
+        // the hints it ignores them.
+        var mainContext = gameCanvas.getContext("2d", { alpha: false, desynchronized: true })
+            || gameCanvas.getContext("2d");
         var serverBrowser = document.getElementById("serverBrowser");
         var nativeResolutionCheckbox = document.getElementById("nativeResolution");
         var showPingCheckbox = document.getElementById("showPing");
@@ -9656,6 +9679,9 @@ let pps = 0;
         function updateMinimap(data) {
             minimapData = data;
         }
+        const MINIMAP_FRAME_MS = 1000 / 30;
+        let minimapDelta = 0;
+
         function renderMinimap(delta) {
             if (myPlayer && myPlayer.alive) {
                 mapContext.clearRect(0, 0, mapDisplay.width, mapDisplay.height);
@@ -11171,7 +11197,17 @@ let pps = 0;
             }
 
             // RENDER MINIMAP:
-            renderMinimap(delta);
+            // The minimap is a 300x300 canvas that is cleared and redrawn
+            // in full every frame. At an unlocked framerate that is the
+            // single most wasteful thing on screen, and nothing on it moves
+            // fast enough to need more than 30 updates a second. The skipped
+            // delta is carried over, so the map ping animation still runs at
+            // its normal speed.
+            minimapDelta += delta;
+            if (!perf.lightRender || minimapDelta >= MINIMAP_FRAME_MS) {
+                renderMinimap(minimapDelta);
+                minimapDelta = 0;
+            }
 
             // RENDER CONTROLS:
             if (controllingTouch.id !== -1) {
@@ -11276,6 +11312,54 @@ let pps = 0;
             }
         }
 
+        // =====================================================================
+        // RENDER LIST  (light render)
+        //
+        // The five layer passes each walked the whole gameObjects array -
+        // destroyed entries included - so a map full of bases was scanned five
+        // times a frame to draw it once. The active objects are collected once
+        // at the start of the frame (the -1 pass always runs first) and
+        // bucketed by layer, so only the layer 0 pass still needs the full
+        // list: it is the one that has to call update() on every active
+        // object, whatever layer that object draws on.
+        //
+        // Nothing about what gets drawn changes. Turning Light Render off puts
+        // the original five full passes back.
+        // =====================================================================
+        const renderActive = [];
+        const renderBuckets = [[], [], [], [], []]; // index = layer + 1
+        const renderStrays = [];                    // any layer outside -1..3
+
+        function buildRenderList() {
+            renderActive.length = 0;
+            renderStrays.length = 0;
+            for (let i = 0; i < renderBuckets.length; ++i) {
+                renderBuckets[i].length = 0;
+            }
+
+            for (let i = 0; i < gameObjects.length; ++i) {
+                const object = gameObjects[i];
+                if (!object.active) continue;
+
+                renderActive.push(object);
+
+                const bucket = renderBuckets[object.layer + 1];
+                if (bucket) {
+                    bucket.push(object);
+                } else {
+                    renderStrays.push(object);
+                }
+            }
+        }
+
+        function renderPassList(layer) {
+            if (!perf.lightRender) return gameObjects;
+            // an object on an unexpected layer means the buckets are not the
+            // whole picture, so that frame takes the full list instead
+            if (renderStrays.length) return renderActive;
+            return (layer == 0) ? renderActive : renderBuckets[layer + 1];
+        }
+
         // RENDER GAME OBJECTS:
         function renderGameObjects(layer, xOffset, yOffset) {
 
@@ -11284,8 +11368,14 @@ let pps = 0;
             // ---- NEW: store spike positions ----
             let spikeList = [];
 
-            for (var i = 0; i < gameObjects.length; ++i) {
-                tmpObj = gameObjects[i];
+            if (layer == -1 && perf.lightRender) {
+                buildRenderList();
+            }
+
+            const passList = renderPassList(layer);
+
+            for (var i = 0; i < passList.length; ++i) {
+                tmpObj = passList[i];
 
                 if (tmpObj.active) {
 
@@ -11293,7 +11383,7 @@ let pps = 0;
                     tmpY = tmpObj.y + tmpObj.yWiggle - yOffset;
 
                     // collect spikes (change name if needed later)
-                    if (layer == 0 && tmpObj.isItem && tmpObj.name === "spikes") {
+                    if (layer == 0 && tmpObj.isItem && tmpObj.name === "spikes" && isOnScreen(tmpX, tmpY, tmpObj.scale)) {
                         spikeList.push({x: tmpX, y: tmpY});
                     }
 
@@ -15950,7 +16040,7 @@ for (let tree of trees) {
                     placedAngles.push(object.angle);
                     io.send("D", getAttackDir());
                 }
-            }, 111 - window.pingTime);
+            }, 111 - tickPing());
 
             setTimeout(function () {
                 if (spamPrePlacer) {
@@ -17004,22 +17094,163 @@ for (let tree of trees) {
         let averagePing = 0;
         let isFirstPing = true;
 
-        let frameTimes = [];
         let fps = 0;
 
-        function trackFPS() {
-            let now = performance.now();
-            frameTimes.push(now);
+        // =====================================================================
+        // PERFORMANCE
+        //
+        // Three settings live here, read once a frame into `perf` so the render
+        // path never has to touch window.vars (which is built by a later block
+        // and can still be missing on the very first frames).
+        // =====================================================================
+        const perf = {
+            fpsUnlock: false,
+            fpsLimit: 0,
+            lightRender: true,
+            pingStabilizer: true
+        };
 
-            while (frameTimes.length > 0 && frameTimes[0] <= now - 1000) {
-                frameTimes.shift();
-            }
+        function syncPerfVars() {
+            const vars = window.vars;
+            if (!vars) return;
 
-            fps = frameTimes.length;
-            requestAnimationFrame(trackFPS);
+            perf.fpsUnlock = !!vars.fpsUnlock;
+            perf.fpsLimit = vars.fpsLimit | 0;
+            perf.lightRender = vars.lightRender !== false;
+            perf.pingStabilizer = vars.pingStabilizer !== false;
         }
 
-        requestAnimationFrame(trackFPS);
+        // =====================================================================
+        // FPS UNLOCK
+        //
+        // requestAnimationFrame is paced to the monitor, so the game loop can
+        // never run faster than the panel - 60, 144, whatever it is. The unlock
+        // drives the same loop from a MessageChannel port instead: a macrotask
+        // with no vsync gate and none of setTimeout's 4ms clamp, so frames go
+        // out as fast as the main thread can produce them and the counter is no
+        // longer pinned to the refresh rate.
+        //
+        //   fpsLimit 0   -> uncapped
+        //   fpsLimit N   -> paced to N frames a second
+        //
+        // Two things are deliberate:
+        //   - the first frames always go out through requestAnimationFrame,
+        //     because that is what tells the unpatch layer to stop the bundle's
+        //     own renderer painting over the mod;
+        //   - a hidden tab is paced down to 60 whatever the setting says. rAF
+        //     would have stopped there completely, and a background tab eating
+        //     a core is the one thing this must not do.
+        // =====================================================================
+        const FPS_HIDDEN_LIMIT = 60;
+        const FPS_RAF_FRAMES = 3;
+
+        let frameChannel = null;
+        let framePending = null;
+        let framesScheduled = 0;
+        let frameStart = 0;
+        let frameCount = 0;
+        let fpsWindowStart = 0;
+
+        function postFrame(fn) {
+            if (!frameChannel) {
+                frameChannel = new MessageChannel();
+                frameChannel.port1.onmessage = function () {
+                    const pending = framePending;
+                    framePending = null;
+                    if (pending) pending();
+                };
+            }
+
+            framePending = fn;
+            frameChannel.port2.postMessage(0);
+        }
+
+        function scheduleFrame(fn) {
+            if (framesScheduled++ < FPS_RAF_FRAMES || !perf.fpsUnlock || typeof MessageChannel != "function") {
+                requestAnimationFrame(fn);
+                return;
+            }
+
+            const limit = document.hidden ? FPS_HIDDEN_LIMIT : perf.fpsLimit;
+
+            if (limit > 0) {
+                const wait = (1000 / limit) - (performance.now() - frameStart);
+
+                if (wait >= 1) {
+                    setTimeout(fn, wait);
+                    return;
+                }
+            }
+
+            postFrame(fn);
+        }
+
+        // Counts loop frames rather than screen refreshes, so the number on the
+        // HUD is the rate the game is really running at, unlocked or not.
+        function trackFPS() {
+            const now = performance.now();
+            frameCount++;
+
+            const span = now - fpsWindowStart;
+            if (span >= 1000) {
+                fps = Math.round((frameCount * 1000) / span);
+                window.gameFps = fps;
+                frameCount = 0;
+                fpsWindowStart = now;
+            }
+        }
+
+        // =====================================================================
+        // PING
+        //
+        // The round trip itself is the network's business, but two things on
+        // this side are not:
+        //
+        //   - it is sampled every second instead of every 2.5, over a rolling
+        //     window, so the readout follows the line instead of lagging it and
+        //     the average no longer jumps when the sample buffer is wiped;
+        //   - the placer's tick timer ran on the raw last round trip, so a
+        //     single spike moved the placement window by that many ms. It runs
+        //     on the median of the recent samples now, which is what a stable
+        //     ping actually buys you: the packets keep going out on the same
+        //     beat when the line hiccups.
+        // =====================================================================
+        const PING_INTERVAL = 1000;
+        const PING_WINDOW = 20;
+        let pingJitter = 0;
+
+        function updatePingStats(pingTime) {
+            pings.push(pingTime);
+            while (pings.length > PING_WINDOW) {
+                pings.shift();
+            }
+
+            let total = 0;
+            for (const ping of pings) {
+                total += ping;
+            }
+            averagePing = Math.round(total / pings.length);
+
+            const sorted = pings.slice().sort((a, b) => a - b);
+            window.pingSmooth = sorted[Math.floor(sorted.length / 2)];
+            pingJitter = sorted[sorted.length - 1] - sorted[0];
+
+            if (pingTime < minPingTime) {
+                minPingTime = pingTime;
+            }
+
+            if (pingTime > maxPingTime) {
+                maxPingTime = pingTime;
+            }
+        }
+
+        // What the tick timers run on: the smoothed round trip while the
+        // stabiliser is on, the raw one otherwise. Clamped into the tick so a
+        // bad sample cannot push a timer outside it.
+        function tickPing() {
+            const value = perf.pingStabilizer ? window.pingSmooth : window.pingTime;
+            return Math.max(0, Math.min(111, value || 0));
+        }
 
         // PING:
         var lastPing = -1;
@@ -17028,30 +17259,12 @@ for (let tree of trees) {
             window.pingTime = pingTime;
 
             if (!isFirstPing) {
-                if (pings.length > 200) {
-                    pings = [];
-                }
-
-                pings.push(pingTime);
-
-                averagePing = 0;
-                for (let ping of pings) {
-                    averagePing += ping;
-                }
-
-                averagePing = averagePing / pings.length;
-                if (pingTime < minPingTime) {
-                    minPingTime = pingTime;
-                }
-
-                if (pingTime > maxPingTime) {
-                    maxPingTime = pingTime;
-                }
+                updatePingStats(pingTime);
             } else {
                 isFirstPing = false;
             }
 
-            pingDisplay.innerText = `Ping: ${window.pingTime} ms | Min: ${minPingTime} ms | Max: ${maxPingTime} ms | Average: ${averagePing} ms | FPS: ${fps}`;
+            pingDisplay.innerText = `Ping: ${window.pingTime} ms | Min: ${minPingTime} ms | Max: ${maxPingTime} ms | Average: ${averagePing} ms | Jitter: ${pingJitter} ms | FPS: ${fps}`;
         }
         function pingSocket() {
             lastPing = Date.now();
@@ -17072,11 +17285,15 @@ for (let tree of trees) {
 
         // UPDATE & ANIMATE:
         function doUpdate() {
+            frameStart = performance.now();
+            syncPerfVars();
+            trackFPS();
+
             now = Date.now();
             delta = now - lastUpdate;
             lastUpdate = now;
             updateGame();
-            requestAnimationFrame(doUpdate);
+            scheduleFrame(doUpdate);
         }
 
         // START GAME:
@@ -20958,6 +21175,12 @@ for (let tree of trees) {
         // Hit on spike
         hitOnSpike: true,
 
+        // Performance
+        fpsUnlock: true,
+        fpsLimit: 240,
+        lightRender: true,
+        pingStabilizer: true,
+
         // Bots
         botName: "nova",
         botCount: 5,
@@ -21095,6 +21318,27 @@ for (let tree of trees) {
                 title: "Preplacer",
                 items: [
                     { type: 'toggle', name: "Enable Preplacer", id: "prePlace" }
+                ]
+            }
+        ],
+        performance: [
+            {
+                title: "Framerate",
+                items: [
+                    { type: 'toggle', name: "Unlock FPS (off vsync)", id: "fpsUnlock" },
+                    { type: 'slider', name: "FPS Limit (0 = unlimited)", id: "fpsLimit", min: 0, max: 480 }
+                ]
+            },
+            {
+                title: "Rendering",
+                items: [
+                    { type: 'toggle', name: "Light Render", id: "lightRender" }
+                ]
+            },
+            {
+                title: "Network",
+                items: [
+                    { type: 'toggle', name: "Ping Stabilizer", id: "pingStabilizer" }
                 ]
             }
         ],
@@ -21521,6 +21765,7 @@ for (let tree of trees) {
                     <div class="nav-item" data-tab="misc"><svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Misc</div>
                     <div class="nav-item" data-tab="bots"><svg viewBox="0 0 24 24"><path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z"/></svg>Bots</div>
                     <div class="nav-item" data-tab="visuals"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>Visuals</div>
+                    <div class="nav-item" data-tab="performance"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8l10-12h-7l1-8z"/></svg>Performance</div>
                     <div class="nav-item" data-tab="menu"><svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>Menu Settings</div>
                 </div>
             </div>
@@ -21564,6 +21809,7 @@ for (let tree of trees) {
                 misc: 'Miscellaneous',
                 bots: 'Bots',
                 visuals: 'Visuals Settings',
+                performance: 'Performance Settings',
                 menu: 'Menu Settings'
             };
             headerTitle.innerText = tabNames[tab] || 'Settings';
