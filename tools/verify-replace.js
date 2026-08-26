@@ -102,7 +102,12 @@ function world(over = {}) {
     sid: 1, x2: 1000, y2: 1000, x: 1000, y: 1000, scale: 35, dir: 0, alive: true,
     xVel: 1000, yVel: 1000, items: [0, 3, 6, 10, 15, 53],
     itemCounts: Object.assign({}, over.itemCounts), weapons: [5, 10],
-    weaponVariants: [0, 0], skinIndex: 0,
+    // Sixteen, indexed by WEAPON ID, exactly as the client's own PlayerObject
+    // builds it (`this.weaponVariants = [0, 0, ... ]`, sixteen wide). A
+    // two-entry stub reads undefined for a hammer at id 10 and every damage
+    // estimate built on it throws — which is a defect in this file, not in the
+    // client, and cost a false bug report before it was checked.
+    weaponVariants: new Array(16).fill(0), skinIndex: 0,
   };
 
   const base = {
@@ -229,7 +234,7 @@ function section(t) { console.log(`\n${t}`); }
 
 const enemyAt = (x, y, o = {}) => Object.assign({
   sid: 2, x2: x, y2: y, x, y, xVel: x, yVel: y, scale: 35,
-  weapons: [5, 10], weaponVariants: [0, 0], skinIndex: 0, weaponIndex: 5,
+  weapons: [5, 10], weaponVariants: new Array(16).fill(0), skinIndex: 0, weaponIndex: 5,
   spikeDamage: 0, shameCount: 0, visible: true, health: 100,
 }, o);
 
