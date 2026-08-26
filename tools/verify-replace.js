@@ -290,6 +290,90 @@ section("FINE AIM — AI Client 44's half-degree search, as a refinement");
 }
 
 // ===========================================================================
+section("BAN BOOK — a refined placement must still be bannable");
+{
+  // The file states this invariant about itself: a placed angle is looked up by
+  // `bannedAngles.has(obj.angle)` and matched with a tolerance. The fine aim
+  // places at angles that are NOT on the ring, which broke it three ways at
+  // once. The ban is what stops two lanes spending the same ground on two
+  // ticks, so this is the load-bearing test for that whole change.
+  const c = world({ nearestEnemy: enemyAt(1060, 1000), enemiesNear: [enemyAt(1060, 1000)] });
+
+  // 1. Every angle the fine aim returns lives in [0, 2pi), like a grid angle.
+  //    atan2 returns -pi..pi, so a hole BELOW the player produced a negative
+  //    angle — the same slot as its positive twin, but a different key.
+  const r = 35 + items.list[6].scale;
+  for (const deg of [-1.25, -45, -179, 1.25, 45, 179]) {
+    const h = { x: 1000 + Math.cos(UTILS.toRad(deg)) * r, y: 1000 + Math.sin(UTILS.toRad(deg)) * r };
+    const grid = c.getPrePlaceAngles(6, []).filter(s => s.placeable)
+          .sort((a, b) => UTILS.getAngleDist(a.angle, UTILS.toRad(deg)) -
+                          UTILS.getAngleDist(b.angle, UTILS.toRad(deg)))[0];
+    const fine = c.replaceFineAim({ id: 6, angle: grid.angle, x: grid.x, y: grid.y }, h, []);
+    ok(`a hole at ${deg}deg refines to an angle inside [0, 2pi)`,
+       fine >= 0 && fine < Math.PI * 2, `got ${fine}`);
+  }
+
+  // 2. A refined placement is found by the ban pass and filed under a key the
+  //    reader actually looks up.
+  const b = world({ nearestEnemy: enemyAt(1060, 1000), enemiesNear: [enemyAt(1060, 1000)] });
+  b.doReplace([hole(1000 + Math.cos(UTILS.toRad(1.25)) * r, 1000 + Math.sin(UTILS.toRad(1.25)) * r)]);
+
+  const placedAngles = placed.map(o => o.angle);
+  ok("something was placed to ban", placedAngles.length > 0);
+
+  const offGrid = placedAngles.filter(a =>
+    !b.getPrePlaceAngles(6, []).some(s => Math.abs(s.angle - a) < 1e-9));
+  ok("at least one placement is genuinely off the grid — the case that broke it",
+     offGrid.length > 0, JSON.stringify(placedAngles.map(a => +a.toFixed(4))));
+
+  b.placedAngles = placedAngles.slice();
+  b.tick = 101;
+  b.replaceCandidates([]);
+
+  const gridAngles = b.getPrePlaceAngles(6, []).map(s => s.angle);
+  const keys = [...b.bannedAngles.keys()];
+  ok("the ban pass found every placement", keys.length >= placedAngles.length,
+     `${keys.length} banned for ${placedAngles.length} placed`);
+  ok("and filed each under a real grid angle, which is what has() looks up",
+     keys.every(k => gridAngles.some(g => g === k)),
+     JSON.stringify(keys.map(k => +k.toFixed(4))));
+
+  const half = Math.PI / gridAngles.length;
+  for (const a of offGrid) {
+    ok(`the off-grid placement ${a.toFixed(4)} is banned`,
+       keys.some(k => UTILS.getAngleDist(k, a) <= half));
+  }
+
+  // 3. The autoplacer reads the same list, so its pass has to agree.
+  const u = world({
+    nearestEnemy: enemyAt(1060, 1000), enemiesNear: [enemyAt(1060, 1000)],
+    vars: { replace: true, autoPlace: true, placeAngles144: true },
+  });
+  u.placedAngles = [0.0218];               // half a grid step off the ring
+  u.updateAngles(u.myPlayer.items[2]);
+  const uKeys = [...u.bannedAngles.keys()];
+  ok("updateAngles bans an off-grid placement too", uKeys.length > 0,
+     JSON.stringify(uKeys));
+  ok("and files it under a grid angle",
+     uKeys.every(k => u.getPrePlaceAngles(u.myPlayer.items[2], []).some(s => s.angle === k)));
+
+  // 4. An exact grid angle must behave exactly as it always did.
+  const g = world({ nearestEnemy: enemyAt(1060, 1000), enemiesNear: [enemyAt(1060, 1000)] });
+  const exact = g.getPrePlaceAngles(6, []).filter(s => s.placeable)[3].angle;
+  g.placedAngles = [exact];
+  g.replaceCandidates([]);
+  ok("a placement already on the grid is banned under its own angle",
+     g.bannedAngles.has(exact), JSON.stringify([...g.bannedAngles.keys()]));
+
+  // 5. Wrap safety: a placement at 6.28 and a slot at 0.00 are one slot.
+  const w = world({ nearestEnemy: enemyAt(1060, 1000), enemiesNear: [enemyAt(1060, 1000)] });
+  w.placedAngles = [Math.PI * 2 - 0.005];
+  w.replaceCandidates([]);
+  ok("a placement just under 2pi bans the slot at 0, not nothing",
+     w.bannedAngles.has(0), JSON.stringify([...w.bannedAngles.keys()]));
+}
+
+// ===========================================================================
 section("CAP — blisma's tally, against a counter only the server writes");
 {
   // Six traps is the real cap, from the client's own group table. Start with

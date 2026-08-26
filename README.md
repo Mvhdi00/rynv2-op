@@ -183,7 +183,7 @@ understood.
 # YoRHa System — Replace
 
 Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
-revision). Verified by `node tools/verify-replace.js` — 78 checks.
+revision). Verified by `node tools/verify-replace.js` — 93 checks.
 
 YoRHa's replacer is **Falcon 0.4.7's grading table**, already carefully ported
 with four documented fixes to Falcon's own bugs. Reading the replacers in nine
@@ -213,6 +213,26 @@ the grade still holds.
 
 Measured: a hole at 1.25° off-grid went from **1.25° → 0.00°**, in **1**
 `canPlace` call. AI Client's own version would spend up to 720.
+
+**This broke an invariant the file states about itself**, and it took three
+fixes. From `buildPlaceAngles`' own notes: *"a placed angle is keyed exactly
+(`bannedAngles.has(obj.angle)`) and matched with a 0.01 rad tolerance"*. The ban
+book is what stops two lanes spending the same ground on two ticks — and a
+refined angle is not a grid angle, so:
+
+1. **It was never found.** A refined angle sits up to half a grid step off the
+   ring — 0.0218 rad in 144 mode, more than twice the 0.01 tolerance — so
+   `find()` returned nothing and the slot was never banned at all.
+2. **Even a match would have been unreachable.** The ban was keyed on the
+   *placed* angle while the reader asks `bannedAngles.has(slot.angle)`.
+3. **Angles could be negative.** `atan2` returns −π..π, so a hole below the
+   player refined to e.g. −0.0218 — the same slot as 6.2614, but a different key
+   and a different number to every raw subtraction.
+
+Both passes now match the nearest slot **within half a step**, measured
+wrap-safe, and file the ban under **that slot's** angle. For a placement already
+on the grid the distance is zero and the key is its own — identical behaviour.
+`updateAngles` needed the same fix, because `placedAngles` is shared with it.
 
 > Its copy never ran. `AutoReplace` is not called anywhere in that file, and the
 > `customCheckItemLocation` it depends on is not defined in it either.
@@ -285,11 +305,11 @@ takes the rest of the tick with it.
 ## Verifying
 
 ```
-node tools/verify-replace.js [client.js]                  # 76 checks
+node tools/verify-replace.js [client.js]                  # 91 checks
 node tools/check-scopes.js   [client.js]                  # names READ but never declared
 node tools/check-dead.js     [client.js] --base [base.js] # names DECLARED but never used
 
-# 78 checks: the two static passes fold in when a baseline is given
+# 93 checks: the two static passes fold in when a baseline is given
 YORHA_BASE=/path/to/pristine.user.js node tools/verify-replace.js
 ```
 

@@ -14903,20 +14903,34 @@ for (let tree of trees) {
         // spike tick lands exactly where 72 landed it either way, and 144 buys
         // reach when 72 had nothing rather than a different answer every tick.
         //
-        // The ceiling is the ban: a placed angle is keyed exactly
-        // (`bannedAngles.has(obj.angle)`) and matched with a 0.01 rad tolerance,
-        // so the step must stay well above 0.01 rad. 144 steps is 0.0436 rad,
-        // four times clear; do not raise the fine grid past that without fixing
-        // the ban first.
+        // The ban used to set the ceiling: a placed angle was keyed exactly
+        // (`bannedAngles.has(obj.angle)`) and matched with a fixed 0.01 rad
+        // tolerance, so the grid step had to stay well clear of 0.01.
+        //
+        // That ceiling is gone. replaceFineAim places at angles that are NOT on
+        // the ring at all — up to half a step off it — so both passes now match
+        // the nearest slot within half a step, wrap-safe, and file the ban under
+        // that SLOT's angle rather than the placement's. The grid can be as fine
+        // as you like; what a placement is keyed by no longer depends on it.
 
         function updateAngles(id) {
             const angles = buildPlaceAngles(id);
 
-            // Check placed angles and ban them if still placeable
+            // Check placed angles and ban them if still placeable.
+            //
+            // placedAngles is shared: the replacer's fine aim can put an angle in
+            // here that is up to half a grid step off the ring, so this pass has
+            // the same two problems the replacer's copy had — a 0.01 tolerance
+            // that cannot reach it, and a ban filed under the placed angle while
+            // checkPredictObjects asks bannedAngles.has(obj.angle). Nearest slot
+            // within half a step, wrap-safe, filed under the slot's own angle.
+            // Identical behaviour for a placement that is already a grid angle.
+            const halfStep = Math.PI / angles.length;
+
             for (let placedAngle of placedAngles) {
-                const matchingAngle = angles.find(a => Math.abs(a.angle - placedAngle) < 0.01); // Small tolerance for float comparison
+                const matchingAngle = angles.find(a => UTILS.getAngleDist(a.angle, placedAngle) <= halfStep);
                 if (matchingAngle && matchingAngle.placeable) {
-                    bannedAngles.set(placedAngle, tick + 18);
+                    bannedAngles.set(matchingAngle.angle, tick + 18);
                 }
             }
 
@@ -15590,10 +15604,22 @@ for (let tree of trees) {
             // by construction the closest fit to the hole; the two guards keep
             // it inside the graded slot and make sure it actually improves on
             // what the grid already had.
+            // Every angle handed back has to live in [0, 2pi) like a grid angle
+            // does. atan2 returns -pi..pi, so toHole and anything offset from it
+            // can be negative — and a negative angle is the SAME slot as its
+            // positive twin while being a different key in bannedAngles, and a
+            // different number to every raw subtraction downstream.
+            const wrap = (a) => {
+                const t = a % (Math.PI * 2);
+                return t < 0 ? t + Math.PI * 2 : t;
+            };
+
             for (let off = 0; off <= coarse; off += REPLACE_FINE_STEP) {
                 const tries = off === 0 ? [toHole] : [toHole + off, toHole - off];
 
-                for (const angle of tries) {
+                for (const raw of tries) {
+                    const angle = wrap(raw);
+
                     if (UTILS.getAngleDist(angle, candidate.angle) > coarse) continue;
                     if (UTILS.getAngleDist(angle, toHole) >= gridGap) continue;
                     if (!canPlace(candidate.id, angle, objects)) continue;
@@ -15643,9 +15669,31 @@ for (let tree of trees) {
                 // spent twice. Running it here too is what keeps the replacer
                 // and the autoplacer on one book — including when the
                 // autoplacer is switched off and nothing else fills the map.
+                // A placed angle is no longer guaranteed to BE a grid angle:
+                // replaceFineAim can move a replacement up to half a step off the
+                // ring to sit closer to its hole. That broke this pass twice
+                // over, and the ban is what stops the same ground being spent by
+                // two lanes on two ticks.
+                //
+                //   * The 0.01 rad tolerance could not reach it. A refined angle
+                //     sits up to half a grid step away — 0.0218 rad in 144 mode,
+                //     twice the tolerance — so find() returned nothing and the
+                //     slot was never banned at all.
+                //   * The ban was then keyed on the PLACED angle while the reader
+                //     asks bannedAngles.has(slot.angle), so even a match would
+                //     have been filed under a key nothing looks up.
+                //
+                // The question this pass actually asks is "which grid slot does
+                // this placement occupy". So: the nearest slot within half a
+                // step, measured wrap-safe (a placement near 0 and a slot near
+                // 2pi are one slot), and filed under that SLOT's angle. For a
+                // placement that is already a grid angle the distance is zero and
+                // the key is its own — identical behaviour to before.
+                const halfStep = Math.PI / slots.length;
+
                 for (const placedAngle of placedAngles) {
-                    const match = slots.find(slot => Math.abs(slot.angle - placedAngle) < 0.01);
-                    if (match && match.placeable) bannedAngles.set(placedAngle, tick + 18);
+                    const match = slots.find(slot => UTILS.getAngleDist(slot.angle, placedAngle) <= halfStep);
+                    if (match && match.placeable) bannedAngles.set(match.angle, tick + 18);
                 }
 
                 for (const slot of slots) {
