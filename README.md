@@ -177,3 +177,107 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# YoRHa System — frame rate and performance
+
+`YoRHa_System.user.js` is the YoRHa System 1.5 userscript with its frame rate
+unlocked and its render loop cleaned up. Same mod, same features, same look —
+only the pacing and the per-frame waste changed. Install it over the old one;
+settings carry over.
+
+## What was capping it
+
+The render loop ended in a bare `requestAnimationFrame`, so the browser paced
+it: one frame per screen refresh and nothing while the tab is hidden. That is
+the "FPS: 60 no matter what" everyone sees on the counter. There were also
+three separate `requestAnimationFrame` loops running at once — the game
+render, the FPS counter, and the stats line.
+
+## The frame clock
+
+One loop now drives all three, and it picks its own driver from the target:
+
+| Target | Driver |
+|---|---|
+| V-Sync | `requestAnimationFrame`, exactly as before |
+| at or below the screen's refresh | `requestAnimationFrame`, gated to hold the target |
+| above it (120 / 144 / 240 / Unlimited) | `setTimeout` + `MessageChannel`, not tied to the refresh at all |
+
+The uncapped driver sleeps until ~2 ms before the frame is due and only then
+hands off to the message port, so it hits its target without the busy-spin a
+pure `postMessage` loop burns a whole core on. "Unlimited" is capped at 1000
+internally for the same reason — past that it would spin waiting for itself.
+Frames are due on a fixed grid rather than one period after the last one
+finished, which is what keeps the measured rate on target instead of drifting
+a few per cent under it.
+
+Measured against a simulated 60 Hz screen: 120 → 120, 144 → 144, 240 → 240,
+Unlimited → 987. A frame that takes longer than the target period (10 ms
+against a 240 target) settles at a steady 99 fps with no catch-up burst.
+
+Two more things fall out of owning the loop:
+
+- **Frame time comes from `performance.now()`**, not `Date.now()`. At 240 fps
+  a frame is 4.17 ms and `Date.now()` can only say 4 or 5 — that rounding is
+  visible as micro-stutter in the camera and in every animation. It is also
+  clamped at 100 ms, so coming back from a hidden tab no longer teleports the
+  world.
+- **A throw in the render no longer kills the session.** It used to: the loop
+  scheduled its next frame *after* `updateGame()`, so anything that threw
+  stopped the loop for good and left the canvas on the last thing painted — a
+  solid green screen. Callbacks now run inside a try/catch.
+
+## Menu → Performance
+
+| Setting | Default | |
+|---|---|---|
+| Frame Rate Cap | 240 FPS | V-Sync / 60 / 120 / 144 / 165 / 240 / 360 / Unlimited |
+| Smooth frame pacing | on | sub-millisecond frame time + the spike clamp |
+| Keep running when tab is hidden | off | on costs CPU for frames nobody sees |
+| Minimap redraw | 60/s | its data only arrives 9 times a second |
+| FPS / Ping on screen | on | the counter itself |
+| Show frame time (ms) | off | adds `(4.2ms)` next to the FPS |
+| Opaque canvas | on | `alpha: false` — reload to apply |
+| Low latency canvas | on | `desynchronized: true` — reload to apply |
+
+Both canvas flags are toggles because they are set when the context is created
+and a graphics driver is allowed to dislike them. Nothing has ever shown
+through the world canvas — the first thing every frame does is fill the whole
+surface — so `alpha: false` only removes a blend that was doing nothing.
+
+## Per-frame waste that is gone
+
+None of this changes what is drawn:
+
+- The **stats line** was a template string, a bot-count walk and an `innerHTML`
+  reparse on every single frame, for numbers that change once a second. It
+  refreshes 5 times a second and only touches the DOM when the text changed.
+- The **FPS tracker** for the ping readout was a third render loop pushing a
+  timestamp into an array and shifting the expired ones off, every frame. The
+  clock already counts frames.
+- Both **full-screen gradients** (the day/night vignette and the YoRHa one)
+  were rebuilt, colour stops and all, every frame. They only depend on the
+  screen size, so they are built once. Verified pixel-identical: not one byte
+  of 5.7 million differs.
+- The **minimap** was a full clear-and-redraw per world frame.
+- **Spike markers** allocated a fresh array of fresh objects every frame,
+  including for spikes off screen. Reused array, on-screen only.
+
+## Two "optimizations" that were measured and thrown out
+
+Both looked obviously right and are both slower. Canvas work is queued and only
+rasterised at flush time, so a timing loop without a flush measures nothing but
+queue insertion — these were re-measured with a `getImageData` forcing the draw:
+
+- **Scanlines as a repeating 1×3 pattern** instead of 360 `fillRect`s: the loop
+  costs 0.67 ms, the pattern fill **31 ms**, a pre-rendered full-screen blit
+  6.2 ms. A transformed repeating pattern drops the rasteriser onto a per-pixel
+  shader over the whole surface; axis-aligned solid rects hit its fast path.
+- **Batching the spike dots** into two paths instead of four calls per dot:
+  0.26 ms the old way, 0.37 ms batched. A path of 60 subpaths goes through the
+  general rasteriser while a lone small circle has a fast path of its own.
+
+Both were reverted. The render path is otherwise within a few per cent of the
+original per frame — the frame rate is what changed.
