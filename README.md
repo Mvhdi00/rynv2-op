@@ -186,7 +186,19 @@ Build output: **`YoRHa_System.user.js`** (base: YoRHa System 1.5, sandbox-limits
 revision). Verified by `node tools/verify-replace.js` — 150 checks.
 
 YoRHa's replacer is **Falcon 0.4.7's grading table**, already carefully ported
-with four documented fixes to Falcon's own bugs. Reading the replacers in nine
+with four documented fixes to Falcon's own bugs.
+
+> **Checked against Falcon's own source.** Those fixes were originally inferred
+> from the port; the original client has since been read directly. Two hold
+> exactly as documented. Falcon's candidate constructor sets `grade = 0` and
+> **never sets `points`** — it then writes `u.points++` once and `u.points += 2`
+> twice, all onto `undefined`, and never reads the field back, so the two things
+> it scores count for nothing. And its knock-in ladder reads
+> `g.building.trap ? 2.5 : g.bounce ? 5 : g.building.trap ? (dead) : 3` — a third
+> branch re-testing a condition the first already took, so it is unreachable.
+> Falcon 0.4.7 also has **no preplacer at all**: its placer exposes `autoplace`,
+> `autoreplace` and `grade`, and the `preplacer` field on its candidate object is
+> written once in the constructor and never read. Reading the replacers in nine
 other clients turned up nothing better than it — so this does not replace it.
 The grading table, `replaceKnockInto`, `replaceEnemyRing`, `replaceWithinPath`,
 `replaceBlocksMyMove` and the four-slot fill limit are all untouched. So are the
