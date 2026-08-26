@@ -287,14 +287,34 @@ Measured with Shame Tick on and 40 visible objects: **2 sweeps** per replace,
 
 ## 5. Commit first, refine second
 
-The fine aim above was running on every candidate `spend()` was offered —
-including the ones `addPredictObject` was about to refuse for overlapping
-something already queued. Measured on one replace in a fight scene: **99 fine-aim
-searches for four placements**, and the `canPlace` calls behind them.
+`spend()` is offered far more candidates than it can ever place. Falcon grades
+the whole ring and hands over everything scoring above zero, and only four slots
+may be filled. Measured on one replace in a fight scene:
 
-`addPredictObject` is a handful of distance comparisons. The fine-aim search is
-up to a dozen collision tests. The cheap question belongs first, so `spend()` now
-commits on the grid angle and refines only what was accepted.
+| | |
+|---|---|
+| candidates offered to `spend()` | 99 (bestSpike + bestTrap + 97 above zero) |
+| refused by `addPredictObject` for overlap | **95** |
+| actually placed | 4 |
+
+The fine aim was running on all 99 — including the 95 about to be refused. And
+nearly none of them could have moved anyway: the search never slides a slot
+further than one grid step, so a candidate whose bearing sits more than a step
+from its hole has no angle to try. **89 of the 97** were in exactly that
+position, and every angle the loop offered them was rejected by its own first
+filter.
+
+> This is not the reason I first gave, and the first one was wrong. I wrote that
+> the search costs "up to a dozen collision tests" — that is its worst case, not
+> what it does. Across all 99 calls it reached `canPlace` **six times**. The cost
+> is the search's own arithmetic: an `atan2`, a scan of the break list, and
+> eleven angle-distance checks that all fail. **7.2 µs a candidate, 684 µs of the
+> 869 µs the reordering saved.** The change and its numbers were right; the
+> explanation behind them was not.
+
+`addPredictObject` is a handful of distance comparisons, and it is the question
+that actually decides. So `spend()` now commits on the grid angle first and
+refines only what was accepted.
 
 Sliding an accepted slot toward its hole can move it into something else queued
 this tick — two spikes that clear each other at 60° apart do not still clear at

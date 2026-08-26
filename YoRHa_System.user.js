@@ -16098,12 +16098,25 @@ for (let tree of trees) {
             // Commit FIRST, refine second — and that order is the whole cost of
             // this function.
             //
-            // Refining before asking addPredictObject meant every candidate the
-            // marker check was going to refuse still paid for a fine-aim search.
-            // Measured on one replace: 121 searches for at most six placements,
-            // and 148 canPlace calls behind them. addPredictObject is a handful
-            // of distance comparisons; the search is up to a dozen collision
-            // tests. The cheap question belongs first.
+            // spend() is offered far more candidates than it can ever place.
+            // Falcon grades the whole ring and hands over everything scoring
+            // above zero, and only four slots may be filled: measured on one
+            // replace in a fight, 99 candidates offered, 95 of them refused by
+            // addPredictObject for overlapping something already queued.
+            //
+            // Refining before asking meant all 95 paid for a fine-aim search
+            // first. And nearly none of them could have moved anyway: the search
+            // never slides a slot further than one grid step, so a candidate
+            // whose bearing is more than a step or so from its hole has no angle
+            // to try — 89 of those 97 were in that position, and every angle the
+            // loop offered them was rejected by its own first filter.
+            //
+            // That is where the cost turned out to be, and it is not what I
+            // first wrote here. The search is not paying for collision tests:
+            // across all 99 calls it reached canPlace six times. It is paying
+            // for its own arithmetic — an atan2, a scan of the break list, and
+            // eleven angle-distance checks that all fail — 7.2us a candidate,
+            // 684us of the 869us this reordering actually saved.
             //
             // Once a slot IS taken, sliding it toward its hole can move it into
             // something else this tick — two spikes that clear each other on the
