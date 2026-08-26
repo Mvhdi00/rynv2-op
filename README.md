@@ -177,3 +177,82 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# YoRHa System — placer aiming
+
+`YoRHa_System.user.js` is a separate script from the mix above (a different
+lineage: YoRHa 1.5, with Luna's placer and Falcon 0.4.7's auto-replace already
+folded in). What changed here is its **preplacer** and **replacer**: both now
+aim at the enemy instead of at the ground.
+
+## What was wrong
+
+Every player the tick handler touches carries two positions — `x2/y2`, where
+the server last put them, and `xVel/yVel`, which despite the name is that same
+position stepped once more along their last step. The placers mixed the two
+freely: one test measured to `x2/y2`, the next to `xVel/yVel`, a third drew a
+line between them. A ring slot is ~90px across and a tick of running is ~25px,
+so which of the two a test reached for decided whether a spike landed on him or
+a third of a body behind him.
+
+On top of that:
+
+- **The preplacer never asked where he was.** It took every legal *spike* slot,
+  sorted by distance to the object that was breaking, and placed the first one —
+  falling back to traps only when no spike was legal at all. Since
+  `isPrePlaceAngle` passes every trap on the ring (its last rule is a bare
+  `if (isTrap) return true`), that meant a trap at whatever angle happened to
+  sit nearest a dying bush: behind you as readily as in front of him.
+- **A spike "hit" was measured at `scale + 55`.** The game damages at
+  `playerScale + spikeScale` — 87 at spike scale 52, not 107. Twenty pixels of
+  phantom reach, most of a body, is why aimed spikes missed.
+- **A standing player had a phantom walk.** `predictMoveAngle` is `null` with no
+  move key down, and `Math.cos(null)` is `1`, so the line-of-sight vetoes
+  invented a future position 222px due east and rejected good slots against it.
+- **Falcon's replace grades in the present tense.** The hole it answers opened a
+  tick ago and its packet lands a tick from now, so against anyone actually
+  running the wall closes behind them.
+
+## What it does now
+
+One shared aiming layer (`aimStep` / `aimLead` / `aimPathHits` / `aimClosing` /
+`aimOffAngle`, above `isPrePlaceAngle`), used by both placers:
+
+| | |
+|---|---|
+| **Lead** | `x2/y2` plus one clamped tick of travel, `placeLead` ticks of it. The clamp (40px) is above what any speed hat or boost pad reaches in a tick and throws away the 400px "steps" a teleport or resync produces. |
+| **Path** | walking *through* a trap catches you as surely as standing in it, so slots are tested against the segment, not only its endpoints. |
+| **Reach** | the game's own numbers: `35 + scale` for a spike (with the +10 slack the mod's own damage predictor uses), 50 for a trap. |
+| **Angle** | how far off the line from me to him a slot sits — "the best angle", measured. |
+
+The preplacer then **grades both lists on one scale** and the best slot takes
+the tick, spike or trap: a trap that closes on the point he is running to
+outscores a spike that reaches the air behind him, and once he is held, the
+spike that reaches him outscores a second trap out of a stock of six. With
+**Trap + Spike Combo** on it will spend a second, non-overlapping slot on the
+same tick — but only on a building that also reaches him.
+
+The replacer keeps Falcon's grading table and adds the lead to it: a trap
+closing on the lead point, a spike reaching it, ties settled by distance to his
+body and by aim.
+
+## Tuning (Placers page)
+
+| Setting | Default | What it does |
+|---|---|---|
+| `Aim At Enemy` (`placeAim`) | on | Off collapses the lead to zero and both placers grade in the present tense, as before. |
+| `Lead (% of a tick)` (`placeLead`) | 100 | 100 = one tick of his travel (~25px at a run). Raise it against runners, lower it against players who juke. |
+| `Trap + Spike Combo` (`prePlaceCombo`) | on | The second preplace slot described above. |
+
+## Verification
+
+```sh
+node --check YoRHa_System.user.js
+node tools/test-place-aim.js
+```
+
+`test-place-aim.js` lifts the aiming and scoring blocks out of the userscript
+by their `---8<---` markers and instantiates them with every free variable
+passed in, so the tests run the shipped code rather than a copy of it.

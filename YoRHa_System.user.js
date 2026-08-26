@@ -15113,92 +15113,257 @@ for (let tree of trees) {
             }
         }
 
-        function isPrePlaceAngle(config, prePlaceObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb) {
+        // =====================================================================
+        // AIM  —  one answer to "where is he about to be", for both placers
+        // ---8<--- aim layer, lifted by tools/test-place-aim.js ---8<---
+        // =====================================================================
+        // Every player the tick handler touches carries two positions: x2/y2,
+        // where the server last put them, and xVel/yVel, that same position
+        // stepped once more along the step they just took (`x2 * 2 - lastX`).
+        // So xVel is not a velocity at all — it is a POSITION one tick out, and
+        // the gap between the two is exactly one tick of travel.
+        //
+        // The placers used to mix the two by hand: one test measured to x2/y2,
+        // the next to xVel/yVel, a third drew a line between them. A ring slot
+        // is about 90px across and a tick of running is about 25px, so which of
+        // the two a test happened to reach for decided whether a spike landed
+        // on him or a third of a body behind him. Everything below goes through
+        // ONE lead point instead, and both placers grade the ring on it.
+        //
+        //   aimStep()      one tick of travel, clamped to what a player can
+        //                  actually cover: terminal speed is
+        //                  0.0016px/ms / (1 - 0.993) ~= 0.23px/ms and a tick is
+        //                  111ms, so ~25px. The clamp at 40 clears every speed
+        //                  hat and boost pad, and throws away the 400px "steps"
+        //                  a teleport, a resync or a packet burst produces.
+        //   aimLead()      x2/y2 plus that step, `placeLead` ticks of it.
+        //   aimPathHits()  the ground between the two — walking THROUGH a trap
+        //                  catches you as surely as standing in it, and the old
+        //                  code only ever tested endpoints.
+        //   aimClosing()   is he running INTO this slot or away from it.
+        //   aimOffAngle()  how far off the line from me to him the slot sits.
+        //                  This is "the best angle", measured.
+        //
+        // The reach numbers are the game's own rather than the eyeballed ones
+        // the placer grew. A spike damages inside playerScale + spikeScale —
+        // objectManager.checkCollision, and the mod's own spike-damage
+        // predictor, both `35 + scale`, the predictor with a +10 slack that is
+        // kept here. A trap catches inside 50, which is what every other trap
+        // test in this file already uses. The preplacer called a spike a hit at
+        // `scale + 55`: at spike scale 52 that is 20px past the real reach,
+        // most of a body, and it is why "aimed" spikes missed.
+        //
+        // Gated by window.vars.placeAim — off, aimLead() collapses onto x2/y2
+        // and every test below degrades to the present-tense one it replaced.
+        const AIM_PLAYER_SCALE = 35;    // config.playerScale
+        const AIM_SPIKE_SLACK = 10;     // the slack the spike-damage predictor uses
+        const AIM_TRAP_CATCH = 50;      // trap catch radius, as used everywhere else
+        const AIM_MAX_STEP = 40;        // px one tick of running can move a player
+
+        // How many ticks ahead to aim. The menu slider is whole percent of one
+        // tick (0..300); Aim off is a lead of zero, which is the old behaviour.
+        function aimLeadTicks() {
+            if (typeof window === "undefined" || !window.vars) return 1;
+            if (window.vars.placeAim === false) return 0;
+
+            const pct = typeof window.vars.placeLead === "number" ? window.vars.placeLead : 100;
+            return Math.max(0, Math.min(300, pct)) / 100;
+        }
+
+        // One tick of travel, clamped. Anything not seen twice yet steps zero.
+        function aimStep(entity) {
+            if (!entity || typeof entity.x2 !== "number" || typeof entity.xVel !== "number") return { x: 0, y: 0 };
+
+            let dx = entity.xVel - entity.x2;
+            let dy = entity.yVel - entity.y2;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (!isFinite(len) || len === 0) return { x: 0, y: 0 };
+
+            if (len > AIM_MAX_STEP) {
+                dx *= AIM_MAX_STEP / len;
+                dy *= AIM_MAX_STEP / len;
+            }
+
+            return { x: dx, y: dy };
+        }
+
+        // Where he is about to be.
+        function aimLead(entity, ticks) {
+            const t = typeof ticks === "number" ? ticks : aimLeadTicks();
+            const step = aimStep(entity);
+
+            return { x: entity.x2 + step.x * t, y: entity.y2 + step.y * t };
+        }
+
+        function aimSpikeReach(config) {
+            return AIM_PLAYER_SCALE + config.scale + AIM_SPIKE_SLACK;
+        }
+
+        function aimSpikeHits(config, x, y) {
+            return UTILS.getDistance(config.x, config.y, x, y) <= aimSpikeReach(config);
+        }
+
+        function aimTrapCatches(config, x, y) {
+            return UTILS.getDistance(config.x, config.y, x, y) <= AIM_TRAP_CATCH;
+        }
+
+        // Does he cross this slot on the way to the lead point? Same
+        // rect-against-segment test the rest of the placer uses, with the
+        // radius that actually matters for the kind of building.
+        function aimPathHits(config, entity, radius, ticks) {
+            const lead = aimLead(entity, ticks);
+
+            return UTILS.lineInRect(
+                config.x - radius, config.y - radius,
+                config.x + radius, config.y + radius,
+                entity.x2, entity.y2,
+                lead.x, lead.y
+            );
+        }
+
+        // 1 straight into the slot, 0 across it, -1 away from it. A standing
+        // player is closing on nothing.
+        function aimClosing(config, entity) {
+            const step = aimStep(entity);
+            const len = Math.sqrt(step.x * step.x + step.y * step.y);
+            if (len < 1) return 0;
+
+            const dx = config.x - entity.x2;
+            const dy = config.y - entity.y2;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 1) return 1;
+
+            return (step.x * dx + step.y * dy) / (len * dist);
+        }
+
+        // How far this ring slot sits off the line from me to a point. 0 is
+        // dead on him, PI is the opposite side of my own ring.
+        function aimOffAngle(config, x, y) {
+            return UTILS.getAngleDist(config.angle, Math.atan2(y - myPlayer.y2, x - myPlayer.x2));
+        }
+
+        // Where the mod is walking me, or null when it is not. predictMoveAngle
+        // is null whenever no move key is down and `Math.cos(null)` is 1, which
+        // is how the line-of-sight tests below used to invent a future position
+        // 222px due east of a standing player and veto good slots against it.
+        function aimMyMoveDir() {
+            if (typeof predictMoveAngle === "number") return predictMoveAngle;
+            if (typeof lastMoveDir === "number") return lastMoveDir;
+            if (typeof lastMoveAngle === "number") return lastMoveAngle;
+
+            return null;
+        }
+        // ---8<--- end aim layer ---8<---
+
+        // ---8<--- placer scoring, lifted by tools/test-place-aim.js ---8<---
+        // Would this spike wall me off — from where I am walking, or from him?
+        // Both placers ask, and both used to compute it inline against a
+        // future position that did not exist when standing still.
+        function prePlaceLOS(config, ctx) {
+            const LOOKAHEAD = 222;
+            const START_OFFSET = 35;
+            const box = [
+                config.x - config.scale - 5, config.y - config.scale - 5,
+                config.x + config.scale + 5, config.y + config.scale + 5,
+            ];
+
+            let future = false;
+            if (ctx.moveDir !== null) {
+                future = UTILS.lineInRect(
+                    box[0], box[1], box[2], box[3],
+                    myPlayer.x2 + Math.cos(ctx.moveDir) * START_OFFSET,
+                    myPlayer.y2 + Math.sin(ctx.moveDir) * START_OFFSET,
+                    myPlayer.x2 + Math.cos(ctx.moveDir) * LOOKAHEAD,
+                    myPlayer.y2 + Math.sin(ctx.moveDir) * LOOKAHEAD
+                );
+            }
+
+            // Me one tick out to him one tick out: that is where the swing
+            // this slot could block actually happens.
+            const enemy = UTILS.lineInRect(
+                box[0], box[1], box[2], box[3],
+                myPlayer.xVel, myPlayer.yVel,
+                ctx.lead.x, ctx.lead.y
+            );
+
+            return { future: future, enemy: enemy };
+        }
+
+        // Built once a tick and spent by every candidate on the ring. The three
+        // "closest" slots come from the caller — they are picked across the
+        // whole ring, so they cannot be decided per candidate — and the rest
+        // are answers isPrePlaceAngle used to recompute for every single angle,
+        // canTrapTick() and canShamePlace() among them. Those two sweep the
+        // entire ring themselves, once per angle, inside a loop over the ring.
+        function prePlaceContext(closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb) {
+            const enemy = nearestEnemy;
+
+            return {
+                enemy: enemy,
+                lead: aimLead(enemy),
+                enemyTrapped: traps_our.find(trap =>
+                                             UTILS.getDistance(trap.x, trap.y, enemy.x2, enemy.y2) < trap.scale
+                                            ),
+                spikeTick: canTrapTick(),
+                shamePlace: canShamePlace(),
+                moveDir: aimMyMoveDir(),
+                closestSpikeToEnemy: closestSpikeToEnemy,
+                closestTrapToEnemy: closestTrapToEnemy,
+                closestSpikeToKb: closestSpikeToKb,
+            };
+        }
+
+        function isPrePlaceAngle(config, prePlaceObject, ctx) {
             if (!nearestEnemy) return false;
             if (UTILS.getDistance(nearestEnemy.x2, nearestEnemy.y2, myPlayer.x2, myPlayer.y2) > 350) return false;
 
             const isSpike = config.id === myPlayer.items[2] && !isItemLimit(myPlayer.items[2]);
             const isTrap = config.id === myPlayer.items[4] && !isItemLimit(myPlayer.items[4]);
 
-            const enemyTrapped = traps_our.find(trap =>
-                                                UTILS.getDistance(trap.x, trap.y, nearestEnemy.x2, nearestEnemy.y2) < trap.scale
-                                               );
+            const enemyTrapped = ctx.enemyTrapped;
+            const lead = ctx.lead;
+            const los = prePlaceLOS(config, ctx);
 
-            // Calculate future position for line-of-sight checks
-            const LOOKAHEAD = 222;
-            const START_OFFSET = 35;
-            const futureX = myPlayer.x2 + Math.cos(predictMoveAngle) * LOOKAHEAD;
-            const futureY = myPlayer.y2 + Math.sin(predictMoveAngle) * LOOKAHEAD;
-            const startX = myPlayer.x2 + Math.cos(predictMoveAngle) * START_OFFSET;
-            const startY = myPlayer.y2 + Math.sin(predictMoveAngle) * START_OFFSET;
+            // Reaches him where he is, or where he is about to be — at the
+            // game's own reach, not `scale + 55`.
+            let canSpikeTick = aimSpikeHits(config, nearestEnemy.x2, nearestEnemy.y2) ||
+                               aimSpikeHits(config, lead.x, lead.y);
 
-            // Check if spike blocks line of sight to future position
-            const spikeWillBlockLOSToFuture = UTILS.lineInRect(
-                config.x - config.scale - 5,
-                config.y - config.scale - 5,
-                config.x + config.scale + 5,
-                config.y + config.scale + 5,
-                startX, startY,
-                futureX, futureY
-            );
-
-
-
-            // Check if spike blocks line of sight to enemy
-            const spikeWillBlockLOSToEnemy = UTILS.lineInRect(
-                config.x - config.scale - 5,
-                config.y - config.scale - 5,
-                config.x + config.scale + 5,
-                config.y + config.scale + 5,
-                myPlayer.xVel, myPlayer.yVel,
-                nearestEnemy.xVel, nearestEnemy.yVel
-            );
-
-            let canSpikeTick = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < config.scale + 55;
-
-            let canRetrap = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < 50;
+            const canRetrap = aimTrapCatches(config, nearestEnemy.x2, nearestEnemy.y2) ||
+                              aimTrapCatches(config, lead.x, lead.y);
 
             if (canSpikeTick) {
-                // Knockback direction: from spike to enemy
-                let kbAngle = Math.atan2(nearestEnemy.y2 - config.y, nearestEnemy.x2 - config.x);
+                // A spike shoves him straight away from itself. If that shove
+                // is pointed at me it is doing his work, not mine.
+                const kbAngle = Math.atan2(nearestEnemy.y2 - config.y, nearestEnemy.x2 - config.x);
+                const enemyToPlayerAngle = Math.atan2(myPlayer.y2 - nearestEnemy.y2, myPlayer.x2 - nearestEnemy.x2);
 
-                // Direction from enemy to player
-                let enemyToPlayerAngle = Math.atan2(myPlayer.y - nearestEnemy.y2, myPlayer.x - nearestEnemy.x2);
-
-                // Check if knockback direction is similar to enemy->player direction
-                let angleDiff = Math.abs(kbAngle - enemyToPlayerAngle);
-                if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-
-                // If knockback would push enemy towards player (angle diff < 90°), it's BAD
-                canSpikeTick = angleDiff >= Math.PI / 5;
+                canSpikeTick = UTILS.getAngleDist(kbAngle, enemyToPlayerAngle) >= Math.PI / 5;
             }
 
-
-            if (isSpike && canSpikeTick && canTrapTick())
+            if (isSpike && canSpikeTick && ctx.spikeTick)
                 return true;
 
-            if (isTrap && canRetrap && canShamePlace())
+            if (isTrap && canRetrap && ctx.shamePlace)
                 return true;
-
-
 
             // Priority 1: Place spike if it hits trapped enemy
-            if (isSpike && enemyTrapped && prePlaceObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) {
+            if (isSpike && enemyTrapped && prePlaceObject !== enemyTrapped && ctx.closestSpikeToEnemy && config === ctx.closestSpikeToEnemy) {
                 return true;
             }
 
             // Priority 2: Retrap colliding enemy
-            if (isTrap && nearestEnemy.spikeDamage > 0 && enemyTrapped && prePlaceObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) {
+            if (isTrap && nearestEnemy.spikeDamage > 0 && enemyTrapped && prePlaceObject === enemyTrapped && ctx.closestTrapToEnemy && config === ctx.closestTrapToEnemy) {
                 return true;
             }
 
             // Priority 3: Place spike that knockbacks enemy into other spikes
-            if (isSpike && closestSpikeToKb && config === closestSpikeToKb && !canShamePlace()) {
+            if (isSpike && ctx.closestSpikeToKb && config === ctx.closestSpikeToKb && !ctx.shamePlace) {
                 return true;
             }
 
             // Priority 4: Place spikes that don't block LOS when enemy is trapped
-            if (isSpike && enemyTrapped && !spikeWillBlockLOSToFuture && !spikeWillBlockLOSToEnemy && prePlaceObject !== enemyTrapped) {
+            if (isSpike && enemyTrapped && !los.future && !los.enemy && prePlaceObject !== enemyTrapped) {
                 return true;
             }
 
@@ -15209,6 +15374,125 @@ for (let tree of trees) {
 
             return false;
         }
+
+        // =====================================================================
+        // What a preplace slot is worth, on one scale for spikes and traps
+        // =====================================================================
+        // The old pick was: every legal SPIKE slot, sorted by distance to the
+        // object that is breaking, take the first — and only if no spike was
+        // legal, the same again for traps. That answers "which slot is nearest
+        // the hole", which is not the question being asked. isPrePlaceAngle
+        // passes every trap on the ring (its last rule is a bare
+        // `if (isTrap) return true`), so with no spike legal the preplacer
+        // dropped a trap at whatever angle happened to sit nearest a dying
+        // bush — behind you as readily as in front of him.
+        //
+        // Same legal slots, graded on what they do to HIM instead: does the
+        // trap close on the point he is running to, does the spike reach that
+        // point, is he walking into it, and how far off the line from me to him
+        // does it sit. The hole still counts — it is the ground the late
+        // preplace lane is timed for — but as one term rather than the sort key.
+        //
+        // Spikes and traps land on one scale on purpose: the tick then spends
+        // itself on the better play rather than on whichever list was consulted
+        // first. A trap closing on a loose enemy outscores a spike that only
+        // reaches the air behind him; once he is held, the spike that reaches
+        // him outscores a second trap out of a stock of six.
+        function prePlaceScore(slot, isTrap, findObject, ctx) {
+            const enemy = ctx.enemy;
+            const lead = ctx.lead;
+            const distLead = UTILS.getDistance(slot.x, slot.y, lead.x, lead.y);
+            const closing = aimClosing(slot, enemy);
+            let score = 0;
+
+            // The hole this tick is answering. A slot overlapping it is ground
+            // nobody can be standing on when the packet lands, which is the
+            // whole point of the late lane. checkItemLocation's own test, so
+            // "overlaps" means here what it means there. Worth having, not
+            // worth more than landing on him: the trap that catches him scores
+            // three times this on its own.
+            const holeBlock = findObject.blocker ||
+                              (findObject.getScale ? findObject.getScale(0.6, findObject.isItem) : findObject.scale);
+            if (UTILS.getDistance(slot.x, slot.y, findObject.x, findObject.y) < slot.scale + holeBlock) score += 40;
+
+            if (isTrap) {
+                if (ctx.enemyTrapped) {
+                    // He is already held. A second trap on top of him spends
+                    // one of six on nothing — the spike beside him is the play,
+                    // so none of the catch scoring below applies.
+                    score -= 40;
+                } else {
+                    // Close to him, at the angle he is walking into.
+                    if (aimTrapCatches(slot, lead.x, lead.y)) score += 120;
+                    else if (aimPathHits(slot, enemy, AIM_TRAP_CATCH)) score += 80;
+
+                    // Standing on it right now — the retrap.
+                    if (aimTrapCatches(slot, enemy.x2, enemy.y2)) score += 60;
+
+                    if (slot === ctx.closestTrapToEnemy) score += 30;
+                }
+
+                // and then simply: the nearer his body, the better the trap.
+                score += 70 * Math.max(0, 1 - distLead / 200);
+                score += 25 * Math.max(0, closing);
+
+                if (imTrapped) score -= 20;
+            } else {
+                let reaches = false;
+
+                if (ctx.enemyTrapped) {
+                    // Held in place: the only question is whether the spike
+                    // reaches him where he is stuck.
+                    reaches = aimSpikeHits(slot, enemy.x2, enemy.y2);
+                    if (reaches) score += 140;
+                } else if (aimSpikeHits(slot, lead.x, lead.y)) {
+                    reaches = true;
+                    score += 90;
+                } else if (aimPathHits(slot, enemy, aimSpikeReach(slot))) {
+                    score += 60;
+                }
+
+                if (slot === ctx.closestSpikeToKb) score += 70;
+                if (slot === ctx.closestSpikeToEnemy) score += 40;
+                if (ctx.spikeTick && aimSpikeHits(slot, enemy.x2, enemy.y2)) score += 80;
+
+                score += 40 * Math.max(0, 1 - distLead / 200);
+                score += 20 * Math.max(0, closing);
+
+                // A spike of mine between the two of us is a wall I have to
+                // walk around and he does not — unless it is the spike that is
+                // damaging him, which is exactly where it belongs.
+                if (!reaches) {
+                    const los = prePlaceLOS(slot, ctx);
+                    if (los.enemy) score -= 70;
+                    if (los.future) score -= 40;
+                }
+            }
+
+            // The best angle, plainly: how far off the line from me to him.
+            score += 30 * (1 - aimOffAngle(slot, lead.x, lead.y) / Math.PI);
+
+            // Standing on the walk I am about to take.
+            if (replaceWithinPath(slot.x, slot.y)) score -= 50;
+
+            return score;
+        }
+
+        // Does this slot actually touch him — now, at the lead point, or on the
+        // way between? The combo spends a second building on the same tick only
+        // when the second building is also on him; a spike beside the trap is
+        // the pair worth having, a spike somewhere else is a spike spent.
+        function prePlaceReaches(slot, isTrap, ctx) {
+            if (isTrap) {
+                return aimTrapCatches(slot, ctx.lead.x, ctx.lead.y) ||
+                       aimTrapCatches(slot, ctx.enemy.x2, ctx.enemy.y2) ||
+                       aimPathHits(slot, ctx.enemy, AIM_TRAP_CATCH);
+            }
+
+            return aimSpikeHits(slot, ctx.lead.x, ctx.lead.y) ||
+                   aimSpikeHits(slot, ctx.enemy.x2, ctx.enemy.y2);
+        }
+        // ---8<--- end placer scoring ---8<---
 
 
         function isAutoPlaceAngle(config, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb) {
@@ -15387,7 +15671,7 @@ for (let tree of trees) {
         // (-> NaN -> "free") whenever no trap candidate shares that angle. The
         // real distance is measured here instead; same intent, no NaN.
         //
-        // Three deliberate departures, all so this cannot fight the rest of the
+        // Five deliberate departures, all so this cannot fight the rest of the
         // mod:
         //
         //   1. Falcon fires this synchronously out of killObject(). YoRHa
@@ -15408,6 +15692,16 @@ for (let tree of trees) {
         //      read, so the two things it scores count for nothing. It is
         //      initialised here and spent as a tiebreak between candidates of
         //      equal grade — see the sort at the end of replaceGrade().
+        //   5. Falcon grades the whole ring in the present tense: every
+        //      distance it measures runs to where the enemy already is. The
+        //      hole it is answering opened a tick ago and the packet lands a
+        //      tick from now, so against anyone actually running that is two
+        //      ticks of lag baked into the answer, and the wall closes behind
+        //      them. Each enemy is graded against a lead point here as well —
+        //      one term for a trap that closes on it, one for a spike that
+        //      reaches it, and the ties settled by distance and by aim. See the
+        //      AIM block above isPrePlaceAngle(); Aim off collapses the lead
+        //      onto Falcon's own present tense.
         //
         // Gated by window.vars.replace, ranged by window.vars.replaceRange.
         // =====================================================================
@@ -15542,8 +15836,20 @@ for (let tree of trees) {
         function replaceGrade(found, enemies, objects, lost) {
             const ourDamagers = objects.filter(object => object && object.owner && object.dmg && isObjectOur(object));
 
+            // Asked once, not once per candidate per enemy. canTrapTick()
+            // sweeps the whole placement ring itself, and it takes no argument
+            // from this loop, so calling it inside one was a ring sweep per
+            // graded slot.
+            const spikeTick = !!(window.vars.shameTick && canTrapTick());
+
             for (const enemy of enemies) {
                 const ring = replaceEnemyRing(enemy, objects);
+                // Where this one is about to be. Falcon grades the ring
+                // entirely in the present tense, which is why its wall closes
+                // behind a running enemy: the hole it is answering was opened a
+                // tick ago, the packet lands a tick from now, and the slot it
+                // graded best was measured against neither. See the AIM block.
+                const lead = aimLead(enemy);
                 const enemyTrapped = traps_our.find(trap =>
                                                     UTILS.getDistance(trap.x, trap.y, enemy.x2, enemy.y2) < trap.scale
                                                    );
@@ -15583,6 +15889,22 @@ for (let tree of trees) {
 
                     if (dist <= ring.placementDistance) candidate.grade += free ? 1 : 0.5;
 
+                    // Aim: the trap that closes on the point he is running to,
+                    // or that he crosses on the way there, is the one that
+                    // actually catches him. Falcon only ever measured to where
+                    // he already was.
+                    if (aimTrapCatches(candidate, lead.x, lead.y)) {
+                        candidate.reTrap = true;
+                        candidate.grade++;
+                        candidate.points += 2;
+                    } else if (aimPathHits(candidate, enemy, AIM_TRAP_CATCH)) {
+                        candidate.grade += 0.5;
+                        candidate.points++;
+                    }
+
+                    // Ties go to the slot nearest his body — "close to him".
+                    candidate.points += Math.max(0, 1 - UTILS.getDistance(candidate.x, candidate.y, lead.x, lead.y) / 235);
+
                     // A trap of ours died and they are loose: re-trapping is
                     // the move the hole is asking for.
                     if (lost.trap && !enemyTrapped && candidate.reTrap) candidate.grade++;
@@ -15621,7 +15943,7 @@ for (let tree of trees) {
                             // Falcon swaps weapons here. YoRHa's own spike tick
                             // owns that, so this only records that the slot is
                             // a tick slot.
-                            if (window.vars.shameTick && canTrapTick()) {
+                            if (spikeTick) {
                                 candidate.spiketick = true;
                                 candidate.points++;
                             }
@@ -15631,6 +15953,19 @@ for (let tree of trees) {
                             candidate.canPush = true;
                         }
                     }
+
+                    // Aim: a spike that reaches the point he is running to is
+                    // damage on the way in, not damage where he stood. Graded
+                    // at the game's own reach — playerScale + spikeScale — so
+                    // a slot only counts as a hit when it really is one.
+                    if (!enemyTrapped && aimSpikeHits(candidate, lead.x, lead.y)) {
+                        if (!candidate.hitEnemy) candidate.hitEnemy = enemy;
+                        candidate.grade++;
+                        candidate.points++;
+                    }
+
+                    // Ties go to the slot best lined up with him.
+                    candidate.points += Math.max(0, 1 - aimOffAngle(candidate, lead.x, lead.y) / Math.PI);
 
                     if (!candidate.into && replaceBlocksMyMove(candidate, enemyTrapped)) {
                         candidate.grade = -1;
@@ -15791,8 +16126,6 @@ for (let tree of trees) {
                 if (findObject) {
                     customObjects.splice(customObjects.indexOf(findObject), 1);
 
-                    let findAngle;
-
                     const spikeAngles = getPrePlaceAngles(myPlayer.items[2], customObjects);
                     const trapAngles = getPrePlaceAngles(myPlayer.items[4] || 15, customObjects);
 
@@ -15908,36 +16241,53 @@ for (let tree of trees) {
                                  )[0]?.angle;
                     })();
 
-                    const getFindAngle = function (findAngleFunc) {
-                        if (findAngle) return;
+                    // ---- the pick ------------------------------------------
+                    // Every slot that clears isPrePlaceAngle is legal; the
+                    // question is which one fights. Both lists are graded on
+                    // one scale and the best slot takes the tick, spike or
+                    // trap — see prePlaceScore(). The old code took the first
+                    // legal SPIKE by distance to the breaking object and only
+                    // looked at traps when no spike was legal at all.
+                    const ctx = prePlaceContext(closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb);
+                    const candidates = [];
 
-                        findAngleFunc();
-                        if (findAngle) {
-                            addPredictObject(findAngle.id, findAngle.angle, true);
+                    for (const slot of spikeAngles) {
+                        if (!slot.placeable) continue;
+                        if (!isPrePlaceAngle(slot, findObject, ctx)) continue;
+
+                        candidates.push({ slot: slot, trap: false, score: prePlaceScore(slot, false, findObject, ctx) });
+                    }
+
+                    for (const slot of trapAngles) {
+                        if (!slot.placeable) continue;
+                        if (!isPrePlaceAngle(slot, findObject, ctx)) continue;
+
+                        candidates.push({ slot: slot, trap: true, score: prePlaceScore(slot, true, findObject, ctx) });
+                    }
+
+                    candidates.sort((a, b) => b.score - a.score);
+
+                    const best = candidates[0];
+                    if (best && best.score > 0) {
+                        addPredictObject(best.slot.id, best.slot.angle, true);
+
+                        // The other half of the pair, when the ring has room for
+                        // it: a trap on him is worth much more with a spike
+                        // beside it, and the hole a broken building leaves is
+                        // often wide enough for both. It has to reach him too —
+                        // otherwise it is a second building out of a stock of
+                        // six or fifteen, spent on ground he is not standing
+                        // on. addPredictObject refuses anything overlapping
+                        // what this tick already holds, so this can only land
+                        // where the first pick left room, and the late preplace
+                        // lane spends it on the same packet budget as the rest.
+                        if (!window.vars || window.vars.prePlaceCombo !== false) {
+                            const other = candidates.find(c => c.trap !== best.trap && c.score > 0 &&
+                                                         prePlaceReaches(c.slot, c.trap, ctx));
+                            if (other) addPredictObject(other.slot.id, other.slot.angle, true);
                         }
                     }
 
-                    getFindAngle(function () {
-                        const object = spikeAngles
-                        .filter(obj => obj.placeable)
-                        .filter(obj => isPrePlaceAngle(obj, findObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb))
-                        .sort((a, b) => UTILS.getDistance(findObject.x, findObject.y, a.x, a.y) - UTILS.getDistance(findObject.x, findObject.y, b.x, b.y))[0];
-
-                        if (object) {
-                            findAngle = object;
-                        }
-                    });
-
-                    getFindAngle(function () {
-                        const object = trapAngles
-                        .filter(obj => obj.placeable)
-                        .filter(obj => isPrePlaceAngle(obj, findObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb))
-                        .sort((a, b) => UTILS.getDistance(findObject.x, findObject.y, a.x, a.y) - UTILS.getDistance(findObject.x, findObject.y, b.x, b.y))[0];
-
-                        if (object) {
-                            findAngle = object;
-                        }
-                    });
                     for (let i in predictObjects) {
                         if (!predictObjects[i].preplace) continue;
 
@@ -25539,6 +25889,17 @@ for (let tree of trees) {
         placeRange: 300,
         prePlace: true,
 
+        // Aiming — shared by the preplacer and the replacer. On, every slot on
+        // the ring is graded against where the enemy is about to be rather than
+        // where the server last put him, and the best-graded slot takes the
+        // tick. Off, the lead collapses to zero and both placers grade in the
+        // present tense, as they did before. placeLead is whole percent of one
+        // tick of his travel: 100 = one tick (~25px at a run).
+        placeAim: true,
+        placeLead: 100,          // 0 .. 300 %
+        prePlaceCombo: true,     // second, non-overlapping preplace slot: the
+                                 // trap and the spike beside it, same tick
+
         // Replace — Falcon 0.4.7's auto-replace. `replace` is the same id the
         // 1.5 menu and the Placers hotkey already used, so saved settings and
         // the one-key Auto/Pre/Replace toggle carry over untouched.
@@ -25892,7 +26253,8 @@ for (let tree of trees) {
             {
                 title: "Preplacer",
                 items: [
-                    { type: 'toggle', name: "Enable Preplacer", id: "prePlace" }
+                    { type: 'toggle', name: "Enable Preplacer", id: "prePlace" },
+                    { type: 'toggle', name: "Trap + Spike Combo", id: "prePlaceCombo" }
                 ]
             },
             {
@@ -25900,6 +26262,13 @@ for (let tree of trees) {
                 items: [
                     { type: 'toggle', name: "Enable Replace", id: "replace" },
                     { type: 'slider', name: "Activation Range", id: "replaceRange", min: 100, max: 500 }
+                ]
+            },
+            {
+                title: "Aiming",
+                items: [
+                    { type: 'toggle', name: "Aim At Enemy", id: "placeAim" },
+                    { type: 'slider', name: "Lead (% of a tick)", id: "placeLead", min: 0, max: 300 }
                 ]
             },
             {
