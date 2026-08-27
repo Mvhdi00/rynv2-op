@@ -14729,17 +14729,80 @@ for (let tree of trees) {
                         bot.x = own.x;
                         bot.y = own.y;
                         bot.team = own.team;
-                        continue;
+                    } else {
+                        const seen = players.find(p => p && p.name === bot.name && p.sid !== (myPlayer && myPlayer.sid));
+                        if (seen) {
+                            bot.x = seen.x2;
+                            bot.y = seen.y2;
+                            bot.sid = seen.sid;
+                            if (seen.team !== undefined) bot.team = seen.team;
+                        }
                     }
 
-                    const seen = players.find(p => p && p.name === bot.name && p.sid !== (myPlayer && myPlayer.sid));
-                    if (seen) {
-                        bot.x = seen.x2;
-                        bot.y = seen.y2;
-                        bot.sid = seen.sid;
-                        if (seen.team !== undefined) bot.team = seen.team;
-                    }
+                    // BEHAVIOUR: everything a bot does on its own goes here,
+                    // each reading the bot's own world and sending on the bot's
+                    // own socket. Each is gated by the SAME toggle the master
+                    // uses, so turning a feature on turns it on for the bots too.
+                    this._autoMills(bot);
                 }
+            },
+
+            // =================================================================
+            // AUTO MILLS (per bot)
+            //
+            // The master's auto-mills fans a few windmills out behind the way it
+            // is moving. A bot fans them behind the way it is FACING (its dir
+            // from its own "a" packet), because the movement layer is not built
+            // yet and facing is what it has. Same item, same fan, same toggle
+            // (the `autoMills` the B key flips) - just resolved against the
+            // bot's world and pushed down the bot's socket.
+            //
+            // Placement is checked against the bot's own objects, so once a ring
+            // of mills has filled in around it nothing more is sent: the
+            // collision test is the natural limit, the way it is for the master.
+            // =================================================================
+            _millCanPlace(bot, id, angle) {
+                const spec = items.list[id];
+                if (!spec) return false;
+                const reach = 35 + spec.scale + (spec.placeOffset || 0);
+                const px = bot.world.self.x + reach * Math.cos(angle);
+                const py = bot.world.self.y + reach * Math.sin(angle);
+
+                for (const o of bot.world.objects.values()) {
+                    if (UTILS.getDistance(o.x, o.y, px, py) < spec.scale + o.scale) return false;
+                }
+                // Don't drop one on top of a player either.
+                for (const p of bot.world.players.values()) {
+                    if (UTILS.getDistance(p.x, p.y, px, py) < spec.scale + 35) return false;
+                }
+                return true;
+            },
+
+            _millPlace(bot, id, angles) {
+                EXP.send(bot.ws, "z", [id, false]);          // enter build mode
+                for (const a of angles) {
+                    EXP.send(bot.ws, "F", [1, a]);           // place
+                    EXP.send(bot.ws, "F", [0, a]);
+                }
+                EXP.send(bot.ws, "z", [bot.world.self.weaponIndex || 0, true]); // back to weapon
+            },
+
+            _autoMills(bot) {
+                if (!autoMills) return;                       // the master's B toggle
+                if (!bot.inGame) return;
+
+                // The bot's mill slot. Bots keep the default loadout (no upgrade
+                // module yet), so the mill is item 10 - the same slot index 3
+                // the master reads.
+                const id = 10;
+                const spec = items.list[id];
+                if (!spec) return;
+
+                const base = (bot.world.self.dir || 0) + Math.PI;   // behind its facing
+                const spread = UTILS.toRad(spec.scale + spec.scale / 2);
+                const wanted = [base, base - spread, base + spread].filter(a => this._millCanPlace(bot, id, a));
+
+                if (wanted.length) this._millPlace(bot, id, wanted);
             },
 
             status() {

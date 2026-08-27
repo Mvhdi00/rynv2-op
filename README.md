@@ -518,5 +518,29 @@ node tools/test-bot-world.js   # 25 cases over the packet layouts and the querie
 node tools/test-bots.js        # 27, now including the socket feeding the world
 ```
 
+## Bots — first behaviour: auto mills
+
+The bot tick has a behaviour stage now, and the first thing in it answers the
+obvious question: **turn on a feature and the bots do it too.** Auto mills is
+flipped by the `B` key into the same `autoMills` variable the master reads — the
+bots read that exact variable, so there is one switch, not two.
+
+Each bot resolves it against its own world: the master fans a few windmills out
+behind the way it is *moving*; a bot fans them behind the way it is *facing*
+(its `dir` from its own `a` packet, since the movement layer isn't built yet),
+same item (windmill, id 10), same three-way fan, checked against the bot's own
+objects and pushed down the bot's own socket with `EXP.send`. Once a ring of
+mills has filled in around a bot, the collision test refuses new ones — the same
+natural limit the master has, no counter needed.
+
+This is the pattern every later feature follows: read `bot.world`, send on
+`bot.ws`, gate on the toggle the master already uses. No global was touched, so
+the master's own auto-mills is exactly as before.
+
+```sh
+node tools/test-bots.js     # now also: off = nothing, on = a three-mill fan
+                            # behind facing, a filled slot skipped, weapon restored
+```
+
 Not yet built (the behaviour layers): movement and formations, combat, farming,
 clans, squads, 1v1.

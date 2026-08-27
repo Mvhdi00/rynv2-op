@@ -93,12 +93,22 @@ let players = [];
 let myPlayer = { sid: 99 };
 let wsAddress = 'wss://sfo-1.moomoo.io:8008/?token=cf:masterToken';
 
+// the game globals the behaviour layer reaches for
+const UTILS = {
+    getDistance: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1),
+    toRad: (d) => d * Math.PI / 180
+};
+const items = { list: [] };
+items.list[10] = { name: 'windmill', scale: 45, placeOffset: 5 };   // the mill slot
+
 const factory = new Function(
-    'EXP', 'window', 'document', 'players', 'myPlayer', 'wsAddress', 'io', 'URL', 'console',
-    `${block}\nreturn NovaBots;`
+    'EXP', 'window', 'document', 'players', 'myPlayer', 'wsAddress', 'io', 'URL', 'console', 'UTILS', 'items', 'setAutoMills',
+    `let autoMills = false;\n     setAutoMills.set = (v) => { autoMills = v; };\n     ${block}\nreturn NovaBots;`
 );
 
-const NovaBots = factory(EXP, win, doc, players, myPlayer, wsAddress, null, URL, { log() {}, warn() {} });
+const autoMillsCtl = () => {};
+const NovaBots = factory(EXP, win, doc, players, myPlayer, wsAddress, null, URL, { log() {}, warn() {} }, UTILS, items, autoMillsCtl);
+const setAutoMills = (v) => autoMillsCtl.set(v);
 
 // --- token choice -----------------------------------------------------------
 console.log('-- token --');
@@ -179,6 +189,42 @@ async function runFlow() {
 
     sock.fire('message', { data: { type: 'H', args: [[77, 810, 900, 0, 50, 0, -1, -1]] } });
     check('objects reach the bot world too', bot.world.resourcesNear(0, 400).length, 1);
+
+    // --- auto mills, per bot, on the master's own toggle --------------------
+    console.log('\n-- auto mills --');
+    bot.world.objects.clear();          // clear ground around the bot
+    bot.world.self.dir = 0;
+    bot.world.self.weaponIndex = 0;
+
+    sent.length = 0;
+    NovaBots.tick();
+    check('mills are not placed while the toggle is off', sent.filter(s => s[1] === 'F').length, 0);
+
+    setAutoMills(true);
+    sent.length = 0;
+    NovaBots.tick();
+    const millTypes = sent.map(s => s[1]);
+    check('the toggle makes the bot build', millTypes.includes('z') && millTypes.includes('F'), true);
+    const placed = sent.filter(s => s[1] === 'F' && s[2][0] === 1).map(s => Math.round(s[2][1] * 100) / 100);
+    check('it fans three mills behind its facing', placed.length, 3);
+    check('the fan is centred behind the bot (dir + 180)', placed.includes(Math.round(Math.PI * 100) / 100), true);
+    check('it returns to its weapon afterwards', sent[sent.length - 1].slice(1), ['z', [0, true]]);
+
+    // a mill already sitting in a slot blocks that slot
+    const spread = (45 + 45 / 2) * Math.PI / 180;
+    const reach = 35 + 45 + 5;
+    const blockAngle = Math.PI;
+    bot.world.objects.set(500, {
+        sid: 500, scale: 45, owner: bot.world.self.sid,
+        x: bot.world.self.x + reach * Math.cos(blockAngle),
+        y: bot.world.self.y + reach * Math.sin(blockAngle)
+    });
+    sent.length = 0;
+    NovaBots.tick();
+    const placed2 = sent.filter(s => s[1] === 'F' && s[2][0] === 1);
+    check('a filled slot is skipped', placed2.length, 2);
+
+    setAutoMills(false);
 
     // death and respawn
     sent.length = 0;
