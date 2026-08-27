@@ -88,7 +88,8 @@ const win = {
         botFollow: true, botFollowCursor: false, botFormation: 'none',
         botRadius: 150, botStopRadius: 50, botCircleRotate: false,
         botFreeze: false, botLock: false, botScatter: false,
-        botAutoHeal: true, botAttackPrimary: false, botAttackSecondary: false
+        botAutoHeal: true, botAttackPrimary: false, botAttackSecondary: false,
+        botAutoAccept: true
     },
     turnstile,
     OriginalWebSocket: FakeSocket,
@@ -360,6 +361,29 @@ async function runFlow() {
     NovaBots.tick();
     check('autospawn off leaves the bot down', sent.length, 0);
     win.vars.botAutospawn = true;
+
+    // --- auto accept (clan join, staggered) --------------------------------
+    console.log('\n-- auto accept --');
+    bot.inGame = true;
+    bot.world.self.sid = 1234;
+    bot.world.self.team = null;              // bot has no clan
+    myPlayer.team = 'CLAN';                   // master is in one
+    NovaBots._lastClanJoin = 0;
+    sent.length = 0;
+    NovaBots.tick();
+    check('a clanless bot asks to join the master clan', sent.find(s => s[1] === 'b')[2], ['CLAN']);
+
+    // a second bot the same tick does not also ask (1.5s stagger)
+    sent.length = 0;
+    NovaBots.tick();
+    check('no second join within 1.5s', sent.filter(s => s[1] === 'b').length, 0);
+
+    bot.world.self.team = 'CLAN';            // now in the clan
+    sent.length = 0;
+    NovaBots.tick();
+    check('a bot already in the clan does not ask', sent.filter(s => s[1] === 'b').length, 0);
+    myPlayer.team = null;
+    bot.world.self.team = null;
 
     // hold and release
     console.log('\n-- hold / release --');

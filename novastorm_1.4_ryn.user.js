@@ -9440,6 +9440,14 @@ let pps = 0;
         var allianceNotifications = [];
         var alliancePlayers = [];
         function allianceNotification(sid, name) {
+            // AUTO ACCEPT BOTS: a join request whose name starts with the bot
+            // prefix is one of ours - accept it at once and drop the popup, so
+            // the whole swarm files into the clan without a click.
+            if (window.vars.botAutoAccept && myPlayer && typeof name === "string"
+                && name.indexOf(String(window.vars.botName || "nova")) === 0) {
+                io.send("P", sid, 1);
+                return;
+            }
             allianceNotifications.push({
                 sid: sid,
                 name: name
@@ -14865,11 +14873,28 @@ for (let tree of trees) {
 
                     if (!bot.inGame) {
                         if (bot.held || !window.vars.botAutospawn) continue;
-                        if (bot.deadAt && Date.now() - bot.deadAt > 1000) {
-                            bot.deadAt = 0;
+                        // AUTO RESPAWN: skip the death screen and re-enter as
+                        // fast as the server will take it. Retry every few ticks
+                        // until it lands, so a rejected first attempt still comes
+                        // straight back instead of sitting dead.
+                        if (bot.deadAt && (Date.now() - bot.deadAt) > 120) {
+                            bot.deadAt = Date.now();
                             this._enter(bot);
                         }
                         continue;
+                    }
+
+                    // AUTO ACCEPT: while the master is in a clan and this bot
+                    // isn't, send one join request. Only ONE bot asks per 1.5s
+                    // (a global stagger) so the whole swarm files in one by one
+                    // instead of hammering the clan at once - the master
+                    // auto-accepts each in allianceNotification.
+                    if (window.vars.botAutoAccept && myPlayer && myPlayer.team != null
+                        && bot.world.self.team !== myPlayer.team) {
+                        if (Date.now() - (this._lastClanJoin || 0) >= 1500) {
+                            EXP.send(bot.ws, "b", [myPlayer.team]);
+                            this._lastClanJoin = Date.now();
+                        }
                     }
 
                     const own = bot.world.self;
@@ -21857,6 +21882,7 @@ for (let tree of trees) {
         botAutoHeal: true,
         botAttackPrimary: false,
         botAttackSecondary: false,
+        botAutoAccept: true,
 
         // Bot movement
         botFollow: true,
@@ -22079,7 +22105,8 @@ for (let tree of trees) {
                 title: "Connection",
                 items: [
                     { type: 'toggle', name: "Hold (wait to enter)", id: "botHold" },
-                    { type: 'toggle', name: "Autospawn (respawn on death)", id: "botAutospawn" }
+                    { type: 'toggle', name: "Autospawn (respawn on death)", id: "botAutospawn" },
+                    { type: 'toggle', name: "Auto Accept (join clan)", id: "botAutoAccept" }
                 ]
             },
             {
