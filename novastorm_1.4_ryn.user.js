@@ -14916,13 +14916,90 @@ for (let tree of trees) {
                     // each reading the bot's own world and sending on the bot's
                     // own socket. Each is gated by the SAME toggle the master
                     // uses, so turning a feature on turns it on for the bots too.
-                    this._move(bot);
+                    // SCAN takes over movement while it is hunting; otherwise
+                    // the normal follow/formation movement runs.
+                    if (this._scanActive()) this._scan(bot);
+                    else this._move(bot);
+
                     this._autoBreak(bot);
                     this._autoHeal(bot);
                     this._attack(bot);
                     this._autoMills(bot);
                 }
                 this._spinFormation();
+            },
+
+            // =================================================================
+            // SCAN — hunt a named player across the whole map
+            //
+            // You put a target (a player id, sid, or exact name) in the Bots
+            // panel and switch Scan on. The bots fan out and roam the ENTIRE map
+            // at random, each watching its own stream for that player. The first
+            // bot to see them becomes the beacon: it pings your minimap where the
+            // target is (using the master's own pingMap, so the dot appears on
+            // your map at once - no packet needed) and then holds a set distance
+            // from them, staying visible so you can close in and see where they
+            // are. Every other bot drops the search and comes home to you.
+            // =================================================================
+            _scanFound: null,     // { name, x, y, at } of the current beacon
+            _lastPing: 0,
+
+            _scanActive() {
+                return !!(window.vars.botScan && String(window.vars.botScanTarget || "").trim());
+            },
+
+            // The target player in this bot's own view, or null.
+            _scanTargetIn(bot) {
+                const t = String(window.vars.botScanTarget || "").trim().toLowerCase();
+                if (!t) return null;
+                for (const p of bot.world.players.values()) {
+                    if (p.sid === bot.world.self.sid) continue;
+                    if (String(p.id) === t || String(p.sid) === t
+                        || (p.name && p.name.toLowerCase() === t)) return p;
+                }
+                return null;
+            },
+
+            _roam(bot) {
+                const map = (typeof config !== "undefined" && config.mapScale) || 14400;
+                const s = bot.world.self;
+                if (!bot._roamTo || Math.hypot(bot._roamTo.x - s.x2, bot._roamTo.y - s.y2) < 150) {
+                    bot._roamTo = { x: Math.random() * map, y: Math.random() * map };
+                }
+                this._sendMove(bot, Math.atan2(bot._roamTo.y - s.y2, bot._roamTo.x - s.x2));
+            },
+
+            _scan(bot) {
+                const s = bot.world.self;
+                const found = this._scanTargetIn(bot);
+                const beacon = (this._scanFound && Date.now() - this._scanFound.at < 6000)
+                    ? this._scanFound.name : null;
+
+                // I see the target and I am the beacon (or there isn't one yet).
+                if (found && (!beacon || beacon === bot.name)) {
+                    this._scanFound = { name: bot.name, x: found.x2, y: found.y2, at: Date.now() };
+
+                    // drop a ping on YOUR minimap where the target is
+                    if (Date.now() - this._lastPing > 2500) {
+                        try { pingMap(found.x2, found.y2); } catch (e) {}
+                        this._lastPing = Date.now();
+                    }
+
+                    // hold ~150 off the target so it stays a visible marker you
+                    // can walk up to
+                    const d = Math.hypot(found.x2 - s.x2, found.y2 - s.y2);
+                    const toTarget = Math.atan2(found.y2 - s.y2, found.x2 - s.x2);
+                    if (d > 190) this._sendMove(bot, toTarget);
+                    else if (d < 120) this._sendMove(bot, toTarget + Math.PI);
+                    else this._sendMove(bot, null);
+                    return;
+                }
+
+                // someone else already found it -> come home to the master
+                if (beacon) { this._move(bot); return; }
+
+                // nobody has it yet -> keep roaming the map
+                this._roam(bot);
             },
 
             // =================================================================
@@ -21937,6 +22014,10 @@ for (let tree of trees) {
         botAutoAccept: true,
         botAutoBreak: false,
 
+        // Bot scan
+        botScan: false,
+        botScanTarget: "",
+
         // Bot movement
         botFollow: true,
         botFollowCursor: false,
@@ -22204,6 +22285,13 @@ for (let tree of trees) {
                     { type: 'keybind', name: "Attack Primary key", id: "keyBotAttackPrimary" },
                     { type: 'keybind', name: "Attack Secondary key", id: "keyBotAttackSecondary" },
                     { type: 'toggle', name: "Auto Break (clear the way)", id: "botAutoBreak" }
+                ]
+            },
+            {
+                title: "Scan",
+                items: [
+                    { type: 'input', name: "Target (id / sid / name)", id: "botScanTarget" },
+                    { type: 'toggle', name: "Scan the map for target", id: "botScan" }
                 ]
             }
         ],

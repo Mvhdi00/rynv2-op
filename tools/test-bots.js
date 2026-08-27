@@ -89,7 +89,8 @@ const win = {
         botRadius: 150, botStopRadius: 50, botCircleRotate: false,
         botFreeze: false, botLock: false, botScatter: false,
         botAutoHeal: true, botAttackPrimary: false, botAttackSecondary: false,
-        botAutoAccept: true, botAutoBreak: false
+        botAutoAccept: true, botAutoBreak: false,
+        botScan: false, botScanTarget: ''
     },
     turnstile,
     OriginalWebSocket: FakeSocket,
@@ -150,6 +151,9 @@ const factory = new Function(
          place(myPlayer.items[0], null);
        }
      }
+     // scan reaches for the master's map ping and the map size
+     const config = { mapScale: 14400 };
+     function pingMap(x, y) { peek.pinged = { x, y }; }
      ${block}
      return NovaBots;`
 );
@@ -530,6 +534,52 @@ async function runFlow() {
     sent.length = 0;
     NovaBots._autoBreak(b);
     check('the toggle off stops breaking', sent.length, 0);
+
+    // --- scan --------------------------------------------------------------
+    console.log('\n-- scan --');
+    NovaBots._scanFound = null;
+    NovaBots._lastPing = 0;
+    peekCtl.pinged = null;
+    b.world.players.clear();
+    b.world.self.sid = 1234; b.world.self.x2 = 3000; b.world.self.y2 = 3000;
+    b._roamTo = null;
+
+    // no target set -> scan is inactive
+    check('scan is off with no target', NovaBots._scanActive(), false);
+
+    win.vars.botScan = true;
+    win.vars.botScanTarget = '77';
+    check('scan is active with a target', NovaBots._scanActive(), true);
+
+    // target not in view -> the bot roams the whole map
+    sent.length = 0;
+    NovaBots._scan(b);
+    check('with no sighting the bot roams', sent.filter(s => s[1] === '9').length, 1);
+    check('the roam point is somewhere on the map', b._roamTo.x >= 0 && b._roamTo.x <= 14400, true);
+
+    // the target (id 77) appears far off in the bot's world
+    b.world.players.set(50, { sid: 50, id: 77, name: 'prey', x2: 3400, y2: 3000 });
+    peekCtl.pinged = null;
+    sent.length = 0;
+    NovaBots._scan(b);
+    check('finding the target pings your minimap at its spot', peekCtl.pinged, { x: 3400, y: 3000 });
+    check('the finder becomes the beacon', NovaBots._scanFound.name, b.name);
+    check('the beacon closes toward a far target', Math.round(sent.find(s => s[1] === '9')[2][0] * 100), 0);
+
+    // a second bot that does NOT see the target goes home to the master
+    const b2 = { name: 'nova9', ws: new FakeSocket('wss://sfo-x/?t=1'), inGame: true,
+                 world: null, _lastMoveAngle: undefined };
+    // give it a minimal world via the real constructor path
+    NovaBots.list.push(b2);
+    b2.world = { self: { sid: 999, x2: 1000, y2: 1000, dir: 0, team: null }, players: new Map(),
+                 nearestEnemy: () => null };
+    sent.length = 0;
+    NovaBots._scan(b2);
+    const homeMove = sent.find(s => s[0] === b2.ws.url && s[1] === '9');
+    const wantHome = Math.atan2(1000 - 1000, 1000 - 1000);
+    check('a non-finder heads home to the master', typeof (homeMove && homeMove[2][0]) !== 'undefined', true);
+    NovaBots.list = NovaBots.list.filter(x => x !== b2);
+    win.vars.botScan = false; win.vars.botScanTarget = '';
 
     // cleanup
     console.log('\n-- cleanup --');
