@@ -202,6 +202,19 @@ if (item.group.limit && this.itemCounts[item.group.id] >= item.group.limit)  // 
 
 and the HUD does too (9426). `UTILS.isSandbox` exists at 16807.
 
+**This is a regression, not an inherited bug.** Luna 1.1 — the base NovaStorm's
+placer is taken from verbatim — has it right at line 11296:
+
+```js
+let limit = config.inSandbox ? group.sandboxLimit || Math.max(group.limit * 3, 99) : group.limit;
+if (limit && myPlayer.itemCounts[group.id] >= limit) { return true; }
+```
+
+See `preplace-replace-reference-extraction.md` §2.4. Note that on the way back
+the sandbox test must be `UTILS.isSandbox` (16807), not NovaStorm's
+`config.inSandbox` (16806), which reads `process.env.VULTR_SCHEME` and is
+undefined in a browser.
+
 Consequence for Preplace specifically: at 15/15 spikes, `isSpike` in
 `isPrePlaceAngle` (13091) still evaluates true, the spike branch still wins,
 the single per-tick slot is spent on a placement the server discards, and the
@@ -407,11 +420,12 @@ second attempt costs 2 packets instead of 5.
 
 ## 5. Decisions needed before implementation
 
-1. **`isItemLimit`** — fix in place (correct for everyone, but changes Auto
-   Place and Auto Mills behaviour), or shadow it with a correct
-   Preplace/Replace-local version and leave the shared one alone? Fixing in
-   place is the honest fix; shadowing is the one that respects the stated
-   scope.
+1. ~~**`isItemLimit`** — fix in place, or shadow it Preplace-locally?~~
+   **Resolved, no decision needed.** The reference pass showed this is a
+   regression NovaStorm introduced against its own Luna base, not an inherited
+   bug. Restoring Luna's expression returns every caller to the behaviour it was
+   written against, so it is a regression fix rather than a scope expansion.
+   See `preplace-replace-reference-extraction.md` §2.4.
 
 2. **Threat model pessimism** — should the enemy damage estimate stay
    worst-case (`× 3.3` always), or become hat-accurate? Accurate means fewer
