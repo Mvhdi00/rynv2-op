@@ -146,11 +146,19 @@ Three properties NovaStorm's `getPrePlaceAngles` (13061) lacks:
    candidates are enumerated outward from a meaningful direction.
 3. **`vel` selects the predicted position `player.x3` over `player.x2`.**
 
-Point 3 is the reference confirmation for the gap flagged in the main analysis:
-NovaStorm's `getConfig`/`canPlace` already accept a `velocity` flag (12782,
-12790) and `getPrePlaceAngles` never passes it, so preplace validates against
-the current position and commits ~111 ms later. Whiteout parameterises exactly
-this and uses the predicted position.
+**Correction (added after the Phase-1 Whiteout trace).** I originally wrote that
+Whiteout "parameterises exactly this and uses the predicted position." The
+parameter is real, but **both live call sites pass `vel = 0`** — 12626-12627 in
+`autoplacers`, and 14467-14468 in `killObject`'s reactive placer — so both
+sweeps run from `player.x2`, exactly as NovaStorm does. Whiteout is therefore
+*not* a reference for validating candidates at the predicted position; it only
+shows the plumbing for it. The underlying gap in NovaStorm (`getConfig`/`canPlace`
+accept a `velocity` flag at 12782/12790 that `getPrePlaceAngles` never passes,
+so candidates are validated for tick N and committed ~111 ms later) still
+stands, but as my own proposal, not a reference-backed one.
+
+What Whiteout *does* do about staleness is re-validate at commit rather than
+predict forward — see `whiteout-preplace-analysis.md` §10.
 
 ### 1.4 Enemy-side prediction — `enemyPlacement` (12543)
 
@@ -389,7 +397,7 @@ Confirmed by a reference, promoted:
 
 | Item | Reference | Main-analysis §|
 |---|---|---|
-| Validate preplace candidates at the predicted position | Whiteout `findAvailableAngles` `vel` → `player.x3` | 2.2.1 |
+| ~~Validate preplace candidates at the predicted position~~ — **not reference-backed**, see the correction in §1.3; Whiteout re-validates at commit instead | (my proposal) | 2.2.1 |
 | Real movement integration for prediction | Whiteout `calcNewVel`; constants already in NovaStorm's bundle | 2.2.5 |
 | Re-verify legality immediately before committing | Whiteout `checkPlacement` fall-through | 2.3.5 / 2.4.2 |
 | Restore the item-limit check | Luna `isItemLimit` — **regression fix**, not a scope call | 2.2.3 |
