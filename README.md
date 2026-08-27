@@ -350,3 +350,62 @@ the header's `@require` / `@updateURL` lines. It does not execute the script.
 On the cleaned file it flags nothing; every host left is a game asset, a font,
 or the msgpack library, and the only hits under "what the code can do" are the
 game's own `getSavedVal` and its keyboard handlers.
+
+## Verifying the cleaned copy
+
+Three independent passes, because one grep is not evidence.
+
+**1. Parser, not regex** (`tools/audit-userscript-ast.js`). Aliasing and string
+building defeat a text search; an AST does not. Every call, `new`, member access
+and assignment in the file was enumerated.
+
+| | original | cleaned |
+|---|---|---|
+| `fetch(...)` calls | 10 (every URL an obfuscated call) | **0** |
+| `new Function` | 1 | **0** |
+| `new Image` beacon | 1 (in the payload) | 1 (hat sprites from moomoo.io) |
+| `setInterval(…, 0x7530)` tracker | 1 | **0** |
+| `console.clear()` | 2 | **0** |
+| timers given a string to execute | 0 | 0 |
+| `eval` / `document.write` / `insertAdjacentHTML` | 0 | 0 |
+| iframe or script elements created | yes | **0** (only `createElement(config.tag \|\| "div")`) |
+| computed access on `window`/`document` | obfuscated throughout | 2, both `window[<menu id> + "Func"]` |
+| storage | payload + game | game's own `saveVal` / `getSavedVal` |
+| URL strings | exfil hosts + game | 6, all game assets and one font |
+
+**2. Every removed hunk read back** (`diff` against the original): 17 hunks, 108
+lines removed, 5 lines added — the five added lines are the `(cleaned)` name and
+a comment. Nothing was removed that the mod's own code uses; the braces around
+each cut were checked by hand and `node --check` parses the result.
+
+**3. Actually run it** (`tools/run-userscript-sandbox.js`). Headless Chromium, a
+fake page served at `https://moomoo.io/` so the script's location checks pass,
+every request intercepted and refused, and `fetch` / XHR / `sendBeacon` /
+`WebSocket` / `element.src` / `localStorage` wrapped to log.
+
+```
+original   694 outbound requests in 12s, including:
+             GET  https://momooio.iloveloggers.workers.dev/
+             POST https://momo.iloveloggers.workers.dev/
+                  {"server":"The server is https://moomoo.io/","time":1787808449952}
+             GET  https://discord.com/channels/@me
+             GET  https://moomoo.io/Lmao%20noob%20fuck%20off%20ur%20not%20doing%20shit
+             script.src -> https://rawgit.com/kawanet/msgpack-lite/…
+           and it blanked the page (3 DOM nodes left, against 7 for the cleaned copy)
+
+cleaned    1 outbound request: https://fonts.googleapis.com/css?family=Ubuntu:700
+           no fetch, no socket, no storage, no element.src, page intact
+```
+
+Both runs reach the same depth before the missing game bundle stops them, so the
+difference is the removed code, not a shorter run.
+
+## What the mod still does that is not spyware
+
+- `autojetchat()` types the author's advertising through your account —
+  "Jet Mod updated!", "Dc: jetishot", "Best MooMoo mod" — toggled with `P`.
+- Kill chat is **on by default** (`killChat: true`): it announces
+  "Noob Executed By Jet Mod!" and "Ezed by Jet Mod: <name>" when you kill.
+
+Neither leaks anything, but both broadcast that you are modding, which is its own
+kind of risk.
