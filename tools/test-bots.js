@@ -567,7 +567,7 @@ async function runFlow() {
     check('the beacon closes toward a far target', Math.round(sent.find(s => s[1] === '9')[2][0] * 100), 0);
 
     // a second bot that does NOT see the target goes home to the master
-    const b2 = { name: 'nova9', ws: new FakeSocket('wss://sfo-x/?t=1'), inGame: true,
+    const b2 = { name: 'nova9', ws: new FakeSocket('wss://helper-x/?t=1'), inGame: true,
                  world: null, _lastMoveAngle: undefined };
     // give it a minimal world via the real constructor path
     NovaBots.list.push(b2);
