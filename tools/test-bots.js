@@ -65,7 +65,9 @@ const EXP = {
         MODE_SECURE: 1,
         states: { set: (sock, st) => sniffed.set(sock, st) },
         hexToBytes: () => new Uint8Array(),
-        buildTables: () => ({ c2s: {}, s2c: {} })
+        buildTables: () => ({ c2s: {}, s2c: {} }),
+        // the native class EXP captured before the game shim — bots open on this
+        NativeWebSocket: FakeSocket
     }
 };
 
@@ -74,7 +76,14 @@ const tokenState = { captured: null, widget: null, renderFails: false };
 const turnstile = {
     render(holder, opts) {
         if (tokenState.renderFails) throw new Error('no widget');
-        tokenState.widget = opts;
+        const isAuto = opts.appearance === 'interaction-only';
+        if (isAuto) tokenState.autoWidget = opts; else tokenState.widget = opts;
+        // simulate Cloudflare deciding a challenge is needed: the invisible
+        // interaction-only widget errors, and the visible box is what solves it
+        if (isAuto && tokenState.autoFails) {
+            setTimeout(() => opts['error-callback'] && opts['error-callback'](), 0);
+            return 1;
+        }
         if (tokenState.widgetToken !== undefined) {
             setTimeout(() => opts.callback(tokenState.widgetToken), 0);
         }
@@ -201,22 +210,38 @@ console.log('-- token --');
 
 tokenState.widgetToken = 'freshOne';
 NovaBots._token().then(t => {
-    check('a widget token is used when one comes back', t, 'cf:freshOne');
-    check('the widget is shown for the user to solve (light theme, not hidden)',
-          [tokenState.widget.theme, tokenState.widget.appearance], ['light', undefined]);
-    check('the widget uses the game sitekey', tokenState.widget.sitekey, '0x4AAAAAAAMYHI96GFiJzMmp');
-    return runFallback();
-}).then(runFlow).then(() => {
+    // the automatic path: an invisible interaction-only widget issues a token
+    // with no click, the way RYN brings bots in silently
+    check('an auto token is used when Cloudflare issues one silently', t, 'cf:freshOne');
+    check('the auto widget is invisible (interaction-only), not a box',
+          [tokenState.autoWidget.appearance, tokenState.autoWidget.theme], ['interaction-only', undefined]);
+    check('the auto widget uses the game sitekey', tokenState.autoWidget.sitekey, '0x4AAAAAAAMYHI96GFiJzMmp');
+    return runManual();
+}).then(runFallback).then(runFlow).then(() => {
     console.log(failed ? `\n${failed} failing case(s)` : '\nall cases pass');
     process.exit(failed ? 1 : 0);
 });
 
+function runManual() {
+    console.log('\n-- manual fallback --');
+    // Cloudflare demands a challenge: the invisible widget errors, so a VISIBLE
+    // box is shown to solve by hand — the "manual only when it asks" path
+    tokenState.autoFails = true;
+    tokenState.widget = null;
+    tokenState.widgetToken = 'solvedByHand';
+    return NovaBots._token().then(t => {
+        check('when a challenge is needed, the hand-solved token is used', t, 'cf:solvedByHand');
+        check('the manual widget is a visible light box', tokenState.widget.theme, 'light');
+        tokenState.autoFails = false;
+    });
+}
+
 function runFallback() {
-    console.log('\n-- fallback --');
+    console.log('\n-- captured fallback --');
     tokenState.renderFails = true;
     tokenState.captured = 'cf:masterToken';
     return NovaBots._token().then(t => {
-        check("the master's captured token is the fallback", t, 'cf:masterToken');
+        check("the master's captured token is the last resort", t, 'cf:masterToken');
         tokenState.captured = null;
         return NovaBots._token();
     }).then(t => {

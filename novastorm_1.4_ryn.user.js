@@ -647,7 +647,7 @@ const EXP = (function() {
         entryStats: function() { return { turnstileRenders: entryStats.renders, entryPressesHeld: entryStats.holds }; },
         nativeSend: nativeSend,
         PACKET_MAP: PACKET_MAP,
-        _internals: { buildTables, tag, hexToBytes, HEADER_LEN, MODE_SECURE, states }
+        _internals: { buildTables, tag, hexToBytes, HEADER_LEN, MODE_SECURE, states, NativeWebSocket }
     };
 }
 )();
@@ -14566,33 +14566,39 @@ for (let tree of trees) {
         }
 
         // =====================================================================
-        // BOTS — CONNECTION  (RYN v5.4's approach, on Novastorm's own layer)
+        // BOTS — CONNECTION  (rebuilt straight from RYN v5.4 + the game's own
+        // O.connect, on Novastorm's EXP layer)
         //
-        // A bot is a second authenticated socket to the SAME server. The part
-        // that decides whether any of this works is the token: Novastorm's old
-        // bots made you solve a Turnstile widget by hand for every bot, while
-        // RYN renders its own widget in "interaction-only" mode and reads the
-        // token out of the callback, so nothing has to be clicked. That is what
-        // is rebuilt here, with RYN's fallback behind it (the token the master
-        // connection already captured).
+        // A bot is a second authenticated socket to the SAME server. Every step
+        // here mirrors what actually works in RYN and in the real client:
         //
-        // The rest costs almost nothing, because EXP already does it:
+        //   1. TOKEN (_token): the one part that decides whether a second socket
+        //      is allowed in. RYN renders a Turnstile widget in "interaction-only"
+        //      mode; because you already cleared Cloudflare on the master socket,
+        //      the same-origin/same-sitekey widget is auto-issued a fresh token
+        //      with no click. We do exactly that first, and only fall back to a
+        //      visible box you solve by hand if Cloudflare demands a challenge -
+        //      then to the master's captured token as a last resort.
         //
-        //   - EXP's WebSocket wrapper sniffs io-init on EVERY socket, so a
-        //     bot's mode / key / opcode tables are filled in the moment the
-        //     handshake lands - no per-bot crypto setup;
-        //   - EXP.send(sock, type, args) maps the opcode through that socket's
-        //     permuted table, appends its own sequence number and signs the
-        //     frame with the 6-byte HMAC header;
-        //   - EXP.receive(sock, raw) translates incoming packets back to names.
+        //   2. SOCKET (_getNativeWS): RYN opens bots on a plain `new WebSocket`
+        //      because it restores window.WebSocket to the native class once the
+        //      master socket is captured. EXP kept that native class privately
+        //      (captured before the game replaced window.WebSocket with its
+        //      connect-shim), so we open on EXP._internals.NativeWebSocket - the
+        //      exact equivalent, no game-shim, no iframe needed.
         //
-        // The game replaces window.WebSocket with its own class after EXP has
-        // installed the wrapper, so bots must be opened through
-        // window.OriginalWebSocket - that is EXP's wrapper, and going through
-        // the game's replacement would drag the bot into the master's connect
-        // path instead.
+        //   3. CRYPTO (_sniff): a native socket is not EXP's wrapper, so nothing
+        //      auto-sniffs its io-init. On io-init we set the per-socket state by
+        //      hand the same way RYN and O.connect do: mode=args[3], key=args[2],
+        //      seed=args[1]. After that EXP.send frames+signs and EXP.receive
+        //      translates on this socket for free.
+        //
+        //   4. ENTER: answer io-init with a ping ("0") and the spawn packet ("M"),
+        //      keep the socket warm with a ping, and mirror C (own sid) / P (death)
+        //      into the bot's own world.
         // =====================================================================
         const NOVABOT_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
+        const NOVABOT_AUTO_MS = 6000;     // wait for an auto (interaction-only) token before asking
         const NOVABOT_TOKEN_MS = 60000;   // time to solve the Turnstile box by hand
         const NOVABOT_READY_MS = 15000;   // how long to wait for io-init
         const NOVABOT_JOIN_GAP = 400;     // pause between two bots joining
@@ -14686,15 +14692,27 @@ for (let tree of trees) {
             _takeSlot() { let i = 0; while (this._slots[i]) i++; this._slots[i] = true; return i; },
             _freeSlot(i) { delete this._slots[i]; },
 
-            // A token for one bot: render a widget of our own first, and fall
-            // back to the one the master connection captured.
+            // A token for one bot. This is a straight port of RYN's proven
+            // createSocket/generateTurnstileToken path, which is what actually
+            // gets a second socket past Cloudflare:
+            //
+            //   1. Render a Turnstile widget in "interaction-only" mode. Because
+            //      you already cleared Cloudflare on the master connection, the
+            //      same-origin, same-sitekey widget is auto-issued a fresh token
+            //      with NO click at all - this is the automatic path, and it is
+            //      how RYN brings bots in silently.
+            //   2. If Cloudflare decides a challenge IS needed (error/timeout on
+            //      the invisible widget), fall back to a VISIBLE box you solve by
+            //      hand - manual only when it is actually demanded, exactly the
+            //      "manual first, automatic after" behaviour you asked for.
+            //   3. If there is no widget at all, reuse the token the master
+            //      connection captured (single-use, last resort).
+            //
+            // Each token comes back already prefixed "cf:".
             async _token() {
                 await this._ensureTurnstile();
                 const ts = window.turnstile || (window.top && window.top.turnstile);
 
-                // The master's captured token is single-use and already spent on
-                // the master's own connection, so it is only a last resort - a
-                // fresh widget token is what a new socket actually needs.
                 const fallback = () => {
                     const captured = EXP.token();   // already "cf:<token>"
                     if (captured) console.log("[NovaBot] falling back to the master's captured token (may be spent)");
@@ -14704,38 +14722,57 @@ for (let tree of trees) {
 
                 if (!ts || typeof ts.render != "function") {
                     console.warn("[NovaBot] window.turnstile is not ready; using the fallback token");
-                    return Promise.resolve(fallback());
+                    return fallback();
                 }
-                console.log("[NovaBot] showing a Turnstile box — solve it to connect the bot…");
 
+                // --- 1) the automatic path: an invisible, interaction-only widget
+                const auto = await this._renderToken({ appearance: "interaction-only" }, NOVABOT_AUTO_MS);
+                if (auto) { console.log("[NovaBot] token issued automatically (interaction-only)"); return auto; }
+
+                // --- 2) a challenge is required: show a box to solve by hand
+                console.log("[NovaBot] Cloudflare wants a challenge — solve the box to connect the bot…");
+                const manual = await this._renderToken({ theme: "light", visible: true }, NOVABOT_TOKEN_MS);
+                if (manual) return manual;
+
+                // --- 3) last resort
+                return fallback();
+            },
+
+            // Render one Turnstile widget and resolve with "cf:<token>" (or null
+            // on error/timeout). `opts.visible` puts it in a labelled box in the
+            // bottom-right corner; otherwise it is a zero-footprint invisible one.
+            _renderToken(opts, timeoutMs) {
+                const ts = window.turnstile || (window.top && window.top.turnstile);
                 return new Promise((resolve) => {
                     const slot = this._takeSlot();
+                    let box = null, holder;
 
-                    // A VISIBLE box, centred near the top, that YOU solve. The
-                    // game renders its own widget the same way (theme light, no
-                    // interaction-only), so the first solve is a click and
-                    // Cloudflare then usually auto-issues the next ones until it
-                    // asks again - exactly the manual-then-automatic flow you
-                    // want. Several stack downward so a batch of bots is solvable.
-                    const box = document.createElement("div");
-                    box.style.cssText =
-                        "position:fixed;right:14px;bottom:" + (14 + slot * 96) + "px;" +
-                        "z-index:2147483647;background:rgba(18,18,28,0.96);padding:12px 14px;border-radius:12px;" +
-                        "box-shadow:0 10px 40px rgba(0,0,0,0.6);text-align:center;" +
-                        "font-family:'Inter',sans-serif;color:#dfe;";
-                    const label = document.createElement("div");
-                    label.textContent = "Solve to connect a bot";
-                    label.style.cssText = "margin-bottom:8px;font-size:12px;font-weight:600;letter-spacing:.3px;";
-                    const holder = document.createElement("div");
-                    box.appendChild(label);
-                    box.appendChild(holder);
-                    (document.body || document.documentElement).appendChild(box);
+                    if (opts.visible) {
+                        box = document.createElement("div");
+                        box.style.cssText =
+                            "position:fixed;right:14px;bottom:" + (14 + slot * 96) + "px;" +
+                            "z-index:2147483647;background:rgba(18,18,28,0.96);padding:12px 14px;border-radius:12px;" +
+                            "box-shadow:0 10px 40px rgba(0,0,0,0.6);text-align:center;" +
+                            "font-family:'Inter',sans-serif;color:#dfe;";
+                        const label = document.createElement("div");
+                        label.textContent = "Solve to connect a bot";
+                        label.style.cssText = "margin-bottom:8px;font-size:12px;font-weight:600;letter-spacing:.3px;";
+                        holder = document.createElement("div");
+                        box.appendChild(label);
+                        box.appendChild(holder);
+                        (document.body || document.documentElement).appendChild(box);
+                    } else {
+                        // invisible: an off-screen holder Cloudflare can attach to
+                        holder = document.createElement("div");
+                        holder.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;";
+                        (document.body || document.documentElement).appendChild(holder);
+                    }
 
                     let done = false, widget = null;
                     const cleanup = () => {
                         this._freeSlot(slot);
                         try { if (widget != null) ts.remove(widget); } catch (e) {}
-                        try { box.remove(); } catch (e) {}
+                        try { if (box) box.remove(); else holder.remove(); } catch (e) {}
                     };
                     const finish = (value) => {
                         if (done) return;
@@ -14744,30 +14781,27 @@ for (let tree of trees) {
                         cleanup();
                         resolve(value);
                     };
-                    // Give a real minute to solve; Cloudflare auto-solves the
-                    // easy ones far quicker.
-                    const timer = setTimeout(() => {
-                        console.warn("[NovaBot] Turnstile not solved in time; falling back");
-                        finish(fallback());
-                    }, NOVABOT_TOKEN_MS);
+                    const timer = setTimeout(() => finish(null), timeoutMs);
 
                     try {
-                        widget = ts.render(holder, {
+                        const conf = {
                             sitekey: NOVABOT_SITEKEY,
-                            theme: "light",
                             callback: (t) => finish("cf:" + t),
-                            "error-callback": () => finish(fallback()),
-                            "expired-callback": () => {}   // let the user re-solve
-                        });
+                            "error-callback": () => finish(null),
+                            "expired-callback": () => finish(null)
+                        };
+                        if (opts.appearance) conf.appearance = opts.appearance;
+                        if (opts.theme) conf.theme = opts.theme;
+                        widget = ts.render(holder, conf);
                     } catch (e) {
                         console.warn("[NovaBot] could not render a widget:", e && e.message);
-                        finish(fallback());
+                        finish(null);
                     }
                 });
             },
 
             // Where the bots connect: the master's own server, with a token of
-            // their own in the query.
+            // their own in the query. Mirrors RYN's createSocket URL step.
             _url(token) {
                 const address = wsAddress || (io && io.socket && io.socket.url);
                 if (!address) return null;
@@ -14775,14 +14809,17 @@ for (let tree of trees) {
                 return u.protocol + "//" + u.host + "/?token=" + encodeURIComponent(token);
             },
 
-            // A guaranteed-native WebSocket constructor. window.WebSocket is the
-            // game's connect-shim (its instances have no addEventListener) and
-            // window.OriginalWebSocket is unreliable inside the userscript
-            // sandbox, so pull a clean one from a hidden iframe and keep it.
-            // THIS is what the original working bots used - the socket the bots
-            // open must be a real native WebSocket, not the game's replacement.
+            // A guaranteed-native WebSocket constructor. RYN opens its bots on a
+            // plain `new WebSocket` because it restores window.WebSocket to the
+            // native class after the master socket is captured. Novastorm's EXP
+            // keeps that native class privately (captured before the game shim
+            // replaced window.WebSocket), so use it directly - that is the exact
+            // equivalent of RYN's restored-native socket, with a hidden-iframe
+            // native as a last-resort fallback.
             _getNativeWS() {
                 if (this._NativeWS) return this._NativeWS;
+                const fromExp = EXP._internals && EXP._internals.NativeWebSocket;
+                if (typeof fromExp === "function") { this._NativeWS = fromExp; return fromExp; }
                 try {
                     const f = document.createElement("iframe");
                     f.style.display = "none";
@@ -14794,10 +14831,11 @@ for (let tree of trees) {
                 return window.OriginalWebSocket || window.WebSocket;
             },
 
-            // A clean native socket is not EXP's wrapper, so EXP never sniffs its
-            // io-init on its own. Replicate that sniff by hand using EXP's exposed
-            // internals, so EXP.send / EXP.receive frame and translate correctly
-            // on this socket afterwards.
+            // A native socket is not EXP's wrapper, so EXP never sniffs its
+            // io-init on its own. Set the per-socket crypto state by hand exactly
+            // the way RYN does on io-init (mode=args[3], key=args[2], seed=args[1])
+            // and the way the game's own O.connect does, so EXP.send / EXP.receive
+            // frame and translate correctly on this socket afterwards.
             _sniff(sock, args) {
                 try {
                     const I = EXP._internals;
@@ -14862,11 +14900,10 @@ for (let tree of trees) {
                     const url = this._url(token);
                     if (!url) return reject(new Error("no server address"));
 
-                    // A clean native WebSocket from a hidden iframe - the game's
-                    // window.WebSocket is a connect-shim with no addEventListener
-                    // and window.OriginalWebSocket is unreliable in the sandbox,
-                    // so this is the one the original working bots used. EXP does
-                    // not auto-sniff it, so io-init is set up by hand below.
+                    // Open on EXP's captured native WebSocket - the same native
+                    // class RYN restores window.WebSocket to before spawning bots.
+                    // EXP does not auto-sniff a native socket, so io-init sets up
+                    // this socket's crypto state by hand (via _sniff) below.
                     const Socket = this._getNativeWS();
                     const ws = new Socket(url);
                     try { ws.binaryType = "arraybuffer"; } catch (e) {}
