@@ -14245,7 +14245,7 @@ for (let tree of trees) {
                 // from the change each "a" packet brings.
                 self: {
                     sid: null,
-                    x: 0, y: 0, x2: 0, y2: 0, xVel: 0, yVel: 0,
+                    x: 0, y: 0, x2: null, y2: null, xVel: 0, yVel: 0,
                     dir: 0, d2: 0,
                     health: 100, maxHealth: 100, scale: 35,
                     team: null, name: "",
@@ -14299,9 +14299,10 @@ for (let tree of trees) {
                             s.x = p.x; s.y = p.y;
                             // the same one-tick-ahead point the master predicts
                             // to (x2*2 - lastX), so features that aim at xVel/yVel
-                            // aim at the same place for a bot.
-                            s.xVel = p.x * 2 - lastX;
-                            s.yVel = p.y * 2 - lastY;
+                            // aim at the same place for a bot. On the first frame
+                            // there is no previous position, so velocity is zero.
+                            s.xVel = lastX == null ? p.x : p.x * 2 - lastX;
+                            s.yVel = lastY == null ? p.y : p.y * 2 - lastY;
                             s.dir = p.dir; s.d2 = p.dir;
                             s.team = p.team;
                             s.buildIndex = p.buildIndex;
