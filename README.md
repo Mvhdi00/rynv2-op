@@ -597,11 +597,34 @@ packets (`a`, `D`, `O`, `N`, `S`). Enemies in a bot's world carry `x2`/`xVel`
 too, so a bot can aim at one exactly the way the master does. Nothing global was
 touched, so this is pure foundation.
 
-Still to come: the context runner that swaps the globals to a bot and runs the
-master's own feature functions, then the combat / heal / place features routed
-through it.
+**Stage 2 (done): the context runner.** `NovaBots.withBot(bot, fn)` points the
+per-player globals at a bot for the length of one call, runs `fn` — which can be
+the master's own feature code — then restores them in a `finally`:
+
+- `myPlayer` becomes the bot's player model;
+- `io.send` routes to the bot's socket, framed by EXP;
+- `nearestEnemy` / `enemiesNear` become what the bot sees;
+- `visibleObjects` becomes the bot's ground, each object wrapped in the master's
+  own object shape (`.active`, `.getScale()`, `.isItem`) so the master's real
+  `checkItemLocation` runs against it;
+- `predictWeapon` becomes the bot's weapon; reload tables read ready (bots don't
+  upgrade, and building features don't read them — real per-bot reload timing is
+  the next stage, for attacks).
+
+It runs synchronously inside the master's tick, right after `tick++` and before
+the master touches those globals itself, so the swap window never overlaps the
+master's own frame. A throw inside still restores everything.
+
+Nothing is routed through it yet — it is proven in isolation (myPlayer becomes
+the bot, io routes to the bot socket, objects wear the master shape, everything
+restores even on a throw), with no working feature touched. Stage 3 will route
+the master's real place / heal / attack code through it, at which point turning a
+feature on turns it on for the bots too — RYN's behaviour, reached the novastorm
+way.
 
 ```sh
-node tools/test-bot-world.js   # adds: self as a full player, predicted
-                               # positions, item counts, enemies with velocity
+node tools/test-bot-world.js   # self as a full player, predicted positions,
+                               # item counts, enemies with velocity
+node tools/test-bots.js        # + the context runner: swap, route, restore,
+                               # restore-on-throw
 ```

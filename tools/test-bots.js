@@ -118,20 +118,28 @@ const gameGlobals = {
 
 const factory = new Function(
     'EXP', 'window', 'document', 'players', 'myPlayer', 'wsAddress', 'io', 'URL', 'console',
-    'UTILS', 'items', 'setAutoMills', 'G',
+    'UTILS', 'items', 'setAutoMills', 'G', 'peek',
     `let autoMills = false;
      setAutoMills.set = (v) => { autoMills = v; };
      let tick, lastMoveAngle, mouseX, mouseY, screenWidth, screenHeight, maxScreenWidth, maxScreenHeight, getAttackDir;
+     // the per-player globals the context runner swaps
+     let visibleObjects = [], predictWeapon = 0, nearestEnemy = null, enemiesNear = [];
+     let primaryReload = [], secondaryReload = [], turretReload = [];
+     let autoaim = false, autoaimAngle = null;
      G.sync = () => { ({ tick, lastMoveAngle, mouseX, mouseY, screenWidth, screenHeight, maxScreenWidth, maxScreenHeight, getAttackDir } = G); };
      G.sync();
+     // lets the test read whatever the globals are at any moment (e.g. inside withBot)
+     peek.read = () => ({ myPlayer, io, visibleObjects, predictWeapon, nearestEnemy, enemiesNear, primaryReload, autoaim });
      ${block}
      return NovaBots;`
 );
 
 const autoMillsCtl = () => {};
-const NovaBots = factory(EXP, win, doc, players, myPlayer, wsAddress, null, URL, { log() {}, warn() {} }, UTILS, items, autoMillsCtl, gameGlobals);
+const peekCtl = () => {};
+const NovaBots = factory(EXP, win, doc, players, myPlayer, wsAddress, null, URL, { log() {}, warn() {} }, UTILS, items, autoMillsCtl, gameGlobals, peekCtl);
 const setAutoMills = (v) => autoMillsCtl.set(v);
 const syncGlobals = () => gameGlobals.sync();
+const peek = () => peekCtl.read();
 
 // --- token choice -----------------------------------------------------------
 console.log('-- token --');
@@ -351,11 +359,52 @@ async function runFlow() {
     check('nothing is held afterwards', NovaBots.status().held, 0);
     win.vars.botHold = false;
 
+    // --- the context runner: "everyone is a master" ------------------------
+    console.log('\n-- context runner --');
+    const realConnect = NovaBots._connect('ctx1');
+    await new Promise(r => setTimeout(r, 5));
+    const cs = sockets[sockets.length - 1];
+    cs.fire('message', { data: { type: 'io-init', args: [1] } });
+    const b = await realConnect;
+    cs.fire('message', { data: { type: 'C', args: [7] } });
+    cs.fire('message', { data: { type: 'a', args: [[
+        7, 200, 200, 0, -1, 5, 2, 'T', 0, 0, 0, 0, 0,
+        8, 260, 200, 0, -1, 0, 0, null, 0, 0, 0, 0, 0
+    ]] } });
+    cs.fire('message', { data: { type: 'H', args: [[90, 220, 200, 0, 50, 0, -1, -1]] } });
+
+    // capture what the globals look like INSIDE the runner
+    const before = peek();
+    let inside = null;
+    let sentInside = null;
+    NovaBots.withBot(b, () => {
+        inside = peek();
+        inside.io.send('9', 1.23);          // a feature would send like this
+        sentInside = sent[sent.length - 1];
+    });
+    const after = peek();
+
+    check('inside, myPlayer IS the bot', inside.myPlayer === b.world.self, true);
+    check('inside, nearestEnemy is what the bot sees', inside.nearestEnemy.sid, 8);
+    check('inside, the object list has the bot ground', inside.visibleObjects.length, 1);
+    check('inside, the objects wear the master shape', typeof inside.visibleObjects[0].getScale, 'function');
+    check('inside, io.send routes to the bot socket', [sentInside[0], sentInside[1]], [cs.url, '9']);
+    check('inside, the bot reads as reloaded', inside.primaryReload[7], 1);
+
+    check('afterward, myPlayer is the master again', after.myPlayer === myPlayer, true);
+    check('afterward, nearestEnemy is restored', after.nearestEnemy, before.nearestEnemy);
+    check('afterward, io is restored', after.io, before.io);
+
+    // even if the feature throws, the globals are put back
+    try { NovaBots.withBot(b, () => { throw new Error('boom'); }); } catch (e) {}
+    const afterThrow = peek();
+    check('a throw inside still restores the master', afterThrow.myPlayer === myPlayer, true);
+
     // cleanup
     console.log('\n-- cleanup --');
     NovaBots.killAll();
     check('kill all closes every socket', NovaBots.list.length, 0);
-    check('the sockets were actually closed', sockets.every(s => s.closed), true);
+    check('the sockets were actually closed', sockets.filter(s => s.url.includes('sfo')).every(s => s.closed), true);
     NovaBots.tick();
     check('ticking with no bots is harmless', NovaBots.list.length, 0);
 }

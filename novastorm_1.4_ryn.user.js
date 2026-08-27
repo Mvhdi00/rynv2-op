@@ -14371,6 +14371,25 @@ for (let tree of trees) {
                     }
                 },
 
+                // The bot's objects wrapped in the shape the master's own
+                // helpers expect (checkItemLocation reads .active, .getScale(),
+                // .isItem, .blocker). This is what lets a master feature run
+                // its real collision check against a bot's ground.
+                objectList() {
+                    const out = [];
+                    for (const o of this.objects.values()) {
+                        out.push({
+                            active: true,
+                            x: o.x, y: o.y, scale: o.scale,
+                            isItem: o.owner >= 0,
+                            blocker: 0,
+                            getScale: () => o.scale,
+                            id: o.id, owner: o.owner, sid: o.sid
+                        });
+                    }
+                    return out;
+                },
+
                 removeObject(sid) { this.objects.delete(sid); },
 
                 removeObjectsOf(ownerSid) {
@@ -14488,6 +14507,84 @@ for (let tree of trees) {
             list: [],
             _slots: {},
             _busy: false,
+
+            // =================================================================
+            // CONTEXT RUNNER  ("everyone is a master", the novastorm way)
+            //
+            // Novastorm's features are written against globals - myPlayer, io,
+            // nearestEnemy, the reload tables. RYN gets bots for free by making
+            // each bot the same class and looping features over all of them; we
+            // get the same end by pointing those globals at a bot for the length
+            // of one call, running the master's own code, then putting them back.
+            //
+            //   withBot(bot, () => someMasterFeature());
+            //
+            // While inside, `myPlayer` IS the bot, `io.send` goes to the bot's
+            // socket (framed by EXP), `nearestEnemy` is what the bot sees, and
+            // the object list is the bot's ground wrapped in the master's own
+            // object shape. Everything is restored in a finally, and the whole
+            // thing runs synchronously inside the master's tick - right after
+            // tick++ and before the master processes its own frame - so the swap
+            // window never overlaps the master's own use of these globals.
+            //
+            // Reloads are stubbed ready for now (bots don't upgrade, and the
+            // building features don't read them); real per-bot reload timing is
+            // a later stage, for the attack features that need it.
+            // =================================================================
+            _botIo(bot) {
+                if (!bot._io) {
+                    bot._io = {
+                        socket: bot.ws,
+                        send: function (type) {
+                            const args = Array.prototype.slice.call(arguments, 1);
+                            return EXP.send(bot.ws, type, args);
+                        }
+                    };
+                }
+                return bot._io;
+            },
+
+            _readyTable(bot) {
+                // an array where the bot's own sid reads as reloaded
+                if (!bot._ready) bot._ready = [];
+                if (bot.sid != null) bot._ready[bot.sid] = 1;
+                return bot._ready;
+            },
+
+            withBot(bot, fn) {
+                const saved = {
+                    myPlayer, io, visibleObjects, predictWeapon,
+                    nearestEnemy, enemiesNear,
+                    primaryReload, secondaryReload, turretReload,
+                    autoaim, autoaimAngle
+                };
+                let result;
+                try {
+                    myPlayer = bot.world.self;
+                    io = this._botIo(bot);
+                    visibleObjects = bot.world.objectList();
+                    predictWeapon = bot.world.self.weaponIndex || 0;
+                    nearestEnemy = bot.world.nearestEnemy();
+                    enemiesNear = bot.world.enemies();
+                    primaryReload = secondaryReload = turretReload = this._readyTable(bot);
+                    autoaim = false;
+                    autoaimAngle = null;
+                    result = fn();
+                } finally {
+                    myPlayer = saved.myPlayer;
+                    io = saved.io;
+                    visibleObjects = saved.visibleObjects;
+                    predictWeapon = saved.predictWeapon;
+                    nearestEnemy = saved.nearestEnemy;
+                    enemiesNear = saved.enemiesNear;
+                    primaryReload = saved.primaryReload;
+                    secondaryReload = saved.secondaryReload;
+                    turretReload = saved.turretReload;
+                    autoaim = saved.autoaim;
+                    autoaimAngle = saved.autoaimAngle;
+                }
+                return result;
+            },
 
             // Stack the captcha widgets up the right edge, so if several do
             // need a click they do not land on top of each other.
