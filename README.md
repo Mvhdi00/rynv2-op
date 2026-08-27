@@ -409,3 +409,28 @@ difference is the removed code, not a shorter run.
 
 Neither leaks anything, but both broadcast that you are modding, which is its own
 kind of risk.
+
+## Bots — removed from novastorm
+
+The ported RYN bot system is gone from `novastorm_1.4_ryn.user.js`, in full:
+
+- the `RynBots` object (spawn / kill / release / per-tick driver, the Turnstile
+  captcha slots, the per-bot socket, framing and ping loop) and its banner;
+- `RynBots.tick()` at the top of `updatePlayers`;
+- the Spawn / Release / Kill All key handlers and their `keySpawnBot`,
+  `keyKillBots`, `keyReleaseBots` defaults;
+- the auto-accept branch in `allianceNotification` that let clan requests from
+  bot-named players through instantly;
+- all twelve `bot*` settings;
+- the whole **Bots** menu page, its sidebar tab and its title.
+
+382 lines. Nothing named `bot` is left in the file, and no identifier the bot
+code owned survives anywhere else. What remains that mentions Turnstile is the
+master connection's own entry handling in the EXP layer, which is what gets *you*
+into the game.
+
+```sh
+node --check novastorm_1.4_ryn.user.js
+node tools/test-hit-on-spike.js
+node tools/test-performance.js
+```

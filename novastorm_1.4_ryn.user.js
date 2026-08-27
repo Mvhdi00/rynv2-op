@@ -9444,18 +9444,6 @@ let pps = 0;
                 sid: sid,
                 name: name
             });
-            // AUTO ACCEPT BOTS: if the requester's name matches our bot prefix,
-            // accept the clan join instantly and drop the notification.
-            if (window.vars.botAutoAccept && myPlayer) {
-                const prefix = String(window.vars.botName || "nova");
-                if (typeof name === "string" && name.indexOf(prefix) === 0) {
-                    io.send("P", sid, 1);
-                    const idx = allianceNotifications.findIndex(n => n.sid === sid);
-                    if (idx >= 0) allianceNotifications.splice(idx, 1);
-                    updateNotifications();
-                    return;
-                }
-            }
             updateNotifications();
         }
         function updateNotifications() {
@@ -10521,15 +10509,6 @@ let pps = 0;
                         const on = !(window.vars.autoPlace && window.vars.prePlace);
                         window.vars.autoPlace = on;
                         window.vars.prePlace = on;
-                    }
-                    else if (keyStr === window.vars.keySpawnBot) {
-                        RynBots.spawn(window.vars.botCount);
-                    }
-                    else if (keyStr === window.vars.keyKillBots) {
-                        RynBots.killAll();
-                    }
-                    else if (keyStr === window.vars.keyReleaseBots) {
-                        RynBots.releaseAll();
                     }
                 }
             }
@@ -14217,316 +14196,8 @@ for (let tree of trees) {
         let promiseResolve;
 
         // UPDATE PLAYER DATA:
-        // =====================================================================
-        // BOTS  (ported from RYN — multibox on Novastorm's own network layer)
-        //
-        // Each bot is its own authenticated WebSocket to the SAME game server,
-        // framed by Novastorm's EXP layer. For every bot a visible Cloudflare
-        // Turnstile popup appears and YOU solve it manually; that token is put
-        // in the connection URL exactly like the master connection, then the
-        // bot spawns with a name and follows / attacks / holds as configured.
-        //
-        //   spawn/kill ....... join & leave the game
-        //   follow ........... walk toward you every tick
-        //   auto attack ...... aim + swing at the nearest enemy
-        //   freeze ........... stand still
-        //   lock position .... hold the spot where lock was turned on
-        //   scatter .......... random movement
-        //
-        // WARNING: this is the hardest, most server-dependent feature and could
-        // NOT be tested here. moomoo's anti-bot (Turnstile) may reject the
-        // connections; if the token/handshake changes server-side, bots will
-        // fail to spawn. Spawning is sequential because one Turnstile widget
-        // must recycle a fresh token per bot.
-        // =====================================================================
-        const RynBots = {
-            list: [],
-            lockPos: null,
-            _spawning: false,
-            _slots: {},
-
-            // Stack captcha widgets up the bottom-right edge so several can show
-            // at once without overlapping.
-            _takeSlot() { let i = 0; while (this._slots[i]) i++; this._slots[i] = true; return i; },
-            _freeSlot(i) { delete this._slots[i]; },
-
-            async spawn(n) {
-                if (this._spawning) return;
-                this._spawning = true;
-                const count = Math.max(1, Math.min(n || 1, 40));
-                try { console.log("[NovaBot] spawning", count, "bot(s) — one by one"); } catch (e) {}
-                // One at a time: fully bring in each bot (its captcha appears,
-                // gets solved, the bot enters) BEFORE starting the next one. So
-                // captchas never pile up or lag — they come one after another —
-                // and the spaced-out connections avoid the server rate-limit.
-                for (let k = 0; k < count; k++) {
-                    if (!this._spawning) break; // killAll can cancel a batch
-                    try { await this._spawnOne(); }
-                    catch (e) {
-                        try { console.warn("[NovaBot] bot", k + 1, "aborted:", e && e.message); } catch (_) {}
-                        if (e && e.message === "cancelled") break;
-                    }
-                    if (k < count - 1) await new Promise(r => setTimeout(r, 800)); // small gap
-                }
-                this._spawning = false;
-            },
-
-            // Make sure Cloudflare Turnstile is loaded.
-            _ensureTurnstile() {
-                return new Promise((resolve) => {
-                    if (window.turnstile && typeof window.turnstile.render === "function") return resolve(true);
-                    if (!document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]')) {
-                        const s = document.createElement("script");
-                        s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-                        s.async = true; s.defer = true;
-                        (document.head || document.documentElement).appendChild(s);
-                    }
-                    let waited = 0;
-                    const iv = setInterval(() => {
-                        if (window.turnstile && typeof window.turnstile.render === "function") { clearInterval(iv); resolve(true); }
-                        else if ((waited += 200) > 12000) { clearInterval(iv); resolve(false); }
-                    }, 200);
-                });
-            },
-            // Auto captcha (like RYN): appearance "interaction-only" means the
-            // widget stays invisible and Cloudflare passes it SILENTLY when it
-            // trusts the browser — the bot then enters with no click. The widget
-            // only shows (bottom-right) if Cloudflare forces a real challenge,
-            // and you can solve that one by hand.
-            async _solveCaptcha(label) {
-                const ok = await this._ensureTurnstile();
-                if (!ok) throw new Error("turnstile API not available");
-                const ts = window.turnstile;
-                const slot = this._takeSlot();
-                return new Promise((resolve, reject) => {
-                    const holder = document.createElement("div");
-                    holder.style.cssText = "position:fixed;right:12px;bottom:" + (12 + slot * 80) + "px;z-index:2147483647;";
-                    (document.body || document.documentElement).appendChild(holder);
-                    let done = false, widgetId = null;
-                    const cleanup = () => { this._freeSlot(slot); try { if (widgetId != null) ts.remove(widgetId); } catch (e) {} try { holder.remove(); } catch (e) {} };
-                    try {
-                        widgetId = ts.render(holder, {
-                            sitekey: "0x4AAAAAAAMYHI96GFiJzMmp",
-                            appearance: "interaction-only", // auto-solve silently, show only if challenged
-                            callback: (token) => { if (done) return; done = true; cleanup(); resolve(token); },
-                            "error-callback": () => { if (done) return; done = true; cleanup(); reject(new Error("captcha error")); },
-                            "expired-callback": () => { if (done) return; done = true; cleanup(); reject(new Error("captcha expired")); }
-                        });
-                    } catch (e) { if (!done) { done = true; cleanup(); reject(e); } }
-                });
-            },
-
-            // A guaranteed-native WebSocket constructor. window.WebSocket is the
-            // game's connect-shim (instances have no addEventListener) and
-            // window.OriginalWebSocket is unreliable inside the userscript
-            // sandbox, so pull a clean one from a hidden iframe and keep it.
-            _getNativeWS() {
-                if (this._NativeWS) return this._NativeWS;
-                try {
-                    const f = document.createElement("iframe");
-                    f.style.display = "none";
-                    (document.body || document.documentElement).appendChild(f);
-                    const WS = f.contentWindow && f.contentWindow.WebSocket;
-                    if (typeof WS === "function") { this._iframe = f; this._NativeWS = WS; return WS; }
-                    f.remove();
-                } catch (e) {}
-                return window.OriginalWebSocket || window.WebSocket;
-            },
-            // Replicate EXP's io-init sniff so EXP.send / EXP.receive work on a
-            // socket EXP did not create itself, using EXP's exposed internals.
-            _sniff(sock, args) {
-                try {
-                    const I = EXP._internals;
-                    if (args && args[3] === I.MODE_SECURE) {
-                        I.states.set(sock, { mode: I.MODE_SECURE, key: I.hexToBytes(args[2]), tables: I.buildTables(args[1] >>> 0), seq: 0 });
-                    } else {
-                        I.states.set(sock, { mode: 0, seq: 0 });
-                    }
-                    return true;
-                } catch (e) { return false; }
-            },
-
-            async _spawnOne() {
-                if (typeof EXP === "undefined" || !EXP.send || !EXP._internals) throw new Error("EXP layer unavailable");
-                let base = wsAddress || window.location.origin;
-                base = String(base).replace(/^http:/, "ws:").replace(/^https:/, "wss:");
-                let origin;
-                try { origin = new URL(base).origin; } catch (e) { origin = base; }
-                try { console.log("[NovaBot] wsAddress =", wsAddress, "| origin =", origin); } catch (e) {}
-                const raw = await this._solveCaptcha("bot #" + (this.list.length + 1));
-                const url = origin + "/?token=" + encodeURIComponent("cf:" + raw);
-                try { console.log("[NovaBot] connecting:", url.replace(/token=[^&]*/, "token=cf:***")); } catch (e) {}
-
-                const WSCtor = this._getNativeWS();
-                const ws = new WSCtor(url);
-                try { ws.binaryType = "arraybuffer"; } catch (e) {}
-                if (typeof ws.addEventListener !== "function") { try { console.warn("[NovaBot] no usable native WebSocket"); } catch (e) {} throw new Error("no native WebSocket"); }
-                const bot = { ws: ws, sid: null, x: 0, y: 0, ready: false, _sc: 0, name: (window.vars.botName || "nova") + (this.list.length + 1) };
-                this.list.push(bot);
-
-                ws.addEventListener("open", () => { try { console.log("[NovaBot] socket open, waiting for io-init…"); } catch (e) {} });
-
-                ws.addEventListener("message", (ev) => {
-                    let msg = null;
-                    try { msg = EXP.receive(ws, ev.data); } catch (e) { return; }
-                    if (!msg) return;
-                    // io-init arrives unframed: set up framing, then ping + spawn.
-                    // The wire format is [opcode, ARGS_ARRAY, seq] — EXP.send's
-                    // third argument IS that args array, so every payload must be
-                    // wrapped in [ ] (this was the bug that got us closed with 1000).
-                    // RYN also sends a ping "0" before the spawn "M".
-                    if (!bot.ready && msg.type === "io-init") {
-                        this._sniff(ws, msg.args);
-                        try { EXP.send(ws, "0", []); } catch (e) {} // ping first, like RYN
-                        bot.ready = true; // connected + framed (not necessarily spawned)
-                        // Keepalive starts NOW so the socket survives while it waits
-                        // at the menu in Hold mode. moomoo drops a socket that stops
-                        // pinging; the master pings every 2500ms and each bot matches.
-                        if (!bot._pingIv) {
-                            bot._pingIv = setInterval(() => {
-                                try { if (bot.ws.readyState === 1) EXP.send(bot.ws, "0", []); } catch (e) {}
-                            }, 2500);
-                        }
-                        // Hold mode: connect + keep alive, but do NOT enter yet.
-                        // Press the Release key to spawn every waiting bot at once.
-                        if (window.vars.botHold) {
-                            bot.pendingSpawn = true;
-                            try { console.log("[NovaBot]", bot.name, "connected — HOLDING (press Release to enter)"); } catch (e) {}
-                        } else {
-                            RynBots._spawnBot(bot);
-                        }
-                        return;
-                    }
-                    const a = msg.args;
-                    if (bot._dbg === undefined) bot._dbg = 0;
-                    if (bot._dbg < 6) { bot._dbg++; try { console.log("[NovaBot] pkt", msg.type, JSON.stringify(a).slice(0, 80)); } catch (e) {} }
-                    if (bot.sid === null) {
-                        // setup packet carries the player's own sid (a small int).
-                        if (typeof a === "number" && a >= 0 && a < 2000) bot.sid = a;
-                        else if (Array.isArray(a) && a.length === 1 && Number.isInteger(a[0]) && a[0] >= 0 && a[0] < 2000) bot.sid = a[0];
-                        if (bot.sid !== null) { try { console.log("[NovaBot] spawned, sid =", bot.sid); } catch (e) {} }
-                    }
-                    // Player-update packet: flat [sid,x,y,dir,...] stride 13.
-                    if (bot.sid !== null && Array.isArray(a) && a.length >= 13) {
-                        for (let i = 0; i + 12 < a.length; i += 13) {
-                            if (a[i] === bot.sid) { bot.x = a[i + 1]; bot.y = a[i + 2]; bot.team = a[i + 7]; break; }
-                        }
-                    }
-                });
-                ws.addEventListener("close", (e) => { try { console.warn("[NovaBot] socket closed", e && e.code, e && e.reason); } catch (_) {} this._remove(bot); });
-                ws.addEventListener("error", () => { try { console.warn("[NovaBot] socket error"); } catch (e) {} });
-
-                // Resolve only once this bot is spawned (or gave up), so the
-                // caller can bring bots in ONE BY ONE — the next captcha only
-                // appears after this one has entered.
-                await new Promise((res) => {
-                    const t0 = Date.now();
-                    const chk = setInterval(() => {
-                        if (bot.ready || bot.ws.readyState > 1 || Date.now() - t0 > 12000) { clearInterval(chk); res(); }
-                    }, 100);
-                });
-            },
-
-            killAll() {
-                this._spawning = false; // cancel any in-progress staggered batch
-                for (const b of this.list) {
-                    if (b._pingIv) { try { clearInterval(b._pingIv); } catch (e) {} b._pingIv = null; }
-                    try { b.ws.close(); } catch (e) {}
-                }
-                this.list = [];
-                this.lockPos = null;
-            },
-            _remove(bot) {
-                if (bot && bot._pingIv) { try { clearInterval(bot._pingIv); } catch (e) {} bot._pingIv = null; }
-                const i = this.list.indexOf(bot);
-                if (i >= 0) this.list.splice(i, 1);
-            },
-            // Send the spawn packet — the moment a bot actually ENTERS the game.
-            _spawnBot(bot) {
-                try { EXP.send(bot.ws, "M", [{ name: String(bot.name).slice(0, 15), moofoll: 1, skin: 0 }]); } catch (e) {}
-                bot.pendingSpawn = false;
-                try { console.log("[NovaBot] spawn sent as", bot.name); } catch (e) {}
-            },
-            // Release every waiting bot at once → they all enter together.
-            releaseAll() {
-                let n = 0;
-                for (const bot of this.list) {
-                    if (bot.ready && bot.pendingSpawn && bot.ws.readyState === 1) { this._spawnBot(bot); n++; }
-                }
-                try { console.log("[NovaBot] released", n, "waiting bot(s)"); } catch (e) {}
-            },
-
-            // Runs once per server tick from updatePlayers.
-            tick() {
-                if (!this.list.length || !myPlayer) return;
-                if (window.vars.botLock) { if (!this.lockPos) this.lockPos = { x: myPlayer.x2, y: myPlayer.y2 }; }
-                else this.lockPos = null;
-                for (const bot of this.list) {
-                    if (!bot.ready || bot.ws.readyState !== 1 || bot.pendingSpawn) continue;
-                    // When the bot is visible near you, the master's own player
-                    // list is the authoritative source: read its position and lock
-                    // in the real sid (more reliable than the bot's own stream).
-                    // When it's far/off-screen we fall back to the bot's own feed.
-                    const mp = players.find(p => p && p.name === bot.name && p.sid !== myPlayer.sid);
-                    if (mp) { bot.x = mp.x2; bot.y = mp.y2; bot.sid = mp.sid; if (mp.team !== undefined) bot.team = mp.team; bot._wasVisible = true; bot._goneTicks = 0; }
-                    else if (bot._wasVisible && window.vars.botAutospawn && bot.ws.readyState === 1) {
-                        // AUTOSPAWN (like RYN): the bot was in the game right next to
-                        // you and vanished — it died. Re-send the spawn packet fast so
-                        // it comes straight back, and keep retrying while it's gone.
-                        bot._goneTicks = (bot._goneTicks || 0) + 1;
-                        if (bot._goneTicks === 5 || (bot._goneTicks > 5 && (bot._goneTicks % 9) === 0)) {
-                            RynBots._spawnBot(bot);
-                            try { console.log("[NovaBot] autospawn", bot.name); } catch (e) {}
-                        }
-                    }
-                    if (bot.sid === null) continue; // no known position yet
-                    try {
-                        // AUTO JOIN (like RYN): while master is in a clan and this
-                        // bot isn't, send a join request (master auto-accepts it).
-                        // Global 1.5s stagger — only ONE bot joins per 1.5s window,
-                        // so a full lobby files in one-by-one exactly like RYN
-                        // instead of every bot slamming the clan at once.
-                        if (window.vars.botAutoAccept && myPlayer.team != null && myPlayer.team !== "" && bot.team !== myPlayer.team) {
-                            if (Date.now() - (RynBots._lastClanJoin || 0) >= 1500) {
-                                EXP.send(bot.ws, "b", [myPlayer.team]);
-                                RynBots._lastClanJoin = Date.now();
-                            }
-                        }
-                        // Every payload is wrapped in an array: [opcode, [args], seq].
-                        if (window.vars.botAutoAttack && nearestEnemy) {
-                            const aim = Math.atan2(nearestEnemy.y2 - bot.y, nearestEnemy.x2 - bot.x);
-                            EXP.send(bot.ws, "D", [aim]);      // face the enemy
-                            EXP.send(bot.ws, "F", [1, aim]);   // swing primary
-                        }
-                        if (window.vars.botFreeze) { EXP.send(bot.ws, "9", [null]); continue; }
-                        let tx = null, ty = null;
-                        if (window.vars.botLock && this.lockPos) { tx = this.lockPos.x; ty = this.lockPos.y; }
-                        else if (window.vars.botScatter) {
-                            if ((tick % 12) === 0) bot._sc = Math.random() * Math.PI * 2;
-                            EXP.send(bot.ws, "9", [bot._sc]); continue;
-                        }
-                        else if (window.vars.botFollow) {
-                            // Spread the bots evenly on a ring of "Circle Radius"
-                            // around you, each at its own slot angle.
-                            const R = window.vars.botCircleRadius || 150;
-                            const slot = this.list.indexOf(bot);
-                            const a0 = (slot / Math.max(1, this.list.length)) * Math.PI * 2;
-                            tx = myPlayer.x2 + R * Math.cos(a0);
-                            ty = myPlayer.y2 + R * Math.sin(a0);
-                        }
-                        else { EXP.send(bot.ws, "9", [null]); continue; }
-                        const d = Math.hypot(tx - bot.x, ty - bot.y);
-                        const stopR = window.vars.botStopRadius || 50;
-                        // Walk to the target, then stop once inside Stop Radius.
-                        EXP.send(bot.ws, "9", [d > stopR ? Math.atan2(ty - bot.y, tx - bot.x) : null]);
-                    } catch (e) {}
-                }
-            }
-        };
-
         function updatePlayers(data) {
             tick++;
-            try { RynBots.tick(); } catch (e) {}
 
 
 
@@ -21147,9 +20818,6 @@ for (let tree of trees) {
         keyPlaceTurret: "T",
         keyVelocityTick: "H",
         keyPlacers: "J",
-        keySpawnBot: "P",
-        keyKillBots: "O",
-        keyReleaseBots: "U",
 
 
         // Combat
@@ -21180,21 +20848,6 @@ for (let tree of trees) {
         fpsLimit: 240,
         lightRender: true,
         pingStabilizer: true,
-
-        // Bots
-        botName: "nova",
-        botCount: 5,
-        botFollow: true,
-        botStopRadius: 50,
-        botCircleRadius: 150,
-        botHold: false,
-        botAutospawn: true,
-        botAutoAttack: false,
-        botAutoAccept: true,
-        botFreeze: false,
-        botLock: false,
-        botScatter: false,
-
         // Utilities
         autoBuy: true,
 
@@ -21376,39 +21029,6 @@ for (let tree of trees) {
                 items: [
                     { type: 'toggle', name: "Cycle Usernames", id: "usernameCycler" },
                     { type: 'input', name: "Usernames (comma sep)", id: "usernameList" }
-                ]
-            }
-        ],
-
-        bots: [
-            {
-                title: "Bot Setup",
-                items: [
-                    { type: 'input', name: "Bot Name", id: "botName" },
-                    { type: 'slider', name: "Bot Count", id: "botCount", min: 1, max: 40 }
-                ]
-            },
-            {
-                title: "Join / Leave",
-                items: [
-                    { type: 'keybind', name: "Spawn Bots", id: "keySpawnBot" },
-                    { type: 'keybind', name: "Release (enter all)", id: "keyReleaseBots" },
-                    { type: 'keybind', name: "Kill All Bots", id: "keyKillBots" }
-                ]
-            },
-            {
-                title: "Behavior",
-                items: [
-                    { type: 'toggle', name: "Follow Master", id: "botFollow" },
-                    { type: 'slider', name: "Stop Movement Radius", id: "botStopRadius", min: 25, max: 500 },
-                    { type: 'slider', name: "Circle Radius", id: "botCircleRadius", min: 50, max: 1000 },
-                    { type: 'toggle', name: "Hold (wait to enter)", id: "botHold" },
-                    { type: 'toggle', name: "Autospawn (respawn on death)", id: "botAutospawn" },
-                    { type: 'toggle', name: "Auto Attack", id: "botAutoAttack" },
-                    { type: 'toggle', name: "Auto Accept (clan)", id: "botAutoAccept" },
-                    { type: 'toggle', name: "Freeze Bots", id: "botFreeze" },
-                    { type: 'toggle', name: "Lock Position", id: "botLock" },
-                    { type: 'toggle', name: "Scatter (random move)", id: "botScatter" }
                 ]
             }
         ],
@@ -21763,7 +21383,6 @@ for (let tree of trees) {
                     <div class="nav-item" data-tab="placers"><svg viewBox="0 0 24 24"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>Placers</div>
                     <div class="nav-item" data-tab="utilities"><svg viewBox="0 0 24 24"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9c-2-2-5-2.4-7.4-1.3L9 6L6 9L1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>Utilities</div>
                     <div class="nav-item" data-tab="misc"><svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Misc</div>
-                    <div class="nav-item" data-tab="bots"><svg viewBox="0 0 24 24"><path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z"/></svg>Bots</div>
                     <div class="nav-item" data-tab="visuals"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>Visuals</div>
                     <div class="nav-item" data-tab="performance"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8l10-12h-7l1-8z"/></svg>Performance</div>
                     <div class="nav-item" data-tab="menu"><svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>Menu Settings</div>
@@ -21807,7 +21426,6 @@ for (let tree of trees) {
                 placers: 'Placers Settings',
                 utilities: 'Utilities Settings',
                 misc: 'Miscellaneous',
-                bots: 'Bots',
                 visuals: 'Visuals Settings',
                 performance: 'Performance Settings',
                 menu: 'Menu Settings'
