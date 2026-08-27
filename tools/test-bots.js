@@ -78,7 +78,7 @@ const turnstile = {
 const elements = [];
 const doc = {
     createElement: () => {
-        const el = { style: {}, remove() {} };
+        const el = { style: {}, remove() {}, appendChild() {}, textContent: '' };
         elements.push(el);
         return el;
     },
@@ -194,7 +194,8 @@ console.log('-- token --');
 tokenState.widgetToken = 'freshOne';
 NovaBots._token().then(t => {
     check('a widget token is used when one comes back', t, 'cf:freshOne');
-    check('the widget is rendered without asking for a click', tokenState.widget.appearance, 'interaction-only');
+    check('the widget is shown for the user to solve (light theme, not hidden)',
+          [tokenState.widget.theme, tokenState.widget.appearance], ['light', undefined]);
     check('the widget uses the game sitekey', tokenState.widget.sitekey, '0x4AAAAAAAMYHI96GFiJzMmp');
     return runFallback();
 }).then(runFlow).then(() => {

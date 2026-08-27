@@ -14593,7 +14593,7 @@ for (let tree of trees) {
         // path instead.
         // =====================================================================
         const NOVABOT_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
-        const NOVABOT_TOKEN_MS = 20000;   // how long to wait on a widget
+        const NOVABOT_TOKEN_MS = 60000;   // time to solve the Turnstile box by hand
         const NOVABOT_READY_MS = 15000;   // how long to wait for io-init
         const NOVABOT_JOIN_GAP = 400;     // pause between two bots joining
         const NOVABOT_PING_MS = 2500;     // keepalive, matching the game's own
@@ -14705,19 +14705,36 @@ for (let tree of trees) {
                     console.warn("[NovaBot] window.turnstile is not ready; using the fallback token");
                     return Promise.resolve(fallback());
                 }
-                console.log("[NovaBot] rendering a fresh Turnstile widget for a bot…");
+                console.log("[NovaBot] showing a Turnstile box — solve it to connect the bot…");
 
                 return new Promise((resolve) => {
                     const slot = this._takeSlot();
+
+                    // A VISIBLE box, centred near the top, that YOU solve. The
+                    // game renders its own widget the same way (theme light, no
+                    // interaction-only), so the first solve is a click and
+                    // Cloudflare then usually auto-issues the next ones until it
+                    // asks again - exactly the manual-then-automatic flow you
+                    // want. Several stack downward so a batch of bots is solvable.
+                    const box = document.createElement("div");
+                    box.style.cssText =
+                        "position:fixed;left:50%;top:" + (14 + slot * 96) + "px;transform:translateX(-50%);" +
+                        "z-index:2147483647;background:rgba(18,18,28,0.96);padding:12px 14px;border-radius:12px;" +
+                        "box-shadow:0 10px 40px rgba(0,0,0,0.6);text-align:center;" +
+                        "font-family:'Inter',sans-serif;color:#dfe;";
+                    const label = document.createElement("div");
+                    label.textContent = "Solve to connect a bot";
+                    label.style.cssText = "margin-bottom:8px;font-size:12px;font-weight:600;letter-spacing:.3px;";
                     const holder = document.createElement("div");
-                    holder.style.cssText = "position:fixed;right:0;bottom:" + (slot * 70) + "px;width:300px;height:65px;z-index:2147483647;";
-                    (document.body || document.documentElement).appendChild(holder);
+                    box.appendChild(label);
+                    box.appendChild(holder);
+                    (document.body || document.documentElement).appendChild(box);
 
                     let done = false, widget = null;
                     const cleanup = () => {
                         this._freeSlot(slot);
                         try { if (widget != null) ts.remove(widget); } catch (e) {}
-                        try { holder.remove(); } catch (e) {}
+                        try { box.remove(); } catch (e) {}
                     };
                     const finish = (value) => {
                         if (done) return;
@@ -14726,15 +14743,20 @@ for (let tree of trees) {
                         cleanup();
                         resolve(value);
                     };
-                    const timer = setTimeout(() => finish(fallback()), NOVABOT_TOKEN_MS);
+                    // Give a real minute to solve; Cloudflare auto-solves the
+                    // easy ones far quicker.
+                    const timer = setTimeout(() => {
+                        console.warn("[NovaBot] Turnstile not solved in time; falling back");
+                        finish(fallback());
+                    }, NOVABOT_TOKEN_MS);
 
                     try {
                         widget = ts.render(holder, {
                             sitekey: NOVABOT_SITEKEY,
-                            appearance: "interaction-only",
+                            theme: "light",
                             callback: (t) => finish("cf:" + t),
                             "error-callback": () => finish(fallback()),
-                            "expired-callback": () => finish(fallback())
+                            "expired-callback": () => {}   // let the user re-solve
                         });
                     } catch (e) {
                         console.warn("[NovaBot] could not render a widget:", e && e.message);
