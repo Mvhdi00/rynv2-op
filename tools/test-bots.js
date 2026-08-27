@@ -90,7 +90,7 @@ const win = {
         botFreeze: false, botLock: false, botScatter: false,
         botAutoHeal: true, botAttackPrimary: false, botAttackSecondary: false,
         botAutoAccept: true, botAutoBreak: false,
-        botScan: false, botScanTarget: ''
+        botScan: false, botScanTarget: '', botSafeWalk: false
     },
     turnstile,
     OriginalWebSocket: FakeSocket,
@@ -104,7 +104,26 @@ let wsAddress = 'wss://sfo-1.moomoo.io:8008/?token=cf:masterToken';
 // the game globals the behaviour layer reaches for
 const UTILS = {
     getDistance: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1),
-    toRad: (d) => d * Math.PI / 180
+    toRad: (d) => d * Math.PI / 180,
+    // novastorm's own lineInRect (axis-aligned segment/box overlap)
+    lineInRect: (recX, recY, recX2, recY2, x1, y1, x2, y2) => {
+        let minX = x1, maxX = x2;
+        if (x1 > x2) { minX = x2; maxX = x1; }
+        if (maxX > recX2) maxX = recX2;
+        if (minX < recX) minX = recX;
+        if (minX > maxX) return false;
+        let minY = y1, maxY = y2;
+        const dx = x2 - x1;
+        if (Math.abs(dx) > 0.0000001) {
+            const a = (y2 - y1) / dx, b = y1 - a * x1;
+            minY = a * minX + b; maxY = a * maxX + b;
+        }
+        if (minY > maxY) { const t = maxY; maxY = minY; minY = t; }
+        if (maxY > recY2) maxY = recY2;
+        if (minY < recY) minY = recY;
+        if (minY > maxY) return false;
+        return true;
+    }
 };
 const items = { list: [] };
 items.list[0] = { name: 'apple', heal: 20 };                        // the food slot
@@ -580,6 +599,34 @@ async function runFlow() {
     check('a non-finder heads home to the master', typeof (homeMove && homeMove[2][0]) !== 'undefined', true);
     NovaBots.list = NovaBots.list.filter(x => x !== b2);
     win.vars.botScan = false; win.vars.botScanTarget = '';
+
+    // --- safe walk ---------------------------------------------------------
+    console.log('\n-- safe walk --');
+    win.vars.botSafeWalk = true;
+    b.world.objects.clear();
+    b.world.self.x2 = 0; b.world.self.y2 = 0; b.world.self.scale = 35;
+    // an enemy spike (id 6) straight ahead on the +x path
+    b.world.objects.set(1, { sid: 1, x: 120, y: 0, scale: 35, id: 6, owner: 8 });
+
+    const bent = NovaBots._safeHeading(b, 0);
+    check('a spike dead ahead bends the heading', bent !== 0, true);
+    // the bent path must itself be clear of the spike
+    const fx = b.world.self.x2 + Math.cos(bent) * 200, fy = b.world.self.y2 + Math.sin(bent) * 200;
+    const clearOfSpike = !UTILS.lineInRect(120 - 70, -70, 120 + 70, 70,
+        Math.cos(bent) * 35, Math.sin(bent) * 35, fx, fy);
+    check('the chosen heading clears the spike', clearOfSpike, true);
+
+    // a clear path is left exactly as asked
+    b.world.objects.clear();
+    check('a clear path is unchanged', NovaBots._safeHeading(b, 1.0), 1.0);
+
+    // resources are not hazards
+    b.world.objects.set(2, { sid: 2, x: 120, y: 0, scale: 50, id: 0, owner: -1 });
+    check('a tree in the way is not avoided', NovaBots._safeHeading(b, 0), 0);
+
+    win.vars.botSafeWalk = false;
+    b.world.objects.set(3, { sid: 3, x: 120, y: 0, scale: 35, id: 6, owner: 8 });
+    check('the toggle off walks straight through', NovaBots._safeHeading(b, 0), 0);
 
     // cleanup
     console.log('\n-- cleanup --');

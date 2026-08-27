@@ -15224,10 +15224,47 @@ for (let tree of trees) {
             },
 
             _sendMove(bot, angle) {
+                // SAFE WALK: bend the heading around enemy spikes and traps the
+                // bot can see, the same idea as the master's own safewalk but on
+                // the bot's world. If the straight line ahead crosses a hazard,
+                // the nearest clear angle is taken instead.
+                angle = this._safeHeading(bot, angle);
+
                 bot._wantMove = angle;   // what auto-break reads to know it's trying to move
                 if (bot._lastMoveAngle === angle) return;   // don't spam the same heading
                 bot._lastMoveAngle = angle;
                 EXP.send(bot.ws, "9", [angle]);
+            },
+
+            _SAFE_HAZARDS: new Set([6, 7, 8, 9, 15]),   // enemy spikes and traps
+
+            _safeHeading(bot, angle) {
+                if (angle == null || !window.vars.botSafeWalk) return angle;
+
+                const s = bot.world.self;
+                const hazards = [];
+                for (const o of bot.world.objects.values()) {
+                    if (this._SAFE_HAZARDS.has(o.id)) hazards.push(o);
+                }
+                if (!hazards.length) return angle;
+
+                const clear = (a) => {
+                    const fx = s.x2 + Math.cos(a) * 200, fy = s.y2 + Math.sin(a) * 200;
+                    const sx = s.x2 + Math.cos(a) * 35, sy = s.y2 + Math.sin(a) * 35;
+                    for (const o of hazards) {
+                        const pad = o.scale + s.scale;
+                        if (UTILS.lineInRect(o.x - pad, o.y - pad, o.x + pad, o.y + pad, sx, sy, fx, fy)) return false;
+                    }
+                    return true;
+                };
+
+                if (clear(angle)) return angle;
+                // sweep outward for the closest heading that is not blocked
+                for (let d = 0.25; d <= Math.PI; d += 0.25) {
+                    if (clear(angle + d)) return angle + d;
+                    if (clear(angle - d)) return angle - d;
+                }
+                return angle;   // boxed in - go straight and let auto-break handle it
             },
 
             _move(bot) {
@@ -22017,6 +22054,7 @@ for (let tree of trees) {
         // Bot scan
         botScan: false,
         botScanTarget: "",
+        botSafeWalk: true,
 
         // Bot movement
         botFollow: true,
@@ -22292,6 +22330,12 @@ for (let tree of trees) {
                 items: [
                     { type: 'input', name: "Target (id / sid / name)", id: "botScanTarget" },
                     { type: 'toggle', name: "Scan the map for target", id: "botScan" }
+                ]
+            },
+            {
+                title: "Pathing",
+                items: [
+                    { type: 'toggle', name: "Safe Walk (avoid spikes/traps)", id: "botSafeWalk" }
                 ]
             }
         ],
