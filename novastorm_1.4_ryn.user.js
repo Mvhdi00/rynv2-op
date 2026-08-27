@@ -10213,6 +10213,12 @@ let pps = 0;
 
         // Scroll zoom
         window.addEventListener('wheel', (e) => {
+            // Let the wheel scroll UI panels (the mod menu, the store, chat)
+            // instead of zooming the game when the cursor is over them.
+            const overUI = e.target && typeof e.target.closest === "function" &&
+                e.target.closest('.deltek-root, #storeMenu, #allianceMenu, #chatBox, #chatHolder, .menu-page, #ot-sdk-btn-floating');
+            if (overUI) return;   // don't preventDefault -> normal scrolling works
+
             e.preventDefault();
 
             const zoomSpeed = 0.1;
@@ -22530,7 +22536,9 @@ for (let tree of trees) {
     /* GRID LAYOUT FOR CARDS (Replaces Float System) */
     .deltek-content {
         padding: 24px;
-        overflow-y: overlay;
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         grid-auto-rows: min-content;
