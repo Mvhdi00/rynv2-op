@@ -615,16 +615,32 @@ It runs synchronously inside the master's tick, right after `tick++` and before
 the master touches those globals itself, so the swap window never overlaps the
 master's own frame. A throw inside still restores everything.
 
-Nothing is routed through it yet — it is proven in isolation (myPlayer becomes
-the bot, io routes to the bot socket, objects wear the master shape, everything
-restores even on a throw), with no working feature touched. Stage 3 will route
-the master's real place / heal / attack code through it, at which point turning a
-feature on turns it on for the bots too — RYN's behaviour, reached the novastorm
-way.
+**Stage 3 (in progress): routing the master's real code.** The first feature is
+Auto Heal, and it adds no game logic at all:
+
+```js
+_autoHeal(bot) {
+    if (!window.vars.botAutoHeal || !bot.inGame) return;
+    const s = bot.world.self;
+    if (s.health >= s.maxHealth || s.health <= 0) return;
+    this.withBot(bot, () => { heal(s.maxHealth - s.health); });   // the master's own heal()
+}
+```
+
+`heal()` is the master's function — it spends food up to full health by calling
+`place()`, which sends on `io`. Run inside `withBot`, every one of those sends
+lands on the bot's socket, spends the bot's food, and reads the bot's health. The
+master heals itself the same way later in the tick with the globals restored, so
+both heal, each on its own body — from one code path. **Bots → Survival → Auto
+Heal** (on by default).
+
+This is the shape the rest follow: point the runner at a bot, call the master's
+existing function, done. Still to route this way: the placer, the attack / insta
+pipeline (needs per-bot reload timing first), auto-buy.
 
 ```sh
 node tools/test-bot-world.js   # self as a full player, predicted positions,
                                # item counts, enemies with velocity
-node tools/test-bots.js        # + the context runner: swap, route, restore,
-                               # restore-on-throw
+node tools/test-bots.js        # + the context runner and the routed heal:
+                               # food spent on the bot socket, globals restored
 ```

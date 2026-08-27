@@ -87,7 +87,8 @@ const win = {
         botName: 'nova', botCount: 3, botHold: false, botAutospawn: true,
         botFollow: true, botFollowCursor: false, botFormation: 'none',
         botRadius: 150, botStopRadius: 50, botCircleRotate: false,
-        botFreeze: false, botLock: false, botScatter: false
+        botFreeze: false, botLock: false, botScatter: false,
+        botAutoHeal: true
     },
     turnstile,
     OriginalWebSocket: FakeSocket,
@@ -104,6 +105,7 @@ const UTILS = {
     toRad: (d) => d * Math.PI / 180
 };
 const items = { list: [] };
+items.list[0] = { name: 'apple', heal: 20 };                        // the food slot
 items.list[10] = { name: 'windmill', scale: 45, placeOffset: 5 };   // the mill slot
 
 // movement-layer globals the master publishes
@@ -130,6 +132,23 @@ const factory = new Function(
      G.sync();
      // lets the test read whatever the globals are at any moment (e.g. inside withBot)
      peek.read = () => ({ myPlayer, io, visibleObjects, predictWeapon, nearestEnemy, enemiesNear, primaryReload, autoaim });
+
+     // the master's real place / heal path, verbatim from novastorm, so
+     // _autoHeal exercises the actual reuse (io + myPlayer + predictWeapon)
+     function selectToBuild(index) { io.send("z", index, false); }
+     function selectWeapon(index) { io.send("z", index, true); }
+     function sendAtck(id, angle) { io.send("F", id, angle); }
+     function place(id, angle) {
+       selectToBuild(id);
+       sendAtck(1, angle);
+       sendAtck(0, angle);
+       selectWeapon(predictWeapon);
+     }
+     function heal(value) {
+       for (let i = 0; i < value; i += items.list[myPlayer.items[0]].heal) {
+         place(myPlayer.items[0], null);
+       }
+     }
      ${block}
      return NovaBots;`
 );
@@ -399,6 +418,30 @@ async function runFlow() {
     try { NovaBots.withBot(b, () => { throw new Error('boom'); }); } catch (e) {}
     const afterThrow = peek();
     check('a throw inside still restores the master', afterThrow.myPlayer === myPlayer, true);
+
+    // --- auto heal: the master's real heal() routed onto a bot --------------
+    console.log('\n-- auto heal (routed) --');
+    b.world.self.health = 60;           // hurt, missing 40; apple heals 20 -> two places
+    b.world.self.maxHealth = 100;
+    sent.length = 0;
+    NovaBots._autoHeal(b);
+    const foods = sent.filter(s => s[0] === cs.url && s[1] === 'z' && s[2][0] === 0 && s[2][1] === false);
+    check('auto heal spends food on the bot socket', foods.length, 2);
+    check('the heal packets are framed for the bot, not the master',
+          sent.every(s => s[0] === cs.url), true);
+    check('afterward the master globals are back', peek().myPlayer === myPlayer, true);
+
+    b.world.self.health = 100;
+    sent.length = 0;
+    NovaBots._autoHeal(b);
+    check('a full-health bot does not heal', sent.length, 0);
+
+    win.vars.botAutoHeal = false;
+    b.world.self.health = 50;
+    sent.length = 0;
+    NovaBots._autoHeal(b);
+    check('the toggle off stops healing', sent.length, 0);
+    win.vars.botAutoHeal = true;
 
     // cleanup
     console.log('\n-- cleanup --');

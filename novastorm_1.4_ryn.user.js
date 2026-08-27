@@ -14886,9 +14886,29 @@ for (let tree of trees) {
                     // own socket. Each is gated by the SAME toggle the master
                     // uses, so turning a feature on turns it on for the bots too.
                     this._move(bot);
+                    this._autoHeal(bot);
                     this._autoMills(bot);
                 }
                 this._spinFormation();
+            },
+
+            // =================================================================
+            // AUTO HEAL (per bot) — the first feature routed through the runner
+            //
+            // No new logic: the master's own heal() spends food up to full
+            // health, calling place() which sends on `io`. Run it inside
+            // withBot and every one of those sends lands on THIS bot's socket,
+            // spending THIS bot's food, read from THIS bot's health. The master
+            // heals itself the same way, later in the tick, with the globals put
+            // back - so both heal, each on its own body.
+            // =================================================================
+            _autoHeal(bot) {
+                if (!window.vars.botAutoHeal) return;
+                if (!bot.inGame) return;
+                const s = bot.world.self;
+                if (s.health >= s.maxHealth || s.health <= 0) return;
+
+                this.withBot(bot, () => { heal(s.maxHealth - s.health); });
             },
 
 
@@ -21785,6 +21805,9 @@ for (let tree of trees) {
         botHold: false,
         botAutospawn: true,
 
+        // Bot combat / survival
+        botAutoHeal: true,
+
         // Bot movement
         botFollow: true,
         botFollowCursor: false,
@@ -22035,6 +22058,12 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Freeze", id: "botFreeze" },
                     { type: 'toggle', name: "Lock Position", id: "botLock" },
                     { type: 'toggle', name: "Scatter", id: "botScatter" }
+                ]
+            },
+            {
+                title: "Survival",
+                items: [
+                    { type: 'toggle', name: "Auto Heal", id: "botAutoHeal" }
                 ]
             }
         ],
