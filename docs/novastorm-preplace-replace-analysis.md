@@ -99,6 +99,13 @@ One sweep is therefore 72 × |visibleObjects| ≈ 20k distance computations.
 Combined with 2.1.1, the placer can reach six figures of `getDistance` calls in
 a 111 ms tick.
 
+> **Corrected after measurement.** That count is real, but the implication that
+> it is expensive was wrong. Benchmarked, the worst realistic per-tick total for
+> all placement sweeps is **~0.87 ms against a 111 ms budget** — under 1%. Early
+> exit on the first blocker makes dense scenes cheap, and the nested sweeps are
+> gated behind `if (!enemyTrapped) return false`. CPU is not this placer's
+> bottleneck; packets are. See `performance-design.md` §1.
+
 Note the engine's own spatial grid is **not** a usable shortcut here:
 
 - `config.colGrid = 10` over `config.mapScale = 14400` (16787, 16887) gives
