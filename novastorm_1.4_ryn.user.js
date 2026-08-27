@@ -14743,8 +14743,169 @@ for (let tree of trees) {
                     // each reading the bot's own world and sending on the bot's
                     // own socket. Each is gated by the SAME toggle the master
                     // uses, so turning a feature on turns it on for the bots too.
+                    this._move(bot);
                     this._autoMills(bot);
                 }
+                this._spinFormation();
+            },
+
+
+            // =================================================================
+            // MOVEMENT & FORMATIONS (per bot)
+            //
+            // moomoo does the physics: the client sends a heading with ["9",
+            // angle] (or null to stop) and the server moves the player, then
+            // reports the new position back in the next "a" packet. So a bot
+            // "moves like the master" by doing exactly what the master does -
+            // pick a spot, send the angle toward it, read its position back from
+            // its own stream. No local physics to copy; the server is the
+            // physics, for the bot the same as for you.
+            //
+            // Where a bot walks (RYN's set, same names):
+            //   - follow ......... toward you, stopping inside Stop Radius
+            //   - follow cursor .. toward where YOUR mouse points in the world
+            //   - formation ...... a slot on a shape around you: circle,
+            //                      triangle, square, heart, hline, column, or a
+            //                      train that trails single-file behind your
+            //                      heading
+            //   - lock ........... hold the spot where lock was switched on
+            //   - freeze ......... stand still
+            //   - scatter ........ wander
+            //
+            // The shape rotates when Circle Rotation is on. Every toggle is one
+            // switch for all bots, read straight off window.vars.
+            // =================================================================
+            _TRAIN_SPACING: 70,
+            _circleOffset: 0,
+            _lockPos: null,
+            _scatter: new Map(),   // bot -> its current random heading
+
+            // The world point under your cursor, the way RYN reads it: your
+            // position plus the mouse offset, un-scaled by the render zoom.
+            _masterCursor() {
+                if (!myPlayer) return null;
+                const scale = Math.max(screenWidth / maxScreenWidth, screenHeight / maxScreenHeight);
+                return {
+                    x: myPlayer.x2 + (mouseX - screenWidth / 2) / scale,
+                    y: myPlayer.y2 + (mouseY - screenHeight / 2) / scale
+                };
+            },
+
+            // RYN's formation offset, one slot per bot around the owner.
+            _formationOffset(index, total, radius, facing) {
+                const f = window.vars.botFormation || "none";
+                const t = total > 0 ? index / total : 0;
+                const angle = 2 * Math.PI * t + this._circleOffset;
+                const rot = (fwd, right) => ({
+                    dx: fwd * Math.cos(facing) - right * Math.sin(facing),
+                    dy: fwd * Math.sin(facing) + right * Math.cos(facing)
+                });
+
+                switch (f) {
+                    case "circle":
+                        return { dx: Math.cos(angle) * radius, dy: Math.sin(angle) * radius };
+                    case "triangle": {
+                        const side = Math.floor(t * 3), along = (t * 3) % 1;
+                        const c = [0, 1, 2].map(i => {
+                            const a = 2 * Math.PI * i / 3 - Math.PI / 2 + this._circleOffset;
+                            return { x: Math.cos(a) * radius, y: Math.sin(a) * radius };
+                        });
+                        const c1 = c[side % 3], c2 = c[(side + 1) % 3];
+                        return { dx: c1.x + (c2.x - c1.x) * along, dy: c1.y + (c2.y - c1.y) * along };
+                    }
+                    case "square": {
+                        const side = Math.floor(t * 4), along = (t * 4) % 1, r2 = radius * 0.85;
+                        const c = [0, 1, 2, 3].map(i => {
+                            const a = Math.PI / 2 * i + this._circleOffset;
+                            return { x: Math.cos(a) * r2, y: Math.sin(a) * r2 };
+                        });
+                        const c1 = c[side % 4], c2 = c[(side + 1) % 4];
+                        return { dx: c1.x + (c2.x - c1.x) * along, dy: c1.y + (c2.y - c1.y) * along };
+                    }
+                    case "heart": {
+                        const a = 2 * Math.PI * t + this._circleOffset, s = radius / 17;
+                        const x = 16 * Math.pow(Math.sin(a), 3);
+                        const y = -(13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a));
+                        return { dx: x * s, dy: y * s };
+                    }
+                    case "hline":
+                        return { dx: (t - 0.5) * radius * 1.8, dy: 0 };
+                    case "column":
+                        return { dx: 0, dy: (t - 0.5) * radius * 1.8 };
+                    case "train":
+                        // single file behind your heading, one carriage per bot
+                        return rot(-(index + 1) * this._TRAIN_SPACING, 0);
+                    default:
+                        return { dx: 0, dy: 0 };
+                }
+            },
+
+            // The spot this bot should walk to this tick.
+            _moveTarget(bot) {
+                if (window.vars.botLock) return this._lockPos;
+
+                const base = window.vars.botFollowCursor
+                    ? (this._masterCursor() || { x: myPlayer.x2, y: myPlayer.y2 })
+                    : { x: myPlayer.x2, y: myPlayer.y2 };
+
+                if ((window.vars.botFormation || "none") === "none") return base;
+
+                // A train trails your heading; the other shapes sit around you
+                // facing your aim.
+                let facing = lastMoveAngle;
+                if (facing == null) facing = getAttackDir ? getAttackDir() : 0;
+
+                const total = this.list.filter(b => b.inGame).length;
+                const index = this.list.filter(b => b.inGame).indexOf(bot);
+                const radius = window.vars.botRadius || 150;
+                const off = this._formationOffset(index < 0 ? 0 : index, total || 1, radius, facing || 0);
+                return { x: base.x + off.dx, y: base.y + off.dy };
+            },
+
+            _sendMove(bot, angle) {
+                if (bot._lastMoveAngle === angle) return;   // don't spam the same heading
+                bot._lastMoveAngle = angle;
+                EXP.send(bot.ws, "9", [angle]);
+            },
+
+            _move(bot) {
+                if (!bot.inGame || !myPlayer) return;
+
+                if (window.vars.botFreeze) { this._sendMove(bot, null); return; }
+
+                if (window.vars.botScatter) {
+                    // pick a new random heading now and then, otherwise hold it
+                    if ((tick % 12) === 0 || !this._scatter.has(bot)) {
+                        this._scatter.set(bot, Math.random() * Math.PI * 2);
+                    }
+                    this._sendMove(bot, this._scatter.get(bot));
+                    return;
+                }
+
+                if (window.vars.botLock) {
+                    if (!this._lockPos) this._lockPos = { x: bot.world.self.x, y: bot.world.self.y };
+                } else {
+                    this._lockPos = null;   // released: fall back to follow/formation
+                }
+
+                const target = this._moveTarget(bot);
+                if (!target) { this._sendMove(bot, null); return; }
+
+                const dx = target.x - bot.world.self.x;
+                const dy = target.y - bot.world.self.y;
+                const dist = Math.hypot(dx, dy);
+                const stop = window.vars.botStopRadius || 50;
+
+                this._sendMove(bot, dist > stop ? Math.atan2(dy, dx) : null);
+            },
+
+            // When Circle Rotation is on and you are standing still, the shape
+            // turns on its own - RYN ties the spin speed to the radius so a
+            // bigger ring turns at the same edge speed.
+            _spinFormation() {
+                if (!window.vars.botCircleRotate) return;
+                const radius = window.vars.botRadius || 150;
+                this._circleOffset = (this._circleOffset + 120 / radius) % (Math.PI * 2);
             },
 
             // =================================================================
@@ -21482,6 +21643,17 @@ for (let tree of trees) {
         botHold: false,
         botAutospawn: true,
 
+        // Bot movement
+        botFollow: true,
+        botFollowCursor: false,
+        botFormation: "none",
+        botRadius: 150,
+        botStopRadius: 50,
+        botCircleRotate: false,
+        botFreeze: false,
+        botLock: false,
+        botScatter: false,
+
         // Performance
         fpsUnlock: true,
         fpsLimit: 240,
@@ -21693,6 +21865,34 @@ for (let tree of trees) {
                 items: [
                     { type: 'toggle', name: "Hold (wait to enter)", id: "botHold" },
                     { type: 'toggle', name: "Autospawn (respawn on death)", id: "botAutospawn" }
+                ]
+            },
+            {
+                title: "Movement",
+                items: [
+                    { type: 'toggle', name: "Follow Master", id: "botFollow" },
+                    { type: 'toggle', name: "Follow Cursor", id: "botFollowCursor" },
+                    { type: 'select', name: "Formation", id: "botFormation", options: [
+                        { value: "none", label: "None" },
+                        { value: "circle", label: "Circle" },
+                        { value: "triangle", label: "Triangle" },
+                        { value: "square", label: "Square" },
+                        { value: "heart", label: "Heart" },
+                        { value: "hline", label: "Line" },
+                        { value: "column", label: "Column" },
+                        { value: "train", label: "Train" }
+                    ] },
+                    { type: 'slider', name: "Formation Radius", id: "botRadius", min: 50, max: 1000 },
+                    { type: 'slider', name: "Stop Radius", id: "botStopRadius", min: 25, max: 500 },
+                    { type: 'toggle', name: "Circle Rotation", id: "botCircleRotate" }
+                ]
+            },
+            {
+                title: "Control",
+                items: [
+                    { type: 'toggle', name: "Freeze", id: "botFreeze" },
+                    { type: 'toggle', name: "Lock Position", id: "botLock" },
+                    { type: 'toggle', name: "Scatter", id: "botScatter" }
                 ]
             }
         ],
@@ -22233,6 +22433,26 @@ for (let tree of trees) {
                     itemsContainer.appendChild(row);
                 }
                 // THEME SELECT
+                else if (item.type === 'select') {
+                    const row = document.createElement('div');
+                    row.className = 'feature-row';
+                    row.innerHTML = `<span class="feat-label">${item.name}</span>`;
+
+                    const sel = document.createElement('select');
+                    sel.className = 'keybind-btn';
+                    sel.style.cursor = 'pointer';
+                    (item.options || []).forEach(opt => {
+                        const o = document.createElement('option');
+                        o.value = opt.value;
+                        o.textContent = opt.label;
+                        if (window.vars[item.id] === opt.value) o.selected = true;
+                        sel.appendChild(o);
+                    });
+                    sel.onchange = () => { window.vars[item.id] = sel.value; saveConfig(); };
+
+                    row.appendChild(sel);
+                    itemsContainer.appendChild(row);
+                }
                 else if (item.type === 'theme_select') {
                     const themes = [
                         { name: 'Default', cls: 'tb-def', val: '' },

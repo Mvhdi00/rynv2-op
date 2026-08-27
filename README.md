@@ -542,5 +542,39 @@ node tools/test-bots.js     # now also: off = nothing, on = a three-mill fan
                             # behind facing, a filled slot skipped, weapon restored
 ```
 
-Not yet built (the behaviour layers): movement and formations, combat, farming,
-clans, squads, 1v1.
+## Bots — movement & formations
+
+moomoo does the physics. The client sends a heading with `["9", angle]` (or
+`null` to stop) and the **server** moves the player, then reports the new
+position back in the next `a` packet. So a bot moves like the master by doing
+exactly what the master does — pick a spot, send the angle toward it, read its
+position back from its own stream. There is no local physics to copy: the server
+is the physics, for a bot the same as for you.
+
+Where a bot walks, RYN's set on the same per-bot resolution:
+
+- **Follow Master** — toward you, stopping inside Stop Radius.
+- **Follow Cursor** — toward the world point under your mouse (computed the way
+  RYN does it: your position plus the mouse offset un-scaled by the render zoom).
+- **Formation** — a slot on a shape around you: circle, triangle, square, heart,
+  line, column, or a **train** that trails single-file behind your heading. Each
+  bot takes one slot by its index; the shape spins on its own when **Circle
+  Rotation** is on (speed tied to radius, so a bigger ring turns at the same edge
+  speed).
+- **Lock Position** — hold the spot where lock was switched on.
+- **Freeze** — stand still. **Scatter** — wander.
+
+Every one of these is a single switch in the **Bots → Movement / Control**
+sections, read straight off `window.vars`, so it drives all the bots at once —
+and a bot's heading is only re-sent when it changes, not every tick.
+
+Because the master's own movement is untouched, the master and the bots can run
+different modes at the same time (you walk, they hold a circle around you).
+
+```sh
+node tools/test-bots.js   # adds: follow toward master, stop inside radius,
+                          # freeze, lock returns to its spot, a formation slot,
+                          # scatter
+```
+
+Not yet built (the behaviour layers): combat, farming, clans, squads, 1v1.
