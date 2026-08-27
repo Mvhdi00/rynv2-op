@@ -10503,6 +10503,15 @@ let pps = 0;
                     else if (keyStr === window.vars.keyVelocityTick) {
                         window.vars.velocityTick = !window.vars.velocityTick;
                     }
+                    else if (keyStr === window.vars.keySpawnBot) {
+                        NovaBots.spawn(window.vars.botCount);
+                    }
+                    else if (keyStr === window.vars.keyReleaseBots) {
+                        NovaBots.releaseAll();
+                    }
+                    else if (keyStr === window.vars.keyKillBots) {
+                        NovaBots.killAll();
+                    }
                     else if (keyStr === window.vars.keyPlacers) {
                         // One key toggles Auto Place + Preplace together:
                         // if either is off, turn both on; otherwise turn both off.
@@ -14195,9 +14204,312 @@ for (let tree of trees) {
         let spawnedObjectSids;
         let promiseResolve;
 
+        // =====================================================================
+        // BOTS — CONNECTION  (RYN v5.4's approach, on Novastorm's own layer)
+        //
+        // A bot is a second authenticated socket to the SAME server. The part
+        // that decides whether any of this works is the token: Novastorm's old
+        // bots made you solve a Turnstile widget by hand for every bot, while
+        // RYN renders its own widget in "interaction-only" mode and reads the
+        // token out of the callback, so nothing has to be clicked. That is what
+        // is rebuilt here, with RYN's fallback behind it (the token the master
+        // connection already captured).
+        //
+        // The rest costs almost nothing, because EXP already does it:
+        //
+        //   - EXP's WebSocket wrapper sniffs io-init on EVERY socket, so a
+        //     bot's mode / key / opcode tables are filled in the moment the
+        //     handshake lands - no per-bot crypto setup;
+        //   - EXP.send(sock, type, args) maps the opcode through that socket's
+        //     permuted table, appends its own sequence number and signs the
+        //     frame with the 6-byte HMAC header;
+        //   - EXP.receive(sock, raw) translates incoming packets back to names.
+        //
+        // The game replaces window.WebSocket with its own class after EXP has
+        // installed the wrapper, so bots must be opened through
+        // window.OriginalWebSocket - that is EXP's wrapper, and going through
+        // the game's replacement would drag the bot into the master's connect
+        // path instead.
+        // =====================================================================
+        const NOVABOT_SITEKEY = "0x4AAAAAAAMYHI96GFiJzMmp";
+        const NOVABOT_TOKEN_MS = 20000;   // how long to wait on a widget
+        const NOVABOT_READY_MS = 15000;   // how long to wait for io-init
+        const NOVABOT_JOIN_GAP = 400;     // pause between two bots joining
+        const NOVABOT_PING_MS = 2500;     // keepalive, matching the game's own
+
+        const NovaBots = {
+            list: [],
+            _slots: {},
+            _busy: false,
+
+            // Stack the captcha widgets up the right edge, so if several do
+            // need a click they do not land on top of each other.
+            _takeSlot() { let i = 0; while (this._slots[i]) i++; this._slots[i] = true; return i; },
+            _freeSlot(i) { delete this._slots[i]; },
+
+            // A token for one bot: render a widget of our own first, and fall
+            // back to the one the master connection captured.
+            _token() {
+                const ts = window.turnstile || (window.top && window.top.turnstile);
+
+                const fallback = () => {
+                    const captured = EXP.token();   // already "cf:<token>"
+                    if (captured) console.log("[NovaBot] using the master's captured token");
+                    return captured;
+                };
+
+                if (!ts || typeof ts.render != "function") return Promise.resolve(fallback());
+
+                return new Promise((resolve) => {
+                    const slot = this._takeSlot();
+                    const holder = document.createElement("div");
+                    holder.style.cssText = "position:fixed;right:0;bottom:" + (slot * 70) + "px;width:300px;height:65px;z-index:2147483647;";
+                    (document.body || document.documentElement).appendChild(holder);
+
+                    let done = false, widget = null;
+                    const cleanup = () => {
+                        this._freeSlot(slot);
+                        try { if (widget != null) ts.remove(widget); } catch (e) {}
+                        try { holder.remove(); } catch (e) {}
+                    };
+                    const finish = (value) => {
+                        if (done) return;
+                        done = true;
+                        clearTimeout(timer);
+                        cleanup();
+                        resolve(value);
+                    };
+                    const timer = setTimeout(() => finish(fallback()), NOVABOT_TOKEN_MS);
+
+                    try {
+                        widget = ts.render(holder, {
+                            sitekey: NOVABOT_SITEKEY,
+                            appearance: "interaction-only",
+                            callback: (t) => finish("cf:" + t),
+                            "error-callback": () => finish(fallback()),
+                            "expired-callback": () => finish(fallback())
+                        });
+                    } catch (e) {
+                        console.warn("[NovaBot] could not render a widget:", e && e.message);
+                        finish(fallback());
+                    }
+                });
+            },
+
+            // Where the bots connect: the master's own server, with a token of
+            // their own in the query.
+            _url(token) {
+                const address = wsAddress || (io && io.socket && io.socket.url);
+                if (!address) return null;
+                const u = new URL(address);
+                return u.protocol + "//" + u.host + "/?token=" + encodeURIComponent(token);
+            },
+
+            // Bring in `n` bots one at a time. Sequential on purpose: each bot
+            // needs its own token, and a widget can only serve one at a time.
+            async spawn(n) {
+                if (this._busy) { console.warn("[NovaBot] already bringing bots in"); return; }
+                if (!wsAddress) { console.warn("[NovaBot] not connected to a server yet"); return; }
+
+                this._busy = true;
+                const count = Math.max(1, Math.min(40, n | 0 || 1));
+                console.log("[NovaBot] bringing in", count, "bot(s)");
+
+                try {
+                    for (let i = 0; i < count; i++) {
+                        const name = String(window.vars.botName || "nova") + (this.list.length + 1);
+                        try {
+                            await this._connect(name);
+                        } catch (e) {
+                            console.warn("[NovaBot]", name, "failed:", e && e.message);
+                        }
+                        if (i + 1 < count) await new Promise(r => setTimeout(r, NOVABOT_JOIN_GAP));
+                    }
+                } finally {
+                    this._busy = false;
+                    console.log("[NovaBot]", this.list.length, "bot(s) connected");
+                }
+            },
+
+            _connect(name) {
+                return new Promise(async (resolve, reject) => {
+                    const token = await this._token();
+                    if (!token) return reject(new Error("no captcha token"));
+
+                    const url = this._url(token);
+                    if (!url) return reject(new Error("no server address"));
+
+                    // EXP's wrapper, not the game's replacement - see the note
+                    // at the top of this block.
+                    const Socket = window.OriginalWebSocket || window.WebSocket;
+                    const ws = new Socket(url);
+                    ws.binaryType = "arraybuffer";
+
+                    const bot = {
+                        ws: ws,
+                        name: name,
+                        sid: null,
+                        ready: false,
+                        held: false,
+                        inGame: false,
+                        pingIv: null,
+                        x: 0, y: 0, team: null,
+                        deadAt: 0
+                    };
+                    this.list.push(bot);
+
+                    let settled = false;
+                    const done = (err) => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(timer);
+                        err ? reject(err) : resolve(bot);
+                    };
+                    const timer = setTimeout(() => {
+                        done(new Error("timed out waiting for io-init"));
+                    }, NOVABOT_READY_MS);
+
+                    ws.addEventListener("open", () => {
+                        console.log("[NovaBot]", name, "socket open, waiting for io-init");
+                    });
+
+                    ws.addEventListener("message", (ev) => {
+                        // EXP's wrapper has already sniffed io-init off this
+                        // socket by the time this runs, so receive() can
+                        // translate the opcode.
+                        let msg = null;
+                        try { msg = EXP.receive(ws, ev.data); } catch (e) { return; }
+                        if (!msg) return;
+
+                        if (msg.type === "io-init") {
+                            bot.ready = true;
+
+                            // Keep the connection warm the same way the master
+                            // does, or the server drops it.
+                            if (!bot.pingIv) {
+                                bot.pingIv = setInterval(() => {
+                                    if (bot.ws.readyState === 1) EXP.send(bot.ws, "0", []);
+                                    else this._remove(bot);
+                                }, NOVABOT_PING_MS);
+                            }
+                            EXP.send(ws, "0", []);
+
+                            if (window.vars.botHold) {
+                                bot.held = true;
+                                console.log("[NovaBot]", name, "connected — holding, press the release key");
+                            } else {
+                                this._enter(bot);
+                            }
+                            done(null);
+                            return;
+                        }
+
+                        // "C" is the game telling this socket its own sid: the
+                        // bot is in the world.
+                        if (msg.type === "C") {
+                            bot.sid = msg.args && msg.args[0];
+                            bot.inGame = true;
+                            console.log("[NovaBot]", name, "entered, sid =", bot.sid);
+                            return;
+                        }
+
+                        // "P" is this bot dying.
+                        if (msg.type === "P") {
+                            bot.inGame = false;
+                            bot.sid = null;
+                            bot.deadAt = Date.now();
+                            console.log("[NovaBot]", name, "died");
+                            return;
+                        }
+                    });
+
+                    ws.addEventListener("close", (ev) => {
+                        console.warn("[NovaBot]", name, "socket closed", ev && ev.code, ev && ev.reason);
+                        this._remove(bot);
+                        done(new Error("socket closed"));
+                    });
+
+                    ws.addEventListener("error", () => {
+                        console.warn("[NovaBot]", name, "socket error");
+                    });
+                });
+            },
+
+            // The packet that actually puts a connected bot into the world.
+            _enter(bot) {
+                if (!bot.ready || bot.ws.readyState !== 1) return;
+                EXP.send(bot.ws, "M", [{ name: String(bot.name).slice(0, 15), moofoll: 1, skin: 0 }]);
+                bot.held = false;
+                console.log("[NovaBot]", bot.name, "spawn sent");
+            },
+
+            // Everything that connected while Hold was on enters at once.
+            releaseAll() {
+                let n = 0;
+                for (const bot of this.list) {
+                    if (bot.held) { this._enter(bot); n++; }
+                }
+                console.log("[NovaBot] released", n, "bot(s)");
+            },
+
+            killAll() {
+                const n = this.list.length;
+                for (const bot of this.list.slice()) {
+                    try { bot.ws.close(); } catch (e) {}
+                    this._remove(bot);
+                }
+                console.log("[NovaBot] closed", n, "bot(s)");
+            },
+
+            _remove(bot) {
+                if (bot.pingIv) { clearInterval(bot.pingIv); bot.pingIv = null; }
+                const i = this.list.indexOf(bot);
+                if (i >= 0) this.list.splice(i, 1);
+            },
+
+            // Runs with the master's tick. Connection upkeep only for now:
+            // bring a dead bot back, and read each bot's position off the
+            // master's own player list while it is on screen.
+            tick() {
+                if (!this.list.length) return;
+
+                for (const bot of this.list) {
+                    if (!bot.ready || bot.ws.readyState !== 1) continue;
+
+                    if (!bot.inGame) {
+                        if (bot.held || !window.vars.botAutospawn) continue;
+                        if (bot.deadAt && Date.now() - bot.deadAt > 1000) {
+                            bot.deadAt = 0;
+                            this._enter(bot);
+                        }
+                        continue;
+                    }
+
+                    const seen = players.find(p => p && p.name === bot.name && p.sid !== (myPlayer && myPlayer.sid));
+                    if (seen) {
+                        bot.x = seen.x2;
+                        bot.y = seen.y2;
+                        bot.sid = seen.sid;
+                        if (seen.team !== undefined) bot.team = seen.team;
+                    }
+                }
+            },
+
+            status() {
+                return {
+                    connected: this.list.length,
+                    inGame: this.list.filter(b => b.inGame).length,
+                    held: this.list.filter(b => b.held).length
+                };
+            }
+        };
+
+        window.NovaBots = NovaBots;
+
         // UPDATE PLAYER DATA:
         function updatePlayers(data) {
             tick++;
+            try { NovaBots.tick(); } catch (e) {}
 
 
 
@@ -20818,6 +21130,9 @@ for (let tree of trees) {
         keyPlaceTurret: "T",
         keyVelocityTick: "H",
         keyPlacers: "J",
+        keySpawnBot: "P",
+        keyReleaseBots: "U",
+        keyKillBots: "O",
 
 
         // Combat
@@ -20842,6 +21157,12 @@ for (let tree of trees) {
 
         // Hit on spike
         hitOnSpike: true,
+
+        // Bots
+        botName: "nova",
+        botCount: 5,
+        botHold: false,
+        botAutospawn: true,
 
         // Performance
         fpsUnlock: true,
@@ -21033,6 +21354,30 @@ for (let tree of trees) {
             }
         ],
 
+        bots: [
+            {
+                title: "Bot Setup",
+                items: [
+                    { type: 'input', name: "Bot Name", id: "botName" },
+                    { type: 'slider', name: "Bot Count", id: "botCount", min: 1, max: 40 }
+                ]
+            },
+            {
+                title: "Join / Leave",
+                items: [
+                    { type: 'keybind', name: "Spawn Bots", id: "keySpawnBot" },
+                    { type: 'keybind', name: "Release (enter all)", id: "keyReleaseBots" },
+                    { type: 'keybind', name: "Kill All Bots", id: "keyKillBots" }
+                ]
+            },
+            {
+                title: "Connection",
+                items: [
+                    { type: 'toggle', name: "Hold (wait to enter)", id: "botHold" },
+                    { type: 'toggle', name: "Autospawn (respawn on death)", id: "botAutospawn" }
+                ]
+            }
+        ],
         visuals: [
             {
                 title: "Objects",
@@ -21383,6 +21728,7 @@ for (let tree of trees) {
                     <div class="nav-item" data-tab="placers"><svg viewBox="0 0 24 24"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>Placers</div>
                     <div class="nav-item" data-tab="utilities"><svg viewBox="0 0 24 24"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9c-2-2-5-2.4-7.4-1.3L9 6L6 9L1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>Utilities</div>
                     <div class="nav-item" data-tab="misc"><svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Misc</div>
+                    <div class="nav-item" data-tab="bots"><svg viewBox="0 0 24 24"><path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z"/></svg>Bots</div>
                     <div class="nav-item" data-tab="visuals"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>Visuals</div>
                     <div class="nav-item" data-tab="performance"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8l10-12h-7l1-8z"/></svg>Performance</div>
                     <div class="nav-item" data-tab="menu"><svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>Menu Settings</div>
@@ -21426,6 +21772,7 @@ for (let tree of trees) {
                 placers: 'Placers Settings',
                 utilities: 'Utilities Settings',
                 misc: 'Miscellaneous',
+                bots: 'Bots',
                 visuals: 'Visuals Settings',
                 performance: 'Performance Settings',
                 menu: 'Menu Settings'

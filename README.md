@@ -434,3 +434,46 @@ node --check novastorm_1.4_ryn.user.js
 node tools/test-hit-on-spike.js
 node tools/test-performance.js
 ```
+
+## Bots — the connection layer
+
+Rebuilt from RYN v5.4's approach on Novastorm's own network layer. A bot is a
+second authenticated socket to the same server.
+
+**The token is what decides whether any of it works.** Novastorm's old bots made
+you solve a Turnstile widget by hand for each bot. RYN renders its own widget in
+`appearance: "interaction-only"` and reads the token out of the callback, so
+nothing has to be clicked — that is what this does, with RYN's fallback behind
+it (the token the master connection already captured, via `EXP.token()`), and a
+20s timeout on the widget.
+
+Everything after the token is nearly free, because EXP already does it:
+
+| | how |
+|---|---|
+| handshake | EXP's WebSocket wrapper sniffs `io-init` on **every** socket, so a bot's mode / key / opcode tables fill in by themselves |
+| sending | `EXP.send(sock, type, args)` maps the opcode through that socket's permuted table, appends its sequence number and signs the 6-byte HMAC header |
+| receiving | `EXP.receive(sock, raw)` translates packets back to names |
+
+One trap worth writing down: the game replaces `window.WebSocket` with its own
+class *after* EXP installs its wrapper, so bots are opened through
+`window.OriginalWebSocket` — the game's replacement would drag a bot into the
+master's connect path instead.
+
+Flow per bot: token → socket → `io-init` (ready, start a 2.5s keepalive ping) →
+either enter with `M {name, moofoll, skin}` or wait if **Hold** is on → `C`
+gives it its sid → `P` means it died, and Autospawn re-enters it a second later.
+Bots come in one at a time, 400ms apart, because a widget serves one token at a
+time.
+
+**Bots** tab: Bot Name, Bot Count (1–40), the Spawn / Release / Kill All
+keybinds (`P` / `U` / `O`), Hold and Autospawn. `window.NovaBots.status()`
+reports `{connected, inGame, held}` from the console.
+
+```sh
+node tools/test-bots.js     # 22 cases: token choice, URL, handshake, enter,
+                            # hold/release, death + autospawn, cleanup
+```
+
+Not yet built (the behaviour layers): movement and formations, combat, farming,
+clans, squads, 1v1.
