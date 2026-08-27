@@ -1503,7 +1503,10 @@ function updateStats() {
     try {
         if (window.NovaBots && window.NovaBots.list.length) {
             const st = window.NovaBots.status();
-            botsText = ` <span style="color:#FFF;">|</span> Bots: ${st.inGame}/${st.connected}`;
+            // while any bot is not in the game yet, show WHY (its phase), e.g.
+            // "Bots: 0/1 (1 open)" means the socket opened but no io-init came.
+            const why = (st.inGame < st.connected && st.note) ? ` (${st.note})` : "";
+            botsText = ` <span style="color:#FFF;">|</span> Bots: ${st.inGame}/${st.connected}${why}`;
         }
     } catch (e) {}
 
@@ -14798,7 +14801,9 @@ for (let tree of trees) {
                         inGame: false,
                         pingIv: null,
                         x: 0, y: 0, team: null,
-                        deadAt: 0
+                        deadAt: 0,
+                        phase: "connecting",   // connecting -> open -> ready -> ingame / dead
+                        _rx: 0                 // count of received packets (for diagnostics)
                     };
                     // Its own view of the game — see BOT WORLD above.
                     bot.world = NovaBotWorld(bot);
@@ -14816,19 +14821,43 @@ for (let tree of trees) {
                     }, NOVABOT_READY_MS);
 
                     ws.addEventListener("open", () => {
+                        bot.phase = "open";
                         console.log("[NovaBot]", name, "socket open, waiting for io-init");
                     });
 
                     ws.addEventListener("message", (ev) => {
-                        // EXP's wrapper has already sniffed io-init off this
-                        // socket by the time this runs, so receive() can
-                        // translate the opcode.
+                        // The UNPATCH layer wraps addEventListener and, because
+                        // this runs from the userscript, translates the incoming
+                        // frame to letter opcodes BEFORE we see it - so the data
+                        // here is already msgpack of [letterName, args]. Decode
+                        // once and read that directly; only if the opcode is
+                        // still a raw number (UNPATCH inactive) do we fall back
+                        // to EXP.receive to translate it. Calling EXP.receive on
+                        // already-translated data would process it twice.
                         let msg = null;
-                        try { msg = EXP.receive(ws, ev.data); } catch (e) { return; }
+                        try {
+                            const parsed = EXP.decode(ev.data);   // toBytes handles ArrayBuffer
+                            if (Array.isArray(parsed)) {
+                                if (typeof parsed[0] === "string") {
+                                    msg = { type: parsed[0], args: parsed[1] || [] };
+                                } else {
+                                    msg = EXP.receive(ws, ev.data);
+                                }
+                            }
+                        } catch (e) { return; }
+
+                        // Log the first handful of packets so it's visible
+                        // whether io-init / C ever arrive.
+                        if (bot._rx < 6) {
+                            bot._rx++;
+                            console.log("[NovaBot]", name, "rx#" + bot._rx,
+                                msg ? msg.type : "(undecodable)");
+                        }
                         if (!msg) return;
 
                         if (msg.type === "io-init") {
                             bot.ready = true;
+                            bot.phase = "ready";
 
                             // Keep the connection warm the same way the master
                             // does, or the server drops it.
@@ -14855,6 +14884,7 @@ for (let tree of trees) {
                         if (msg.type === "C") {
                             bot.sid = msg.args && msg.args[0];
                             bot.inGame = true;
+                            bot.phase = "ingame";
                             bot.world.self.sid = bot.sid;
                             console.log("[NovaBot]", name, "entered, sid =", bot.sid);
                             return;
@@ -14867,6 +14897,7 @@ for (let tree of trees) {
                             bot.world.self.alive = false;
                             bot.deadAt = Date.now();
                             bot.world.reset();
+                            bot.phase = "dead";
                             console.log("[NovaBot]", name, "died");
                             return;
                         }
@@ -15464,10 +15495,20 @@ for (let tree of trees) {
             },
 
             status() {
+                // a short note on where the not-yet-in-game bots are stuck,
+                // so it can be read straight off the HUD without the console
+                const stuck = this.list.filter(b => !b.inGame);
+                let note = "";
+                if (stuck.length) {
+                    const phases = {};
+                    for (const b of stuck) phases[b.phase] = (phases[b.phase] || 0) + 1;
+                    note = Object.keys(phases).map(p => phases[p] + " " + p).join(", ");
+                }
                 return {
                     connected: this.list.length,
                     inGame: this.list.filter(b => b.inGame).length,
                     held: this.list.filter(b => b.held).length,
+                    note: note,
                     // what each bot can see from where it stands
                     views: this.list.map(b => ({
                         name: b.name,

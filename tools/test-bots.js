@@ -54,7 +54,11 @@ let incoming = new Map();          // socket -> parsed message queue
 const EXP = {
     token: () => tokenState.captured,
     send: (sock, type, args) => { sent.push([sock.url, type, args]); return true; },
-    receive: (sock, raw) => raw     // the test hands parsed messages straight in
+    // the test hands messages in as { type, args }; decode turns that into the
+    // [type, args] array the real EXP.decode yields (string opcode = already
+    // translated), and receive is the raw-number fallback path
+    decode: (raw) => (raw && raw.type !== undefined) ? [raw.type, raw.args || []] : raw,
+    receive: (sock, raw) => (raw && raw.type !== undefined) ? { type: raw.type, args: raw.args || [] } : null
 };
 
 const tokenState = { captured: null, widget: null, renderFails: false };
