@@ -51,6 +51,7 @@ class FakeSocket {
 // what the game would hand back on each incoming packet
 let incoming = new Map();          // socket -> parsed message queue
 
+const sniffed = new Map();   // sock -> state, set by the manual _sniff
 const EXP = {
     token: () => tokenState.captured,
     send: (sock, type, args) => { sent.push([sock.url, type, args]); return true; },
@@ -58,7 +59,14 @@ const EXP = {
     // [type, args] array the real EXP.decode yields (string opcode = already
     // translated), and receive is the raw-number fallback path
     decode: (raw) => (raw && raw.type !== undefined) ? [raw.type, raw.args || []] : raw,
-    receive: (sock, raw) => (raw && raw.type !== undefined) ? { type: raw.type, args: raw.args || [] } : null
+    receive: (sock, raw) => (raw && raw.type !== undefined) ? { type: raw.type, args: raw.args || [] } : null,
+    // exposed internals the manual io-init sniff uses on a clean iframe socket
+    _internals: {
+        MODE_SECURE: 1,
+        states: { set: (sock, st) => sniffed.set(sock, st) },
+        hexToBytes: () => new Uint8Array(),
+        buildTables: () => ({ c2s: {}, s2c: {} })
+    }
 };
 
 const tokenState = { captured: null, widget: null, renderFails: false };

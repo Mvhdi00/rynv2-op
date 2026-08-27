@@ -14688,7 +14688,8 @@ for (let tree of trees) {
 
             // A token for one bot: render a widget of our own first, and fall
             // back to the one the master connection captured.
-            _token() {
+            async _token() {
+                await this._ensureTurnstile();
                 const ts = window.turnstile || (window.top && window.top.turnstile);
 
                 // The master's captured token is single-use and already spent on
@@ -14774,6 +14775,59 @@ for (let tree of trees) {
                 return u.protocol + "//" + u.host + "/?token=" + encodeURIComponent(token);
             },
 
+            // A guaranteed-native WebSocket constructor. window.WebSocket is the
+            // game's connect-shim (its instances have no addEventListener) and
+            // window.OriginalWebSocket is unreliable inside the userscript
+            // sandbox, so pull a clean one from a hidden iframe and keep it.
+            // THIS is what the original working bots used - the socket the bots
+            // open must be a real native WebSocket, not the game's replacement.
+            _getNativeWS() {
+                if (this._NativeWS) return this._NativeWS;
+                try {
+                    const f = document.createElement("iframe");
+                    f.style.display = "none";
+                    (document.body || document.documentElement).appendChild(f);
+                    const WS = f.contentWindow && f.contentWindow.WebSocket;
+                    if (typeof WS === "function") { this._iframe = f; this._NativeWS = WS; return WS; }
+                    f.remove();
+                } catch (e) {}
+                return window.OriginalWebSocket || window.WebSocket;
+            },
+
+            // A clean native socket is not EXP's wrapper, so EXP never sniffs its
+            // io-init on its own. Replicate that sniff by hand using EXP's exposed
+            // internals, so EXP.send / EXP.receive frame and translate correctly
+            // on this socket afterwards.
+            _sniff(sock, args) {
+                try {
+                    const I = EXP._internals;
+                    if (args && args[3] === I.MODE_SECURE) {
+                        I.states.set(sock, { mode: I.MODE_SECURE, key: I.hexToBytes(args[2]), tables: I.buildTables(args[1] >>> 0), seq: 0 });
+                    } else {
+                        I.states.set(sock, { mode: 0, seq: 0 });
+                    }
+                    return true;
+                } catch (e) { return false; }
+            },
+
+            // Make sure the Turnstile API is present (load it if the game hasn't).
+            _ensureTurnstile() {
+                return new Promise((resolve) => {
+                    if (window.turnstile && typeof window.turnstile.render === "function") return resolve(true);
+                    if (!document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]')) {
+                        const s = document.createElement("script");
+                        s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+                        s.async = true; s.defer = true;
+                        (document.head || document.documentElement).appendChild(s);
+                    }
+                    let waited = 0;
+                    const iv = setInterval(() => {
+                        if (window.turnstile && typeof window.turnstile.render === "function") { clearInterval(iv); resolve(true); }
+                        else if ((waited += 200) > 12000) { clearInterval(iv); resolve(false); }
+                    }, 200);
+                });
+            },
+
             // Bring in `n` bots one at a time. Sequential on purpose: each bot
             // needs its own token, and a widget can only serve one at a time.
             async spawn(n) {
@@ -14808,11 +14862,14 @@ for (let tree of trees) {
                     const url = this._url(token);
                     if (!url) return reject(new Error("no server address"));
 
-                    // EXP's wrapper, not the game's replacement - see the note
-                    // at the top of this block.
-                    const Socket = window.OriginalWebSocket || window.WebSocket;
+                    // A clean native WebSocket from a hidden iframe - the game's
+                    // window.WebSocket is a connect-shim with no addEventListener
+                    // and window.OriginalWebSocket is unreliable in the sandbox,
+                    // so this is the one the original working bots used. EXP does
+                    // not auto-sniff it, so io-init is set up by hand below.
+                    const Socket = this._getNativeWS();
                     const ws = new Socket(url);
-                    ws.binaryType = "arraybuffer";
+                    try { ws.binaryType = "arraybuffer"; } catch (e) {}
 
                     const bot = {
                         ws: ws,
@@ -14848,25 +14905,12 @@ for (let tree of trees) {
                     });
 
                     ws.addEventListener("message", (ev) => {
-                        // The UNPATCH layer wraps addEventListener and, because
-                        // this runs from the userscript, translates the incoming
-                        // frame to letter opcodes BEFORE we see it - so the data
-                        // here is already msgpack of [letterName, args]. Decode
-                        // once and read that directly; only if the opcode is
-                        // still a raw number (UNPATCH inactive) do we fall back
-                        // to EXP.receive to translate it. Calling EXP.receive on
-                        // already-translated data would process it twice.
+                        // This is a clean iframe socket, NOT wrapped by UNPATCH,
+                        // so the data arrives raw - EXP.receive decodes it and, on
+                        // io-init, we set up the crypto state by hand (via _sniff)
+                        // so every following packet translates correctly.
                         let msg = null;
-                        try {
-                            const parsed = EXP.decode(ev.data);   // toBytes handles ArrayBuffer
-                            if (Array.isArray(parsed)) {
-                                if (typeof parsed[0] === "string") {
-                                    msg = { type: parsed[0], args: parsed[1] || [] };
-                                } else {
-                                    msg = EXP.receive(ws, ev.data);
-                                }
-                            }
-                        } catch (e) { return; }
+                        try { msg = EXP.receive(ws, ev.data); } catch (e) { return; }
 
                         // Log the first handful of packets so it's visible
                         // whether io-init / C ever arrive.
@@ -14878,6 +14922,11 @@ for (let tree of trees) {
                         if (!msg) return;
 
                         if (msg.type === "io-init") {
+                            // Set up this socket's crypto state by hand FIRST, so
+                            // EXP.send frames the ping and spawn correctly. Without
+                            // this the very first EXP.send goes out unframed and the
+                            // server closes the socket.
+                            this._sniff(ws, msg.args);
                             bot.ready = true;
                             bot.phase = "ready";
 
