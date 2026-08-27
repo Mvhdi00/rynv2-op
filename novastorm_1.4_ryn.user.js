@@ -14718,7 +14718,7 @@ for (let tree of trees) {
                     // want. Several stack downward so a batch of bots is solvable.
                     const box = document.createElement("div");
                     box.style.cssText =
-                        "position:fixed;left:50%;top:" + (14 + slot * 96) + "px;transform:translateX(-50%);" +
+                        "position:fixed;right:14px;bottom:" + (14 + slot * 96) + "px;" +
                         "z-index:2147483647;background:rgba(18,18,28,0.96);padding:12px 14px;border-radius:12px;" +
                         "box-shadow:0 10px 40px rgba(0,0,0,0.6);text-align:center;" +
                         "font-family:'Inter',sans-serif;color:#dfe;";
