@@ -14616,13 +14616,21 @@ for (let tree of trees) {
             _token() {
                 const ts = window.turnstile || (window.top && window.top.turnstile);
 
+                // The master's captured token is single-use and already spent on
+                // the master's own connection, so it is only a last resort - a
+                // fresh widget token is what a new socket actually needs.
                 const fallback = () => {
                     const captured = EXP.token();   // already "cf:<token>"
-                    if (captured) console.log("[NovaBot] using the master's captured token");
+                    if (captured) console.log("[NovaBot] falling back to the master's captured token (may be spent)");
+                    else console.warn("[NovaBot] no token available — no Turnstile widget and nothing captured");
                     return captured;
                 };
 
-                if (!ts || typeof ts.render != "function") return Promise.resolve(fallback());
+                if (!ts || typeof ts.render != "function") {
+                    console.warn("[NovaBot] window.turnstile is not ready; using the fallback token");
+                    return Promise.resolve(fallback());
+                }
+                console.log("[NovaBot] rendering a fresh Turnstile widget for a bot…");
 
                 return new Promise((resolve) => {
                     const slot = this._takeSlot();
@@ -14809,7 +14817,19 @@ for (let tree of trees) {
                     });
 
                     ws.addEventListener("close", (ev) => {
-                        console.warn("[NovaBot]", name, "socket closed", ev && ev.code, ev && ev.reason);
+                        const code = ev && ev.code;
+                        // A close before io-init almost always means the token
+                        // was rejected: Cloudflare drops the socket (1006/1015).
+                        // Say so plainly so it is clear this is the captcha, not
+                        // a bug in the wiring.
+                        if (!bot.ready) {
+                            console.warn("[NovaBot]", name,
+                                "closed before handshake (code " + code + ") — the server refused the "
+                                + "connection token. This is Cloudflare's anti-bot; an extra socket needs "
+                                + "its own fresh Turnstile token and the server may be rejecting it.");
+                        } else {
+                            console.warn("[NovaBot]", name, "socket closed", code, ev && ev.reason);
+                        }
                         this._remove(bot);
                         done(new Error("socket closed"));
                     });
