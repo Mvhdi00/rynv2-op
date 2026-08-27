@@ -10512,6 +10512,12 @@ let pps = 0;
                     else if (keyStr === window.vars.keyKillBots) {
                         NovaBots.killAll();
                     }
+                    else if (keyStr === window.vars.keyBotAttackPrimary) {
+                        window.vars.botAttackPrimary = !window.vars.botAttackPrimary;
+                    }
+                    else if (keyStr === window.vars.keyBotAttackSecondary) {
+                        window.vars.botAttackSecondary = !window.vars.botAttackSecondary;
+                    }
                     else if (keyStr === window.vars.keyPlacers) {
                         // One key toggles Auto Place + Preplace together:
                         // if either is off, turn both on; otherwise turn both off.
@@ -14887,9 +14893,49 @@ for (let tree of trees) {
                     // uses, so turning a feature on turns it on for the bots too.
                     this._move(bot);
                     this._autoHeal(bot);
+                    this._attack(bot);
                     this._autoMills(bot);
                 }
                 this._spinFormation();
+            },
+
+            // =================================================================
+            // ATTACK (per bot) — two buttons
+            //
+            // One button swings the bots' PRIMARY (your left click), the other
+            // their SECONDARY (your right click). While a button is on, each bot
+            // faces the nearest enemy it can see and holds the attack down; the
+            // server swings on every reload, so holding is all it takes. Turning
+            // both off sends one stop so the bots drop their weapons.
+            //
+            // Bot-specific, not routed: the master's attack is welded into the
+            // instakill pipeline, not a function to borrow. This is the plain
+            // "swing at who's nearest" that a held mouse button is.
+            // =================================================================
+            _attack(bot) {
+                if (!bot.inGame) return;
+
+                const primary = window.vars.botAttackPrimary;
+                const secondary = window.vars.botAttackSecondary;
+
+                if (!primary && !secondary) {
+                    if (bot._attacking) { EXP.send(bot.ws, "F", [0]); bot._attacking = false; }
+                    return;
+                }
+
+                const s = bot.world.self;
+                const foe = bot.world.nearestEnemy();
+                const angle = foe
+                    ? Math.atan2(foe.y2 - s.y2, foe.x2 - s.x2)
+                    : (s.dir || 0);
+
+                // secondary button wins when both are on
+                const weapon = secondary ? 1 : 0;
+
+                EXP.send(bot.ws, "z", [weapon, true]);   // equip that weapon
+                EXP.send(bot.ws, "D", [angle]);          // face the target
+                EXP.send(bot.ws, "F", [1, angle]);       // hold the swing
+                bot._attacking = true;
             },
 
             // =================================================================
@@ -21774,6 +21820,8 @@ for (let tree of trees) {
         keySpawnBot: "P",
         keyReleaseBots: "U",
         keyKillBots: "O",
+        keyBotAttackPrimary: "K",
+        keyBotAttackSecondary: "L",
 
 
         // Combat
@@ -21807,6 +21855,8 @@ for (let tree of trees) {
 
         // Bot combat / survival
         botAutoHeal: true,
+        botAttackPrimary: false,
+        botAttackSecondary: false,
 
         // Bot movement
         botFollow: true,
@@ -22064,6 +22114,15 @@ for (let tree of trees) {
                 title: "Survival",
                 items: [
                     { type: 'toggle', name: "Auto Heal", id: "botAutoHeal" }
+                ]
+            },
+            {
+                title: "Combat",
+                items: [
+                    { type: 'toggle', name: "Attack — Primary (left)", id: "botAttackPrimary" },
+                    { type: 'toggle', name: "Attack — Secondary (right)", id: "botAttackSecondary" },
+                    { type: 'keybind', name: "Attack Primary key", id: "keyBotAttackPrimary" },
+                    { type: 'keybind', name: "Attack Secondary key", id: "keyBotAttackSecondary" }
                 ]
             }
         ],

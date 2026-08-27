@@ -88,7 +88,7 @@ const win = {
         botFollow: true, botFollowCursor: false, botFormation: 'none',
         botRadius: 150, botStopRadius: 50, botCircleRotate: false,
         botFreeze: false, botLock: false, botScatter: false,
-        botAutoHeal: true
+        botAutoHeal: true, botAttackPrimary: false, botAttackSecondary: false
     },
     turnstile,
     OriginalWebSocket: FakeSocket,
@@ -442,6 +442,37 @@ async function runFlow() {
     NovaBots._autoHeal(b);
     check('the toggle off stops healing', sent.length, 0);
     win.vars.botAutoHeal = true;
+
+    // --- attack buttons ----------------------------------------------------
+    console.log('\n-- attack --');
+    b.world.self.x2 = 200; b.world.self.y2 = 200; b.world.self.dir = 0;
+    // an enemy at (260,200) is already in the bot's world from earlier
+    sent.length = 0;
+    NovaBots._attack(b);
+    check('idle bot does not attack', sent.length, 0);
+
+    win.vars.botAttackPrimary = true;
+    sent.length = 0;
+    NovaBots._attack(b);
+    const atkTypes = sent.filter(s => s[0] === cs.url).map(s => s[1]);
+    check("primary attack equips, faces and swings", atkTypes, ['z', 'D', 'F']);
+    check('it equips the primary weapon (0)', sent.find(s => s[1] === 'z')[2][0], 0);
+    check('it aims at the nearest enemy', Math.round(sent.find(s => s[1] === 'D')[2][0] * 100), 0);
+    check('the swing is held down (F 1)', sent.find(s => s[1] === 'F')[2][0], 1);
+
+    win.vars.botAttackSecondary = true;
+    sent.length = 0;
+    NovaBots._attack(b);
+    check('secondary wins when both are on (weapon 1)', sent.find(s => s[1] === 'z')[2][0], 1);
+    win.vars.botAttackSecondary = false;
+
+    win.vars.botAttackPrimary = false;
+    sent.length = 0;
+    NovaBots._attack(b);
+    check('turning off sends one stop (F 0)', sent.filter(s => s[1] === 'F').map(s => s[2][0]), [0]);
+    sent.length = 0;
+    NovaBots._attack(b);
+    check('and then stays quiet', sent.length, 0);
 
     // cleanup
     console.log('\n-- cleanup --');
