@@ -14205,6 +14205,210 @@ for (let tree of trees) {
         let promiseResolve;
 
         // =====================================================================
+        // BOT WORLD  (RYN's PlayerClient, cut down to what a bot needs)
+        //
+        // In RYN every bot is a whole PlayerClient: its own PlayerManager,
+        // EnemyManager, ObjectManager and myPlayer, fed by its own socket. That
+        // is what makes a RYN bot able to act where the master cannot see -
+        // it is not reading the master's screen, it is reading its own stream.
+        //
+        // Novastorm has exactly one world model, and it belongs to the master.
+        // So each bot gets a small one of its own here, built out of the same
+        // packets the master parses, with the same field layouts:
+        //
+        //   "a"  every visible player, 13 fields each -> players
+        //   "D"  someone entered view (id, sid, name, x, y, dir, health, ...)
+        //   "E"  someone left view
+        //   "O"  a health change
+        //   "H"  objects loaded, 8 fields each        -> objects
+        //   "Q"  one object destroyed
+        //   "R"  every object of one owner destroyed
+        //   "N"  one of this bot's own values changed (food, wood, points, ...)
+        //   "C"  this bot's own sid
+        //   "P"  this bot died
+        //
+        // It is deliberately smaller than the master's: positions, teams, health
+        // and object footprints. That is enough to pick a target, keep a
+        // distance, walk around something or find a resource - and it costs one
+        // Map write per packet instead of a second copy of the game.
+        // =====================================================================
+        function NovaBotWorld(bot) {
+            return {
+                bot: bot,
+                players: new Map(),   // sid -> { sid, x, y, dir, team, weaponIndex, name, health }
+                objects: new Map(),   // sid -> { sid, x, y, dir, scale, type, id, owner }
+                self: {
+                    sid: null, x: 0, y: 0, dir: 0, health: 100, team: null,
+                    weaponIndex: 0, food: 0, wood: 0, stone: 0, points: 0, age: 1, kills: 0
+                },
+                lastUpdate: 0,
+
+                // "a" - the tick packet: every player this bot can see.
+                feedPlayers(data) {
+                    if (!Array.isArray(data)) return;
+                    this.lastUpdate = Date.now();
+
+                    const seen = new Set();
+                    for (let i = 0; i + 12 < data.length; i += 13) {
+                        const sid = data[i];
+                        seen.add(sid);
+
+                        let p = this.players.get(sid);
+                        if (!p) {
+                            p = { sid: sid, name: "", health: 100 };
+                            this.players.set(sid, p);
+                        }
+                        p.x = data[i + 1];
+                        p.y = data[i + 2];
+                        p.dir = data[i + 3];
+                        p.buildIndex = data[i + 4];
+                        p.weaponIndex = data[i + 5];
+                        p.weaponVariant = data[i + 6];
+                        p.team = data[i + 7];
+                        p.skinIndex = data[i + 9];
+
+                        if (sid === this.self.sid) {
+                            this.self.x = p.x;
+                            this.self.y = p.y;
+                            this.self.dir = p.dir;
+                            this.self.team = p.team;
+                            this.self.weaponIndex = p.weaponIndex;
+                        }
+                    }
+
+                    // Anyone not in this packet is out of view. Their entry is
+                    // dropped rather than kept stale, so "nearest" can never
+                    // point at a ghost.
+                    for (const sid of this.players.keys()) {
+                        if (!seen.has(sid)) this.players.delete(sid);
+                    }
+                },
+
+                // "D" - someone came into view, with their name and health.
+                feedPlayerData(data) {
+                    if (!Array.isArray(data)) return;
+                    const sid = data[1];
+                    const p = this.players.get(sid) || { sid: sid };
+                    p.id = data[0];          // "E" removes by this, not by sid
+                    p.name = data[2];
+                    p.x = data[3];
+                    p.y = data[4];
+                    p.dir = data[5];
+                    p.health = data[6];
+                    p.scale = data[8];
+                    this.players.set(sid, p);
+                },
+
+                // "E" names the socket id the game gave that player, not the sid.
+                removePlayerById(id) {
+                    for (const [sid, p] of this.players) {
+                        if (p.id === id) { this.players.delete(sid); return; }
+                    }
+                },
+
+                feedHealth(sid, value) {
+                    const p = this.players.get(sid);
+                    if (p) p.health = value;
+                    if (sid === this.self.sid) this.self.health = value;
+                },
+
+                // "H" - objects, 8 fields each.
+                feedObjects(data) {
+                    if (!Array.isArray(data)) return;
+                    for (let i = 0; i + 7 < data.length; i += 8) {
+                        this.objects.set(data[i], {
+                            sid: data[i],
+                            x: data[i + 1],
+                            y: data[i + 2],
+                            dir: data[i + 3],
+                            scale: data[i + 4],
+                            type: data[i + 5],
+                            id: data[i + 6],
+                            owner: data[i + 7]
+                        });
+                    }
+                },
+
+                removeObject(sid) { this.objects.delete(sid); },
+
+                removeObjectsOf(ownerSid) {
+                    for (const [sid, o] of this.objects) {
+                        if (o.owner === ownerSid) this.objects.delete(sid);
+                    }
+                },
+
+                // "N" - one of the bot's own counters.
+                feedValue(name, value) {
+                    if (name === "points") this.self.points = value;
+                    else if (name in this.self) this.self[name] = value;
+                },
+
+                reset() {
+                    this.players.clear();
+                    this.objects.clear();
+                    this.self.health = 100;
+                },
+
+                // ---- what the behaviour layer asks it -----------------------
+
+                // Everyone this bot can see who is not on its team, and not one
+                // of ours. Teamless players each count as their own side, which
+                // is how the game treats them.
+                enemies() {
+                    const out = [];
+                    const mine = this.self.team;
+                    for (const p of this.players.values()) {
+                        if (p.sid === this.self.sid) continue;
+                        if (mine != null && p.team === mine) continue;
+                        if (NovaBots.isOurs(p.sid, p.name)) continue;
+                        out.push(p);
+                    }
+                    return out;
+                },
+
+                nearestEnemy() {
+                    let best = null, bestD = Infinity;
+                    for (const p of this.enemies()) {
+                        const d = Math.hypot(p.x - this.self.x, p.y - this.self.y);
+                        if (d < bestD) { bestD = d; best = p; }
+                    }
+                    return best;
+                },
+
+                distanceTo(o) {
+                    return Math.hypot(o.x - this.self.x, o.y - this.self.y);
+                },
+
+                angleTo(o) {
+                    return Math.atan2(o.y - this.self.y, o.x - this.self.x);
+                },
+
+                // Resources near the bot: type 0 tree, 1 bush, 2 stone, 3 gold.
+                // Objects with an owner are buildings, never resources.
+                resourcesNear(type, range) {
+                    const out = [];
+                    for (const o of this.objects.values()) {
+                        if (o.owner >= 0) continue;
+                        if (type != null && o.type !== type) continue;
+                        const d = this.distanceTo(o);
+                        if (d <= (range || 700)) out.push({ object: o, distance: d });
+                    }
+                    return out.sort((a, b) => a.distance - b.distance);
+                },
+
+                // Anything solid the bot could walk into within `range`.
+                blockersNear(range) {
+                    const out = [];
+                    for (const o of this.objects.values()) {
+                        const d = this.distanceTo(o);
+                        if (d <= (range || 200)) out.push({ object: o, distance: d });
+                    }
+                    return out.sort((a, b) => a.distance - b.distance);
+                }
+            };
+        }
+
+        // =====================================================================
         // BOTS — CONNECTION  (RYN v5.4's approach, on Novastorm's own layer)
         //
         // A bot is a second authenticated socket to the SAME server. The part
@@ -14356,6 +14560,8 @@ for (let tree of trees) {
                         x: 0, y: 0, team: null,
                         deadAt: 0
                     };
+                    // Its own view of the game — see BOT WORLD above.
+                    bot.world = NovaBotWorld(bot);
                     this.list.push(bot);
 
                     let settled = false;
@@ -14409,6 +14615,7 @@ for (let tree of trees) {
                         if (msg.type === "C") {
                             bot.sid = msg.args && msg.args[0];
                             bot.inGame = true;
+                            bot.world.self.sid = bot.sid;
                             console.log("[NovaBot]", name, "entered, sid =", bot.sid);
                             return;
                         }
@@ -14418,8 +14625,24 @@ for (let tree of trees) {
                             bot.inGame = false;
                             bot.sid = null;
                             bot.deadAt = Date.now();
+                            bot.world.reset();
                             console.log("[NovaBot]", name, "died");
                             return;
+                        }
+
+                        // Everything else is this bot's own view of the game.
+                        // The master never sees most of it: these packets are
+                        // sent to the bot's socket because of where the BOT is.
+                        const a = msg.args || [];
+                        switch (msg.type) {
+                          case "a": bot.world.feedPlayers(a[0]); break;
+                          case "D": bot.world.feedPlayerData(a[0]); break;
+                          case "E": bot.world.removePlayerById(a[0]); break;
+                          case "O": bot.world.feedHealth(a[0], a[1]); break;
+                          case "H": bot.world.feedObjects(a[0]); break;
+                          case "Q": bot.world.removeObject(a[0]); break;
+                          case "R": bot.world.removeObjectsOf(a[0]); break;
+                          case "N": bot.world.feedValue(a[0], a[1]); break;
                         }
                     });
 
@@ -14467,9 +14690,25 @@ for (let tree of trees) {
                 if (i >= 0) this.list.splice(i, 1);
             },
 
-            // Runs with the master's tick. Connection upkeep only for now:
-            // bring a dead bot back, and read each bot's position off the
-            // master's own player list while it is on screen.
+            // Is this player one of ours - the master, or another bot? Used by
+            // a bot's own world, which has no idea who "we" are.
+            isOurs(sid, name) {
+                if (myPlayer && sid === myPlayer.sid) return true;
+                for (const bot of this.list) {
+                    if (bot.sid != null && bot.sid === sid) return true;
+                    if (name && bot.name === name) return true;
+                }
+                return false;
+            },
+
+            // Runs with the master's tick. Upkeep only: bring a dead bot back,
+            // and keep the bot's summary position current.
+            //
+            // The position comes from the bot's OWN world first - that is the
+            // whole point of giving it one, and it keeps working when the bot
+            // is nowhere near the master's screen. The master's player list is
+            // only a fallback for the moment before the bot's first "a" packet
+            // lands.
             tick() {
                 if (!this.list.length) return;
 
@@ -14482,6 +14721,14 @@ for (let tree of trees) {
                             bot.deadAt = 0;
                             this._enter(bot);
                         }
+                        continue;
+                    }
+
+                    const own = bot.world.self;
+                    if (own.sid != null && bot.world.players.has(own.sid)) {
+                        bot.x = own.x;
+                        bot.y = own.y;
+                        bot.team = own.team;
                         continue;
                     }
 
@@ -14499,7 +14746,15 @@ for (let tree of trees) {
                 return {
                     connected: this.list.length,
                     inGame: this.list.filter(b => b.inGame).length,
-                    held: this.list.filter(b => b.held).length
+                    held: this.list.filter(b => b.held).length,
+                    // what each bot can see from where it stands
+                    views: this.list.map(b => ({
+                        name: b.name,
+                        at: [Math.round(b.x), Math.round(b.y)],
+                        players: b.world.players.size,
+                        objects: b.world.objects.size,
+                        enemies: b.world.enemies().length
+                    }))
                 };
             }
         };

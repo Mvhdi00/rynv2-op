@@ -475,5 +475,48 @@ node tools/test-bots.js     # 22 cases: token choice, URL, handshake, enter,
                             # hold/release, death + autospawn, cleanup
 ```
 
+## Bots — a world of their own
+
+In RYN every bot is a whole `PlayerClient`: the same class as the master, with
+its own `PlayerManager`, `EnemyManager`, `ObjectManager` and `myPlayer`, fed by
+its own socket. That is why a RYN bot can act where the master cannot see — it
+is not reading the master's screen, it is reading its own stream.
+
+Novastorm has exactly one world model and it belongs to the master, so each bot
+is given a small one of its own, built from the same packets the master parses,
+with the same field layouts:
+
+| packet | what it carries | where it lands |
+|---|---|---|
+| `a` | every visible player, 13 fields each | `world.players`, and the bot's own row into `world.self` |
+| `D` | someone entered view (id, sid, name, x, y, dir, health…) | name and health on that player |
+| `E` | someone left view — **by socket id, not sid** | removed |
+| `O` | a health change | that player, or the bot itself |
+| `H` | objects, 8 fields each | `world.objects` |
+| `Q` / `R` | one object / every object of an owner destroyed | removed |
+| `N` | one of the bot's own counters | `world.self.wood`, `.points`, `.age`… |
+
+Players missing from a tick are dropped rather than left stale, so "nearest"
+can never point at a ghost.
+
+What the behaviour layer will ask it: `enemies()` (skipping its own clan, the
+master and the other bots), `nearestEnemy()`, `distanceTo()` / `angleTo()`,
+`resourcesNear(type, range)` (anything owned is a building, never a resource)
+and `blockersNear(range)`, nearest first.
+
+The tick now takes each bot's position from its own world and only falls back to
+the master's player list for the moment before the bot's first `a` packet.
+`NovaBots.status().views` shows what each bot can see from where it stands.
+
+It is deliberately smaller than the master's model — positions, teams, health and
+object footprints — which is enough to pick a target, hold a distance, walk
+around something or find a resource, and costs a Map write per packet instead of
+a second copy of the game.
+
+```sh
+node tools/test-bot-world.js   # 25 cases over the packet layouts and the queries
+node tools/test-bots.js        # 27, now including the socket feeding the world
+```
+
 Not yet built (the behaviour layers): movement and formations, combat, farming,
 clans, squads, 1v1.

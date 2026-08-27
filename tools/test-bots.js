@@ -18,7 +18,11 @@ const src = fs.readFileSync(SCRIPT, 'utf8');
 const start = src.indexOf('        const NOVABOT_SITEKEY');
 const end = src.indexOf('        window.NovaBots = NovaBots;');
 if (start < 0 || end < 0) throw new Error('bots block not found');
-const block = src.slice(start, end);
+
+// the per-bot world comes along: a bot is given one the moment it connects
+const worldStart = src.indexOf('        function NovaBotWorld(bot) {');
+if (worldStart < 0) throw new Error('bot world block not found');
+const block = src.slice(worldStart, start) + src.slice(start, end);
 
 let failed = 0;
 function check(name, got, want) {
@@ -154,12 +158,27 @@ async function runFlow() {
     // entering the world
     sock.fire('message', { data: { type: 'C', args: [1234] } });
     check('"C" gives the bot its sid', [bot.sid, bot.inGame], [1234, true]);
-    check('status counts it', NovaBots.status(), { connected: 1, inGame: 1, held: 0 });
+    const st = NovaBots.status();
+    check('status counts it', [st.connected, st.inGame, st.held], [1, 1, 0]);
+    check('status reports what the bot can see', st.views[0].name, 'nova1');
 
     // the master's player list is read for its position
     players.push({ name: 'nova1', sid: 1234, x2: 500, y2: 600, team: 'RYN' });
     NovaBots.tick();
     check('the position comes off the master player list', [bot.x, bot.y, bot.team], [500, 600, 'RYN']);
+
+    // ... until the bot's own stream arrives, which then takes over
+    sock.fire('message', { data: { type: 'a', args: [[
+        1234, 800, 900, 0, -1, 0, 0, 'RYN', 0, 0, 0, 0, 0,
+        4321, 850, 900, 0, -1, 5, 2, null, 0, 0, 0, 0, 0
+    ]] } });
+    check('the socket feeds the bot its own world', bot.world.players.size, 2);
+    NovaBots.tick();
+    check('its own view wins over the master list', [bot.x, bot.y], [800, 900]);
+    check('it sees an enemy the master never reported', bot.world.nearestEnemy().sid, 4321);
+
+    sock.fire('message', { data: { type: 'H', args: [[77, 810, 900, 0, 50, 0, -1, -1]] } });
+    check('objects reach the bot world too', bot.world.resourcesNear(0, 400).length, 1);
 
     // death and respawn
     sent.length = 0;
