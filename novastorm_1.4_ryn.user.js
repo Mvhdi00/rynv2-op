@@ -1417,6 +1417,68 @@ let lastTime = performance.now();
 let currentFps = 0;
 let lastStatsText = "";
 
+// =============================================================================
+// SERVER PLAYER COUNT  (like RYN)
+//
+// The game itself gets its lobby numbers from https://api.moomoo.io/servers
+// (confirmed in the game bundle: `${api}/servers?v=…`, each server carrying
+// region / name / games[] with playerCount + playerCapacity). We poll the same
+// endpoint, find the server named in the ?server=region:name query, and show
+// its players / capacity. If the fetch fails (offline, CORS), we fall back to
+// the number the server-browser dropdown already shows, e.g. "[42/50]".
+// =============================================================================
+let serverCountText = "?";
+const SERVER_API = (location.hostname.indexOf("sandbox") === 0 ? "https://api-sandbox.moomoo.io" : "https://api.moomoo.io") + "/servers";
+
+function currentServerKey() {
+    try {
+        const q = new URLSearchParams(location.search).get("server");
+        if (typeof q !== "string") return null;
+        const [region, name] = q.split(":");
+        return region && name ? { region, name } : null;
+    } catch (e) { return null; }
+}
+
+function serverBrowserFallback() {
+    try {
+        const sel = document.getElementById("serverBrowser");
+        const opt = sel && sel.querySelector("select") ? sel.querySelector("select").selectedOptions[0] : null;
+        const m = /\[(\d+)\s*\/\s*(\d+)\]/.exec((opt && opt.textContent) || "");
+        return m ? m[1] + "/" + m[2] : null;
+    } catch (e) { return null; }
+}
+
+async function pollServerCount() {
+    const here = currentServerKey();
+    try {
+        const res = await fetch(SERVER_API, { cache: "no-store" });
+        const data = await res.json();
+        // The response is either a flat list of games or servers with games[];
+        // flatten either shape to per-game entries carrying region + name.
+        const games = [];
+        const rows = Array.isArray(data) ? data : (data && data.servers) || [];
+        for (const s of rows) {
+            if (Array.isArray(s.games)) {
+                for (const g of s.games) games.push({ region: s.region, name: s.name, playerCount: g.playerCount, playerCapacity: g.playerCapacity });
+            } else {
+                games.push(s);
+            }
+        }
+        if (here) {
+            for (const g of games) {
+                if (String(g.region) === here.region && String(g.name) === here.name) {
+                    serverCountText = Math.min(g.playerCount, g.playerCapacity) + "/" + g.playerCapacity;
+                    return;
+                }
+            }
+        }
+    } catch (e) {}
+    const fb = serverBrowserFallback();
+    serverCountText = fb === null ? "?" : fb;
+}
+setTimeout(pollServerCount, 1500);
+setInterval(pollServerCount, 10000);
+
 // This readout is still driven by requestAnimationFrame, which stays paced to
 // the monitor - fine for a HUD, but it must not report the screen's rate as the
 // game's. The game loop publishes what it is actually running at on
@@ -1436,7 +1498,17 @@ function updateStats() {
     let ping = (window.vars && window.vars.pingStabilizer === false)
         ? (window.pingTime || 0)
         : (window.pingSmooth || window.pingTime || 0);
-    let text = `FPS: ${fps} <span style="color:#FFF;">|</span> Ping: ${ping}ms`;
+    // bots: how many are in the game out of how many are connected
+    let botsText = "";
+    try {
+        if (window.NovaBots && window.NovaBots.list.length) {
+            const st = window.NovaBots.status();
+            botsText = ` <span style="color:#FFF;">|</span> Bots: ${st.inGame}/${st.connected}`;
+        }
+    } catch (e) {}
+
+    const sep = '<span style="color:#FFF;">|</span>';
+    let text = `FPS: ${fps} ${sep} Ping: ${ping}ms ${sep} Players: ${serverCountText}${botsText}`;
     if (text !== lastStatsText) {
         statsDiv.innerHTML = text;
         lastStatsText = text;
