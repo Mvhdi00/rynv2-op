@@ -285,3 +285,68 @@ The round trip itself is the network's business; these two things were not:
 ```sh
 node tools/test-performance.js   # scheduler, ping stats, render-list equivalence
 ```
+
+---
+
+# Best 2026 Mod — cleaned
+
+`Best2026Mod_cleaned.user.js` is a third-party moomoo userscript ("Best 2026
+Mod v3.95") with its malicious parts removed. The original was audited first;
+what it carried, and what came out:
+
+## What was in it
+
+Five obfuscated payloads (~95KB total) were parked at the end of ordinary lines
+behind 170–270 spaces, so they were invisible in an editor. They were basE91
+strings with a different 91-character alphabet per function, which is why
+searching the file for `http`, `webhook` or `token` found nothing. Decoding them
+statically (no execution) produced:
+
+- **A token logger.** Console strings `[TokenLogger] Checking Worker for
+  existing token`, `Token: %c%s`, `Iframe token grab failed:`, `Beacon sent
+  successfully`. It read the token (hidden `iframe` → `contentWindow` /
+  `localStorage` / `JSON.parse`, with a `?data=` image-beacon fallback) and
+  POSTed it as a Discord webhook embed — `fields: [{name: "Token", value: …},
+  {name: "Date: ", …}]` — to seven endpoints on `*.iloveloggers.workers.dev`
+  (`/log`, `/track`, `/backup`, `/report`, and three bare hosts), with delivery
+  confirmation back to `/report`.
+- **A location tracker.** Every 30 seconds, and on every URL change, it POSTed
+  `{server: "The server is " + location.href, time: Date.now()}` to
+  `momo.iloveloggers.workers.dev`.
+- **Kill switches.** Any player typing `jh67` in chat blanked your page; `!dc!
+  <your name>` called `window.leave()`; an obfuscated `!ownerdc` handler did the
+  same for the author.
+- **Anti-tamper.** Five `typeof <payload var> === "undefined"` guards blanked
+  the page if a payload was deleted, the page was blanked on non-Chrome
+  browsers, and `console.clear()` ran 1.5s after load to wipe the logger's own
+  output.
+
+No password prompt, no keylogger, no cookie access — the theft was of the
+session token, which opens the account without one.
+
+## What was removed
+
+All five payloads, all five anti-tamper guards, both chat kill switches, both
+browser-gate page wipes, both `console.clear()` calls, the runtime
+`<script src="https://rawgit.com/…">` injection and its `@require` (rawgit is a
+dead host — whoever registers the domain gets code execution on the page), the
+unused dompurify `@require`, and `@updateURL` / `@downloadURL` (which let the
+author silently replace the script on your machine).
+
+The mod's own features were left alone. `msgpack` still loads from the
+greasyfork `@require`, which the script needs.
+
+## Verifying it
+
+```sh
+node tools/scan-userscript.js Best2026Mod_cleaned.user.js
+node --check Best2026Mod_cleaned.user.js
+```
+
+`tools/scan-userscript.js` reports hosts, payloads parked off the right edge of
+a line, basE91 string tables, what the code can do (network, dynamic code,
+stored credentials, iframes, key capture, redirects), remote kill switches, and
+the header's `@require` / `@updateURL` lines. It does not execute the script.
+On the cleaned file it flags nothing; every host left is a game asset, a font,
+or the msgpack library, and the only hits under "what the code can do" are the
+game's own `getSavedVal` and its keyboard handlers.
