@@ -638,6 +638,36 @@ This is the shape the rest follow: point the runner at a bot, call the master's
 existing function, done. Still to route this way: the placer, the attack / insta
 pipeline (needs per-bot reload timing first), auto-buy.
 
+## Bots — the feature batch
+
+Built on the world model and the runner:
+
+- **Attack** — two buttons/keys. Primary (your left click) swings weapon 0,
+  Secondary (right) swings weapon 1; while on, each bot faces the nearest enemy
+  in its own view and holds the swing.
+- **Auto Break** — a bot stuck against a wall / mill / spike / trap for a few
+  ticks turns and breaks it; resources are left alone.
+- **Auto Heal** — the master's own `heal()` routed onto the bot.
+- **Auto Accept** — while you're in a clan, one bot per 1.5s sends a join
+  request and the master auto-accepts any bot-named request.
+- **Auto respawn** — re-enters within ~120ms of death, retrying until it lands.
+- **Scan** — put a player's id / sid / name in the panel and switch it on: the
+  bots roam the whole map at random, the first to see the target pings your
+  minimap at its spot (via the master's own `pingMap`) and then holds ~150 off
+  it as a beacon, while the rest come home.
+- **Safe Walk** — every bot heading bends around enemy spikes and traps it can
+  see (the master's safewalk idea, on the bot's world).
+
+Each is one switch in the **Bots** tab, driving all the bots at once, and every
+per-bot action reads `bot.world` and sends on `bot.ws`.
+
+```sh
+node tools/test-bots.js   # + attack, auto-break, auto-accept, scan, safe walk
+```
+
+Still to build from the batch: routing the master's Auto Place / Preplace,
+per-bot weapon selection + auto platform, and the teleport safe-walk.
+
 ```sh
 node tools/test-bot-world.js   # self as a full player, predicted positions,
                                # item counts, enemies with velocity
