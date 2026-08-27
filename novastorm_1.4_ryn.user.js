@@ -14917,11 +14917,62 @@ for (let tree of trees) {
                     // own socket. Each is gated by the SAME toggle the master
                     // uses, so turning a feature on turns it on for the bots too.
                     this._move(bot);
+                    this._autoBreak(bot);
                     this._autoHeal(bot);
                     this._attack(bot);
                     this._autoMills(bot);
                 }
                 this._spinFormation();
+            },
+
+            // =================================================================
+            // AUTO BREAK (per bot) — clear whatever is in the way
+            //
+            // A bot that is trying to move but not getting anywhere is walled in.
+            // When that has held for a few ticks, it turns and swings the primary
+            // at the nearest structure in front of it - a wall, mill, spike or
+            // trap - until the path opens. Resources are left alone; this is for
+            // things someone built to pen the bots in.
+            //
+            // "Stuck" is measured from the bot's own position between ticks, so
+            // it works anywhere on the map, not just where the master can see.
+            // =================================================================
+            _STRUCTURE_IDS: new Set([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15]),
+
+            _autoBreak(bot) {
+                if (!window.vars.botAutoBreak || !bot.inGame) return;
+                const s = bot.world.self;
+
+                // only meaningful while it wants to move
+                if (bot._wantMove == null) { bot._stuck = 0; return; }
+
+                // how far it actually moved since last tick
+                const moved = bot._lastBX == null ? 999
+                    : Math.hypot(s.x2 - bot._lastBX, s.y2 - bot._lastBY);
+                bot._lastBX = s.x2; bot._lastBY = s.y2;
+
+                bot._stuck = moved < 8 ? (bot._stuck || 0) + 1 : 0;
+                if (bot._stuck < 3) return;
+
+                // the nearest structure sitting in front of it, within reach
+                const ahead = {
+                    x: s.x2 + Math.cos(bot._wantMove) * 45,
+                    y: s.y2 + Math.sin(bot._wantMove) * 45
+                };
+                let target = null, best = Infinity;
+                for (const o of bot.world.objects.values()) {
+                    if (!this._STRUCTURE_IDS.has(o.id)) continue;
+                    const reach = o.scale + s.scale + 20;
+                    if (Math.hypot(o.x - ahead.x, o.y - ahead.y) > reach) continue;
+                    const d = Math.hypot(o.x - s.x2, o.y - s.y2);
+                    if (d < best) { best = d; target = o; }
+                }
+                if (!target) return;
+
+                const angle = Math.atan2(target.y - s.y2, target.x - s.x2);
+                EXP.send(bot.ws, "z", [0, true]);   // primary
+                EXP.send(bot.ws, "D", [angle]);
+                EXP.send(bot.ws, "F", [1, angle]);
             },
 
             // =================================================================
@@ -15096,6 +15147,7 @@ for (let tree of trees) {
             },
 
             _sendMove(bot, angle) {
+                bot._wantMove = angle;   // what auto-break reads to know it's trying to move
                 if (bot._lastMoveAngle === angle) return;   // don't spam the same heading
                 bot._lastMoveAngle = angle;
                 EXP.send(bot.ws, "9", [angle]);
@@ -21883,6 +21935,7 @@ for (let tree of trees) {
         botAttackPrimary: false,
         botAttackSecondary: false,
         botAutoAccept: true,
+        botAutoBreak: false,
 
         // Bot movement
         botFollow: true,
@@ -22149,7 +22202,8 @@ for (let tree of trees) {
                     { type: 'toggle', name: "Attack — Primary (left)", id: "botAttackPrimary" },
                     { type: 'toggle', name: "Attack — Secondary (right)", id: "botAttackSecondary" },
                     { type: 'keybind', name: "Attack Primary key", id: "keyBotAttackPrimary" },
-                    { type: 'keybind', name: "Attack Secondary key", id: "keyBotAttackSecondary" }
+                    { type: 'keybind', name: "Attack Secondary key", id: "keyBotAttackSecondary" },
+                    { type: 'toggle', name: "Auto Break (clear the way)", id: "botAutoBreak" }
                 ]
             }
         ],

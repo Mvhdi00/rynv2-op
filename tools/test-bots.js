@@ -89,7 +89,7 @@ const win = {
         botRadius: 150, botStopRadius: 50, botCircleRotate: false,
         botFreeze: false, botLock: false, botScatter: false,
         botAutoHeal: true, botAttackPrimary: false, botAttackSecondary: false,
-        botAutoAccept: true
+        botAutoAccept: true, botAutoBreak: false
     },
     turnstile,
     OriginalWebSocket: FakeSocket,
@@ -497,6 +497,39 @@ async function runFlow() {
     sent.length = 0;
     NovaBots._attack(b);
     check('and then stays quiet', sent.length, 0);
+
+    // --- auto break --------------------------------------------------------
+    console.log('\n-- auto break --');
+    win.vars.botAutoBreak = true;
+    b.world.self.x2 = 500; b.world.self.y2 = 500; b.world.self.scale = 35;
+    b.world.objects.clear();
+    // a wall (id 3) right in front, to the +x, plus a tree (resource) beside it
+    b.world.objects.set(1, { sid: 1, x: 560, y: 500, scale: 25, id: 3, owner: 8 });
+    b.world.objects.set(2, { sid: 2, x: 560, y: 560, scale: 50, id: 0, owner: -1 }); // tree
+    b._wantMove = 0;          // heading +x, into the wall
+    b._stuck = 0; b._lastBX = 500; b._lastBY = 500;
+
+    // first two ticks it is still measuring "stuck", no break yet
+    sent.length = 0; NovaBots._autoBreak(b);
+    sent.length = 0; NovaBots._autoBreak(b);
+    check('it waits a few stuck ticks before breaking', sent.length, 0);
+
+    NovaBots._autoBreak(b);   // third stuck tick
+    check('then it swings at the blocking wall', sent.filter(s => s[1] === 'F').length, 1);
+    check('it faces the wall, not the tree', Math.round(sent.find(s => s[1] === 'D')[2][0] * 100), 0);
+
+    // moving freely resets the stuck counter -> no break
+    b._lastBX = 500;
+    b.world.self.x2 = 560;    // it moved 60
+    sent.length = 0;
+    NovaBots._autoBreak(b);
+    check('moving freely does not break anything', sent.filter(s => s[1] === 'F').length, 0);
+
+    win.vars.botAutoBreak = false;
+    b._stuck = 5;
+    sent.length = 0;
+    NovaBots._autoBreak(b);
+    check('the toggle off stops breaking', sent.length, 0);
 
     // cleanup
     console.log('\n-- cleanup --');
