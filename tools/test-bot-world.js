@@ -118,6 +118,36 @@ check('resources land on the bot itself', [world.self.wood, world.self.points, w
 world.feedValue('nonsense', 5);
 check('an unknown value is ignored', world.self.nonsense, undefined);
 
+// --- the bot's own player, shaped like the master's myPlayer ---------------
+console.log('\n-- self as a full player --');
+const w2 = NovaBotWorld({ name: 'nova2' });
+w2.self.sid = 10;
+
+// two ticks so velocity (x2*2 - lastX) has a previous frame to work from
+w2.feedPlayers([10, 100, 100, 0, 2, 5, 3, 'RYN', 0, 7, 0, 0, 0]);
+w2.feedPlayers([10, 120, 100, 0, 2, 5, 3, 'RYN', 0, 7, 0, 0, 0]);
+
+check('x2/y2 are the server position', [w2.self.x2, w2.self.y2], [120, 100]);
+check('xVel is the one-tick-ahead point the master predicts', [w2.self.xVel, w2.self.yVel], [140, 100]);
+check('weapon index and variant are tracked', [w2.self.weaponIndex, w2.self.weaponVariant], [5, 3]);
+check('the variant lands in the per-weapon table', w2.self.weaponVariants[5], 3);
+check('build index and skin are tracked', [w2.self.buildIndex, w2.self.skinIndex], [2, 7]);
+
+w2.feedItemCount(3, 7);
+check('"S" fills the bot\'s item counts', w2.self.itemCounts[3], 7);
+
+// enemies carry x2/xVel too, so a bot aims like the master
+w2.feedPlayers([
+    10, 120, 100, 0, 2, 5, 3, 'RYN', 0, 7, 0, 0, 0,
+    50, 300, 100, 0, -1, 0, 0, null, 0, 0, 0, 0, 0
+]);
+w2.feedPlayers([
+    10, 120, 100, 0, 2, 5, 3, 'RYN', 0, 7, 0, 0, 0,
+    50, 320, 100, 0, -1, 0, 0, null, 0, 0, 0, 0, 0
+]);
+const foe = w2.nearestEnemy();
+check('an enemy has a predicted position', [foe.x2, foe.xVel], [320, 340]);
+
 // --- death ------------------------------------------------------------------
 console.log('\n-- death --');
 world.reset();

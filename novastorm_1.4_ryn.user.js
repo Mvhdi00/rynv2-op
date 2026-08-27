@@ -14237,9 +14237,26 @@ for (let tree of trees) {
                 bot: bot,
                 players: new Map(),   // sid -> { sid, x, y, dir, team, weaponIndex, name, health }
                 objects: new Map(),   // sid -> { sid, x, y, dir, scale, type, id, owner }
+                // The bot's own player, shaped like the master's myPlayer so
+                // the same feature code can read it once the context runner is
+                // in. x2/y2 are the authoritative "server" position (what the
+                // master's features read); x/y mirror them. xVel/yVel are the
+                // one-tick-ahead position the master predicts to, filled in
+                // from the change each "a" packet brings.
                 self: {
-                    sid: null, x: 0, y: 0, dir: 0, health: 100, team: null,
-                    weaponIndex: 0, food: 0, wood: 0, stone: 0, points: 0, age: 1, kills: 0
+                    sid: null,
+                    x: 0, y: 0, x2: 0, y2: 0, xVel: 0, yVel: 0,
+                    dir: 0, d2: 0,
+                    health: 100, maxHealth: 100, scale: 35,
+                    team: null, name: "",
+                    alive: true,
+                    buildIndex: -1, weaponIndex: 0, weaponVariant: 0,
+                    weaponVariants: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    weapons: [0],
+                    items: [0, 3, 6, 10],
+                    itemCounts: {},
+                    skinIndex: 0, tailIndex: 0,
+                    food: 0, wood: 0, stone: 0, points: 0, age: 1, kills: 0
                 },
                 lastUpdate: 0,
 
@@ -14255,12 +14272,20 @@ for (let tree of trees) {
 
                         let p = this.players.get(sid);
                         if (!p) {
-                            p = { sid: sid, name: "", health: 100 };
+                            p = { sid: sid, name: "", health: 100, scale: 35 };
                             this.players.set(sid, p);
                         }
+                        const lastPX = p.x2, lastPY = p.y2;
                         p.x = data[i + 1];
                         p.y = data[i + 2];
+                        // x2/y2 and xVel/yVel mirror what the master keeps on
+                        // every player, so a bot's features can aim at an enemy
+                        // exactly the way the master's do.
+                        p.x2 = p.x; p.y2 = p.y;
+                        p.xVel = lastPX == null ? p.x : p.x * 2 - lastPX;
+                        p.yVel = lastPY == null ? p.y : p.y * 2 - lastPY;
                         p.dir = data[i + 3];
+                        p.d2 = p.dir;
                         p.buildIndex = data[i + 4];
                         p.weaponIndex = data[i + 5];
                         p.weaponVariant = data[i + 6];
@@ -14268,11 +14293,22 @@ for (let tree of trees) {
                         p.skinIndex = data[i + 9];
 
                         if (sid === this.self.sid) {
-                            this.self.x = p.x;
-                            this.self.y = p.y;
-                            this.self.dir = p.dir;
-                            this.self.team = p.team;
-                            this.self.weaponIndex = p.weaponIndex;
+                            const s = this.self;
+                            const lastX = s.x2, lastY = s.y2;
+                            s.x2 = p.x; s.y2 = p.y;
+                            s.x = p.x; s.y = p.y;
+                            // the same one-tick-ahead point the master predicts
+                            // to (x2*2 - lastX), so features that aim at xVel/yVel
+                            // aim at the same place for a bot.
+                            s.xVel = p.x * 2 - lastX;
+                            s.yVel = p.y * 2 - lastY;
+                            s.dir = p.dir; s.d2 = p.dir;
+                            s.team = p.team;
+                            s.buildIndex = p.buildIndex;
+                            s.weaponIndex = p.weaponIndex;
+                            s.weaponVariant = p.weaponVariant;
+                            if (s.weaponIndex != null) s.weaponVariants[s.weaponIndex] = p.weaponVariant;
+                            s.skinIndex = p.skinIndex;
                         }
                     }
 
@@ -14312,6 +14348,11 @@ for (let tree of trees) {
                     if (sid === this.self.sid) this.self.health = value;
                 },
 
+                // "S" - one of the bot's own item counts (index -> count).
+                feedItemCount(index, value) {
+                    this.self.itemCounts[index] = value;
+                },
+
                 // "H" - objects, 8 fields each.
                 feedObjects(data) {
                     if (!Array.isArray(data)) return;
@@ -14347,6 +14388,7 @@ for (let tree of trees) {
                     this.players.clear();
                     this.objects.clear();
                     this.self.health = 100;
+                    this.self.alive = true;
                 },
 
                 // ---- what the behaviour layer asks it -----------------------
@@ -14624,6 +14666,7 @@ for (let tree of trees) {
                         if (msg.type === "P") {
                             bot.inGame = false;
                             bot.sid = null;
+                            bot.world.self.alive = false;
                             bot.deadAt = Date.now();
                             bot.world.reset();
                             console.log("[NovaBot]", name, "died");
@@ -14643,6 +14686,7 @@ for (let tree of trees) {
                           case "Q": bot.world.removeObject(a[0]); break;
                           case "R": bot.world.removeObjectsOf(a[0]); break;
                           case "N": bot.world.feedValue(a[0], a[1]); break;
+                          case "S": bot.world.feedItemCount(a[0], a[1]); break;
                         }
                     });
 

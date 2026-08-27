@@ -577,4 +577,31 @@ node tools/test-bots.js   # adds: follow toward master, stop inside radius,
                           # scatter
 ```
 
-Not yet built (the behaviour layers): combat, farming, clans, squads, 1v1.
+## Bots — toward "everyone is a master"
+
+The goal is RYN's: add a feature once and the bots get it too. RYN reaches it by
+making every bot the same `PlayerClient` class as the master and looping features
+over all of them. Novastorm is procedural — one master, features written against
+globals (`myPlayer`, `io`, `nearestEnemy`) — so the same end is reached the
+novastorm way: a **client context** each feature can be pointed at, with the
+master as the default context and each bot as another.
+
+This is staged so nothing working breaks between steps.
+
+**Stage 1 (done): a full per-bot player model.** Each bot's `world.self` is now
+shaped like the master's `myPlayer` — `x2`/`y2` (the server position the master's
+features read), `xVel`/`yVel` (the same one-tick-ahead point the master predicts
+to), `weaponIndex`/`weaponVariant`/`weaponVariants`, `items`/`itemCounts`,
+`buildIndex`, `health`/`maxHealth`, team, skin, age — all fed from the bot's own
+packets (`a`, `D`, `O`, `N`, `S`). Enemies in a bot's world carry `x2`/`xVel`
+too, so a bot can aim at one exactly the way the master does. Nothing global was
+touched, so this is pure foundation.
+
+Still to come: the context runner that swaps the globals to a bot and runs the
+master's own feature functions, then the combat / heal / place features routed
+through it.
+
+```sh
+node tools/test-bot-world.js   # adds: self as a full player, predicted
+                               # positions, item counts, enemies with velocity
+```
