@@ -16,7 +16,7 @@
 
 /* Says which build is actually running, so "I installed the fix" and "the fix is
  * running" stop being the same guess. */
-console.log("%c[revelation] build: transport-port 2026-08-28", "color:#9b8cff");
+console.log("%c[revelation] build: spawn-after-handshake 2026-08-28", "color:#9b8cff");
 // Force bot spawning toggle ON by default
 /*var spawning = true;
 
@@ -4331,6 +4331,13 @@ const RevTransport = (function () {
 /* Null until io-init says the connection is signed. */
 let revNet = null;
 
+/* Whether io-init has arrived on the live connection. Until it has there is no
+ * key and no opcode table, so a frame sent now cannot be signed and cannot even
+ * be addressed — it goes out in the pre-2023 format and the server discards it.
+ * Nothing is sendable before the handshake, so drop those frames rather than
+ * putting malformed bytes on the wire. */
+let revHandshake = false;
+
 /* Builds the state io-init describes, or null for an unsigned connection. */
 function revNetInit(args) {
     if (!args || args[3] !== RevTransport.encryptedMode) return null;
@@ -4343,6 +4350,7 @@ function revNetInit(args) {
 
 /* Wraps an outgoing [type, args] the way the server now expects it. */
 function revNetFrame(type, args) {
+    if (!revHandshake) return null;             // nothing is sendable yet
     if (!revNet) return ql.encode([type, args]);
     const op = revNet.tables.c2s.enc[type];
     if (op === undefined) return null;          // opcode this server does not take
@@ -4388,6 +4396,7 @@ const ee = {
       this.socket = new WebSocket(e);
       websocket = this.socket;
       this.socket.binaryType = "arraybuffer";
+      let handshake = false;
       this.socket.onmessage = function (o) {
         var a = new Uint8Array(o.data);
         const l = Wl.decode(a);
@@ -4397,6 +4406,17 @@ const ee = {
           // Everything after this frame is permuted and signed unless the
           // server says otherwise.
           revNet = revNetInit(a);
+          revHandshake = true;
+          // The connection is only usable now, so this is where the game
+          // reports it open — not in onopen. Anything sent before io-init has
+          // no opcode table and no key to sign with, so it goes out in the old
+          // unsigned format and the server drops it. The first thing this
+          // callback does is send the spawn packet, which is why the socket
+          // opened, the world drew, and you were never in it.
+          if (!handshake) {
+            handshake = true;
+            t();
+          }
           return;
         }
         // The opcode is a number on the current server; map it back to the
@@ -4407,10 +4427,14 @@ const ee = {
       };
       this.socket.onopen = function () {
         s.connected = true;
-        t();
       };
       this.socket.onclose = function (o) {
         s.connected = false;
+        // The key, the opcode tables and the sequence number all belong to the
+        // connection that just ended. Carrying them into the next one signs
+        // with a stale key from a sequence the server has never seen.
+        revNet = null;
+        revHandshake = false;
         if (o.code == 4001) {
           t("Invalid Connection");
         } else if (!n) {
@@ -4499,6 +4523,8 @@ const ee = {
     }
     this.socket = null;
     this.connected = false;
+    revNet = null;
+    revHandshake = false;
   }
 };
 var qr = Math.abs;

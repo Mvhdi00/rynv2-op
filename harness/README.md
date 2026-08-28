@@ -45,7 +45,10 @@ node retrap.js                # instant retrap: does the break get answered, how
 node item-limits.js           # placement caps vs the game's own rule
 node loop-alive.js            # counts the render loop's own reschedules
 node transport-check.js       # a client's wire format vs the game's own
+node packet-layout.js         # a client's packet field layouts vs the game's own
 node spawn-check.js           # for clients that open their own socket
+node boot-check.js            # can the real Play button reach a connection
+node reconnect-check.js       # is the second connection as good as the first
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -119,6 +122,40 @@ Against a build without the stand-down guard, `late` fails with
 `sequence out of order (9: got 1, expected 4)`, close code 4001, and
 `colours=1` — a green screen and `disconnected`.
 
+### `spawn-check.js`, `boot-check.js`, `reconnect-check.js`
+
+For a client that carries its own copy of the game and opens its own socket.
+`play.js` opens the socket itself, which suits a client that hooks
+`window.WebSocket`; a client that connects on its own never sees that socket and
+sits on its menu proving nothing. These three redirect every socket the page
+opens to the mock instead, so the client's own connection is the one under test,
+and they tell the two programs on the page apart — both open sockets, so
+counting them proves nothing.
+
+`spawn-check.js` drives a whole session: through the client's real captcha gate,
+into the world, then samples the canvas where your character should be. The mock
+server it runs against only puts you in the world once it accepts a spawn frame
+it can verify, as the real one does — spawning on a timer instead made a client
+that never sent a valid spawn look exactly like one that did.
+
+```
+  frames the server accepted: 0 seq=1 [] | M seq=2 [{"name":"","moofoll":1,"skin":0}]
+  frames it rejected:         none
+  client state: "me": {"sid":1,"x":7000,"y":7000,"visible":true,"alive":true}
+```
+
+Against the build that sent its spawn from `onopen`, before `io-init` had given
+it a key: `frame shorter than its signature (4 bytes)` and `"me": null`.
+
+`boot-check.js` is the only one that goes through the Play button rather than
+calling the gate directly, so it covers the part of the boot that has to wire
+the button at all — under four states of the FRVR SDK the page hands over.
+
+`reconnect-check.js` connects, drops the socket and connects again. The signing
+key, both opcode tables and the sequence number belong to one connection;
+carrying them into the next signs with a key the server never issued, and the
+client then looks connected while doing nothing.
+
 ### `preplace-bench.js`
 
 Runs the client's own placement geometry against a 0.5 degree reference sweep
@@ -141,8 +178,12 @@ the test runs the shipped code rather than a copy.
 ## Limits
 
 The mock server speaks the real transport (`io-init`, per-connection opcode
-permutation, 6-byte signed client frames) and sends enough packets to spawn,
-render and tick. It is not the game: it does not validate what the client sends
-back, and it covers only the packets in `server.js`. A clean run here means the
-client loads, connects, renders and survives; it is not a substitute for
-playing.
+permutation, 6-byte signed client frames), verifies every frame the client sends
+— signature, opcode, strictly increasing sequence — and with `requireSpawn` puts
+the client in the world only once it accepts a spawn.
+
+It is not the game. It covers only the packets in `server.js`, and their
+*payloads* are the harness's own: the field layouts are checked against
+`src/game_index.js` separately, by comparing the strides each client parses them
+with. A clean run here means the client loads, connects, spawns, renders and
+survives; it is not a substitute for playing.

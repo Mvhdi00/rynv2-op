@@ -218,24 +218,87 @@ token the way the game does and then pressing Play:
 Zero sockets is the whole symptom: nothing to see, nothing to move, nothing to
 build.
 
+### It spawned before it had a transport
+
+With the socket open the client still put nobody in the world. The reason is one
+line out of place.
+
+The game reports its connection open from *inside* the `io-init` branch:
+
+```js
+if (m === "io-init") {
+    s.socketId = g[0],
+    Z = { key: Ro(g[2]), tables: Po(g[1] >>> 0), seq: 0 },
+    o || (o = !0, t());     // here — and onopen does not call t()
+    return
+}
+```
+
+Revelation called it from `onopen` instead. `onopen` fires before the first
+message, so the callback ran with no key, no opcode tables and no sequence
+number — and the first thing that callback does is `bs()`, which sends the spawn
+packet. `revNetFrame` has no state to build a frame from at that point, so the
+spawn goes out in the pre-2023 format: unsigned, unnumbered, addressed by letter
+instead of opcode. The server discards it.
+
+Everything downstream follows from that. The socket is open and healthy, the
+ping packets that need no player go out and come back, the leaderboard arrives —
+but you are not in the game, so there is no character to draw, nothing to move
+and nothing to build with. The client shows you the world it is being sent from
+outside it.
+
+Two smaller faults in the same object: `onclose` and `close()` left `revNet`
+holding the finished connection's key, tables and sequence counter, so a
+reconnect signed with a key the server never issued; and nothing stopped a send
+before the handshake, which could only ever produce a malformed frame. The key
+is now cleared on both paths and frames before `io-init` are dropped rather than
+mangled.
+
+The mock server had been spawning the player on a timer, which made a client
+that never sent a valid spawn look exactly like one that did. It now waits for a
+frame it can verify, as the real one does. [`../harness/spawn-check.js`](../harness/README.md)
+against that server:
+
+| | before | after |
+|---|---|---|
+| spawn frame | `frame shorter than its signature (4 bytes)` | accepted, `seq=2` |
+| frames rejected | 2 | **0** |
+| local player | `null` | `{sid: 1, x: 7000, y: 7000, visible, alive}` |
+| players in the world | 0 | 2 |
+
+And [`../harness/reconnect-check.js`](../harness/README.md), which connects,
+drops the socket and connects again:
+
+| session | spawn | rejected | local player |
+|---|---|---|---|
+| before — #1 | NO | 2 | NONE |
+| before — #2 | NO | 2 | NONE |
+| after — #1 | accepted | 0 | sid 1, alive |
+| after — #2 | accepted | 0 | sid 1, alive |
+
 ## What is verified and what is not
 
-A full session against the mock server now runs, entered through the client's
-own captcha gate: it opens its own socket, negotiates the signed transport (real
-key, both opcode tables, sequence climbing past 80), decodes chat and player
-packets — the harness log shows `Encountered rival[2]` and `tester[1]: hello`
-coming through — and draws the world, the objects, the other player and the
-health bars, with no page errors.
+A full session against the mock server runs, entered through the client's own
+captcha gate and its own Play button: it opens its own socket, negotiates the
+signed transport, sends a spawn the server accepts, and draws the world, the
+objects, the other player and the health bars, with no page errors and no
+rejected frames.
 
-Also verified: the transport is byte-identical to the game's over 200 seeds and
-200 signatures, the handler vocabulary covers all 36 opcodes, and the render
-loop survives a fault.
+Also verified:
 
-**Still not verified:** the live server. The mock speaks the same transport but
-its packet *payloads* are the harness's own, so whether every field layout still
-matches what these handlers expect can only be settled by playing it. The
-startup line `[revelation] build: transport-port 2026-08-28` in the console
-tells you which build is actually running.
+- The transport is byte-identical to the game's over 200 seeds and 200
+  signatures, and the handler vocabulary covers all 36 opcodes.
+- The bulk packets are parsed with the same field strides as the shipped game —
+  player update 13, leaderboard 3, objects 8, animals 7 — so the field layouts
+  these handlers expect are the current ones.
+- The client reaches a connection whether the FRVR SDK resolves, throws because
+  the page's bundle already consumed it, never settles, or is missing entirely.
+- The render loop survives a fault.
+
+**Still not verified:** the live server. The mock speaks the same transport and
+now enforces it, but its packet *payloads* are still the harness's own. The
+startup line `[revelation] build: spawn-after-handshake 2026-08-28` in the
+console tells you which build is actually running.
 
 ## Not fixed
 

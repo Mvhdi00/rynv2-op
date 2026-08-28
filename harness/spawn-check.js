@@ -68,9 +68,17 @@ const REDIRECT = `
 })();
 `;
 
+const frames = [];
+
 (async () => {
   await new Promise((r) => http_server.listen(8321, "127.0.0.1", r));
-  const wss = server.start(8322, null);
+  /* Like the real one: it only puts you in the world once it accepts a spawn
+   * frame, and it says out loud when a frame does not verify. */
+  const violations = [];
+  const wss = server.start(8322, (...a) => frames.push(a.slice(1).join(" ")), {
+    requireSpawn: true,
+    onViolation: (why, detail) => violations.push(why + (detail ? " (" + detail + ")" : "")),
+  });
 
   const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -154,6 +162,8 @@ const REDIRECT = `
   console.log("  connect url:", await page.evaluate(() => (window.__wsUrls || [])[0] || "(none)"));
   console.log("  client state:", JSON.stringify(state));
   console.log("  sockets the page opened:", result.socketsOpened);
+  console.log("  frames the server accepted:", frames.length ? frames.slice(0, 4).join(" | ") : "NONE");
+  console.log("  frames it rejected:", violations.length ? [...new Set(violations)].join(" | ") : "none");
   console.log("  distinct colours where the player should be:", result.coloursAtCentre);
   console.log("  most common:", result.topColours.join("  "));
   console.log("  character drawn:", result.coloursAtCentre > 3 ? "likely yes" : "NO — the middle is flat background");

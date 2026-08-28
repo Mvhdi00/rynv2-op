@@ -46,7 +46,14 @@ function tablesFor(seed) {
 }
 
 function start(port, log, opts) {
-  const { strict = false, onViolation = null, onClose = null, onSession = null } = opts || {};
+  const {
+    strict = false, onViolation = null, onClose = null, onSession = null,
+    /* The real server puts you in the world when it accepts your "M" frame and
+     * not before. Spawning on a timer instead makes a client that never sends a
+     * valid spawn look identical to one that does — which is how a spawn sent
+     * before the transport was negotiated went unnoticed here. */
+    requireSpawn = false,
+  } = opts || {};
   const { WebSocketServer } = require("ws");
   const wss = new WebSocketServer({ port });
 
@@ -101,6 +108,7 @@ function start(port, log, opts) {
       expectedSeq = seq;
 
       if (log) log("c2s", letter, "seq=" + seq, JSON.stringify(frame[1]).slice(0, 120));
+      if (letter === "M") spawn();
     });
 
     ws.on("close", () => { if (onClose) onClose(violations); });
@@ -113,7 +121,16 @@ function start(port, log, opts) {
     const mid = 7e3;
     const foeSid = 2;
 
-    setTimeout(() => {
+    let spawned = false;
+    let tick = null;
+    const spawn = () => {
+      if (spawned) return;
+      spawned = true;
+      sendWorld();
+      tick = setInterval(tickWorld, 111);
+    };
+
+    function sendWorld() {
       send("A", [{ teams: [{ sid: "clan", owner: mySid }] }]);
       send("C", [mySid]);
       // [id, sid, name, x, y, dir, health, maxHealth, scale, skinColor]
@@ -152,11 +169,11 @@ function start(port, log, opts) {
       send("3", ["clan", 1]);
       send("4", [[mySid, "tester"]]);
       send("9", [mid, mid + 100]);
-    }, 250);
+    }
 
     // Keep the world ticking so interpolation and the tick loop run.
     let t = 0;
-    const tick = setInterval(() => {
+    function tickWorld() {
       t++;
       const wobble = Math.sin(t / 8) * 60;
       send("a", [[
@@ -165,8 +182,10 @@ function start(port, log, opts) {
       ]]);
       if (t % 9 === 0) send("O", [foeSid, 60 + (t % 40)]);
       if (t % 15 === 0) send("M", [3, 1]);
-    }, 111);
-    ws.on("close", () => clearInterval(tick));
+    }
+
+    if (!requireSpawn) setTimeout(spawn, 250);
+    ws.on("close", () => { if (tick) clearInterval(tick); });
   });
 
   return wss;
