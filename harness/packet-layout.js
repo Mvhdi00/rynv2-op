@@ -22,7 +22,8 @@ const rev = fs.readFileSync(CLIENT, "utf8");
 
 /* handler letter -> [game function, revelation function] */
 const PAIRS = {
-  a: ["Jl", "playerUpdate"],
+  // A client may split a handler into a guard plus the body that does the work.
+  a: ["Jl", ["playerUpdateTick", "playerUpdate"]],
   G: ["Tl", "updateLeaderboard"],
   H: ["Vl", "loadObject"],
   I: ["Xl", "animalUpdate"],
@@ -63,8 +64,11 @@ console.log(pad("packet", 8) + pad("game fn", 10) + pad("game strides", 22) + pa
 console.log("-".repeat(96));
 let bad = 0;
 for (const [letter, [g, r]] of Object.entries(PAIRS)) {
-  const gb = body(game, g), rb = body(rev, r);
-  if (!rb) { console.log(pad(letter, 8) + pad(g, 10) + pad("", 22) + pad(r, 20) + "handler not found under that name"); continue; }
+  const names = Array.isArray(r) ? r : [r];
+  let rb = null, rName = names[0];
+  for (const n of names) { const b = body(rev, n); if (b) { rb = b; rName = n; break; } }
+  const gb = body(game, g);
+  if (!rb) { console.log(pad(letter, 8) + pad(g, 10) + pad("", 22) + pad(rName, 20) + "handler not found under that name"); continue; }
   const gs = strides(gb), rs = strides(rb);
   const num = (s) => s ? [...s].filter((x) => typeof x === "number").sort((a, b) => a - b) : [];
   const gi = (s) => s ? Math.max(-1, ...[...s].filter((x) => typeof x === "string").map((x) => +x.split(" ")[2])) : -1;
@@ -76,7 +80,7 @@ for (const [letter, [g, r]] of Object.entries(PAIRS)) {
   if (!agree) bad++;
   console.log(pad(letter, 8) + pad(g, 10) +
     pad(gN.join(",") + " (max idx " + gi(gs) + ")", 22) +
-    pad(r, 20) + rN.join(",") + " (max idx " + gi(rs) + ")" + note);
+    pad(rName, 20) + rN.join(",") + " (max idx " + gi(rs) + ")" + note);
 }
 console.log(bad ? "\n" + bad + " packet(s) parsed differently" : "\nall bulk packets parsed identically");
 process.exit(bad ? 1 : 0);

@@ -16,7 +16,60 @@
 
 /* Says which build is actually running, so "I installed the fix" and "the fix is
  * running" stop being the same guess. */
-console.log("%c[revelation] build: spawn-after-handshake 2026-08-28", "color:#9b8cff");
+console.log("%c[revelation] build: canvas-and-tick 2026-08-28", "color:#9b8cff");
+
+/* Take the canvas away from the page's own game.
+ *
+ * This client carries its own copy of the game and runs at document-idle, so
+ * the page's bundle is still there, still running — and it draws on the same
+ * #gameCanvas. It never enters a game (this client wins the Play button), so it
+ * sits on its menu forever, and a moomoo menu backdrop is the world plus a 35%
+ * dark wash over the whole canvas, painted every frame.
+ *
+ * Two render loops on one canvas means the picture is whichever one drew last.
+ * Yours is the one carrying your character, so it flickers, dims, and mostly
+ * is not there — the world drawn dark with nobody in it.
+ *
+ * Both programs take getContext("2d") once and keep it, so swapping the element
+ * before this file takes its own reference is enough: the page's context still
+ * points at the old canvas, which is no longer in the document, and everything
+ * it draws from now on goes nowhere. */
+(function () {
+  try {
+    if (window.__revCanvasTaken) return;
+    const old = document.getElementById("gameCanvas");
+    if (!old || !old.parentNode) return;
+    window.__revCanvasTaken = true;
+    // cloneNode(false) keeps the id, size attributes, class and inline style,
+    // so every stylesheet rule and layout still applies to the new one.
+    old.parentNode.replaceChild(old.cloneNode(false), old);
+  } catch (e) {
+    console.warn("[revelation] could not take the canvas:", e);
+  }
+})();
+
+/* Says a fault out loud, once per distinct message.
+ *
+ * The packet handlers run sixty times a second, so an unguarded console.error
+ * would bury the console; but the alternative this file had — a throw inside an
+ * async handler — is worse, because an unhandled rejection is easy to miss and
+ * says nothing about which handler died. Report each distinct fault once, with
+ * the handler that raised it. */
+const revFaults = new Set();
+function revReportFault(where, err) {
+  const msg = where + ": " + ((err && err.message) || err);
+  if (revFaults.has(msg)) return;
+  revFaults.add(msg);
+  console.error("%c[revelation] " + msg, "color:#ff6b6b", err);
+}
+
+/* This file is full of async handlers, and a throw in one of those is a
+ * rejection nobody has to handle — the browser files it under a heading that is
+ * easy to filter away, with no hint which of them stopped. Anything that gets
+ * past the guards below still gets named here. */
+window.addEventListener("unhandledrejection", function (e) {
+  revReportFault("unhandled", (e && e.reason) || e);
+});
 // Force bot spawning toggle ON by default
 /*var spawning = true;
 
@@ -4423,7 +4476,16 @@ const ee = {
         // letter the handler table is keyed on. An unknown one is not ours.
         const c = revNetType(l[0]);
         if (c === undefined || !i[c]) return;
-        i[c].apply(undefined, a);
+        /* One handler throwing must not stop the socket reading the next
+         * packet, and it must not be silent. Every one of these dereferences
+         * server data, so a field this fork has not seen before — a weapon
+         * index, a skin, a player who left mid-tick — used to end that packet's
+         * work with nothing said. Name the handler and carry on. */
+        try {
+          i[c].apply(undefined, a);
+        } catch (err) {
+          revReportFault("packet " + c, err);
+        }
       };
       this.socket.onopen = function () {
         s.connected = true;
@@ -19038,7 +19100,18 @@ function hatTracker(post, current = {}, param) {
 //circularData.self = circularData;
 //ee.send(circularData); // maybe potential msg pack crash lololol
 // when sending move packet it activates the next tick so you move the tick after u send the move packet;
+/* The tick that drives everything: it is the only handler the whole client
+ * depends on, and it is async, so a throw anywhere in it becomes an unhandled
+ * rejection — no stack anyone reads, no indication which handler stopped. Say
+ * which one it was, once, and keep taking the next packet. */
 async function playerUpdate(e) {
+  try {
+    await playerUpdateTick(e);
+  } catch (err) {
+    revReportFault("playerUpdate", err);
+  }
+}
+async function playerUpdateTick(e) {
   ppT = 0;
   bowInstaing = false;
   antiOneTicks();
@@ -19070,80 +19143,92 @@ async function playerUpdate(e) {
     if (!(y = findPlayerSID(e[n]))) {
       continue;
     }
-    y.t1 = y.t2 === undefined ? t : y.t2;
-    ltt[y.sid] = y;
-    y.t2 = t;
-    y.x1 = y.x;
-    y.y1 = y.y;
-    y.preX = y.x2;
-    y.preY = y.y2;
-    y.pmovDir = y.movDir;
-    y.x2 = e[n + 1];
-    y.y2 = e[n + 2];
-    y.d1 = y.d2 === undefined ? e[n + 3] : y.d2;
-    y.d2 = e[n + 3];
-    y.delta = y.dt;
-    y.dt = 0;
-    y.buildIndex = e[n + 4];
-    y.weaponIndex = e[n + 5];
-    y.xVel = y.x2 - y.preX;
-    y.xVel2 = y.x2 - y.x1;
-    y.yVel = y.y2 - y.preY;
-    y.yVel2 = y.x2 - y.x1;
-    y.weaponVariant = e[n + 6];
-    y.team = e[n + 7];
-    y.isLeader = e[n + 8];
-    y.skinIndex = e[n + 9];
-    if (y.skinIndex != 45) {
-      y.shameTimer = 30;
-      y.clowned = false;
-    }
-    if (y.skinIndex == 45 && y.shameTimer == 30) {
-      Shame(y);
-    }
-    y.tailIndex = e[n + 10];
-    y.iconIndex = e[n + 11];
-    y.zIndex = e[n + 12];
+    /* The server sent an update for this player, so they are on screen —
+     * record that before anything that could fail. Everything below is
+     * derived state, and this is an async handler: a throw here used to
+     * surface as an unhandled rejection and abandon the rest of the loop,
+     * so no later player was ever marked visible. Objects and the
+     * leaderboard kept updating while nobody was drawn and nothing
+     * responded. One bad player is now one bad player. */
     y.visible = true;
-    y.slowMult = max(1, y.slowMult + delta * 0.0008);
-    y.movSpd = sqrt((y.preY - y.y2) ** 2 + (y.preX - y.x2) ** 2);
-    y.movSpd2 = sqrt((y.y1 - y.y2) ** 2 + (y.x1 - y.x2) ** 2);
-    y.movDir = atan2(y.y2 - y.preY, y.x2 - y.preX);
-    if (y.movDir == 0 && y.movSpd == 0 || y.preX == y.x2 && y.preY == y.y2) {
-      y.movDir = undefined;
-    }
-    if (y.weaponIndex >= 9) {
-      y.secondary = y.weaponIndex;
-    } else {
-      y.primary = y.weaponIndex;
-    }
-    if (y.weaponIndex == y.primary) {
-      y.primaryVar = y.weaponVariant;
-    }
-    if (y.weaponIndex == y.secondary) {
-      y.secondaryVar = y.weaponVariant;
-    }
-    y.lastpr = y.pr;
-    y.lastsr = y.sr;
-    y.lasttr = y.tr;
-    y.tick = tick;
-    reloadWeapon(y);
-    y.weaponE = y.weaponIndex == y.secondary ? y.sr : y.pr;
-    y.multpr = y.lastpr == y.pr && y.pr == 0 ? (y.multpr = 0.015, y.lastpr = 0.015) : y.pr;
-    y.multsr = y.lastsr == y.sr && y.sr == 0 ? (y.multsr = 0.015, y.lastsr = 0.015) : y.sr;
-    y.hitProjs = 0;
-    y.hitSpike = false;
-    y.np = calcVel(y);
-    y.inWater = y.y2 >= T.mapScale / 2 - T.riverWidth / 2 && y.y2 <= T.mapScale / 2 + T.riverWidth / 2;
-    if (y.buildIndex != -1) {
-      loadoutSort(y.loadout, y.buildIndex);
-    }
-    //  y.positions = y.sid == targetID.ID ? multiCalcVel(y,6) : null,
-    y.assumeAge = ageCheck(y);
-    if (clan(y.sid)) {
-      allies.push(y);
-    } else {
-      enemies.push(y);
+    try {
+      y.t1 = y.t2 === undefined ? t : y.t2;
+      ltt[y.sid] = y;
+      y.t2 = t;
+      y.x1 = y.x;
+      y.y1 = y.y;
+      y.preX = y.x2;
+      y.preY = y.y2;
+      y.pmovDir = y.movDir;
+      y.x2 = e[n + 1];
+      y.y2 = e[n + 2];
+      y.d1 = y.d2 === undefined ? e[n + 3] : y.d2;
+      y.d2 = e[n + 3];
+      y.delta = y.dt;
+      y.dt = 0;
+      y.buildIndex = e[n + 4];
+      y.weaponIndex = e[n + 5];
+      y.xVel = y.x2 - y.preX;
+      y.xVel2 = y.x2 - y.x1;
+      y.yVel = y.y2 - y.preY;
+      y.yVel2 = y.x2 - y.x1;
+      y.weaponVariant = e[n + 6];
+      y.team = e[n + 7];
+      y.isLeader = e[n + 8];
+      y.skinIndex = e[n + 9];
+      if (y.skinIndex != 45) {
+        y.shameTimer = 30;
+        y.clowned = false;
+      }
+      if (y.skinIndex == 45 && y.shameTimer == 30) {
+        Shame(y);
+      }
+      y.tailIndex = e[n + 10];
+      y.iconIndex = e[n + 11];
+      y.zIndex = e[n + 12];
+      y.visible = true;
+      y.slowMult = max(1, y.slowMult + delta * 0.0008);
+      y.movSpd = sqrt((y.preY - y.y2) ** 2 + (y.preX - y.x2) ** 2);
+      y.movSpd2 = sqrt((y.y1 - y.y2) ** 2 + (y.x1 - y.x2) ** 2);
+      y.movDir = atan2(y.y2 - y.preY, y.x2 - y.preX);
+      if (y.movDir == 0 && y.movSpd == 0 || y.preX == y.x2 && y.preY == y.y2) {
+        y.movDir = undefined;
+      }
+      if (y.weaponIndex >= 9) {
+        y.secondary = y.weaponIndex;
+      } else {
+        y.primary = y.weaponIndex;
+      }
+      if (y.weaponIndex == y.primary) {
+        y.primaryVar = y.weaponVariant;
+      }
+      if (y.weaponIndex == y.secondary) {
+        y.secondaryVar = y.weaponVariant;
+      }
+      y.lastpr = y.pr;
+      y.lastsr = y.sr;
+      y.lasttr = y.tr;
+      y.tick = tick;
+      reloadWeapon(y);
+      y.weaponE = y.weaponIndex == y.secondary ? y.sr : y.pr;
+      y.multpr = y.lastpr == y.pr && y.pr == 0 ? (y.multpr = 0.015, y.lastpr = 0.015) : y.pr;
+      y.multsr = y.lastsr == y.sr && y.sr == 0 ? (y.multsr = 0.015, y.lastsr = 0.015) : y.sr;
+      y.hitProjs = 0;
+      y.hitSpike = false;
+      y.np = calcVel(y);
+      y.inWater = y.y2 >= T.mapScale / 2 - T.riverWidth / 2 && y.y2 <= T.mapScale / 2 + T.riverWidth / 2;
+      if (y.buildIndex != -1) {
+        loadoutSort(y.loadout, y.buildIndex);
+      }
+      //  y.positions = y.sid == targetID.ID ? multiCalcVel(y,6) : null,
+      y.assumeAge = ageCheck(y);
+      if (clan(y.sid)) {
+        allies.push(y);
+      } else {
+        enemies.push(y);
+      }
+    } catch (revErr) {
+      revReportFault("playerUpdate sid " + y.sid, revErr);
     }
   }
   mouseXY();
@@ -20262,24 +20347,35 @@ function reloadWeapon(_, bot) {
   if (bot && _ === null) {
     return;
   }
+  /* Both of these destructured a weapon straight out of the table with no
+   * check. The index they use is not the one off the wire: playerEncounter
+   * resets primary and secondary to null, and only a later tick fills the one
+   * matching the weapon in hand — so between those two packets, and for anyone
+   * whose weaponIndex is null while they hold a building, the lookup is
+   * undefined and destructuring it throws.
+   *
+   * That throw lands inside playerUpdate's per-player loop, which is async, so
+   * it became an unhandled rejection and abandoned the rest of the tick: no
+   * player after it was marked visible, your own included. The world kept
+   * drawing from its other handlers with nobody in it. */
   if (_.buildIndex == -1) {
-    if (_.weaponIndex <= 8) {
-      let {
-        speed
-      } = R.weapons[_.primary];
-      _.pr = min(1, _.pr + (_.delta > 190 ? _.delta : timeBetweenTick) / (speed * _.samRP));
-    } else if (_.weaponIndex > 8) {
-      let {
-        speed
-      } = R.weapons[_.secondary];
-      _.sr = min(1, _.sr + (_.delta > 190 ? _.delta : timeBetweenTick) / (speed * _.samRS));
+    const held = R.weapons[_.weaponIndex <= 8 ? _.primary : _.secondary];
+    if (held) {
+      const speed = held.speed;
+      if (_.weaponIndex <= 8) {
+        _.pr = min(1, _.pr + (_.delta > 190 ? _.delta : timeBetweenTick) / (speed * _.samRP));
+      } else {
+        _.sr = min(1, _.sr + (_.delta > 190 ? _.delta : timeBetweenTick) / (speed * _.samRS));
+      }
     }
   }
   _.tr = min(1, _.tr + _.delta / 2400);
   primaryReloads[_.sid] = _.pr;
   secondaryReloads[_.sid] = _.sr;
   turretReloads[_.sid] = _.tr;
-  if (_.sid != E.sid) {
+  // Runs for every player on every tick, and a tick can arrive before the
+  // packet that creates you — on join and on every respawn.
+  if (E && _.sid != E.sid) {
     if (!_.hasSoldier && _.skinIndex == 6) {
       _.hasSoldier = true;
     }

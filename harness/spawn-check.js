@@ -142,18 +142,25 @@ const frames = [];
     out.socketsOpened = (window.__wsUrls || []).length;
     const c = document.getElementById("gameCanvas");
     const ctx = c.getContext("2d", { willReadFrequently: true });
-    // The player is drawn at the centre of the view. A body is a filled disc of
-    // skin colour with a dark outline, so look for a distinct blob there.
-    const w = c.width, h = c.height;
-    const img = ctx.getImageData(Math.floor(w / 2) - 90, Math.floor(h / 2) - 90, 180, 180).data;
+    /* The camera is locked to your player, so your body is drawn at the exact
+     * centre of the canvas: a filled disc of skin colour, big enough to cover
+     * the middle but far too small to be the background. Counting distinct
+     * colours here is not enough — a washed-out world with nobody in it still
+     * has hundreds. So take the centre pixel and ask how far it spreads. */
+    const w = c.width, h = c.height, R = 90;
+    const img = ctx.getImageData(Math.floor(w / 2) - R, Math.floor(h / 2) - R, R * 2, R * 2).data;
+    const key = (i) => img[i] + "," + img[i + 1] + "," + img[i + 2];
     const seen = new Map();
-    for (let i = 0; i < img.length; i += 4) {
-      const k = img[i] + "," + img[i + 1] + "," + img[i + 2];
-      seen.set(k, (seen.get(k) || 0) + 1);
-    }
+    for (let i = 0; i < img.length; i += 4) seen.set(key(i), (seen.get(key(i)) || 0) + 1);
+    const centre = key((R * (R * 2) + R) * 4);
+    const sorted = [...seen.entries()].sort((a, b) => b[1] - a[1]);
     out.coloursAtCentre = seen.size;
-    out.topColours = [...seen.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4)
-      .map(([k, n]) => k + " x" + n);
+    out.topColours = sorted.slice(0, 3).map(([k, n]) => k + " x" + n);
+    out.centreColour = centre;
+    out.centreSpread = seen.get(centre) || 0;
+    out.background = sorted[0][0];
+    // A body covers a few percent of this box. Background is tens of percent.
+    out.isBody = centre !== sorted[0][0] && out.centreSpread > 150 && out.centreSpread < (R * 2) * (R * 2) * 0.4;
     return out;
   });
 
@@ -164,9 +171,12 @@ const frames = [];
   console.log("  sockets the page opened:", result.socketsOpened);
   console.log("  frames the server accepted:", frames.length ? frames.slice(0, 4).join(" | ") : "NONE");
   console.log("  frames it rejected:", violations.length ? [...new Set(violations)].join(" | ") : "none");
-  console.log("  distinct colours where the player should be:", result.coloursAtCentre);
-  console.log("  most common:", result.topColours.join("  "));
-  console.log("  character drawn:", result.coloursAtCentre > 3 ? "likely yes" : "NO — the middle is flat background");
+  console.log("  colour at the exact centre:", result.centreColour,
+    "spreading over", result.centreSpread, "px");
+  console.log("  background there:", result.background, " (" + result.coloursAtCentre + " distinct colours)");
+  console.log("  your character drawn:", result.isBody
+    ? "YES — a body-sized blob distinct from the ground"
+    : "NO — the centre is the same as the ground behind it");
   if (errors.length) console.log("  errors:", [...new Set(errors)].slice(0, 4).join(" | "));
 
   await page.screenshot({ path: path.join(HERE, "spawn-" + path.basename(CLIENT) + ".png") });

@@ -276,6 +276,91 @@ drops the socket and connects again:
 | after — #1 | accepted | 0 | sid 1, alive |
 | after — #2 | accepted | 0 | sid 1, alive |
 
+### The page's own game was drawing on the same canvas
+
+This client carries its own copy of the game and runs at `document-idle`, so the
+page's bundle is still there and still running. It never enters a game — this
+client wins the Play button — so it sits on its menu forever, and a moomoo menu
+backdrop is the world plus a 35% dark wash across the whole canvas, painted
+every frame. Both programs draw `#gameCanvas`.
+
+Counting sockets said nothing, because both open one; counting draws does.
+[`../harness/canvas-owner.js`](../harness/README.md) attributes every
+full-canvas fill by where it came from:
+
+| over 2.5s | before | after |
+|---|---|---|
+| full-canvas draws by this client | 750 | 750 |
+| full-canvas draws by the page's bundle | **300** | **0** |
+| draws that never reach the screen | 0 | 300 |
+
+Both programs take `getContext("2d")` once and keep it, so this client now
+swaps the canvas element for a fresh one before taking its own reference. The
+page's context still points at the old canvas, which is no longer in the
+document, and everything it draws goes nowhere.
+
+Worth being exact about what this did and did not explain: in the harness the
+client happened to draw last, so the character survived either way. Which loop
+draws last depends on registration order, and the page's fill is opaque — where
+it lands second it erases the frame beneath it, character included. That was
+worth removing whether or not it was the fault on any particular machine.
+
+### One player's data could blank the whole world
+
+`playerUpdate` is the tick everything hangs off. It marks who is on screen,
+refreshes every player's derived state, and then rebuilds the object lists, the
+pathfinder position and the bot state — and it is `async`, so a throw anywhere
+inside it became an unhandled rejection: nothing in the console anyone would
+notice, and the rest of the loop never ran.
+
+`reloadWeapon`, called once per player per tick, had two ways to throw:
+
+```js
+let { speed } = R.weapons[_.primary];   // undefined index -> destructure throws
+...
+if (_.sid != E.sid) {                   // E is null before you spawn
+```
+
+The index it uses is not the one off the wire — `playerEncounter` resets
+`primary` and `secondary` to `null`, and only a later tick fills whichever one
+matches the weapon in hand. And `E` does not exist until the packet that creates
+you arrives, which is after the first tick on join and on every respawn.
+
+Either throw ends the per-player loop, so **no player after the bad record is
+ever marked visible — your own included**. The objects and the leaderboard keep
+updating from their own handlers, so the world draws normally with nobody in it
+and nothing responding to a key. That is exactly what a player sees and reports
+as "I am in the game but there is no one here and I cannot do anything".
+
+The weapon tables themselves are current — 16 weapons, same order as the shipped
+bundle, only a cosmetic rename — so the index is not stale; the code simply
+never checked. Both lookups are now guarded, the visible flag is set before
+anything that can fail, and each player is handled independently.
+
+[`../harness/tick-survives.js`](../harness/README.md) puts a malformed record
+*ahead* of you in a tick:
+
+| the record before yours has | before | after |
+|---|---|---|
+| a weapon index off the end of the table | you are **not** drawn, silently | drawn |
+| a weapon index that is not a number | drawn | drawn |
+| a null weapon index | you are **not** drawn, silently | drawn |
+
+### Nothing fails silently any more
+
+Every fault above was invisible. The packet handlers are called through one
+`apply`, so all 36 are now wrapped: a throw names its handler, once, and the
+socket goes on reading. `playerUpdate` reports rather than rejecting, and an
+`unhandledrejection` listener names anything that still gets past.
+
+```
+[revelation] packet a: Cannot read properties of undefined (reading 'speed')
+```
+
+That line is the point. A clean session prints none of them; if one appears, it
+says which handler stopped and why, which is the thing no amount of reading the
+file could establish from here.
+
 ## What is verified and what is not
 
 A full session against the mock server runs, entered through the client's own
@@ -293,17 +378,36 @@ Also verified:
   these handlers expect are the current ones.
 - The client reaches a connection whether the FRVR SDK resolves, throws because
   the page's bundle already consumed it, never settles, or is missing entirely.
-- The render loop survives a fault.
+- Moving, aiming, attacking and building each put their own packet on the wire
+  and the server accepts all of them.
+- This client is the only thing drawing the canvas.
+- The render loop survives a fault, and so does the tick.
 
 **Still not verified:** the live server. The mock speaks the same transport and
-now enforces it, but its packet *payloads* are still the harness's own. The
-startup line `[revelation] build: spawn-after-handshake 2026-08-28` in the
+now enforces it, but its packet *payloads* are still the harness's own — so a
+field only the real server produces is exactly what the fault reporter above is
+for. The startup line `[revelation] build: canvas-and-tick 2026-08-28` in the
 console tells you which build is actually running.
+
+## Not a fault
+
+The world is drawn very dark on purpose. This client paints two tints over the
+finished frame every frame — `rgba(15, 0, 70, 0.59)` and a second at `0.294` —
+which is what makes everything read as dark purple rather than grass green. The
+strength is a setting, not a constant:
+
+```js
+lightmode.checked ? "rgba(15, 0, 70, 0.39)"
+  : regVis.checked ? "rgba(10, 0, 25, 0.6)"
+  : "rgba(15, 0, 70, 0.59)"
+```
+
+The **Light mode** and **Shaders** toggles in the client's own menu control it.
 
 ## Not fixed
 
-- It runs at `document-idle` and carries its own copy of the game, so the page's
-  own bundle runs alongside it — which is why the leaderboard and resources kept
-  working while the canvas did not. Both now speak the protocol, so they will
-  both connect. Blocking the page's bundle needs `@run-at document-start` and
-  script interception, as the Whiteout client does, and is its own change.
+- The page's own bundle still runs alongside this one — it just cannot reach the
+  canvas any more. It keeps a render loop going against a detached canvas, which
+  costs a little CPU and nothing else. Stopping it outright needs
+  `@run-at document-start` and script interception, as the Whiteout client does,
+  and is its own change.

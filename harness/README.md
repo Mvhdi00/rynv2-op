@@ -28,9 +28,13 @@ node build-page.js   # synthesises index.html and copies the bundles from ../../
 
 `build-page.js` builds the page from the element ids `src/game_index.js` and the
 chosen client actually reach for. It reproduces script types and load order — the game
-ships as an ES module, which is what its WebSocket capture races against — but
-not layout or art. Sprite hosts are unreachable from the sandbox, so every run
-is also a test of the client with every image broken.
+ships as an ES module, which is what its WebSocket capture races against — and
+the geometry of the two elements whose size changes what a client can do: the
+canvas, and the transparent full-screen layer mouse input is bound to. Left in
+normal flow that layer has no area, and the harness reports actions as unsent
+that a player can perform perfectly well. Everything else is unstyled, and
+sprite hosts are unreachable from the sandbox, so every run is also a test of
+the client with every image broken.
 
 ## Running
 
@@ -49,6 +53,9 @@ node packet-layout.js         # a client's packet field layouts vs the game's ow
 node spawn-check.js           # for clients that open their own socket
 node boot-check.js            # can the real Play button reach a connection
 node reconnect-check.js       # is the second connection as good as the first
+node canvas-owner.js          # is anything else painting the game canvas
+node tick-survives.js         # can one bad player blank the whole world
+node input-check.js           # do moving, attacking and building reach the server
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -155,6 +162,29 @@ the button at all — under four states of the FRVR SDK the page hands over.
 key, both opcode tables and the sequence number belong to one connection;
 carrying them into the next signs with a key the server never issued, and the
 client then looks connected while doing nothing.
+
+### `canvas-owner.js`, `tick-survives.js`, `input-check.js`
+
+Three ways a client can be connected and still show you nothing.
+
+`canvas-owner.js` asks who is painting `#gameCanvas`. A client that carries its
+own copy of the game does not replace the page's bundle — it runs beside it, and
+both draw. Counting sockets says nothing because both open one, so this
+attributes every full-canvas fill to the program that made it, and separately
+samples each frame for your body in the middle. A draw to a canvas no longer in
+the document is reported as such rather than counted.
+
+`tick-survives.js` puts a malformed record *ahead* of yours in a player update.
+The handler is async, so a throw in it is an unhandled rejection — easy to
+filter away, and it abandons the rest of the loop, leaving every player after
+the bad one unmarked and undrawn. The server keeps ticking underneath, so the
+probe clears everyone, runs exactly one tick, and reads the answer before
+yielding.
+
+`input-check.js` presses the keys a player presses and reports the packets the
+server accepted, checking for the packet each action is *supposed* to send —
+otherwise the aim packets that flow continuously cover for an action that never
+happened.
 
 ### `preplace-bench.js`
 

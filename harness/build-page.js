@@ -56,6 +56,20 @@ fs.writeFileSync(path.join(HERE, "index.html"), `<!doctype html>
 <script src="/assets/jquery.js"></script>
 <script src="/assets/frvr-stub.js"></script>
 <script type="module" crossorigin src="/assets/index-f3a4c1ad.js"></script>
+<style>
+/* Not the real stylesheet — just the two elements whose *geometry* changes what
+ * the client can do. The canvas has to fill the window or every screen-space
+ * coordinate is off, and mouse input is bound to #touch-controls-fullscreen,
+ * which in the real page is a transparent layer over the whole screen. Left in
+ * normal flow it has no area, so no click ever reaches the client and the
+ * harness reports actions as unsent that a player can perform perfectly well.
+ * The menu stays above both so the Play button is still clickable. */
+html, body { margin: 0; height: 100%; overflow: hidden; }
+#gameCanvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+#touch-controls-fullscreen { position: fixed; inset: 0; z-index: 1; }
+#menuCardHolder, #mainMenu, #enterGame, #nameInput, #serverBrowser, #altcha,
+#turnstileWidget, #linksContainer { position: relative; z-index: 10; }
+</style>
 </head>
 <body>
   ${[...ids].sort().map(tag).join("\n  ")}
