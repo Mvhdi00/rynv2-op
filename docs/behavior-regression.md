@@ -67,7 +67,7 @@ Genuinely carried across, and unchanged in intent:
 |---|---|---|---|
 | prediction | `x3` from `calcVel`, accel/decel chosen by scoring last tick | same mechanism | **yes** |
 | movement handling | `movDir`/`pmovDir`, one tick of history, stability gate | same, with the signed-sum bug fixed | **yes, improved** |
-| candidate generation | `findAvailableAngles(item, 0, 0, PI/100)` — **200 uniform angles from 0**, at `player.x2` | **72 anchored probes**, at `player.x2` | **no** — D1 |
+| candidate generation | `findAvailableAngles(item, 0, 0, PI/100)` — 201 uniform angles from 0, at `player.x2` | identical: 201 uniform from 0, at `player.x2` | **yes** |
 | | legality via `checkItemLocation3`: passes iff **every** overlapping object has `assumeBreak` | `canPlace`: **any** overlap blocks | **no** — D2 |
 | candidate selection | `gradeAngles` points table, `bestSpike` + `bestTrap`, then `fullplace` tops up to **4 placements** | single best by `gain`, **1 placement** | **no** — D3, D4 |
 | timing | preplace+priority → `setTimeout(tickRate - pingTime)`; everything else immediate | deferred at `111 - tickPing()` | **yes** |
@@ -87,20 +87,31 @@ Genuinely carried across, and unchanged in intent:
 
 ## 4. Every divergence
 
-### D1 — sweep resolution and anchoring — ***CLOSED***
-**ORIGINAL** Whiteout sweeps `PI/100` = **201** probes in `autoplacers` (12626)
-and `PI/50` = **101** in its reactive replacer (14467).
-**CHANGE (first version, now superseded)** 72 probes — NovaStorm's stock budget.
-**CHANGE (current)** Preplace **200**, Replace **100**, matching Whiteout's two
-live call sites. Still anchored on the bearing to the predicted enemy position
-(64 fine probes within ±1.2 rad) rather than uniform from 0, since Whiteout
-passes `0` for the anchor and only parameterises it.
-**REASON** Closing a divergence that had no justification beyond my keeping
-NovaStorm's stock number. Measured cost at 400 objects: **0.055 ms → 0.118 ms**
-per sweep, against a 111 ms tick — 0.1% of budget.
-**EXPECTED RESULT** Resolution now matches Whiteout: 1.8° uniform-equivalent
-instead of 5°, with extra density toward the enemy. Candidates Whiteout would
-find are no longer missed for want of probe density.
+### D1 — sweep generation — ***CLOSED, now a faithful port***
+**ORIGINAL** `findAvailableAngles` (12277):
+
+```js
+for (let offset = thisAng; offset <= thisAng + PI2; offset += interval)
+```
+
+Uniform, both endpoints inclusive. Live call sites pass `thisAng = 0` and
+`interval = PI/100` in `autoplacers` (12626) and `PI/50` in the reactive
+replacer (14467) — **201** and **101** probes respectively.
+
+**CHANGE (v1)** 72 probes, NovaStorm's stock budget.
+**CHANGE (v2)** 200 / 100, but still anchored on the bearing to the predicted
+enemy with a fine band — my optimisation, not Whiteout's behaviour.
+**CHANGE (current)** `NS_probeAngles` is a literal port of the loop above.
+Anchor defaults to `0`, matching every live Whiteout call site; step is
+`PI/100` for Preplace and `PI/50` for Replace. Verified in
+`tools/test-preplace.js` against a standalone reimplementation of Whiteout's
+loop — the emitted angle sequences are identical to 1e-12, 201 and 101 probes.
+
+**REASON** Fidelity. The anchoring was architectural preference, which the
+behaviour-preservation directive rules out. Measured cost at 400 objects:
+0.055 ms (72) → 0.118 ms (201) per sweep against a 111 ms tick.
+**EXPECTED RESULT** Candidate generation is now Whiteout's, exactly — same
+angles, same order, same density.
 
 ### D2 — multi-object break-aware legality *(the biggest fidelity gap)*
 **ORIGINAL** `checkItemLocation3` (6102) collects **every** overlapping object

@@ -13222,9 +13222,8 @@ for (let tree of trees) {
             COOLDOWN: 6,          // ticks a position is blocked after a failure
             EXIT_SEAL_RAD: 0.45,  // bearing tolerance for "seals this exit"
             RING_MIN: 3,          // ring members before containment analysis runs
-            PROBE_ANGLES: 200,    // Whiteout's autoplacers sweeps PI/100 = 201 probes
-            ANCHOR_FINE: 64,      // of which this many pack around the anchor
-            ANCHOR_SPAN: 1.2      // radians either side of the anchor for the fine band
+            PROBE_STEP: Math.PI / 100,  // Whiteout autoplacers 12626: findAvailableAngles(..., PI/100)
+            PROBE_ANCHOR: 0             // Whiteout passes thisAng = 0 at every live call site
         };
 
         let NS_intent = null;              // at most one in-flight predictive intent
@@ -13481,19 +13480,20 @@ for (let tree of trees) {
             return v;
         }
 
-        // Same probe budget as the stock 72-angle sweep, redistributed: a fine
-        // band either side of the anchor, coarse elsewhere.
-        function NS_probeAngles(anchor, total) {
+        // Faithful port of Whiteout's findAvailableAngles sweep (12277):
+        //
+        //     for (let offset = thisAng; offset <= thisAng + PI2; offset += interval)
+        //
+        // Uniform, inclusive of both endpoints, starting at thisAng. Both live
+        // Whiteout call sites pass thisAng = 0 — the parameter exists but is
+        // never used to anchor — so the default here is 0 as well. Step is
+        // PI/100 for the placer (12626) and PI/50 for the replacer (14467).
+        function NS_probeAngles(anchor, step) {
             const out = [];
-            const n = total || NS_PP.PROBE_ANGLES;
-            const fine = Math.min(NS_PP.ANCHOR_FINE, Math.floor(n / 2));
-            const span = NS_PP.ANCHOR_SPAN;
-            for (let i = 0; i < fine; i++) {
-                out.push(anchor - span + (2 * span) * (i / (fine - 1)));
-            }
-            const coarse = n - fine;
-            for (let i = 0; i < coarse; i++) {
-                out.push(anchor + span + (2 * Math.PI - 2 * span) * ((i + 0.5) / coarse));
+            const from = anchor || 0;
+            const inc = step || NS_PP.PROBE_STEP;
+            for (let offset = from; offset <= from + Math.PI * 2; offset += inc) {
+                out.push(offset);
             }
             return out;
         }
@@ -13515,8 +13515,7 @@ for (let tree of trees) {
             if (ctx.trapId != null && !isItemLimit(ctx.trapId)) ids.push(ctx.trapId);
             if (!ids.length) return;
 
-            const anchor = Math.atan2(ctx.fut.y - myPlayer.y2, ctx.fut.x - myPlayer.x2);
-            const probes = NS_probeAngles(anchor);
+            const probes = NS_probeAngles(NS_PP.PROBE_ANCHOR);
             let best = null;
 
             for (const id of ids) {
@@ -13629,7 +13628,7 @@ for (let tree of trees) {
             RECOVERY_MIN: 0.8,    // fraction of that the replacement must restore
             NEAR_MISS_FRAC: 0.15, // survives-by margin still counted as probable
             LOSS_MIN_UNCERTAIN: 5,// raised bar when the death is only probable
-            PROBE_ANGLES: 100     // Whiteout's replacer sweeps PI/50 = 101 probes
+            PROBE_STEP: Math.PI / 50    // Whiteout replacer 14467: PI / window.replaceAccuracy (50)
         };
 
         let NS_replaceIntent = null;
@@ -13780,11 +13779,10 @@ for (let tree of trees) {
             if (ctx.trapId != null && !isItemLimit(ctx.trapId)) ids.push(ctx.trapId);
             if (!ids.length) return;
 
-            const anchor = Math.atan2(target.obj.y - myPlayer.y2, target.obj.x - myPlayer.x2);
             let best = null;
 
             for (const id of ids) {
-                for (const angle of NS_probeAngles(anchor, NS_RP.PROBE_ANGLES)) {
+                for (const angle of NS_probeAngles(NS_PP.PROBE_ANCHOR, NS_RP.PROBE_STEP)) {
                     const cfg = getConfig(id, angle);
                     cfg.id = id; cfg.angle = angle;
 

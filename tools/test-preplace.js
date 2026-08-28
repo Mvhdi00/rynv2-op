@@ -44,20 +44,27 @@ t('degenerate segment', Math.abs(M.NS_segDist2(3,4, 0,0, 0,0)-25)<1e-9);
   t('diagonal miss is a miss (AABB would say hit)', d2 > r*r, 'd='+Math.sqrt(d2).toFixed(1)+' r='+r);
 }
 
-console.log('\nNS_probeAngles — budget and coverage');
+console.log('\nNS_probeAngles — faithful to Whiteout findAvailableAngles');
 {
-  const p=M.NS_probeAngles(0);
-  t('probe count matches Whiteout (200)', p.length===M.NS_PP.PROBE_ANGLES && p.length===200, 'got '+p.length);
-  const pr=M.NS_probeAngles(0,100);
-  t('Replace sweep is 100 (Whiteout replacer)', pr.length===100, 'got '+pr.length);
-  const norm=a=>{let x=a%(Math.PI*2);return x<0?x+Math.PI*2:x;};
-  const near=p.filter(a=>M.UTILS.getAngleDist(a,0)<=M.NS_PP.ANCHOR_SPAN).length;
-  t('fine band packed at the anchor', near>=M.NS_PP.ANCHOR_FINE, 'near='+near);
-  // full-circle coverage: no gap wider than ~25 deg
-  const s=p.map(norm).sort((a,b)=>a-b);
-  let maxGap=s[0]+(Math.PI*2-s[s.length-1]);
-  for(let i=1;i<s.length;i++)maxGap=Math.max(maxGap,s[i]-s[i-1]);
-  t('no coverage gap > 10 deg', maxGap<0.18, 'maxGap='+(maxGap*180/Math.PI).toFixed(1)+' deg');
+  // Whiteout: for (offset = thisAng; offset <= thisAng + PI2; offset += interval)
+  const whiteout = (thisAng, interval) => {
+    const o=[]; for (let x=thisAng; x<=thisAng+Math.PI*2; x+=interval) o.push(x); return o;
+  };
+  const mineP = M.NS_probeAngles(0);
+  const wP    = whiteout(0, Math.PI/100);
+  t('placer sweep identical to Whiteout PI/100',
+    mineP.length===wP.length && mineP.every((v,i)=>Math.abs(v-wP[i])<1e-12),
+    'mine '+mineP.length+' vs whiteout '+wP.length);
+  const mineR = M.NS_probeAngles(0, Math.PI/50);
+  const wR    = whiteout(0, Math.PI/50);
+  t('replacer sweep identical to Whiteout PI/50',
+    mineR.length===wR.length && mineR.every((v,i)=>Math.abs(v-wR[i])<1e-12),
+    'mine '+mineR.length+' vs whiteout '+wR.length);
+  t('starts at 0, as every live Whiteout call site does', mineP[0]===0);
+  t('uniform step, no anchoring', (()=>{
+      for(let i=1;i<mineP.length;i++) if(Math.abs((mineP[i]-mineP[i-1])-Math.PI/100)>1e-12) return false;
+      return true; })());
+  console.log('       placer '+mineP.length+' probes, replacer '+mineR.length+' probes');
 }
 
 console.log('\nNS_escapeExits — containment');
