@@ -68,7 +68,7 @@ Genuinely carried across, and unchanged in intent:
 | prediction | `x3` from `calcVel`, accel/decel chosen by scoring last tick | same mechanism | **yes** |
 | movement handling | `movDir`/`pmovDir`, one tick of history, stability gate | same, with the signed-sum bug fixed | **yes, improved** |
 | candidate generation | `findAvailableAngles(item, 0, 0, PI/100)` — 201 uniform angles from 0, at `player.x2` | identical: 201 uniform from 0, at `player.x2` | **yes** |
-| | legality via `checkItemLocation3`: passes iff **every** overlapping object has `assumeBreak` | `canPlace`: **any** overlap blocks | **no** — D2 |
+| | legality via `checkItemLocation3`: passes iff **every** overlapping object has `assumeBreak` | `NS_canPlaceBreakAware`: passes iff every overlapping object is in the doomed set | **yes** |
 | candidate selection | `gradeAngles` points table, `bestSpike` + `bestTrap`, then `fullplace` tops up to **4 placements** | single best by `gain`, **1 placement** | **no** — D3, D4 |
 | timing | preplace+priority → `setTimeout(tickRate - pingTime)`; everything else immediate | deferred at `111 - tickPing()` | **yes** |
 | placement | `placers()` → `check3()` revalidate → `place()`, **3 packets** | `NS_revalidate` → `place()`, **4 packets** | mechanism yes, cost no — D5 |
@@ -113,18 +113,47 @@ behaviour-preservation directive rules out. Measured cost at 400 objects:
 **EXPECTED RESULT** Candidate generation is now Whiteout's, exactly — same
 angles, same order, same density.
 
-### D2 — multi-object break-aware legality *(the biggest fidelity gap)*
+### D2 — multi-object break-aware legality — ***CLOSED, now a faithful port***
 **ORIGINAL** `checkItemLocation3` (6102) collects **every** overlapping object
 and its `assumeBreak`, and passes iff none is `false`. `objDmgPot` (14736) sets
 `assumeBreak` across all `nearPlayers`. This is what lets Whiteout preplace into
 space occupied by several objects that are all about to die.
-**CHANGE** Not implemented for Preplace. `canPlace` blocks on any overlap.
-Replace excludes only its single `targetSid`.
-**REASON** *Architectural preference / omission.* Not required by any
-compatibility constraint — I simply did not port it.
-**EXPECTED RESULT** Preplace finds **strictly fewer** candidates than Whiteout in
-exactly the situation preplacing exists for: contested space about to clear.
-This is the single change most likely to make it feel weaker than Whiteout.
+
+**CHANGE (v1)** Not implemented for Preplace. `canPlace` blocked on any overlap;
+Replace excluded only its single `targetSid`.
+**CHANGE (current)** `NS_canPlaceBreakAware(id, angle, doomed)` ports the loop:
+
+```js
+for (let i = 0; i < visibleObjects.length; ++i) {
+    const o = visibleObjects[i];
+    if (!o.active) continue;
+    const blockS = o.blocker ? o.blocker : o.getScale(0.6, o.isItem);
+    if (UTILS.getDistance(cfg.x, cfg.y, o.x, o.y) >= (cfg.scale + blockS)) continue;
+    if (!doomed || !doomed.has(o.sid)) return false;   // a survivor blocks
+    sawDoomed = true;                                  // Whiteout's overBreaking
+}
+```
+
+Same structure as `checkItemLocation3`: collect overlaps, fail on the first that
+is not marked for death, remember whether any doomed object was overlapped. The
+collision terms (`o.blocker || o.getScale(0.6, o.isItem)`, the item-limit test
+and the river band) are taken verbatim from NovaStorm's own `checkItemLocation`
+(18557) rather than Whiteout's, so legality still means the same thing to the
+server. The doomed set is Whiteout's `assumeBreak` computed NovaStorm-side:
+`NS_buildCtx` calls `NS_findDoomed` once per tick and caches `ctx.doomed` as a
+`Set` of sids, so the sweep pays one hash lookup per overlap rather than
+recomputing per angle. `NS_runReplace` now reads the same cached list instead of
+calling `NS_findDoomed` a second time.
+
+**REASON** *Fidelity.* This was my omission, not a compatibility constraint —
+nothing in Auto Place, Spike Tick or the packet layer required it to be absent.
+**EXPECTED RESULT** Preplace now claims contested space in the tick before it
+clears, which is the situation preplacing exists for. Candidate counts rise only
+while something is actually doomed; with nothing doomed the predicate is
+byte-for-byte equivalent to the old `canPlace` path. Verified by matrix scenario
+15: a spot occupied by one object is blocked under plain `canPlace`, still
+blocked break-aware when the blocker is **not** doomed, and free with
+`overBreaking = true` when it is.
 
 ### D3 — placement count per tick
 **ORIGINAL** `fullplace` (12640) tops up to **4** non-overlapping placements per
@@ -256,13 +285,12 @@ contradict literal fidelity:
 
 I cannot satisfy both readings at once, and I am not going to pick for you.
 
-**Three remaining divergences are mine alone, with no instruction behind them,
-and I would close them regardless of what you decide:**
+**Three divergences were mine alone, with no instruction behind them, and I said
+I would close them regardless of what you decide. Two are now closed:**
 
-- **D2** — multi-object `assumeBreak` legality. The most valuable single thing in
-  Whiteout's live path and I did not port it. Closing this is the highest-value
-  work available. **Now the only one left of the three.**
-- **D4** — the scoring table's specific weights.
+- ~~**D1** — sweep resolution and anchoring.~~ **CLOSED** — literal port.
+- ~~**D2** — multi-object `assumeBreak` legality.~~ **CLOSED** — `NS_canPlaceBreakAware`.
+- **D4** — the scoring table's specific weights. **The only one left.**
 
 ## 6. Options
 
@@ -273,10 +301,10 @@ tick, 200-angle sweep, no confidence gate; and restore Luna's `getPrePlaceObject
 D11, D12) and the source-defect fixes (D13, D14). Discards D3, D7, D9, D10 —
 i.e. four things you asked for.
 
-**B — Close my three, keep yours.** D1 is done. Remaining: implement D2 (the big
-one) and align the scoring weights to `gradeAngles`. Keep the
-confidence gate, one-placement rule, loss/recovery gate and conditional retry.
-Result: closer to Whiteout everywhere the two are not in direct conflict.
+**B — Close my three, keep yours.** D1 and D2 are done. Remaining: align the
+scoring weights to `gradeAngles`. Keep the confidence gate, one-placement rule,
+loss/recovery gate and conditional retry. Result: closer to Whiteout everywhere
+the two are not in direct conflict.
 
 **C — Selective.** Name which of D3, D7, D9, D10 to revert toward source, and I
 close D1/D2/D4 alongside.

@@ -13372,6 +13372,35 @@ for (let tree of trees) {
             return exits.length ? exits : null;
         }
 
+        // Port of Whiteout's checkItemLocation3 (6102). It does NOT early-return
+        // on the first blocker: it walks every object, records whether each
+        // overlapping one is predicted to break, and passes iff none of them is
+        // staying. That is what lets a preplace claim space occupied by several
+        // objects that all die to the same hit — NovaStorm's canPlace can only
+        // ever reject on the first overlap.
+        //
+        // Collision terms mirror NovaStorm's own checkItemLocation (18557)
+        // exactly — blocker/getScale, the active flag, the river band — so the
+        // only difference from canPlace is the break-aware verdict.
+        function NS_canPlaceBreakAware(id, angle, doomed) {
+            if (isItemLimit(id)) return false;
+            const cfg = getConfig(id, angle);
+            let sawDoomed = false;
+            for (let i = 0; i < visibleObjects.length; ++i) {
+                const o = visibleObjects[i];
+                if (!o.active) continue;
+                const blockS = o.blocker ? o.blocker : o.getScale(0.6, o.isItem);
+                if (UTILS.getDistance(cfg.x, cfg.y, o.x, o.y) >= (cfg.scale + blockS)) continue;
+                // Overlaps. Whiteout: obj.preplacer.push(asd.assumeBreak), then
+                // reject if any pushed value is false.
+                if (!doomed || !doomed.has(o.sid)) return false;
+                sawDoomed = true;
+            }
+            if (cfg.y >= (config.mapScale / 2) - (config.riverWidth / 2) &&
+                cfg.y <= (config.mapScale / 2) + (config.riverWidth / 2)) return false;
+            return { ok: true, overBreaking: sawDoomed };
+        }
+
         // Tick-scoped memo. A cache, not a coordinator: it makes "computed once
         // per tick" true instead of aspirational. The shipped code calls
         // canTrapTick() twice per tick from two places and can get two answers.
@@ -13418,6 +13447,13 @@ for (let tree of trees) {
             }
             ctx.ring = ring;
             ctx.exits = NS_escapeExits(e.x2, e.y2, 35, ring);
+
+            // Whiteout's assumeBreak, computed once per tick: the set of our
+            // objects predicted to die this tick. Preplace uses it for
+            // break-aware legality; Replace uses it to pick a target.
+            ctx.doomedList = NS_findDoomed(ctx);
+            ctx.doomed = new Set();
+            for (const d of ctx.doomedList) ctx.doomed.add(d.obj.sid);
             return ctx;
         }
 
@@ -13525,7 +13561,11 @@ for (let tree of trees) {
                     cfg.angle = angle;
 
                     if (NS_isCooling(cfg.x, cfg.y)) continue;
-                    if (!canPlace(id, angle)) continue;
+                    // Break-aware: a spot occupied only by objects that are all
+                    // about to die is placeable. This is the whole point of
+                    // preplacing, and plain canPlace cannot express it.
+                    const legal = NS_canPlaceBreakAware(id, angle, ctx.doomed);
+                    if (!legal) continue;
 
                     // Spike Tick's protected annulus, verbatim from canTrapTick.
                     if (ctx.spikeTickLive &&
@@ -13549,7 +13589,8 @@ for (let tree of trees) {
                     // disabled system and nothing was placed at all.
                     if (window.vars.autoPlace && isAutoPlaceAngle(cfg, null, null, null)) continue;
 
-                    if (!best || gain > best.gain) best = { id, angle, cfg, gain, vFut };
+                    if (!best || gain > best.gain)
+                        best = { id, angle, cfg, gain, vFut, overBreaking: legal.overBreaking };
                 }
             }
 
@@ -13565,7 +13606,7 @@ for (let tree of trees) {
 
             addPredictObject(best.id, best.angle, true, {
                 owner: "preplace", tick: tick, conf: ctx.conf, gain: best.gain,
-                px: best.cfg.x, py: best.cfg.y
+                overBreaking: best.overBreaking, px: best.cfg.x, py: best.cfg.y
             });
             for (const o of predictObjects) {
                 if (o.preplace && o.owner === "preplace") { NS_intent = o; break; }
@@ -13748,7 +13789,7 @@ for (let tree of trees) {
 
             // ---- mode A: predicted to die this tick ------------------------
             if (!target) {
-                const doomed = NS_findDoomed(ctx);
+                const doomed = ctx.doomedList || [];
                 if (doomed.length && ctx.enemy) {
                     doomed.sort((a, b) =>
                         UTILS.getDistance(a.obj.x, a.obj.y, ctx.enemy.x2, ctx.enemy.y2) -

@@ -41,7 +41,8 @@ No other repository file was touched. `ReUp_Mix.user.js`, `src/RYN_Client_v4.js`
 
 `NS_PP` (constants) · `NS_posKey` · `NS_isCooling` · `NS_cool` · `NS_groupLimit` ·
 `NS_updateMoveModel` · `NS_segDist2` · `NS_hits` · `NS_escapeExits` · `NS_buildCtx` ·
-`NS_usefulness` · `NS_probeAngles` · `NS_runPreplace` · `NS_revalidate`
+`NS_usefulness` · `NS_probeAngles` · `NS_canPlaceBreakAware` · `NS_runPreplace` ·
+`NS_revalidate`
 
 Kept in one contiguous block, adjacent to the code it replaces, so the change is
 reviewable as a unit.
@@ -80,6 +81,7 @@ present in the shipped code.
 | direction-stability gate on the prediction | `dAng(movDir,pmovDir) <= .3`, 14917 | `STABLE_RAD` / `TURN_RAD` |
 | re-validate immediately before sending, rather than cancelling | `check3` 12592 | `NS_revalidate` |
 | parameterised, anchored angle sweep | `findAvailableAngles` 12277 | `NS_probeAngles` |
+| break-aware legality: a spot passes iff **every** overlapping object is marked for death | `checkItemLocation3` 6102 (`assumeBreak`) | `NS_canPlaceBreakAware` |
 | points-based scoring with negative terms | `gradeAngles` 12348 | `NS_usefulness` |
 | packet-budget-graded degradation | `secPacket` gates 12292 / 12573 | gate G4 + `NS_revalidate` |
 

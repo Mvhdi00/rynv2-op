@@ -36,7 +36,7 @@ const EXTRACT = ["NS_posKey", "NS_isCooling", "NS_cool", "NS_inSandbox", "NS_gro
   "NS_updateMoveModel", "NS_segDist2", "NS_hits", "NS_escapeExits", "NS_buildCtx",
   "NS_usefulness", "NS_probeAngles", "NS_runPreplace", "NS_revalidate",
   "NS_objAsConfig", "NS_roles", "NS_fillsRole", "NS_findDoomed", "NS_runReplace",
-  "isObjectOur", "addPredictObject", "isItemLimit", "getConfig", "canPlace",
+  "isObjectOur", "NS_canPlaceBreakAware", "addPredictObject", "isItemLimit", "getConfig", "canPlace",
   "isAutoPlaceAngle"];
 
 const harness = `
@@ -140,7 +140,7 @@ function __resetCooldown() { NS_cooldown.clear(); }
 module.exports = { __set, __get, __resetCooldown, NS_buildCtx, NS_runPreplace,
                    NS_runReplace, NS_findDoomed, NS_roles, NS_fillsRole, NS_objAsConfig,
                    NS_revalidate, NS_updateMoveModel, NS_usefulness, isAutoPlaceAngle,
-                   getConfig, canPlace, NS_PP, NS_RP, items, UTILS };
+                   getConfig, canPlace, NS_canPlaceBreakAware, NS_PP, NS_RP, items, UTILS };
 `;
 
 const tmp = path.join(__dirname, ".ns_matrix." + process.pid + ".tmp.js");
@@ -596,6 +596,35 @@ let steadyState, steadyRes;
   });
   if (tight.intents.length) { console.log("   *** PREPLACE ACTED UNDER PACKET PRESSURE ***"); process.exitCode = 1; }
   if (revalAt) { console.log("   *** COMMITTED OVER BUDGET ***"); process.exitCode = 1; }
+}
+
+// 15 -----------------------------------------------------------------------
+{
+  // Whiteout's checkItemLocation3: a spot overlapped only by objects that are
+  // all predicted to break IS placeable. NovaStorm's canPlace cannot say this.
+  const st = base();
+  st.nearestEnemy = mkEnemy(7200 + 250, 5000);
+  walk(st.nearestEnemy, 8, -14, 0);
+  const blocker = { id: SPIKE, sid: 77, x: 7200 + 79, y: 5000, scale: 49, active: true,
+                    health: 60, owner: { sid: 1 }, getScale: function () { return this.scale; } };
+  st.visibleObjects = [blocker]; st.spikes_our = [blocker];
+  G.__set(st);
+  const plainBlocked = !G.canPlace(SPIKE, 0);
+  const breakAwareNoDoom = G.NS_canPlaceBreakAware(SPIKE, 0, new Set());
+  const breakAwareDoomed = G.NS_canPlaceBreakAware(SPIKE, 0, new Set([77]));
+  record(15, "Spot occupied only by an object that is about to die", {
+    owner: breakAwareDoomed ? "Preplace (space claimed before it clears)" : "none",
+    reason: `plain canPlace: ${plainBlocked ? "blocked" : "free"}; break-aware with the ` +
+            `blocker NOT doomed: ${breakAwareNoDoom ? "free (WRONG)" : "blocked"}; ` +
+            `with it doomed: ${breakAwareDoomed ? "free" : "BLOCKED (WRONG)"}` +
+            (breakAwareDoomed ? `, overBreaking=${breakAwareDoomed.overBreaking}` : ""),
+    deferred: "n/a",
+    dup: "n/a",
+    stale: "the doomed set is rebuilt each tick, so the claim expires with the prediction"
+  });
+  if (!plainBlocked || breakAwareNoDoom || !breakAwareDoomed || !breakAwareDoomed.overBreaking) {
+    console.log("   *** BREAK-AWARE LEGALITY WRONG ***"); process.exitCode = 1;
+  }
 }
 
 console.log("\n" + "=".repeat(72));
