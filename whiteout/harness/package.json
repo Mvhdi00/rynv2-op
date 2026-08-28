@@ -1,0 +1,17 @@
+{
+  "name": "whiteout-harness",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Runs Whiteout against a mock moomoo.io page and a mock game server.",
+  "scripts": {
+    "build": "node build-page.js",
+    "play": "node play.js",
+    "chaos": "node chaos.js"
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "^3.0.0",
+    "jquery": "^3.7.1",
+    "playwright": "^1.40.0",
+    "ws": "^8.0.0"
+  }
+}

@@ -126,6 +126,8 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+whiteout/                 the Whiteout v4 client — a separate script, not part
+                          of this build; see whiteout/README.md
 ```
 
 ## Build

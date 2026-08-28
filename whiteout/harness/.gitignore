@@ -1,0 +1,7 @@
+node_modules/
+package-lock.json
+index.html
+assets/index-*.js
+assets/vendor-*.js
+assets/jquery.js
+*.png
