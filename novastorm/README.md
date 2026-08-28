@@ -60,18 +60,33 @@ and now comes back.
 Two changes, both measured by [`../harness/preplace-bench.js`](../harness/README.md)
 against a 0.5 degree reference sweep over 400 random object layouts.
 
-### Item limits were never enforced
+### Item limits did not match the game
+
+`isItemLimit` read `(group.sandboxLimit || 99)` and never looked at
+`group.limit`. That is right on sandbox and far too generous everywhere else:
+outside sandbox the cap became 99 for every group without a `sandboxLimit`, so
+the gate never fired and the placer kept scanning angles and spending packets on
+items the server would refuse.
+
+It now applies the rule the bundle itself uses (`game_index.js`):
 
 ```js
-let limit = (group.sandboxLimit || 99);   // never looked at group.limit
+inSandbox ? (group.sandboxLimit || Math.max(group.limit * 3, 99))
+          : group.limit
 ```
 
-Outside sandbox that made the cap 99 for every group without a `sandboxLimit`
-and 299 for the three that have one. The real limits are spikes 15, traps 6,
-turrets 2, mines 1, mills 7. The gate never fired, so the placer kept scanning
-angles and spending packets on items the server would refuse — which is what
-"it sometimes just doesn't place" looks like from the inside. It now reads
-`group.limit`, and only prefers `sandboxLimit` when actually in sandbox.
+so sandbox really is 99 for spikes and traps — `3x15` and `3x6` both floor at 99
+— and 299 for the three groups carrying an explicit `sandboxLimit`, while normal
+play gets the real caps. A group with no limit at all (food) stays uncapped, as
+it is in the game; capping it would have blocked healing.
+
+| | sandbox spike / trap | normal spike / trap | food |
+|---|---|---|---|
+| original | 99 / 99 | 99 / 99 | 99 |
+| game | **99 / 99** | **15 / 6** | **uncapped** |
+
+[`../harness/item-limits.js`](../harness/README.md) checks every group against
+the game's formula in both modes.
 
 ### The angle scan called checkItemLocation 72 times per item
 

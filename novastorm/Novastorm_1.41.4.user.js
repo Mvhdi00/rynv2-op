@@ -12836,15 +12836,24 @@ for (let tree of trees) {
 
         function isItemLimit(id) {
             let group = items.list[id].group;
-            /* This used to read (group.sandboxLimit || 99), which never looked at
-             * group.limit at all. Outside sandbox that made the cap 99 for every
-             * group without a sandboxLimit — spikes (really 15), traps (6),
-             * turrets (2), mines (1) — and 299 for the three that have one. The
-             * gate effectively never fired, so the placer kept scanning angles
-             * and spending packets on items the server would refuse. */
+            /* Exactly the rule the game itself applies:
+             *
+             *   inSandbox ? (group.sandboxLimit || max(group.limit * 3, 99))
+             *             : group.limit
+             *
+             * So sandbox really is 99 for spikes and traps (3x15 and 3x6 both
+             * floor at 99) and 299 for the three groups carrying an explicit
+             * sandboxLimit, while outside sandbox the caps are the real ones:
+             * 15 spikes, 6 traps, 2 turrets, 1 mine.
+             *
+             * This used to read (group.sandboxLimit || 99) with no reference to
+             * group.limit, which is right in sandbox and far too generous
+             * everywhere else, so the gate never fired outside it. */
+            // Food carries no limit at all, and the game leaves it uncapped.
+            if (group.limit == undefined) return false;
             let limit = config.isSandbox
-                ? (group.sandboxLimit || group.limit || 99)
-                : (group.limit || 99);
+                ? (group.sandboxLimit || Math.max(group.limit * 3, 99))
+                : group.limit;
 
             if (myPlayer.itemCounts[group.id] >= limit) {
                 return true;
