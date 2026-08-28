@@ -43,6 +43,43 @@ Fixed by hooking `WebSocket.prototype` instead — an `onmessage` accessor and a
 own handler. The socket is now caught by how it is *used*, so load order stops
 mattering. The constructor swap is kept as well; it is harmless when it wins.
 
+That alone is not enough, though — see below.
+
+### 1b. …and then the connection was dropped instead
+
+Reading the stream late is safe. *Sending* late is not, and fixing only the
+first turned the green screen into an immediate `disconnected`.
+
+Every frame carries a sequence number the server verifies. Normally the game
+bundle's own packets are routed through this client's gate, which renumbers
+them, so one counter covers the socket. But the bundle captures
+`WebSocket.prototype.send` on its second line:
+
+```js
+const Ri = window.WebSocket && window.WebSocket.prototype.send;
+```
+
+If it captured that before the client replaced it, the bundle sends through the
+pristine builtin — past the gate, with a counter of its own. Two counters both
+starting at 1 on one socket means duplicate sequence numbers, and the server
+closes with code 4001 the moment the player spawns.
+
+So the client now decides, before hooking anything, whether it can be the only
+thing sending:
+
+- **another copy of the script is already running** — stand down completely,
+  installing no hooks at all. Two copies would collide the same way.
+- **the game bundle already ran** (`window.loadedScript` / `window.config` are
+  set) — it holds a `send` this client cannot route, so this page load is
+  render-only: the world is still drawn, but the client opens no sequence of
+  its own. Reloading usually wins the race.
+
+Both say so in the console rather than failing quietly, and socket closes now
+report their code and reason, so `disconnected` is no longer opaque.
+
+`harness/sole-sender.js` checks all three arrangements against a server that
+enforces sequencing the way the real one does.
+
 ### 2. A broken image killed every frame
 
 `drawImage` throws `InvalidStateError` when handed an image that failed to load.

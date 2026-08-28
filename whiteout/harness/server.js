@@ -45,7 +45,8 @@ function tablesFor(seed) {
   return { c2s: permute(C2S, t), s2c: permute(S2C, (t ^ 2246822507) >>> 0) };
 }
 
-function start(port, log) {
+function start(port, log, opts) {
+  const { strict = false, onViolation = null, onClose = null, onSession = null } = opts || {};
   const { WebSocketServer } = require("ws");
   const wss = new WebSocketServer({ port });
 
@@ -60,15 +61,52 @@ function start(port, log) {
       ws.send(Buffer.from(encode([op, args])));
     };
 
+    /* The real server drops the connection on a frame it cannot verify, which
+     * is what a client shows as "disconnected". Validate the same three things
+     * it does — signature, opcode, strictly increasing sequence — and report
+     * every violation instead of silently ignoring it. */
+    const key = Buffer.from(keyHex, "hex");
+    let expectedSeq = 0;
+    const violations = [];
+    const reject = (why, detail) => {
+      violations.push(why + (detail ? " (" + detail + ")" : ""));
+      if (onViolation) onViolation(why, detail);
+      if (strict) ws.close(4001, "Invalid Connection");
+    };
+
     ws.on("message", (raw) => {
       const bytes = new Uint8Array(raw);
-      if (bytes.length <= SIG_BYTES) return;
+      if (bytes.length <= SIG_BYTES) return reject("frame shorter than its signature", bytes.length + " bytes");
+
+      const payload = bytes.subarray(SIG_BYTES);
+      const want = crypto.createHmac("sha256", key).update(payload).digest().subarray(0, SIG_BYTES);
+      if (!want.equals(Buffer.from(bytes.subarray(0, SIG_BYTES))))
+        return reject("bad frame signature");
+
+      let frame;
       try {
-        const frame = decode(bytes.subarray(SIG_BYTES));
-        const letter = tables.c2s.dec[frame[0]];
-        if (log) log("c2s", letter, JSON.stringify(frame[1]).slice(0, 120));
-      } catch (e) { /* not for us */ }
+        frame = decode(payload);
+      } catch (e) {
+        return reject("payload is not msgpack", e.message);
+      }
+      if (!Array.isArray(frame)) return reject("payload is not a frame");
+
+      const letter = tables.c2s.dec[frame[0]];
+      if (letter === undefined) return reject("unknown c2s opcode", String(frame[0]));
+
+      const seq = frame[2];
+      if (typeof seq !== "number") return reject("missing sequence number", letter);
+      if (seq !== expectedSeq + 1)
+        return reject("sequence out of order", letter + ": got " + seq + ", expected " + (expectedSeq + 1));
+      expectedSeq = seq;
+
+      if (log) log("c2s", letter, "seq=" + seq, JSON.stringify(frame[1]).slice(0, 120));
     });
+
+    ws.on("close", () => { if (onClose) onClose(violations); });
+
+    // Lets a test emulate the game bundle sending frames of its own.
+    if (onSession) onSession({ keyHex, c2s: tables.c2s.enc });
 
     ws.send(Buffer.from(encode(["io-init", [7, seed, keyHex, ENCRYPTED_MODE]])));
 

@@ -27,6 +27,8 @@ is also a test of the client with every image broken.
 node play.js                  # normal load order
 node play.js "" native        # userscript injected late (see below)
 node chaos.js                 # transient mid-frame fault, then recovery
+node protocol.js              # what the client puts on the wire
+node sole-sender.js           # only one packet sequence per socket
 ```
 
 `play.js` prints the distinct colours sampled off the canvas — a live world is
@@ -58,6 +60,30 @@ because a wedged loop leaves the last good frame on screen and still looks rich:
 
 Run it against the pre-fix script and `after fault cleared` stays
 `drawing=no` — the leaked save-stack means one bad frame is permanent.
+
+### `protocol.js` and `sole-sender.js`
+
+The mock server verifies client frames the way the real one does — signature,
+opcode, strictly increasing sequence — and with `strict` it closes on the first
+frame it cannot verify, which is what a player sees as `disconnected`.
+
+`protocol.js` reports what the client sends and whether any of it is rejected.
+
+`sole-sender.js` covers the case that actually caused a disconnect: two things
+sending on one socket. It runs three arrangements — one client, two copies of
+the client, and a client that lost the race to a game bundle that sends past it
+through a pristine `WebSocket.send` — and all three must end with the
+connection alive:
+
+```
+  solo       frames=  3 rejected= 0 closed=no  colours=20 OK
+  duplicate  frames=  3 rejected= 0 closed=no  colours=19 OK
+  late       frames=  8 rejected= 0 closed=no  colours=19 OK
+```
+
+Against a build without the stand-down guard, `late` fails with
+`sequence out of order (9: got 1, expected 4)`, close code 4001, and
+`colours=1` — a green screen and `disconnected`.
 
 ## Limits
 

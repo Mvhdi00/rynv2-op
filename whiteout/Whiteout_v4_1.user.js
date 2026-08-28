@@ -9,6 +9,49 @@
 // @run-at       document-start
 // ==/UserScript==
 
+/* Exactly one client may put packets on the socket.
+ *
+ * Every frame carries a sequence number the server checks, and this client
+ * keeps its own counter. A second counter on the same socket — another copy of
+ * this script, or the game bundle sending straight past us — means duplicate
+ * sequence numbers, and the server closes the connection. The player sees
+ * "disconnected" as soon as they spawn, every time.
+ *
+ * So before hooking anything, work out whether we can be that one client.
+ *
+ *   "duplicate" — another copy is already running here. Stand down entirely;
+ *                 the copy that got here first is the client.
+ *   "late"      — the game bundle finished before us, which means it captured
+ *                 WebSocket.prototype.send while it was still pristine and
+ *                 sends through a handle we cannot route. We can still read
+ *                 the stream and draw the world, but we must not send.
+ */
+const WhiteoutStandDown = (function () {
+    try {
+        if (window.__whiteoutInstalled) {
+            console.warn(
+                "[whiteout] another copy of this script is already running on this page, so this " +
+                "one is standing down. Two copies would open two packet sequences on one socket " +
+                "and the server would disconnect you. Remove the duplicate from your userscript manager."
+            );
+            return "duplicate";
+        }
+        window.__whiteoutInstalled = true;
+
+        // Both are set by the game bundle's own top level.
+        if (window.loadedScript || window.config) {
+            console.warn(
+                "[whiteout] the game bundle ran before this script did, so the game holds a direct " +
+                "handle to WebSocket.send that this client cannot route. Sending from here too would " +
+                "open a second packet sequence and the server would disconnect you, so this page load " +
+                "is render-only — the world is drawn, but the client's own packets are off. Reload to retry."
+            );
+            return "late";
+        }
+    } catch (e) {}
+    return null;
+})();
+
 const WhiteoutNet = (function () {
 
 var se = 4294967295;
@@ -1616,7 +1659,9 @@ function Ro(e) {
     var api = {
         signatureBytes: jt,
         encryptedMode: Ht,
-        gate: null
+        gate: null,
+        // Set when this instance must not open a packet sequence of its own.
+        passive: WhiteoutStandDown === "late" || WhiteoutStandDown === "duplicate"
     };
 
     api.encode = function (value) {
@@ -1696,6 +1741,11 @@ function Ro(e) {
     };
 
     api.encodeOut = function (socket, type, args) {
+        // Every frame this builds consumes a sequence number. When another
+        // client owns the sequence on this socket, building one at all is the
+        // thing that gets the connection dropped. Callers already treat a null
+        // frame as "nothing to send".
+        if (api.passive) return null;
         var list = Array.isArray(args) ? args : [ args ];
         var state = states.get(socket);
         if (!state) return encoder.encode([ type, list ]);
@@ -1728,7 +1778,7 @@ function Ro(e) {
     };
 
     api.send = function (socket, type, args) {
-        if (!socket) return;
+        if (!socket || api.passive) return;
         var packet = {
             __whiteout: true,
             type: type,
@@ -1785,13 +1835,15 @@ function Ro(e) {
     HookedSocket.CLOSING = NativeSocket.CLOSING;
     HookedSocket.CLOSED = NativeSocket.CLOSED;
 
-    NativeSocket.prototype.send = function (message) {
-        if (typeof api.gate === "function") return api.gate.call(this, message);
-        api.relay(this, message);
-    };
-    NativeSocket.prototype.nsend = function (message) {
-        api.nativeSend(this, message);
-    };
+    if (WhiteoutStandDown !== "duplicate") {
+        NativeSocket.prototype.send = function (message) {
+            if (typeof api.gate === "function") return api.gate.call(this, message);
+            api.relay(this, message);
+        };
+        NativeSocket.prototype.nsend = function (message) {
+            api.nativeSend(this, message);
+        };
+    }
 
     /* Swapping window.WebSocket only catches sockets built through the global.
      * The game bundle snapshots the constructor into a module-local on its
@@ -1804,6 +1856,8 @@ function Ro(e) {
      * of how it was built, which no longer depends on load order. Both attach
      * our listener before the page's own, so we still see io-init. */
     (function hookPrototype() {
+        // A duplicate must leave the page exactly as it found it.
+        if (WhiteoutStandDown === "duplicate") return;
         var proto = NativeSocket.prototype;
 
         var onmessage = Object.getOwnPropertyDescriptor(proto, "onmessage");
@@ -1836,9 +1890,11 @@ function Ro(e) {
         }
     })();
 
-    try {
-        window.WebSocket = HookedSocket;
-    } catch (e) {}
+    if (WhiteoutStandDown !== "duplicate") {
+        try {
+            window.WebSocket = HookedSocket;
+        } catch (e) {}
+    }
 
     return api;
 })();
@@ -3548,6 +3604,14 @@ WhiteoutNet.whenMain(function (socket) {
         getMessage(msg);
     });
     socket.addEventListener("close", function (event) {
+        // The game only ever shows "disconnected". Say why, so a server-side
+        // drop can be told apart from the connection simply ending.
+        console.warn(
+            "[whiteout] socket closed: code " + event.code +
+            (event.reason ? " (" + event.reason + ")" : "") +
+            (event.code === 4001 ? " — the server rejected this connection" : "") +
+            ", clean: " + event.wasClean
+        );
         if (event.code == 4001) {
             window.location.reload();
         }
@@ -22647,7 +22711,9 @@ setInterval(() => {
 }, 300000)
 }
 
-if (document.readyState === "loading") {
+if (WhiteoutStandDown === "duplicate") {
+    // The copy that loaded first is the client; this one does nothing at all.
+} else if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", whiteoutMain, { once: true });
 } else {
     whiteoutMain();
