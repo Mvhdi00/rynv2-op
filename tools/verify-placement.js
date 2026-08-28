@@ -97,6 +97,27 @@ console.log("\nST2 — Spike Tick predicates called only from their own ladder")
   }
 }
 
+console.log("\nAC7 — the ownership oracle only yields to an ENABLED Auto Place");
+{
+  // window.vars.autoPlace defaults to false. An unguarded oracle call makes
+  // Preplace/Replace stand down for a system that will not act, so nothing is
+  // placed at all - which is exactly what happens while an enemy is trapped,
+  // where rule A3 claims every placeable spike angle.
+  // Auto Place's own calls live inside checkPredictObjects, already under the
+  // window.vars.autoPlace branch at its caller. Only calls from outside it need
+  // the guard, so strip that body (and the definition) before counting.
+  let outside = WORK_C;
+  for (const owner of ["checkPredictObjects", "isAutoPlaceAngle"]) {
+    const body = fn(WORK_C, owner);
+    if (body) outside = outside.replace(body, "");
+  }
+  const external = [...outside.matchAll(/([^\n]*isAutoPlaceAngle\s*\([^\n]*)/g)].map(m => m[1]);
+  const guarded = external.filter(c => /vars\.autoPlace\s*&&/.test(c));
+  check("AC7", `${external.length} external oracle call(s), ${guarded.length} guarded by vars.autoPlace`,
+        external.length > 0 && external.length === guarded.length,
+        "every external isAutoPlaceAngle call must be gated on window.vars.autoPlace");
+}
+
 console.log("\nIN2 — addPredictObject is the only producer, legacy arity preserved");
 {
   const sites = src => [...src.matchAll(/(?<!function\s)addPredictObject\(([\s\S]*?)\);/g)]

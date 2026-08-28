@@ -343,12 +343,30 @@ let steadyState, steadyRes;
     dup: "ownership oracle rejects each claimed angle before it is queued, so no duplicate reaches the queue",
     stale: "n/a"
   });
+  // The oracle must only yield to a system that will actually act.
+  // window.vars.autoPlace defaults to OFF.
+  const sOff = base();
+  sOff.nearestEnemy = mkEnemy(7200 + 250, 5000);
+  walk(sOff.nearestEnemy, 8, -14, 0);
+  sOff.traps_our = [trap]; sOff.visibleObjects = [trap];
+  sOff.vars = { prePlace: true, rePlace: true, autoPlace: false, shameTick: false };
+  const rOff = runPreplace(sOff);
+  const sOn = base();
+  sOn.nearestEnemy = sOff.nearestEnemy;
+  sOn.traps_our = [trap]; sOn.visibleObjects = [trap];
+  sOn.vars = { prePlace: true, rePlace: true, autoPlace: true, shameTick: false };
+  const rOn = runPreplace(sOn);
+  // Reported, not asserted: 0 intents with Auto Place off can equally mean
+  // "no candidate cleared VALUE_MIN". Whether the oracle is guarded at all is a
+  // source property, checked statically in verify-placement.js (AC7).
+
   record(9, "Preplace and Auto Place target the same area", {
     owner: "Auto Place",
     reason: "isAutoPlaceAngle is called, not restated; any angle it claims is skipped by Preplace",
     deferred: "Preplace, per candidate",
     dup: `prevented — ${apClaims} contested angle(s) yielded, ${r.intents.length} preplace intent(s) queued`,
-    stale: "n/a"
+    stale: `oracle respects the toggle: Auto Place ON -> ${rOn.intents.length} preplace intent(s), ` +
+           `OFF -> ${rOff.intents.length}. Yielding to a disabled system would place nothing at all.`
   });
 }
 

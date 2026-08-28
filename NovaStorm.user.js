@@ -13228,6 +13228,7 @@ for (let tree of trees) {
         };
 
         let NS_intent = null;              // at most one in-flight predictive intent
+        let NS_errorLogged = false;        // report a placer fault once, not every tick
         const NS_cooldown = new Map();     // position key -> tick the block lifts
 
         function NS_posKey(x, y) { return ((x / 40) | 0) + "," + ((y / 40) | 0); }
@@ -13539,7 +13540,13 @@ for (let tree of trees) {
                     // and are compared by identity there, so no external caller
                     // can ever satisfy those rules; passing null evaluates
                     // exactly the positional rules (A3, T2) that decide ownership.
-                    if (isAutoPlaceAngle(cfg, null, null, null)) continue;
+                    //
+                    // Only yield to a system that is actually going to act.
+                    // window.vars.autoPlace defaults to OFF, and rule A3 claims
+                    // every placeable spike angle while the enemy is trapped —
+                    // so without this guard Preplace stood down in favour of a
+                    // disabled system and nothing was placed at all.
+                    if (window.vars.autoPlace && isAutoPlaceAngle(cfg, null, null, null)) continue;
 
                     if (!best || gain > best.gain) best = { id, angle, cfg, gain, vFut };
                 }
@@ -13671,6 +13678,7 @@ for (let tree of trees) {
                           : (ctx.enemy ? [ctx.enemy] : []);
 
             for (const e of enemies) {
+                if (!e || !e.weapons || !e.weaponVariants) continue;
                 // Reload edge: the weapon became ready this tick, not merely is.
                 let weapon = null;
                 if (e.weapons[1] == 10 && secondaryReload[e.sid] == 1 &&
@@ -13785,7 +13793,8 @@ for (let tree of trees) {
                     const recov = NS_usefulness(cfg, ctx.cur, ctx);
                     if (recov < loss * NS_RP.RECOVERY_MIN) continue;    // R7
                     if (!roles.every(r => NS_fillsRole(cfg, r, ctx))) continue;
-                    if (isAutoPlaceAngle(cfg, null, null, null)) continue;  // R8
+                    // Yield only to an enabled Auto Place — see NS_runPreplace.
+                    if (window.vars.autoPlace && isAutoPlaceAngle(cfg, null, null, null)) continue;  // R8
 
                     if (!best || recov > best.recov) best = { id, angle, cfg, recov };
                 }
@@ -13827,12 +13836,20 @@ for (let tree of trees) {
             // getPrePlaceObject() is no longer Preplace's trigger: that is
             // replacement target acquisition and moves to Replace at step 5.
 
-            NS_ctx = NS_buildCtx();
-            NS_ctx.removed = nsRemoved;
-            NS_runPreplace(NS_ctx);
+            // Contained: a throw here would propagate into the promise chain
+            // and silently kill everything after it in the tick — Auto Place's
+            // commit loop and the direction send included. Preplace and Replace
+            // failing must never take the rest of the client with them.
+            try {
+                NS_ctx = NS_buildCtx();
+                NS_ctx.removed = nsRemoved;
+                NS_runPreplace(NS_ctx);
 
-            // REPLACE  (upgraded — see NS_runReplace / docs/replace-design.md)
-            NS_runReplace(NS_ctx);
+                // REPLACE  (upgraded — see NS_runReplace / docs/replace-design.md)
+                NS_runReplace(NS_ctx);
+            } catch (e) {
+                if (!NS_errorLogged) { NS_errorLogged = true; console.error("NovaStorm placer:", e); }
+            }
 
             // GET AUTOPLACE ANGLES
             if (window.vars.autoPlace && nearestEnemy) {
@@ -15798,6 +15815,7 @@ for (let tree of trees) {
             const nsCommit = predictObjects.filter(o => o.preplace);
             if (nsCommit.length) {
                 setTimeout(function () {
+                  try {
                     for (const intent of nsCommit) {
                         if (!NS_revalidate(intent)) {
                             NS_cool(intent.px !== undefined ? intent.px : intent.x,
@@ -15808,6 +15826,9 @@ for (let tree of trees) {
                         placedAngles.push(intent.angle);
                         io.send("D", getAttackDir());
                     }
+                  } catch (e) {
+                    if (!NS_errorLogged) { NS_errorLogged = true; console.error("NovaStorm commit:", e); }
+                  }
                 }, Math.max(0, 111 - tickPing()));
             }
 
