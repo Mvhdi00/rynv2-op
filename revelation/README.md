@@ -155,17 +155,42 @@ delivers nothing if the client is keyed on a different opcode set. Every letter
 the server can send has a handler, and no handler waits on a letter it cannot —
 so the packet vocabulary was already current, and only the transport was missing.
 
+### playerUpdate threw before the player existed
+
+With the transport working, `../harness/spawn-check.js` could finally drive a
+real session — and it surfaced a second fault straight away:
+
+```
+Cannot read properties of undefined (reading 'd1')
+```
+
+`playerUpdate` runs on every tick and its tail dereferences `E`, the local
+player, four times. But an update can arrive before the packet that creates
+them — on join, and again on every respawn. Worse, `playerUpdate` is `async`, so
+the throw surfaced as an unhandled rejection rather than an error anyone would
+see, and it took the rest of the tick's state update with it: `renderObjects`,
+`nearObjects` and the pathfinder position all stayed stale, so the world kept
+drawing from old data while the player never appeared.
+
+It now returns early when there is no local player yet.
+
 ## What is verified and what is not
 
-Verified here: the transport is byte-identical to the game's, the handler
-vocabulary is complete, the client loads and renders without errors, and the
-render loop survives a fault.
+A full session against the mock server now runs: the client opens its own
+socket, negotiates the signed transport (real key, both opcode tables, sequence
+climbing past 50), decodes chat and player packets — the harness log shows
+`Encountered rival[2]` and `tester[1]: hello` coming through — and draws the
+world, the objects, the other player and the health bars, with no page errors.
 
-**Not verified here:** an actual game session. Revelation only connects after a
-Cloudflare Turnstile token, which this sandbox cannot produce, so no socket is
-ever opened and the in-game path stays untested. The transport is proven correct
-in isolation; whether the packet *payloads* behind those opcodes still match
-what this client's handlers expect can only be settled by playing it.
+Also verified: the transport is byte-identical to the game's over 200 seeds and
+200 signatures, the handler vocabulary covers all 36 opcodes, and the render
+loop survives a fault.
+
+**Still not verified:** the live server. The mock speaks the same transport but
+its packet *payloads* are the harness's own, so whether every field layout still
+matches what these handlers expect can only be settled by playing it. The
+startup line `[revelation] build: transport-port 2026-08-28` in the console
+tells you which build is actually running.
 
 ## Not fixed
 

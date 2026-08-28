@@ -82,18 +82,34 @@ const REDIRECT = `
 
   await page.addInitScript({ content: SERVER_LIST });
   await page.addInitScript({ content: REDIRECT });
-  const installed = await inject.install(page, fs.readFileSync(CLIENT, "utf8"));
+  /* The client's own top-level names are not on window. Since the harness is
+   * what evaluates the source, append an export in the same scope — a test hook
+   * that leaves the shipped file untouched. */
+  let source = fs.readFileSync(CLIENT, "utf8");
+  if (source.includes("const ee = {")) {
+    source += `
+;try { window.__rev = {
+  connect: typeof gn === "function" ? gn : null,
+  socket: function () { return ee.socket; },
+  state: function () { return { net: typeof revNet !== "undefined" ? revNet : "absent",
+                                me: typeof E !== "undefined" && E ? { sid: E.sid, x: E.x, y: E.y, visible: E.visible, alive: E.alive } : null,
+                                players: typeof J !== "undefined" ? J.length : -1 }; }
+}; } catch (e) { window.__revErr = String(e); }`;
+  }
+  const installed = await inject.install(page, source);
   await page.goto("http://127.0.0.1:8321/", { waitUntil: "load" });
   await installed.finish();
   await page.waitForTimeout(1500);
 
-  // Nudge anything that only connects on a click.
-  await page.evaluate(() => {
+  // Drive the client's own connect, past the captcha gate the sandbox cannot pass.
+  const connected = await page.evaluate(() => {
+    if (window.__rev && window.__rev.connect) { try { window.__rev.connect(); return "called"; } catch (e) { return "threw: " + e.message; } }
     const play = document.getElementById("enterGame");
-    if (play) play.click();
-    if (typeof window.enterGame === "function") try { window.enterGame(); } catch (e) {}
+    if (play) { play.click(); return "clicked"; }
+    return "no way in";
   });
   await page.waitForTimeout(6000);
+  const state = await page.evaluate(() => (window.__rev ? window.__rev.state() : window.__revErr || null));
 
   const result = await page.evaluate(() => {
     const out = {};
@@ -116,6 +132,8 @@ const REDIRECT = `
   });
 
   console.log(path.basename(CLIENT), "| run-at:", installed.when);
+  console.log("  connect:", connected);
+  console.log("  client state:", JSON.stringify(state));
   console.log("  sockets the page opened:", result.socketsOpened);
   console.log("  distinct colours where the player should be:", result.coloursAtCentre);
   console.log("  most common:", result.topColours.join("  "));

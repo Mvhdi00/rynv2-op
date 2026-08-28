@@ -4,11 +4,19 @@
 // @version      infinite
 // @description  try to take over the world!
 // @author       Nachocheesefry, snorlax, kwyxl, forker
-// @require      https://rawgit.com/kawanet/msgpack-lite/master/dist/msgpack.min.js
 // @match        https://*.moomoo.io/*
 // @icon         https://i.imgur.com/Z8oaFKj.png
 // @grant        none
 // ==/UserScript==
+
+/* The @require that used to sit here pulled msgpack-lite from rawgit.com, which
+ * shut down in 2019 — it could only ever fail, and it printed an error in every
+ * console. Nothing needed it: the client carries its own codec, which
+ * window.msgpack now points at further down. */
+
+/* Says which build is actually running, so "I installed the fix" and "the fix is
+ * running" stop being the same guess. */
+console.log("%c[revelation] build: transport-port 2026-08-28", "color:#9b8cff");
 // Force bot spawning toggle ON by default
 /*var spawning = true;
 
@@ -19061,6 +19069,14 @@ async function playerUpdate(e) {
   }
   mouseXY();
   getInventory();
+  /* Everything below needs the local player, and an update can arrive before
+   * the packet that creates them — on join, and again on every respawn.
+   * Dereferencing E here threw, and because this function is async that
+   * surfaced as an unhandled rejection rather than an error anyone would see,
+   * taking the rest of the tick's state update with it: renderObjects,
+   * nearObjects and the pathfinder position all stayed stale, so the world kept
+   * drawing from old data while the player never appeared. */
+  if (!E) return;
   if (E.d1 == E.dir && E.d2 == E.dir && aim[0] === null) {
     visAim = false;
   }
