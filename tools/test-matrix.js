@@ -35,7 +35,9 @@ function grab(name, kind) {
 const EXTRACT = ["NS_posKey", "NS_isCooling", "NS_cool", "NS_inSandbox", "NS_groupLimit",
   "NS_updateMoveModel", "NS_segDist2", "NS_hits", "NS_escapeExits", "NS_buildCtx",
   "NS_usefulness", "NS_probeAngles", "NS_runPreplace", "NS_revalidate",
-  "addPredictObject", "isItemLimit", "getConfig", "canPlace", "isAutoPlaceAngle"];
+  "NS_objAsConfig", "NS_roles", "NS_fillsRole", "NS_findDoomed", "NS_runReplace",
+  "isObjectOur", "addPredictObject", "isItemLimit", "getConfig", "canPlace",
+  "isAutoPlaceAngle"];
 
 const harness = `
 'use strict';
@@ -62,6 +64,10 @@ const GROUPS = { 2: { id:2, name:"spikes", limit:15 }, 5: { id:5, name:"trap", l
 const items = { list: [] };
 items.list[6]  = { id:6,  name:"spikes",   scale:49, placeOffset:-5, group:GROUPS[2] };
 items.list[15] = { id:15, name:"pit trap", scale:50, placeOffset:-5, group:GROUPS[5] };
+items.weapons = [];
+items.weapons[0]  = { dmg:25, range:65,  speed:300 };
+items.weapons[10] = { dmg:10, sDmg:7.5, range:75, speed:400 };   // hammer, real values
+config.weaponVariants = [{val:1},{val:1.1},{val:1.18},{val:1.18}];
 const objectManager = {
   checkItemLocation: function (x, y, s, sM, indx, ignoreWater, placer, objects) {
     for (let i = 0; i < objects.length; ++i) {
@@ -85,6 +91,10 @@ let myPlayer = null, nearestEnemy = null, nearestTrap = null;
 let instaKill = [], insta = { primary:false, secondary:false, turret:false, primaryturret:false };
 let spikeDmgCount = 0, predictMoveAngle = null, smartTickSpike = null;
 let removedObjects = [];
+let enemiesNear = [];
+let spawnedObjectSids = [];
+let alliancePlayers = [];
+function isAlly() { return false; }
 const primaryReload = {}, secondaryReload = {};
 let imTrapped = false;
 function getPlayerInfo(p, t) {
@@ -94,8 +104,11 @@ function getPlayerInfo(p, t) {
 }
 ${EXTRACT.map(n => grab(n)).join("\n")}
 ${grab("NS_PP", "const").trim()}
+${grab("NS_RP", "const").trim()}
 let NS_ctx = null;
 let NS_intent = null;
+let NS_replaceIntent = null;
+let NS_pendingReplace = null;
 let NS_sandboxCache = null;
 const NS_cooldown = new Map();
 
@@ -115,14 +128,19 @@ function __set(s) {
   if ('predictMoveAngle' in s) predictMoveAngle = s.predictMoveAngle;
   if ('imTrapped' in s) imTrapped = s.imTrapped;
   if ('removedObjects' in s) removedObjects = s.removedObjects;
+  if ('enemiesNear' in s) enemiesNear = s.enemiesNear;
+  if ('spawnedObjectSids' in s) spawnedObjectSids = s.spawnedObjectSids;
+  if ('pendingReplace' in s) NS_pendingReplace = s.pendingReplace;
   if ('vars' in s) Object.assign(win.vars, s.vars);
   if ('reloads' in s) { primaryReload[s.reloads.sid] = s.reloads.p; secondaryReload[s.reloads.sid] = s.reloads.s; }
 }
-function __get() { return { predictObjects, NS_intent, NS_ctx, smartTickSpike, packets, tick }; }
+function __get() { return { predictObjects, NS_intent, NS_replaceIntent, NS_ctx,
+                            smartTickSpike, packets, tick, NS_pendingReplace }; }
 function __resetCooldown() { NS_cooldown.clear(); }
 module.exports = { __set, __get, __resetCooldown, NS_buildCtx, NS_runPreplace,
+                   NS_runReplace, NS_findDoomed, NS_roles, NS_fillsRole, NS_objAsConfig,
                    NS_revalidate, NS_updateMoveModel, NS_usefulness, isAutoPlaceAngle,
-                   getConfig, canPlace, NS_PP, items, UTILS };
+                   getConfig, canPlace, NS_PP, NS_RP, items, UTILS };
 `;
 
 const tmp = path.join(__dirname, ".ns_matrix." + process.pid + ".tmp.js");
@@ -157,8 +175,32 @@ function base(over) {
     instaKill: [], insta: { primary:false, secondary:false, turret:false, primaryturret:false },
     spikeDmgCount: 0, predictMoveAngle: null, imTrapped: false,
     vars: { prePlace: true, autoPlace: true, shameTick: false },
-    reloads: { sid: 1, p: 1, s: 1 }
+    reloads: { sid: 1, p: 1, s: 1 }, enemiesNear: [], spawnedObjectSids: [],
+    removedObjects: [], pendingReplace: null
   }, over);
+}
+
+
+// A spike of ours sitting in contact range of the enemy, and an enemy whose
+// hammer came off cooldown this tick (the reload EDGE, not merely "is ready").
+function replaceFixture(spikeHealth) {
+  const st = base();
+  st.nearestEnemy = mkEnemy(7200 + 250, 5000);
+  walk(st.nearestEnemy, 8, -14, 0);                     // ends ~138 out
+  const e = st.nearestEnemy;
+  e.weapons = [0, 10];
+  e.weaponVariants = { 0: 0, 10: 0 };
+  e.skinIndex = 0;                                       // no tank hat
+  e.lastSecondaryReload = 0;
+  e.d2 = Math.atan2(5000 - e.y2, 7200 - e.x2);           // facing our side
+  st.reloads = { sid: 2, p: 0, s: 1 };
+  const spike = { id: SPIKE, sid: 55, x: e.x2 - 60, y: 5000, scale: 49,
+                  active: true, health: spikeHealth, owner: { sid: 1 },
+                  getScale: function () { return this.scale; } };
+  st.visibleObjects = [spike];
+  st.spikes_our = [spike];
+  st.enemiesNear = [e];
+  return { st, e, spike };
 }
 
 // ---------------------------------------------------------------- reporting
@@ -171,6 +213,17 @@ function record(n, name, r) {
   console.log(`   deferred  : ${r.deferred}`);
   console.log(`   duplicate : ${r.dup}`);
   console.log(`   stale     : ${r.stale}`);
+}
+
+function runReplace(state, removed) {
+  G.__resetCooldown();
+  G.__set(state);
+  const ctx = G.NS_buildCtx();
+  ctx.removed = removed || [];
+  G.NS_runReplace(ctx);
+  const out = G.__get();
+  return { ctx, intents: out.predictObjects.filter(o => o.owner === "replace"),
+           all: out.predictObjects };
 }
 
 function runPreplace(state) {
@@ -315,13 +368,37 @@ let steadyState, steadyRes;
 }
 
 // 7 ------------------------------------------------------------------------
-record(7, "Replace opportunity active", {
-  owner: "NOT YET IMPLEMENTED",
-  reason: "Replace is step 5 of the implementation order; getPrePlaceObject still awaits its move",
-  deferred: "n/a",
-  dup: "n/a",
-  stale: "n/a"
-});
+{
+  const doomedF = replaceFixture(60);       // hammer does 10*7.5=75 -> dies
+  G.__set(doomedF.st);
+  const ctxD = G.NS_buildCtx();
+  const doomed = G.NS_findDoomed(ctxD);
+  const rA = runReplace(doomedF.st, []);
+
+  const safeF = replaceFixture(600);        // survives comfortably
+  G.__set(safeF.st);
+  const safe = G.NS_findDoomed(G.NS_buildCtx());
+
+  // an object doing nothing, far from the fight, that is also about to die
+  const idleF = replaceFixture(60);
+  idleF.spike.x = 7200 - 900; idleF.spike.y = 5000;
+  const rIdle = runReplace(idleF.st, []);
+
+  record(7, "Replace opportunity active", {
+    owner: rA.intents.length ? `Replace (mode ${rA.intents[0].mode})` : "none",
+    reason: rA.intents.length
+      ? `spike health 60 vs hammer 75 -> doomed; loss ${rA.intents[0].loss.toFixed(2)} >= LOSS_MIN ` +
+        `${G.NS_RP.LOSS_MIN}, recovery ${rA.intents[0].recov.toFixed(2)} >= loss*${G.NS_RP.RECOVERY_MIN}`
+      : `no qualifying replacement (doomed found: ${doomed.length})`,
+    deferred: `healthy object: ${safe.length} doomed (correctly none). ` +
+              `idle object far from the fight: ${rIdle.intents.length} intent(s) — ` +
+              `"technically possible" is not a reason`,
+    dup: `${rA.intents.length} replace intent(s); one per lost position`,
+    stale: "revalidated at commit like any deferred intent"
+  });
+  if (safe.length) { console.log("   *** HEALTHY OBJECT REPORTED DOOMED ***"); process.exitCode = 1; }
+  if (rIdle.intents.length) { console.log("   *** REPLACED AN OBJECT THAT WAS DOING NOTHING ***"); process.exitCode = 1; }
+}
 
 // 8 ------------------------------------------------------------------------
 {
@@ -352,11 +429,33 @@ record(7, "Replace opportunity active", {
 }
 
 // 10 -----------------------------------------------------------------------
-record(10, "Replace and Auto Place interact with the same object", {
-  owner: "NOT YET IMPLEMENTED",
-  reason: "needs Replace (step 5) and its per-role Auto-Place-dependency test",
-  deferred: "n/a", dup: "n/a", stale: "n/a"
-});
+{
+  const f = replaceFixture(60);
+  G.__set(f.st);
+  const ctx = G.NS_buildCtx();
+  const roles = G.NS_roles(f.spike, ctx);
+  // does a trap candidate at the same spot fill a kbTarget role? it must not.
+  const spikeCfg = Object.assign(G.getConfig(SPIKE, 0), { id: SPIKE });
+  const trapCfg  = Object.assign(G.getConfig(TRAP, 0),  { id: TRAP  });
+  const dSpike = G.UTILS.getDistance(f.spike.x, f.spike.y, ctx.enemy.x2, ctx.enemy.y2);
+  const trapFills = roles.length ? roles.every(r => G.NS_fillsRole(trapCfg, r, ctx)) : null;
+
+  // mode B: the object actually died; Auto Place gets first refusal
+  const rB = runReplace(f.st, [f.spike.sid]);
+
+  record(10, "Replace and Auto Place interact with the same object", {
+    owner: rB.intents.length ? `Replace (mode ${rB.intents[0].mode}, immediate)` : "Auto Place",
+    reason: `dying spike is ${Math.round(dSpike)} from the enemy; Auto-Place-dependent roles: ` +
+            `[${roles.join(", ") || "none"}]`,
+    deferred: `Replace yields any angle isAutoPlaceAngle claims (same oracle as Preplace). ` +
+              `Mode B is queued preplace:false so it commits in the tick body, not 111ms later`,
+    dup: `a trap candidate ${trapFills === null ? "n/a (no roles)" :
+           trapFills ? "WOULD wrongly satisfy" : "correctly fails"} the role test, ` +
+          `so it cannot silently disable the rule Auto Place depended on`,
+    stale: "n/a — mode B has no deferral gap"
+  });
+  if (trapFills === true) { console.log("   *** ROLE TEST DID NOT PROTECT AUTO PLACE ***"); process.exitCode = 1; }
+}
 
 // 11 -----------------------------------------------------------------------
 {
@@ -405,11 +504,34 @@ record(10, "Replace and Auto Place interact with the same object", {
 }
 
 // 12 -----------------------------------------------------------------------
-record(12, "Replace candidate becomes stale", {
-  owner: "NOT YET IMPLEMENTED",
-  reason: "harness ready; NS_revalidate is shared and already covers generation, collision and Spike Tick",
-  deferred: "n/a", dup: "n/a", stale: "n/a"
-});
+{
+  const f = replaceFixture(60);
+  const r = runReplace(f.st, []);
+  let res = { same: null, nextTick: null, spikeTick: null, overBudget: null };
+  if (r.intents.length) {
+    const it = r.intents[0];
+    G.__set(f.st);                      res.same = G.NS_revalidate(it);
+    G.__set({ tick: f.st.tick + 1 });   res.nextTick = G.NS_revalidate(it);
+    G.__set({ tick: f.st.tick, instaKill: ["secondary"] });
+                                        res.spikeTick = G.NS_revalidate(it);
+    G.__set({ instaKill: [], packets: 116 });
+                                        res.overBudget = G.NS_revalidate(it);
+  }
+  record(12, "Replace candidate becomes stale", {
+    owner: r.intents.length ? "Replace, subject to the same commit gate as Preplace" : "none",
+    reason: "NS_revalidate is shared — generation, packets, Spike Tick, item limit, collision",
+    deferred: "Replace defers to whatever invalidated it; cancellation is silent",
+    dup: "n/a",
+    stale: r.intents.length
+      ? `same tick: ${res.same ? "commits" : "cancelled"} | next tick: ${res.nextTick ? "COMMITS (BAD)" : "cancelled"}` +
+        ` | Spike Tick fired: ${res.spikeTick ? "COMMITS (BAD)" : "cancelled"}` +
+        ` | over budget: ${res.overBudget ? "COMMITS (BAD)" : "cancelled"}`
+      : "no intent produced"
+  });
+  if (r.intents.length && (!res.same || res.nextTick || res.spikeTick || res.overBudget)) {
+    console.log("   *** REPLACE STALE PREVENTION FAILED ***"); process.exitCode = 1;
+  }
+}
 
 // 13 -----------------------------------------------------------------------
 {

@@ -3,8 +3,9 @@
 Commit `4c3c527`. Baseline `src/novastorm_1.4.js` (the unmodified upload).
 Deliverable `NovaStorm.user.js`. 13 diff hunks, 733 changed lines.
 
-**Scope actually completed: Preplace. Replace was designed but not implemented.**
-Everything below distinguishes what is in the code from what is on paper.
+**Scope: Preplace and Replace, both implemented.** Replace landed after the
+first version of this report; §5 and §11 are updated accordingly, and the
+addenda at the end record the two defects found after that.
 
 ---
 
@@ -108,7 +109,19 @@ present in the shipped code.
 
 ## 5. Luna Replace logic actually extracted
 
-**None. Replace is not implemented**, so no Luna Replace logic is in the code.
+Located and read in `Luna_Fixed.user.js` before use, and present in the code:
+
+| behaviour | Luna source | where it landed |
+|---|---|---|
+| reload **edge** trigger — the weapon became ready this tick, not merely is ready | 11765–11771 | `NS_findDoomed` |
+| branch A's filter set (range + aim cone + lethality + accurate hat) applied to the enemy branch, which had only range and lethality | 11749–11757 vs 11764–11776 | `NS_findDoomed` |
+| splice the doomed object out of the collision set when choosing | 11814 | `NS_runReplace`, generalised to a set |
+| correct item-limit expression | 11296 | `NS_groupLimit` |
+
+**Deliberately not carried over**, all verified in Luna: the unconditional
+`spamPrePlacer` re-send with no success check (14001), the `prePlace2` menu stub
+read nowhere (19253), the single-enemy restriction, and the hard-coded `* 3.3`
+tank multiplier — `skinIndex` is parsed per player at 14031, so accuracy is free.
 
 What the Luna analysis established, for the record:
 
@@ -218,31 +231,28 @@ confirmed dead or pending Replace; none has been deleted.
 
 ## 11. Remaining limitations
 
-1. **Replace is not implemented.** Steps 5–8 of the agreed order were not
-   reached. `getPrePlaceObject` still sits unreferenced, awaiting its move.
-   Audit items 2, 9, 12 and 14 cannot pass.
-2. **Gap A — the predicted-position candidate basis was designed and not
+1. **Gap A — the predicted-position candidate basis was designed and not
    written.** `NS_runPreplace` calls `getConfig(id, angle)` and
    `canPlace(id, angle)` with no `velocity` argument, so candidates are still
    validated at the current player position. Mitigated by commit-time
    revalidation re-deriving from the current position; still a gap, and mine.
-3. **Gap B — C6 and C7 remain open.** A new `NS_cooldown` map was added instead
+2. **Gap B — C6 and C7 remain open.** A new `NS_cooldown` map was added instead
    of rekeying the existing `bannedAngles` map as the integration design
    specified. Preplace still writes into `placedAngles` at commit while reading
    no bans. I pre-registered this risk with a commitment to flag it at step 2 and
    did not.
-4. **Nothing has been run in a browser.** Every result is static analysis or
+3. **Nothing has been run in a browser.** Every result is static analysis or
    synthetic-state simulation. `CONF_MIN 0.65`, `VALUE_MIN 2.0`, `GAIN_MIN 1.5`
    were chosen from geometry, not from play.
-5. **The yield rule is strict.** Scenario 5 measures it: with an enemy trapped,
+4. **The yield rule is strict.** Scenario 5 measures it: with an enemy trapped,
    Auto Place's rule A3 claims **55 of 55** placeable spike angles and Preplace
    queues nothing. Correct per the compatibility contract, but it is the number
    to look at if Preplace feels too quiet. The remedy is the A3/T2 override
    offered in `autoplace-compatibility.md` §8, not a change to the oracle.
-6. **Preplace engages later than the range gate suggests.** The 300 gate is
+5. **Preplace engages later than the range gate suggests.** The 300 gate is
    necessary but not sufficient; at 236 units every candidate is below
    `VALUE_MIN`. Real engagement is around 120.
-7. **Two questions were never answered and I proceeded on stated defaults:**
+6. **Two questions were never answered and I proceeded on stated defaults:**
    `isItemLimit` applied globally rather than shadowed, and Spike Tick imminence
    via the cheap-prefix predicate rather than an additive line in the frozen
    block.
@@ -297,3 +307,45 @@ so a missing `window.location` cannot throw.
 Because `isItemLimit` sits inside `canPlace`, this affected **every** placement
 system in sandbox, not just Preplace. `tools/test-limits.js` (24 tests) pins all
 three regimes so it cannot regress again.
+
+
+---
+
+## Addendum 2 — Replace implemented (step 5), and what it broke
+
+Replace was missing from the first report. It is now in, with both modes:
+
+- **mode A** — an object of ours is predicted to die this tick (reload edge,
+  aim cone, ownership, hat-accurate damage, all nearby enemies). Queued
+  `preplace: true`, so it commits on the deferred timer as the gap opens.
+- **mode B** — one actually died. Read from the destroyed-object list captured
+  at the top of `getPredictObjects`, before the clear. Queued `preplace: false`,
+  so it commits immediately in the tick body.
+
+The discriminator is loss/recovery, not possibility: `loss >= LOSS_MIN` and
+`recov >= loss * RECOVERY_MIN`, with a raised bar for deaths that are only
+probable. Scenario 7 pins the negative case — an object far from the fight that
+is equally doomed produces no intent.
+
+Auto Place is protected per-role (`NS_roles` / `NS_fillsRole`): a trap cannot
+replace a knockback-target spike, because that would leave `closestSpikeToKb`
+undefined and silently disable Auto Place's A2 rule. Spike Tick is protected by
+never replacing the containing trap while a tick is live — replacing it resets
+its health and fails `canTrapTick`'s one-hammer-breakable test.
+
+**A defect the matrix caught.** `NS_revalidate` excluded `removedObjects` but not
+the intent's own `targetSid`. Choosing a mode-A candidate excludes the doomed
+object; the commit did not, so every mode-A intent cancelled itself on the very
+object it was created to replace. Fixed, and scenario 12 now asserts a valid
+Replace intent commits on its own tick rather than only asserting that stale
+ones cancel.
+
+**Obsolete logic removed (step 8):** `getPrePlaceObject` (superseded by
+`NS_findDoomed`), `lastPrePlaceObject`, `spamPrePlacer`, and the `FIX STACK
+PACKETS` block whose only effect was writing the never-read `placeTick`.
+`placeTick` and `setPlaceTick` themselves are left in place: they are dead, but
+their call sites sit inside Auto Place's frozen branch and removing them would
+edit it for no behavioural gain.
+
+All four suites pass: verify-placement 28, test-preplace 18, test-limits 24,
+test-matrix **14/14**.

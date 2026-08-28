@@ -12292,8 +12292,7 @@ for (let tree of trees) {
             secondary: false
         }
 
-        let spamPrePlacer = false;
-        let prePlaceInterval;
+            let prePlaceInterval;
 
         // BULLTICKS
         // =====================================================================
@@ -12893,7 +12892,6 @@ for (let tree of trees) {
 
         }
 
-        let lastPrePlaceObject = null;
         let removedObjects = [];
 
         function updateAngles(id) {
@@ -13580,8 +13578,14 @@ for (let tree of trees) {
             // visibleObjects with active === true: disableBySid splices
             // gameObjects without clearing the flag. Correcting for that is what
             // stops us cancelling exactly the placements that just became legal.
-            const objs = removedObjects.length
-                ? visibleObjects.filter(o => removedObjects.indexOf(o.sid) === -1)
+            // ...and the intent's own target, for a Replace mode A whose whole
+            // premise is that the object dies this tick. Choosing excluded it
+            // (NS_runReplace); the commit must exclude it too or the intent
+            // cancels itself on the object it was created to replace.
+            const skip = removedObjects.slice();
+            if (it.targetSid !== undefined) skip.push(it.targetSid);
+            const objs = skip.length
+                ? visibleObjects.filter(o => skip.indexOf(o.sid) === -1)
                 : visibleObjects;
 
             // Re-aim at the stored world point from where the player is now.
@@ -13601,57 +13605,219 @@ for (let tree of trees) {
             return true;
         }
 
-        function getPrePlaceObject() {
-            let findObject;
+        // =====================================================================
+        //  REPLACE (upgraded)   —  docs/replace-design.md
+        //
+        //  Two modes. A: an object of ours is predicted to die this tick, so the
+        //  replacement is timed to land as the gap opens. B: one actually died,
+        //  so fill it now. Neither fires merely because a replacement is
+        //  possible — the object has to have been doing something.
+        // =====================================================================
 
-            if (autogathering) {
-                if ((predictWeapon < 9 && primaryReload[myPlayer.sid] == 1) || (predictWeapon > 8 && secondaryReload[myPlayer.sid] == 1)) {
-                    let dmg = items.weapons[predictWeapon].dmg * (items.weapons[predictWeapon].sDmg || 1) * (config.weaponVariants[myPlayer.weaponVariants[predictWeapon]].val) * (isBoughtHat(40, 0) ? 3.3 : 1);
+        const NS_RP = {
+            LOSS_MIN: 2.5,        // usefulness a dying object must have had
+            RECOVERY_MIN: 0.8,    // fraction of that the replacement must restore
+            NEAR_MISS_FRAC: 0.15, // survives-by margin still counted as probable
+            LOSS_MIN_UNCERTAIN: 5 // raised bar when the death is only probable
+        };
 
-                    findObject = visibleObjects.filter((object) => (UTILS.getDistance(myPlayer.xVel, myPlayer.yVel, object.x, object.y) - object.scale) <= items.weapons[predictWeapon].range
-                                                       && UTILS.getAngleDist(UTILS.getDirection(object.x, object.y, myPlayer.xVel, myPlayer.yVel), getAttackDir()) <= config.gatherAngle
-                                                       && object.health <= dmg).sort((a, b) => UTILS.getDistance(a.x, a.y, nearestEnemy.x2, nearestEnemy.y2) - UTILS.getDistance(b.x, b.y, nearestEnemy.x2, nearestEnemy.y2))[0];
-                }
-            }
+        let NS_replaceIntent = null;
+        let NS_pendingReplace = null;   // { px, py, id, angle, tick } awaiting confirmation
 
-            if (nearestEnemy && !findObject) {
-                let weapon = null;
-                if (nearestEnemy.weapons[1] == 10 && secondaryReload[nearestEnemy.sid] == 1 && nearestEnemy.lastSecondaryReload < secondaryReload[nearestEnemy.sid]) {
-                    weapon = nearestEnemy.weapons[1];
-                } else {
-                    if (items.weapons[nearestEnemy.weapons[0]].speed <= 400 && primaryReload[nearestEnemy.sid] == 1 && nearestEnemy.lastPrimaryReload < primaryReload[nearestEnemy.sid]) {
-                        weapon = nearestEnemy.weapons[0];
-                    }
-                }
-
-                if (weapon != null) {
-                    let dmg = items.weapons[weapon].dmg * (items.weapons[weapon].sDmg || 1) * (config.weaponVariants[nearestEnemy.weaponVariants[weapon]].val || 1) * 3.3;
-
-                    findObject = visibleObjects.filter((object) => !object.hideFromEnemy && UTILS.getDistance(nearestEnemy.x2, nearestEnemy.y2, object.x, object.y) <= (object.scale + items.weapons[weapon].range)
-                                                       && object.health <= dmg).sort((a, b) => UTILS.getDistance(a.x, a.y, nearestEnemy.x2, nearestEnemy.y2) - UTILS.getDistance(b.x, b.y, nearestEnemy.x2, nearestEnemy.y2))[0];
-                }
-            }
-
-            if (findObject) {
-                spamPrePlacer = true;
-            }
-
-            return findObject;
+        // Score an existing object with the same scorer used for candidates, so
+        // loss and recovery are comparable quantities rather than two scales.
+        function NS_objAsConfig(obj, ctx) {
+            const isSpike = obj.id > 5 && obj.id < 10;
+            return { id: isSpike ? ctx.spikeId : (obj.id == 15 ? ctx.trapId : obj.id),
+                     x: obj.x, y: obj.y, scale: obj.scale, angle: 0, sid: obj.sid };
         }
 
-        function getPredictObjects() {
-            // FIX STACK PACKETS
-            if (removedObjects.length > 0) {
-                if (lastPrePlaceObject && removedObjects.some((sid) => lastPrePlaceObject.sid == sid)) {
-                    for (const object of predictObjects) {
-                        if (!object.preplace) continue;
-
-                        placeTick = tick;
-                    }
-                }
-
-                removedObjects = [];
+        // Roles an object fills that Auto Place's own rules depend on. A
+        // replacement has to fill each of them, or it silently disables a rule
+        // Auto Place was relying on (a trap where a knockback-target spike was
+        // leaves closestSpikeToKb undefined).
+        function NS_roles(obj, ctx) {
+            const r = [];
+            if (ctx.enemyTrapped && obj.sid === ctx.enemyTrapped.sid) r.push("enemyTrap");
+            if (obj.id > 5 && obj.id < 10 && ctx.enemy) {
+                const d = UTILS.getDistance(obj.x, obj.y, ctx.enemy.x2, ctx.enemy.y2);
+                if (d >= 50 && d <= 150) r.push("kbTarget");
             }
+            return r;
+        }
+        function NS_fillsRole(cfg, role, ctx) {
+            if (!ctx.enemy) return false;
+            const d = UTILS.getDistance(cfg.x, cfg.y, ctx.enemy.x2, ctx.enemy.y2);
+            if (role === "enemyTrap") return cfg.id === ctx.trapId && d < 50;
+            if (role === "kbTarget") return cfg.id === ctx.spikeId && d >= 50 && d <= 150;
+            return true;
+        }
+
+        // Which of our objects are about to stop existing. Luna's branch A had
+        // the right filter shape — range, aim cone, lethality, accurate hat —
+        // sitting three lines above a branch B that had only range and
+        // lethality. Both branches now use the full set, and every nearby enemy
+        // is considered rather than only the nearest.
+        function NS_findDoomed(ctx) {
+            const doomed = [];
+            if (!myPlayer) return doomed;
+
+            const ours = visibleObjects.filter(o => o.owner && isObjectOur(o) &&
+                                                    o.health !== undefined && !o.hideFromEnemy);
+            if (!ours.length) return doomed;
+
+            const enemies = (enemiesNear && enemiesNear.length) ? enemiesNear
+                          : (ctx.enemy ? [ctx.enemy] : []);
+
+            for (const e of enemies) {
+                // Reload edge: the weapon became ready this tick, not merely is.
+                let weapon = null;
+                if (e.weapons[1] == 10 && secondaryReload[e.sid] == 1 &&
+                    e.lastSecondaryReload < secondaryReload[e.sid]) {
+                    weapon = e.weapons[1];
+                } else if (items.weapons[e.weapons[0]] &&
+                           items.weapons[e.weapons[0]].speed <= 400 &&
+                           primaryReload[e.sid] == 1 &&
+                           e.lastPrimaryReload < primaryReload[e.sid]) {
+                    weapon = e.weapons[0];
+                }
+                if (weapon == null) continue;
+
+                const w = items.weapons[weapon];
+                // Hat-accurate rather than assuming the tank hat is always worn.
+                const tank = e.skinIndex === 40 ? 3.3 : 1;
+                const dmg = w.dmg * (w.sDmg || 1) *
+                            ((config.weaponVariants[e.weaponVariants[weapon]] || {}).val || 1) * tank;
+                const aim = e.d2;
+
+                for (const o of ours) {
+                    if (UTILS.getDistance(e.x2, e.y2, o.x, o.y) > o.scale + w.range) continue;
+                    // Aim cone: an enemy facing away is not about to break this.
+                    if (aim !== undefined &&
+                        UTILS.getAngleDist(UTILS.getDirection(o.x, o.y, e.x2, e.y2), aim) > config.gatherAngle) continue;
+                    if (o.health > dmg) {
+                        // A near miss is a probable death, held to a higher bar.
+                        if (o.health <= dmg * (1 + NS_RP.NEAR_MISS_FRAC)) {
+                            if (!doomed.some(d => d.obj.sid === o.sid)) doomed.push({ obj: o, certain: false });
+                        }
+                        continue;
+                    }
+                    const seen = doomed.find(d => d.obj.sid === o.sid);
+                    if (seen) seen.certain = true;
+                    else doomed.push({ obj: o, certain: true });
+                }
+            }
+            return doomed;
+        }
+
+        function NS_runReplace(ctx) {
+            NS_replaceIntent = null;
+            if (!window.vars.prePlace) return;          // shares the placer toggle
+            if (!myPlayer || !myPlayer.alive) return;
+            if (ctx.spikeTickActive) return;                            // R3
+            if (packets + 10 > 119) return;                             // R5
+
+            // ---- confirm or retire the previous attempt -------------------
+            if (NS_pendingReplace) {
+                const p = NS_pendingReplace;
+                const landed = spawnedObjectSids && spawnedObjectSids.some(sid => {
+                    const o = visibleObjects.find(v => v.sid === sid);
+                    return o && UTILS.getDistance(o.x, o.y, p.px, p.py) < 40;
+                });
+                if (landed || tick - p.tick > 2) NS_pendingReplace = null;
+            }
+
+            // ---- mode B: something of ours actually died -------------------
+            let target = null, mode = null;
+            for (const sid of (ctx.removed || [])) {
+                const o = visibleObjects.find(v => v.sid === sid);
+                if (!o || !o.owner || !isObjectOur(o)) continue;
+                target = { obj: o, certain: true }; mode = "B"; break;
+            }
+
+            // ---- mode A: predicted to die this tick ------------------------
+            if (!target) {
+                const doomed = NS_findDoomed(ctx);
+                if (doomed.length && ctx.enemy) {
+                    doomed.sort((a, b) =>
+                        UTILS.getDistance(a.obj.x, a.obj.y, ctx.enemy.x2, ctx.enemy.y2) -
+                        UTILS.getDistance(b.obj.x, b.obj.y, ctx.enemy.x2, ctx.enemy.y2));
+                    target = doomed[0]; mode = "A";
+                }
+            }
+            if (!target || !ctx.enemy) return;                          // R1
+
+            // Spike Tick owns the containing trap. Replacing it resets its
+            // health and fails canTrapTick's one-hammer-breakable test, killing
+            // the tick. The shipped code already guarded this via spikeDamage;
+            // that condition is kept.
+            if (ctx.enemyTrapped && target.obj.sid === ctx.enemyTrapped.sid &&
+                ctx.enemy.spikeDamage <= 0) return;                     // S4
+
+            const lossCfg = NS_objAsConfig(target.obj, ctx);
+            const loss = NS_usefulness(lossCfg, ctx.cur, ctx);
+            const bar = target.certain ? NS_RP.LOSS_MIN : NS_RP.LOSS_MIN_UNCERTAIN;
+            if (loss < bar) return;                                     // R2 — the brief's rule
+
+            const roles = NS_roles(target.obj, ctx);
+            const doomedSids = [target.obj.sid];
+            const objs = visibleObjects.filter(o => doomedSids.indexOf(o.sid) === -1);
+
+            const ids = [];
+            if (ctx.spikeId != null && !isItemLimit(ctx.spikeId)) ids.push(ctx.spikeId);
+            if (ctx.trapId != null && !isItemLimit(ctx.trapId)) ids.push(ctx.trapId);
+            if (!ids.length) return;
+
+            const anchor = Math.atan2(target.obj.y - myPlayer.y2, target.obj.x - myPlayer.x2);
+            let best = null;
+
+            for (const id of ids) {
+                for (const angle of NS_probeAngles(anchor)) {
+                    const cfg = getConfig(id, angle);
+                    cfg.id = id; cfg.angle = angle;
+
+                    if (NS_isCooling(cfg.x, cfg.y)) continue;
+                    if (!canPlace(id, angle, objs)) continue;           // R6, doomed excluded
+                    if (ctx.spikeTickLive &&
+                        UTILS.getDistance(cfg.x, cfg.y, ctx.enemy.x2, ctx.enemy.y2) < cfg.scale + 55) continue;
+
+                    const recov = NS_usefulness(cfg, ctx.cur, ctx);
+                    if (recov < loss * NS_RP.RECOVERY_MIN) continue;    // R7
+                    if (!roles.every(r => NS_fillsRole(cfg, r, ctx))) continue;
+                    if (isAutoPlaceAngle(cfg, null, null, null)) continue;  // R8
+
+                    if (!best || recov > best.recov) best = { id, angle, cfg, recov };
+                }
+            }
+            if (!best) return;
+
+            addPredictObject(best.id, best.angle, mode === "A", {
+                owner: "replace", mode: mode, tick: tick, targetSid: target.obj.sid,
+                loss: loss, recov: best.recov, px: best.cfg.x, py: best.cfg.y
+            });
+            for (const o of predictObjects) {
+                if (o.owner === "replace") { NS_replaceIntent = o; break; }
+            }
+            if (NS_replaceIntent) {
+                NS_pendingReplace = { px: best.cfg.x, py: best.cfg.y, id: best.id,
+                                      angle: best.angle, tick: tick };
+            }
+        }
+
+        // getPrePlaceObject (removed, step 8). It answered "which existing
+        // object is about to stop existing" — replacement target acquisition
+        // living inside Preplace. Superseded by NS_findDoomed, which adds the
+        // aim cone, ownership and hat-accuracy that its enemy branch lacked
+        // and considers every nearby enemy rather than only the nearest.
+
+
+        function getPredictObjects() {
+            // Objects destroyed since the last tick, captured before the clear.
+            // The block that stood here detected exactly this and wrote it into
+            // placeTick, which is never read anywhere in the file; Replace
+            // mode B consumes the same signal for real.
+            const nsRemoved = removedObjects.slice();
+            removedObjects = [];
 
             predictObjects = [];
 
@@ -13659,11 +13825,13 @@ for (let tree of trees) {
             // Movement-driven and confidence-gated. The doomed-object finder
             // getPrePlaceObject() is no longer Preplace's trigger: that is
             // replacement target acquisition and moves to Replace at step 5.
-            lastPrePlaceObject = null;
-            spamPrePlacer = false;
 
             NS_ctx = NS_buildCtx();
+            NS_ctx.removed = nsRemoved;
             NS_runPreplace(NS_ctx);
+
+            // REPLACE  (upgraded — see NS_runReplace / docs/replace-design.md)
+            NS_runReplace(NS_ctx);
 
             // GET AUTOPLACE ANGLES
             if (window.vars.autoPlace && nearestEnemy) {
