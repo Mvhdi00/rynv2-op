@@ -90,6 +90,10 @@ const REDIRECT = `
     source += `
 ;try { window.__rev = {
   connect: typeof gn === "function" ? gn : null,
+  gate: typeof Oh === "function" ? Oh : null,
+  gateState: function () { return { ready: typeof ps !== "undefined" ? ps : "absent",
+                                    token: typeof code !== "undefined" ? code : "absent",
+                                    kind: typeof revTokenKind !== "undefined" ? revTokenKind : "absent" }; },
   socket: function () { return ee.socket; },
   state: function () { return { net: typeof revNet !== "undefined" ? revNet : "absent",
                                 me: typeof E !== "undefined" && E ? { sid: E.sid, x: E.x, y: E.y, visible: E.visible, alive: E.alive } : null,
@@ -101,13 +105,27 @@ const REDIRECT = `
   await installed.finish();
   await page.waitForTimeout(1500);
 
-  // Drive the client's own connect, past the captcha gate the sandbox cannot pass.
-  const connected = await page.evaluate(() => {
-    if (window.__rev && window.__rev.connect) { try { window.__rev.connect(); return "called"; } catch (e) { return "threw: " + e.message; } }
-    const play = document.getElementById("enterGame");
-    if (play) { play.click(); return "clicked"; }
-    return "no way in";
+  /* Go through the client's real captcha gate rather than around it: hand the
+   * page a Turnstile token the way the game does, then press Play. This is the
+   * path that was dead — the client only ever connected if `code` was set, and
+   * nothing set it. */
+  const gate = await page.evaluate(() => {
+    const out = {};
+    try {
+      if (typeof window.onGotTurnstileToken === "function") {
+        window.onGotTurnstileToken("stub-token");
+        out.tokenDelivered = true;
+      }
+    } catch (e) { out.tokenError = e.message; }
+    out.beforePlay = window.__rev ? window.__rev.gateState() : null;
+    try {
+      if (window.__rev && window.__rev.gate) { window.__rev.gate(); out.played = "gate"; }
+      else { const b = document.getElementById("enterGame"); if (b) { b.click(); out.played = "click"; } }
+    } catch (e) { out.playError = e.message; }
+    return out;
   });
+  await page.waitForTimeout(2500);
+  const connected = JSON.stringify(gate);
   await page.waitForTimeout(6000);
   const state = await page.evaluate(() => (window.__rev ? window.__rev.state() : window.__revErr || null));
 
@@ -132,7 +150,8 @@ const REDIRECT = `
   });
 
   console.log(path.basename(CLIENT), "| run-at:", installed.when);
-  console.log("  connect:", connected);
+  console.log("  captcha gate:", connected);
+  console.log("  connect url:", await page.evaluate(() => (window.__wsUrls || [])[0] || "(none)"));
   console.log("  client state:", JSON.stringify(state));
   console.log("  sockets the page opened:", result.socketsOpened);
   console.log("  distinct colours where the player should be:", result.coloursAtCentre);

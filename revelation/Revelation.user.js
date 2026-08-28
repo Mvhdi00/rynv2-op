@@ -12551,31 +12551,84 @@ function Oh() {
   if (!!ps && !Fn) {
     Fn = true;
     if (Eh || ls) {
+      // Connect either way. With a token when the page produced one, without
+      // when it did not — the old branch simply returned, which is how pressing
+      // Play came to do nothing at all.
       if (code) {
-        gn("alt:" + code);
+        gn(revTokenKind + ":" + code);
+      } else {
+        console.warn("[revelation] no captcha token; connecting without one");
+        gn();
       }
     } else if (Ei) {
-      gn("alt:" + code);
+      gn(revTokenKind + ":" + code);
     } else {
       gn();
     }
   }
 }
 let Vn = false;
+
+/* Which captcha the token came from. This client was written when the site used
+ * an <altcha> widget; the current site uses Cloudflare Turnstile, and the two
+ * take different prefixes on the connect URL. */
+let revTokenKind = "alt";
+
 function sd(e) {
   var t;
   if (((t = e == null ? undefined : e.detail) == null ? undefined : t.state) === "verified") {
     code = e.detail.payload;
+    revTokenKind = "alt";
     Le.classList.remove("disabled");
   }
   console.log(code);
 }
-window.addEventListener("load", () => {
+
+/* The whole reason this client sat there doing nothing.
+ *
+ * `code` is the captcha token, and without it Oh() below never called gn(), so
+ * ee.connect was never reached and no socket was ever opened — which is why
+ * nothing it drew ever had another player in it, and why no keypress, no
+ * placement, nothing at all reached a server. The leaderboard and ping that
+ * kept moving belong to the page's own bundle, not to this client.
+ *
+ * Two things stopped `code` ever being set:
+ *
+ *   1. It was wired up inside a window "load" listener, but this script runs at
+ *      document-idle — load has already been and gone, so the listener never
+ *      ran.
+ *   2. Even when it did run, it looked for a #altcha element. The site moved to
+ *      Cloudflare Turnstile and that element no longer exists.
+ *
+ * Turnstile hands its token to window.onGotTurnstileToken, so take a copy on
+ * the way past, leaving whatever the page installed intact. */
+function revUseToken(token, kind) {
+  if (!token || code) return;
+  code = token;
+  revTokenKind = kind;
+  console.log("[revelation] captcha token captured (" + kind + ")");
+  try { Le.classList.remove("disabled"); } catch (e) {}
+}
+
+(function () {
+  const pageHandler = window.onGotTurnstileToken;
+  window.onGotTurnstileToken = function (token) {
+    revUseToken(token, "cf");
+    if (typeof pageHandler === "function") return pageHandler.apply(this, arguments);
+  };
+})();
+
+function revWireAltcha() {
   const e = document.getElementById("altcha");
   if (e != null) {
     e.addEventListener("statechange", sd);
   }
-});
+}
+if (document.readyState === "complete") {
+  revWireAltcha();
+} else {
+  window.addEventListener("load", revWireAltcha);
+}
 function gn(e) {
   qe.start(bi, function (t, i, s) {
     let r = "wss://" + t;

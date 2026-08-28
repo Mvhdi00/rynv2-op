@@ -174,13 +174,58 @@ drawing from old data while the player never appeared.
 
 It now returns early when there is no local player yet.
 
+### It never opened a socket at all
+
+With the transport in and the tick no longer dying, the client still sat there:
+world drawn, nobody in it, no movement, no building, nothing. The reason was
+upstream of all of it — `ee.connect` was never reached.
+
+The gate:
+
+```js
+if (Eh || ls) {
+  if (code) { gn("alt:" + code); }   // no token, no connection, no message
+}
+```
+
+`code` is the captcha token, and two separate things stopped it ever being set:
+
+1. It was wired up inside a `window` `"load"` listener — but this script runs at
+   `document-idle`, by which time `load` has already been and gone, so the
+   listener never ran.
+2. Even had it run, it looked for a `#altcha` element. The site moved to
+   Cloudflare Turnstile; that element no longer exists.
+
+And the prefix was wrong for the new one either way: Turnstile tokens go out as
+`cf:`, not `alt:`.
+
+So the client wrapped `window.onGotTurnstileToken` — the function the game
+itself is handed the token through — to take a copy on the way past, remembers
+which captcha it came from so the prefix is right, wires the altcha path
+immediately when `load` has already fired, and connects without a token rather
+than silently doing nothing when the page never produces one.
+
+`../harness/spawn-check.js` drives the real gate, handing the page a Turnstile
+token the way the game does and then pressing Play:
+
+| | before | after |
+|---|---|---|
+| captcha token | `absent` | `stub-token`, kind `cf` |
+| transport state | `null` | key and both opcode tables |
+| local player | `null` | `{sid: 1, visible: true, alive: true}` |
+| **sockets opened** | **0** | **1** |
+
+Zero sockets is the whole symptom: nothing to see, nothing to move, nothing to
+build.
+
 ## What is verified and what is not
 
-A full session against the mock server now runs: the client opens its own
-socket, negotiates the signed transport (real key, both opcode tables, sequence
-climbing past 50), decodes chat and player packets — the harness log shows
-`Encountered rival[2]` and `tester[1]: hello` coming through — and draws the
-world, the objects, the other player and the health bars, with no page errors.
+A full session against the mock server now runs, entered through the client's
+own captcha gate: it opens its own socket, negotiates the signed transport (real
+key, both opcode tables, sequence climbing past 80), decodes chat and player
+packets — the harness log shows `Encountered rival[2]` and `tester[1]: hello`
+coming through — and draws the world, the objects, the other player and the
+health bars, with no page errors.
 
 Also verified: the transport is byte-identical to the game's over 200 seeds and
 200 signatures, the handler vocabulary covers all 36 opcodes, and the render
