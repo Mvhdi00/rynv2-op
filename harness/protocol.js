@@ -12,6 +12,7 @@ const path = require("path");
 const http = require("http");
 const { chromium } = require("playwright");
 const server = require("./server");
+const inject = require("./inject");
 
 const HERE = __dirname;
 const CLIENT = process.argv[2] || path.resolve(HERE, "../whiteout/Whiteout_v4_1.user.js");
@@ -42,8 +43,9 @@ const http_server = http.createServer((req, res) => {
 
   const closed = [];
   await page.exposeFunction("__reportClose", (code, reason) => closed.push(code + " " + reason));
-  await page.addInitScript({ content: fs.readFileSync(CLIENT, "utf8") });
+  const client = await inject.install(page, fs.readFileSync(CLIENT, "utf8"));
   await page.goto("http://127.0.0.1:8321/", { waitUntil: "load" });
+  await client.finish();
   await page.waitForTimeout(1200);
 
   await page.evaluate(() => {

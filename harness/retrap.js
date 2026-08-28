@@ -14,6 +14,7 @@ const http = require("http");
 const crypto = require("crypto");
 const { encode, decode } = require("@msgpack/msgpack");
 const { chromium } = require("playwright");
+const inject = require("./inject");
 
 const HERE = __dirname;
 const CLIENT = process.argv[2] || path.resolve(HERE, "../novastorm/Novastorm_1.41.4.user.js");
@@ -118,8 +119,9 @@ let breakSentAt = 0;
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e.message).slice(0, 160)));
 
-  await page.addInitScript({ content: fs.readFileSync(CLIENT, "utf8") });
+  const client = await inject.install(page, fs.readFileSync(CLIENT, "utf8"));
   await page.goto("http://127.0.0.1:8321/", { waitUntil: "load" });
+  await client.finish();
   await page.waitForTimeout(1200);
   await page.evaluate(() => {
     const s = new window.WebSocket("ws://127.0.0.1:8322");

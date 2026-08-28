@@ -129,7 +129,8 @@ tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 whiteout/                 the Whiteout v4 client — a separate script, not part
                           of this build; see whiteout/README.md
 novastorm/                the Novastorm 1.41.4 client, likewise
-harness/                  runs either client in a browser against a mock game
+revelation/               the Revelation client, likewise
+harness/                  runs any of them in a browser against a mock game
 ```
 
 ## Build

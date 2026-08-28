@@ -3,19 +3,28 @@
  * A loop that only survives lucky frames stays broken after the fault goes
  * away; a loop that resets its state per frame comes straight back.
  *
- *   node chaos.js <client.js>
+ *   node chaos.js [client.js] [render-anchor-line]
  */
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const { chromium } = require("playwright");
 const server = require("./server");
+const inject = require("./inject");
 
 const HERE = __dirname;
 const SRC = process.argv[2] || path.resolve(HERE, "../whiteout/Whiteout_v4_1.user.js");
 const MIME = { ".html": "text/html", ".js": "text/javascript" };
 
-const ANCHOR = "    renderVolcanoDamageZone(xOffset, yOffset);";
+/* A line inside the client's per-frame render, after which the fault is
+ * injected. Differs per client, so it can be passed in. */
+const ANCHORS = [
+  "    renderVolcanoDamageZone(xOffset, yOffset);",   // Whiteout
+  "                // DEATH TEXT:",                    // Novastorm
+  "function Of() {",                                  // Revelation
+];
+const ANCHOR = process.argv[3] || ANCHORS.find((a) => fs.readFileSync(SRC, "utf8").includes(a));
+if (!ANCHOR) throw new Error("no known render anchor in " + path.basename(SRC) + "; pass one as argv[3]");
 const INJECT = ANCHOR + `
     if (window.__chaos) { mainContext.save(); mainContext.translate(9999, 9999); throw new Error("injected mid-frame fault"); }`;
 
@@ -39,8 +48,9 @@ const http_server = http.createServer((req, res) => {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 
   await page.addInitScript({ content: "window.__nativeWS = window.WebSocket;" });
-  await page.addInitScript({ content: client });
+  const installed = await inject.install(page, client);
   await page.goto("http://127.0.0.1:8321/", { waitUntil: "load" });
+  await installed.finish();
   await page.waitForTimeout(1200);
 
   await page.evaluate(() => {

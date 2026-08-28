@@ -12,6 +12,7 @@ const path = require("path");
 const http = require("http");
 const { chromium } = require("playwright");
 const server = require("./server");
+const inject = require("./inject");
 
 const HERE = __dirname;
 const CLIENT = process.argv[2] || path.resolve(HERE, "../whiteout/Whiteout_v4_1.user.js");
@@ -46,9 +47,10 @@ const http_server = http.createServer((req, res) => {
   // Snapshot the pristine constructor the way the game bundle's line 34 does,
   // before the client gets a chance to install its hook.
   await page.addInitScript({ content: "window.__nativeWS = window.WebSocket;" });
-  await page.addInitScript({ content: fs.readFileSync(CLIENT, "utf8") });
+  const client = await inject.install(page, fs.readFileSync(CLIENT, "utf8"));
 
   await page.goto("http://127.0.0.1:8321/", { waitUntil: "load" });
+  await client.finish();
   await page.waitForTimeout(1500);
 
   await page.evaluate((mode) => {
@@ -76,7 +78,7 @@ const http_server = http.createServer((req, res) => {
     return out;
   });
 
-  console.log("mode:", MODE);
+  console.log("mode:", MODE, "| run-at:", client.when);
   console.log(JSON.stringify(probe, null, 2));
   const seen = new Set();
   console.log("errors:");

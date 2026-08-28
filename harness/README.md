@@ -43,7 +43,13 @@ node sole-sender.js           # only one packet sequence per socket
 node preplace-bench.js        # preplace angle search: safety, cost, coverage
 node retrap.js                # instant retrap: does the break get answered, how fast
 node item-limits.js           # placement caps vs the game's own rule
+node loop-alive.js            # counts the render loop's own reschedules
 ```
+
+Each script installs the client the way its metadata block asks — a
+`@run-at document-start` script goes in before the page's own scripts, anything
+else after load. Injecting one the way the other expects produces failures that
+belong to the harness, not the client.
 
 `play.js` prints the distinct colours sampled off the canvas — a live world is
 ~15-20, an empty green one is 1 — followed by every page error and console
@@ -74,6 +80,18 @@ because a wedged loop leaves the last good frame on screen and still looks rich:
 
 Run it against the pre-fix script and `after fault cleared` stays
 `drawing=no` — the leaked save-stack means one bad frame is permanent.
+
+Canvas liveness is only a proxy, though: a client sitting on a menu barely
+animates, so two samples can match while the loop is fine. Where the client
+exposes its frame scheduler on `window`, `loop-alive.js` counts calls to it
+instead and answers the question outright:
+
+```
+  frames per 500ms, before fault: 31
+  during fault:                    0
+  after fault cleared:             0
+  loop survived: NO — the loop is dead
+```
 
 ### `protocol.js` and `sole-sender.js`
 
