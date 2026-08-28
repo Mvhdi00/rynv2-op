@@ -13240,10 +13240,31 @@ for (let tree of trees) {
         }
         function NS_cool(x, y) { NS_cooldown.set(NS_posKey(x, y), tick + NS_PP.COOLDOWN); }
 
-        // The limit the server actually enforces. items.list[id].group.limit
-        // outside sandbox; sandboxLimit only when genuinely in sandbox.
+        // Sandbox detection. config.inSandbox (16806) reads
+        // process.env.VULTR_SCHEME, a server-side probe that is always
+        // undefined in a browser, and UTILS.isSandbox (16807) matches only the
+        // exact host "sandbox.moomoo.io". Cover the sandbox subdomains too, and
+        // still honour either flag if something else sets one.
+        let NS_sandboxCache = null;
+        function NS_inSandbox() {
+            if (NS_sandboxCache === null) {
+                try {
+                    NS_sandboxCache = !!config.inSandbox || !!UTILS.isSandbox ||
+                        /(^|\.)sandbox(-dev)?\.moomoo\.io$/i.test(window.location.hostname);
+                } catch (e) { NS_sandboxCache = false; }
+            }
+            return NS_sandboxCache;
+        }
+
+        // The limit the server actually enforces. Outside sandbox that is
+        // group.limit. Inside sandbox the game applies no cap at all — its own
+        // PlayerObject.canBuild returns true unconditionally there — except for
+        // the three groups that carry an explicit sandboxLimit (mill, booster,
+        // teleporter, all 299). Returning 0 means uncapped: isItemLimit guards
+        // on `limit &&`, so a 0 never limits.
         function NS_groupLimit(group) {
-            return (UTILS.isSandbox && group.sandboxLimit) ? group.sandboxLimit : group.limit;
+            if (NS_inSandbox()) return group.sandboxLimit || 0;
+            return group.limit;
         }
 
         // Short-horizon movement model. Called once per player from the existing

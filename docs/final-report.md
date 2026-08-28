@@ -30,7 +30,7 @@ No other repository file was touched. `ReUp_Mix.user.js`, `src/RYN_Client_v4.js`
 | function | baseline line | change | why it was necessary |
 |---|---|---|---|
 | `addPredictObject` | 12825 | optional 4th `meta` parameter, spread into the pushed record | The intent record carried no owner, provenance or target. Without them the deferred commit cannot tell whose intent it holds or whether it is stale. This is the single point every placement flows through, so it is the cheapest place to attach it. All nine surviving legacy call sites still pass three arguments and are behaviourally unchanged. |
-| `isItemLimit` | 12834 | `group.sandboxLimit \|\| 99` → `NS_groupLimit(group)` | The old expression never fired for spikes (limit 15) or traps (limit 6), because neither group carries a `sandboxLimit`. A regression against Luna 1.1, which this placer is otherwise copied from verbatim. It sits inside `canPlace`, so every system was proposing placements the server discards. Preplace's scarcity term and Spike Tick's item-reservation are meaningless without it. |
+| `isItemLimit` | 12834 | `group.sandboxLimit \|\| 99` → `NS_groupLimit(group)` (see the sandbox note below) | The old expression never fired for spikes (limit 15) or traps (limit 6), because neither group carries a `sandboxLimit`. A regression against Luna 1.1, which this placer is otherwise copied from verbatim. It sits inside `canPlace`, so every system was proposing placements the server discards. Preplace's scarcity term and Spike Tick's item-reservation are meaningless without it. |
 | `isPrePlaceAngle` | 13088 | **removed** | Preplace's old acceptance cascade. Three of its rules were Auto Place's spike rules with one extra qualifier and no prediction term; its trap rule was unconditional where Auto Place's is guarded; three of its rules called into Spike Tick's decision functions once per candidate angle. Replaced wholesale — it is the thing being upgraded, not unrelated code. |
 | `getPredictObjects` | 13338 | the Preplace branch (167 lines) replaced by two calls | The branch was the old doomed-object-driven Preplace. Replaced by `NS_buildCtx()` + `NS_runPreplace()`. |
 | `updatePlayers` | 14018 | 5 lines added after the existing `xVel`/`yVel` assignment | The movement model needs per-tick displacement, and `lastX`/`lastY` are already in scope at exactly that point. Extending the one existing predictor here is what keeps it from becoming a second one. The original `xVel`/`yVel` lines are untouched, so every existing reader is unaffected. |
@@ -255,5 +255,45 @@ confirmed dead or pending Replace; none has been deleted.
 node --check NovaStorm.user.js      syntax OK
 tools/verify-placement.js           28 passed, 0 failed
 tools/test-preplace.js              18 passed, 0 failed
+tools/test-limits.js                24 passed, 0 failed
 tools/test-matrix.js                11/14 scenarios; 3 await Replace
 ```
+
+---
+
+## Addendum — sandbox item cap regression, found and fixed
+
+Reported from play: placement stopped early in sandbox. It was mine.
+
+The cap has had three forms:
+
+| version | expression | effect in sandbox |
+|---|---|---|
+| shipped 1.4 | `group.sandboxLimit \|\| 99` | 99 for spikes/traps — wrong, but generous |
+| my first fix | `(isSandbox && group.sandboxLimit) ? sandboxLimit : group.limit` | spikes have no `sandboxLimit`, so it fell through to **15**, and traps to **6** |
+| corrected | `NS_inSandbox() ? (group.sandboxLimit \|\| 0) : group.limit` | uncapped, except the three groups with an explicit 299 |
+
+The reference is the game's own `PlayerObject.canBuild` (19193):
+
+```js
+this.canBuild = function (item) {
+    if (config.inSandbox) return true;                 // no cap at all
+    if (item.group.limit && this.itemCounts[item.group.id] >= item.group.limit) return false;
+    return this.hasRes(item);
+};
+```
+
+`sandboxLimit` is read nowhere in the game — only by the old `isItemLimit`. So
+the correct model is: uncapped in sandbox, except where the data carries an
+explicit `sandboxLimit` (mill, booster, teleporter — 299 each).
+
+Sandbox detection was also too narrow. `config.inSandbox` (16806) reads
+`process.env.VULTR_SCHEME` and is always `undefined` in a browser;
+`UTILS.isSandbox` (16807) matches only the exact host `sandbox.moomoo.io`.
+`NS_inSandbox()` now also matches `sandbox-dev.moomoo.io` and any `*.sandbox.moomoo.io`,
+anchored so `notsandbox.moomoo.io` does not match, and is wrapped in a try/catch
+so a missing `window.location` cannot throw.
+
+Because `isItemLimit` sits inside `canPlace`, this affected **every** placement
+system in sandbox, not just Preplace. `tools/test-limits.js` (24 tests) pins all
+three regimes so it cannot regress again.

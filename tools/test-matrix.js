@@ -32,7 +32,7 @@ function grab(name, kind) {
   }
 }
 
-const EXTRACT = ["NS_posKey", "NS_isCooling", "NS_cool", "NS_groupLimit",
+const EXTRACT = ["NS_posKey", "NS_isCooling", "NS_cool", "NS_inSandbox", "NS_groupLimit",
   "NS_updateMoveModel", "NS_segDist2", "NS_hits", "NS_escapeExits", "NS_buildCtx",
   "NS_usefulness", "NS_probeAngles", "NS_runPreplace", "NS_revalidate",
   "addPredictObject", "isItemLimit", "getConfig", "canPlace", "isAutoPlaceAngle"];
@@ -74,7 +74,8 @@ const objectManager = {
     return true;
   }
 };
-const win = { vars: { prePlace: true, autoPlace: true, shameTick: false } };
+const win = { vars: { prePlace: true, autoPlace: true, shameTick: false },
+              location: { hostname: "moomoo.io" } };   // scenarios run off sandbox, so real caps apply
 const window = win;
 
 let tick = 0, packets = 0;
@@ -95,6 +96,7 @@ ${EXTRACT.map(n => grab(n)).join("\n")}
 ${grab("NS_PP", "const").trim()}
 let NS_ctx = null;
 let NS_intent = null;
+let NS_sandboxCache = null;
 const NS_cooldown = new Map();
 
 function __set(s) {
