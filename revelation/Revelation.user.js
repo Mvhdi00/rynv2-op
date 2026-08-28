@@ -4164,6 +4164,19 @@ const T = {
 };
 const ql = new ka();
 const Wl = new Pa();
+
+/* The @require this file declares points at rawgit.com, which shut down in
+ * 2019 — the browser console reports "couldn't load @require from URL". So
+ * window.msgpack is undefined and every bot-socket call through it throws.
+ *
+ * Nothing external is needed: the client already carries a working msgpack
+ * codec for its own connection, so point the bot paths at that. */
+if (!window.msgpack) {
+  window.msgpack = {
+    encode: function (value) { return ql.encode(value); },
+    decode: function (bytes) { return Wl.decode(bytes); }
+  };
+}
 const ee = {
   socket: null,
   connected: false,
