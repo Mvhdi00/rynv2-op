@@ -123,16 +123,54 @@ DOM, while the canvas underneath is Revelation's.
 This is the same position Luna 1.1 is in, as the top-level README describes: a
 fork of an older bundle that predates the current transport.
 
-Fixing it means porting that transport in — seeded opcode permutation both ways,
-truncated HMAC-SHA256 frame signatures, sequence numbers, and numeric-to-letter
-opcode mapping on the way in. `../harness/protocol.js` validates all of it
-against a server that enforces the same rules, so the work is checkable; but it
-is a rewrite of the client's network layer, not a patch, and the packet field
-layouts behind it may have drifted too.
+### The transport, ported
+
+The transport block is lifted verbatim out of `src/game_index.js` — the salt,
+both alphabets, the seeded Fisher-Yates permutation, SHA-256, the truncated HMAC
+and the hex reader — and wrapped in a closure so the game's short names do not
+collide with this file's own. Three edits wire it in:
+
+- `io-init` now builds the connection state from the seed, key and mode instead
+  of reading the socket id and throwing the rest away.
+- Incoming opcodes are numbers on this server; they are mapped back through the
+  s2c table to the letter the handler table is keyed on, and an unrecognised one
+  is ignored rather than dereferenced.
+- Outgoing frames are `[opcode, args, ++seq]` with the six signature bytes in
+  front. The frame is built at the moment of sending, not at the top of `send`,
+  because a sequence number must not be minted by a call that then returns early.
+
+[`../harness/transport-check.js`](../harness/README.md) runs the ported code and
+the game's own side by side:
+
+```
+  s2c handlers:             36 of 36, complete
+  signature width and mode: match
+  opcode tables compared:   200 seeds x both directions
+  signatures compared:      200
+  byte-for-byte identical to the game's own transport
+```
+
+The handler count matters as much as the bytes: a correct transport still
+delivers nothing if the client is keyed on a different opcode set. Every letter
+the server can send has a handler, and no handler waits on a letter it cannot —
+so the packet vocabulary was already current, and only the transport was missing.
+
+## What is verified and what is not
+
+Verified here: the transport is byte-identical to the game's, the handler
+vocabulary is complete, the client loads and renders without errors, and the
+render loop survives a fault.
+
+**Not verified here:** an actual game session. Revelation only connects after a
+Cloudflare Turnstile token, which this sandbox cannot produce, so no socket is
+ever opened and the in-game path stays untested. The transport is proven correct
+in isolation; whether the packet *payloads* behind those opcodes still match
+what this client's handlers expect can only be settled by playing it.
 
 ## Not fixed
 
-- The old transport, above.
 - It runs at `document-idle` and carries its own copy of the game, so the page's
-  own bundle runs alongside it. That is what keeps the DOM working while the
-  canvas does not, and untangling it is part of the same job.
+  own bundle runs alongside it — which is why the leaderboard and resources kept
+  working while the canvas did not. Both now speak the protocol, so they will
+  both connect. Blocking the page's bundle needs `@run-at document-start` and
+  script interception, as the Whiteout client does, and is its own change.

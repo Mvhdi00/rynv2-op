@@ -44,6 +44,8 @@ node preplace-bench.js        # preplace angle search: safety, cost, coverage
 node retrap.js                # instant retrap: does the break get answered, how fast
 node item-limits.js           # placement caps vs the game's own rule
 node loop-alive.js            # counts the render loop's own reschedules
+node transport-check.js       # a client's wire format vs the game's own
+node spawn-check.js           # for clients that open their own socket
 ```
 
 Each script installs the client the way its metadata block asks — a

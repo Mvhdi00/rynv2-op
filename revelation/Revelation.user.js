@@ -4165,6 +4165,194 @@ const T = {
 const ql = new ka();
 const Wl = new Pa();
 
+/* ---- game transport -------------------------------------------------------
+ *
+ * This client was written against the protocol the game used to speak: plain
+ * msgpack [type, args], with `type` a letter. The live game negotiates a
+ * per-connection opcode permutation from the io-init seed and prefixes every
+ * client frame with six HMAC bytes, so on the current server nothing this
+ * client sends is accepted and nothing it receives decodes — which is why the
+ * world drew but your player never appeared.
+ *
+ * The block below is lifted verbatim out of src/game_index.js (the shipped
+ * bundle): the salt, both alphabets, the seeded Fisher-Yates permutation,
+ * SHA-256, the truncated HMAC and the hex reader. It is wrapped in a closure so
+ * none of the game's short names collide with this file's own.
+ */
+const RevTransport = (function () {
+      const Io = 1
+      , jt = 6
+      , Ht = 1
+      , bo = ["M", "D", "9", "e", "F", "z", "H", "K", "L", "N", "b", "P", "Q", "c", "6", "S", "0"]
+      , To = ["A", "B", "C", "D", "E", "a", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "X", "Y", "Z", "g", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
+    function Co(e) {
+        return function() {
+            e |= 0,
+            e = e + 1831565813 | 0;
+            let t = Math.imul(e ^ e >>> 15, 1 | e);
+            return t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t,
+            ((t ^ t >>> 14) >>> 0) / 4294967296
+        }
+    }
+    function Oi(e, t) {
+        const i = e.length
+          , s = e.map( (d, l) => l)
+          , n = Co(t >>> 0);
+        for (let d = i - 1; d > 0; d--) {
+            const l = Math.floor(n() * (d + 1))
+              , c = s[d];
+            s[d] = s[l],
+            s[l] = c
+        }
+        const a = {}
+          , o = {};
+        for (let d = 0; d < i; d++)
+            a[e[d]] = s[d],
+            o[s[d]] = e[d];
+        return {
+            enc: a,
+            dec: o
+        }
+    }
+    function Po(e) {
+        const t = (e ^ Math.imul(Io, 2654435761)) >>> 0;
+        return {
+            c2s: Oi(bo, t),
+            s2c: Oi(To, (t ^ 2246822507) >>> 0)
+        }
+    }
+    const Do = new Uint32Array([1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298]);
+    function Vt(e) {
+        const t = new Uint32Array([1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225])
+          , i = e.length
+          , s = i * 8
+          , n = i + 9
+          , a = new Uint8Array(Math.ceil(n / 64) * 64);
+        a.set(e),
+        a[i] = 128;
+        const o = new DataView(a.buffer);
+        o.setUint32(a.length - 4, s >>> 0, !1),
+        o.setUint32(a.length - 8, Math.floor(s / 4294967296), !1);
+        const d = new Uint32Array(64);
+        for (let m = 0; m < a.length; m += 64) {
+            for (let w = 0; w < 16; w++)
+                d[w] = o.getUint32(m + w * 4, !1);
+            for (let w = 16; w < 64; w++) {
+                const T = j(d[w - 15], 7) ^ j(d[w - 15], 18) ^ d[w - 15] >>> 3
+                  , A = j(d[w - 2], 17) ^ j(d[w - 2], 19) ^ d[w - 2] >>> 10;
+                d[w] = d[w - 16] + T + d[w - 7] + A | 0
+            }
+            let g = t[0]
+              , h = t[1]
+              , u = t[2]
+              , p = t[3]
+              , x = t[4]
+              , I = t[5]
+              , P = t[6]
+              , f = t[7];
+            for (let w = 0; w < 64; w++) {
+                const T = j(x, 6) ^ j(x, 11) ^ j(x, 25)
+                  , A = x & I ^ ~x & P
+                  , V = f + T + A + Do[w] + d[w] | 0
+                  , W = j(g, 2) ^ j(g, 13) ^ j(g, 22)
+                  , S = g & h ^ g & u ^ h & u
+                  , H = W + S | 0;
+                f = P,
+                P = I,
+                I = x,
+                x = p + V | 0,
+                p = u,
+                u = h,
+                h = g,
+                g = V + H | 0
+            }
+            t[0] = t[0] + g | 0,
+            t[1] = t[1] + h | 0,
+            t[2] = t[2] + u | 0,
+            t[3] = t[3] + p | 0,
+            t[4] = t[4] + x | 0,
+            t[5] = t[5] + I | 0,
+            t[6] = t[6] + P | 0,
+            t[7] = t[7] + f | 0
+        }
+        const l = new Uint8Array(32)
+          , c = new DataView(l.buffer);
+        for (let m = 0; m < 8; m++)
+            c.setUint32(m * 4, t[m], !1);
+        return l
+    }
+    function j(e, t) {
+        return e >>> t | e << 32 - t
+    }
+    const he = 64;
+    function Ao(e, t) {
+        let i = e;
+        i.length > he && (i = Vt(i));
+        const s = new Uint8Array(he);
+        s.set(i);
+        const n = new Uint8Array(he + t.length)
+          , a = new Uint8Array(he + 32);
+        for (let o = 0; o < he; o++)
+            n[o] = s[o] ^ 54,
+            a[o] = s[o] ^ 92;
+        return n.set(t, he),
+        a.set(Vt(n), he),
+        Vt(a)
+    }
+    function Eo(e, t) {
+        return Ao(e, t).subarray(0, jt)
+    }
+    function Ro(e) {
+        const t = new Uint8Array(e.length / 2);
+        for (let i = 0; i < t.length; i++)
+            t[i] = parseInt(e.substr(i * 2, 2), 16);
+        return t
+    }
+
+    return {
+        signatureBytes: jt,
+        encryptedMode: Ht,
+        /* Both opcode tables for a connection seed. */
+        tables: function (seed) { return Po(seed >>> 0); },
+        /* The six-byte frame signature over a payload. */
+        sign: function (key, payload) { return Eo(key, payload); },
+        keyFromHex: function (hex) { return Ro(hex); }
+    };
+})();
+
+/* Null until io-init says the connection is signed. */
+let revNet = null;
+
+/* Builds the state io-init describes, or null for an unsigned connection. */
+function revNetInit(args) {
+    if (!args || args[3] !== RevTransport.encryptedMode) return null;
+    return {
+        key: RevTransport.keyFromHex(args[2]),
+        tables: RevTransport.tables(args[1]),
+        seq: 0
+    };
+}
+
+/* Wraps an outgoing [type, args] the way the server now expects it. */
+function revNetFrame(type, args) {
+    if (!revNet) return ql.encode([type, args]);
+    const op = revNet.tables.c2s.enc[type];
+    if (op === undefined) return null;          // opcode this server does not take
+    const payload = ql.encode([op, args, ++revNet.seq]);
+    const signature = RevTransport.sign(revNet.key, payload);
+    const frame = new Uint8Array(RevTransport.signatureBytes + payload.length);
+    frame.set(signature, 0);
+    frame.set(payload, RevTransport.signatureBytes);
+    return frame;
+}
+
+/* Incoming opcodes arrive permuted and numeric; map them back to the letter
+ * this client's handler table is keyed on. */
+function revNetType(type) {
+    if (revNet && typeof type === "number") return revNet.tables.s2c.dec[type];
+    return type;
+}
+
 /* The @require this file declares points at rawgit.com, which shut down in
  * 2019 — the browser console reports "couldn't load @require from URL". So
  * window.msgpack is undefined and every bot-socket call through it throws.
@@ -4195,13 +4383,19 @@ const ee = {
       this.socket.onmessage = function (o) {
         var a = new Uint8Array(o.data);
         const l = Wl.decode(a);
-        const c = l[0];
         var a = l[1];
-        if (c == "io-init") {
+        if (l[0] == "io-init") {
           s.socketId = a[0];
-        } else {
-          i[c].apply(undefined, a);
+          // Everything after this frame is permuted and signed unless the
+          // server says otherwise.
+          revNet = revNetInit(a);
+          return;
         }
+        // The opcode is a number on the current server; map it back to the
+        // letter the handler table is keyed on. An unknown one is not ours.
+        const c = revNetType(l[0]);
+        if (c === undefined || !i[c]) return;
+        i[c].apply(undefined, a);
       };
       this.socket.onopen = function () {
         s.connected = true;
@@ -4229,7 +4423,9 @@ const ee = {
   },
   send: function (e) {
     const t = Array.prototype.slice.call(arguments, 1);
-    const i = ql.encode([e, t]); //  console.log(e,t)
+    // Built here rather than at the send below because the frame carries a
+    // sequence number: it has to be minted at the moment the frame actually
+    // goes out, and every early return past this point must not consume one.
     if (!fS.min) {
       fS.min = true;
       setTimeout(() => {
@@ -4282,7 +4478,8 @@ const ee = {
       }
     }
     if (this.socket) {
-      this.socket.send(i);
+      const frame = revNetFrame(e, t);
+      if (frame) this.socket.send(frame);
     }
   },
   socketReady: function () {

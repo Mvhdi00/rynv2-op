@@ -31,6 +31,26 @@ const http_server = http.createServer((req, res) => {
   res.end(fs.readFileSync(file));
 });
 
+/* The server list never loads in a sandbox with no outbound network, so a
+ * client that connects on its own never opens a socket at all. Hand it one
+ * server so it gets as far as connecting; the ping fetches are allowed to fail,
+ * which the game's own code tolerates. */
+const SERVER_LIST = `
+(function () {
+  const realFetch = window.fetch.bind(window);
+  window.fetch = function (input) {
+    const url = String((input && input.url) || input);
+    if (url.includes("/servers")) {
+      return Promise.resolve(new Response(JSON.stringify([{
+        region: 1, key: "0", name: "mock", index: 0, port: 8322,
+        playerCount: 1, playerCapacity: 50
+      }]), { status: 200, headers: { "content-type": "application/json" } }));
+    }
+    return realFetch.apply(this, arguments);
+  };
+})();
+`;
+
 /* Point every socket the page opens at the mock, whoever opens it. */
 const REDIRECT = `
 (function () {
@@ -60,6 +80,7 @@ const REDIRECT = `
     if (m.type() === "warning" && m.text().includes("[")) errors.push("WARN: " + m.text().slice(0, 200));
   });
 
+  await page.addInitScript({ content: SERVER_LIST });
   await page.addInitScript({ content: REDIRECT });
   const installed = await inject.install(page, fs.readFileSync(CLIENT, "utf8"));
   await page.goto("http://127.0.0.1:8321/", { waitUntil: "load" });
