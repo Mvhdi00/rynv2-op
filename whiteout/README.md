@@ -6,7 +6,7 @@ green screen fixed.
 This is not part of the ReUp Mix build. It is a separate userscript that keeps
 its own copy of the game's msgpack codec and transport (`WhiteoutNet`), renders
 the world itself, and disables the game's own render loop by overwriting
-`window.requestAnimFrame`. Verified with [`harness/`](harness/README.md).
+`window.requestAnimFrame`. Verified with [`../harness`](../harness/README.md).
 
 ## The green screen
 
@@ -77,7 +77,7 @@ thing sending:
 Both say so in the console rather than failing quietly, and socket closes now
 report their code and reason, so `disconnected` is no longer opaque.
 
-`harness/sole-sender.js` checks all three arrangements against a server that
+`../harness/sole-sender.js` checks all three arrangements against a server that
 enforces sequencing the way the real one does.
 
 ### 2. A broken image killed every frame

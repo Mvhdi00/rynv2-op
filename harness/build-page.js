@@ -2,7 +2,7 @@
  *
  * The real page is not checked in, so this synthesises one from the element ids
  * the game bundle and the client actually reach for, and serves the game
- * bundles from ../../src. It reproduces load order and script types — the game
+ * bundles from ../src. It reproduces load order and script types — the game
  * ships as an ES module, which is what makes its WebSocket capture race with a
  * userscript — but not layout or art.
  */
@@ -10,8 +10,10 @@ const fs = require("fs");
 const path = require("path");
 
 const HERE = __dirname;
-const ROOT = path.resolve(HERE, "../..");
-const CLIENT = path.join(ROOT, "whiteout/Whiteout_v4_1.user.js");
+const ROOT = path.resolve(HERE, "..");
+const CLIENT = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : path.join(ROOT, "whiteout/Whiteout_v4_1.user.js");
 
 const sources = [
   fs.readFileSync(path.join(ROOT, "src/game_index.js"), "utf8"),

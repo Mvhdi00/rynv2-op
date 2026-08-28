@@ -12,7 +12,7 @@ const { chromium } = require("playwright");
 const server = require("./server");
 
 const HERE = __dirname;
-const SRC = process.argv[2] || path.resolve(HERE, "../Whiteout_v4_1.user.js");
+const SRC = process.argv[2] || path.resolve(HERE, "../whiteout/Whiteout_v4_1.user.js");
 const MIME = { ".html": "text/html", ".js": "text/javascript" };
 
 const ANCHOR = "    renderVolcanoDamageZone(xOffset, yOffset);";

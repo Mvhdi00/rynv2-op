@@ -1,7 +1,18 @@
-# Whiteout harness
+# Client harness
 
-Runs `../Whiteout_v4_1.user.js` in a real browser against a mock moomoo.io page
-and a mock game server, and reports what the client draws and what it throws.
+Runs a moomoo.io userscript client in a real browser against a mock moomoo.io
+page and a mock game server, and reports what it draws and what it throws.
+
+Every script takes an optional client path and defaults to
+`../whiteout/Whiteout_v4_1.user.js`:
+
+```sh
+node build-page.js ../novastorm/Novastorm_1.41.4.user.js   # page ids come from the client
+node play.js       ../novastorm/Novastorm_1.41.4.user.js
+```
+
+Rebuild the page whenever you switch clients — it is generated from the element
+ids that client reaches for.
 
 The green-screen bugs this was built for could not be found by reading: one only
 appears when the userscript loses a load-order race, the other only when a
@@ -16,7 +27,7 @@ node build-page.js   # synthesises index.html and copies the bundles from ../../
 ```
 
 `build-page.js` builds the page from the element ids `src/game_index.js` and the
-client actually reach for. It reproduces script types and load order — the game
+chosen client actually reach for. It reproduces script types and load order — the game
 ships as an ES module, which is what its WebSocket capture races against — but
 not layout or art. Sprite hosts are unreachable from the sandbox, so every run
 is also a test of the client with every image broken.

@@ -20,7 +20,7 @@ const { chromium } = require("playwright");
 const server = require("./server");
 
 const HERE = __dirname;
-const CLIENT = process.argv[2] || path.resolve(HERE, "../Whiteout_v4_1.user.js");
+const CLIENT = process.argv[2] || path.resolve(HERE, "../whiteout/Whiteout_v4_1.user.js");
 const MIME = { ".html": "text/html", ".js": "text/javascript" };
 const source = fs.readFileSync(CLIENT, "utf8");
 

@@ -14,7 +14,7 @@ const { chromium } = require("playwright");
 const server = require("./server");
 
 const HERE = __dirname;
-const CLIENT = process.argv[2] || path.resolve(HERE, "../Whiteout_v4_1.user.js");
+const CLIENT = process.argv[2] || path.resolve(HERE, "../whiteout/Whiteout_v4_1.user.js");
 const MODE = process.argv[3] || "hooked";
 const MIME = { ".html": "text/html", ".js": "text/javascript" };
 
