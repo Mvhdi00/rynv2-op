@@ -80,7 +80,7 @@ const objectManager = {
     return true;
   }
 };
-const win = { vars: { prePlace: true, autoPlace: true, shameTick: false },
+const win = { vars: { prePlace: true, rePlace: true, autoPlace: true, shameTick: false },
               location: { hostname: "moomoo.io" } };   // scenarios run off sandbox, so real caps apply
 const window = win;
 
@@ -174,7 +174,7 @@ function base(over) {
     traps_our: [], myPlayer: me, nearestEnemy: en, nearestTrap: null,
     instaKill: [], insta: { primary:false, secondary:false, turret:false, primaryturret:false },
     spikeDmgCount: 0, predictMoveAngle: null, imTrapped: false,
-    vars: { prePlace: true, autoPlace: true, shameTick: false },
+    vars: { prePlace: true, rePlace: true, autoPlace: true, shameTick: false },
     reloads: { sid: 1, p: 1, s: 1 }, enemiesNear: [], spawnedObjectSids: [],
     removedObjects: [], pendingReplace: null
   }, over);
@@ -411,7 +411,7 @@ let steadyState, steadyRes;
   s2.nearestEnemy = mkEnemy(7200 + 250, 5000);
   walk(s2.nearestEnemy, 8, -14, 0);  // ends ~138 out
   s2.myPlayer.__hammer = true;
-  s2.vars = { prePlace: true, autoPlace: true, shameTick: true };
+  s2.vars = { prePlace: true, rePlace: true, autoPlace: true, shameTick: true };
   const trap = { id: TRAP, sid: 91, x: s2.nearestEnemy.x2, y: s2.nearestEnemy.y2,
                  scale: 50, active: true, health: 40, owner: { sid: 1 },
                  getScale: function () { return this.scale; } };

@@ -10424,11 +10424,12 @@ let pps = 0;
                         window.vars.velocityTick = !window.vars.velocityTick;
                     }
                     else if (keyStr === window.vars.keyPlacers) {
-                        // One key toggles Auto Place + Preplace together:
-                        // if either is off, turn both on; otherwise turn both off.
-                        const on = !(window.vars.autoPlace && window.vars.prePlace);
+                        // One key toggles all three placers together:
+                        // if any is off, turn them all on; otherwise all off.
+                        const on = !(window.vars.autoPlace && window.vars.prePlace && window.vars.rePlace);
                         window.vars.autoPlace = on;
                         window.vars.prePlace = on;
+                        window.vars.rePlace = on;
                     }
                 }
             }
@@ -13712,7 +13713,7 @@ for (let tree of trees) {
 
         function NS_runReplace(ctx) {
             NS_replaceIntent = null;
-            if (!window.vars.prePlace) return;          // shares the placer toggle
+            if (!window.vars.rePlace) return;            // its own toggle, Placers -> Replacer
             if (!myPlayer || !myPlayer.alive) return;
             if (ctx.spikeTickActive) return;                            // R3
             if (packets + 10 > 119) return;                             // R5
@@ -20920,6 +20921,7 @@ for (let tree of trees) {
         autoPlace: false,
         placeRange: 300,
         prePlace: true,
+        rePlace: true,
 
         // Velocity tick (Glotus)
         velocityTick: false,
@@ -21049,6 +21051,12 @@ for (let tree of trees) {
                 title: "Preplacer",
                 items: [
                     { type: 'toggle', name: "Enable Preplacer", id: "prePlace" }
+                ]
+            },
+            {
+                title: "Replacer",
+                items: [
+                    { type: 'toggle', name: "Enable Replacer", id: "rePlace" }
                 ]
             }
         ],
