@@ -41,6 +41,7 @@ node chaos.js                 # transient mid-frame fault, then recovery
 node protocol.js              # what the client puts on the wire
 node sole-sender.js           # only one packet sequence per socket
 node preplace-bench.js        # preplace angle search: safety, cost, coverage
+node retrap.js                # instant retrap: does the break get answered, how fast
 ```
 
 `play.js` prints the distinct colours sampled off the canvas — a live world is

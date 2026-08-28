@@ -10576,6 +10576,9 @@ let pps = 0;
         function killObject(sid) {
             removedObjects.push(sid);
             objectManager.disableBySid(sid);
+            // Replace a trap the enemy just broke out of before the frame ends,
+            // so both reach the server in the same tick.
+            onTrapBroken(sid);
         }
 
         // UPDATE SCORE DISPLAY:
@@ -13227,6 +13230,121 @@ for (let tree of trees) {
             return angles;
         }
 
+        /* ---- instant retrap -------------------------------------------------
+         *
+         * A pit trap is the only thing holding an enemy still, so the tick it
+         * breaks is the tick they get to move again. Noticing that on the next
+         * render frame hands them that tick for free. Instead the kill packet
+         * itself drives the replacement, synchronously, so the new trap and the
+         * break reach the server in the same tick and the enemy never actually
+         * gets out of the hole.
+         *
+         * Which of our traps is holding someone is worked out once per tick and
+         * kept in retrapWatch, so the kill handler only does a Map lookup and a
+         * send — no scanning at the moment it matters.
+         */
+        const retrapWatch = new Map();
+        let retrapArmedFor = null;
+
+        /* Structure damage the enemy's next swing lands, or 0 while they are
+         * still reloading. The x3.3 is the structure-damage hat, checked rather
+         * than assumed — assuming it overstates every enemy without it. */
+        function enemyStructureDamage(enemy) {
+            if (!enemy || !enemy.weapons) return 0;
+            let weapon = null;
+            if (enemy.weapons[1] == 10 && secondaryReload[enemy.sid] == 1) {
+                weapon = enemy.weapons[1];
+            } else if (items.weapons[enemy.weapons[0]] &&
+                       items.weapons[enemy.weapons[0]].speed <= 400 &&
+                       primaryReload[enemy.sid] == 1) {
+                weapon = enemy.weapons[0];
+            }
+            if (weapon == null) return 0;
+            const weaponData = items.weapons[weapon];
+            if (!weaponData) return 0;
+            const variant = config.weaponVariants[enemy.weaponVariants ? enemy.weaponVariants[weapon] : 0];
+            return weaponData.dmg
+                * (weaponData.sDmg || 1)
+                * ((variant && variant.val) || 1)
+                * (enemy.skinIndex == 40 ? 3.3 : 1);
+        }
+
+        /* The angle that drops a trap back onto `target`. The trap that just
+         * broke is excluded by sid so its corpse cannot block its replacement. */
+        function findRetrapAngle(target, excludeSid) {
+            const trapId = myPlayer.items[4];
+            if (trapId == undefined || isItemLimit(trapId)) return null;
+            const objects = excludeSid == null
+                  ? visibleObjects
+                  : visibleObjects.filter(o => o.sid !== excludeSid);
+            const tx = target.x2 !== undefined ? target.x2 : target.x;
+            const ty = target.y2 !== undefined ? target.y2 : target.y;
+
+            let best = null, bestDist = Infinity;
+            const candidates = getPrePlaceAngles(trapId, objects);
+            for (let i = 0; i < candidates.length; i++) {
+                if (!candidates[i].placeable) continue;
+                const d = UTILS.getDistance(candidates[i].x, candidates[i].y, tx, ty);
+                if (d < bestDist) { bestDist = d; best = candidates[i]; }
+            }
+            // The enemy has to land inside the new trap, not beside it.
+            if (!best || bestDist > items.list[trapId].scale) return null;
+            return best.angle;
+        }
+
+        /* Rebuilt once per tick. Only traps actually holding someone are kept. */
+        function updateRetrapWatch() {
+            retrapWatch.clear();
+            if (!window.vars.instantRetrap || !myPlayer || !myPlayer.alive || !enemiesNear) {
+                retrapArmedFor = null;
+                return;
+            }
+            const trapId = myPlayer.items[4];
+            if (trapId == undefined || isItemLimit(trapId)) {
+                retrapArmedFor = null;
+                return;
+            }
+
+            let armTarget = null;
+            for (let i = 0; i < traps_our.length; i++) {
+                const trap = traps_our[i];
+                if (!trap.active) continue;
+                for (let j = 0; j < enemiesNear.length; j++) {
+                    const enemy = enemiesNear[j];
+                    if (UTILS.getDistance(trap.x, trap.y, enemy.x2, enemy.y2) >= trap.scale) continue;
+                    retrapWatch.set(trap.sid, enemy);
+                    // Their next swing already breaks it — get the item selected
+                    // now so the break itself only costs the place packets.
+                    if (armTarget == null && enemyStructureDamage(enemy) >= trap.health) armTarget = trap.sid;
+                    break;
+                }
+            }
+
+            // Select once per trap, not once per tick, or this becomes spam.
+            if (armTarget != null && retrapArmedFor !== armTarget) {
+                retrapArmedFor = armTarget;
+                selectToBuild(trapId);
+            } else if (armTarget == null) {
+                retrapArmedFor = null;
+            }
+        }
+
+        /* Called from killObject, in the same turn the break arrives. */
+        function onTrapBroken(sid) {
+            const enemy = retrapWatch.get(sid);
+            if (!enemy) return;
+            retrapWatch.delete(sid);
+            if (retrapArmedFor === sid) retrapArmedFor = null;
+            if (!window.vars.instantRetrap || !myPlayer || !myPlayer.alive) return;
+            try {
+                const angle = findRetrapAngle(enemy, sid);
+                if (angle == null) return;
+                place(myPlayer.items[4], angle);
+            } catch (e) {
+                reportFault("instant retrap failed", e);
+            }
+        }
+
         function getPerfectAngles(angles) {
             for (let i in angles) {
                 angles[i].perfect = false;
@@ -14283,6 +14401,7 @@ for (let tree of trees) {
                     cactuses = visibleObjects.filter(object => object.type == 1 && object.y >= config.mapScale - config.snowBiomeTop);
                     spikes_our = visibleObjects.filter(object => object.id > 5 && object.id < 10 && isObjectOur(object));
                     traps_our = visibleObjects.filter(object => object.id == 15 && isObjectOur(object));
+                    updateRetrapWatch();
                     turrets_our = visibleObjects.filter(object => object.id == 17);
                 }
 
@@ -20787,6 +20906,7 @@ for (let tree of trees) {
         autoPlace: false,
         placeRange: 300,
         prePlace: true,
+        instantRetrap: true,
 
         // Velocity tick (Glotus)
         velocityTick: false,

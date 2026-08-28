@@ -100,8 +100,45 @@ each blocked arc is shrunk slightly, so a borderline angle is still handed to
 angular, so every angle the geometry calls free is still verified the old way.
 If the geometry throws for any reason, the scan falls back to checking all 72.
 
+## Instant retrap
+
+A pit trap is the only thing holding an enemy still, so the tick it breaks is
+the tick they get to move again. Reacting to that on the next render frame hands
+them that tick for free.
+
+The kill packet now drives the replacement directly. Which of our traps is
+holding someone is worked out once per tick and kept in a `Map`, so when the
+break arrives the handler does a lookup and sends — no scanning at the moment it
+matters, and no waiting for a frame.
+
+Measured by [`../harness/retrap.js`](../harness/README.md), which stands a trap
+up with an enemy inside it and then kills it:
+
+| | before | after |
+|---|---|---|
+| reply to the break | *nothing* | `z F F z` — a full place sequence |
+| gap | — | **5ms**, round trip included, well inside the tick |
+
+The replacement angle comes from the arc geometry above, with the broken trap
+excluded by sid so its corpse cannot block its own replacement, and the winning
+angle has to land the enemy *inside* the new trap rather than beside it. If no
+angle qualifies, nothing is sent.
+
+Toggle: `window.vars.instantRetrap` (on by default).
+
+`enemyStructureDamage` pre-selects the trap when the enemy's next swing already
+breaks it, once per trap rather than once per tick. It reads the enemy's hat
+instead of assuming the x3.3 structure-damage hat the way `getPrePlaceObject`
+does — assuming it overstates the damage of every enemy not wearing it.
+
 ## Not fixed
 
+- **`MovementSimulator` was not ported.** Aurora's simulator reads `player.xVel`
+  and `yVel` as true velocities, but novastorm overwrites those same fields with
+  a predicted position (`x2 * 2 - lastX`) on every network update, so a faithful
+  port would be fed the wrong state. It also matters least for retrap, where the
+  enemy is pinned in a trap and barely moving. Sorting out the field conflict
+  first would be its own change.
 - Two copies of the script on one page throw inside novastorm's own
   `window.WebSocket` replacement, which calls into its connect path from the
   constructor. It already warns about running two clients at once; making a
