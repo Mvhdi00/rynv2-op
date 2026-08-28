@@ -56,6 +56,7 @@ node reconnect-check.js       # is the second connection as good as the first
 node canvas-owner.js          # is anything else painting the game canvas
 node tick-survives.js         # can one bad player blank the whole world
 node input-check.js           # do moving, attacking and building reach the server
+node silence-check.js         # can the client still talk after the server stalls
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -185,6 +186,11 @@ yielding.
 server accepted, checking for the packet each action is *supposed* to send —
 otherwise the aim packets that flow continuously cover for an action that never
 happened.
+
+`silence-check.js` has the server stop ticking without closing the socket, holds
+input through the stall, and then tries to play again. An outgoing rate limiter
+whose counter is only cleared by an incoming packet latches shut here and never
+opens: connected, drawing, sending nothing.
 
 ### `preplace-bench.js`
 

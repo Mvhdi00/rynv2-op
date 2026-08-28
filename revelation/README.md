@@ -346,6 +346,42 @@ anything that can fail, and each player is handled independently.
 | a weapon index that is not a number | drawn | drawn |
 | a null weapon index | you are **not** drawn, silently | drawn |
 
+### The rate limiter could latch shut for good
+
+This is the one that matches "I could move for a second, then no packets".
+
+`send` allows 120 packets a second. The counter it measures against is cleared
+in exactly one place:
+
+```js
+if (!(tick % 9)) {        // inside playerUpdate — every ninth tick
+  packets = 0;
+}
+```
+
+So the limiter's release depends on the server still talking to you. While ticks
+are missing — a stall, a respawn, a moment of loss, a handler that gave up — the
+count keeps climbing on whatever you send, reaches 120, and every `send` from
+then on returns early. Nothing clears it, because the only thing that could is a
+tick you can no longer ask for.
+
+The socket stays open. The render loop keeps drawing. Not one packet leaves
+again. From the outside that is a frozen game that still reports itself
+connected, and it is exactly as far as you get before it happens: a second or
+two of play.
+
+[`../harness/silence-check.js`](../harness/README.md) spawns, has the server go
+quiet, holds input through it, then tries to play again:
+
+| | before | after |
+|---|---|---|
+| limiter counter during the stall | 120 / 120 | 1 / 120 |
+| limiter counter after it | **120 / 120** | 2 / 120 |
+| packets the server got afterwards | **0** | 5 |
+
+The counter is now also cleared on its own clock, but only once the tick-driven
+reset has actually stopped, so normal play keeps the limit it was given.
+
 ### Nothing fails silently any more
 
 Every fault above was invisible. The packet handlers are called through one
@@ -360,6 +396,30 @@ socket goes on reading. `playerUpdate` reports rather than rejecting, and an
 That line is the point. A clean session prints none of them; if one appears, it
 says which handler stopped and why, which is the thing no amount of reading the
 file could establish from here.
+
+A socket close now names its code and reason too, since "no packets" and "the
+server dropped you" look identical from a chair.
+
+### A read-out, because three faults look the same
+
+"The screen is frozen and nothing is being sent" describes three different
+faults that are indistinguishable from outside: this client's render loop has
+stopped, or this client is fine and something else owns the canvas you are
+looking at, or the loop is running and the socket has gone quiet. The console
+separates none of them.
+
+So the counters are drawn on *this client's own canvas*, top left:
+
+```
+rev  60 fps   up 34/s   down 9/s   signed
+```
+
+- No read-out on screen at all → you are not looking at this client's canvas.
+- Frame count frozen → its render loop died.
+- Frames climbing, packet counts at zero → the socket is the problem, and the
+  last field says which: `signed`, `rate-limited 120/s`, `closed 1006`.
+
+Green while packets are arriving, red when they are not. **F8** hides it.
 
 ## What is verified and what is not
 
@@ -380,13 +440,14 @@ Also verified:
   the page's bundle already consumed it, never settles, or is missing entirely.
 - Moving, aiming, attacking and building each put their own packet on the wire
   and the server accepts all of them.
+- The client still talks after the server goes quiet for several seconds.
 - This client is the only thing drawing the canvas.
 - The render loop survives a fault, and so does the tick.
 
 **Still not verified:** the live server. The mock speaks the same transport and
 now enforces it, but its packet *payloads* are still the harness's own — so a
 field only the real server produces is exactly what the fault reporter above is
-for. The startup line `[revelation] build: canvas-and-tick 2026-08-28` in the
+for. The startup line `[revelation] build: rate-latch 2026-08-28` in the
 console tells you which build is actually running.
 
 ## Not a fault

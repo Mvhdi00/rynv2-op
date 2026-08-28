@@ -113,8 +113,14 @@ function start(port, log, opts) {
 
     ws.on("close", () => { if (onClose) onClose(violations); });
 
-    // Lets a test emulate the game bundle sending frames of its own.
-    if (onSession) onSession({ keyHex, c2s: tables.c2s.enc });
+    // Lets a test emulate the game bundle sending frames of its own, and go
+    // quiet on demand — a server that stalls is a thing clients have to live
+    // through, not an impossible state.
+    if (onSession) onSession({
+      keyHex,
+      c2s: tables.c2s.enc,
+      stopTicks: () => { if (tick) { clearInterval(tick); tick = null; } },
+    });
 
     ws.send(Buffer.from(encode(["io-init", [7, seed, keyHex, ENCRYPTED_MODE]])));
 

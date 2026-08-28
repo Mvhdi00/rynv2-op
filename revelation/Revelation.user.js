@@ -16,7 +16,7 @@
 
 /* Says which build is actually running, so "I installed the fix" and "the fix is
  * running" stop being the same guess. */
-console.log("%c[revelation] build: canvas-and-tick 2026-08-28", "color:#9b8cff");
+console.log("%c[revelation] build: rate-latch 2026-08-28", "color:#9b8cff");
 
 /* Take the canvas away from the page's own game.
  *
@@ -34,19 +34,30 @@ console.log("%c[revelation] build: canvas-and-tick 2026-08-28", "color:#9b8cff")
  * before this file takes its own reference is enough: the page's context still
  * points at the old canvas, which is no longer in the document, and everything
  * it draws from now on goes nowhere. */
-(function () {
+function revTakeCanvas() {
   try {
-    if (window.__revCanvasTaken) return;
+    if (window.__revCanvasTaken) return true;
     const old = document.getElementById("gameCanvas");
-    if (!old || !old.parentNode) return;
+    if (!old || !old.parentNode) return false;   // page not built yet
     window.__revCanvasTaken = true;
     // cloneNode(false) keeps the id, size attributes, class and inline style,
     // so every stylesheet rule and layout still applies to the new one.
     old.parentNode.replaceChild(old.cloneNode(false), old);
+    console.log("%c[revelation] canvas: taken from the page's game", "color:#9b8cff");
+    return true;
   } catch (e) {
     console.warn("[revelation] could not take the canvas:", e);
+    return false;
   }
-})();
+}
+/* Whether the canvas exists yet depends on when the userscript manager decided
+ * to run this file, which is not something this file gets to choose. Doing it
+ * once and silently giving up is how a fix ends up installed and not running. */
+if (!revTakeCanvas()) {
+  console.warn("[revelation] canvas: not in the page yet, retrying");
+  document.addEventListener("DOMContentLoaded", revTakeCanvas);
+  window.addEventListener("load", revTakeCanvas);
+}
 
 /* Says a fault out loud, once per distinct message.
  *
@@ -62,6 +73,77 @@ function revReportFault(where, err) {
   revFaults.add(msg);
   console.error("%c[revelation] " + msg, "color:#ff6b6b", err);
 }
+
+/* A read-out of what this client is actually doing, drawn on its own canvas.
+ *
+ * "The screen is frozen and no packets are going out" describes three different
+ * faults that look identical from the outside: this client's render loop has
+ * stopped, or this client is fine but something else owns the canvas you are
+ * looking at, or the loop is running and the socket has gone quiet. Nothing in
+ * the console separates them.
+ *
+ * Drawing the counters on *this* client's canvas separates all three at a
+ * glance. If the numbers are not on screen at all, you are not looking at this
+ * client's canvas. If the frame count is frozen, its render loop died. If the
+ * frame count climbs while the packet counts sit at zero, the socket is the
+ * problem. Toggle with F8. */
+const revStats = { frames: 0, sent: 0, recv: 0, fps: 0, sps: 0, rps: 0, at: 0, socket: "no socket" };
+
+/* The outgoing rate limiter allows 120 packets a second, and the counter it
+ * measures against is cleared in exactly one place: inside playerUpdate, every
+ * ninth tick. That is a limiter whose release depends on the server still
+ * talking to you.
+ *
+ * So if ticks stop for any reason — a stall, a respawn, a handler that gave up,
+ * a moment of packet loss — the count keeps climbing on what you send, reaches
+ * 120, and every send from then on returns early. Nothing resets it, because
+ * the only thing that could is a tick you can no longer ask for. The client is
+ * connected, the loop is drawing, and not one packet leaves again.
+ *
+ * Clear it on its own clock too, but only once the tick-driven reset has
+ * actually stopped, so normal play keeps the limit it was given. */
+let revLastRateReset = Date.now();
+setInterval(function () {
+  if (Date.now() - revLastRateReset > 1100) {
+    packets = 0;
+    revLastRateReset = Date.now();
+  }
+}, 500);
+let revHud = true;
+function revHudTick() {
+  const now = Date.now();
+  if (!revStats.at) revStats.at = now;
+  if (now - revStats.at >= 1000) {
+    const per = 1000 / (now - revStats.at);
+    revStats.fps = Math.round(revStats.frames * per);
+    revStats.sps = Math.round(revStats.sent * per);
+    revStats.rps = Math.round(revStats.recv * per);
+    revStats.frames = revStats.sent = revStats.recv = 0;
+    revStats.at = now;
+  }
+}
+function revDrawHud(ctx) {
+  if (!revHud || !ctx) return;
+  try {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    const line = "rev  " + revStats.fps + " fps   up " + revStats.sps +
+      "/s   down " + revStats.rps + "/s   " + revStats.socket;
+    ctx.font = "13px monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    const w = ctx.measureText(line).width + 16;
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillRect(8, 8, w, 24);
+    ctx.fillStyle = revStats.rps > 0 ? "#7ee787" : "#ff7b72";
+    ctx.fillText(line, 16, 13);
+    ctx.restore();
+  } catch (e) {}
+}
+window.addEventListener("keydown", function (e) {
+  if (e.keyCode === 119) revHud = !revHud;   // F8
+});
 
 /* This file is full of async handlers, and a throw in one of those is a
  * rejection nobody has to handle — the browser files it under a heading that is
@@ -4451,6 +4533,7 @@ const ee = {
       this.socket.binaryType = "arraybuffer";
       let handshake = false;
       this.socket.onmessage = function (o) {
+        revStats.recv++;
         var a = new Uint8Array(o.data);
         const l = Wl.decode(a);
         var a = l[1];
@@ -4460,6 +4543,7 @@ const ee = {
           // server says otherwise.
           revNet = revNetInit(a);
           revHandshake = true;
+          revStats.socket = revNet ? "signed" : "unsigned";
           // The connection is only usable now, so this is where the game
           // reports it open — not in onopen. Anything sent before io-init has
           // no opcode table and no key to sign with, so it goes out in the old
@@ -4489,6 +4573,7 @@ const ee = {
       };
       this.socket.onopen = function () {
         s.connected = true;
+        revStats.socket = "open, no io-init yet";
       };
       this.socket.onclose = function (o) {
         s.connected = false;
@@ -4497,6 +4582,11 @@ const ee = {
         // with a stale key from a sequence the server has never seen.
         revNet = null;
         revHandshake = false;
+        /* A close code is the server's reason for dropping you, and it is the
+         * one thing that turns "no packets" from a symptom into an answer. */
+        revStats.socket = "closed " + o.code + (o.reason ? " " + o.reason : "");
+        console.warn("%c[revelation] socket closed: code " + o.code +
+          (o.reason ? ", reason " + o.reason : ", no reason given"), "color:#ffa657");
         if (o.code == 4001) {
           t("Invalid Connection");
         } else if (!n) {
@@ -4548,6 +4638,11 @@ const ee = {
       addChatLog(`exceeding second packet limit ${packets}`, "", generateRandomColor(), false, true);
     }
     if (packets >= 120 || minutePackets > 5050) {
+      /* The per-second counter is reset inside playerUpdate, not on a timer, so
+       * it only clears while ticks are arriving. If those stop, this limiter
+       * latches shut and the client goes silent for good. Say so rather than
+       * dropping frames quietly. */
+      revStats.socket = "rate-limited " + packets + "/s";
       return;
     }
     if (e == "9") {
@@ -4573,7 +4668,10 @@ const ee = {
     }
     if (this.socket) {
       const frame = revNetFrame(e, t);
-      if (frame) this.socket.send(frame);
+      if (frame) {
+        this.socket.send(frame);
+        revStats.sent++;
+      }
     }
   },
   socketReady: function () {
@@ -19125,6 +19223,7 @@ async function playerUpdateTick(e) {
     }
     ppsAvg = ceil(ppsAvgs.reduce((a, b) => a + b) / ppsAvgs.length);
     packets = 0;
+    revLastRateReset = Date.now();
   }
   nearEnemies.length = nearSpikes.length = nearTraps.length = enemies.length = allies.length = 0;
   hold = null;
@@ -20068,6 +20167,12 @@ function Uo() {
      * nothing recovers from it but a reload. */
     for (let i = 0; i < 32; i++) M.restore();
     M.globalAlpha = 1;
+    // Counted and drawn here rather than inside Of, so the read-out survives a
+    // frame that died — a frozen picture with a climbing frame count says
+    // something quite different from a frozen count.
+    revStats.frames++;
+    revHudTick();
+    revDrawHud(M);
     requestAFrame(Uo);
   }
 }
