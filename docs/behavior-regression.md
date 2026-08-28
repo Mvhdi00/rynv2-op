@@ -87,17 +87,20 @@ Genuinely carried across, and unchanged in intent:
 
 ## 4. Every divergence
 
-### D1 — sweep resolution and anchoring
-**ORIGINAL** Whiteout sweeps 200 uniform angles from 0 (`PI/100`, 12626).
-**CHANGE** 72 probes, 24 packed within ±1.2 rad of the bearing to the predicted
-enemy position, 48 coarse elsewhere.
-**REASON** *Architectural preference.* NovaStorm's existing sweeps are 72 and I
-kept that budget. Anchoring is from Whiteout's parameterisation, but Whiteout
-passes `0` for the anchor at both live call sites, so uniform-from-0 is what it
-actually does.
-**EXPECTED RESULT** Finer resolution where placements land, coarser behind the
-player. Total probe cost unchanged vs NovaStorm; **~2.8× fewer than Whiteout**,
-so some candidate Whiteout would find can be missed.
+### D1 — sweep resolution and anchoring — ***CLOSED***
+**ORIGINAL** Whiteout sweeps `PI/100` = **201** probes in `autoplacers` (12626)
+and `PI/50` = **101** in its reactive replacer (14467).
+**CHANGE (first version, now superseded)** 72 probes — NovaStorm's stock budget.
+**CHANGE (current)** Preplace **200**, Replace **100**, matching Whiteout's two
+live call sites. Still anchored on the bearing to the predicted enemy position
+(64 fine probes within ±1.2 rad) rather than uniform from 0, since Whiteout
+passes `0` for the anchor and only parameterises it.
+**REASON** Closing a divergence that had no justification beyond my keeping
+NovaStorm's stock number. Measured cost at 400 objects: **0.055 ms → 0.118 ms**
+per sweep, against a 111 ms tick — 0.1% of budget.
+**EXPECTED RESULT** Resolution now matches Whiteout: 1.8° uniform-equivalent
+instead of 5°, with extra density toward the enemy. Candidates Whiteout would
+find are no longer missed for want of probe density.
 
 ### D2 — multi-object break-aware legality *(the biggest fidelity gap)*
 **ORIGINAL** `checkItemLocation3` (6102) collects **every** overlapping object
@@ -247,8 +250,7 @@ and I would close them regardless of what you decide:**
 
 - **D2** — multi-object `assumeBreak` legality. The most valuable single thing in
   Whiteout's live path and I did not port it. Closing this is the highest-value
-  work available.
-- **D1** — probe count 72 vs 200.
+  work available. **Now the only one left of the three.**
 - **D4** — the scoring table's specific weights.
 
 ## 6. Options
@@ -260,8 +262,8 @@ tick, 200-angle sweep, no confidence gate; and restore Luna's `getPrePlaceObject
 D11, D12) and the source-defect fixes (D13, D14). Discards D3, D7, D9, D10 —
 i.e. four things you asked for.
 
-**B — Close my three, keep yours.** Implement D2 (the big one), raise the probe
-count toward 200, and align the scoring weights to `gradeAngles`. Keep the
+**B — Close my three, keep yours.** D1 is done. Remaining: implement D2 (the big
+one) and align the scoring weights to `gradeAngles`. Keep the
 confidence gate, one-placement rule, loss/recovery gate and conditional retry.
 Result: closer to Whiteout everywhere the two are not in direct conflict.
 

@@ -13222,8 +13222,8 @@ for (let tree of trees) {
             COOLDOWN: 6,          // ticks a position is blocked after a failure
             EXIT_SEAL_RAD: 0.45,  // bearing tolerance for "seals this exit"
             RING_MIN: 3,          // ring members before containment analysis runs
-            PROBE_ANGLES: 72,     // total probes per sweep — same budget as stock
-            ANCHOR_FINE: 24,      // of which this many pack around the anchor
+            PROBE_ANGLES: 200,    // Whiteout's autoplacers sweeps PI/100 = 201 probes
+            ANCHOR_FINE: 64,      // of which this many pack around the anchor
             ANCHOR_SPAN: 1.2      // radians either side of the anchor for the fine band
         };
 
@@ -13483,13 +13483,15 @@ for (let tree of trees) {
 
         // Same probe budget as the stock 72-angle sweep, redistributed: a fine
         // band either side of the anchor, coarse elsewhere.
-        function NS_probeAngles(anchor) {
+        function NS_probeAngles(anchor, total) {
             const out = [];
-            const fine = NS_PP.ANCHOR_FINE, span = NS_PP.ANCHOR_SPAN;
+            const n = total || NS_PP.PROBE_ANGLES;
+            const fine = Math.min(NS_PP.ANCHOR_FINE, Math.floor(n / 2));
+            const span = NS_PP.ANCHOR_SPAN;
             for (let i = 0; i < fine; i++) {
                 out.push(anchor - span + (2 * span) * (i / (fine - 1)));
             }
-            const coarse = NS_PP.PROBE_ANGLES - fine;
+            const coarse = n - fine;
             for (let i = 0; i < coarse; i++) {
                 out.push(anchor + span + (2 * Math.PI - 2 * span) * ((i + 0.5) / coarse));
             }
@@ -13626,7 +13628,8 @@ for (let tree of trees) {
             LOSS_MIN: 2.5,        // usefulness a dying object must have had
             RECOVERY_MIN: 0.8,    // fraction of that the replacement must restore
             NEAR_MISS_FRAC: 0.15, // survives-by margin still counted as probable
-            LOSS_MIN_UNCERTAIN: 5 // raised bar when the death is only probable
+            LOSS_MIN_UNCERTAIN: 5,// raised bar when the death is only probable
+            PROBE_ANGLES: 100     // Whiteout's replacer sweeps PI/50 = 101 probes
         };
 
         let NS_replaceIntent = null;
@@ -13781,7 +13784,7 @@ for (let tree of trees) {
             let best = null;
 
             for (const id of ids) {
-                for (const angle of NS_probeAngles(anchor)) {
+                for (const angle of NS_probeAngles(anchor, NS_RP.PROBE_ANGLES)) {
                     const cfg = getConfig(id, angle);
                     cfg.id = id; cfg.angle = angle;
 

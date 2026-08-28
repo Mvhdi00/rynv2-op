@@ -47,7 +47,9 @@ t('degenerate segment', Math.abs(M.NS_segDist2(3,4, 0,0, 0,0)-25)<1e-9);
 console.log('\nNS_probeAngles — budget and coverage');
 {
   const p=M.NS_probeAngles(0);
-  t('probe count equals the stock budget', p.length===M.NS_PP.PROBE_ANGLES, 'got '+p.length);
+  t('probe count matches Whiteout (200)', p.length===M.NS_PP.PROBE_ANGLES && p.length===200, 'got '+p.length);
+  const pr=M.NS_probeAngles(0,100);
+  t('Replace sweep is 100 (Whiteout replacer)', pr.length===100, 'got '+pr.length);
   const norm=a=>{let x=a%(Math.PI*2);return x<0?x+Math.PI*2:x;};
   const near=p.filter(a=>M.UTILS.getAngleDist(a,0)<=M.NS_PP.ANCHOR_SPAN).length;
   t('fine band packed at the anchor', near>=M.NS_PP.ANCHOR_FINE, 'near='+near);
@@ -55,7 +57,7 @@ console.log('\nNS_probeAngles — budget and coverage');
   const s=p.map(norm).sort((a,b)=>a-b);
   let maxGap=s[0]+(Math.PI*2-s[s.length-1]);
   for(let i=1;i<s.length;i++)maxGap=Math.max(maxGap,s[i]-s[i-1]);
-  t('no coverage gap > 25 deg', maxGap<0.44, 'maxGap='+(maxGap*180/Math.PI).toFixed(1)+' deg');
+  t('no coverage gap > 10 deg', maxGap<0.18, 'maxGap='+(maxGap*180/Math.PI).toFixed(1)+' deg');
 }
 
 console.log('\nNS_escapeExits — containment');
