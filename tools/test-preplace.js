@@ -26,8 +26,10 @@ ${fnbody('NS_probeAngles')}
 ${fnbody('NS_updateMoveModel')}
 module.exports={NS_segDist2,NS_escapeExits,NS_probeAngles,NS_updateMoveModel,NS_PP,UTILS};
 `;
-fs.writeFileSync('__dirname + "/.ns_extract.tmp.js"',harness);
-const M=require('__dirname + "/.ns_extract.tmp.js"');
+const tmp=path.join(__dirname,'.ns_extract.tmp.js');
+fs.writeFileSync(tmp,harness);
+const M=require(tmp);
+process.on('exit',()=>{try{fs.unlinkSync(tmp);}catch(e){}});
 let ok=0,bad=0;
 const t=(n,c,extra='')=>{if(c){ok++;console.log('  ok   '+n);}else{bad++;console.log('  FAIL '+n+(extra?' — '+extra:''));}};
 
