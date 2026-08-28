@@ -1,2 +1,5 @@
 node_modules/
 package-lock.json
+
+# scratch from tools/test-preplace.js
+tools/.ns_extract.tmp.js

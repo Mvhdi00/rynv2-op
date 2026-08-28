@@ -12822,20 +12822,27 @@ for (let tree of trees) {
             return myPlayer.weapons[0];
         }
 
-        function addPredictObject(id, angle, preplace) {
+        // `meta` is optional. All ten pre-existing call sites pass three
+        // arguments and are unaffected; only Preplace and Replace supply it.
+        function addPredictObject(id, angle, preplace, meta) {
             let config = getConfig(id, angle);
             for (let object of predictObjects) {
                 if (object.id != 17 && UTILS.getDistance(config.x, config.y, object.x, object.y) < (config.scale + object.scale)) return;
             }
 
-            predictObjects.push({ id: id, angle: angle, name: items.list[id].name, x: config.x, y: config.y, scale: config.scale, preplace: preplace });
+            predictObjects.push(Object.assign({ id: id, angle: angle, name: items.list[id].name, x: config.x, y: config.y, scale: config.scale, preplace: preplace }, meta));
         }
 
+        // The cap the server actually enforces. This read `group.sandboxLimit ||
+        // 99`, which never fires for spikes (limit 15) or traps (limit 6) because
+        // neither group carries a sandboxLimit — a regression against Luna 1.1,
+        // which this placer is otherwise copied from verbatim. The game's own
+        // check uses group.limit, as does the HUD.
         function isItemLimit(id) {
             let group = items.list[id].group;
-            let limit = (group.sandboxLimit || 99);
+            let limit = NS_groupLimit(group);
 
-            if (myPlayer.itemCounts[group.id] >= limit) {
+            if (limit && myPlayer.itemCounts[group.id] >= limit) {
                 return true;
             }
         }
@@ -13085,102 +13092,13 @@ for (let tree of trees) {
             }
         }
 
-        function isPrePlaceAngle(config, prePlaceObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb) {
-            if (!nearestEnemy) return false;
-            if (UTILS.getDistance(nearestEnemy.x2, nearestEnemy.y2, myPlayer.x2, myPlayer.y2) > 350) return false;
+        // isPrePlaceAngle (removed, step 2). Its six rules were the old
+        // Preplace acceptance cascade: three were Auto Place's spike rules
+        // with one extra qualifier and no prediction term, the trap rule was
+        // unconditional where Auto Place's is guarded by neitherTrapped, and
+        // three called into Spike Tick's decision functions once per
+        // candidate angle. Replaced by NS_runPreplace + NS_usefulness.
 
-            const isSpike = config.id === myPlayer.items[2] && !isItemLimit(myPlayer.items[2]);
-            const isTrap = config.id === myPlayer.items[4] && !isItemLimit(myPlayer.items[4]);
-
-            const enemyTrapped = traps_our.find(trap =>
-                                                UTILS.getDistance(trap.x, trap.y, nearestEnemy.x2, nearestEnemy.y2) < trap.scale
-                                               );
-
-            // Calculate future position for line-of-sight checks
-            const LOOKAHEAD = 222;
-            const START_OFFSET = 35;
-            const futureX = myPlayer.x2 + Math.cos(predictMoveAngle) * LOOKAHEAD;
-            const futureY = myPlayer.y2 + Math.sin(predictMoveAngle) * LOOKAHEAD;
-            const startX = myPlayer.x2 + Math.cos(predictMoveAngle) * START_OFFSET;
-            const startY = myPlayer.y2 + Math.sin(predictMoveAngle) * START_OFFSET;
-
-            // Check if spike blocks line of sight to future position
-            const spikeWillBlockLOSToFuture = UTILS.lineInRect(
-                config.x - config.scale - 5,
-                config.y - config.scale - 5,
-                config.x + config.scale + 5,
-                config.y + config.scale + 5,
-                startX, startY,
-                futureX, futureY
-            );
-
-
-
-            // Check if spike blocks line of sight to enemy
-            const spikeWillBlockLOSToEnemy = UTILS.lineInRect(
-                config.x - config.scale - 5,
-                config.y - config.scale - 5,
-                config.x + config.scale + 5,
-                config.y + config.scale + 5,
-                myPlayer.xVel, myPlayer.yVel,
-                nearestEnemy.xVel, nearestEnemy.yVel
-            );
-
-            let canSpikeTick = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < config.scale + 55;
-
-            let canRetrap = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < 50;
-
-            if (canSpikeTick) {
-                // Knockback direction: from spike to enemy
-                let kbAngle = Math.atan2(nearestEnemy.y2 - config.y, nearestEnemy.x2 - config.x);
-
-                // Direction from enemy to player
-                let enemyToPlayerAngle = Math.atan2(myPlayer.y - nearestEnemy.y2, myPlayer.x - nearestEnemy.x2);
-
-                // Check if knockback direction is similar to enemy->player direction
-                let angleDiff = Math.abs(kbAngle - enemyToPlayerAngle);
-                if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-
-                // If knockback would push enemy towards player (angle diff < 90°), it's BAD
-                canSpikeTick = angleDiff >= Math.PI / 5;
-            }
-
-
-            if (isSpike && canSpikeTick && canTrapTick())
-                return true;
-
-            if (isTrap && canRetrap && canShamePlace())
-                return true;
-
-
-
-            // Priority 1: Place spike if it hits trapped enemy
-            if (isSpike && enemyTrapped && prePlaceObject !== enemyTrapped && closestSpikeToEnemy && config === closestSpikeToEnemy) {
-                return true;
-            }
-
-            // Priority 2: Retrap colliding enemy
-            if (isTrap && nearestEnemy.spikeDamage > 0 && enemyTrapped && prePlaceObject === enemyTrapped && closestTrapToEnemy && config === closestTrapToEnemy) {
-                return true;
-            }
-
-            // Priority 3: Place spike that knockbacks enemy into other spikes
-            if (isSpike && closestSpikeToKb && config === closestSpikeToKb && !canShamePlace()) {
-                return true;
-            }
-
-            // Priority 4: Place spikes that don't block LOS when enemy is trapped
-            if (isSpike && enemyTrapped && !spikeWillBlockLOSToFuture && !spikeWillBlockLOSToEnemy && prePlaceObject !== enemyTrapped) {
-                return true;
-            }
-
-            // Priority 6: Place trap when neither player is trapped
-            if (isTrap) {
-                return true;
-            }
-
-            return false;
-        }
 
 
         function isAutoPlaceAngle(config, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb) {
@@ -13281,6 +13199,387 @@ for (let tree of trees) {
             }, configs[0]);
         };
 
+        // =====================================================================
+        //  PREPLACE (upgraded)   —  docs/preplace-design.md
+        //
+        //  Additive and Preplace-local. Reuses NovaStorm's existing intent queue
+        //  (predictObjects / addPredictObject), collision (canPlace), world
+        //  state, packet counter and timers. No second placement engine, target
+        //  tracker, packet scheduler or predictor is introduced.
+        // =====================================================================
+
+        const NS_PP = {
+            MOVE_EPS: 4,          // units/tick below which a player counts as still
+            STABLE_RAD: 0.30,     // direction change still counted as steady
+            TURN_RAD: 0.60,       // direction change that invalidates prediction
+            STABLE_N: 4,          // ticks of steadiness for full stability
+            ERR_SCALE: 35,        // prediction-error normaliser (player scale)
+            W_ACC: 0.6,
+            W_STAB: 0.4,
+            CONF_MIN: 0.65,       // below this Preplace does not act at all
+            TURN_FLOOR: 0.25,     // confidence ceiling straight after a turn
+            VALUE_MIN: 2.0,       // minimum tactical value of a predictive placement
+            GAIN_MIN: 1.5,        // minimum future-over-now advantage
+            COOLDOWN: 6,          // ticks a position is blocked after a failure
+            EXIT_SEAL_RAD: 0.45,  // bearing tolerance for "seals this exit"
+            RING_MIN: 3,          // ring members before containment analysis runs
+            PROBE_ANGLES: 72,     // total probes per sweep — same budget as stock
+            ANCHOR_FINE: 24,      // of which this many pack around the anchor
+            ANCHOR_SPAN: 1.2      // radians either side of the anchor for the fine band
+        };
+
+        let NS_intent = null;              // at most one in-flight predictive intent
+        const NS_cooldown = new Map();     // position key -> tick the block lifts
+
+        function NS_posKey(x, y) { return ((x / 40) | 0) + "," + ((y / 40) | 0); }
+        function NS_isCooling(x, y) {
+            const k = NS_posKey(x, y), until = NS_cooldown.get(k);
+            if (until === undefined) return false;
+            if (tick >= until) { NS_cooldown.delete(k); return false; }
+            return true;
+        }
+        function NS_cool(x, y) { NS_cooldown.set(NS_posKey(x, y), tick + NS_PP.COOLDOWN); }
+
+        // The limit the server actually enforces. items.list[id].group.limit
+        // outside sandbox; sandboxLimit only when genuinely in sandbox.
+        function NS_groupLimit(group) {
+            return (UTILS.isSandbox && group.sandboxLimit) ? group.sandboxLimit : group.limit;
+        }
+
+        // Short-horizon movement model. Called once per player from the existing
+        // predictor site in updatePlayers, so there is still exactly one
+        // predictor; xVel/yVel keep their original meaning and readers.
+        function NS_updateMoveModel(p, lastX, lastY) {
+            if (lastX === undefined || lastY === undefined) return;
+            let m = p._mv;
+            if (!m) {
+                m = p._mv = { dir: null, pdir: null, stable: 0, spd: 0,
+                              errEMA: NS_PP.ERR_SCALE, conf: 0,
+                              predAccel: null, predDecel: null, pred: null, chosen: null };
+            }
+
+            // Score last tick's two hypotheses against where the player actually
+            // turned up. This is the self-correcting half of the model.
+            if (m.predAccel && m.predDecel) {
+                const eA = UTILS.getDistance(m.predAccel.x, m.predAccel.y, p.x2, p.y2);
+                const eD = UTILS.getDistance(m.predDecel.x, m.predDecel.y, p.x2, p.y2);
+                m.chosen = eD < eA ? "decel" : "accel";
+                m.errEMA = m.errEMA * 0.6 + Math.min(eA, eD) * 0.4;
+            }
+
+            const dx = p.x2 - lastX, dy = p.y2 - lastY;
+            const spd = Math.hypot(dx, dy);   // magnitude, not a signed sum
+            m.spd = spd;
+            m.pdir = m.dir;
+            m.dir = spd < NS_PP.MOVE_EPS ? null : Math.atan2(dy, dx);
+
+            // A direction change immediately downgrades. A stop or a start counts
+            // as one, and the floor sits below CONF_MIN so Preplace stands down
+            // until stability is re-earned.
+            const bothMoving = m.dir !== null && m.pdir !== null;
+            const turned = ((m.dir === null) !== (m.pdir === null)) ||
+                           (bothMoving && UTILS.getAngleDist(m.dir, m.pdir) > NS_PP.TURN_RAD);
+
+            if (turned) {
+                m.stable = 0;
+            } else if (bothMoving && UTILS.getAngleDist(m.dir, m.pdir) <= NS_PP.STABLE_RAD) {
+                m.stable++;
+            }
+
+            const accuracy = 1 - Math.min(1, m.errEMA / NS_PP.ERR_SCALE);
+            const stability = Math.min(1, m.stable / NS_PP.STABLE_N);
+            let conf = NS_PP.W_ACC * accuracy + NS_PP.W_STAB * stability;
+            conf = conf < 0 ? 0 : (conf > 1 ? 1 : conf);
+            m.conf = turned ? Math.min(conf, NS_PP.TURN_FLOOR) : conf;
+
+            // Horizon = commit latency = one tick, using the game's own constants
+            // and the measured inter-tick interval rather than a hard-coded 111.
+            // buildIndex is still the previous tick's value here, which is the
+            // one that governed the displacement just observed.
+            const dt = Math.max(1, Math.min(200, (p.t2 - p.t1) || 111));
+            const decay = Math.pow(config.playerDecel, dt);
+            m.predDecel = { x: p.x2 + dx * decay, y: p.y2 + dy * decay };
+            if (m.dir === null) {
+                m.predAccel = { x: m.predDecel.x, y: m.predDecel.y };
+            } else {
+                const a = config.playerSpeed * (p.buildIndex >= 0 ? 0.5 : 1) * dt * dt;
+                m.predAccel = { x: m.predDecel.x + Math.cos(m.dir) * a,
+                                y: m.predDecel.y + Math.sin(m.dir) * a };
+            }
+            m.pred = (m.chosen === "decel") ? m.predDecel : m.predAccel;
+        }
+
+        // Exact segment-to-point distance. Replaces the axis-aligned box that
+        // UTILS.lineInRect substitutes for a circle, which over-reaches by up to
+        // sqrt(2) on the diagonals.
+        function NS_segDist2(px, py, x1, y1, x2, y2) {
+            const vx = x2 - x1, vy = y2 - y1;
+            const len2 = vx * vx + vy * vy;
+            let t = len2 > 0 ? ((px - x1) * vx + (py - y1) * vy) / len2 : 0;
+            t = t < 0 ? 0 : (t > 1 ? 1 : t);
+            const dx = px - (x1 + t * vx), dy = py - (y1 + t * vy);
+            return dx * dx + dy * dy;
+        }
+        function NS_hits(cfg, r, x1, y1, x2, y2) {
+            const rr = r + cfg.scale;
+            return NS_segDist2(cfg.x, cfg.y, x1, y1, x2, y2) < rr * rr;
+        }
+
+        // Port of SiegeAnalysis.isEscapable from RYN_Client_v4.js (11935): sort
+        // the ring by bearing, measure the chord between angular neighbours,
+        // compare against the width the enemy needs to fit through.
+        function NS_escapeExits(cx, cy, selfRadius, ring) {
+            if (!ring || ring.length < NS_PP.RING_MIN) return null;
+            const arr = [];
+            for (const o of ring) {
+                const dx = o.x - cx, dy = o.y - cy;
+                arr.push({ ang: Math.atan2(dy, dx), dist: Math.hypot(dx, dy), r: o.r });
+            }
+            arr.sort((a, b) => a.ang - b.ang);
+            const exits = [];
+            for (let i = 0; i < arr.length; i++) {
+                const a = arr[i], b = arr[(i + 1) % arr.length];
+                let gap = Math.abs(a.ang - b.ang);
+                if (gap > Math.PI) gap = 2 * Math.PI - gap;
+                const w2 = a.dist * a.dist + b.dist * b.dist - 2 * a.dist * b.dist * Math.cos(gap);
+                const need = selfRadius * 2 + a.r + b.r + 10;
+                if (w2 > need * need) {
+                    let ang = (a.ang + b.ang) / 2;
+                    if (Math.abs(a.ang - b.ang) > Math.PI) ang += Math.PI;
+                    exits.push({ angle: ang, width: Math.sqrt(w2) });
+                }
+            }
+            return exits.length ? exits : null;
+        }
+
+        // Tick-scoped memo. A cache, not a coordinator: it makes "computed once
+        // per tick" true instead of aspirational. The shipped code calls
+        // canTrapTick() twice per tick from two places and can get two answers.
+        let NS_ctx = null;
+
+        function NS_buildCtx() {
+            const e = nearestEnemy;
+            const ctx = {
+                tick: tick,
+                enemy: e || null,
+                mv: (e && e._mv) || null,
+                conf: (e && e._mv) ? e._mv.conf : 0,
+                cur: e ? { x: e.x2, y: e.y2 } : null,
+                fut: null,
+                enemyTrapped: null,
+                exits: null,
+                ring: null,
+                spikeId: myPlayer.items[2],
+                trapId: myPlayer.items[4] || 15,
+                spikeTickActive: instaKill.length > 0 || insta.primary || insta.secondary ||
+                                 insta.turret || insta.primaryturret,
+                spikeTickLive: false
+            };
+            if (!e) return ctx;
+
+            ctx.fut = (e._mv && e._mv.pred) ? e._mv.pred : { x: e.xVel, y: e.yVel };
+            ctx.enemyTrapped = traps_our.find(t =>
+                UTILS.getDistance(t.x, t.y, e.x2, e.y2) < t.scale) || null;
+
+            // Cheap prefix of canTrapTick's conditions, deliberately WITHOUT the
+            // 72-angle sweep — that sweep is where Spike Tick's decision is made.
+            // This only detects that a tick is live so Preplace can stay clear.
+            ctx.spikeTickLive = !!(window.vars.shameTick && ctx.enemyTrapped &&
+                e.spikeDamage <= 0 &&
+                getPlayerInfo(myPlayer, "secondaryWeapon") == "hammer" &&
+                secondaryReload[myPlayer.sid] >= 1 && primaryReload[myPlayer.sid] >= 1 &&
+                ctx.enemyTrapped.health <= getPlayerInfo(myPlayer, "secondaryStructureDmg"));
+
+            const ring = [];
+            for (const o of visibleObjects) {
+                if (!(o.id == 15 || (o.id > 5 && o.id < 10))) continue;
+                if (UTILS.getDistance(e.x2, e.y2, o.x, o.y) > 35 + o.scale + 40) continue;
+                ring.push({ x: o.x, y: o.y, r: o.scale, sid: o.sid });
+            }
+            ctx.ring = ring;
+            ctx.exits = NS_escapeExits(e.x2, e.y2, 35, ring);
+            return ctx;
+        }
+
+        // Shared tactical scorer. Preplace calls it twice per candidate (current
+        // vs predicted enemy state) and takes the difference; Replace will call
+        // it on the dying object and on the candidate. One function, several call
+        // patterns — not several scorers.
+        function NS_usefulness(cfg, ep, ctx) {
+            if (!ctx.enemy) return 0;
+            const e = ctx.enemy;
+            const isSpike = cfg.id === ctx.spikeId;
+            const isTrap = cfg.id === ctx.trapId;
+            const d = UTILS.getDistance(cfg.x, cfg.y, ep.x, ep.y);
+            let v = 0;
+
+            if (isSpike) {
+                if (d < cfg.scale + 35) v += 3;
+                else if (d < cfg.scale + 70) v += 1;
+                if (NS_hits(cfg, e.scale, e.x2, e.y2, ep.x, ep.y)) v += 2;
+
+                // knockback into one of our spikes, with a real alignment
+                // threshold rather than a bare ranking
+                if (d < cfg.scale + 70) {
+                    const kb = Math.atan2(ep.y - cfg.y, ep.x - cfg.x);
+                    for (const s of spikes_our) {
+                        const sd = UTILS.getDistance(ep.x, ep.y, s.x, s.y);
+                        if (sd < 50 || sd > 150) continue;
+                        if (UTILS.getAngleDist(kb, Math.atan2(s.y - ep.y, s.x - ep.x)) <= 0.17) {
+                            v += 4; break;
+                        }
+                    }
+                }
+            }
+            if (isTrap) {
+                if (d < 50) v += 3;
+                if (NS_hits(cfg, e.scale, e.x2, e.y2, ep.x, ep.y)) v += 1.5;
+            }
+
+            if (ctx.exits) {
+                const ang = Math.atan2(cfg.y - ep.y, cfg.x - ep.x);
+                for (const ex of ctx.exits) {
+                    if (UTILS.getAngleDist(ang, ex.angle) < NS_PP.EXIT_SEAL_RAD) { v += 2.5; break; }
+                }
+            }
+
+            // penalties: blocking our own path, and blocking our line to the enemy
+            if (predictMoveAngle !== null && predictMoveAngle !== undefined) {
+                const fx = myPlayer.x2 + Math.cos(predictMoveAngle) * 222;
+                const fy = myPlayer.y2 + Math.sin(predictMoveAngle) * 222;
+                const rr = cfg.scale + 35;
+                if (NS_segDist2(cfg.x, cfg.y, myPlayer.x2, myPlayer.y2, fx, fy) < rr * rr) v -= 2;
+            }
+            const rl = cfg.scale + 5;
+            if (NS_segDist2(cfg.x, cfg.y, myPlayer.x2, myPlayer.y2, e.x2, e.y2) < rl * rl) v -= 1;
+
+            const grp = items.list[cfg.id].group;
+            const cap = NS_groupLimit(grp);
+            if (cap && (myPlayer.itemCounts[grp.id] || 0) >= cap - 1) v -= 1;
+
+            return v;
+        }
+
+        // Same probe budget as the stock 72-angle sweep, redistributed: a fine
+        // band either side of the anchor, coarse elsewhere.
+        function NS_probeAngles(anchor) {
+            const out = [];
+            const fine = NS_PP.ANCHOR_FINE, span = NS_PP.ANCHOR_SPAN;
+            for (let i = 0; i < fine; i++) {
+                out.push(anchor - span + (2 * span) * (i / (fine - 1)));
+            }
+            const coarse = NS_PP.PROBE_ANGLES - fine;
+            for (let i = 0; i < coarse; i++) {
+                out.push(anchor + span + (2 * Math.PI - 2 * span) * ((i + 0.5) / coarse));
+            }
+            return out;
+        }
+
+        // Preplace decision. Gates run cheapest-first, so an erratically-moving
+        // enemy costs one float comparison per tick and never reaches a sweep.
+        function NS_runPreplace(ctx) {
+            NS_intent = null;
+            if (!window.vars.prePlace) return;
+            if (!ctx.enemy || !ctx.mv) return;
+            if (ctx.conf < NS_PP.CONF_MIN) return;                        // G1
+            if (ctx.spikeTickActive || ctx.spikeTickLive) return;         // G2
+            if (packets + 10 > 119) return;                               // G4
+            if (UTILS.getDistance(myPlayer.x2, myPlayer.y2, ctx.enemy.x2, ctx.enemy.y2) > 300) return;
+            if (nearestTrap && spikeDmgCount > 0) return;
+
+            const ids = [];
+            if (ctx.spikeId != null && !isItemLimit(ctx.spikeId)) ids.push(ctx.spikeId);
+            if (ctx.trapId != null && !isItemLimit(ctx.trapId)) ids.push(ctx.trapId);
+            if (!ids.length) return;
+
+            const anchor = Math.atan2(ctx.fut.y - myPlayer.y2, ctx.fut.x - myPlayer.x2);
+            const probes = NS_probeAngles(anchor);
+            let best = null;
+
+            for (const id of ids) {
+                for (const angle of probes) {
+                    const cfg = getConfig(id, angle);
+                    cfg.id = id;
+                    cfg.angle = angle;
+
+                    if (NS_isCooling(cfg.x, cfg.y)) continue;
+                    if (!canPlace(id, angle)) continue;
+
+                    // Spike Tick's protected annulus, verbatim from canTrapTick.
+                    if (ctx.spikeTickLive &&
+                        UTILS.getDistance(cfg.x, cfg.y, ctx.enemy.x2, ctx.enemy.y2) < cfg.scale + 55) continue;
+
+                    const vFut = NS_usefulness(cfg, ctx.fut, ctx);
+                    if (vFut < NS_PP.VALUE_MIN) continue;                 // G6
+                    const gain = vFut - NS_usefulness(cfg, ctx.cur, ctx);
+                    if (gain < NS_PP.GAIN_MIN) continue;                  // G7
+
+                    // Auto Place ownership oracle — reused, not restated. The
+                    // three selector arguments are Auto Place's own angle objects
+                    // and are compared by identity there, so no external caller
+                    // can ever satisfy those rules; passing null evaluates
+                    // exactly the positional rules (A3, T2) that decide ownership.
+                    if (isAutoPlaceAngle(cfg, null, null, null)) continue;
+
+                    if (!best || gain > best.gain) best = { id, angle, cfg, gain, vFut };
+                }
+            }
+
+            if (!best) return;
+
+            // Publish the discovered spike location for Spike Tick. Preplace
+            // identifies; it never acts on the identification, and nothing reads
+            // this until the Spike Tick side is authorised.
+            if (best.id === ctx.spikeId) {
+                smartTickSpike = { x: best.cfg.x, y: best.cfg.y, scale: best.cfg.scale,
+                                   angle: best.angle, tick: tick, conf: ctx.conf };
+            }
+
+            addPredictObject(best.id, best.angle, true, {
+                owner: "preplace", tick: tick, conf: ctx.conf, gain: best.gain,
+                px: best.cfg.x, py: best.cfg.y
+            });
+            for (const o of predictObjects) {
+                if (o.preplace && o.owner === "preplace") { NS_intent = o; break; }
+            }
+        }
+
+        // Commit-time gate. Everything the decision rested on that is written
+        // only in the tick body is covered by the generation check; the rest is
+        // genuinely volatile and is re-tested. Failure sends nothing at all.
+        function NS_revalidate(it) {
+            if (!it || !myPlayer || !myPlayer.alive) return false;
+            if (it.tick !== tick) return false;                           // guard 0
+            if (packets + 5 > 119) return false;
+            if (instaKill.length > 0 || insta.primary || insta.secondary ||
+                insta.turret || insta.primaryturret) return false;
+            if (isItemLimit(it.id)) return false;
+
+            // Objects that died during the commit window are still in
+            // visibleObjects with active === true: disableBySid splices
+            // gameObjects without clearing the flag. Correcting for that is what
+            // stops us cancelling exactly the placements that just became legal.
+            const objs = removedObjects.length
+                ? visibleObjects.filter(o => removedObjects.indexOf(o.sid) === -1)
+                : visibleObjects;
+
+            // Re-aim at the stored world point from where the player is now.
+            // Same point, same item, same justification — only the transmitted
+            // angle is corrected.
+            let angle = it.angle;
+            if (it.px !== undefined) {
+                const item = items.list[it.id];
+                const reach = 35 + item.scale + (item.placeOffset || 0);
+                const dx = it.px - myPlayer.x2, dy = it.py - myPlayer.y2;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 1 && Math.abs(dist - reach) <= 20) angle = Math.atan2(dy, dx);
+            }
+
+            if (!canPlace(it.id, angle, objs)) return false;
+            it.angle = angle;
+            return true;
+        }
+
         function getPrePlaceObject() {
             let findObject;
 
@@ -13335,177 +13634,15 @@ for (let tree of trees) {
 
             predictObjects = [];
 
-            // PRE PLACER
+            // PRE PLACER  (upgraded — see NS_runPreplace / docs/preplace-design.md)
+            // Movement-driven and confidence-gated. The doomed-object finder
+            // getPrePlaceObject() is no longer Preplace's trigger: that is
+            // replacement target acquisition and moves to Replace at step 5.
             lastPrePlaceObject = null;
             spamPrePlacer = false;
 
-            if (window.vars.prePlace && nearestEnemy && UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2) < 300 && !(nearestTrap && spikeDmgCount > 0)) {
-                let findObject = getPrePlaceObject();
-                smartTickSpike = null;
-
-                let customObjects = [];
-                for (let object of visibleObjects) {
-                    customObjects.push(object);
-                }
-
-                if (findObject) {
-                    customObjects.splice(customObjects.indexOf(findObject), 1);
-
-                    let findAngle;
-
-                    const spikeAngles = getPrePlaceAngles(myPlayer.items[2], customObjects);
-                    const trapAngles = getPrePlaceAngles(myPlayer.items[4] || 15, customObjects);
-
-                    const placeableSpikeAngles = spikeAngles.filter(obj => obj.placeable);
-                    const placeableTrapAngles = trapAngles.filter(obj => obj.placeable);
-
-                    // Find closest spike that will hit enemy
-                    const closestSpikeToEnemy = placeableSpikeAngles
-                    .filter(a => {
-                        return UTILS.lineInRect(
-                            a.x - (nearestEnemy.scale + a.scale - 1),
-                            a.y - (nearestEnemy.scale + a.scale - 1),
-                            a.x + (nearestEnemy.scale + a.scale - 1),
-                            a.y + (nearestEnemy.scale + a.scale - 1),
-                            nearestEnemy.x2, nearestEnemy.y2,
-                            nearestEnemy.xVel, nearestEnemy.yVel
-                        );
-                    })
-                    .sort((a, b) =>
-                          UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, a.x, a.y) -
-                          UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, b.x, b.y)
-                         )[0];
-
-                    // Find closest trap that will hit enemy
-                    const closestTrapToEnemy = placeableTrapAngles
-                    .filter(a => {
-                        return UTILS.lineInRect(
-                            a.x - a.scale,
-                            a.y - a.scale,
-                            a.x + a.scale,
-                            a.y + a.scale,
-                            nearestEnemy.x2, nearestEnemy.y2,
-                            nearestEnemy.xVel, nearestEnemy.yVel
-                        );
-                    })
-                    .sort((a, b) =>
-                          UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, a.x, a.y) -
-                          UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, b.x, b.y)
-                         )[0];
-
-                    // Find closest spike that will knockback enemy into other spikes with best alignment
-                    const closestSpikeToKb = (() => {
-                        const validAngles = placeableSpikeAngles
-                        .filter(a => {
-                            const canHitEnemy = UTILS.lineInRect(
-                                a.x - (nearestEnemy.scale + a.scale - 2),
-                                a.y - (nearestEnemy.scale + a.scale - 2),
-                                a.x + (nearestEnemy.scale + a.scale - 2),
-                                a.y + (nearestEnemy.scale + a.scale - 2),
-                                nearestEnemy.x2, nearestEnemy.y2,
-                                nearestEnemy.xVel, nearestEnemy.yVel
-                            );
-
-                            if (!canHitEnemy) return false;
-
-                            // Check if knockback will push enemy into our spikes
-                            const knockbackAngle = Math.atan2(nearestEnemy.yVel - a.y, nearestEnemy.xVel - a.x);
-                            const projectedX = nearestEnemy.xVel + 200 * Math.cos(knockbackAngle);
-                            const projectedY = nearestEnemy.yVel + 200 * Math.sin(knockbackAngle);
-
-                            for (let spike of spikes_our) {
-                                if (UTILS.lineInRect(
-                                    spike.x - spike.scale, spike.y - spike.scale,
-                                    spike.x + spike.scale, spike.y + spike.scale,
-                                    nearestEnemy.xVel, nearestEnemy.yVel,
-                                    projectedX, projectedY
-                                )) {
-                                    return true;
-                                }
-                            }
-                            return false;
-                        })
-                        .map(a => {
-                            // Calculate alignment score
-                            const knockbackAngle = Math.atan2(nearestEnemy.yVel - a.y, nearestEnemy.xVel - a.x);
-                            const projectedX = nearestEnemy.xVel + 200 * Math.cos(knockbackAngle);
-                            const projectedY = nearestEnemy.yVel + 200 * Math.sin(knockbackAngle);
-
-                            let bestAlignment = Infinity;
-
-                            for (let spike of spikes_our) {
-                                if (UTILS.lineInRect(
-                                    spike.x - spike.scale, spike.y - spike.scale,
-                                    spike.x + spike.scale, spike.y + spike.scale,
-                                    nearestEnemy.xVel, nearestEnemy.yVel,
-                                    projectedX, projectedY
-                                )) {
-                                    smartTickSpike = spike;
-                                    const angleToEnemy = Math.atan2(nearestEnemy.yVel - a.y, nearestEnemy.xVel - a.x);
-                                    const enemyToSpike = Math.atan2(spike.y - nearestEnemy.yVel, spike.x - nearestEnemy.xVel);
-
-                                    let angleDiff = Math.abs(angleToEnemy - enemyToSpike);
-                                    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-
-                                    bestAlignment = Math.min(bestAlignment, angleDiff);
-                                }
-                            }
-
-                            return { angle: a, alignment: bestAlignment };
-                        });
-
-                        if (validAngles.length === 0) return undefined;
-
-                        // Find the best alignment score
-                        const bestAlignmentScore = Math.min(...validAngles.map(v => v.alignment));
-
-                        // Filter to only angles with the best alignment, then pick closest to enemy
-                        return validAngles
-                            .filter(v => v.alignment === bestAlignmentScore)
-                            .sort((a, b) =>
-                                  UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, a.angle.x, a.angle.y) -
-                                  UTILS.getDistance(nearestEnemy.xVel, nearestEnemy.yVel, b.angle.x, b.angle.y)
-                                 )[0]?.angle;
-                    })();
-
-                    const getFindAngle = function (findAngleFunc) {
-                        if (findAngle) return;
-
-                        findAngleFunc();
-                        if (findAngle) {
-                            addPredictObject(findAngle.id, findAngle.angle, true);
-                        }
-                    }
-
-                    getFindAngle(function () {
-                        const object = spikeAngles
-                        .filter(obj => obj.placeable)
-                        .filter(obj => isPrePlaceAngle(obj, findObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb))
-                        .sort((a, b) => UTILS.getDistance(findObject.x, findObject.y, a.x, a.y) - UTILS.getDistance(findObject.x, findObject.y, b.x, b.y))[0];
-
-                        if (object) {
-                            findAngle = object;
-                        }
-                    });
-
-                    getFindAngle(function () {
-                        const object = trapAngles
-                        .filter(obj => obj.placeable)
-                        .filter(obj => isPrePlaceAngle(obj, findObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb))
-                        .sort((a, b) => UTILS.getDistance(findObject.x, findObject.y, a.x, a.y) - UTILS.getDistance(findObject.x, findObject.y, b.x, b.y))[0];
-
-                        if (object) {
-                            findAngle = object;
-                        }
-                    });
-                    for (let i in predictObjects) {
-                        if (!predictObjects[i].preplace) continue;
-
-                        lastPrePlaceObject = findObject;
-                        break;
-                    }
-                }
-            }
+            NS_ctx = NS_buildCtx();
+            NS_runPreplace(NS_ctx);
 
             // GET AUTOPLACE ANGLES
             if (window.vars.autoPlace && nearestEnemy) {
@@ -14015,6 +14152,11 @@ for (let tree of trees) {
 
                     tmpObj.xVel = tmpObj.x2 * 2 - lastX;
                     tmpObj.yVel = tmpObj.y2 * 2 - lastY;
+
+                    // PREPLACE: short-horizon movement model. Extends the one
+                    // existing predictor rather than adding a second one; the
+                    // xVel/yVel above keep their original meaning and readers.
+                    NS_updateMoveModel(tmpObj, lastX, lastY);
 
                     tmpObj.d1 = (tmpObj.d2 === undefined) ? data[i + 3] : tmpObj.d2;
                     tmpObj.d2 = data[i + 3];
@@ -15451,40 +15593,33 @@ for (let tree of trees) {
                 }
             });
 
-            // PRE PLACER
-            setTimeout(function () {
-                for (let object of predictObjects) {
-                    if (!object.preplace) continue;
-                    setPlaceTick();
-                    getPrePlaceAngles(myPlayer.items[2], object.id, object.angle);
-                    getPrePlaceAngles(myPlayer.items[4] || 15, object.id, object.angle);
-                    io.send("D", getAttackDir());
-                }
-            }, 1);
-
-            setTimeout(function () {
-                for (let object of predictObjects) {
-                    if (!object.preplace) continue;
-                    if (packets + 5 > 119) break;
-
-                    place(object.id, object.angle);
-                    placedAngles.push(object.angle);
-                    io.send("D", getAttackDir());
-                }
-            }, 111 - tickPing());
-
-            setTimeout(function () {
-                if (spamPrePlacer) {
-                    for (let object of predictObjects) {
-                        if (!object.preplace) continue;
-                        if (packets + 5 > 119) break;
-
-                        place(object.id, object.angle);
-                        placedAngles.push(object.angle);
+            // PRE PLACER commit. The decision is snapshotted here, at
+            // registration, instead of being re-read from mutable globals when
+            // the timer fires ~71-96ms later, and every send is revalidated
+            // first. A failed revalidation sends nothing at all — not even the
+            // direction packet.
+            //
+            // The old 1ms warm-up timer is gone: its two getPrePlaceAngles calls
+            // passed object.id where customObjects was expected, so
+            // objects.length read undefined, every angle trivially passed, and
+            // the result was discarded. The old 111 - minPingTime retry is gone
+            // too; minPingTime never decays and clamps to 0ms before the first
+            // ping response. Replace owns the conditional retry (step 5).
+            const nsCommit = predictObjects.filter(o => o.preplace);
+            if (nsCommit.length) {
+                setTimeout(function () {
+                    for (const intent of nsCommit) {
+                        if (!NS_revalidate(intent)) {
+                            NS_cool(intent.px !== undefined ? intent.px : intent.x,
+                                    intent.py !== undefined ? intent.py : intent.y);
+                            continue;
+                        }
+                        place(intent.id, intent.angle);
+                        placedAngles.push(intent.angle);
                         io.send("D", getAttackDir());
                     }
-                }
-            }, 111 - minPingTime);
+                }, Math.max(0, 111 - tickPing()));
+            }
 
 
             damagesByHits = [];
