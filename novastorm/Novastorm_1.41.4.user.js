@@ -12833,11 +12833,21 @@ for (let tree of trees) {
 
         function isItemLimit(id) {
             let group = items.list[id].group;
-            let limit = (group.sandboxLimit || 99);
+            /* This used to read (group.sandboxLimit || 99), which never looked at
+             * group.limit at all. Outside sandbox that made the cap 99 for every
+             * group without a sandboxLimit — spikes (really 15), traps (6),
+             * turrets (2), mines (1) — and 299 for the three that have one. The
+             * gate effectively never fired, so the placer kept scanning angles
+             * and spending packets on items the server would refuse. */
+            let limit = config.isSandbox
+                ? (group.sandboxLimit || group.limit || 99)
+                : (group.limit || 99);
 
             if (myPlayer.itemCounts[group.id] >= limit) {
                 return true;
             }
+
+            return false;
         }
 
         function lineInCircle(x, y, x2, y2, circleX, circleY, scale) {
@@ -13058,14 +13068,162 @@ for (let tree of trees) {
             }
         }
 
+        /* ---- placement geometry --------------------------------------------
+         *
+         * checkItemLocation is the expensive half of finding a place angle, and
+         * the scan below used to call it 72 times per item per decision. Most of
+         * those angles are blocked by a nearby object, and that part is pure
+         * geometry: a placement sits on a ring of radius D around the player and
+         * collides with an object wherever it comes within E of that object's
+         * centre, so every object blocks one contiguous arc of the ring. One
+         * circle-circle intersection per nearby object gives those arcs, and the
+         * scan can then skip the checkItemLocation call for every angle inside
+         * them. The more crowded the fight, the more calls disappear.
+         *
+         * The arcs also name the exact angles where a placement just grazes an
+         * obstacle. Those are the ones actually worth placing on, and a 5 degree
+         * grid only lands on them by luck, so they are added as candidates too.
+         *
+         * This mirrors checkItemLocation's object test exactly and is biased
+         * narrow on purpose: each blocked arc is shrunk slightly, so a borderline
+         * angle is still handed to checkItemLocation rather than thrown away.
+         * Water and item limits are not angular, so every angle the geometry
+         * calls free is still verified the old way.
+         */
+        const PP_EPS = 1e-6;
+        const PP_TWO_PI = Math.PI * 2;
+
+        function ppNormalizeAngle(a) {
+            a %= PP_TWO_PI;
+            return a < 0 ? a + PP_TWO_PI : a;
+        }
+
+        function ppArcContains(start, end, angle) {
+            const span = end - start >= PP_TWO_PI - PP_EPS
+                  ? PP_TWO_PI
+                  : (end - start + PP_TWO_PI) % PP_TWO_PI;
+            return ((angle - start + PP_TWO_PI) % PP_TWO_PI) <= span + PP_EPS;
+        }
+
+        function ppBlockedArc(obj, itemScale, ringRadius, originX, originY) {
+            // Same blocking radius checkItemLocation uses.
+            const blockS = obj.blocker ? obj.blocker : obj.getScale(0.6, obj.isItem);
+            const dx = obj.x - originX, dy = obj.y - originY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < PP_EPS) return null;
+            // Shrunk by a hair so a grazing angle stays a candidate.
+            const reach = itemScale + blockS - 0.01;
+            if (reach <= 0) return null;
+            if (dist >= ringRadius + reach) return null;      // too far to reach the ring
+            if (dist + reach <= ringRadius) return null;      // sits inside the ring
+            if (dist + ringRadius <= reach) return [0, PP_TWO_PI]; // swallows the ring
+            const a = (ringRadius * ringRadius - reach * reach + dist * dist) / (2 * dist);
+            const h = Math.sqrt(Math.max(0, ringRadius * ringRadius - a * a));
+            const px = originX + (a / dist) * dx, py = originY + (a / dist) * dy;
+            const e1 = ppNormalizeAngle(UTILS.getDirection(px + (h / dist) * dy, py - (h / dist) * dx, originX, originY));
+            const e2 = ppNormalizeAngle(UTILS.getDirection(px - (h / dist) * dy, py + (h / dist) * dx, originX, originY));
+            // The blocked side is whichever arc holds the direction to the object.
+            const toObj = ppNormalizeAngle(UTILS.getDirection(obj.x, obj.y, originX, originY));
+            return ppArcContains(e1, e2, toObj) ? [e1, e2] : [e2, e1];
+        }
+
+        function ppMergeBlocked(arcs) {
+            const intervals = [];
+            for (const arc of arcs) {
+                const s = arc[0], e = arc[1];
+                if (e - s >= PP_TWO_PI - PP_EPS) return [[0, PP_TWO_PI]];
+                if (s <= e) intervals.push([s, e]);
+                else { intervals.push([s, PP_TWO_PI]); intervals.push([0, e]); }
+            }
+            if (!intervals.length) return [];
+            intervals.sort((a, b) => a[0] - b[0]);
+            const merged = [intervals[0].slice()];
+            for (let i = 1; i < intervals.length; i++) {
+                const cur = intervals[i], last = merged[merged.length - 1];
+                if (cur[0] <= last[1] + PP_EPS) last[1] = Math.max(last[1], cur[1]);
+                else merged.push(cur.slice());
+            }
+            return merged;
+        }
+
+        function ppFreeArcs(merged) {
+            if (!merged.length) return [[0, PP_TWO_PI]];
+            if (merged.length === 1 && merged[0][0] <= PP_EPS && merged[0][1] >= PP_TWO_PI - PP_EPS) return [];
+            const free = [];
+            for (let i = 0; i < merged.length; i++) {
+                const gapStart = merged[i][1];
+                const gapEnd = i < merged.length - 1 ? merged[i + 1][0] : merged[0][0] + PP_TWO_PI;
+                if (gapEnd - gapStart > PP_EPS) free.push([ppNormalizeAngle(gapStart), ppNormalizeAngle(gapEnd)]);
+            }
+            return free;
+        }
+
+        function ppInFreeArc(arcs, angle) {
+            if (!arcs || !arcs.length) return false;
+            const a = ppNormalizeAngle(angle);
+            for (let i = 0; i < arcs.length; i++) {
+                if (ppArcContains(arcs[i][0], arcs[i][1], a)) return true;
+            }
+            return false;
+        }
+
+        function getPlaceableArcs(id, customObjects) {
+            const item = items.list[id];
+            if (!item) return null;
+            const list = customObjects ? customObjects : visibleObjects;
+            if (!list) return null;
+            const ringRadius = 35 + item.scale + (item.placeOffset || 0);
+            const originX = myPlayer.x2, originY = myPlayer.y2;
+            const blocked = [];
+            for (let i = 0; i < list.length; i++) {
+                const obj = list[i];
+                if (!obj || !obj.active) continue;
+                const arc = ppBlockedArc(obj, item.scale, ringRadius, originX, originY);
+                if (arc) blocked.push(arc);
+            }
+            return ppFreeArcs(ppMergeBlocked(blocked));
+        }
+
         function getPrePlaceAngles(id, customObjects) {
             const angles = [];
+            let arcs = null;
+            try {
+                arcs = getPlaceableArcs(id, customObjects);
+            } catch (e) {
+                arcs = null; // fall back to scanning every angle
+            }
+
+            const add = (angle, geometryFree, edge) => {
+                const entry = {
+                    id: id,
+                    angle: angle,
+                    placeable: geometryFree ? canPlace(id, angle, customObjects) : false,
+                    ...getConfig(id, angle)
+                };
+                if (edge) entry.onEdge = true;
+                angles.push(entry);
+            };
+
             for (let i = 0; i < 72; i++) {
                 const angle = UTILS.toRad(i * (360 / 72));
-                angles.push({ id: id, angle: angle, placeable: canPlace(id, angle, customObjects), ...getConfig(id, angle) });
+                add(angle, arcs === null || ppInFreeArc(arcs, angle), false);
+            }
+
+            if (arcs) {
+                for (let i = 0; i < arcs.length; i++) {
+                    const s = arcs[i][0], e = arcs[i][1];
+                    add(ppNormalizeAngle(s + 0.002), true, true);
+                    add(ppNormalizeAngle(e - 0.002), true, true);
+                }
+                angles.sort((a, b) => a.angle - b.angle);
             }
 
             getPerfectAngles(angles);
+            // A placement hard against an obstacle is the real optimum. The grid
+            // only flags one when it happens to straddle the boundary.
+            for (let i = 0; i < angles.length; i++) {
+                if (angles[i].onEdge && angles[i].placeable) angles[i].perfect = true;
+            }
             return angles;
         }
 

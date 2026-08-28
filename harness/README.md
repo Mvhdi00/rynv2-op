@@ -40,6 +40,7 @@ node play.js "" native        # userscript injected late (see below)
 node chaos.js                 # transient mid-frame fault, then recovery
 node protocol.js              # what the client puts on the wire
 node sole-sender.js           # only one packet sequence per socket
+node preplace-bench.js        # preplace angle search: safety, cost, coverage
 ```
 
 `play.js` prints the distinct colours sampled off the canvas — a live world is
@@ -95,6 +96,25 @@ connection alive:
 Against a build without the stand-down guard, `late` fails with
 `sequence out of order (9: got 1, expected 4)`, close code 4001, and
 `colours=1` — a green screen and `disconnected`.
+
+### `preplace-bench.js`
+
+Runs the client's own placement geometry against a 0.5 degree reference sweep
+over random object layouts. It reports three things: how many
+`checkItemLocation` calls the angle scan costs, whether the geometry ever rules
+out an angle that reference sweep accepts (must be zero), and how often a 5
+degree grid is blind to a gap a placement really fits through.
+
+```
+  checkItemLocation, old scan:  28800
+  checkItemLocation, new scan:  5112 (17.8% of old)
+  valid angles wrongly skipped: 0   <- safe
+  scenes the 5deg grid missed:  6 of 288 (2.1%)
+  ...of those, arc edges found: 6 (100.0%)
+```
+
+Pure geometry, no browser — it lifts the helpers out of the client with `vm` so
+the test runs the shipped code rather than a copy.
 
 ## Limits
 

@@ -55,6 +55,51 @@ second.
 injected mid-frame and then cleared, the loop used to stay dead (`drawing=no`)
 and now comes back.
 
+## Preplace: stability and speed
+
+Two changes, both measured by [`../harness/preplace-bench.js`](../harness/README.md)
+against a 0.5 degree reference sweep over 400 random object layouts.
+
+### Item limits were never enforced
+
+```js
+let limit = (group.sandboxLimit || 99);   // never looked at group.limit
+```
+
+Outside sandbox that made the cap 99 for every group without a `sandboxLimit`
+and 299 for the three that have one. The real limits are spikes 15, traps 6,
+turrets 2, mines 1, mills 7. The gate never fired, so the placer kept scanning
+angles and spending packets on items the server would refuse — which is what
+"it sometimes just doesn't place" looks like from the inside. It now reads
+`group.limit`, and only prefers `sandboxLimit` when actually in sandbox.
+
+### The angle scan called checkItemLocation 72 times per item
+
+Most of those angles are blocked by a nearby object, and that part is pure
+geometry: a placement sits on a ring of radius `35 + item.scale + placeOffset`
+around the player and collides with an object wherever it comes within
+`item.scale + blockS` of that object's centre — so each object blocks one
+contiguous arc of the ring. One circle-circle intersection per nearby object
+gives those arcs (ported from Aurora/Robotics' `closestPossibleAngles`), and the
+scan then skips the `checkItemLocation` call for every angle inside them.
+
+The arcs also name the exact angles where a placement just grazes an obstacle.
+A 5 degree grid only lands on those by luck, so they are added as candidates and
+marked `perfect`.
+
+| | before | after |
+|---|---|---|
+| `checkItemLocation` calls | 28,800 | **5,112** (17.8%) |
+| valid angles wrongly skipped | — | **0** |
+| scenes where the 5° grid found nothing but a placement existed | 6 of 288 (2.1%) | **0** — arc edges found all 6 |
+
+The safety row is the one that matters: the geometry is only allowed to *skip*
+work, never to decide. It mirrors `checkItemLocation`'s object test exactly and
+each blocked arc is shrunk slightly, so a borderline angle is still handed to
+`checkItemLocation` rather than discarded. Water and item limits are not
+angular, so every angle the geometry calls free is still verified the old way.
+If the geometry throws for any reason, the scan falls back to checking all 72.
+
 ## Not fixed
 
 - Two copies of the script on one page throw inside novastorm's own
