@@ -6,7 +6,11 @@
  * to it answers the question outright — a loop that reschedules itself keeps
  * calling, a dead one stops.
  *
- *   node loop-alive.js <client.js> <window-scheduler> <render-anchor-line>
+ *   node loop-alive.js <client.js> <window-scheduler> <render-anchor-line> [callback-name]
+ *
+ * A client with no scheduler of its own calls requestAnimationFrame directly —
+ * but so does the page's own bundle, and counting both hides the client's loop
+ * dying. Name the client's own callback to count only that one.
  *
  * e.g. node loop-alive.js ../revelation/Revelation.user.js requestAFrame "    if (mi < 120) {"
  */
@@ -20,6 +24,7 @@ const HERE = __dirname;
 const SRC = process.argv[2] || path.resolve(HERE, "../revelation/Revelation.user.js");
 const SCHEDULER = process.argv[3] || "requestAFrame";
 const ANCHOR = process.argv[4] || "function Of() {";
+const ONLY = process.argv[5] || "";
 const MIME = { ".html": "text/html", ".js": "text/javascript" };
 
 let client = fs.readFileSync(SRC, "utf8");
@@ -47,13 +52,16 @@ const http_server = http.createServer((req, res) => {
   await page.waitForTimeout(1000);
 
   // Count reschedules by wrapping the client's own scheduler.
-  const wrapped = await page.evaluate((name) => {
+  const wrapped = await page.evaluate(({ name, only }) => {
     const original = window[name];
     if (typeof original !== "function") return false;
     window.__frames = 0;
-    window[name] = function (fn) { window.__frames++; return original.apply(this, arguments); };
+    window[name] = function (fn) {
+      if (!only || (fn && fn.name === only)) window.__frames++;
+      return original.apply(this, arguments);
+    };
     return true;
-  }, SCHEDULER);
+  }, { name: SCHEDULER, only: ONLY });
   if (!wrapped) {
     console.log("window." + SCHEDULER + " is not a function on this client");
     await browser.close(); http_server.close(); return;
