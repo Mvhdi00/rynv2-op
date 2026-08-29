@@ -246,67 +246,98 @@ is better here:
   straight to `Math.cos`, and `Math.cos(null)` is 1 — the prediction points due
   east no matter where you are actually going.
 
-## The preplace scan: 240 was tried and reverted
+## The placement ring: the step count was never the lever
 
-`prePlaceSteps` was raised from 144 to 240 on request, played, and put back.
-Raising it alone does not improve placement — it degrades it, and the reason is
-a second number it is paired with.
+`prePlaceSteps` was raised from 144 to 240 on request, played, put back, and the
+step count was then tuned twice more before anyone measured what a placement
+scan is actually competing against. The geometry settles it in three numbers,
+all of them from the game's own tables.
 
-```js
-prePlaceSteps: 144,               // scan every 2.5 degrees
-angleDedupe: Math.PI / 120,       // drop a candidate within 1.5 degrees of one already held
-```
+Every candidate for one item sits on a circle around you of radius
+`35 + scale + placeOffset`. Greater spikes are scale 52, offset −5, so the ring
+is **82**. And `addPredictObject` refuses a second placement within
+`scale + scale` = **104** of the first — which is not a mod's conservatism but
+the server's own rule, since `getScale(0.6, isItem)` returns full scale for a
+placed building. A 104 chord on an 82 ring is **78.7°**.
 
-Those two are tuned together. At 144 the scan spacing is 2.5°, comfortably wider
-than the 1.5° dedupe window, so every angle the scan finds survives. At 240 the
-spacing is 1.5° — exactly the threshold — so much of what the finer scan finds is
-thrown away again the moment it is collected.
+So:
 
-Worse, `addPredictObject` keeps the **first** candidate in a window and rejects
-later ones. `getPerfectAngles` marks the angles that sit on the edge of an
-obstacle, which are the valuable placements; at 240 an ordinary angle 1.5° ahead
-of one claims the slot first and the edge angle is dropped. At 144 it survives,
-because the spacing exceeds the window.
+1. **Four spikes is the most the ring can ever hold**, at any resolution. 360°
+   ÷ 78.7° = 4.57.
+2. A gap between two spikes only becomes walkable for a 35-radius body once they
+   are **138.6°** apart. Four spikes, however badly arranged, cannot leave a gap
+   wider than 360 − 3×78.7 = **123.9°**. Three can leave 202.6°.
+3. Therefore **the ring is sealed exactly when the fourth spike goes down** — not
+   when the scan is fine.
 
-And the placement budget is fixed either way — `if (packets + 5 > 119) break;`
-is about 24 placements a second no matter how many candidates were found. Extra
-candidates do not buy extra placements; they spend the same budget on angles
-that are nearly the same, and the one that mattered further down the list never
-gets sent.
+That reframes the whole question. The scan's only job is to find candidates;
+which four go down was being decided by nothing but the order the scan happened
+to produce them in. `checkPredictObjects` walked the edge angles, then the rest
+in index order, and each accepted angle locked out 78.7° around it. One leg
+landing a few degrees off costs the fourth spike and the seal with it.
 
-Advising against 240 on CPU cost alone was the wrong reason for the right
-answer: `angleDedupe` was never read. The pair is the setting, not the step
-count.
+[`../harness/seal-bench.js`](../harness/README.md) measures it: 600 random fight
+scenes, and for each one, whether an enemy body can still reach you by flood
+fill rather than by an angle heuristic.
 
-What the measurement below does still say is what a finer *grid* buys in
-isolation, ignoring dedupe:
+| placement scan | checks/tick | spikes down | all 4 | enemy shut out |
+|---|---|---|---|---|
+| 144, first-come (was in use) | 144 | 3.02/4 | 39.3% | **74.2%** |
+| 360, first-come | 360 | 3.06/4 | 41.2% | 76.0% |
+| 72, chosen as a set | 72 | 3.06/4 | 43.3% | 86.0% |
+| 144, chosen as a set | 144 | 3.08/4 | 44.2% | 86.3% |
+| 240, chosen as a set | 240 | 3.10/4 | 44.8% | 86.3% |
+| **360, chosen as a set** | **360** | **3.11/4** | **45.8%** | **87.0%** ← in use |
+| 720, chosen as a set | 720 | 3.12/4 | 45.8% | 87.0% |
 
-The game rounds every placement angle before it goes out —
-`Ci()` ends in `fixTo(dir, 2)`, one hundredth of a radian — so the circle holds
-**628 distinguishable angles** and no scan finer than that can send a different
-packet. Between 72 and that ceiling, more steps means fewer misses on average,
-but noisily, because a fixed grid catching a gap is a matter of where the gap
-happens to sit:
+Two other seeds give 75.0 → 87.7% and 75.0 → 86.8% for the 144 pair, so the
++12-point step is the picker and the ±0.5 is the resolution. Choosing the set is
+worth roughly **twenty-four times** what raising the scan is.
 
-| steps | degrees apart | checks per 400 scenes | scenes it cannot place in |
-|---|---|---|---|
-| **144** | **2.50** | **57,600** | **3–6** ← in use |
-| 240 | 1.50 | 96,000 | 0–3 |
-| 512 | 0.70 | 204,800 | 0–2 |
+`sealRingOrder` does the choosing: fix a first angle, take the earliest
+candidate clearing 78.7°, repeat, check the wrap, and try every candidate as the
+first. That is exact, not approximate — if a valid ring `{a₁..a₄}` exists then
+greedy from `a₁` picks each leg no later than `aₖ`, so it closes too. Brute
+force over every four-subset agrees: in 600 scenes a valid ring existed 265
+times and this found one 265 times. A third construction that looked like it
+should reach sets the forward walk cannot was written, measured identically on
+every count, and deleted.
 
-The ranking between those reshuffles with a different set of scenes — 160 was
-best of its neighbours in one set and worst in another, worse than 144 itself —
-so no step count is "the right one". 240 is simply the best value on the curve:
-it beats or ties 288 and 360 in most sets while costing less than either.
+When no full ring exists, it switches from packing tight to spreading evenly —
+three legs crammed at 79° leave a 202° hole, the same three at 120° leave
+nothing walkable. Packing is what maximises the *count*, spreading is what
+matters once the count is capped, and they pull against each other, so it tries
+them in that order.
 
-But that is the grid in isolation. In the client the dedupe window undoes most
-of it, so the trade is worse than the table suggests — which is what playing it
-showed. Raising the step count is only worth considering alongside
-`angleDedupe`, and neither alone.
+`placeSteps` is 360 because that is where resolution stops paying at all — 720
+measures identical — and because it costs nothing real: one tick scanning both
+items plus the search is **0.42 ms at 360** against 0.19 ms at 144, or 0.38% of
+a core at the game's tick rate. Advising against 240 on CPU grounds was wrong on
+the facts; the reason to leave it alone was that it barely does anything.
 
-The arc geometry in Novastorm reaches **0 blind at 5,112 checks** — cheaper than
-144 was, let alone 240. It stays the better answer to this whole question, and
-is not taken here.
+`prePlaceSteps` stays at 144. That path places one object at the angle nearest
+the one being replaced, and nothing measured says a finer scan improves it.
+
+### The dedupe window, corrected
+
+An earlier version of this file blamed `angleDedupe` (1.5°) for the 240
+regression: the scan spacing at 240 equals the dedupe window, so candidates get
+thrown away as they are collected. That reading was incomplete in a way that
+mattered. `addPredictObject` runs the angle test *and* a distance test, and for
+anything but item 17 the distance test rejects everything within 104 units —
+about 78.7° of ring. The 1.5° window is entirely inside that shadow, so for
+spikes and traps it decides nothing at all. The real cap on placements was
+always the separation rule, which is why no step count ever moved the number of
+spikes that went down.
+
+The game also rounds every placement angle before sending — `Ci()` ends in
+`fixTo(dir, 2)`, one hundredth of a radian — so the circle holds 628
+distinguishable angles and no scan finer than that can send a different packet.
+That ceiling is real but never binds here; the 78.7° one binds first.
+
+The arc geometry in Novastorm reaches **0 blind at 5,112 checks**, cheaper than
+144 was. It remains a good answer to the *cost* of scanning, and is still not
+taken here — but it is a different question from which four spikes go down.
 
 ## What was already fine
 

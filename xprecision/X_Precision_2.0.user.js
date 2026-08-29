@@ -11,7 +11,7 @@
 
 /* Says which build is running, so "I installed the fix" and "the fix is
  * running" stop being the same guess. */
-console.log("%c[x-] build: audited 2026-08-29", "color:#9b8cff");
+console.log("%c[x-] build: seal-ring 2026-08-29", "color:#9b8cff");
 
 /* Says a fault out loud, once per distinct message.
  *
@@ -127,12 +127,33 @@ let shouldntPathfind = false;
 
 // X- precision tuning: preserves the original decision logic, but samples
 // finer angles and uses tighter de-duplication for cleaner actions.
+//
+// The step count is the small half of the placement question, and it was the
+// only half being tuned. A ring holds four spikes and no more whatever the
+// resolution, so the scan only finds candidates — which four go down is
+// sealRingOrder's job, and that is where the difference lives. Measured over
+// 600 random fight scenes on three seeds (harness/seal-bench.js), enemy shut
+// out of the ring entirely:
+//
+//   144 angles, first-come (what this used to do)     74.2 / 75.0 / 75.0 %
+//   360 angles, first-come                            76.0 %
+//   144 angles, chosen as a set                       86.3 / 87.7 / 86.8 %
+//   360 angles, chosen as a set                       87.0 / 87.8 / 87.5 %
+//
+// So the picker is worth ~12 points and the resolution ~0.5. placeSteps is at
+// 360 because that is where resolution stops paying at all — 720 measures
+// identical to it — and because it costs nothing real: one tick of scanning
+// both items plus the search takes 0.42 ms at 360 against 0.19 ms at 144, or
+// 0.38% of a core at the game's tick rate. prePlaceSteps stays at 144: that
+// path places one object at the angle nearest the one being replaced, and
+// nothing measured says a finer scan improves it.
 const X_PRECISION = {
-    placeSteps: 144,        // 2.5 degree placement scan
+    placeSteps: 360,        // 1 degree placement scan
     prePlaceSteps: 144,
     breakSteps: 180,        // 2 degree autobreak scan
     angleDedupe: Math.PI / 120, // 1.5 degrees
-    visualMaxGhosts: 12
+    visualMaxGhosts: 12,
+    sealRing: true          // choose the ring as a set, not first-come
 };
 
 let settings = {
@@ -11472,6 +11493,182 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 predictObjects.push({ id: id, angle: angle, name: items.list[id].name, x: config.x, y: config.y, scale: config.scale, preplace: preplace });
             }
 
+            /* Choose the ring as a set, instead of taking whatever comes first.
+             *
+             * Every candidate for one item sits on a circle of radius
+             * 35 + scale + placeOffset around you, and the rule directly above
+             * refuses a second one within scale + scale of the first — the same
+             * distance the server enforces, since its getScale(0.6, isItem)
+             * returns full scale for a building. For greater spikes that is 104
+             * on an 82 ring: a 78.7 degree chord. So FOUR is the most the ring
+             * can ever hold, at any scan resolution, and no finer scan changes
+             * that.
+             *
+             * Which makes the fourth spike the whole game. A gap between two of
+             * them only becomes walkable for a 35 radius body once they are
+             * 138.6 degrees apart, and four spikes cannot leave a gap wider than
+             * 360 - 3*78.7 = 123.9 — a full ring is sealed, a ring of three need
+             * not be. Handing candidates over in scan order does not choose a
+             * set: the first one accepted locks out 78.7 degrees around it, and
+             * a leg landing a few degrees off costs the fourth spike.
+             *
+             * So pack them. Fix a first angle, take the earliest candidate that
+             * clears the minimum, repeat, and check the wrap — then try every
+             * candidate as the first. Earliest-feasible is optimal once the
+             * first is fixed: if a valid ring {a1..a4} exists then greedy from
+             * a1 picks each leg no later than a_k, so it closes too. Brute
+             * force over every four-subset agrees exactly — in 600 scenes a
+             * valid ring existed 265 times and this found one 265 times, so the
+             * full-ring rate below is the ceiling for that resolution, not an
+             * attempt at it.
+             *
+             * Measured over 600 random fight scenes (harness/seal-bench.js), at
+             * the same 144 angles and the same number of checkItemLocation
+             * calls as the scan order it replaced: four spikes down 39.3% ->
+             * 44.2% of ticks, and the enemy shut out of the ring 74.2% ->
+             * 86.3%. Two other seeds give 75.0 -> 87.7 and 75.0 -> 86.8. */
+            function sealRingOrder(candidates, id, prefer) {
+                if (!X_PRECISION.sealRing || candidates.length < 2) return candidates;
+
+                const item = items.list[id];
+                if (!item) return candidates;
+                const ring = 35 + item.scale + (item.placeOffset || 0);
+                const sep = item.scale * 2;
+                if (!(ring > 0) || sep >= ring * 2) return candidates;   // two never fit
+                const minSep = 2 * Math.asin(sep / (2 * ring));
+                const maxSpots = Math.floor((2 * Math.PI) / minSep);
+                if (maxSpots < 2) return candidates;
+
+                // Whatever is already committed this tick occupies the ring too.
+                const free = candidates.filter((c) => {
+                    for (let o of predictObjects) {
+                        if (o.id != 17 && UTILS.getDistance(c.x, c.y, o.x, o.y) < (c.scale + o.scale)) return false;
+                    }
+                    return true;
+                });
+                if (free.length < 2) return candidates;
+
+                const sorted = free.slice().sort((a, b) => a.angle - b.angle);
+                const n = sorted.length;
+                const TAU = Math.PI * 2;
+                const ideal = TAU / maxSpots;
+
+                /* Two ways to build a ring outward from one candidate, because
+                 * the two things worth having pull in opposite directions.
+                 *
+                 * `spread` aims each leg at an even share of the circle, which
+                 * is what a ring that cannot be completed needs: three legs
+                 * crammed at 79 degrees leave a 202 degree hole and the enemy
+                 * walks straight through it, while the same three spread at 120
+                 * leave nothing wider than 120 — under the 138.6 a body needs.
+                 *
+                 * But even spacing narrows the window every later leg has to
+                 * land in, so it finds fewer full rings: aiming leg two at 180
+                 * when 170 was free costs leg three the 10 degrees it needed.
+                 * Packing earliest-first is what maximises the count, and once
+                 * four are down the spread no longer matters — four spikes
+                 * cannot leave a walkable gap however badly arranged.
+                 *
+                 * So: pack for the full ring, and spread only once no full ring
+                 * is available. */
+                function build(s, spread) {
+                    const set = [s];
+                    let cur = s;
+                    for (let k = 1; k < maxSpots; k++) {
+                        let bestJ = -1, bestErr = Infinity;
+                        /* Walk on from the leg just placed, not from the start.
+                         * Counting from the start instead lets an angle behind
+                         * `cur` pass the separation test on the way round and be
+                         * taken as the next leg, and the ring goes backwards. */
+                        for (let d = 1; d < n; d++) {
+                            const j = (cur + d) % n;
+                            if (j === s) break;                    // all the way round
+                            let fromCur = sorted[j].angle - sorted[cur].angle;
+                            if (fromCur < 0) fromCur += TAU;
+                            if (fromCur < minSep) continue;
+                            let fromStart = sorted[j].angle - sorted[s].angle;
+                            if (fromStart < 0) fromStart += TAU;
+                            if (fromStart > TAU - minSep) break;   // no room to close the ring
+                            if (!spread) { bestJ = j; break; }     // earliest that clears
+                            const err = Math.abs(fromStart - k * ideal);
+                            if (err < bestErr) { bestErr = err; bestJ = j; }
+                        }
+                        if (bestJ < 0) break;
+                        set.push(bestJ);
+                        cur = bestJ;
+                    }
+                    return set;
+                }
+
+                /* A third construction lived here and has been removed: legs at
+                 * even shares of the circle, each snapped to the nearest
+                 * candidate in either direction rather than walked to forward.
+                 * It looked like it should reach sets the forward walks cannot,
+                 * and measured identically on every count — which is what the
+                 * exactness argument above already says. Two passes is all this
+                 * needs. */
+
+                function widestGap(set) {
+                    if (set.length < 2) return TAU;
+                    let worst = 0;
+                    for (let i = 0; i < set.length; i++) {
+                        let g = sorted[set[(i + 1) % set.length]].angle - sorted[set[i]].angle;
+                        if (g <= 0) g += TAU;
+                        if (g > worst) worst = g;
+                    }
+                    return worst;
+                }
+
+                /* The preferred angle leads if a full ring can be built through
+                 * it — the spike that hits the trapped enemy is why the ring is
+                 * going down, and a full ring seals either way, so there is
+                 * nothing to trade. Only when no ring passes through it does the
+                 * search go looking elsewhere. */
+                let best = null;
+                const anchor = prefer ? sorted.indexOf(prefer) : -1;
+                if (anchor >= 0) {
+                    const set = build(anchor, false);
+                    if (set.length >= maxSpots) best = set;
+                }
+                if (!best) {
+                    for (let s = 0; s < n; s++) {
+                        const set = build(s, false);
+                        if (set.length >= maxSpots) { best = set; break; }
+                    }
+                }
+                if (!best) {
+                    // No full ring exists anywhere — take the widest coverage.
+                    let bestGap = Infinity;
+                    for (let s = 0; s < n; s++) {
+                        for (const set of [build(s, true)]) {
+                            const gap = widestGap(set);
+                            if (!best || set.length > best.length ||
+                                (set.length === best.length && gap < bestGap)) {
+                                best = set;
+                                bestGap = gap;
+                            }
+                        }
+                    }
+                }
+                if (!best || !best.length) return candidates;
+
+                const picked = best.map((i) => sorted[i]);
+                const inSet = new Set(picked);
+                const rest = candidates.filter((c) => !inSet.has(c));
+
+                /* The preferred spike goes straight after the set, not in front
+                 * of it. Leading with it was worth measuring and cost 5.3 points
+                 * of shut-out in seal-bench: on the ticks where no full ring
+                 * exists, one angle chosen ahead of the others displaces the
+                 * spread that was the only thing still closing the ring. Behind
+                 * the set it still gets placed whenever it fits, which is what
+                 * the original scan order gave it anyway. */
+                if (prefer && !inSet.has(prefer)) {
+                    return picked.concat([prefer], rest.filter((c) => c !== prefer));
+                }
+                return picked.concat(rest);
+            }
+
             /* The game's own rule, which this had collapsed to one branch.
              *
              * It used the sandbox cap everywhere, so on normal moomoo it
@@ -11689,17 +11886,24 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
 
 
-                for (let object of validAngles.filter(obj => obj.perfect)) {
-                    if (isAutoPlaceAngle(object, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb)) {
-                        addPredictObject(object.id, object.angle, false);
+                /* isAutoPlaceAngle is a pure test of one angle, so run it first
+                 * and let the packer choose among everything that passed. It
+                 * used to be interleaved with the adding, which meant the order
+                 * of the scan decided the ring — see sealRingOrder. Edges still
+                 * come before ordinary angles inside each group, which is the
+                 * order that survives when no full ring is available. */
+                const eligible = validAngles
+                    .filter(obj => obj.perfect || obj.placeable)
+                    .filter(obj => isAutoPlaceAngle(obj, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb));
+                const ordered = eligible.filter(obj => obj.perfect).concat(eligible.filter(obj => !obj.perfect));
 
-                    }
-                }
+                // The spike that hits the trapped enemy is why the ring is going
+                // down; it leads whatever else fits around it.
+                const prefer = ordered.indexOf(closestSpikeToEnemy) >= 0 ? closestSpikeToEnemy
+                    : (ordered.indexOf(closestTrapToEnemy) >= 0 ? closestTrapToEnemy : null);
 
-                for (let object of validAngles.filter(obj => obj.placeable)) {
-                    if (isAutoPlaceAngle(object, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb)) {
-                        addPredictObject(object.id, object.angle, false);
-                    }
+                for (let object of sealRingOrder(ordered, ordered.length ? ordered[0].id : null, prefer)) {
+                    addPredictObject(object.id, object.angle, false);
                 }
             }
 
@@ -14197,8 +14401,15 @@ function runSongLoop() {
                     for (let object of predictObjects) {
                         if (!object.preplace) continue;
                         setPlaceTick();
-                        getPrePlaceAngles(myPlayer.items[2], object.id, object.angle);
-                        getPrePlaceAngles(myPlayer.items[4] || 15, object.id, object.angle);
+                        /* Two getPrePlaceAngles calls used to sit here, passing
+                         * (id, object.id, object.angle) into a function whose
+                         * second parameter is the object list. A number reached
+                         * checkItemLocation as `objects`, so `objects.length`
+                         * was undefined, the collision loop never ran, and every
+                         * angle came back placeable — and the return value was
+                         * discarded anyway. 288 checkItemLocation calls per
+                         * preplace tick, spent on an answer nothing read. The
+                         * aim packet below is what this loop is for. */
                         io.send("D", getAttackDir());
                     }
                 }, 1);

@@ -69,6 +69,7 @@ node silence-check.js         # can the client still talk after the server stall
 node features-check.js        # do the mod's own per-tick features actually run
 node heal-check.js            # does auto heal fire when the server hurts you
 node loadout-check.js         # what the hats and accessories a client wears really do
+node seal-bench.js            # how many of the four placements land, and is the ring sealed
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -116,6 +117,17 @@ instead and answers the question outright:
   during fault:                    0
   after fault cleared:             0
   loop survived: NO — the loop is dead
+```
+
+The anchor argument decides where the fault is injected, and putting it in the
+wrong place reports a healthy client as dead. A guarded loop looks like
+`doUpdate` wrapping `updateGame()` in try/catch/**finally**, and the reschedule
+lives in the `finally`; anchoring on `function doUpdate() {` throws *before* that
+try is entered, so nothing reschedules and the test prints `NO` for a client that
+recovers perfectly. Anchor inside the guarded body — for X- Precision:
+
+```sh
+node loop-alive.js ../xprecision/X_Precision_2.0.user.js requestAnimationFrame "function updateGame() {"
 ```
 
 ### `protocol.js` and `sole-sender.js`
@@ -233,6 +245,41 @@ A placement is `z` carrying the item id, not `G` — counting the wrong opcode
 turned 358 food placements into zero. And a client that never spawned proves
 nothing about a feature, so the verdict says INCONCLUSIVE rather than
 "not firing".
+
+### `seal-bench.js`
+
+Asks what a placement scan is actually competing against, which turns out not to
+be its own resolution. Every candidate for one item sits on a fixed ring around
+the player, and `addPredictObject` refuses a second within `scale + scale` of the
+first — the server's own rule, since `getScale(0.6, isItem)` returns full scale
+for a placed building. For greater spikes that is a 78.7 degree chord on an 82
+ring, so **four** is the most that can ever go down, at any step count, and the
+ring is sealed exactly when the fourth lands.
+
+So it reports how many of the four a given policy gets down and whether an enemy
+body can still reach the player — answered by flood fill over the plane the enemy
+moves in, because a barrier can look gapless on one radius and be walk-through on
+another.
+
+```
+  scan            checks/tick  spikes down  all 4    enemy shut out
+  144 in order    144          3.02/4       39.3%    445 of 600 (74.2%)
+  144 sealed      144          3.08/4       44.2%    518 of 600 (86.3%)
+  360 sealed      360          3.11/4       45.8%    522 of 600 (87.0%)
+  720 sealed      720          3.12/4       45.8%    522 of 600 (87.0%)
+```
+
+The rows named `sealed` drive the client's own `sealRingOrder` — lifted with `vm`
+so the test moves when the file does, not a copy of it. `SEAL_SEED` changes the
+scenes and `SEAL_ONLY` selects rows by label prefix.
+
+Two traps this fell into first, both worth knowing. Modelling a placed building's
+blocking radius as `scale * 0.6` is wrong — the 0.6 never applies to an item — and
+it made the world look far emptier than it is. And a scaffold picker written to
+compare against reported *better* full-ring rates than the shipped one, which was
+impossible: greedy-from-every-start is provably exact here. Brute-forcing every
+four-subset settled it — a valid ring existed in 265 of 600 scenes and the client
+found one in all 265 — and the scaffold was the thing that was wrong.
 
 ### `preplace-bench.js`
 
