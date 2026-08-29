@@ -129,7 +129,7 @@ let shouldntPathfind = false;
 // finer angles and uses tighter de-duplication for cleaner actions.
 const X_PRECISION = {
     placeSteps: 144,        // 2.5 degree placement scan
-    prePlaceSteps: 240,
+    prePlaceSteps: 144,
     breakSteps: 180,        // 2 degree autobreak scan
     angleDedupe: Math.PI / 120, // 1.5 degrees
     visualMaxGhosts: 12
@@ -15157,11 +15157,13 @@ function runSongLoop() {
                 }
 
                 // ACC
-                /* The resting accessory, was Angel Wings (13), now Monkey Tail
-                 * (11). Like the line it replaces this is not behind an
-                 * isBoughtHat check — it is only a starting value, and every
-                 * branch below can still override it. */
-                let currentAcc = 11;
+                /* Angel Wings (13). This was briefly Monkey Tail (11) on
+                 * request, and Monkey Tail carries dmgMultO: 0.2 — the game
+                 * multiplies your outgoing damage by it, so wearing it deals a
+                 * fifth of the damage. The description only says "reduced
+                 * damage" and never says by how much. Angel Wings has no such
+                 * penalty; it is healthRegen: 3. */
+                let currentAcc = 13;
                 if (isBoughtHat(15, 1)) {
                     currentAcc = 15;
                 }

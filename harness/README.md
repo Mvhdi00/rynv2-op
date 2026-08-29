@@ -68,6 +68,7 @@ node input-check.js           # do moving, attacking and building reach the serv
 node silence-check.js         # can the client still talk after the server stalls
 node features-check.js        # do the mod's own per-tick features actually run
 node heal-check.js            # does auto heal fire when the server hurts you
+node loadout-check.js         # what the hats and accessories a client wears really do
 ```
 
 Each script installs the client the way its metadata block asks — a

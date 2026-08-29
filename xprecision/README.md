@@ -142,7 +142,27 @@ The resting hat and accessory — what the client puts on when nothing else in
 | | was | now |
 |---|---|---|
 | hat | Halo (48) | Booster Hat (12) |
-| accessory | Angel Wings (13) | Monkey Tail (11) |
+| accessory | Angel Wings (13) | **reverted to Angel Wings** — see below |
+
+**The accessory swap was a mistake and is undone.** Monkey Tail carries
+`dmgMultO: 0.2`, and the game applies it straight to your outgoing damage:
+
+```js
+Ot = Bt * (skin.dmgMultO || 1) * (tail.dmgMultO || 1)     // Bt is the base damage
+```
+
+Wearing it deals **a fifth of the damage**. The description says only "reduced
+damage" and never says by how much, so it was made on request without the number
+being read first. Angel Wings has no such penalty — it is `healthRegen: 3`.
+
+The hat is fine and stays: Booster Hat is `spdMult: 1.16` with no damage term,
+against Halo's literal "no effect".
+
+[`../harness/loadout-check.js`](../harness/README.md) now reads the ids a
+client's `hatFc` actually equips and prints what the shipped game says each one
+does, so a penalty like that cannot be picked blind again. It still flags
+Monkey Tail, because one branch — great hammer in hand — equips it deliberately,
+and that was the original author's choice, not this one.
 
 Halo was on the line directly above Booster Hat, so Booster already won whenever
 you owned both; the Halo line is simply gone. Neither of these is the *only*
@@ -226,10 +246,40 @@ is better here:
   straight to `Math.cos`, and `Math.cos(null)` is 1 — the prediction points due
   east no matter where you are actually going.
 
-## The preplace scan, at 240
+## The preplace scan: 240 was tried and reverted
 
-`prePlaceSteps` was 144 and is now 240, by choice, after measuring what the
-change buys.
+`prePlaceSteps` was raised from 144 to 240 on request, played, and put back.
+Raising it alone does not improve placement — it degrades it, and the reason is
+a second number it is paired with.
+
+```js
+prePlaceSteps: 144,               // scan every 2.5 degrees
+angleDedupe: Math.PI / 120,       // drop a candidate within 1.5 degrees of one already held
+```
+
+Those two are tuned together. At 144 the scan spacing is 2.5°, comfortably wider
+than the 1.5° dedupe window, so every angle the scan finds survives. At 240 the
+spacing is 1.5° — exactly the threshold — so much of what the finer scan finds is
+thrown away again the moment it is collected.
+
+Worse, `addPredictObject` keeps the **first** candidate in a window and rejects
+later ones. `getPerfectAngles` marks the angles that sit on the edge of an
+obstacle, which are the valuable placements; at 240 an ordinary angle 1.5° ahead
+of one claims the slot first and the edge angle is dropped. At 144 it survives,
+because the spacing exceeds the window.
+
+And the placement budget is fixed either way — `if (packets + 5 > 119) break;`
+is about 24 placements a second no matter how many candidates were found. Extra
+candidates do not buy extra placements; they spend the same budget on angles
+that are nearly the same, and the one that mattered further down the list never
+gets sent.
+
+Advising against 240 on CPU cost alone was the wrong reason for the right
+answer: `angleDedupe` was never read. The pair is the setting, not the step
+count.
+
+What the measurement below does still say is what a finer *grid* buys in
+isolation, ignoring dedupe:
 
 The game rounds every placement angle before it goes out —
 `Ci()` ends in `fixTo(dir, 2)`, one hundredth of a radian — so the circle holds
@@ -240,8 +290,8 @@ happens to sit:
 
 | steps | degrees apart | checks per 400 scenes | scenes it cannot place in |
 |---|---|---|---|
-| 144 | 2.50 | 57,600 | 3–6 |
-| **240** | **1.50** | **96,000** | **0–3** |
+| **144** | **2.50** | **57,600** | **3–6** ← in use |
+| 240 | 1.50 | 96,000 | 0–3 |
 | 512 | 0.70 | 204,800 | 0–2 |
 
 The ranking between those reshuffles with a different set of scenes — 160 was
@@ -249,9 +299,10 @@ best of its neighbours in one set and worst in another, worse than 144 itself �
 so no step count is "the right one". 240 is simply the best value on the curve:
 it beats or ties 288 and 360 in most sets while costing less than either.
 
-What it costs is real: `getPrePlaceAngles` is called fourteen times in this file,
-most of them inside the tick, so the extra angles are paid on every one. What it
-buys is under 1.5% of placements. It is a deliberate trade, not a free upgrade.
+But that is the grid in isolation. In the client the dedupe window undoes most
+of it, so the trade is worse than the table suggests — which is what playing it
+showed. Raising the step count is only worth considering alongside
+`angleDedupe`, and neither alone.
 
 The arc geometry in Novastorm reaches **0 blind at 5,112 checks** — cheaper than
 144 was, let alone 240. It stays the better answer to this whole question, and
