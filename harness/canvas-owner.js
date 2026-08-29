@@ -136,10 +136,11 @@ const HOOK = `
       const key = (i) => d[i] + "," + d[i + 1] + "," + d[i + 2];
       const seen = new Map();
       for (let i = 0; i < d.length; i += 4) seen.set(key(i), (seen.get(key(i)) || 0) + 1);
-      const centre = key((R * (R * 2) + R) * 4);
-      const top = [...seen.entries()].sort((a, b) => b[1] - a[1])[0];
-      const n = seen.get(centre) || 0;
-      if (centre !== top[0] && n > 150 && n < (R * 2) * (R * 2) * 0.5) window.__frames.withBody++;
+      // The biggest patch that is not the ground — see spawn-check.js: the
+      // exact centre pixel can be the sid number drawn over the body.
+      const sorted = [...seen.entries()].sort((a, b) => b[1] - a[1]);
+      const n = sorted[1] ? sorted[1][1] : 0;
+      if (n > 150 && n < (R * 2) * (R * 2) * 0.5) window.__frames.withBody++;
       requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);

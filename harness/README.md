@@ -36,6 +36,15 @@ that a player can perform perfectly well. Everything else is unstyled, and
 sprite hosts are unreachable from the sandbox, so every run is also a test of
 the client with every image broken.
 
+It deliberately does **not** synthesise ids the client builds for itself. A mod
+menu creates its own controls at runtime — real checkboxes, read back by id
+every tick — and a placeholder div for each of those puts a second element with
+the same id earlier in the document. `getElementById` answers with the
+placeholder, so every `.checked` read comes back `undefined`, every feature
+tests as off, and a check for "is the menu built" finds an empty one. The
+harness reported a mod layer as missing while it sat right there with 84 toggles
+in it. Ids emitted by `createToggleSlider` and friends are left to the client.
+
 ## Running
 
 ```sh
@@ -57,6 +66,7 @@ node canvas-owner.js          # is anything else painting the game canvas
 node tick-survives.js         # can one bad player blank the whole world
 node input-check.js           # do moving, attacking and building reach the server
 node silence-check.js         # can the client still talk after the server stalls
+node features-check.js        # do the mod's own per-tick features actually run
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -197,6 +207,16 @@ happened.
 input through the stall, and then tries to play again. An outgoing rate limiter
 whose counter is only cleared by an incoming packet latches shut here and never
 opens: connected, drawing, sending nothing.
+
+`features-check.js` answers a different question: a client can connect, spawn,
+draw and move while nothing it was installed for works. Auto heal, the mills,
+the buyer and the reloads all live in the tail of one per-tick function, so a
+throw part-way down that tail takes every feature below it and leaves the game
+looking healthy. It wraps the functions that tail ends with and counts how often
+the tick reaches each, so the first one at zero is where it stops — and reports
+the real state of the controls those features read.
+
+This is the test the page builder used to make impossible: see below.
 
 ### `preplace-bench.js`
 

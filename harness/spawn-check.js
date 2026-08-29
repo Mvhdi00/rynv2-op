@@ -152,15 +152,21 @@ const frames = [];
     const key = (i) => img[i] + "," + img[i + 1] + "," + img[i + 2];
     const seen = new Map();
     for (let i = 0; i < img.length; i += 4) seen.set(key(i), (seen.get(key(i)) || 0) + 1);
-    const centre = key((R * (R * 2) + R) * 4);
     const sorted = [...seen.entries()].sort((a, b) => b[1] - a[1]);
     out.coloursAtCentre = seen.size;
     out.topColours = sorted.slice(0, 3).map(([k, n]) => k + " x" + n);
-    out.centreColour = centre;
-    out.centreSpread = seen.get(centre) || 0;
     out.background = sorted[0][0];
-    // A body covers a few percent of this box. Background is tens of percent.
-    out.isBody = centre !== sorted[0][0] && out.centreSpread > 150 && out.centreSpread < (R * 2) * (R * 2) * 0.4;
+    /* The biggest patch of one colour that is not the ground.
+     *
+     * This used to read the single pixel at the exact centre, which is only the
+     * body while nothing is drawn on top of it — the client also puts the sid
+     * number there, and one digit is enough to make a working client report as
+     * empty. The body is a filled disc a few percent of this box; text, grid
+     * lines and outlines are far smaller. */
+    const blob = sorted[1] || ["none", 0];
+    out.bodyColour = blob[0];
+    out.bodySize = blob[1];
+    out.isBody = blob[1] > 150 && blob[1] < (R * 2) * (R * 2) * 0.4;
     return out;
   });
 
@@ -171,8 +177,8 @@ const frames = [];
   console.log("  sockets the page opened:", result.socketsOpened);
   console.log("  frames the server accepted:", frames.length ? frames.slice(0, 4).join(" | ") : "NONE");
   console.log("  frames it rejected:", violations.length ? [...new Set(violations)].join(" | ") : "none");
-  console.log("  colour at the exact centre:", result.centreColour,
-    "spreading over", result.centreSpread, "px");
+  console.log("  biggest non-ground patch there:", result.bodyColour,
+    "over", result.bodySize, "px");
   console.log("  background there:", result.background, " (" + result.coloursAtCentre + " distinct colours)");
   console.log("  your character drawn:", result.isBody
     ? "YES — a body-sized blob distinct from the ground"

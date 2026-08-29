@@ -16,7 +16,7 @@
 
 /* Says which build is actually running, so "I installed the fix" and "the fix is
  * running" stop being the same guess. */
-console.log("%c[revelation] build: boot-and-layer 2026-08-29", "color:#9b8cff");
+console.log("%c[revelation] build: layer-and-menu 2026-08-29", "color:#9b8cff");
 
 /* Take the canvas away from the page's own game.
  *
@@ -61,7 +61,18 @@ function revTakeCanvas() {
     page.id = "revPageCanvas";
     ["position", "top", "left", "right", "bottom", "width", "height", "zIndex"]
       .forEach((p) => { if (cs[p] && cs[p] !== "auto") page.style[p] = cs[p]; });
-    mine.style.zIndex = String((parseInt(cs.zIndex, 10) || 0) + 1);
+    /* No z-index of its own. Raising it above the page's canvas also raises it
+     * above every part of the page that has none and relies on document order —
+     * the action bar, the store, the mod menu's own controls — and a canvas
+     * over those is a canvas you cannot click through. Inserting it directly
+     * after the page's canvas already puts it above that one and below
+     * everything later in the document, which is exactly the position wanted.
+     *
+     * And nothing is bound to this element but oncontextmenu: all real input
+     * goes to #touch-controls-fullscreen. So it takes no pointer events at all
+     * and cannot swallow a click meant for anything underneath. */
+    mine.style.zIndex = cs.zIndex && cs.zIndex !== "auto" ? cs.zIndex : "";
+    mine.style.pointerEvents = "none";
     mine.style.visibility = "hidden";
     page.parentNode.insertBefore(mine, page.nextSibling);
     revCanvas = mine;
@@ -13326,6 +13337,36 @@ function revBoot(why) {
     $h();
   } catch (e) {
     revReportFault("boot", e);
+  }
+  revCheckMod();
+}
+
+/* Is the mod layer actually there?
+ *
+ * Every feature — auto heal, the mills, the buyer — is a checkbox in this
+ * client's own menu, read by id on each tick. The menu is built by assigning
+ * one long template into a div; if that assignment never ran, or ran before the
+ * body existed, every one of those lookups is null and every feature is off
+ * with nothing said. "The mod does not load" and "the mod loaded and its
+ * toggles are off" look identical from a chair, so count them. */
+function revCheckMod() {
+  try {
+    const menu = document.getElementById("transparentMenu");
+    const toggles = menu ? menu.querySelectorAll("input[type=checkbox]").length : 0;
+    const on = menu ? [...menu.querySelectorAll("input[type=checkbox]")].filter((c) => c.checked).length : 0;
+    if (!menu || !toggles) {
+      console.error("%c[revelation] mod menu: NOT BUILT — no features can run", "color:#ff6b6b");
+      return;
+    }
+    console.log("%c[revelation] mod menu: " + toggles + " toggles, " + on +
+      " on (press the menu key to open it)", "color:#9b8cff");
+    // Named separately because these are the ones people ask about by name.
+    ["auto heal", "auto place", "auto break"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) console.warn("[revelation] mod menu: no control named '" + id + "'");
+    });
+  } catch (e) {
+    revReportFault("mod menu check", e);
   }
 }
 Promise.resolve(window.frvrSdkInitPromise)

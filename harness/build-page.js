@@ -31,6 +31,24 @@ for (const s of sources) {
 ["adCard", "promoImgHolder", "promoImg", "menuChatDiv", "mChMain", "mChBox",
  "linksContainer", "gameName", "loadingText"].forEach((id) => ids.add(id));
 
+/* Ids the client builds for itself must NOT be synthesised here.
+ *
+ * A client's mod menu creates its own controls at runtime — real checkboxes,
+ * inputs and sliders, read back by id every tick. Making a placeholder div for
+ * each of those puts a second element with the same id earlier in the document,
+ * and getElementById answers with the placeholder: every `.checked` read comes
+ * back undefined, every feature reads as off, and a check for "is the menu
+ * built" finds an empty one. The harness then reports a mod layer that is
+ * missing when it is right there with eighty-four toggles in it.
+ *
+ * They are recognisable from the calls that emit them. */
+const selfBuilt = new Set(["transparentMenu"]);
+for (const s of sources) {
+  for (const m of s.matchAll(/create(?:ToggleSlider|Input|ThrottleSlider|Dropdown|Select)\(\s*"([^"]+)"/g))
+    selfBuilt.add(m[1]);
+}
+selfBuilt.forEach((id) => ids.delete(id));
+
 const CANVAS = new Set(["gameCanvas", "mapDisplay"]);
 const SELECT = new Set(["instaType", "predictType", "serverBrowser", "altServer",
   "mode", "spin", "musketSync", "antikick", "healMsg"]);
@@ -82,4 +100,5 @@ fs.copyFileSync(path.join(ROOT, "src/game_index.js"), path.join(HERE, "assets/in
 fs.copyFileSync(path.join(ROOT, "src/game_vendor.js"), path.join(HERE, "assets/vendor-b760dbba.js"));
 fs.copyFileSync(path.join(HERE, "node_modules/jquery/dist/jquery.js"), path.join(HERE, "assets/jquery.js"));
 
-console.log("built mock page with " + ids.size + " elements");
+console.log("built mock page with " + ids.size + " elements" +
+  (selfBuilt.size ? ", leaving " + selfBuilt.size + " for the client to build itself" : ""));

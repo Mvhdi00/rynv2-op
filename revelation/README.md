@@ -449,6 +449,34 @@ hidden again the moment the socket closes.
 | the page's own canvas | removed | kept and visible |
 | once connected | visible | visible |
 
+### The layer took the clicks with it
+
+The layer above was right in principle and wrong in two details, and between
+them they stopped every one of the mod's features working while the game itself
+carried on perfectly.
+
+It was given `z-index` one above the page's canvas. Raising it above that canvas
+also raises it above every part of the page that has no `z-index` of its own and
+relies on document order — the action bar, the store, the mod menu's controls.
+A canvas over those is a canvas you cannot click through. And nothing is bound
+to this element except `oncontextmenu`; all real input goes to
+`#touch-controls-fullscreen`.
+
+So it takes no `z-index` at all — being inserted directly after the page's
+canvas already puts it above that one and below everything later in the
+document — and `pointer-events: none`, so it can never take a click meant for
+anything underneath.
+
+There is also a line at boot now saying whether the mod layer is actually there:
+
+```
+[revelation] mod menu: 84 toggles, 3 on
+```
+
+`mod menu: NOT BUILT` instead means no feature can run, which is a different
+problem from a menu whose toggles are simply off — and from a chair the two look
+identical.
+
 ### Nothing fails silently any more
 
 Every fault above was invisible. The packet handlers are called through one
@@ -514,7 +542,7 @@ Also verified:
 **Still not verified:** the live server. The mock speaks the same transport and
 now enforces it, but its packet *payloads* are still the harness's own — so a
 field only the real server produces is exactly what the fault reporter above is
-for. The startup line `[revelation] build: boot-and-layer 2026-08-29` in the
+for. The startup line `[revelation] build: layer-and-menu 2026-08-29` in the
 console tells you which build is actually running.
 
 ## Not a fault
