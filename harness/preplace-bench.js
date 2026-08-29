@@ -29,6 +29,12 @@ function slice(startMarker, endMarker) {
 }
 
 const hasGeometry = src.includes("function ppBlockedArc");
+
+/* Each client scans at its own resolution, so compare each against its own —
+ * hardcoding 72 flatters a client that scans 144 and would report half its real
+ * cost. */
+const stepMatch = src.match(/prePlaceSteps:\s*(\d+)/);
+const STEPS = stepMatch ? Number(stepMatch[1]) : 72;
 const geometry = hasGeometry
   ? slice("const PP_EPS = 1e-6;", "        function getPrePlaceAngles(id, customObjects) {").replace(/function getPrePlaceAngles[\s\S]*$/, "")
   : "";
@@ -107,16 +113,20 @@ for (let n = 0; n < 400; n++) {
   }
   if (refOk.length) refPlaceableScenes++;
 
-  // Old scan: 72 angles, every one costs a checkItemLocation call.
+  // This client's own scan: every angle costs a checkItemLocation call.
   let gridOk = 0;
-  for (let i = 0; i < 72; i++) {
-    const a = (i / 72) * Math.PI * 2;
+  for (let i = 0; i < STEPS; i++) {
+    const a = (i / STEPS) * Math.PI * 2;
     oldCalls++;
     const p = at(a);
     if (checkItemLocation(p.x, p.y, ITEM_SCALE, objects)) gridOk++;
   }
 
-  if (!hasGeometry) continue;
+  if (!hasGeometry) {
+    // No arcs to compare against, but its own blindness is still measurable.
+    if (gridOk === 0 && refOk.length > 0) gridMissed++;
+    continue;
+  }
 
   // New scan: geometry first, checkItemLocation only inside free arcs.
   sandbox.__arcs = null;
@@ -129,8 +139,8 @@ for (let n = 0; n < 400; n++) {
   for (const a of refOk) if (!inFree(a)) unsafe++;
 
   let newOk = 0;
-  for (let i = 0; i < 72; i++) {
-    const a = (i / 72) * Math.PI * 2;
+  for (let i = 0; i < STEPS; i++) {
+    const a = (i / STEPS) * Math.PI * 2;
     if (!inFree(a)) continue;
     newCalls++;
     const p = at(a);
@@ -156,12 +166,16 @@ for (let n = 0; n < 400; n++) {
 
 const pct = (a, b) => b ? (100 * a / b).toFixed(1) + "%" : "n/a";
 console.log(path.basename(CLIENT));
-console.log("  geometry present:            ", hasGeometry ? "yes" : "no (baseline)");
+console.log("  arc geometry:                ", hasGeometry ? "yes" : "NO — tests every angle");
 console.log("  scenes:                      ", scenes, "(" + refPlaceableScenes + " with a real placement)");
-console.log("  checkItemLocation, old scan: ", oldCalls);
+console.log("  this client scans:           ", STEPS, "angles (" + (360 / STEPS).toFixed(1) + " deg apart)");
+console.log("  checkItemLocation, own scan: ", oldCalls);
 if (hasGeometry) {
-  console.log("  checkItemLocation, new scan: ", newCalls, "(" + pct(newCalls, oldCalls) + " of old)");
+  console.log("  checkItemLocation, with arcs:", newCalls, "(" + pct(newCalls, oldCalls) + " of old)");
   console.log("  valid angles wrongly skipped:", unsafe, unsafe === 0 ? "  <- safe" : "  <- UNSAFE");
-  console.log("  scenes the 5deg grid missed: ", gridMissed, "of", refPlaceableScenes, "(" + pct(gridMissed, refPlaceableScenes) + ")");
+  console.log("  scenes its grid was blind to:", gridMissed, "of", refPlaceableScenes, "(" + pct(gridMissed, refPlaceableScenes) + ")");
   console.log("  ...of those, arc edges found:", edgeFound, "(" + pct(edgeFound, gridMissed) + ")");
+} else {
+  console.log("  scenes its grid was blind to:", gridMissed, "of", refPlaceableScenes,
+    "(" + pct(gridMissed, refPlaceableScenes) + ") — nothing to recover them");
 }
