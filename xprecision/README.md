@@ -134,6 +134,25 @@ fix is running" stop being the same guess:
 [x-] render frame failed: <what went wrong>     (only if something does)
 ```
 
+## Changed on request
+
+The resting hat and accessory — what the client puts on when nothing else in
+`hatFc` has a reason to change it:
+
+| | was | now |
+|---|---|---|
+| hat | Halo (48) | Booster Hat (12) |
+| accessory | Angel Wings (13) | Monkey Tail (11) |
+
+Halo was on the line directly above Booster Hat, so Booster already won whenever
+you owned both; the Halo line is simply gone. Neither of these is the *only*
+thing the function does — the soldier helmet near an enemy, the turret gear, the
+biome hats and everything else still override them exactly as before.
+
+The accessory line is a starting value and is not behind an `isBoughtHat` check,
+the same as the line it replaces. Nothing in a client can equip something the
+account has not bought; the server decides that.
+
 ## What was already fine
 
 - The outgoing packet counter is cleared by its own `setInterval`, so it cannot

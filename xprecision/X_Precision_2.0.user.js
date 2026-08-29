@@ -15076,10 +15076,10 @@ function runSongLoop() {
             function hatFc() {
                 // HAT
                 currentHat = 6;
-                if (isBoughtHat(48, 0)) {
-                    currentHat = 48;
-                }
-
+                /* The resting hat — what you wear when nothing else in this
+                 * function has a reason to change it. Was Halo (48), with
+                 * Booster Hat (12) on the line after it, so Booster already won
+                 * whenever you owned both. Halo is gone; Booster is the one. */
                 if (isBoughtHat(12, 0)) {
                     currentHat = 12;
                 }
@@ -15151,7 +15151,11 @@ function runSongLoop() {
                 }
 
                 // ACC
-                let currentAcc = 13;
+                /* The resting accessory, was Angel Wings (13), now Monkey Tail
+                 * (11). Like the line it replaces this is not behind an
+                 * isBoughtHat check — it is only a starting value, and every
+                 * branch below can still override it. */
+                let currentAcc = 11;
                 if (isBoughtHat(15, 1)) {
                     currentAcc = 15;
                 }
