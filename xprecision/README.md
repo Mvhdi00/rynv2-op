@@ -190,6 +190,44 @@ after more damage   220          0             0               92ms
 Item 0 is the apple, and no other build went out with it. Auto heal fires, 29ms
 after the damage that called for it.
 
+## Novastorm's spike tick, added
+
+Measured before changing anything, as with the heal. Unlike the heal, this one
+really did differ — in four ways, one of which is why it looked missing.
+
+**The toggle is there, under another name.** Novastorm shows it as **"Spike
+Tick"**; this client showed the *same setting*, id `shameTick`, as **"shame
+tick"**. Same id, same code behind it. Both default to off, so it was never on
+in either — it just could not be found here by the name people use. Renamed to
+"spike tick".
+
+The other three are real geometry, and all three made this client offer a tick
+where Novastorm takes one:
+
+| | was | now (Novastorm's) | where |
+|---|---|---|---|
+| spike tick reach | `scale + 35` | `scale + 55` | `isPrePlaceAngle` |
+| trap tick reach | `scale + 75` | `scale + 95` | `canTrapTick` |
+| trap tick spike reach | `scale + 35` | `scale + 55` | `canTrapTick` |
+| enemy must be shamed out | yes, `shameCount >= 7` | no | `canTrapTick` |
+
+That last one mattered most: waiting for shame 7 means never ticking anyone who
+heals properly. Novastorm has no such gate.
+
+All four are settings now, in the placement section, following the pattern this
+client already uses for `place range` — a number fixed in code is a number
+nobody can tune. Existing saved settings keep them, because the loader is
+`Object.assign(window.vars, parsed)` and leaves keys the saved blob has never
+heard of.
+
+**Two things were deliberately *not* taken from Novastorm**, because this client
+is better here:
+
+- `place range` is a setting here and a hardcoded 350 there.
+- The lookahead falls back when `predictMoveAngle` is null; Novastorm passes it
+  straight to `Math.cos`, and `Math.cos(null)` is 1 — the prediction points due
+  east no matter where you are actually going.
+
 ## What was already fine
 
 - The outgoing packet counter is cleared by its own `setInterval`, so it cannot

@@ -11340,7 +11340,10 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 if (secondaryReload[myPlayer.sid] < 1) return false;
                 if (primaryReload[myPlayer.sid] < 1) return false;
                 if (nearestEnemy.spikeDamage > 0) return false;
-                if (nearestEnemy.shameCount < 7) return false;
+                /* Novastorm ticks whatever the enemy's shame is; this waited
+                 * until they were shamed out at 7, which means never against
+                 * anyone who heals properly. Off by default now, as there. */
+                if (!window.vars.tickUnshamed && nearestEnemy.shameCount < 7) return false;
                 if (!window.vars.shameTick) return false;
 
 
@@ -11358,8 +11361,12 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                 for (let spike of placableSpikes) {
                     if (spike.placeable && enemyTrapped.health <= getPlayerInfo(myPlayer, "secondaryStructureDmg")
-                        && UTILS.getDistance(enemyTrapped.x, enemyTrapped.y, myPlayer.x2, myPlayer.y2) < spike.scale + 75 &&
-                        UTILS.getDistance(spike.x, spike.y, nearestEnemy.x2, nearestEnemy.y2) < spike.scale + 35) {
+                        /* Novastorm reaches further on both: 95 to the trap
+                         * and 55 to the enemy, against 75 and 35 here. The
+                         * shorter pair is why a tick that Novastorm takes is
+                         * simply not offered. */
+                        && UTILS.getDistance(enemyTrapped.x, enemyTrapped.y, myPlayer.x2, myPlayer.y2) < spike.scale + (window.vars.trapTickRange || 95) &&
+                        UTILS.getDistance(spike.x, spike.y, nearestEnemy.x2, nearestEnemy.y2) < spike.scale + (window.vars.trapTickSpike || 55)) {
                         return true;
                     }
                 }
@@ -11774,7 +11781,9 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     nearestEnemy.xVel, nearestEnemy.yVel
                 );
 
-                let canSpikeTick = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < config.scale + 35;
+                // Novastorm allows 55 here; 35 was this client's own, and it
+                // rules out spots Novastorm ticks from.
+                let canSpikeTick = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < config.scale + (window.vars.spikeTickRange || 55);
 
                 let canRetrap = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < 50;
 
@@ -19395,6 +19404,13 @@ function runSongLoop() {
         // Placers
         autoPlace: true,
         placeRange: 350,
+        /* Novastorm's spike tick, as its numbers. Sliders because these are the
+         * three that decide whether a tick is offered at all, and a fixed
+         * number in the code is a number nobody can tune. */
+        spikeTickRange: 55,
+        trapTickRange: 95,
+        trapTickSpike: 55,
+        tickUnshamed: true,
         prePlace: true,
 
         // Utilities
@@ -19470,7 +19486,10 @@ function runSongLoop() {
             {
                 title: "Shame Combat",
                 items: [
-                    { type: 'toggle', name: "shame tick" , id: "shameTick" },
+                    // Same setting Novastorm shows as "Spike Tick" — same id,
+                    // same code behind it. Named for what it does, so it can be
+                    // found by the name people use for it.
+                    { type: 'toggle', name: "spike tick" , id: "shameTick" },
                     { type: 'toggle', name: "shame enemy", id: "shameGrind" },
                     { type: 'toggle', name: "auto hit to shame", id: "autoShame" },
                     { type: 'slider', name: "max shame", id: "autoShameLimit", min: 1, max: 8 }
@@ -19498,7 +19517,11 @@ defense: [
                 title: "Default",
                 items: [
                     { type: 'toggle', name: "autoplace", id: "autoPlace" },
-                    { type: 'slider', name: "place range", id: "placeRange", min: 100, max: 500 }
+                    { type: 'slider', name: "place range", id: "placeRange", min: 100, max: 500 },
+                    { type: 'toggle', name: "tick unshamed enemies", id: "tickUnshamed" },
+                    { type: 'slider', name: "spike tick range", id: "spikeTickRange", min: 20, max: 90 },
+                    { type: 'slider', name: "trap tick range", id: "trapTickRange", min: 50, max: 140 },
+                    { type: 'slider', name: "trap tick spike range", id: "trapTickSpike", min: 20, max: 90 }
                 ]
             },
             {
