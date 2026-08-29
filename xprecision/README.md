@@ -214,11 +214,9 @@ where Novastorm takes one:
 That last one mattered most: waiting for shame 7 means never ticking anyone who
 heals properly. Novastorm has no such gate.
 
-All four are settings now, in the placement section, following the pattern this
-client already uses for `place range` — a number fixed in code is a number
-nobody can tune. Existing saved settings keep them, because the loader is
-`Object.assign(window.vars, parsed)` and leaves keys the saved blob has never
-heard of.
+They were briefly four menu settings; on request they are plain numbers again
+and the four controls are gone from the menu. The behaviour is unchanged —
+`canTrapTick` is now byte-identical to Novastorm's — the menu is just shorter.
 
 **Two things were deliberately *not* taken from Novastorm**, because this client
 is better here:
@@ -227,6 +225,37 @@ is better here:
 - The lookahead falls back when `predictMoveAngle` is null; Novastorm passes it
   straight to `Math.cos`, and `Math.cos(null)` is 1 — the prediction points due
   east no matter where you are actually going.
+
+## The preplace scan, at 240
+
+`prePlaceSteps` was 144 and is now 240, by choice, after measuring what the
+change buys.
+
+The game rounds every placement angle before it goes out —
+`Ci()` ends in `fixTo(dir, 2)`, one hundredth of a radian — so the circle holds
+**628 distinguishable angles** and no scan finer than that can send a different
+packet. Between 72 and that ceiling, more steps means fewer misses on average,
+but noisily, because a fixed grid catching a gap is a matter of where the gap
+happens to sit:
+
+| steps | degrees apart | checks per 400 scenes | scenes it cannot place in |
+|---|---|---|---|
+| 144 | 2.50 | 57,600 | 3–6 |
+| **240** | **1.50** | **96,000** | **0–3** |
+| 512 | 0.70 | 204,800 | 0–2 |
+
+The ranking between those reshuffles with a different set of scenes — 160 was
+best of its neighbours in one set and worst in another, worse than 144 itself —
+so no step count is "the right one". 240 is simply the best value on the curve:
+it beats or ties 288 and 360 in most sets while costing less than either.
+
+What it costs is real: `getPrePlaceAngles` is called fourteen times in this file,
+most of them inside the tick, so the extra angles are paid on every one. What it
+buys is under 1.5% of placements. It is a deliberate trade, not a free upgrade.
+
+The arc geometry in Novastorm reaches **0 blind at 5,112 checks** — cheaper than
+144 was, let alone 240. It stays the better answer to this whole question, and
+is not taken here.
 
 ## What was already fine
 
