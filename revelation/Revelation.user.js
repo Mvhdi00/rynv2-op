@@ -16,7 +16,7 @@
 
 /* Says which build is actually running, so "I installed the fix" and "the fix is
  * running" stop being the same guess. */
-console.log("%c[revelation] build: rate-latch 2026-08-28", "color:#9b8cff");
+console.log("%c[revelation] build: boot-and-layer 2026-08-29", "color:#9b8cff");
 
 /* Take the canvas away from the page's own game.
  *
@@ -34,21 +34,48 @@ console.log("%c[revelation] build: rate-latch 2026-08-28", "color:#9b8cff");
  * before this file takes its own reference is enough: the page's context still
  * points at the old canvas, which is no longer in the document, and everything
  * it draws from now on goes nowhere. */
+let revCanvas = null;
 function revTakeCanvas() {
   try {
     if (window.__revCanvasTaken) return true;
-    const old = document.getElementById("gameCanvas");
-    if (!old || !old.parentNode) return false;   // page not built yet
+    const page = document.getElementById("gameCanvas");
+    if (!page || !page.parentNode) return false;   // page not built yet
     window.__revCanvasTaken = true;
-    // cloneNode(false) keeps the id, size attributes, class and inline style,
-    // so every stylesheet rule and layout still applies to the new one.
-    old.parentNode.replaceChild(old.cloneNode(false), old);
-    console.log("%c[revelation] canvas: taken from the page's game", "color:#9b8cff");
+
+    /* Two canvases, stacked, rather than one taken away.
+     *
+     * Removing the page's canvas outright is what this did first, and it is
+     * only right while this client has a game to draw. With no connection it
+     * has nothing — so it painted an empty world over the top of the game the
+     * player was actually in, and took the screen away from a program that was
+     * working. A client that is not running must get out of the way, not blind
+     * you.
+     *
+     * So the page keeps its canvas and keeps drawing on it, and this one goes
+     * on top, hidden, until io-init says there is really a game behind it.
+     * cloneNode(false) carries the id, size, class and inline style across, so
+     * the stylesheet still lays the new one out; the page's keeps its geometry
+     * inline now that the id has moved. */
+    const mine = page.cloneNode(false);
+    const cs = window.getComputedStyle(page);
+    page.id = "revPageCanvas";
+    ["position", "top", "left", "right", "bottom", "width", "height", "zIndex"]
+      .forEach((p) => { if (cs[p] && cs[p] !== "auto") page.style[p] = cs[p]; });
+    mine.style.zIndex = String((parseInt(cs.zIndex, 10) || 0) + 1);
+    mine.style.visibility = "hidden";
+    page.parentNode.insertBefore(mine, page.nextSibling);
+    revCanvas = mine;
+    console.log("%c[revelation] canvas: own layer ready, hidden until connected", "color:#9b8cff");
     return true;
   } catch (e) {
     console.warn("[revelation] could not take the canvas:", e);
     return false;
   }
+}
+/* Shown once there is a game on this socket, hidden again the moment there is
+ * not — so a dropped connection hands the screen back rather than freezing it. */
+function revShowCanvas(on) {
+  try { if (revCanvas) revCanvas.style.visibility = on ? "visible" : "hidden"; } catch (e) {}
 }
 /* Whether the canvas exists yet depends on when the userscript manager decided
  * to run this file, which is not something this file gets to choose. Doing it
@@ -4544,6 +4571,7 @@ const ee = {
           revNet = revNetInit(a);
           revHandshake = true;
           revStats.socket = revNet ? "signed" : "unsigned";
+          revShowCanvas(true);      // there is a game behind this layer now
           // The connection is only usable now, so this is where the game
           // reports it open — not in onopen. Anything sent before io-init has
           // no opcode table and no key to sign with, so it goes out in the old
@@ -4585,6 +4613,7 @@ const ee = {
         /* A close code is the server's reason for dropping you, and it is the
          * one thing that turns "no packets" from a symptom into an answer. */
         revStats.socket = "closed " + o.code + (o.reason ? " " + o.reason : "");
+        revShowCanvas(false);       // hand the screen back to the page's game
         console.warn("%c[revelation] socket closed: code " + o.code +
           (o.reason ? ", reason " + o.reason : ", no reason given"), "color:#ffa657");
         if (o.code == 4001) {
@@ -4685,6 +4714,7 @@ const ee = {
     this.connected = false;
     revNet = null;
     revHandshake = false;
+    revShowCanvas(false);
   }
 };
 var qr = Math.abs;
@@ -13273,7 +13303,42 @@ const wo = async () => fetch(Yh).then(e => e.json()).then(async e => qe.processS
 const $h = () => wo().then(Wh).catch(e => {
   console.error("Failed to load.");
 });
-window.frvrSdkInitPromise.then(() => window.FRVR.bootstrapper.complete()).then(() => $h());
+/* Everything this client needs in order to play hangs off this one line: $h()
+ * fetches the server list and then calls Wh(), and Wh() is what puts a handler
+ * on the Play button. Without it the page's own bundle keeps the button, the
+ * page's game is the one you enter, and this client never opens a socket at
+ * all — which is exactly what `no socket` in the read-out means.
+ *
+ * As written, all of that waited on an SDK belonging to the page. This client
+ * runs at document-idle, so the page's bundle has already run the identical
+ * line and already called complete(); a second call is not something the SDK
+ * promises to survive. There was no catch and no timeout, so a throw or a
+ * promise that never settles simply ended the boot in silence.
+ *
+ * None of it is actually needed to connect. Let the SDK have its turn, and
+ * boot regardless of how that turn goes. */
+let revBooted = false;
+function revBoot(why) {
+  if (revBooted) return;
+  revBooted = true;
+  console.log("%c[revelation] boot: wiring the menu (" + why + ")", "color:#9b8cff");
+  try {
+    $h();
+  } catch (e) {
+    revReportFault("boot", e);
+  }
+}
+Promise.resolve(window.frvrSdkInitPromise)
+  .then(() => window.FRVR && window.FRVR.bootstrapper && window.FRVR.bootstrapper.complete())
+  .then(() => revBoot("sdk ready"))
+  .catch((e) => {
+    console.warn("[revelation] FRVR sdk unavailable, booting anyway:", e && e.message);
+    revBoot("sdk failed");
+  });
+/* And a floor, for the case the promise above never settles at all. Short,
+ * because until this runs the Play button has no handler of ours on it — every
+ * millisecond here is a millisecond of pressing Play and nothing happening. */
+setTimeout(() => revBoot("sdk timed out"), 1500);
 const Kh = e => {
   window.blockRedraw = false;
   if (FRVR.channelCharacteristics.allowNavigation) {

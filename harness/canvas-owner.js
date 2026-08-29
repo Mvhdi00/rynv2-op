@@ -82,11 +82,29 @@ const HOOK = `
   await page.goto("http://127.0.0.1:8321/", { waitUntil: "load" });
   await installed.finish();
   await page.waitForTimeout(1500);
+
+  /* Before there is any connection, this client has nothing to draw. If its
+   * layer is on screen anyway it paints an empty world over the game the player
+   * is actually in — worse than doing nothing, because it takes the screen away
+   * from a program that works. */
+  const idle = await page.evaluate(() => {
+    const mine = document.getElementById("gameCanvas");
+    const page_ = document.getElementById("revPageCanvas");
+    return {
+      overlay: mine ? getComputedStyle(mine).visibility : "absent",
+      pageCanvasKept: !!page_ && getComputedStyle(page_).visibility !== "hidden",
+    };
+  });
+
   await page.evaluate(() => {
     try { if (typeof window.onGotTurnstileToken === "function") window.onGotTurnstileToken("stub-token"); } catch (e) {}
     if (window.__rev && window.__rev.gate) window.__rev.gate();
   });
   await page.waitForTimeout(4000);
+  const live = await page.evaluate(() => {
+    const mine = document.getElementById("gameCanvas");
+    return mine ? getComputedStyle(mine).visibility : "absent";
+  });
 
   /* Full-canvas fills are what set the picture's base colour, so attribute
    * those. A draw to a canvas no longer in the document is not on screen. */
@@ -136,6 +154,10 @@ const HOOK = `
   const seen = frames.total ? Math.round((frames.withBody / frames.total) * 100) : 0;
 
   console.log(path.basename(CLIENT) + " — who paints #gameCanvas\n");
+  console.log("  with no connection, this client's layer: " + idle.overlay +
+    (idle.overlay === "hidden" ? "   (the page's game shows through)" : "   <- painting over the page's game"));
+  console.log("  the page's own canvas is still there:    " + (idle.pageCanvasKept ? "yes" : "no"));
+  console.log("  once connected, this client's layer:     " + live + "\n");
   console.log("  full-canvas draws by the client:      " + by.client);
   console.log("  full-canvas draws by the page bundle: " + by.page + (by.page ? "   <- painting over your frames (" + pct + "%)" : ""));
   console.log("  draws that never reach the screen:    " + by.offscreen + (by.offscreen ? "   (the page bundle, on a detached canvas)" : ""));

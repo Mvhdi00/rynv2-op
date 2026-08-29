@@ -382,6 +382,73 @@ quiet, holds input through it, then tries to play again:
 The counter is now also cleared on its own clock, but only once the tick-driven
 reset has actually stopped, so normal play keeps the limit it was given.
 
+### The boot chain died on the page's SDK, and took the client with it
+
+The read-out settled it in one line:
+
+```
+rev  120 fps   up 0/s   down 0/s   no socket
+```
+
+Frames climbing, nothing sent, nothing received, and `no socket` — the initial
+value, so `ee.connect` was never reached at all. Meanwhile the player could walk
+around and the leaderboard kept updating, because **the game they were playing
+was the page's own**. This client had taken the canvas and was painting an empty
+world over the top of it.
+
+Everything needed to play hangs off one line:
+
+```js
+window.frvrSdkInitPromise.then(() => window.FRVR.bootstrapper.complete())
+                         .then(() => $h());
+```
+
+`$h()` fetches the server list and calls `Wh()`, and `Wh()` is what puts a
+handler on the Play button. No catch, no timeout — and this client runs at
+`document-idle`, so the page's bundle has already run the identical line and
+already called `complete()`. A second call is not something the SDK promises to
+survive, and if `frvrSdkInitPromise` is missing the line throws at the module's
+top level and takes the remaining ~15,500 lines with it. The build banner, the
+canvas and the captcha wrapper all sit above it, which is why they printed while
+nothing below them ever ran.
+
+It now lets the SDK have its turn and boots regardless of how that turn goes,
+with a short floor for a promise that never settles.
+
+[`../harness/boot-check.js`](../harness/README.md), clicking the real Play
+button under four states of that SDK:
+
+| the page's SDK | before | after |
+|---|---|---|
+| resolves normally | connects | connects |
+| `complete()` throws (already consumed) | **nothing** | connects |
+| promise never settles | **nothing** | connects |
+| `frvrSdkInitPromise` missing | **died at load** | connects |
+
+This test had been passing all four. Two things were wrong with it: it served
+the page from `127.0.0.1`, which trips the client's own localhost shortcut and
+skips the captcha gate and the server list entirely; and the page's own
+`frvr-stub.js` ran after the test staged its mode and quietly overwrote it, so
+every mode was really the healthy one. It now serves under the game's hostname
+and the stub stands aside.
+
+### A client with nothing to draw must not take the screen
+
+Taking the canvas outright is right only while this client has a game behind it.
+With no connection it has nothing, so it painted an empty world over a game the
+player was in the middle of — worse than doing nothing, because it took the
+screen from a program that was working.
+
+The page keeps its canvas and keeps drawing on it. This client's canvas now sits
+on top, hidden, until `io-init` says there is really a game behind it, and
+hidden again the moment the socket closes.
+
+| | before | after |
+|---|---|---|
+| with no connection | painting over the page's game | `hidden` |
+| the page's own canvas | removed | kept and visible |
+| once connected | visible | visible |
+
 ### Nothing fails silently any more
 
 Every fault above was invisible. The packet handlers are called through one
@@ -447,7 +514,7 @@ Also verified:
 **Still not verified:** the live server. The mock speaks the same transport and
 now enforces it, but its packet *payloads* are still the harness's own — so a
 field only the real server produces is exactly what the fault reporter above is
-for. The startup line `[revelation] build: rate-latch 2026-08-28` in the
+for. The startup line `[revelation] build: boot-and-layer 2026-08-29` in the
 console tells you which build is actually running.
 
 ## Not a fault

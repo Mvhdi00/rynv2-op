@@ -38,7 +38,7 @@ const MIME = { ".html": "text/html", ".js": "text/javascript" };
  * and the only one the client was ever run against. */
 const MODES = {
   ok: "resolves, complete() is a no-op",
-  consumed: "complete() throws once the page's bundle has called it",
+  consumed: "complete() throws, as it does once already consumed",
   stalled: "frvrSdkInitPromise never settles",
   missing: "window.frvrSdkInitPromise is undefined",
 };
@@ -51,7 +51,12 @@ window.__frvrMode = ${JSON.stringify(mode)};
   window.FRVR = {
     bootstrapper: {
       complete: function () {
-        if (window.__frvrMode === "consumed" && completed)
+        /* Was "throw only on the second call", which relied on the page's own
+         * bundle getting as far as the first — in this synthesised page it does
+         * not, so the state was never actually reached and the test passed on a
+         * mode it never entered. On the real site the page's bundle has already
+         * consumed the bootstrapper before this client is even parsed. */
+        if (window.__frvrMode === "consumed")
           throw new Error("bootstrapper already completed");
         completed = true;
       }
@@ -131,16 +136,21 @@ async function run(browser, mode, source) {
   await page.addInitScript({ content: REDIRECT });
 
   const installed = await inject.install(page, source + HOOK);
-  await page.goto("http://127.0.0.1:8321/", { waitUntil: "load" });
-  await installed.finish();
-  await page.waitForTimeout(2500);
+  await page.goto("http://sandbox.moomoo.io:8321/", { waitUntil: "load" });
+  /* A client that throws at its own top level takes everything below the throw
+   * with it — which is the failure this test exists to catch, so report it
+   * rather than dying on it. */
+  let loadError = null;
+  try { await installed.finish(); } catch (e) { loadError = String(e.message).split("\n")[0].slice(0, 90); }
+  // Long enough to cover a client that waits out a stalled SDK before booting.
+  await page.waitForTimeout(3500);
 
   await page.evaluate(() => {
     try { if (typeof window.onGotTurnstileToken === "function") window.onGotTurnstileToken("stub-token"); } catch (e) {}
   });
   await page.waitForTimeout(300);
 
-  const before = await page.evaluate(() => ({
+  const before = loadError ? { wired: false, gate: "died at load", fetches: 0 } : await page.evaluate(() => ({
     wired: !!(document.getElementById("enterGame") || {}).onclick,
     gate: window.__rev ? window.__rev.gateState() : (window.__revErr || "no hook"),
     fetches: window.__serversFetched || 0,
@@ -161,7 +171,7 @@ async function run(browser, mode, source) {
   });
 
   await page.close();
-  return { mode, ...before, ...after, errors: [...new Set(errors)] };
+  return { mode, loadError, ...before, ...after, errors: [...new Set(errors)] };
 }
 
 (async () => {
@@ -176,7 +186,16 @@ async function run(browser, mode, source) {
   await new Promise((r) => http_server.listen(8321, "127.0.0.1", r));
   const wss = server.start(8322, null);
 
-  const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
+  /* Serve the page under the game's real hostname.
+   *
+   * On 127.0.0.1 the client takes its own localhost shortcut — ki is true, so
+   * the captcha gate is skipped and the server list is bypassed entirely. That
+   * is not the path a player takes, and testing it hid the fact that the boot
+   * chain never wires the Play button on the real site. */
+  const browser = await chromium.launch({
+    executablePath: "/opt/pw-browsers/chromium",
+    args: ["--no-sandbox", "--host-resolver-rules=MAP sandbox.moomoo.io 127.0.0.1"],
+  });
   const source = fs.readFileSync(CLIENT, "utf8");
 
   console.log(path.basename(CLIENT) + " — pressing the real Play button\n");
@@ -194,7 +213,8 @@ async function run(browser, mode, source) {
       pad(gate.servers === undefined ? "?" : gate.servers, 9) +
       pad(r.byClient, 11) +
       pad(r.byPage, 9) +
-      (r.byClient ? "connects" : "NOTHING") + (r.errors.length ? "  [" + r.errors[0] + "]" : "")
+      (r.byClient ? "connects" : "NOTHING") +
+      (r.loadError ? "  [died at load: " + r.loadError + "]" : r.errors.length ? "  [" + r.errors[0] + "]" : "")
     );
   }
   console.log("\n" + Object.entries(MODES).map(([k, v]) => "  " + pad(k, 10) + v).join("\n"));

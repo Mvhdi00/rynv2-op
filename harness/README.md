@@ -157,7 +157,13 @@ it a key: `frame shorter than its signature (4 bytes)` and `"me": null`.
 
 `boot-check.js` is the only one that goes through the Play button rather than
 calling the gate directly, so it covers the part of the boot that has to wire
-the button at all — under four states of the FRVR SDK the page hands over.
+the button at all — under four states of the FRVR SDK the page hands over. It
+serves the page under the game's own hostname, because on `127.0.0.1` a client
+may take a localhost shortcut that skips the captcha gate and the server list
+and so tests a path no player is on. Two faults in this test hid a real one for
+several rounds: that hostname, and `assets/frvr-stub.js` running after the test
+had staged its SDK mode and overwriting it, so all four modes were really the
+healthy one. The stub now stands aside when a mode is staged.
 
 `reconnect-check.js` connects, drops the socket and connects again. The signing
 key, both opcode tables and the sequence number belong to one connection;
