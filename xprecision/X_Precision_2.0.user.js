@@ -9326,6 +9326,18 @@ function sendLockDir() {
             // KILL OBJECT:
             function killObject(sid) {
                 removedObjects.push(sid);
+                /* Remember what stood there before disableBySid drops it.
+                 *
+                 * "replace" needs the position and the item id of the thing that
+                 * just died, and after this line there is nothing left to ask —
+                 * the object is out of gameObjects and the server only sent a
+                 * sid. visibleObjects still holds last tick's copy, which is
+                 * where it was when it broke. */
+                for (const object of visibleObjects) {
+                    if (object.sid != sid) continue;
+                    removedDetails.push({ sid: sid, id: object.id, x: object.x, y: object.y, owner: object.owner });
+                    break;
+                }
                 objectManager.disableBySid(sid);
             }
 
@@ -11737,6 +11749,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
             let lastPrePlaceObject = null;
             let removedObjects = [];
+            let removedDetails = [];
 
             function updateAngles(id) {
                 const angles = [];
@@ -11982,9 +11995,12 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     nearestEnemy.xVel, nearestEnemy.yVel
                 );
 
-                // 55 is Novastorm's; 35 was this client's own and ruled out
-                // spots it ticks from.
-                let canSpikeTick = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < config.scale + 55;
+                /* Back to this client's own 35. The spike tick port raised it to
+                 * Novastorm's 55, which is the one thing that port changed
+                 * inside the preplace path, and preplace was asked back to how
+                 * it shipped. canTrapTick keeps Novastorm's numbers — it is not
+                 * on this path. */
+                let canSpikeTick = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < config.scale + 35;
 
                 let canRetrap = UTILS.getDistance(config.x, config.y, nearestEnemy.x2, nearestEnemy.y2) < 50;
 
@@ -12197,6 +12213,53 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                 }
 
                 predictObjects = [];
+
+                /* REPLACE — the menu's second placer switch, which had nothing
+                 * behind it.
+                 *
+                 * `prePlace2` appeared exactly once in the whole file, in the
+                 * line that draws the toggle; no code ever read it. The state it
+                 * would plausibly have driven is dead too — `placeTick` is
+                 * written in two places and read in none — so the switch did
+                 * nothing whichever way it was set.
+                 *
+                 * What the name means, and what this does: preplace puts a new
+                 * object down *before* the enemy breaks yours, predicting the
+                 * hit. Replace answers the hit that already landed — your wall
+                 * or spike is gone, so put one back where it stood, this tick.
+                 *
+                 * Only your own buildings, and only ones that died within reach:
+                 * every placement lands on your own ring, so an object further
+                 * off than the ring plus its own scale cannot be replaced where
+                 * it was, and guessing a different spot is not replacing. The
+                 * angle is the bearing to where it stood, and canPlace decides
+                 * the rest — item limits, collisions and the river included.
+                 *
+                 * Off by default: it is new behaviour, not a repair. */
+                if (window.vars.prePlace2 && myPlayer && removedDetails.length > 0) {
+                    /* Without this the feature can never fire. visibleObjects is
+                     * a once-per-tick snapshot of gameObjects, so the building
+                     * that just died is still in it here — and it sits right
+                     * where the replacement goes, which means it blocks its own
+                     * replacement and canPlace says no every time. The server
+                     * has already destroyed it; this list is only stale. */
+                    const goneSids = removedDetails.map((d) => d.sid);
+                    const standing = visibleObjects.filter((o) => !goneSids.includes(o.sid));
+
+                    for (const gone of removedDetails) {
+                        const item = items.list[gone.id];
+                        if (!item || !isObjectMine(gone)) continue;
+
+                        const ring = 35 + item.scale + (item.placeOffset || 0);
+                        if (UTILS.getDistance(myPlayer.x2, myPlayer.y2, gone.x, gone.y) > ring + item.scale) continue;
+
+                        const angle = Math.atan2(gone.y - myPlayer.y2, gone.x - myPlayer.x2);
+                        if (canPlace(gone.id, angle, standing)) {
+                            addPredictObject(gone.id, angle, false);
+                        }
+                    }
+                }
+                removedDetails = [];
 
                 // PRE PLACER
                 lastPrePlaceObject = null;
@@ -19615,6 +19678,7 @@ function runSongLoop() {
         autoPlace: true,
         placeRange: 350,
         prePlace: true,
+        prePlace2: false,       // replace: put back what the enemy just broke
 
         // Utilities
         autoBuy: true,

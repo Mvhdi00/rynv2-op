@@ -318,6 +318,68 @@ the facts; the reason to leave it alone was that it barely does anything.
 `prePlaceSteps` stays at 144. That path places one object at the angle nearest
 the one being replaced, and nothing measured says a finer scan improves it.
 
+## The "replace" switch had nothing behind it
+
+The menu shows two placer switches side by side. `prePlace` works. `prePlace2`,
+labelled **replace**, appeared exactly once in the whole 20,000-line file — in
+the line that draws the toggle. No code read it. The state it would plausibly
+have driven was dead too: `placeTick` is written in two places and read in none.
+So the switch did nothing whichever way it was set, and nothing on screen said so.
+
+It now does what its name says. Preplace puts an object down *before* the enemy
+breaks yours, predicting the hit; replace answers the hit that already landed —
+your wall or spike is gone, so one goes back where it stood, that tick.
+
+Only your own buildings, and only ones that died within reach: every placement
+lands on your own ring, so an object further off than the ring plus its own scale
+cannot be replaced where it was, and guessing a different spot is not replacing.
+`canPlace` decides the rest — item limits, collisions and the river included.
+
+**Off by default.** It is new behaviour, not a repair.
+
+One thing it needs, which is easy to miss: the object that just died has to be
+excluded from the collision check. `visibleObjects` is a once-per-tick snapshot,
+so at that moment the dead building is still in it, sitting exactly where the
+replacement goes — it blocks its own replacement and `canPlace` says no every
+time. The server has already destroyed it; the list is only stale.
+
+[`../harness/replace-check.js`](../harness/README.md) breaks one of the player's
+own buildings and counts what follows:
+
+| replace | item placed back |
+|---|---|
+| off | 0 |
+| on | **1** |
+
+## Preplace is back to how it shipped
+
+The spike tick port raised one number inside the preplace path — the reach at
+which a preplace spot counts as able to tick the enemy — from this client's own
+`scale + 35` to Novastorm's `scale + 55`. That was the only line the port changed
+on this path, and it is back at 35.
+
+`canTrapTick` keeps Novastorm's numbers (95 and 55, no shame gate); it is a
+different path and was not part of this.
+
+Everything else in preplace is byte-identical to the file as it arrived:
+`getPrePlaceAngles`, `getPrePlaceObject`, and the whole preplace decision block
+were compared line by line against the original. `prePlaceSteps` went 144 → 240
+→ back to 144, so the net change there is zero.
+
+The one thing not restored is a pair of calls in the preplace timeout:
+
+```js
+getPrePlaceAngles(myPlayer.items[2], object.id, object.angle);
+getPrePlaceAngles(myPlayer.items[4] || 15, object.id, object.angle);
+```
+
+The function takes `(id, customObjects)`. A **number** was arriving where the
+object list goes, so `objects.length` was `undefined`, the collision loop never
+ran, every angle came back placeable — and the return value was discarded, since
+nothing was assigned. 288 `checkItemLocation` calls per preplace tick spent on an
+answer nothing read. Restoring them would restore the waste and change no
+behaviour, so they stay out.
+
 ### The dedupe window, corrected
 
 An earlier version of this file blamed `angleDedupe` (1.5°) for the 240

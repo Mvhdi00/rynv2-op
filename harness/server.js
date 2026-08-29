@@ -130,7 +130,17 @@ function start(port, log, opts) {
 
     ws.send(Buffer.from(encode(["io-init", [7, seed, keyHex, ENCRYPTED_MODE]])));
 
+    /* Put the world on dry land.
+     *
+     * This used to spawn everything at 7000, 7000 — the middle of the map, and
+     * the middle of the river. checkItemLocation's last line refuses any
+     * placement whose y falls inside mapScale/2 +/- riverWidth/2, which for the
+     * game's own 14400 and 724 is y in [6838, 7562]. So every canPlace call in
+     * every browser test returned false, whatever the client decided, and a
+     * placer that worked perfectly would test as placing nothing. x stays at the
+     * centre; y moves well clear of the bank. */
     const mid = 7e3;
+    const midY = 6e3;
     const foeSid = 2;
 
     let spawned = false;
@@ -146,22 +156,22 @@ function start(port, log, opts) {
       send("A", [{ teams: [{ sid: "clan", owner: mySid }] }]);
       send("C", [mySid]);
       // [id, sid, name, x, y, dir, health, maxHealth, scale, skinColor]
-      send("D", [["p1", mySid, "tester", mid, mid, 0, 100, 100, 35, 0], true]);
-      send("D", [["p2", foeSid, "rival", mid + 150, mid + 40, 0, 100, 100, 35, 1], false]);
+      send("D", [["p1", mySid, "tester", mid, midY, 0, 100, 100, 35, 0], true]);
+      send("D", [["p2", foeSid, "rival", mid + 150, midY + 40, 0, 100, 100, 35, 1], false]);
       // 13 fields per player
       send("a", [[
-        mySid, mid, mid, 0, -1, 0, 0, null, 0, 0, 0, 0, 0,
-        foeSid, mid + 150, mid + 40, 3, -1, 5, 1, null, 0, 6, 11, 1, 0,
+        mySid, mid, midY, 0, -1, 0, 0, null, 0, 0, 0, 0, 0,
+        foeSid, mid + 150, midY + 40, 3, -1, 5, 1, null, 0, 6, 11, 1, 0,
       ]]);
       // loadGameObject: 8 fields per object [sid,x,y,dir,scale,type,itemId,ownerSid]
       send("H", [[
-        1, mid + 200, mid + 120, 0, 70, 0, null, null,      // tree
-        2, mid - 240, mid + 60, 1, 60, 2, null, null,       // stone
-        3, mid + 60, mid - 90, 0, 35, null, 4, mySid,       // my spike
-        4, mid - 60, mid - 120, 0, 35, null, 4, foeSid,     // enemy spike
+        1, mid + 200, midY + 120, 0, 70, 0, null, null,      // tree
+        2, mid - 240, midY + 60, 1, 60, 2, null, null,       // stone
+        3, mid + 60, midY - 90, 0, 35, null, 4, mySid,       // my spike
+        4, mid - 60, midY - 120, 0, 35, null, 4, foeSid,     // enemy spike
       ]]);
       // loadAI: 7 fields per animal [sid,index,x,y,dir,health,nameIndex]
-      send("I", [[9, 0, mid + 300, mid - 200, 0, 100, 0]]);
+      send("I", [[9, 0, mid + 300, midY - 200, 0, 100, 0]]);
       send("G", [[mySid, "tester", 12, 0, foeSid, "rival", 8, 0]]);
       send("T", [0, 1, 1]);
       send("U", [1, 0]);
@@ -169,18 +179,18 @@ function start(port, log, opts) {
       send("V", [[0, 1, 2], null]);
       send("V", [[0, 1, 2, 3], true]);
       send("6", [mySid, "hello"]);
-      send("8", [mid + 40, mid + 40, 15, 0]);
+      send("8", [mid + 40, midY + 40, 15, 0]);
       send("7", []);
       send("K", [mySid, 1, 0]);
       send("L", [1]);
       send("O", [foeSid, 80]);
       // addProjectile: [x, y, dir, range, speed, index, layer, sid]
-      send("X", [mid + 20, mid + 20, 0, 700, 1.5, 0, 0, 21]);
+      send("X", [mid + 20, midY + 20, 0, 700, 1.5, 0, 0, 21]);
       send("J", [9, false]);
       send("g", [{ sid: "clan", owner: mySid }]);
       send("3", ["clan", 1]);
       send("4", [[mySid, "tester"]]);
-      send("9", [mid, mid + 100]);
+      send("9", [mid, midY + 100]);
     }
 
     // Keep the world ticking so interpolation and the tick loop run.
@@ -189,8 +199,8 @@ function start(port, log, opts) {
       t++;
       const wobble = Math.sin(t / 8) * 60;
       send("a", [[
-        mySid, mid, mid, 0, -1, 0, 0, null, 0, 0, 0, 0, 0,
-        foeSid, mid + 150 + wobble, mid + 40, 3, -1, 5, 1, null, 0, 6, 11, 1, 0,
+        mySid, mid, midY, 0, -1, 0, 0, null, 0, 0, 0, 0, 0,
+        foeSid, mid + 150 + wobble, midY + 40, 3, -1, 5, 1, null, 0, 6, 11, 1, 0,
       ]]);
       if (t % 9 === 0) send("O", [foeSid, 60 + (t % 40)]);
       if (t % 15 === 0) send("M", [3, 1]);

@@ -70,6 +70,7 @@ node features-check.js        # do the mod's own per-tick features actually run
 node heal-check.js            # does auto heal fire when the server hurts you
 node loadout-check.js         # what the hats and accessories a client wears really do
 node seal-bench.js            # how many of the four placements land, and is the ring sealed
+node replace-check.js         # does the "replace" switch put back what was broken
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -246,6 +247,21 @@ turned 358 food placements into zero. And a client that never spawned proves
 nothing about a feature, so the verdict says INCONCLUSIVE rather than
 "not firing".
 
+### `replace-check.js`
+
+A switch that is off by default and a switch with nothing behind it look
+identical from outside, so this tests the difference rather than the presence:
+it breaks one of the player's own buildings, then counts the placements that
+follow, once with `replace` off and once on. Off must place nothing; on must put
+the same item back.
+
+It also reads the toggle back after setting it, because a switch that silently
+failed to take would make "off places nothing" true for the wrong reason.
+
+Finding this one took a harness fix first, described below — every `canPlace` in
+every browser test was returning false, so the feature tested as broken while
+working.
+
 ### `seal-bench.js`
 
 Asks what a placement scan is actually competing against, which turns out not to
@@ -306,6 +322,16 @@ The mock server speaks the real transport (`io-init`, per-connection opcode
 permutation, 6-byte signed client frames), verifies every frame the client sends
 — signature, opcode, strictly increasing sequence — and with `requireSpawn` puts
 the client in the world only once it accepts a spawn.
+
+It spawns the world on dry land, and that is not cosmetic. It used to put
+everything at 7000, 7000 — the middle of the map, and the middle of the river.
+`checkItemLocation` ends by refusing any placement whose y is inside
+`mapScale/2 ± riverWidth/2`, which for the game's own 14400 and 724 is
+y ∈ [6838, 7562]. So **every `canPlace` call in every browser test returned
+false**, whatever the client decided: a placement feature that worked perfectly
+tested as placing nothing, with no error anywhere to say why. If a placement
+test here reports a feature dead, check where the player is standing before
+believing it.
 
 It is not the game. It covers only the packets in `server.js`, and their
 *payloads* are the harness's own: the field layouts are checked against
