@@ -7213,6 +7213,7 @@ class AI {
             this.forcedAddOns = [0, 0, 0, 0];
             this.velSoldier = false;
             this.spikeSoldier = false;
+            this.safeSoldier = false;
         }
         resetAllForcedAddOns() {
             for (let e = 0; e < this.forcedAddOns.length; e++) {
@@ -7257,12 +7258,30 @@ class AI {
             }
         }
         canBullTick() {
-            return !game.closeObjects.find((e) => e.active && e.dmg && !game.isFriendly(e.owner.sid) && UTILS.getDistance(e, player) <= 40 + e.scale) && !effectsManager.effects.find((e) => e.name == "shame!") && !(player.health - 5 <= 0) && !!player.skins[7] && player.shameCount > 0 && ((game.tick - player.bullTick) % 9 == 0 || this.needTick > 1) && (this.needTick++, true);
+            return !game.closeObjects.find((e) => e.active && e.dmg && !game.isFriendly(e.owner.sid) && UTILS.getDistance(e, player) <= 40 + e.scale) && !effectsManager.effects.find((e) => e.name == "shame!") && !(player.health - 5 <= 0) && !!player.skins[7] && player.shameCount > 0 && !healer.soldierAnti && !healer.collidingSpike && healer.healingPotential == 0 && ((game.tick - player.bullTick) % 9 == 0 || this.needTick > 1) && (this.needTick++, true);
+        }
+        canSafeSoldier() {
+            let e = game.enemies.nearest;
+            return !!scriptMenu.toggles.safeSoldier && !!player.skins[6] && !!e && UTILS.getDistance(e, player) <= 300;
         }
         doBasicFunction(e) {
             let t = game.enemies.nearest;
+            this.safeSoldier = this.canSafeSoldier();
             if (hatSystem.canBullTick()) {
                 this.storeEquip(7, 0, true);
+            } else if (this.safeSoldier) {
+                this.storeEquip(6, 0, true);
+                if (!e) {
+                    if (chicken.pushing && ![4, 5].includes(player.weapons[0]) && UTILS.getDistance(chicken.pushing.victim, player) >= 130) {
+                        this.storeEquip(11, 1, true);
+                    } else if (chicken.autoTriggerOneShot && UTILS.getDistance(t, player) <= 250) {
+                        this.storeEquip(chicken.checkHave(19, true), 1, true);
+                    } else if (player.weapons[0] == 7 || player.weapons[0] == 8 || (UTILS.getDistance(t, player) >= 110 && !game.closeObjects.find((e) => e.active && e.dmg && UTILS.getDistance(e, player) <= 400))) {
+                        this.storeEquip(11, 1, true);
+                    } else {
+                        this.storeEquip(chicken.checkHave(19, true), 1, true);
+                    }
+                }
             } else if (player.y2 > 6850 && player.y2 < 7550) {
                 this.storeEquip(31, 0, true);
                 if (!e) {
@@ -7413,6 +7432,7 @@ class AI {
             this.wasTrapped = false;
             this.collidingSpike = false;
             this.willCollide = false;
+            this.spikeDamageTaken = false;
             this.soldierAnti = false;
             this.spikeTickAnti = false;
             this.canStillGather = false;
@@ -7744,6 +7764,7 @@ class AI {
             }
             this.collidingSpike = p;
             this.willCollide = m;
+            this.spikeDamageTaken = s.spikes.length > 0;
             this.lastColliding = p;
             this.wasTrapped = !!player.trapData;
             this.lastPredicted = c;
@@ -8475,6 +8496,125 @@ class AI {
             this.active = false;
             this.spikeDamages = [20, 35, 45, 30];
             this.reverseSpiketick = false;
+            this.smartTickAngle = 0;
+        }
+        smartTick() {
+            if (!scriptMenu.toggles.smartTick || player.tailIndex == 11) {
+                return false;
+            }
+            let enemy = game.enemies.nearest;
+            if (!enemy || player.weapons[1] != 10 || healer.reloadPercent(player, 10) < 1) {
+                return false;
+            }
+            if (chicken.pushing || enemy.trapData || this.damagedBySpike(enemy)) {
+                return false;
+            }
+            let spikeId = player.items[2];
+            let spike = items.list[spikeId];
+            if (!spike) {
+                return false;
+            }
+            let range = items.weapons[10].range;
+            let targets = game.closeObjects.filter((e) => e.active && !e.dmg && !e.trap && !e.teleport && UTILS.getDistance(e, player) - e.scale <= range && UTILS.getDistance(e, enemy) < e.scale * 2 && chicken.healthToHits(e.currentHealth, 10) <= 1);
+            if (!targets.length) {
+                return false;
+            }
+            let offset = 35 + spike.scale + (spike.placeOffset || 0);
+            let step = Math.PI / parseInt(scriptMenu.toggles.placementDepth);
+            let reach = enemy.scale + spike.scale - 3;
+            let best = null;
+            for (let i = 0; i < targets.length; i++) {
+                let target = targets[i];
+                for (let angle = 0; angle < Math.PI * 2; angle += step) {
+                    let pos = placer.calculatePosition(player, offset, angle);
+                    if (!objectManager.checkItemLocation(pos.x, pos.y, spike.scale, 0.6, spikeId, false, target)) {
+                        continue;
+                    }
+                    if (!UTILS.lineInRect(pos.x - reach, pos.y - reach, pos.x + reach, pos.y + reach, enemy.x2, enemy.y2, enemy.vel.x, enemy.vel.y)) {
+                        continue;
+                    }
+                    let kb = kbSimulator.spikeKB(
+                        {
+                            x: enemy.x2,
+                            y: enemy.y2,
+                            scale: 35,
+                            tmpObj: enemy,
+                        },
+                        {
+                            x: pos.x,
+                            y: pos.y,
+                            scale: spike.scale,
+                            dmg: spike.dmg,
+                        },
+                        true,
+                    );
+                    let trapped = !!kb.data.find((e) => e.id == "trap");
+                    let dmg = kb.data.filter((e) => e.id == "spiek").reduce((e, t) => e + t.dmg, 0);
+                    if (!trapped && !dmg) {
+                        continue;
+                    }
+                    dmg += spike.dmg;
+                    if (!best || (trapped && !best.trapped) || (trapped == best.trapped && dmg > best.dmg)) {
+                        best = {
+                            obj: target,
+                            angle: angle,
+                            dmg: dmg,
+                            trapped: trapped,
+                        };
+                    }
+                }
+            }
+            if (!best) {
+                return false;
+            }
+            this.smartTickAngle = best.angle;
+            return best.obj;
+        }
+        smartTickAnti() {
+            if (!scriptMenu.toggles.smartTick || !player.trapData) {
+                return false;
+            }
+            let enemy = game.enemies.nearest;
+            if (!enemy || enemy.trapData || player.weapons[1] != 10) {
+                return false;
+            }
+            if (healer.spikeDamageTaken) {
+                return false;
+            }
+            if (chicken.healthToHits(player.trapData.currentHealth, 10) > 1) {
+                return false;
+            }
+            let spike = items.list[enemy.spikeType?.id || 9];
+            if (!spike) {
+                return false;
+            }
+            let spikes = healer.getEnemySpikes();
+            if (!spikes.length) {
+                return false;
+            }
+            let offset = 35 + spike.scale + (spike.placeOffset || 0);
+            let step = (Math.PI * 2) / 36;
+            for (let angle = 0; angle < Math.PI * 2; angle += step) {
+                let pos = placer.calculatePosition(enemy, offset, angle);
+                if (!objectManager.checkItemLocation(pos.x, pos.y, spike.scale, 0.6, spike.id, false, enemy)) {
+                    continue;
+                }
+                if (UTILS.getDistance(player, pos) >= 35 + spike.scale) {
+                    continue;
+                }
+                let kbAngle = Math.atan2(player.y2 - pos.y, player.x2 - pos.x);
+                let end = {
+                    x: player.x2 + 111 * Math.cos(kbAngle),
+                    y: player.y2 + 111 * Math.sin(kbAngle),
+                };
+                for (let i = 0; i < spikes.length; i++) {
+                    let s = spikes[i];
+                    if (UTILS.lineInRect(s.x - s.scale, s.y - s.scale, s.x + s.scale, s.y + s.scale, player.x2, player.y2, end.x, end.y)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
         damagedBySpike(e) {
             for (let t = 0; t < e.damages.length; t++) {
@@ -8790,6 +8930,7 @@ class AI {
             this.autoBrakeGameTick = 0;
             this.onClick = {
                 tank: false,
+                bull: false,
             };
             this.cursorLocation = {
                 x: 0,
@@ -9639,6 +9780,25 @@ class AI {
             let n;
             return Math.ceil(e / (s * (config.weaponVariants[player.weaponVariant]?.val || 1) * (i.sDmg || 1) * (player.skins[40] ? 3.3 : 1)));
         }
+        smartTickHit(e) {
+            this.objBreakingTarget = {
+                sid: e.sid,
+                x: e.x,
+                y: e.y,
+            };
+            this.preferedWeaponIndex = 10;
+            if (player.weaponIndex != 10) {
+                this.selectToBuild(10, true);
+            }
+            hatSystem.storeEquip(40, 0, true);
+            hatSystem.storeEquip(this.checkHave(19, true), 1, true);
+            this.sendHitOnce();
+            let t = autoHit.smartTickAngle;
+            game.nextTick(() => {
+                placer.checkPlace(player.items[2], t);
+            });
+            placer.preplace();
+        }
         bullHit() {
             this.preferedWeaponIndex = player.weapons[0];
             if (player.weaponIndex != player.weapons[0]) {
@@ -9736,7 +9896,11 @@ class AI {
 
 
                 if (this.autoaim);
-                else if (player.trapData && scriptMenu.toggles.inTrapBreak && (!scriptMenu.toggles.bullSpamInTrap || !attackState)) {
+                else if (autoHit.smartTickAnti()) {
+                    hatSystem.addForcedAddOnValue(hatSystem.forceAddIndexs.trapSoldier, 1);
+                    textManager.showText(player, 250, 35, 0, "#ff0", "hold");
+                    hatSystem.doBasicFunction(true);
+                } else if (player.trapData && scriptMenu.toggles.inTrapBreak && (!scriptMenu.toggles.bullSpamInTrap || !attackState)) {
                     let i = this.equipBestBreakWeapon("autobreak", true);
                     let s = items.weapons[i];
                     let n = UTILS.getDistance(player.vel, player) >= 2 ? 4 : 0;
@@ -9782,7 +9946,8 @@ class AI {
                 } else {
                     let g = autoHit.autoInsta();
                     let $ = autoHit.autoHit();
-                    if (!$ && !g && !t) {
+                    let smartTickTarget = !$ && !g && !t && autoHit.smartTick();
+                    if (!$ && !g && !t && !smartTickTarget) {
                         autoHit.meleeSync();
                     }
                     if (t) {
@@ -9799,6 +9964,8 @@ class AI {
                         this.bullHit();
                     } else if (g) {
                         instaManager.startInsta(g);
+                    } else if (smartTickTarget) {
+                        this.smartTickHit(smartTickTarget);
                     } else if (instaManager.holdModeOT && typeof e != "number") {
                         e = instaManager.oneTickMovement();
                     } else if (scriptMenu.toggles.autoGrind && unxGrind.tick(this)) {
@@ -12817,9 +12984,21 @@ class AI {
                             checked: true,
                         },
                         {
+                            label: "Smart Tick",
+                            id: "smartTick",
+                            type: "toggle",
+                            checked: true,
+                        },
+                        {
                             label: "Healing",
                             type: "group",
                             options: [
+                                {
+                                    label: "Safe Soldier Anti",
+                                    id: "safeSoldier",
+                                    type: "toggle",
+                                    checked: true,
+                                },
                                 {
                                     label: "Use Soldier-EMP Anti",
                                     id: "soldierEMP",
@@ -14218,6 +14397,7 @@ class AI {
                 attackState = 0;
                 chicken.autoaim = false;
                 chicken.onClick.tank = false;
+                chicken.onClick.bull = false;
                 chicken.grid = undefined;
                 placer.markers = [];
                 game.buildingsHit = [];
@@ -14275,17 +14455,36 @@ class AI {
     }
     window.addEventListener("keydown", UTILS.checkTrusted(keyDown));
     window.addEventListener("keyup", UTILS.checkTrusted(keyUp));
+    function setClickState(e, t) {
+        if (e.button == 0) {
+            chicken.onClick.bull = t;
+        } else {
+            chicken.onClick.tank = t;
+        }
+    }
+    function releaseClicks() {
+        chicken.onClick.bull = false;
+        chicken.onClick.tank = false;
+    }
     gameCanvas.addEventListener(
         "mousedown",
         function (e) {
-            if (e.button == 0) {
-                chicken.onClick.bull = !chicken.onClick.bull;
-            } else {
-                chicken.onClick.tank = !chicken.onClick.tank;
-            }
+            setClickState(e, true);
         },
         false,
     );
+    gameCanvas.addEventListener(
+        "mouseup",
+        function (e) {
+            setClickState(e, false);
+        },
+        false,
+    );
+    gameCanvas.addEventListener("mouseleave", releaseClicks, false);
+    window.addEventListener("mouseup", function (e) {
+        setClickState(e, false);
+    });
+    window.addEventListener("blur", releaseClicks);
     var lastMoveDir = undefined;
     function getMoveDir() {
         let e = 0;
