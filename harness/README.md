@@ -67,6 +67,7 @@ node tick-survives.js         # can one bad player blank the whole world
 node input-check.js           # do moving, attacking and building reach the server
 node silence-check.js         # can the client still talk after the server stalls
 node features-check.js        # do the mod's own per-tick features actually run
+node heal-check.js            # does auto heal fire when the server hurts you
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -217,6 +218,20 @@ the tick reaches each, so the first one at zero is where it stops — and report
 the real state of the controls those features read.
 
 This is the test the page builder used to make impossible: see below.
+
+`heal-check.js` asks the same question of one feature, from outside. Auto heal is
+a damage prediction feeding a decision feeding a placement, and any of the three
+can be intact while the feature does nothing — so the server hurts the player and
+the test counts the food that goes down, and how long after. It reaches into
+nothing: these clients are webpack bundles whose state lives in closures, and an
+earlier version that appended a hook read `heal is not defined` and was about to
+report a working feature as broken.
+
+Two more traps it fell into first, both worth knowing when writing a check here.
+A placement is `z` carrying the item id, not `G` — counting the wrong opcode
+turned 358 food placements into zero. And a client that never spawned proves
+nothing about a feature, so the verdict says INCONCLUSIVE rather than
+"not firing".
 
 ### `preplace-bench.js`
 

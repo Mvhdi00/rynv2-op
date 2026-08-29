@@ -120,6 +120,12 @@ function start(port, log, opts) {
       keyHex,
       c2s: tables.c2s.enc,
       stopTicks: () => { if (tick) { clearInterval(tick); tick = null; } },
+      /* Push any packet the server can send. A client built as a webpack
+       * bundle keeps its state inside closures, so a test cannot reach in and
+       * set a field — driving it from the wire is the only way, and it is the
+       * way the real game does it anyway. */
+      send: (letter, args) => send(letter, args),
+      mySid,
     });
 
     ws.send(Buffer.from(encode(["io-init", [7, seed, keyHex, ENCRYPTED_MODE]])));

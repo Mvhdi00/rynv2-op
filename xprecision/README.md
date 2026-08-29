@@ -153,6 +153,43 @@ The accessory line is a starting value and is not behind an `isBoughtHat` check,
 the same as the line it replaces. Nothing in a client can equip something the
 account has not bought; the server decides that.
 
+## Asked to port Novastorm's auto heal — it is already the same code
+
+The request was to bring Novastorm's auto heal across "100%". Measured first,
+because copying code that is already there changes nothing and hides that
+nothing changed.
+
+Novastorm and X- are forks of one base: **560 shared function names, 83.8%
+overlap** (every other pair of clients here is 2.5–12.6%). Of the 438 functions
+both define, **396 have byte-identical bodies**. Auto heal is in that 396:
+
+| | result |
+|---|---|
+| the 350-line `ANTIS AND HEAL` → `AUTO PLACER` block | **byte-identical**, zero differing lines |
+| `heal()` | byte-identical |
+| `place()`, which `heal` calls | byte-identical |
+| `updateHealth`, `changeObjectHealth` | byte-identical |
+| `io.send` packet accounting | same counter, same 1s reset, neither throttles |
+
+The 42 functions that do differ, and the 177 differing lines inside the shared
+per-tick `updatePlayers`, are trap and spike placement, the connection layer and
+the chat features. Not one of them touches the heal decision, the damage
+prediction, or the placement it uses.
+
+So there was nothing to port. What was worth doing instead was proving the
+feature runs, which
+[`../harness/heal-check.js`](../harness/README.md) does from the wire — the
+server hurts the player and the test counts the food that goes down:
+
+```
+phase               food placed  other builds  item ids used   first heal
+after damage        138          0             0               29ms
+after more damage   220          0             0               92ms
+```
+
+Item 0 is the apple, and no other build went out with it. Auto heal fires, 29ms
+after the damage that called for it.
+
 ## What was already fine
 
 - The outgoing packet counter is cleared by its own `setInterval`, so it cannot
