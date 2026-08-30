@@ -43,10 +43,13 @@
  *      shove us onto a hostile spike, or who is on us while we sit in a trap
  *      with a spike against it, gets hit first.
  *   9. A new weapon grip and swing (Visuals -> Custom Weapon Style). Render
- *      only, on this client alone -- vanilla spins the whole body a quarter
- *      turn, this leans the body and swings the arm through a windup, a strike
- *      and a return. Applied to every player drawn, so enemy weapons read the
- *      same way.
+ *      only, on this client alone. Vanilla parks both hands side by side on the
+ *      body with the weapon floating between them and swings by spinning the
+ *      whole player a quarter turn. Here the hands sit on the weapon -- one
+ *      back by the pommel, one forward up the shaft, the grip the game already
+ *      uses for the musket -- the body only leans, and each weapon has its own
+ *      hold and its own swing. Applied to every player drawn, so enemy weapons
+ *      read the same way.
  */
 
 
@@ -33782,6 +33785,14 @@ class AI {
                                     max: 200,
                                     min: 0,
                                 },
+                                {
+                                    label: "Grip Width",
+                                    id: "customWeaponGrip",
+                                    type: "number",
+                                    value: 100,
+                                    max: 200,
+                                    min: 20,
+                                },
                             ],
                             margin: true,
                         },
@@ -35291,22 +35302,46 @@ class AI {
      * applied to every player that gets rendered, so enemy weapons read the
      * same way.
      *
-     * Vanilla swings by spinning the whole body a quarter turn. Here the body
-     * only leans, and the arm carries the weapon through a windup, a strike
-     * across the front, and a return -- with heavier weapons winding further
-     * back and reaching further out.
+     * Vanilla parks both hands side by side on the body and leaves the weapon
+     * floating between them, then swings by spinning the whole body a quarter
+     * turn. Here the two hands sit ON the weapon -- one back by the pommel, one
+     * forward up the shaft -- the grip the game itself already uses for the
+     * musket (armS / hndS / hndD), generalised to every weapon. The grip is
+     * rigid: hands and weapon rotate together, so it never comes apart.
+     *
+     * Each weapon gets its own hold and its own swing: heavy weapons load
+     * further back and travel further, stabbing weapons rotate less and drive
+     * forward, and bows draw the back hand in instead of swinging at all.
      * ---------------------------------------------------------------------- */
     var weaponStyle = {
-        // grip: where the weapon rests. wind: how far back it loads.
-        // arc: how far the strike travels. kick: reach added at the peak.
+        // back / front: how far out along the weapon each hand sits, in
+        // multiples of the player's scale. The back hand stays out on the body
+        // edge -- the body circle is painted after the hands, so anything
+        // nearer than that is simply covered up -- and the front hand runs up
+        // the shaft, further for the longer weapons. spread: how far they sit
+        // either side of the shaft. line: how much of the weapon's own yOff the
+        // grip follows. grip: the resting tilt. wind: how far it loads back.
+        // arc: how far the strike travels. kick: reach gained at the peak.
+        // pull: how far the back hand draws in (bows and the like).
         poses: {
-            melee: { grip: 0.3, wind: 0.2, arc: 1, kick: 0.1 },
-            heavy: { grip: 0.42, wind: 0.3, arc: 1.35, kick: 0.16 },
-            quick: { grip: 0.2, wind: 0.1, arc: 0.7, kick: 0.07 },
-            reach: { grip: 0.15, wind: 0.08, arc: 0.55, kick: 0.2 },
-            ranged: { grip: 0, wind: 0, arc: 0, kick: -0.16 },
-            shield: { grip: 0.1, wind: 0.05, arc: 0.35, kick: 0.03 },
+            0: { back: 0.96, front: 1.34, spread: 0.28, line: 0.7, grip: 0.26, wind: 0.16, arc: 0.85, kick: 0.1 },
+            1: { back: 0.96, front: 1.32, spread: 0.3, line: 0.7, grip: 0.3, wind: 0.2, arc: 0.95, kick: 0.1 },
+            2: { back: 0.94, front: 1.6, spread: 0.24, line: 0.7, grip: 0.4, wind: 0.3, arc: 1.3, kick: 0.15 },
+            3: { back: 0.96, front: 1.4, spread: 0.26, line: 0.7, grip: 0.28, wind: 0.2, arc: 1, kick: 0.12 },
+            4: { back: 0.95, front: 1.52, spread: 0.24, line: 0.7, grip: 0.34, wind: 0.26, arc: 1.15, kick: 0.14 },
+            5: { back: 0.94, front: 1.68, spread: 0.2, line: 0.7, grip: 0.22, wind: 0.16, arc: 0.8, kick: 0.24 },
+            6: { back: 0.95, front: 1.44, spread: 0.26, line: 0.7, grip: 0.38, wind: 0.3, arc: 1.25, kick: 0.12 },
+            7: { back: 0.98, front: 1.26, spread: 0.34, line: 0.7, grip: 0.18, wind: 0.08, arc: 0.6, kick: 0.18 },
+            8: { back: 0.96, front: 1.38, spread: 0.28, line: 0.7, grip: 0.24, wind: 0.14, arc: 0.8, kick: 0.08 },
+            9: { back: 1.08, front: 1.42, spread: 0.3, line: 0.7, grip: 0.05, wind: 0, arc: 0, kick: -0.12, pull: 0.16 },
+            10: { back: 0.94, front: 1.58, spread: 0.24, line: 0.7, grip: 0.44, wind: 0.34, arc: 1.4, kick: 0.18 },
+            11: { back: 1, front: 1.3, spread: 0.32, line: 0.7, grip: 0.08, wind: 0, arc: 0, kick: 0 },
+            12: { back: 1, front: 1.46, spread: 0.26, line: 0.7, grip: 0.05, wind: 0, arc: 0, kick: -0.12, pull: 0.08 },
+            13: { back: 1, front: 1.46, spread: 0.26, line: 0.7, grip: 0.05, wind: 0, arc: 0, kick: -0.08, pull: 0.05 },
+            14: { back: 0.94, front: 1.7, spread: 0.24, line: 0.7, grip: 0.14, wind: 0.1, arc: 0.55, kick: 0.26 },
+            15: { back: 1, front: 1.6, spread: 0.28, line: 0.7, grip: 0, wind: 0, arc: 0, kick: -0.18, pull: 0.06 },
         },
+        fallback: { back: 0.96, front: 1.4, spread: 0.28, line: 0.7, grip: 0.28, wind: 0.2, arc: 1, kick: 0.12 },
         enabled(obj) {
             if (!scriptMenu.toggles.customWeaponStyle) {
                 return false;
@@ -35314,26 +35349,11 @@ class AI {
             return obj == player || scriptMenu.toggles.customWeaponStyleAll;
         },
         poseFor(e) {
-            let t = items.weapons[e];
-            if (!t) {
-                return this.poses.melee;
-            }
-            if (t.shield) {
-                return this.poses.shield;
-            }
-            if (t.projectile != undefined) {
-                return this.poses.ranged;
-            }
-            if (e == 10) {
-                return this.poses.heavy;
-            }
-            if (e == 7) {
-                return this.poses.quick;
-            }
-            if (e == 14) {
-                return this.poses.reach;
-            }
-            return this.poses.melee;
+            return this.poses[e] || this.fallback;
+        },
+        power(e, t) {
+            let i = scriptMenu.toggles[e];
+            return (typeof i == "number" ? i : t) / 100;
         },
         // 0 at rest, 1 at the far end of the swing. The game already drives
         // dirPlus from 0 to targetAngle and back, so read the ratio off that
@@ -35348,18 +35368,49 @@ class AI {
         offset(obj) {
             let e = this.poseFor(obj.weaponIndex);
             let t = this.progress(obj);
-            let i = scriptMenu.toggles.customWeaponSwing;
-            let s = (typeof i == "number" ? i : 100) / 100;
+            let s = this.power("customWeaponSwing", 100);
             let n = t * t * (3 - 2 * t);
             let a = t < 0.35 ? Math.sin((Math.PI * t) / 0.35) : 0;
             // A landed hit is a shorter swing than a whiff, the way the game
             // itself shortens targetAngle when the hit connects.
             let l = e.arc * (Math.abs(obj.targetAngle || 0) > 2 ? 1 : 0.78);
             return {
-                // Swing Power scales the whole motion, so 0 parks the arm on
-                // the grip and leaves only the new hold.
+                // Swing Power scales the whole motion, so 0 parks the grip
+                // where it rests and leaves only the new hold.
                 angle: e.grip + (e.wind * a - (e.grip + l) * n) * s,
                 reach: 1 + e.kick * Math.sin(Math.PI * t) * s,
+                pull: (e.pull || 0) * Math.sin(Math.PI * t) * s,
+            };
+        },
+        // Both hands on the weapon, rotated with it. The weapon's own yOff is
+        // what tells us which side of the body it lies along, so the grip
+        // follows that line and stays on the sprite for every weapon.
+        hands(obj, swing) {
+            let e = items.weapons[obj.weaponIndex] || {};
+            let t = this.poseFor(obj.weaponIndex);
+            let i = obj.scale;
+            // Grip Width opens and closes the gap between the hands; the back
+            // hand stays put so it can never sink into the body.
+            let s = this.power("customWeaponGrip", 100);
+            let n = (e.xOff || 0) * 0.25;
+            // the weapon's own yOff says which side of the body it lies along
+            let a = Math.max(-i * 0.5, Math.min(i * 0.5, (e.yOff || 0) * t.line));
+            let l = t.spread * i;
+            // the back hand never draws in past the body rim, and the front
+            // hand never runs off the end of the weapon's own sprite
+            let o = Math.max(i * 0.9, i * (t.back - (swing.pull || 0)));
+            let r = i + (e.xOff || 0) + (e.length || i * 2) / 2 - 14;
+            let h = o + (t.front - t.back) * i * s * swing.reach;
+            r = Math.min(Math.max(h, o + 8), Math.max(r, o + 8));
+            let c = Math.cos(swing.angle);
+            let d = Math.sin(swing.angle);
+            let p = (e, t) => ({
+                x: e * c - t * d,
+                y: e * d + t * c,
+            });
+            return {
+                back: p(o + n, a + l),
+                front: p(r + n, a - l * 0.55),
             };
         },
     };
@@ -35396,12 +35447,16 @@ class AI {
 
         // HANDS:
         ctxt.fillStyle = config.skinColors[obj.skinColor];
-        // The forward hand rides the weapon; the other trails it, so the grip
-        // stays believable through the swing.
-        let mainHand = handAngle + swing.angle;
-        let offHand = -handAngle * oHandAngle + swing.angle * 0.85;
-        renderCircle(toolDist * Math.cos(mainHand), toolDist * Math.sin(mainHand), 14, ctxt);
-        renderCircle(obj.scale * oHandDist * Math.cos(offHand), obj.scale * oHandDist * Math.sin(offHand), 14, ctxt);
+        if (styled) {
+            // One hand back by the pommel, one forward up the shaft, both
+            // turning with the weapon.
+            let grip = weaponStyle.hands(obj, swing);
+            renderCircle(grip.back.x, grip.back.y, 14, ctxt);
+            renderCircle(grip.front.x, grip.front.y, 14, ctxt);
+        } else {
+            renderCircle(obj.scale * Math.cos(handAngle), obj.scale * Math.sin(handAngle), 14, ctxt);
+            renderCircle(obj.scale * oHandDist * Math.cos(-handAngle * oHandAngle), obj.scale * oHandDist * Math.sin(-handAngle * oHandAngle), 14, ctxt);
+        }
 
         // WEAPON ABOVE HANDS:
         if (obj.buildIndex < 0 && items.weapons[obj.weaponIndex].aboveHand) {
