@@ -333,9 +333,21 @@ is sent a direction and an attack state, exactly as before, and every other
 player's browser draws the world with its own copy of this code, so none of it
 is visible to anyone else and none of it moves a hitbox.
 
-What it changes: the weapon tilts across the body, sits further out along the
-arm, the hands come closer together and the off hand slides down the shaft. The
-swing is widened and its curve bent so the arm leaves early and drifts back.
+What it changes: where the weapon points, how it sits in the hands, and the
+shape of the swing. `holdAngle` is the one that matters — the game draws every
+weapon along the arm pointing the way you face, and turning this swings the whole
+weapon about the fist so the grip stays put and only the blade travels. `-1.9`
+holds it out and slightly back, clear of your own outline; past about `-2.4` it
+starts to lie over the body, which hides the character. `holdSpin`, `holdOut`,
+`holdSide`, `holdScale`, `flipX` and `flipY` place and size the sprite on top of
+that — size through the canvas, never through the weapon's `length` and `width`,
+which belong to the game's table.
+
+`X_STYLE` is on `window`, so the pose can be dialled in mid-match against the
+real sprite (`X_STYLE.holdAngle = -1.6`) and the numbers copied back into the
+file once they look right.
+[`../harness/weapon-poses.js`](../harness/README.md) draws one labelled tile per
+angle if you would rather compare them side by side.
 
 The swing **duration** is deliberately not adjustable. It equals the weapon's
 reload, which makes it the only visual cue for when the next hit is ready — for

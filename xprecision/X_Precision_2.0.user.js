@@ -171,14 +171,52 @@ const X_PRECISION = {
  * free, so those are what this changes.
  */
 const X_STYLE = {
+    // The swing
     swingArc: 1.3,      // wider than the game's own throw
     swingEase: 0.6,     // < 1 throws early and eases out of the return
-    holdAngle: -0.5,    // radians the weapon tilts across the body
-    holdOut: 12,        // pixels further from the fist, along the arm
-    holdSide: -7,       // pixels across the body
+
+    /* Where the weapon points, measured from the grip.
+     *
+     * The game draws every weapon along the arm, pointing the way you face —
+     * holdAngle 0. Turning it swings the whole weapon about the fist, so the
+     * grip stays in the hand and only the blade travels:
+     *
+     *    0      straight ahead, the game's own pose
+     *   -0.5    angled across the body
+     *   -1.6    straight out to the side
+     *   -1.9    out and slightly back                <- this
+     *   -2.6    over the shoulder, across the body
+     *   +-3.14  reversed, laid along your back
+     *
+     * -1.9 holds the weapon clear of your own outline. Past about -2.4 it starts
+     * to lie over the body, which reads as carrying it rather than holding it —
+     * fine if that is what you want, but it hides the character.
+     * harness/weapon-poses.js draws one tile per value if you want to compare.
+     */
+    holdAngle: -1.9,
+    holdSpin: 0.35,     // and a turn of the sprite in place, on top of that
+    holdOut: 16,        // along the weapon, away from the fist
+    holdSide: -4,       // across the weapon
+    holdScale: 1.05,    // size, without touching the game's length/width
+    flipX: false,       // mirror end for end — point the head the other way
+    flipY: false,       // mirror top for bottom
+
+    // The hands
     gripSpread: 0.8,    // hands closer together than the game puts them
     offHandGrip: 1.25   // off hand further down the shaft
 };
+
+/* Tune it in the game rather than in this file.
+ *
+ * Every value above takes effect on the next frame, so with this exposed you can
+ * open the console mid-match and dial the pose against the real sprite:
+ *
+ *   X_STYLE.holdAngle = -1.9
+ *   X_STYLE.holdOut = 20
+ *
+ * When it looks right, copy the numbers back up here so they survive a reload.
+ */
+window.X_STYLE = X_STYLE;
 
 let settings = {
     botplatformplacer: false,
@@ -10308,22 +10346,32 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 const weapon = items.weapons[obj.weaponIndex];
                 const variant = config.weaponVariants[obj.weaponVariant].src;
 
-                const paint = () => {
-                    const x = styled ? X_STYLE.holdOut : obj.scale;
-                    const y = styled ? X_STYLE.holdSide : 0;
+                const paint = (x, y) => {
                     renderTool(weapon, variant, x, y, ctxt);
                     if (weapon.projectile != undefined && !weapon.hideProjectile) {
                         renderProjectile(x, y, items.projectiles[weapon.projectile], ctxt);
                     }
                 };
 
-                if (!styled) return paint();
+                if (!styled) return paint(obj.scale, 0);
 
                 ctxt.save();
                 try {
+                    /* Built from the grip outward, so each step means one thing.
+                     *
+                     * Move to the fist, swing the whole weapon about it, then
+                     * slide it along and across itself, size it, and finally
+                     * spin the sprite where it sits. Size comes from the canvas,
+                     * never from the weapon's length and width — those belong to
+                     * the game's own table and this file leaves that table
+                     * exactly as the game ships it. */
                     ctxt.translate(obj.scale, 0);
                     ctxt.rotate(X_STYLE.holdAngle);
-                    paint();
+                    ctxt.translate(X_STYLE.holdOut, X_STYLE.holdSide);
+                    ctxt.scale(X_STYLE.holdScale * (X_STYLE.flipX ? -1 : 1),
+                               X_STYLE.holdScale * (X_STYLE.flipY ? -1 : 1));
+                    ctxt.rotate(X_STYLE.holdSpin);
+                    paint(0, 0);
                 } finally {
                     ctxt.restore();
                 }

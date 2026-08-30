@@ -73,6 +73,7 @@ node seal-bench.js            # how many of the four placements land, and is the
 node replace-check.js         # does the "replace" switch put back what was broken
 node trapped-preplace.js      # does preplace still run while you are in the enemy's trap
 node weapon-style.js          # does the custom weapon carry draw, and unwind the canvas
+node weapon-poses.js          # a contact sheet of weapon angles, to pick one by looking
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -248,6 +249,20 @@ A placement is `z` carrying the item id, not `G` — counting the wrong opcode
 turned 358 food placements into zero. And a client that never spawned proves
 nothing about a feature, so the verdict says INCONCLUSIVE rather than
 "not firing".
+
+### `weapon-poses.js`
+
+`X_STYLE.holdAngle` decides where the weapon points, and words do not settle it —
+"out to the side" and "trailing back" is one sentence for two poses that look
+nothing alike. So this renders the same character at a spread of angles and
+stitches a labelled sheet, and an angle gets chosen by looking at it.
+
+It needs `window.X_STYLE` exposed by the client, and says so plainly rather than
+producing seven identical tiles if it is not.
+
+The crop is deliberately wide. The stand-in sprite is drawn at the weapon's own
+`length` and `width`, which for a polearm is large, so a tight frame fills with
+bar and hides the very thing being chosen — the first version did exactly that.
 
 ### `weapon-style.js`
 
