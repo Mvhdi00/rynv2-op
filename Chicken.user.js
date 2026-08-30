@@ -42,14 +42,14 @@
  *   8. Anti push spike (Combat -> Auto Hitting): an enemy whose knockback would
  *      shove us onto a hostile spike, or who is on us while we sit in a trap
  *      with a spike against it, gets hit first.
- *   9. A new weapon grip and swing (Visuals -> Custom Weapon Style). Render
- *      only, on this client alone. Vanilla parks both hands side by side on the
- *      body with the weapon floating between them and swings by spinning the
- *      whole player a quarter turn. Here the hands sit on the weapon -- one
- *      back by the pommel, one forward up the shaft, the grip the game already
- *      uses for the musket -- the body only leans, and each weapon has its own
- *      hold and its own swing. Applied to every player drawn, so enemy weapons
- *      read the same way.
+ *   9. A new weapon grip and swing (Home -> Weapon Style, on by default). Local
+ *      to this client. Vanilla parks both hands side by side on the body with
+ *      the weapon floating between them; here they sit on the weapon, one back
+ *      by the pommel and one forward up the shaft -- the grip the game already
+ *      uses for the musket. The swing keeps the game's timing and most of its
+ *      body turn, with the weapon leading it by a little, by its own amount per
+ *      weapon. Applied to every player drawn, so enemy weapons read the same
+ *      way.
  */
 
 
@@ -33288,6 +33288,45 @@ class AI {
                 [
                     [
                         {
+                            label: "Weapon Style",
+                            id: "customWeaponStyle",
+                            type: "group toggle",
+                            checked: true,
+                            options: [
+                                {
+                                    label: "Show On Others",
+                                    id: "customWeaponStyleAll",
+                                    type: "toggle",
+                                    checked: true,
+                                },
+                                {
+                                    label: "Swing Power",
+                                    id: "customWeaponSwing",
+                                    type: "number",
+                                    value: 100,
+                                    max: 200,
+                                    min: 0,
+                                },
+                                {
+                                    label: "Grip Width",
+                                    id: "customWeaponGrip",
+                                    type: "number",
+                                    value: 100,
+                                    max: 200,
+                                    min: 20,
+                                },
+                                {
+                                    label: "Grip Reach",
+                                    id: "customWeaponReach",
+                                    type: "number",
+                                    value: 100,
+                                    max: 200,
+                                    min: 80,
+                                },
+                            ],
+                            margin: true,
+                        },
+                        {
                             label: "Auto Upgrade",
                             id: "autoUpgrade",
                             type: "group toggle",
@@ -33764,44 +33803,6 @@ class AI {
                             label: "Render Real Direction",
                             id: "renderRealDir",
                             type: "toggle",
-                        },
-                        {
-                            label: "Custom Weapon Style",
-                            id: "customWeaponStyle",
-                            type: "group toggle",
-                            checked: true,
-                            options: [
-                                {
-                                    label: "Show On Others",
-                                    id: "customWeaponStyleAll",
-                                    type: "toggle",
-                                    checked: true,
-                                },
-                                {
-                                    label: "Swing Power",
-                                    id: "customWeaponSwing",
-                                    type: "number",
-                                    value: 100,
-                                    max: 200,
-                                    min: 0,
-                                },
-                                {
-                                    label: "Grip Width",
-                                    id: "customWeaponGrip",
-                                    type: "number",
-                                    value: 100,
-                                    max: 200,
-                                    min: 20,
-                                },
-                                {
-                                    label: "Grip Reach",
-                                    id: "customWeaponReach",
-                                    type: "number",
-                                    value: 100,
-                                    max: 200,
-                                    min: 80,
-                                },
-                            ],
                             margin: true,
                         },
                     ],
@@ -35189,9 +35190,9 @@ class AI {
             let l = players[a];
             if (l.zIndex == i && (l.animate(delta), l.visible)) {
                 l.skinRot += delta * 0.002;
-                // With the custom style on, the swing lives in the arm, so the
-                // body only leans into it instead of spinning a quarter turn.
-                let o = (n || player != l ? l.dir : chicken.getAttackDir(false, true)) + l.dirPlus * (l.buildIndex < 0 && weaponStyle.enabled(l) ? 0.16 : 1);
+                // The body keeps nearly all of the game's own swing -- the new
+                // motion is the weapon leading it, not a different animation.
+                let o = (n || player != l ? l.dir : chicken.getAttackDir(false, true)) + l.dirPlus * (l.buildIndex < 0 && weaponStyle.enabled(l) ? 0.8 : 1);
                 mainContext.save();
                 mainContext.translate(l.x - e, l.y - t);
                 mainContext.rotate(o);
@@ -35311,15 +35312,18 @@ class AI {
      * same way.
      *
      * Vanilla parks both hands side by side on the body and leaves the weapon
-     * floating between them, then swings by spinning the whole body a quarter
-     * turn. Here the two hands sit ON the weapon -- one back by the pommel, one
-     * forward up the shaft -- the grip the game itself already uses for the
-     * musket (armS / hndS / hndD), generalised to every weapon. The grip is
-     * rigid: hands and weapon rotate together, so it never comes apart.
+     * floating between them. Here the two hands sit ON the weapon -- one back
+     * by the pommel, one forward up the shaft -- the grip the game itself
+     * already uses for the musket (armS / hndS / hndD), generalised to every
+     * weapon. The grip is rigid: hands and weapon rotate together, so it never
+     * comes apart.
      *
-     * Each weapon gets its own hold and its own swing: heavy weapons load
-     * further back and travel further, stabbing weapons rotate less and drive
-     * forward, and bows draw the back hand in instead of swinging at all.
+     * The swing stays the game's: same timing, and the body still carries most
+     * of the turn. On top of it the weapon leads the body by a little, by an
+     * amount of its own per weapon -- the heavy ones lead furthest, stabbing
+     * ones lead least and drive forward instead, and bows draw the back hand in
+     * rather than swinging. Small numbers on purpose: a different motion inside
+     * the game's animation, not a louder one.
      * ---------------------------------------------------------------------- */
     var weaponStyle = {
         // back / front: how far out along the weapon each hand sits, in
@@ -35332,24 +35336,24 @@ class AI {
         // arc: how far the strike travels. kick: reach gained at the peak.
         // pull: how far the back hand draws in (bows and the like).
         poses: {
-            0: { back: 0.96, front: 1.34, spread: 0.28, line: 0.7, grip: 0.26, wind: 0.16, arc: 0.85, kick: 0.1 },
-            1: { back: 0.96, front: 1.32, spread: 0.3, line: 0.7, grip: 0.3, wind: 0.2, arc: 0.95, kick: 0.1 },
-            2: { back: 0.94, front: 1.6, spread: 0.24, line: 0.7, grip: 0.4, wind: 0.3, arc: 1.3, kick: 0.15 },
-            3: { back: 0.96, front: 1.4, spread: 0.26, line: 0.7, grip: 0.28, wind: 0.2, arc: 1, kick: 0.12 },
-            4: { back: 0.95, front: 1.52, spread: 0.24, line: 0.7, grip: 0.34, wind: 0.26, arc: 1.15, kick: 0.14 },
-            5: { back: 0.94, front: 1.68, spread: 0.2, line: 0.7, grip: 0.22, wind: 0.16, arc: 0.8, kick: 0.24 },
-            6: { back: 0.95, front: 1.44, spread: 0.26, line: 0.7, grip: 0.38, wind: 0.3, arc: 1.25, kick: 0.12 },
-            7: { back: 0.98, front: 1.26, spread: 0.34, line: 0.7, grip: 0.18, wind: 0.08, arc: 0.6, kick: 0.18 },
-            8: { back: 0.96, front: 1.38, spread: 0.28, line: 0.7, grip: 0.24, wind: 0.14, arc: 0.8, kick: 0.08 },
-            9: { back: 1.08, front: 1.42, spread: 0.3, line: 0.7, grip: 0.05, wind: 0, arc: 0, kick: -0.12, pull: 0.16 },
-            10: { back: 0.94, front: 1.58, spread: 0.24, line: 0.7, grip: 0.44, wind: 0.34, arc: 1.4, kick: 0.18 },
-            11: { back: 1, front: 1.3, spread: 0.32, line: 0.7, grip: 0.08, wind: 0, arc: 0, kick: 0 },
-            12: { back: 1, front: 1.46, spread: 0.26, line: 0.7, grip: 0.05, wind: 0, arc: 0, kick: -0.12, pull: 0.08 },
-            13: { back: 1, front: 1.46, spread: 0.26, line: 0.7, grip: 0.05, wind: 0, arc: 0, kick: -0.08, pull: 0.05 },
-            14: { back: 0.94, front: 1.7, spread: 0.24, line: 0.7, grip: 0.14, wind: 0.1, arc: 0.55, kick: 0.26 },
-            15: { back: 1, front: 1.6, spread: 0.28, line: 0.7, grip: 0, wind: 0, arc: 0, kick: -0.18, pull: 0.06 },
+            0: { back: 0.96, front: 1.26, spread: 0.28, line: 0.7, grip: 0.1, wind: 0.03, arc: 0.18, kick: 0.03 },
+            1: { back: 0.96, front: 1.24, spread: 0.3, line: 0.7, grip: 0.11, wind: 0.04, arc: 0.2, kick: 0.03 },
+            2: { back: 0.94, front: 1.48, spread: 0.24, line: 0.7, grip: 0.15, wind: 0.06, arc: 0.3, kick: 0.05 },
+            3: { back: 0.96, front: 1.32, spread: 0.26, line: 0.7, grip: 0.1, wind: 0.04, arc: 0.22, kick: 0.04 },
+            4: { back: 0.95, front: 1.42, spread: 0.24, line: 0.7, grip: 0.12, wind: 0.05, arc: 0.26, kick: 0.04 },
+            5: { back: 0.94, front: 1.56, spread: 0.2, line: 0.7, grip: 0.08, wind: 0.03, arc: 0.16, kick: 0.06 },
+            6: { back: 0.95, front: 1.36, spread: 0.26, line: 0.7, grip: 0.14, wind: 0.05, arc: 0.28, kick: 0.04 },
+            7: { back: 0.98, front: 1.2, spread: 0.34, line: 0.7, grip: 0.07, wind: 0.02, arc: 0.14, kick: 0.05 },
+            8: { back: 0.96, front: 1.3, spread: 0.28, line: 0.7, grip: 0.09, wind: 0.03, arc: 0.18, kick: 0.03 },
+            9: { back: 1.06, front: 1.34, spread: 0.3, line: 0.7, grip: 0.03, wind: 0, arc: 0, kick: -0.04, pull: 0.08 },
+            10: { back: 0.94, front: 1.46, spread: 0.24, line: 0.7, grip: 0.16, wind: 0.06, arc: 0.34, kick: 0.05 },
+            11: { back: 1, front: 1.24, spread: 0.32, line: 0.7, grip: 0.05, wind: 0, arc: 0, kick: 0 },
+            12: { back: 1, front: 1.38, spread: 0.26, line: 0.7, grip: 0.03, wind: 0, arc: 0, kick: -0.04, pull: 0.05 },
+            13: { back: 1, front: 1.38, spread: 0.26, line: 0.7, grip: 0.03, wind: 0, arc: 0, kick: -0.03, pull: 0.04 },
+            14: { back: 0.94, front: 1.58, spread: 0.24, line: 0.7, grip: 0.06, wind: 0.02, arc: 0.12, kick: 0.07 },
+            15: { back: 1, front: 1.6, spread: 0.28, line: 0.7, grip: 0.02, wind: 0, arc: 0, kick: -0.05, pull: 0.04 },
         },
-        fallback: { back: 0.96, front: 1.4, spread: 0.28, line: 0.7, grip: 0.28, wind: 0.2, arc: 1, kick: 0.12 },
+        fallback: { back: 0.96, front: 1.32, spread: 0.28, line: 0.7, grip: 0.1, wind: 0.04, arc: 0.22, kick: 0.04 },
         enabled(obj) {
             if (!scriptMenu.toggles.customWeaponStyle) {
                 return false;
