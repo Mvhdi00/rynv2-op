@@ -72,6 +72,7 @@ node loadout-check.js         # what the hats and accessories a client wears rea
 node seal-bench.js            # how many of the four placements land, and is the ring sealed
 node replace-check.js         # does the "replace" switch answer a broken building
 node replace-bench.js         # graded replace vs putting the same thing back
+node packet-burn.js           # packets a second on the wire, against the client's own guard
 node trap-tick-check.js       # which spike a trap tick runs on, and whether it survives
 node trapped-preplace.js      # does preplace still run while you are in the enemy's trap
 node weapon-style.js          # does the custom weapon carry draw, and unwind the canvas
@@ -339,6 +340,29 @@ What it does **not** cover: whether a placement actually goes out. A preplace
 needs the enemy mid-swing at a building weak enough to die to it, and the mock
 reproduces neither reload timing nor object health, so the untrapped run places
 nothing either. This counts the gate, which is what changed.
+
+### `packet-burn.js`
+
+moomoo drops a client that sends too fast, and this file guards its placements
+with `packets + 5 > 119` against a counter that resets every second. That guard
+covers placements only — attacks, aim, hat swaps and weapon selects increment the
+same counter without asking — so a placer firing four placements at four packets
+each does not break the guard, it eats the budget everything else was going to
+spend. "Feels like it burns packets" is measurable, so this measures it.
+
+```
+  replace     peak/s    average/s   total    busiest packets
+  off         10        8.4         76       Dx73 0x3
+  on          22        17.2        155      Dx72 zx40 Fx40 0x3
+```
+
+Per-second buckets rather than an average, because the guard is written against a
+one-second counter and an average hides the spike that gets you dropped.
+
+Read it with its limit in mind: the mock has no real fight running, so the base
+rate here is far below what combat produces. What it settles is the *increment* —
+replace adds about 9 packets a second — not whether some other client state is
+already near the line.
 
 ### `replace-bench.js`
 

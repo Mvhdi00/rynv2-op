@@ -12536,92 +12536,6 @@ if (isSpike && canSpikeTick && canTrapTick()) {
 
                 predictObjects = [];
 
-                /* REPLACE — the menu's second placer switch, which had nothing
-                 * behind it.
-                 *
-                 * `prePlace2` appeared exactly once in the whole file, in the
-                 * line that draws the toggle; no code ever read it. The state it
-                 * would plausibly have driven is dead too — `placeTick` is
-                 * written in two places and read in none — so the switch did
-                 * nothing whichever way it was set.
-                 *
-                 * What the name means, and what this does: preplace puts a new
-                 * object down *before* the enemy breaks yours, predicting the
-                 * hit. Replace answers the hit that already landed.
-                 *
-                 * Not by putting the same thing back where it stood — that was
-                 * the first version of this and it is the weak answer, because
-                 * the spot that just failed is rarely the spot worth holding and
-                 * one placement where four fit is three wasted. This grades
-                 * every reachable spot against every nearby enemy and takes the
-                 * best set, which is Revelation's gradeReplace and fullplace
-                 * rather than a put-back. See gradeReplaceSpot for the rules.
-                 *
-                 * Traps win ties, as they do there: a trap that scores the same
-                 * as a spike is worth more, because it holds them still while
-                 * everything else does its work.
-                 *
-                 * Revelation stops at `packets >= 85`. That cap is deliberately
-                 * not ported — this client already refuses a placement at
-                 * `packets + 5 > 119` in the send loop, which covers every
-                 * placement it makes rather than this one feature, and a second
-                 * lower cap would only make replace quieter than the rest.
-                 *
-                 * Off by default: it is new behaviour, not a repair. */
-                if (window.vars.prePlace2 && myPlayer && removedDetails.length > 0) {
-                    /* Without this the feature can never fire. visibleObjects is
-                     * a once-per-tick snapshot of gameObjects, so the building
-                     * that just died is still in it here — and it sits right
-                     * where a replacement goes, which means it blocks its own
-                     * replacement and canPlace says no every time. The server
-                     * has already destroyed it; this list is only stale. */
-                    const goneSids = removedDetails.map((d) => d.sid);
-                    const standing = visibleObjects.filter((o) => !goneSids.includes(o.sid));
-
-                    const mine = removedDetails.filter((gone) => items.list[gone.id] && isObjectMine(gone));
-                    const worthAnswering = mine.some((gone) => {
-                        const item = items.list[gone.id];
-                        const ring = 35 + item.scale + (item.placeOffset || 0);
-                        return UTILS.getDistance(myPlayer.x2, myPlayer.y2, gone.x, gone.y) <= ring + item.scale;
-                    });
-
-                    if (worthAnswering && nearestEnemy) {
-                        const enemies = enemiesNear && enemiesNear.length ? enemiesNear : [nearestEnemy];
-                        const spikeId = myPlayer.items[2];
-                        const trapId = myPlayer.items[4] || 15;
-
-                        const graded = [];
-                        for (const id of [spikeId, trapId]) {
-                            const item = items.list[id];
-                            if (!item || isItemLimit(id)) continue;
-                            for (const spot of getPrePlaceAngles(id, standing)) {
-                                if (!spot.placeable) continue;
-                                const { points, priority } = gradeReplaceSpot(spot, enemies, item);
-                                if (points <= 0) continue;
-                                graded.push({ spot: spot, id: id, points: points, priority: priority, isTrap: id === trapId });
-                            }
-                        }
-
-                        graded.sort((a, b) => {
-                            if (b.points !== a.points) return b.points - a.points;
-                            if (a.priority !== b.priority) return a.priority ? -1 : 1;
-                            return (b.isTrap ? 1 : 0) - (a.isTrap ? 1 : 0);   // traps win ties
-                        });
-
-                        /* Four is the ring's own limit — addPredictObject refuses
-                         * anything closer than scale + scale, the server's rule,
-                         * and that many is all that fits. It enforces it again on
-                         * every add, so this loop only has to stop asking. */
-                        let placed = 0;
-                        for (const cand of graded) {
-                            if (placed >= 4) break;
-                            const before = predictObjects.length;
-                            addPredictObject(cand.id, cand.spot.angle, false);
-                            if (predictObjects.length > before) placed++;
-                        }
-                    }
-                }
-                removedDetails = [];
 
                 // PRE PLACER
                 lastPrePlaceObject = null;
@@ -12903,6 +12817,108 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                     }
                     trapTickSpike = null;
                 }
+
+                /* REPLACE — last of the placers, and last on purpose.
+                 *
+                 * It used to run first, before preplace and before autoplace,
+                 * and that made it look like a weak feature when it was really a
+                 * greedy one: addPredictObject refuses anything within
+                 * scale + scale of a placement already taken, so four graded
+                 * spikes filled the ring and the tactical placers arrived to
+                 * find nowhere left. Autoplace's first priority is the spike
+                 * that hits a trapped enemy, and replace was taking that spot
+                 * for something merely well scored.
+                 *
+                 * Running last inverts it: preplace and autoplace get first
+                 * pick, and replace fills whatever is genuinely still open.
+                 * Revelation does the same thing by checking its placements
+                 * against prioLoc, the spots preplace has reserved.
+                 *
+                 * The menu's second placer switch, which had nothing behind it.
+                 *
+                 * `prePlace2` appeared exactly once in the whole file, in the
+                 * line that draws the toggle; no code ever read it. The state it
+                 * would plausibly have driven is dead too — `placeTick` is
+                 * written in two places and read in none — so the switch did
+                 * nothing whichever way it was set.
+                 *
+                 * What the name means, and what this does: preplace puts a new
+                 * object down *before* the enemy breaks yours, predicting the
+                 * hit. Replace answers the hit that already landed.
+                 *
+                 * Not by putting the same thing back where it stood — that was
+                 * the first version of this and it is the weak answer, because
+                 * the spot that just failed is rarely the spot worth holding and
+                 * one placement where four fit is three wasted. This grades
+                 * every reachable spot against every nearby enemy and takes the
+                 * best set, which is Revelation's gradeReplace and fullplace
+                 * rather than a put-back. See gradeReplaceSpot for the rules.
+                 *
+                 * Traps win ties, as they do there: a trap that scores the same
+                 * as a spike is worth more, because it holds them still while
+                 * everything else does its work.
+                 *
+                 * Revelation stops at `packets >= 85`. That cap is deliberately
+                 * not ported — this client already refuses a placement at
+                 * `packets + 5 > 119` in the send loop, which covers every
+                 * placement it makes rather than this one feature, and a second
+                 * lower cap would only make replace quieter than the rest.
+                 *
+                 * Off by default: it is new behaviour, not a repair. */
+                if (window.vars.prePlace2 && myPlayer && removedDetails.length > 0) {
+                    /* Without this the feature can never fire. visibleObjects is
+                     * a once-per-tick snapshot of gameObjects, so the building
+                     * that just died is still in it here — and it sits right
+                     * where a replacement goes, which means it blocks its own
+                     * replacement and canPlace says no every time. The server
+                     * has already destroyed it; this list is only stale. */
+                    const goneSids = removedDetails.map((d) => d.sid);
+                    const standing = visibleObjects.filter((o) => !goneSids.includes(o.sid));
+
+                    const mine = removedDetails.filter((gone) => items.list[gone.id] && isObjectMine(gone));
+                    const worthAnswering = mine.some((gone) => {
+                        const item = items.list[gone.id];
+                        const ring = 35 + item.scale + (item.placeOffset || 0);
+                        return UTILS.getDistance(myPlayer.x2, myPlayer.y2, gone.x, gone.y) <= ring + item.scale;
+                    });
+
+                    if (worthAnswering && nearestEnemy) {
+                        const enemies = enemiesNear && enemiesNear.length ? enemiesNear : [nearestEnemy];
+                        const spikeId = myPlayer.items[2];
+                        const trapId = myPlayer.items[4] || 15;
+
+                        const graded = [];
+                        for (const id of [spikeId, trapId]) {
+                            const item = items.list[id];
+                            if (!item || isItemLimit(id)) continue;
+                            for (const spot of getPrePlaceAngles(id, standing)) {
+                                if (!spot.placeable) continue;
+                                const { points, priority } = gradeReplaceSpot(spot, enemies, item);
+                                if (points <= 0) continue;
+                                graded.push({ spot: spot, id: id, points: points, priority: priority, isTrap: id === trapId });
+                            }
+                        }
+
+                        graded.sort((a, b) => {
+                            if (b.points !== a.points) return b.points - a.points;
+                            if (a.priority !== b.priority) return a.priority ? -1 : 1;
+                            return (b.isTrap ? 1 : 0) - (a.isTrap ? 1 : 0);   // traps win ties
+                        });
+
+                        /* Four is the ring's own limit — addPredictObject refuses
+                         * anything closer than scale + scale, the server's rule,
+                         * and that many is all that fits. It enforces it again on
+                         * every add, so this loop only has to stop asking. */
+                        let placed = 0;
+                        for (const cand of graded) {
+                            if (placed >= 4) break;
+                            const before = predictObjects.length;
+                            addPredictObject(cand.id, cand.spot.angle, false);
+                            if (predictObjects.length > before) placed++;
+                        }
+                    }
+                }
+                removedDetails = [];
 
                 if(grindObjects && grindObjects.length > 0) {
                       for (let grindObj of grindObjects) {
