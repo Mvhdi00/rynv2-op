@@ -175,35 +175,44 @@ const X_STYLE = {
     swingArc: 1.3,      // wider than the game's own throw
     swingEase: 0.6,     // < 1 throws early and eases out of the return
 
-    /* Where the weapon points, measured from the grip.
+    /* The pose, built so the character keeps hold of the weapon.
      *
-     * The game draws every weapon along the arm, pointing the way you face —
-     * holdAngle 0. Turning it swings the whole weapon about the fist, so the
-     * grip stays in the hand and only the blade travels:
+     * The first version of this turned the weapon about the fist and left the
+     * hands where the game put them, and it looked exactly like what it was: a
+     * weapon floating beside someone not holding it. The hands have to travel
+     * with it.
      *
-     *    0      straight ahead, the game's own pose
-     *   -0.5    angled across the body
-     *   -1.6    straight out to the side
-     *   -1.9    out and slightly back                <- this
-     *   -2.6    over the shoulder, across the body
-     *   +-3.14  reversed, laid along your back
+     * So `armAngle` turns the whole assembly — both hands and the weapon —
+     * about the body, the way a shoulder does. The grip stays between the
+     * fists at every angle, because everything rotates together. `gripTilt`
+     * then turns the weapon within the grip, the way a wrist does, and that is
+     * the one that gives a pose its character; keep it small or the weapon
+     * pulls out of the hands again.
      *
-     * -1.9 holds the weapon clear of your own outline. Past about -2.4 it starts
-     * to lie over the body, which reads as carrying it rather than holding it —
-     * fine if that is what you want, but it hides the character.
-     * harness/weapon-poses.js draws one tile per value if you want to compare.
+     * The gap between the fist the weapon is drawn from and each hand is
+     * handAngle, and armAngle turns all three together — so that gap is the
+     * same at every angle, by construction. That is the whole reason this
+     * version reads as held and the previous one did not.
+     *
+     *   armAngle    0  straight ahead, the game's own
+     *           -0.25  eased across
+     *            -0.6  guard stance, weapon across the front   <- this
+     *            -1.0  held wide
+     *            -1.6  straight out to the side
+     *           +0.45  over the other shoulder
+     *
+     * harness/weapon-poses.js draws one labelled tile per value.
      */
-    holdAngle: -1.9,
-    holdSpin: 0.35,     // and a turn of the sprite in place, on top of that
-    holdOut: 16,        // along the weapon, away from the fist
-    holdSide: -4,       // across the weapon
-    holdScale: 1.05,    // size, without touching the game's length/width
+    armAngle: -0.6,
+    gripTilt: -0.28,    // the wrist, on top of the shoulder
+    gripSlide: 5,       // along its own length, still inside the fists
+    holdScale: 1.06,    // size, without touching the game's length/width
     flipX: false,       // mirror end for end — point the head the other way
     flipY: false,       // mirror top for bottom
 
     // The hands
-    gripSpread: 0.8,    // hands closer together than the game puts them
-    offHandGrip: 1.25   // off hand further down the shaft
+    gripSpread: 0.72,   // hands closer together than the game puts them
+    offHandGrip: 1.3    // off hand further down the shaft
 };
 
 /* Tune it in the game rather than in this file.
@@ -10207,11 +10216,18 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     xRenderWeapon(styled, obj, ctxt);
                 }
 
-                // HANDS:
+                /* HANDS — on the same arm line the weapon was drawn along.
+                 *
+                 * This is the whole difference between a pose and a weapon
+                 * floating next to someone. The game puts both fists at
+                 * +-handAngle around the body; adding the same armAngle the
+                 * weapon was rotated by swings them to meet it, so the grip
+                 * stays between them at every angle. */
+                const arm = styled ? X_STYLE.armAngle : 0;
                 ctxt.fillStyle = config.skinColors[obj.skinColor];
-                renderCircle(obj.scale * Math.cos(handAngle), (obj.scale * Math.sin(handAngle)), 14);
-                renderCircle((obj.scale * oHandDist) * Math.cos(-handAngle * oHandAngle),
-                    (obj.scale * oHandDist) * Math.sin(-handAngle * oHandAngle), 14);
+                renderCircle(obj.scale * Math.cos(arm + handAngle), (obj.scale * Math.sin(arm + handAngle)), 14);
+                renderCircle((obj.scale * oHandDist) * Math.cos(arm - handAngle * oHandAngle),
+                    (obj.scale * oHandDist) * Math.sin(arm - handAngle * oHandAngle), 14);
 
                 // WEAPON ABOVE HANDS:
                 if (obj.buildIndex < 0 && items.weapons[obj.weaponIndex].aboveHand) {
@@ -10357,21 +10373,23 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                 ctxt.save();
                 try {
-                    /* Built from the grip outward, so each step means one thing.
+                    /* Shoulder, then wrist — the same two joints the hands use,
+                     * in the same order, which is what keeps the weapon in them.
                      *
-                     * Move to the fist, swing the whole weapon about it, then
-                     * slide it along and across itself, size it, and finally
-                     * spin the sprite where it sits. Size comes from the canvas,
-                     * never from the weapon's length and width — those belong to
-                     * the game's own table and this file leaves that table
-                     * exactly as the game ships it. */
+                     * armAngle turns about the body centre, so the fist at
+                     * `obj.scale` along the arm carries the weapon with it and
+                     * the hands drawn at the same offset land on the same line.
+                     * gripTilt then turns the weapon alone, about that fist.
+                     *
+                     * Size comes from the canvas, never from the weapon's length
+                     * and width — those belong to the game's own table and this
+                     * file leaves that table exactly as the game ships it. */
+                    ctxt.rotate(X_STYLE.armAngle);
                     ctxt.translate(obj.scale, 0);
-                    ctxt.rotate(X_STYLE.holdAngle);
-                    ctxt.translate(X_STYLE.holdOut, X_STYLE.holdSide);
+                    ctxt.rotate(X_STYLE.gripTilt);
                     ctxt.scale(X_STYLE.holdScale * (X_STYLE.flipX ? -1 : 1),
                                X_STYLE.holdScale * (X_STYLE.flipY ? -1 : 1));
-                    ctxt.rotate(X_STYLE.holdSpin);
-                    paint(0, 0);
+                    paint(X_STYLE.gripSlide, 0);
                 } finally {
                     ctxt.restore();
                 }

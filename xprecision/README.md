@@ -333,15 +333,26 @@ is sent a direction and an attack state, exactly as before, and every other
 player's browser draws the world with its own copy of this code, so none of it
 is visible to anyone else and none of it moves a hitbox.
 
-What it changes: where the weapon points, how it sits in the hands, and the
-shape of the swing. `holdAngle` is the one that matters — the game draws every
-weapon along the arm pointing the way you face, and turning this swings the whole
-weapon about the fist so the grip stays put and only the blade travels. `-1.9`
-holds it out and slightly back, clear of your own outline; past about `-2.4` it
-starts to lie over the body, which hides the character. `holdSpin`, `holdOut`,
-`holdSide`, `holdScale`, `flipX` and `flipY` place and size the sprite on top of
-that — size through the canvas, never through the weapon's `length` and `width`,
+What it changes: where the arms point, how the weapon sits in them, and the
+shape of the swing.
+
+The first attempt at this turned the weapon about the fist and left the hands
+where the game had put them, and it looked like exactly what it was — a weapon
+floating beside someone who was not holding it. The hands have to travel with it.
+
+So the pose is built from the two joints a real grip has. **`armAngle`** turns the
+whole assembly — both hands and the weapon — about the body, the way a shoulder
+does; the fist the weapon is drawn from sits at `armAngle` and the hands at
+`armAngle ± handAngle`, so the gap between them is the same at every angle by
+construction, and the grip stays between the fists. **`gripTilt`** then turns the
+weapon alone about that fist, the way a wrist does, and it is the one that gives
+a pose its character — kept small, or the weapon pulls out of the hands again.
+`gripSlide`, `holdScale`, `flipX` and `flipY` place and size the sprite on top of
+that; size through the canvas, never through the weapon's `length` and `width`,
 which belong to the game's table.
+
+The default is `armAngle: -0.6` — a guard stance, weapon across the front, body
+still visible.
 
 `X_STYLE` is on `window`, so the pose can be dialled in mid-match against the
 real sprite (`X_STYLE.holdAngle = -1.6`) and the numbers copied back into the

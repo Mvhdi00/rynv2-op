@@ -23,20 +23,33 @@ const CLIENT = process.argv[2] || path.resolve(HERE, "../xprecision/X_Precision_
 const OUT = process.env.OUT_DIR || HERE;
 const MIME = { ".html": "text/html", ".js": "text/javascript" };
 
+/* armAngle turns the whole assembly, hands included, so every tile here is a
+ * weapon the character is actually holding. */
 const ANGLES = [
-  { a: 0, label: "0.0  the game's own" },
-  { a: -0.5, label: "-0.5  across the body" },
-  { a: -1.2, label: "-1.2  half out" },
-  { a: -1.6, label: "-1.6  straight out to the side" },
-  { a: -2.2, label: "-2.2  out and back" },
-  { a: -2.6, label: "-2.6  over the shoulder" },
-  { a: -3.14, label: "-3.14  reversed along the back" },
+  { a: 0, label: "0.00  the game's own" },
+  { a: -0.25, label: "-0.25  eased across" },
+  { a: -0.4, label: "-0.40  across the chest" },
+  { a: -0.65, label: "-0.65  guard side" },
+  { a: -0.9, label: "-0.90  held wide" },
+  { a: -1.3, label: "-1.30  nearly side on" },
+  { a: -1.6, label: "-1.60  straight out to the side" },
+  { a: 0.45, label: "+0.45  the other shoulder" },
 ];
 
+/* A stand-in shaped like a weapon, not a slab.
+ *
+ * renderTool stretches whatever it loads to the weapon's own length and width,
+ * and for a polearm that box is nearly square — so a filled rectangle comes out
+ * as a block that hides the character and answers nothing. Real weapon sprites
+ * are mostly transparent with a thin shaft through the middle, so this is too:
+ * a bright grip at the left end, a shaft, and a dark head at the right, which
+ * makes it obvious which end is in the hands and which way it points.
+ */
 const BAR = "data:image/svg+xml;base64," + Buffer.from(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="24">' +
-  '<rect width="120" height="24" rx="6" fill="#c0392b" stroke="#2c1810" stroke-width="4"/>' +
-  '<rect x="86" width="34" height="24" rx="6" fill="#e8b647" stroke="#2c1810" stroke-width="4"/>' +
+  '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">' +
+  '<rect x="6" y="52" width="108" height="16" rx="4" fill="#8d6e4a" stroke="#2c1810" stroke-width="3"/>' +
+  '<rect x="4" y="46" width="30" height="28" rx="6" fill="#e8b647" stroke="#2c1810" stroke-width="3"/>' +
+  '<path d="M92 44 L118 60 L92 76 Z" fill="#c0392b" stroke="#2c1810" stroke-width="3"/>' +
   "</svg>").toString("base64");
 
 const FAKE_SPRITES = `
@@ -131,10 +144,10 @@ const REDIRECT = `
   /* A wide crop, deliberately. The stand-in sprite is drawn at the weapon's own
    * length and width, which for a polearm is large, so a tight frame fills with
    * bar and the pose — the thing being chosen — is unreadable. */
-  const CELL = 300, ZOOM = 1.2;
+  const CELL = 210, ZOOM = 1.7;
   const tiles = [];
   for (const { a, label } of ANGLES) {
-    await page.evaluate((v) => { window.vars.xWeaponStyle = true; window.X_STYLE.holdAngle = v; }, a);
+    await page.evaluate((v) => { window.vars.xWeaponStyle = true; window.X_STYLE.armAngle = v; }, a);
     await page.waitForTimeout(450);
     const dataUrl = await page.evaluate(({ cell, zoom }) => {
       const c = document.getElementById("gameCanvas");
