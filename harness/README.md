@@ -72,6 +72,7 @@ node loadout-check.js         # what the hats and accessories a client wears rea
 node seal-bench.js            # how many of the four placements land, and is the ring sealed
 node replace-check.js         # does the "replace" switch put back what was broken
 node trapped-preplace.js      # does preplace still run while you are in the enemy's trap
+node weapon-style.js          # does the custom weapon carry draw, and unwind the canvas
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -247,6 +248,29 @@ A placement is `z` carrying the item id, not `G` — counting the wrong opcode
 turned 358 food placements into zero. And a client that never spawned proves
 nothing about a feature, so the verdict says INCONCLUSIVE rather than
 "not firing".
+
+### `weapon-style.js`
+
+A custom weapon carry means a save/rotate/restore around the draw, and an
+unbalanced pair there is the fault this repo already carries an unwind for. It
+also means a picture, and sprite hosts are unreachable here — so any image the
+client requests from the weapons folder is answered with a solid bar, and the
+crop is read straight out of the canvas with `drawImage` rather than screenshot
+off the page, which caught the mod menu and none of the character.
+
+Three checks of the balance were needed before one was right, and the two wrong
+ones are the interesting part:
+
+- **saves vs restores over a window** counts a read landing mid-frame as a leak,
+  because those saves have not been restored yet. Reports a healthy loop as
+  broken.
+- **watching the gap grow** fails differently: `doUpdate`'s `finally` calls
+  `restore()` 32 times unconditionally every frame, so the gap marches away from
+  zero on a perfectly healthy loop — and no leak could survive a frame anyway.
+- **net save-restore per frame, compared between the style on and off** is the
+  one that answers the question. One unbalanced save in the player draw shifts it
+  by one per player per frame. It reads `-32.0 vs -32.0`: the unwind, and nothing
+  else.
 
 ### `trapped-preplace.js`
 

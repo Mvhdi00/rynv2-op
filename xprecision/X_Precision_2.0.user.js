@@ -156,6 +156,28 @@ const X_PRECISION = {
     sealRing: true          // choose the ring as a set, not first-come
 };
 
+/* How your own character carries and swings its weapon.
+ *
+ * All of this is paint. The server is sent a direction and an attack, and every
+ * other player's browser draws you with its own copy of this code — so nothing
+ * here is visible to anyone else, and nothing here moves a hitbox, a range or a
+ * tick. It changes your screen only.
+ *
+ * The swing duration is deliberately not adjustable. It equals the weapon's
+ * reload, which makes it your only visual cue for when the next hit is ready; a
+ * snappier-looking swing would be a lie about that. The arc and the curve are
+ * free, so those are what this changes.
+ */
+const X_STYLE = {
+    swingArc: 1.3,      // wider than the game's own throw
+    swingEase: 0.6,     // < 1 throws early and eases out of the return
+    holdAngle: -0.5,    // radians the weapon tilts across the body
+    holdOut: 12,        // pixels further from the fist, along the arm
+    holdSide: -7,       // pixels across the body
+    gripSpread: 0.8,    // hands closer together than the game puts them
+    offHandGrip: 1.25   // off hand further down the shaft
+};
+
 let settings = {
     botplatformplacer: false,
     botcount: 40,
@@ -10042,7 +10064,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                         tmpObj.animate(delta);
                         if (tmpObj.visible) {
                             tmpObj.skinRot += (0.002 * delta);
-                            tmpDir = ((tmpObj == myPlayer) ? getAttackDir() : tmpObj.dir) + tmpObj.dirPlus;
+                            tmpDir = ((tmpObj == myPlayer) ? getAttackDir() : tmpObj.dir) + xStyleSwing(tmpObj);
                             mainContext.save();
                             mainContext.translate(tmpObj.x - xOffset, tmpObj.y - yOffset);
                     // RENDER PLAYER:
@@ -10131,13 +10153,17 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     renderTail(obj.tailIndex, ctxt, obj);
                 }
 
+                /* My own carry. Only while actually holding a weapon — mid-place
+                 * the hands are on a building and the game's own grip is right. */
+                const styled = !!window.vars.xWeaponStyle && obj == myPlayer && obj.buildIndex < 0;
+                if (styled) {
+                    handAngle *= X_STYLE.gripSpread;
+                    oHandDist *= X_STYLE.offHandGrip;
+                }
+
                 // WEAPON BELLOW HANDS:
                 if (obj.buildIndex < 0 && !items.weapons[obj.weaponIndex].aboveHand) {
-                    renderTool(items.weapons[obj.weaponIndex], config.weaponVariants[obj.weaponVariant].src, obj.scale, 0, ctxt);
-                    if (items.weapons[obj.weaponIndex].projectile != undefined && !items.weapons[obj.weaponIndex].hideProjectile) {
-                        renderProjectile(obj.scale, 0,
-                            items.projectiles[items.weapons[obj.weaponIndex].projectile], mainContext);
-                    }
+                    xRenderWeapon(styled, obj, ctxt);
                 }
 
                 // HANDS:
@@ -10148,11 +10174,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                 // WEAPON ABOVE HANDS:
                 if (obj.buildIndex < 0 && items.weapons[obj.weaponIndex].aboveHand) {
-                    renderTool(items.weapons[obj.weaponIndex], config.weaponVariants[obj.weaponVariant].src, obj.scale, 0, ctxt);
-                    if (items.weapons[obj.weaponIndex].projectile != undefined && !items.weapons[obj.weaponIndex].hideProjectile) {
-                        renderProjectile(obj.scale, 0,
-                            items.projectiles[items.weapons[obj.weaponIndex].projectile], mainContext);
-                    }
+                    xRenderWeapon(styled, obj, ctxt);
                 }
 
                 // BUILD ITEM:
@@ -10244,6 +10266,64 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
             // RENDER TOOL:
             var toolSprites = {};
+            /* Reshape my own swing.
+             *
+             * dirPlus is the offset the game lerps 0 -> targetAngle -> 0 across
+             * the weapon's own speed, and it is added to the direction the whole
+             * character is drawn at. Scaling it widens the throw; the exponent
+             * bends the curve so the arm leaves early and drifts back, which is
+             * the part that actually reads as a different animation.
+             *
+             * Mine only: every other player on screen keeps the game's swing,
+             * because that swing is information — it is how you read what they
+             * are doing — and because theirs is drawn from packets, not from a
+             * choice of mine. */
+            function xStyleSwing(obj) {
+                const swing = obj.dirPlus || 0;
+                if (!window.vars.xWeaponStyle || obj != myPlayer || !swing) return swing;
+
+                const target = obj.targetAngle || 0;
+                if (!target) return swing;
+
+                const through = Math.max(0, Math.min(1, swing / target));
+                return target * X_STYLE.swingArc * Math.pow(through, X_STYLE.swingEase);
+            }
+
+            /* renderTool, tilted across the body, for my own weapon only.
+             *
+             * The sprite is drawn outward from the fist, so rotating about that
+             * point tilts the weapon without sliding the grip off the hand. The
+             * projectile a bow carries goes inside the same transform, or the
+             * arrow stays level while the bow leans and the pair comes apart.
+             *
+             * save and restore are balanced here. A throw in between would leave
+             * the transform on every later frame — the exact fault doUpdate's
+             * finally already carries an unwind for, and worth not relying on. */
+            function xRenderWeapon(styled, obj, ctxt) {
+                const weapon = items.weapons[obj.weaponIndex];
+                const variant = config.weaponVariants[obj.weaponVariant].src;
+
+                const paint = () => {
+                    const x = styled ? X_STYLE.holdOut : obj.scale;
+                    const y = styled ? X_STYLE.holdSide : 0;
+                    renderTool(weapon, variant, x, y, ctxt);
+                    if (weapon.projectile != undefined && !weapon.hideProjectile) {
+                        renderProjectile(x, y, items.projectiles[weapon.projectile], ctxt);
+                    }
+                };
+
+                if (!styled) return paint();
+
+                ctxt.save();
+                try {
+                    ctxt.translate(obj.scale, 0);
+                    ctxt.rotate(X_STYLE.holdAngle);
+                    paint();
+                } finally {
+                    ctxt.restore();
+                }
+            }
+
             function renderTool(obj, variant, x, y, ctxt) {
                 var tmpSrc = obj.src + (variant || "");
                 var tmpSprite = toolSprites[tmpSrc];
@@ -19831,6 +19911,7 @@ function runSongLoop() {
         millRotation: false,
         spikeRotation: false,
         xCombatVisuals: true,
+        xWeaponStyle: true,     // your own carry and swing, drawn your way
         xTargetLine: true,
         xThreatRange: true,
         xPlacementPreview: true,
@@ -19974,6 +20055,8 @@ defense: [
                 title: "X- Precision HUD",
                 items: [
                     { type: 'toggle', name: "combat overlays", id: "xCombatVisuals" },
+                    // Paint only, and only on your own character.
+                    { type: 'toggle', name: "my weapon style", id: "xWeaponStyle" },
                     { type: 'toggle', name: "target line", id: "xTargetLine" },
                     { type: 'toggle', name: "enemy threat range", id: "xThreatRange" },
                     { type: 'toggle', name: "placement ghosts", id: "xPlacementPreview" },
