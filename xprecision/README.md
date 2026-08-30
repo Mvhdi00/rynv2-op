@@ -318,6 +318,41 @@ the facts; the reason to leave it alone was that it barely does anything.
 `prePlaceSteps` stays at 144. That path places one object at the angle nearest
 the one being replaced, and nothing measured says a finer scan improves it.
 
+## The weapon carry is paint, and only paint
+
+Asked for a different hold and a different attack animation. Both are drawn in
+this client's own copy of the game's renderer, so both are possible — and it is
+worth being exact about what they are not.
+
+Every weapon stat is the game's own. The client bundles a copy of the weapon
+table, and it compares **byte for byte identical** to the one in
+`src/game_index.js` — 3008 characters, after normalising minifier formatting
+(`.85` against `0.85`). No damage, range, speed, gather or knockback value
+differs. `X_STYLE` decides where a sprite is drawn and nothing else: the server
+is sent a direction and an attack state, exactly as before, and every other
+player's browser draws the world with its own copy of this code, so none of it
+is visible to anyone else and none of it moves a hitbox.
+
+What it changes: the weapon tilts across the body, sits further out along the
+arm, the hands come closer together and the off hand slides down the shaft. The
+swing is widened and its curve bent so the arm leaves early and drifts back.
+
+The swing **duration** is deliberately not adjustable. It equals the weapon's
+reload, which makes it the only visual cue for when the next hit is ready — for
+you and, once the style covers everyone, for reading opponents too. A
+snappier-looking swing would be a lie about that. Arc and curve are free, so
+those are what moved.
+
+Applied to every player on request. The cost of that is worth stating: another
+player's swing is information, and restyling it restyles your reading of them.
+Only the arc and curve move, so what a swing *looks* like changes and when it
+lands does not.
+
+[`../harness/weapon-style.js`](../harness/README.md) confirms it draws, on both
+your own character and another player's, and that the transform is unwound —
+the tilt needs a `save`/`rotate`/`restore`, and an unbalanced pair there is the
+exact fault this client already carries an unwind for.
+
 ## The "replace" switch had nothing behind it
 
 The menu shows two placer switches side by side. `prePlace` works. `prePlace2`,

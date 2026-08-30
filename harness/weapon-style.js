@@ -151,13 +151,19 @@ const REDIRECT = `
     return file;
   };
 
+  /* Two samples, because "a player changed" is not the question once the style
+   * is meant to cover everyone. The mock puts you at the centre and the rival
+   * 150 right and 40 down, so read both patches and require both to move. */
   const read = async () => page.evaluate(() => {
     const c = document.getElementById("gameCanvas");
     const g = c.getContext("2d");
-    const d = g.getImageData(c.width / 2 - 90, c.height / 2 - 90, 180, 180).data;
-    let sum = 0;
-    for (let i = 0; i < d.length; i += 4) sum += d[i] * 3 + d[i + 1] * 5 + d[i + 2] * 7;
-    return { sum, saves: window.__saves, restores: window.__restores };
+    const patch = (dx, dy) => {
+      const d = g.getImageData(c.width / 2 + dx - 80, c.height / 2 + dy - 80, 160, 160).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += d[i] * 3 + d[i + 1] * 5 + d[i + 2] * 7;
+      return sum;
+    };
+    return { me: patch(0, 0), rival: patch(150, 40) };
   });
 
   const set = async (on) => {
@@ -205,8 +211,10 @@ const REDIRECT = `
   console.log(path.basename(CLIENT) + " — custom weapon carry\n");
   const pad = (s, n) => String(s).padEnd(n);
   console.log("  " + pad("spawned", 26) + (spawned ? "yes" : "NO — nothing below means anything"));
-  console.log("  " + pad("pixels around the player", 26) +
-    (off.sum === on.sum ? "IDENTICAL — the style changed nothing" : "changed with the switch"));
+  console.log("  " + pad("pixels around me", 26) +
+    (off.me === on.me ? "IDENTICAL — nothing changed" : "changed with the switch"));
+  console.log("  " + pad("pixels around the rival", 26) +
+    (off.rival === on.rival ? "IDENTICAL — other players unstyled" : "changed with the switch"));
   console.log("  " + pad("save/restore balance", 26) +
     (balanced
       ? "same net per frame either way (" + rateOff.toFixed(1) + " vs " + rateOn.toFixed(1) + ")"
@@ -214,7 +222,7 @@ const REDIRECT = `
   if (faults.length) console.log("  " + pad("page errors", 26) + faults.slice(0, 2).join(" | "));
   console.log("\n  " + offShot + "\n  " + onShot);
 
-  const ok = spawned && off.sum !== on.sum && balanced && !faults.length;
+  const ok = spawned && off.me !== on.me && off.rival !== on.rival && balanced && !faults.length;
   console.log("\n  " + (ok
     ? "the carry draws, and leaves the canvas as it found it"
     : "FAIL — see the rows above"));

@@ -156,12 +156,14 @@ const X_PRECISION = {
     sealRing: true          // choose the ring as a set, not first-come
 };
 
-/* How your own character carries and swings its weapon.
+/* How characters carry and swing their weapons, on your screen.
  *
  * All of this is paint. The server is sent a direction and an attack, and every
- * other player's browser draws you with its own copy of this code — so nothing
- * here is visible to anyone else, and nothing here moves a hitbox, a range or a
- * tick. It changes your screen only.
+ * other player's browser draws the world with its own copy of this code — so
+ * nothing here is visible to anyone else, and nothing here moves a hitbox, a
+ * range, a damage number or a tick. Every weapon stat is the game's own table,
+ * unchanged and verified byte for byte against src/game_index.js. This decides
+ * where a sprite is drawn and nothing more.
  *
  * The swing duration is deliberately not adjustable. It equals the weapon's
  * reload, which makes it your only visual cue for when the next hit is ready; a
@@ -10153,9 +10155,10 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                     renderTail(obj.tailIndex, ctxt, obj);
                 }
 
-                /* My own carry. Only while actually holding a weapon — mid-place
-                 * the hands are on a building and the game's own grip is right. */
-                const styled = !!window.vars.xWeaponStyle && obj == myPlayer && obj.buildIndex < 0;
+                /* Every player's carry, on request. Only while actually holding
+                 * a weapon — mid-place the hands are on a building and the
+                 * game's own grip is the right one for that. */
+                const styled = !!window.vars.xWeaponStyle && obj.buildIndex < 0;
                 if (styled) {
                     handAngle *= X_STYLE.gripSpread;
                     oHandDist *= X_STYLE.offHandGrip;
@@ -10274,13 +10277,15 @@ if (tmpObj.isPlayer && tmpObj.alive) {
              * bends the curve so the arm leaves early and drifts back, which is
              * the part that actually reads as a different animation.
              *
-             * Mine only: every other player on screen keeps the game's swing,
-             * because that swing is information — it is how you read what they
-             * are doing — and because theirs is drawn from packets, not from a
-             * choice of mine. */
+             * Applied to everyone on screen, on request. Worth knowing what
+             * that costs: another player's swing is information — its width and
+             * its timing are how you read what they are doing and when they can
+             * do it again — and restyling it restyles your reading of them. The
+             * timing is untouched either way, since only the arc and the curve
+             * move here, so what changes is how it looks, not when it lands. */
             function xStyleSwing(obj) {
                 const swing = obj.dirPlus || 0;
-                if (!window.vars.xWeaponStyle || obj != myPlayer || !swing) return swing;
+                if (!window.vars.xWeaponStyle || !swing) return swing;
 
                 const target = obj.targetAngle || 0;
                 if (!target) return swing;
