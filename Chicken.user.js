@@ -33793,6 +33793,14 @@ class AI {
                                     max: 200,
                                     min: 20,
                                 },
+                                {
+                                    label: "Grip Reach",
+                                    id: "customWeaponReach",
+                                    type: "number",
+                                    value: 100,
+                                    max: 200,
+                                    min: 80,
+                                },
                             ],
                             margin: true,
                         },
@@ -35389,17 +35397,20 @@ class AI {
             let e = items.weapons[obj.weaponIndex] || {};
             let t = this.poseFor(obj.weaponIndex);
             let i = obj.scale;
-            // Grip Width opens and closes the gap between the hands; the back
-            // hand stays put so it can never sink into the body.
+            // Grip Width opens and closes the gap between the hands; Grip Reach
+            // slides both of them out along the weapon together, for dialling
+            // the hold onto a weapon whose art sits further out than most.
             let s = this.power("customWeaponGrip", 100);
+            let u = this.power("customWeaponReach", 100);
             let n = (e.xOff || 0) * 0.25;
             // the weapon's own yOff says which side of the body it lies along
             let a = Math.max(-i * 0.5, Math.min(i * 0.5, (e.yOff || 0) * t.line));
             let l = t.spread * i;
-            // the back hand never draws in past the body rim, and the front
-            // hand never runs off the end of the weapon's own sprite
-            let o = Math.max(i * 0.9, i * (t.back - (swing.pull || 0)));
+            // Neither hand leaves the weapon: the back one never draws in past
+            // the body rim nor slides off the tip, and the front one never runs
+            // out past the end of the weapon's own sprite.
             let r = i + (e.xOff || 0) + (e.length || i * 2) / 2 - 14;
+            let o = Math.max(i * 0.9, Math.min(r - 8, i * (t.back - (swing.pull || 0)) * u));
             let h = o + (t.front - t.back) * i * s * swing.reach;
             r = Math.min(Math.max(h, o + 8), Math.max(r, o + 8));
             let c = Math.cos(swing.angle);
