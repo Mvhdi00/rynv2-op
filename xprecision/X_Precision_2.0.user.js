@@ -11951,6 +11951,23 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 }
             }
 
+            /* Would a building here stand between you and the enemy?
+             *
+             * Both placement filters worked this out with the same six lines,
+             * and the preplace fallback needs it too — walling yourself off from
+             * the enemy is the one thing a last-resort placement must not do. */
+            function blocksLineToEnemy(config) {
+                if (!nearestEnemy || !myPlayer) return false;
+                return UTILS.lineInRect(
+                    config.x - config.scale - 5,
+                    config.y - config.scale - 5,
+                    config.x + config.scale + 5,
+                    config.y + config.scale + 5,
+                    myPlayer.xVel, myPlayer.yVel,
+                    nearestEnemy.xVel, nearestEnemy.yVel
+                );
+            }
+
             function isPrePlaceAngle(config, prePlaceObject, closestSpikeToEnemy, closestTrapToEnemy, closestSpikeToKb) {
                 if (!nearestEnemy) return false;
                 if (UTILS.getDistance(nearestEnemy.x2, nearestEnemy.y2, myPlayer.x2, myPlayer.y2) > (window.vars.placeRange || 350)) return false;
@@ -11986,14 +12003,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
 
                 // Check if spike blocks line of sight to enemy
-                const spikeWillBlockLOSToEnemy = UTILS.lineInRect(
-                    config.x - config.scale - 5,
-                    config.y - config.scale - 5,
-                    config.x + config.scale + 5,
-                    config.y + config.scale + 5,
-                    myPlayer.xVel, myPlayer.yVel,
-                    nearestEnemy.xVel, nearestEnemy.yVel
-                );
+                const spikeWillBlockLOSToEnemy = blocksLineToEnemy(config);
 
                 /* Back to this client's own 35. The spike tick port raised it to
                  * Novastorm's 55, which is the one thing that port changed
@@ -12092,14 +12102,7 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                 );
 
                 // Check if spike blocks line of sight to enemy
-                const spikeWillBlockLOSToEnemy = UTILS.lineInRect(
-                    config.x - config.scale - 5,
-                    config.y - config.scale - 5,
-                    config.x + config.scale + 5,
-                    config.y + config.scale + 5,
-                    myPlayer.xVel, myPlayer.yVel,
-                    nearestEnemy.xVel, nearestEnemy.yVel
-                );
+                const spikeWillBlockLOSToEnemy = blocksLineToEnemy(config);
 
                 // Check if trap will retrap enemy
                 const willRetrap = UTILS.lineInRect(
@@ -12265,7 +12268,21 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                 lastPrePlaceObject = null;
                 spamPrePlacer = false;
 
-                if (window.vars.prePlace && nearestEnemy && UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2) < 300 && !(nearestTrap && spikeDmgCount > 0)) {
+                /* This used to carry `&& !(nearestTrap && spikeDmgCount > 0)`,
+                 * which switched preplace off entirely in the one state where
+                 * losing a wall costs the most: standing in the enemy's trap
+                 * while their spikes tick you. nearestTrap is an enemy pit trap
+                 * within 50 of you — so it means trapped — and spikeDmgCount
+                 * counts the consecutive ticks you have taken spike damage. Both
+                 * true is exactly the moment your buildings are being broken and
+                 * you cannot walk away from the gap.
+                 *
+                 * Whatever it was guarding against, it was not packets: a
+                 * preplace is one placement, the send is already behind
+                 * `packets + 5 > 119`, and place() puts your weapon back after
+                 * it. Trapped or not, if something of yours is about to break,
+                 * the replacement should be on its way. */
+                if (window.vars.prePlace && nearestEnemy && UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.x2, nearestEnemy.y2) < 300) {
                     let findObject = getPrePlaceObject();
                     smartTickSpike = null;
 
@@ -12424,6 +12441,39 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                                 findAngle = object;
                             }
                         });
+
+                        /* Last resort, and the second half of making preplace
+                         * dependable rather than usual.
+                         *
+                         * Opening the gate above only gets the search running;
+                         * it does not mean it finds anything. isPrePlaceAngle
+                         * answers a tactical question — does this spot tick the
+                         * enemy, knock them into a spike, retrap them — and four
+                         * of its six branches need `enemyTrapped`. So while YOU
+                         * are the one in the trap and they are not, almost
+                         * nothing passes, and a wall about to break gets no
+                         * replacement at all: the case this is supposed to be
+                         * for.
+                         *
+                         * When nothing above accepted, fall back to what preplace
+                         * is actually for — the closest spot to the thing that is
+                         * about to break. The one veto kept is the line to the
+                         * enemy, because a replacement that blinds you is worse
+                         * than the hole it fills. Spikes first, then traps, same
+                         * order the tactical passes use. */
+                        for (const candidates of [spikeAngles, trapAngles]) {
+                            getFindAngle(function () {
+                                const object = candidates
+                                    .filter(obj => obj.placeable)
+                                    .filter(obj => !blocksLineToEnemy(obj))
+                                    .sort((a, b) => UTILS.getDistance(findObject.x, findObject.y, a.x, a.y) - UTILS.getDistance(findObject.x, findObject.y, b.x, b.y))[0];
+
+                                if (object) {
+                                    findAngle = object;
+                                }
+                            });
+                        }
+
                         for (let i in predictObjects) {
                             if (!predictObjects[i].preplace) continue;
 

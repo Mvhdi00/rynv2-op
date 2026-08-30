@@ -71,6 +71,7 @@ node heal-check.js            # does auto heal fire when the server hurts you
 node loadout-check.js         # what the hats and accessories a client wears really do
 node seal-bench.js            # how many of the four placements land, and is the ring sealed
 node replace-check.js         # does the "replace" switch put back what was broken
+node trapped-preplace.js      # does preplace still run while you are in the enemy's trap
 ```
 
 Each script installs the client the way its metadata block asks — a
@@ -246,6 +247,34 @@ A placement is `z` carrying the item id, not `G` — counting the wrong opcode
 turned 358 food placements into zero. And a client that never spawned proves
 nothing about a feature, so the verdict says INCONCLUSIVE rather than
 "not firing".
+
+### `trapped-preplace.js`
+
+Preplace used to switch itself off when you were standing in an enemy trap
+taking spike damage. Both halves of that state are reachable from the wire, which
+is what makes it testable: `nearestTrap` is an enemy pit trap within 50 of you,
+and spike damage is recognised purely by the amount — `distributionDamages` keeps
+a health delta only if it is 20, 30, 35, 45 or one of those times 0.75.
+
+Where the probes go is the whole test. The first version put one counter inside
+the block, after the gate, which cannot see what the gate excluded: against the
+old build it reported "never reached trapped+spiked" and called itself
+inconclusive — true, and useless. So one probe sits outside the gate recording
+the state every tick, and one inside recording that the search ran.
+
+```
+  run                 spawned   trapped    spiked     both at once  preplace ran while both
+  before              yes       30 ticks   6 ticks    6 ticks       0 of 6
+  after               yes       29 ticks   6 ticks    6 ticks       6 of 6
+```
+
+The outside anchor is the part of the condition both builds share, so one test
+runs against either, and a missing anchor exits 2 instead of reporting a zero.
+
+What it does **not** cover: whether a placement actually goes out. A preplace
+needs the enemy mid-swing at a building weak enough to die to it, and the mock
+reproduces neither reload timing nor object health, so the untrapped run places
+nothing either. This counts the gate, which is what changed.
 
 ### `replace-check.js`
 

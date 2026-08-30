@@ -351,7 +351,52 @@ own buildings and counts what follows:
 | off | 0 |
 | on | **1** |
 
-## Preplace is back to how it shipped
+## Preplace stops switching itself off when you are trapped
+
+The gate read:
+
+```js
+if (window.vars.prePlace && nearestEnemy && dist < 300 && !(nearestTrap && spikeDmgCount > 0))
+```
+
+`nearestTrap` is an enemy pit trap within 50 of you, so it means *trapped*.
+`spikeDmgCount` counts the consecutive ticks you have taken spike damage. Both
+true is the moment your walls are being broken and you cannot step away from the
+gap — and that last clause turned preplace off entirely there.
+
+Whatever it was guarding, it was not packets: a preplace is one placement, the
+send already sits behind `packets + 5 > 119`, and `place()` puts your weapon back
+after it. The clause is gone.
+
+Opening the gate is only half of it, though, and the half that is easy to mistake
+for the whole. `isPrePlaceAngle` answers a *tactical* question — does this spot
+tick the enemy, knock them into a spike, retrap them — and four of its six
+branches require `enemyTrapped`. So while **you** are the one in the trap and
+they are not, almost nothing passes the filter, the search runs and finds
+nothing, and the wall about to break still gets no replacement.
+
+So there is now a last-resort pass, after the two tactical ones and only when
+they came back empty: take the closest placeable angle to the object that is
+about to break, which is what preplace is for in the first place. The one veto
+kept is the line to the enemy — a replacement that blinds you is worse than the
+hole it fills — and it is the same check the tactical filter uses, now shared as
+`blocksLineToEnemy` rather than written out three times.
+
+[`../harness/trapped-preplace.js`](../harness/README.md) stages the exact state
+from the wire and counts the ticks that reach the search:
+
+| build | trapped and spiked | preplace search ran |
+|---|---|---|
+| before | 6 ticks | **0 of 6** |
+| after | 6 ticks | **6 of 6** |
+
+**Not verified end to end:** that the fallback pass places something in a real
+fight. A preplace only fires when the enemy is mid-swing at a building weak
+enough to die to that swing, and the mock reproduces neither weapon reload timing
+nor object health — the untrapped run places nothing either, so there is no
+comparison to make. The gate is measured; the fallback is reasoned.
+
+## Preplace is otherwise back to how it shipped
 
 The spike tick port raised one number inside the preplace path — the reach at
 which a preplace spot counts as able to tick the enemy — from this client's own
