@@ -72,6 +72,7 @@ node loadout-check.js         # what the hats and accessories a client wears rea
 node seal-bench.js            # how many of the four placements land, and is the ring sealed
 node replace-check.js         # does the "replace" switch answer a broken building
 node replace-bench.js         # graded replace vs putting the same thing back
+node trap-tick-check.js       # which spike a trap tick runs on, and whether it survives
 node trapped-preplace.js      # does preplace still run while you are in the enemy's trap
 node weapon-style.js          # does the custom weapon carry draw, and unwind the canvas
 node weapon-poses.js          # a contact sheet of weapon angles, to pick one by looking
@@ -287,6 +288,29 @@ ones are the interesting part:
   one that answers the question. One unbalanced save in the player draw shifts it
   by one per player per frame. It reads `-32.0 vs -32.0`: the unwind, and nothing
   else.
+
+### `trap-tick-check.js`
+
+`canTrapTick` proves a specific spike would land before it lets the combo run,
+then returned `true` and let that spike fall on the floor — so the hammer broke
+the trap and the primary swung with nothing placed for the enemy to be freed
+into. It also took the *first* candidate that passed, and the scan hands them
+over in angle order from zero, so the move ran on whichever spike sat lowest on
+the circle rather than the one that hits.
+
+Both are decisions inside one function, so both test without a browser: lift it,
+hand it a candidate list whose answer is known, read back what it chose.
+
+```
+  the enemy sits at angle 1.90, and candidates arrive in angle order from 0
+  nearest candidate to the enemy    angle 1.92, 9.1 away
+  the one it kept                   angle 1.92, 9.1 away      (before: none)
+```
+
+It does **not** cover the placement reaching the wire. A trap tick needs a trap
+damaged below the hammer's structure damage, and object health is not reachable
+from the mock — nothing in the packet table sets it, so a loaded trap sits at the
+item table's 500 and the gate never opens.
 
 ### `trapped-preplace.js`
 

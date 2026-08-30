@@ -11661,6 +11661,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             }
 
             function canTrapTick() {
+                trapTickSpike = null;      // this tick's choice only
                 if (!nearestEnemy) return false;
                 if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
                 if (secondaryReload[myPlayer.sid] < 1) return false;
@@ -11684,17 +11685,34 @@ if (tmpObj.isPlayer && tmpObj.alive) {
 
                 if (placableSpikes.length == 0) return false;
 
+                /* Keep the best one, not the first one.
+                 *
+                 * This used to return on the first spike that passed, and the
+                 * scan hands them over in angle order from 0 -- so the spike the
+                 * combo ran on was whichever happened to sit lowest on the
+                 * circle, not the one that hits hardest. Closest to the enemy is
+                 * the one that hits: spike damage falls off with distance from
+                 * the body, and the test below only asks that it be within
+                 * scale + 55 at all. */
+                let best = null;
+                let bestDist = Infinity;
                 for (let spike of placableSpikes) {
-                    if (spike.placeable && enemyTrapped.health <= getPlayerInfo(myPlayer, "secondaryStructureDmg")
-                        // 95 and 55 are Novastorm's; this was 75 and 35, which
-                        // is why a tick it takes was simply not offered here.
-                        && UTILS.getDistance(enemyTrapped.x, enemyTrapped.y, myPlayer.x2, myPlayer.y2) < spike.scale + 95 &&
-                        UTILS.getDistance(spike.x, spike.y, nearestEnemy.x2, nearestEnemy.y2) < spike.scale + 55) {
-                        return true;
-                    }
+                    if (!spike.placeable) continue;
+                    if (enemyTrapped.health > getPlayerInfo(myPlayer, "secondaryStructureDmg")) continue;
+                    // 95 and 55 are Novastorm's; this was 75 and 35, which
+                    // is why a tick it takes was simply not offered here.
+                    if (UTILS.getDistance(enemyTrapped.x, enemyTrapped.y, myPlayer.x2, myPlayer.y2) >= spike.scale + 95) continue;
+
+                    const toEnemy = UTILS.getDistance(spike.x, spike.y, nearestEnemy.x2, nearestEnemy.y2);
+                    if (toEnemy >= spike.scale + 55) continue;
+
+                    if (toEnemy < bestDist) { bestDist = toEnemy; best = spike; }
                 }
 
-                return false;
+                if (!best) return false;
+
+                trapTickSpike = best;
+                return true;
             }
 
             function place(id, angle = Math.atan2(mouseY - (screenHeight / 2), mouseX - (screenWidth / 2))) {
@@ -12041,6 +12059,14 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             }
 
             let lastPrePlaceObject = null;
+            /* The spike a trap tick was validated on.
+             *
+             * canTrapTick proves a specific spike would land before it lets the
+             * combo run, and then returned true and let that spike fall on the
+             * floor -- Novastorm does the same. So the hammer broke the trap and
+             * the primary swung, with nothing placed for the enemy to be freed
+             * into. Kept here so the placement pass can put it down. */
+            let trapTickSpike = null;
             let removedObjects = [];
             let removedDetails = [];
 
@@ -12859,6 +12885,23 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                     if(canPlace(myPlayer.items[2], angle)) {
                         addPredictObject(myPlayer.items[2], angle, false);
                      }
+                }
+
+                /* Put down the spike the trap tick was validated on.
+                 *
+                 * It has to happen here and not where canTrapTick is called:
+                 * that runs earlier in the tick, and getPredictObjects opens by
+                 * clearing predictObjects, so anything added there is thrown
+                 * away before it can be sent.
+                 *
+                 * Before the hammer, not after. The whole move is that the enemy
+                 * is released from your trap into a spike, and a spike placed
+                 * after the break arrives to an enemy already moving. */
+                if (trapTickSpike) {
+                    if (canPlace(myPlayer.items[2], trapTickSpike.angle)) {
+                        addPredictObject(myPlayer.items[2], trapTickSpike.angle, false);
+                    }
+                    trapTickSpike = null;
                 }
 
                 if(grindObjects && grindObjects.length > 0) {
