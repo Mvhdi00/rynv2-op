@@ -70,7 +70,8 @@ node features-check.js        # do the mod's own per-tick features actually run
 node heal-check.js            # does auto heal fire when the server hurts you
 node loadout-check.js         # what the hats and accessories a client wears really do
 node seal-bench.js            # how many of the four placements land, and is the ring sealed
-node replace-check.js         # does the "replace" switch put back what was broken
+node replace-check.js         # does the "replace" switch answer a broken building
+node replace-bench.js         # graded replace vs putting the same thing back
 node trapped-preplace.js      # does preplace still run while you are in the enemy's trap
 node weapon-style.js          # does the custom weapon carry draw, and unwind the canvas
 node weapon-poses.js          # a contact sheet of weapon angles, to pick one by looking
@@ -314,6 +315,23 @@ What it does **not** cover: whether a placement actually goes out. A preplace
 needs the enemy mid-swing at a building weak enough to die to it, and the mock
 reproduces neither reload timing nor object health, so the untrapped run places
 nothing either. This counts the gate, which is what changed.
+
+### `replace-bench.js`
+
+"Grades every spot against every enemy and takes the best four" sounds better
+than "puts one back where it stood", and sounding better is not evidence. Both
+are geometry, so both run over the same scenes:
+
+```
+  policy                placements   placed nothing  enemy shut out   enemy spots denied
+  put it back (was)     0.69         30.6%           0 (0.0%)         5.3
+  graded, best four     2.75         0.2%            174 (34.8%)      17.8
+```
+
+The last column is what the scoring is actually for — a spike sitting where the
+enemy wanted to build is worth more than the same spike in open ground, and
+neither of the other columns can see that. The first row's 30.6% is the reason
+the put-back was weak: the spot that just failed is often still blocked.
 
 ### `replace-check.js`
 

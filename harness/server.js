@@ -176,7 +176,14 @@ function start(port, log, opts) {
       send("T", [0, 1, 1]);
       send("U", [1, 0]);
       send("S", [0, 3, 0]);
-      send("V", [[0, 1, 2], null]);
+      /* The game's own starting loadout, not three numbers in a row.
+       *
+       * updateItems takes this list as myPlayer.items, and every placer here
+       * reads it by slot -- items[2] is the spike, items[4] the trap. Sending
+       * [0,1,2] made slot 2 read as cheese and slot 4 as nothing, so a placement
+       * test watched the client try to build food and called the feature broken.
+       * The game spawns you with [0, 3, 6, 10]: apple, wood wall, spikes, mill. */
+      send("V", [[0, 3, 6, 10], null]);
       send("V", [[0, 1, 2, 3], true]);
       send("6", [mySid, "hello"]);
       send("8", [mid + 40, midY + 40, 15, 0]);

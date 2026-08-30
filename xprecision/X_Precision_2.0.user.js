@@ -11603,6 +11603,63 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 return UTILS.getDistance(myPlayer.xVel, myPlayer.yVel, nearestEnemy.xVel, nearestEnemy.yVel) <= reach;
             }
 
+            /* Score a replacement spot the way Revelation's gradeReplace does.
+             *
+             * Putting the broken building back where it stood is the obvious
+             * answer and the weak one: the spot that just failed is rarely the
+             * spot worth holding, and one placement where four fit is three
+             * wasted. Revelation grades every candidate against every nearby
+             * enemy and keeps the best set, which is a different feature wearing
+             * the same name.
+             *
+             * The rules are its rules, with its numbers:
+             *
+             *   within 200 of an enemy                          +1
+             *   within 20.4 — close enough to deny their build  +1
+             *   within 50 — actually colliding with them        +2, or +4 trapped
+             *   next to a spike of mine, so a push lands on it  +1 per spike
+             *   sitting on a spot they wanted to build in       +1, and priority
+             *
+             * The last rule is the one that is not a straight port. Revelation
+             * reads `placePot.possible` — every angle each enemy could place at,
+             * kept up to date elsewhere in that client. Nothing here computes
+             * that, and computing it per enemy per tick is a scan this file
+             * cannot afford. So it is approximated: an enemy's placements land
+             * on a ring of `35 + scale + placeOffset` around them, so a spot of
+             * mine denies one when its distance from that enemy is within a
+             * building's width of that ring. Same intent, O(1) instead of a
+             * scan, and it is an approximation rather than the real thing. */
+            function gradeReplaceSpot(config, enemies, myItem) {
+                let points = 0;
+                let priority = false;
+
+                for (const enemy of enemies) {
+                    const dist = UTILS.getDistance(config.x, config.y, enemy.x2, enemy.y2);
+
+                    if (dist <= 200) points += 1;
+                    if (dist <= 20.4) points += 1;
+                    if (dist <= 50) points += imTrapped ? 4 : 2;
+
+                    // Their own placement ring — is this spot one they wanted?
+                    const theirItem = items.list[enemy.items ? enemy.items[2] : myItem.id] || myItem;
+                    const theirRing = 35 + theirItem.scale + (theirItem.placeOffset || 0);
+                    if (Math.abs(dist - theirRing) < (config.scale + theirItem.scale)) {
+                        points += 1;
+                        priority = true;
+                    }
+                }
+
+                /* Next to your own spikes: anything you knock an enemy into is
+                 * worth more than open ground. */
+                let beside = 0;
+                for (const spike of spikes_our) {
+                    if (UTILS.getDistance(config.x, config.y, spike.x, spike.y) <= 50 + spike.scale + 24) beside++;
+                }
+                if (beside) points += 1 + beside;
+
+                return { points, priority };
+            }
+
             function canTrapTick() {
                 if (!nearestEnemy) return false;
                 if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
@@ -12464,37 +12521,77 @@ if (isSpike && canSpikeTick && canTrapTick()) {
                  *
                  * What the name means, and what this does: preplace puts a new
                  * object down *before* the enemy breaks yours, predicting the
-                 * hit. Replace answers the hit that already landed — your wall
-                 * or spike is gone, so put one back where it stood, this tick.
+                 * hit. Replace answers the hit that already landed.
                  *
-                 * Only your own buildings, and only ones that died within reach:
-                 * every placement lands on your own ring, so an object further
-                 * off than the ring plus its own scale cannot be replaced where
-                 * it was, and guessing a different spot is not replacing. The
-                 * angle is the bearing to where it stood, and canPlace decides
-                 * the rest — item limits, collisions and the river included.
+                 * Not by putting the same thing back where it stood — that was
+                 * the first version of this and it is the weak answer, because
+                 * the spot that just failed is rarely the spot worth holding and
+                 * one placement where four fit is three wasted. This grades
+                 * every reachable spot against every nearby enemy and takes the
+                 * best set, which is Revelation's gradeReplace and fullplace
+                 * rather than a put-back. See gradeReplaceSpot for the rules.
+                 *
+                 * Traps win ties, as they do there: a trap that scores the same
+                 * as a spike is worth more, because it holds them still while
+                 * everything else does its work.
+                 *
+                 * Revelation stops at `packets >= 85`. That cap is deliberately
+                 * not ported — this client already refuses a placement at
+                 * `packets + 5 > 119` in the send loop, which covers every
+                 * placement it makes rather than this one feature, and a second
+                 * lower cap would only make replace quieter than the rest.
                  *
                  * Off by default: it is new behaviour, not a repair. */
                 if (window.vars.prePlace2 && myPlayer && removedDetails.length > 0) {
                     /* Without this the feature can never fire. visibleObjects is
                      * a once-per-tick snapshot of gameObjects, so the building
                      * that just died is still in it here — and it sits right
-                     * where the replacement goes, which means it blocks its own
+                     * where a replacement goes, which means it blocks its own
                      * replacement and canPlace says no every time. The server
                      * has already destroyed it; this list is only stale. */
                     const goneSids = removedDetails.map((d) => d.sid);
                     const standing = visibleObjects.filter((o) => !goneSids.includes(o.sid));
 
-                    for (const gone of removedDetails) {
+                    const mine = removedDetails.filter((gone) => items.list[gone.id] && isObjectMine(gone));
+                    const worthAnswering = mine.some((gone) => {
                         const item = items.list[gone.id];
-                        if (!item || !isObjectMine(gone)) continue;
-
                         const ring = 35 + item.scale + (item.placeOffset || 0);
-                        if (UTILS.getDistance(myPlayer.x2, myPlayer.y2, gone.x, gone.y) > ring + item.scale) continue;
+                        return UTILS.getDistance(myPlayer.x2, myPlayer.y2, gone.x, gone.y) <= ring + item.scale;
+                    });
 
-                        const angle = Math.atan2(gone.y - myPlayer.y2, gone.x - myPlayer.x2);
-                        if (canPlace(gone.id, angle, standing)) {
-                            addPredictObject(gone.id, angle, false);
+                    if (worthAnswering && nearestEnemy) {
+                        const enemies = enemiesNear && enemiesNear.length ? enemiesNear : [nearestEnemy];
+                        const spikeId = myPlayer.items[2];
+                        const trapId = myPlayer.items[4] || 15;
+
+                        const graded = [];
+                        for (const id of [spikeId, trapId]) {
+                            const item = items.list[id];
+                            if (!item || isItemLimit(id)) continue;
+                            for (const spot of getPrePlaceAngles(id, standing)) {
+                                if (!spot.placeable) continue;
+                                const { points, priority } = gradeReplaceSpot(spot, enemies, item);
+                                if (points <= 0) continue;
+                                graded.push({ spot: spot, id: id, points: points, priority: priority, isTrap: id === trapId });
+                            }
+                        }
+
+                        graded.sort((a, b) => {
+                            if (b.points !== a.points) return b.points - a.points;
+                            if (a.priority !== b.priority) return a.priority ? -1 : 1;
+                            return (b.isTrap ? 1 : 0) - (a.isTrap ? 1 : 0);   // traps win ties
+                        });
+
+                        /* Four is the ring's own limit — addPredictObject refuses
+                         * anything closer than scale + scale, the server's rule,
+                         * and that many is all that fits. It enforces it again on
+                         * every add, so this loop only has to stop asking. */
+                        let placed = 0;
+                        for (const cand of graded) {
+                            if (placed >= 4) break;
+                            const before = predictObjects.length;
+                            addPredictObject(cand.id, cand.spot.angle, false);
+                            if (predictObjects.length > before) placed++;
                         }
                     }
                 }

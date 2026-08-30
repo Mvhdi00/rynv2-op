@@ -1,4 +1,4 @@
-/* Does the "replace" switch put back what the enemy just broke?
+/* Does the "replace" switch answer what the enemy just broke?
  *
  * The menu has two placer switches. `prePlace` puts an object down *before* the
  * hit lands, predicting it. `prePlace2`, labelled "replace", answers the hit
@@ -121,11 +121,21 @@ async function run(port, wsPort, replaceOn) {
   if (session) session.send("Q", [MY_OBJECT_SID]);
   await page.waitForTimeout(2500);
 
+  /* Count buildings, not placements.
+   *
+   * An earlier version asked whether item 4 -- the exact thing that broke --
+   * went back down, which was the right question while replace was a put-back
+   * and the wrong one now: it grades every reachable spot and takes the best,
+   * so the answer is usually a different item in a better place. It also
+   * counted food, and auto heal places food constantly, so a apple from a
+   * different feature read as replace working. */
   const after = got.filter((g) => g.phase === "after break");
   const idOf = (r) => { try { return JSON.parse(r.args)[0]; } catch (e) { return null; } };
+  const FOOD = new Set([0, 16, 17]);
   const places = after.filter((r) => r.letter === "z");
-  const replaced = places.filter((r) => idOf(r) === MY_OBJECT_ITEM).length;
-  const otherIds = [...new Set(places.map(idOf).filter((v) => v !== MY_OBJECT_ITEM))];
+  const builds = places.filter((r) => { const id = idOf(r); return id != null && !FOOD.has(id); });
+  const replaced = builds.length;
+  const otherIds = [...new Set(builds.map(idOf))];
 
   await browser.close();
   wss.close();
@@ -142,7 +152,7 @@ async function run(port, wsPort, replaceOn) {
   console.log("  the mock breaks the player's own item " + MY_OBJECT_ITEM +
     " (sid " + MY_OBJECT_SID + "), then watches the wire\n");
   console.log("  " + pad("replace", 12) + pad("spawned", 10) + pad("switch reads", 15) +
-    pad("item " + MY_OBJECT_ITEM + " placed", 16) + "other items placed");
+    pad("buildings placed", 18) + "which items");
   console.log("  " + "-".repeat(76));
   for (const [label, r] of [["off", off], ["on", on]]) {
     console.log("  " + pad(label, 12) + pad(r.spawned ? "yes" : "NO", 10) +
@@ -156,11 +166,12 @@ async function run(port, wsPort, replaceOn) {
   if (!off.spawned || !on.spawned) {
     verdict = "INCONCLUSIVE — a run never spawned, so nothing was tested.";
   } else if (on.replaced > 0 && off.replaced === 0) {
-    verdict = "replace works, and only when switched on — " + on.replaced + " placement(s)";
+    verdict = "replace answers the break, and only when switched on — " +
+      on.replaced + " building(s), item " + on.otherIds.join(" and ");
   } else if (on.replaced > 0) {
     verdict = "FAIL — it also fires with the switch off (" + off.replaced + "), so the switch is not the gate";
   } else {
-    verdict = "FAIL — switched on, nothing was placed back";
+    verdict = "FAIL — switched on, nothing was built after the break";
   }
   console.log("\n  " + verdict);
   process.exit(off.spawned && on.spawned && on.replaced > 0 && off.replaced === 0 ? 0 : 1);
