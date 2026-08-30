@@ -11367,6 +11367,86 @@ if (tmpObj.isPlayer && tmpObj.alive) {
             }
 
 
+            /* Velocity tick: turret gear one tick, bull helmet and the polearm
+             * the next, so the bolt and the swing land on the same server tick
+             * and there is no gap to heal in.
+             *
+             * Both Glotus and Revelation carry this, and neither is better
+             * outright — they are better at different halves, so this takes one
+             * half from each.
+             *
+             * Glotus decides better. It requires the polearm to be diamond or
+             * above, because below that the two hits do not add up to enough to
+             * be worth the hat swap; and it fires on the tick the enemy is
+             * committing to their own swing rather than whenever the range
+             * happens to be right. Revelation checks neither, so it spends the
+             * combo on ticks that cannot kill.
+             *
+             * Revelation times better. Its range floor moves with your ping,
+             * which is the correct shape: the bolt is in flight for a round trip
+             * and a fixed floor is only right at one latency. Glotus's fixed 220
+             * is that floor for about 150ms of ping and too far for anyone
+             * below it.
+             *
+             *   ping <= 85   floor 170
+             *   ping <= 110  floor 190
+             *   ping <= 140  floor 210
+             *   ping >  140  floor 230
+             *
+             * The ceiling is 245 in both — the polearm's reach — and is kept.
+             *
+             * The combo itself is expressed in this client's own vocabulary: an
+             * instaKill queue, one step a tick, which is what every other insta
+             * here already uses. "turret" wears 53 without attacking, "primary"
+             * wears 7 and swings. Neither client's setTimeout chain is copied;
+             * this file drives combos off the tick. */
+            function canVelocityTick() {
+                if (!window.vars.velocityTick || !nearestEnemy || !myPlayer) return false;
+                if (imTrapped) return false;
+                if (!isBoughtHat(53, 0) || !isBoughtHat(7, 0)) return false;
+
+                // Polearm, diamond or better.
+                if (myPlayer.weapons[0] != 5) return false;
+                if ((myPlayer.weaponVariants[5] || 0) < 2) return false;
+
+                if (primaryReload[myPlayer.sid] < 1 || turretReload[myPlayer.sid] < 1) return false;
+
+                // Soldier helmet or emp on them and the combo does not land.
+                if (nearestEnemy.skinIndex == 6 || nearestEnemy.skinIndex == 22) return false;
+
+                const ping = window.pingTime || 0;
+                const floor = ping > 140 ? 230 : ping > 110 ? 210 : ping > 85 ? 190 : 170;
+                const range = UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.xVel, nearestEnemy.yVel);
+                if (range < floor || range > 245) return false;
+
+                // Fire as they commit, not merely when the range is right.
+                return primaryReload[nearestEnemy.sid] >= 0.8;
+            }
+
+            /* Someone walked into one of your traps: hit them now.
+             *
+             * A trapped player cannot step out of reach, so a swing at one is
+             * free damage — but only the tick they are actually in the trap and
+             * only if the weapon reaches. Both are checked against the game's
+             * own numbers: inside `trap.scale` of the trap's centre is what the
+             * game counts as trapped, and 35 * 1.8 + weapon range is the reach
+             * this file already uses for its own damage prediction, so near and
+             * a little far both count as long as the weapon covers it. */
+            function canTrapHit() {
+                if (!window.vars.trapHit || !nearestEnemy || !myPlayer) return false;
+                if (primaryReload[myPlayer.sid] < 1) return false;
+
+                const inMyTrap = traps_our.find(trap =>
+                    UTILS.getDistance(trap.x, trap.y, nearestEnemy.x2, nearestEnemy.y2) < trap.scale
+                );
+                if (!inMyTrap) return false;
+
+                const weapon = items.weapons[myPlayer.weapons[0]];
+                if (!weapon) return false;
+                const reach = 35 * 1.8 + weapon.range;
+                return UTILS.getDistance(myPlayer.xVel, myPlayer.yVel, nearestEnemy.xVel, nearestEnemy.yVel) <= reach;
+            }
+
             function canTrapTick() {
                 if (!nearestEnemy) return false;
                 if (getPlayerInfo(myPlayer, "secondaryWeapon") != "hammer") return false;
@@ -13876,6 +13956,18 @@ if (player.sid == myPlayer.sid) {
 
                         if (canVelocitySpikeTick()) {
                             instaKill = ["primary", "stop"];
+                        }
+
+                        /* A trapped enemy is a free swing, so it beats the
+                         * ordinary ticks above — but the velocity tick beats it,
+                         * because turret plus polearm is the bigger burst and
+                         * the later assignment is the one that runs. */
+                        if (canTrapHit()) {
+                            instaKill = ["primary", "stop"];
+                        }
+
+                        if (canVelocityTick()) {
+                            instaKill = ["turret", "primary", "stop"];
                         }
 
 
@@ -19714,6 +19806,8 @@ function runSongLoop() {
 
         // Combat
         shameTick: false,
+        velocityTick: false,    // turret gear, then bull helmet + diamond polearm
+        trapHit: false,         // swing the moment someone is in one of your traps
         shameGrind: true,
         autoShame: false,
         autoShameLimit: 4,
@@ -19807,6 +19901,9 @@ function runSongLoop() {
                     // same code behind it. Named for what it does, so it can be
                     // found by the name people use for it.
                     { type: 'toggle', name: "spike tick" , id: "shameTick" },
+                    // Velocity tick, and the free swing that belongs under it.
+                    { type: 'toggle', name: "velocity tick", id: "velocityTick" },
+                    { type: 'toggle', name: "hit in my trap", id: "trapHit" },
                     { type: 'toggle', name: "shame enemy", id: "shameGrind" },
                     { type: 'toggle', name: "auto hit to shame", id: "autoShame" },
                     { type: 'slider', name: "max shame", id: "autoShameLimit", min: 1, max: 8 }
