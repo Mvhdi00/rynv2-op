@@ -61,7 +61,7 @@ const REDIRECT = `
 })();
 `;
 
-async function run(port, wsPort, replaceOn) {
+async function run(port, wsPort, replaceOn, scenario) {
   const http_server = http.createServer((req, res) => {
     let p = req.url.split("?")[0];
     if (p === "/") p = "/index.html";
@@ -116,6 +116,25 @@ async function run(port, wsPort, replaceOn) {
 
   await page.waitForTimeout(600);
 
+  /* The question this was extended for: trapped in the enemy's pit trap while
+   * the enemy stands in one of yours. Both are reachable from the wire — a pit
+   * trap is item 15, and trap_where_im_in wants one within its own scale of you
+   * owned by someone else, while traps_our wants one owned by you. */
+  if (scenario.startsWith("both trapped") && session) {
+    /* How far the enemy's trap sits from your centre is the whole story, so it
+     * is a parameter. A pit trap blocks placement at its full scale of 50 --
+     * getScale returns scale unchanged for an item, ignoreCollision or not --
+     * and your spike ring is 79, so a spike needs 49 + 50 = 99 of clearance.
+     * The farthest point on your ring is ring + d from the trap centre, so
+     * below d = 20 the trap covers every spot you own and nothing is placeable
+     * by anyone, mod or not. trap_where_im_in accepts d < 50, so both sides of
+     * that line happen in play. */
+    const d = scenario.indexOf("centred") !== -1 ? 10 : 35;
+    session.send("H", [[20, 7e3 + d, 6e3, 0, 45, null, 15, 2]]);         // theirs, on me
+    session.send("H", [[21, 7e3 + 150, 6e3 + 40, 0, 45, null, 15, 1]]);  // mine, on them
+    await page.waitForTimeout(500);
+  }
+
   // Destroy the player's own building and watch what goes out after it.
   phase = "after break";
   if (session) session.send("Q", [MY_OBJECT_SID]);
@@ -140,24 +159,29 @@ async function run(port, wsPort, replaceOn) {
   await browser.close();
   wss.close();
   http_server.close();
-  return { spawned, varState, replaced, otherIds, faults: [...new Set(faults)] };
+  const trapState = await page.evaluate(() => {
+    try { return { imTrapped: !!window.__imTrapped }; } catch (e) { return {}; }
+  }).catch(() => ({}));
+  return { spawned, varState, replaced, otherIds, trapState, faults: [...new Set(faults)] };
 }
 
 (async () => {
   console.log(path.basename(CLIENT) + " — does \"replace\" put back what was broken?\n");
-  const off = await run(8331, 8332, false);
-  const on = await run(8333, 8334, true);
+  const off = await run(8331, 8332, false, "plain");
+  const on = await run(8333, 8334, true, "plain");
+  const both = await run(8335, 8336, true, "both trapped, off centre");
+  const dead = await run(8337, 8338, true, "both trapped, centred");
 
   const pad = (s, n) => String(s).padEnd(n);
   console.log("  the mock breaks the player's own item " + MY_OBJECT_ITEM +
     " (sid " + MY_OBJECT_SID + "), then watches the wire\n");
-  console.log("  " + pad("replace", 12) + pad("spawned", 10) + pad("switch reads", 15) +
-    pad("buildings placed", 18) + "which items");
-  console.log("  " + "-".repeat(76));
-  for (const [label, r] of [["off", off], ["on", on]]) {
-    console.log("  " + pad(label, 12) + pad(r.spawned ? "yes" : "NO", 10) +
+  console.log("  " + pad("replace", 18) + pad("spawned", 10) + pad("switch reads", 15) +
+    pad("buildings in window", 21) + "which items");
+  console.log("  " + "-".repeat(80));
+  for (const [label, r] of [["off", off], ["on", on], ["on, trapped 35 away", both], ["on, trapped 10 away", dead]]) {
+    console.log("  " + pad(label, 18) + pad(r.spawned ? "yes" : "NO", 10) +
       pad(r.varState.ok ? String(r.varState.value) : "unreadable", 15) +
-      pad(r.replaced, 16) + (r.otherIds.length ? r.otherIds.join(",") : "none"));
+      pad(r.replaced, 21) + (r.otherIds.length ? r.otherIds.join(",") : "none"));
   }
   const errs = [...new Set([...off.faults, ...on.faults])];
   if (errs.length) console.log("\n  page errors: " + errs.slice(0, 3).join(" | "));
@@ -173,6 +197,18 @@ async function run(port, wsPort, replaceOn) {
   } else {
     verdict = "FAIL — switched on, nothing was built after the break";
   }
+  /* The count is every building placed in the window, not replace's alone.
+   * With the enemy standing in your trap, autoplace's own branches open too --
+   * four of isAutoPlaceAngle's six need exactly that -- so the trapped rows are
+   * answering "does it build at all", which is the question, and not "how many
+   * of these were replace". */
+  console.log("\n  in the enemy's trap with the enemy in yours:");
+  console.log("    trap 35 from you  " + (both.replaced > 0
+    ? "builds — " + both.replaced + " in the window (replace and autoplace both)"
+    : "builds nothing"));
+  console.log("    trap 10 from you  " + (dead.replaced > 0
+    ? "builds — " + dead.replaced + " building(s)"
+    : "builds nothing — the trap covers the whole ring, so no spot exists"));
   console.log("\n  " + verdict);
   process.exit(off.spawned && on.spawned && on.replaced > 0 && off.replaced === 0 ? 0 : 1);
 })();

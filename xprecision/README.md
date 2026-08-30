@@ -414,6 +414,32 @@ own buildings and counts what follows:
 | off | 0 |
 | on | **1** |
 
+### Does it build while you are trapped
+
+Asked directly: standing in the enemy's pit trap, enemy beside you standing in
+one of yours — does replace still build?
+
+**Yes, and harder than usual** — `imTrapped` is a bonus in the scoring, never a
+gate, and a spot colliding with the enemy scores +4 while you are trapped
+instead of +2. Nothing in the feature checks whether you are trapped before
+running.
+
+**With one exception that is not the mod's doing.** A pit trap blocks placement
+at its full scale of 50 — `getScale` returns `scale` unchanged for an item,
+`ignoreCollision` or not — and your spike ring is 79, so a spike needs 49 + 50 =
+99 of clearance from the trap's centre. The farthest point on your ring is
+`ring + d` from a trap `d` away, so:
+
+| trap's distance from you | your ring |
+|---|---|
+| under 20 | **entirely covered — no legal spot exists at all** |
+| 20 or more | partly free, and it builds |
+
+`trap_where_im_in` accepts anything under 50, so both sides of that line happen
+in play. Under 20 nothing can place there — not this mod, not any mod, not you
+by hand. [`../harness/replace-check.js`](../harness/README.md) runs both sides:
+24 buildings at 35 away, none at 10.
+
 ## Preplace stops switching itself off when you are trapped
 
 The gate read:
