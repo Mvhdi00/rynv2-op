@@ -147,7 +147,7 @@ const REDIRECT = `
   const CELL = 210, ZOOM = 1.7;
   const tiles = [];
   for (const { a, label } of ANGLES) {
-    await page.evaluate((v) => { window.vars.xWeaponStyle = true; window.X_STYLE.armAngle = v; }, a);
+    await page.evaluate((v) => { window.vars.xHoldStyle = true; window.X_STYLE.armAngle = v; }, a);
     await page.waitForTimeout(450);
     const dataUrl = await page.evaluate(({ cell, zoom }) => {
       const c = document.getElementById("gameCanvas");

@@ -351,8 +351,13 @@ a pose its character — kept small, or the weapon pulls out of the hands again.
 that; size through the canvas, never through the weapon's `length` and `width`,
 which belong to the game's table.
 
-The default is `armAngle: -0.6` — a guard stance, weapon across the front, body
-still visible.
+`armAngle: -0.6` is a guard stance, weapon across the front, body still visible.
+
+**Both switches ship off**, and they are two switches, not one: `weapon pose` and
+`swing style`. The grip and the swing are separate things — the pose is how the
+weapon sits while you hold it, the swing is what it does when you attack — and
+asking for the game's grip back is not asking for its swing back. So the file
+installs looking exactly like the game, and either half can be turned on alone.
 
 `X_STYLE` is on `window`, so the pose can be dialled in mid-match against the
 real sprite (`X_STYLE.holdAngle = -1.6`) and the numbers copied back into the

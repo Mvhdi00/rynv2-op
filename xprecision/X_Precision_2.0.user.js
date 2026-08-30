@@ -158,6 +158,11 @@ const X_PRECISION = {
 
 /* How characters carry and swing their weapons, on your screen.
  *
+ * Both off by default — the game's own grip, the game's own swing. Two separate
+ * switches in the menu, `weapon pose` and `swing style`, because they are two
+ * separate things and wanting the game's grip back does not mean wanting its
+ * swing back too. The numbers below drive whichever is on.
+ *
  * All of this is paint. The server is sent a direction and an attack, and every
  * other player's browser draws the world with its own copy of this code — so
  * nothing here is visible to anyone else, and nothing here moves a hitbox, a
@@ -10205,7 +10210,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 /* Every player's carry, on request. Only while actually holding
                  * a weapon — mid-place the hands are on a building and the
                  * game's own grip is the right one for that. */
-                const styled = !!window.vars.xWeaponStyle && obj.buildIndex < 0;
+                const styled = !!window.vars.xHoldStyle && obj.buildIndex < 0;
                 if (styled) {
                     handAngle *= X_STYLE.gripSpread;
                     oHandDist *= X_STYLE.offHandGrip;
@@ -10339,7 +10344,7 @@ if (tmpObj.isPlayer && tmpObj.alive) {
              * move here, so what changes is how it looks, not when it lands. */
             function xStyleSwing(obj) {
                 const swing = obj.dirPlus || 0;
-                if (!window.vars.xWeaponStyle || !swing) return swing;
+                if (!window.vars.xSwingStyle || !swing) return swing;
 
                 const target = obj.targetAngle || 0;
                 if (!target) return swing;
@@ -19982,7 +19987,14 @@ function runSongLoop() {
         millRotation: false,
         spikeRotation: false,
         xCombatVisuals: true,
-        xWeaponStyle: true,     // your own carry and swing, drawn your way
+        /* Both off: the game's own grip and the game's own swing.
+         *
+         * They are separate switches because they are separate things — the
+         * pose is how the weapon sits while you hold it, the swing is what it
+         * does when you attack — and wanting one back does not mean wanting
+         * both back. X_STYLE still holds the numbers either drives. */
+        xHoldStyle: false,      // where the weapon sits in the hands
+        xSwingStyle: false,     // the shape of the attack arc
         xTargetLine: true,
         xThreatRange: true,
         xPlacementPreview: true,
@@ -20126,8 +20138,9 @@ defense: [
                 title: "X- Precision HUD",
                 items: [
                     { type: 'toggle', name: "combat overlays", id: "xCombatVisuals" },
-                    // Paint only, and only on your own character.
-                    { type: 'toggle', name: "my weapon style", id: "xWeaponStyle" },
+                    // Paint only — neither touches damage, range or timing.
+                    { type: 'toggle', name: "weapon pose", id: "xHoldStyle" },
+                    { type: 'toggle', name: "swing style", id: "xSwingStyle" },
                     { type: 'toggle', name: "target line", id: "xTargetLine" },
                     { type: 'toggle', name: "enemy threat range", id: "xThreatRange" },
                     { type: 'toggle', name: "placement ghosts", id: "xPlacementPreview" },

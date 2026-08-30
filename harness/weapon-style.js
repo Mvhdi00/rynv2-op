@@ -167,9 +167,18 @@ const REDIRECT = `
   });
 
   const set = async (on) => {
-    await page.evaluate((v) => { window.vars.xWeaponStyle = v; }, on);
+    await page.evaluate((v) => { window.vars.xHoldStyle = v; window.vars.xSwingStyle = v; }, on);
     await page.waitForTimeout(700);
   };
+
+  /* What the file ships with, before anything is flipped.
+   *
+   * The rest of this test proves the style works when switched on, which says
+   * nothing about what a player sees on install. That is a separate fact and it
+   * is the one that was asked for, so read it before touching either switch. */
+  const shipped = await page.evaluate(() => ({
+    hold: !!window.vars.xHoldStyle, swing: !!window.vars.xSwingStyle,
+  }));
 
   await set(false);
   const off = await read();
@@ -211,6 +220,9 @@ const REDIRECT = `
   console.log(path.basename(CLIENT) + " — custom weapon carry\n");
   const pad = (s, n) => String(s).padEnd(n);
   console.log("  " + pad("spawned", 26) + (spawned ? "yes" : "NO — nothing below means anything"));
+  console.log("  " + pad("ships with", 26) +
+    (!shipped.hold && !shipped.swing ? "both off — the game's own grip and swing"
+      : "pose " + (shipped.hold ? "ON" : "off") + ", swing " + (shipped.swing ? "ON" : "off")));
   console.log("  " + pad("pixels around me", 26) +
     (off.me === on.me ? "IDENTICAL — nothing changed" : "changed with the switch"));
   console.log("  " + pad("pixels around the rival", 26) +
