@@ -414,6 +414,42 @@ own buildings and counts what follows:
 | off | 0 |
 | on | **1** |
 
+### Velocity tick: the window was wider than the weapon
+
+Reported as never firing on a trapped enemy, and as "so fast only the turret
+arrives". Both are the same mistake, and it is a porting one.
+
+The window came from the source clients: Glotus uses 220–245, Revelation 170–245.
+**They can afford that because they drive movement during the combo** — Glotus
+sets `moveTo`, Revelation sends a `"9"` toward the enemy — so the gap closes
+before the swing. This port does not take over your movement, so a swing happens
+from wherever you are standing, and by this file's own reach formula
+(`35 * 1.8 + range`, the one its damage prediction uses) a polearm covers
+`63 + 142 = 205`. **Between 205 and 245 the bolt lands and the swing hits
+nothing** — exactly "only the turret arrives". The ceiling is now the weapon's
+reach.
+
+And the floor does not apply to a trapped enemy. The floor exists because the
+bolt needs travel time against a *moving* target; someone standing in your trap
+cannot move, so both hits land at any distance the weapon covers. This is why it
+never fired on one: a trap sits on your own ring, so anyone in it is 30–130 away,
+always under the floor.
+
+| case | before | after |
+|---|---|---|
+| enemy at 225, past the polearm | fired | **declines** |
+| enemy at 90, in your trap | declined | **fires** |
+| enemy at 225 in your trap | fired | **declines** — reach is reach |
+
+**On ping.** Half right, and the half that is wrong is worth knowing. The combo
+advances one step per **server** tick — the queue is drained inside
+`updatePlayers`, the handler for the server's own player-update packet, not a
+local timer. Ping delays both of your packets equally, so the gap between the
+turret and the swing is preserved whatever the latency; there is nothing to
+compensate. Where ping *does* matter is the floor, because the bolt's travel is a
+round trip and the minimum useful distance moves with it — which is why that
+number is ping-adaptive and the timing is not.
+
 ### Does it build while you are trapped
 
 Asked directly: standing in the enemy's pit trap, enemy beside you standing in

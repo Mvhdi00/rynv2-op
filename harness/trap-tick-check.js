@@ -84,6 +84,49 @@ function run(opts) {
   return { ok: sandbox.result, chose: sandbox.chose, scene: sc };
 }
 
+/* Velocity tick, same treatment: hand it a staged world and read the answer.
+ *
+ * The two faults reported were "it never fires when someone is in a trap" and
+ * "it is so fast only the turret arrives". Both are range, and both are visible
+ * here without a browser. */
+const POLEARM = { id: 5, range: 142 };
+const REACH = 35 * 1.8 + POLEARM.range;      // 205, this file's own formula
+
+function velocity(opts) {
+  const enemyDist = opts.dist;
+  const sandbox = {
+    Math,
+    UTILS: { getDistance: (a, b, c, d) => Math.hypot(c - a, d - b) },
+    window: { vars: { velocityTick: true }, pingTime: opts.ping || 0 },
+    nearestEnemy: { sid: 2, skinIndex: 0, x2: enemyDist, y2: 0, xVel: enemyDist, yVel: 0 },
+    myPlayer: { sid: 1, x2: 0, y2: 0, weapons: [POLEARM.id, 10], weaponVariants: [0,0,0,0,0, opts.variant == null ? 2 : opts.variant] },
+    items: { weapons: { [POLEARM.id]: POLEARM } },
+    isBoughtHat: () => true,
+    imTrapped: !!opts.imTrapped,
+    primaryReload: { 1: 1, 2: opts.enemyReload == null ? 1 : opts.enemyReload },
+    turretReload: { 1: 1 },
+    traps_our: opts.enemyTrapped ? [{ x: enemyDist, y: 0, scale: 50 }] : [],
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(lift("canVelocityTick") + "\nthis.out = canVelocityTick();", sandbox);
+  return sandbox.out;
+}
+
+const V = [];
+const vadd = (label, opts, expect) => V.push({ label, got: velocity(opts) ? "fires" : "declines", expect });
+
+vadd("enemy at 180, open ground", { dist: 180 }, "fires");
+vadd("enemy at 150 — under the floor", { dist: 150 }, "declines");
+vadd("enemy at 200 — polearm still reaches", { dist: 200 }, "fires");
+vadd("enemy at 225 — past the polearm", { dist: 225 }, "declines");
+vadd("enemy at 90, in my trap", { dist: 90, enemyTrapped: true }, "fires");
+vadd("enemy at 90, no trap", { dist: 90 }, "declines");
+vadd("enemy at 225 in my trap — still past reach", { dist: 225, enemyTrapped: true }, "declines");
+vadd("gold polearm", { dist: 180, variant: 1 }, "declines");
+vadd("I am trapped", { dist: 180, imTrapped: true }, "declines");
+vadd("enemy nowhere near their swing", { dist: 180, enemyReload: 0.2 }, "declines");
+vadd("ping 200 pushes the floor to 230", { dist: 180, ping: 200 }, "declines");
+
 const BASE = { toggle: true, secondary: "hammer", structureDmg: 400, trapHealth: 200 };
 const rows = [];
 const add = (label, opts, expect) => {
@@ -129,6 +172,15 @@ console.log("  " + pad("the one it kept", 34) + "angle " +
 
 const picksNearest = !!fired.chose && !!nearest && Math.abs(chosenDist - nd) < 0.01;
 if (!picksNearest) bad++;
+console.log("\n\n" + path.basename(CLIENT) + " — when a velocity tick fires");
+console.log("  polearm reach is 35 * 1.8 + " + POLEARM.range + " = " + REACH + "\n");
+console.log("  " + pad("case", 42) + pad("expected", 12) + "got");
+console.log("  " + "-".repeat(68));
+for (const v of V) {
+  if (v.got !== v.expect) bad++;
+  console.log("  " + pad(v.label, 42) + pad(v.expect, 12) + v.got + (v.got === v.expect ? "" : "   <-"));
+}
+
 console.log("\n  " + (bad === 0
   ? "every gate answers correctly, and it keeps the spike nearest the enemy"
   : bad + " wrong — see the marked rows"));

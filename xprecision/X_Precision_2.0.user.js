@@ -11570,13 +11570,47 @@ if (tmpObj.isPlayer && tmpObj.alive) {
                 // Soldier helmet or emp on them and the combo does not land.
                 if (nearestEnemy.skinIndex == 6 || nearestEnemy.skinIndex == 22) return false;
 
-                const ping = window.pingTime || 0;
-                const floor = ping > 140 ? 230 : ping > 110 ? 210 : ping > 85 ? 190 : 170;
-                const range = UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.xVel, nearestEnemy.yVel);
-                if (range < floor || range > 245) return false;
+                /* The ceiling is the polearm's own reach, not the 245 both
+                 * source clients use.
+                 *
+                 * They can afford 245 because they drive movement during the
+                 * combo — Glotus sets moveTo, Revelation sends a "9" toward the
+                 * enemy — so the gap closes before the swing. This port does not
+                 * take over your movement, so a swing here happens from wherever
+                 * you are standing, and by this file's own reach formula
+                 * (35 * 1.8 + range, the one its damage prediction uses) a
+                 * polearm covers 63 + 142 = 205. Between 205 and 245 the bolt
+                 * lands and the swing hits nothing, which is exactly "only the
+                 * turret arrives". */
+                const weapon = items.weapons[myPlayer.weapons[0]];
+                const reach = 35 * 1.8 + weapon.range;
 
-                // Fire as they commit, not merely when the range is right.
-                return primaryReload[nearestEnemy.sid] >= 0.8;
+                /* A trapped enemy is not going anywhere, so the floor does not
+                 * apply to one.
+                 *
+                 * The floor exists because the bolt needs travel time against a
+                 * MOVING target — too close and it arrives before the swing is
+                 * worth anything. Someone standing in your trap cannot move, so
+                 * both hits land at any distance the weapon covers, and the
+                 * window that was protecting the timing is only refusing free
+                 * damage. This is why it never fired on a trapped enemy: a trap
+                 * sits on your own ring, so anyone in one is 30 to 130 away,
+                 * always under the floor. */
+                const enemyTrapped = traps_our.some(trap =>
+                    UTILS.getDistance(trap.x, trap.y, nearestEnemy.x2, nearestEnemy.y2) < trap.scale
+                );
+
+                const ping = window.pingTime || 0;
+                const floor = enemyTrapped ? 0
+                    : ping > 140 ? 230 : ping > 110 ? 210 : ping > 85 ? 190 : 170;
+
+                const range = UTILS.getDistance(myPlayer.x2, myPlayer.y2, nearestEnemy.xVel, nearestEnemy.yVel);
+                if (range < floor || range > reach) return false;
+
+                /* Fire as they commit, not merely when the range is right —
+                 * except on a trapped enemy, who is not committing to anything
+                 * and cannot leave. */
+                return enemyTrapped || primaryReload[nearestEnemy.sid] >= 0.8;
             }
 
             /* Someone walked into one of your traps: hit them now.
