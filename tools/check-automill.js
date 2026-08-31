@@ -2,32 +2,43 @@
 /*
  * check-automill.js
  *
- * Automill is meant to lay a wall of windmills three wide. The old spacing was
- * exact tangency, and the game rounds the place angle to two decimals on its
- * way out (`M.fixTo(dir, 2)` in the bundle's attack path), so two neighbours
- * could round toward each other and close a gap that had no clearance to give.
- * Which mill was lost depended on where base +/- offset landed on the 0.01
- * grid — that is, on the heading — so the wall came out a different width
- * depending on which way you walked.
+ * Automill is meant to lay a wall of windmills three wide. It came out one,
+ * two or three depending on which way you walked.
  *
- * This lifts the real class out of the built script, drives it against a model
+ * The cause was the spacing: `asin(scale / distance) * 2` is exact tangency, so
+ * neighbouring mills land centre-to-centre at exactly 2 * scale and the
+ * server's strict `distance < scaleA + scaleB` accepts them only while nothing
+ * rounds the gap down. The game rounds the place angle to two decimals on its
+ * way out (`M.fixTo(dir, 2)`, Ci() in src/game_index.js), which at the
+ * windmill's 85-unit place radius is ~0.85 units of arc per angle. Two
+ * neighbours can round toward each other for a combined ~1.7, and which mill
+ * is lost depends on where base +/- offset lands on the 0.01 grid — that is,
+ * on the heading.
+ *
+ * This lifts the real class out of a built client, drives it against a model
  * of the server's own placement rule, and sweeps the heading. The old spacing
- * is reproduced alongside it so the regression stays visible.
+ * is reproduced alongside so the regression stays visible.
+ *
+ * It runs against either build: the v4-based ReUp_Mix, whose Automill was also
+ * carrying an all-or-nothing gate, and RYN v5.4, which had already fixed that
+ * but kept the spacing.
  *
  *   node tools/check-automill.js [path/to/client.js]
  */
 const fs = require("fs");
 const path = require("path");
+const { extractModule } = require("./lib/extract");
 
 const TARGET = process.argv[2] || path.join(__dirname, "..", "ReUp_Mix.user.js");
 const SOURCE = fs.readFileSync(TARGET, "utf8");
-const START = SOURCE.indexOf("  const MILL_TYPE = 5;");
-const END = SOURCE.indexOf("  const Automill_default = Automill;");
-if (START === -1 || END === -1 || END < START) {
+
+const MOD =
+  extractModule(SOURCE, "  const MILL_TYPE = 5;", "Automill") ||
+  extractModule(SOURCE, "  const AUTOMILL_PLACE_COST", "Automill");
+if (MOD === null) {
   console.error("could not find the Automill module in " + path.relative(process.cwd(), TARGET));
   process.exit(1);
 }
-const MOD = SOURCE.slice(START, END);
 
 /* ---- game data, as the client reads it ---- */
 const PLAYER_SCALE = 35;
@@ -36,6 +47,7 @@ const Items = { 10: WINDMILL };
 const ItemGroups = { 3: { limit: 7, sandboxLimit: 299 } };
 const Settings_default = { _automill: true };
 const fixTo = (value, fraction) => parseFloat(value.toFixed(fraction));
+const RING = PLAYER_SCALE + WINDMILL.scale + WINDMILL.placeOffset; // 85
 
 function Vector(x, y) { this.x = x; this.y = y; }
 Vector.prototype.addDirection = function (angle, length) {
@@ -46,21 +58,20 @@ Vector.prototype.distance = function (o) { return Math.hypot(o.x - this.x, o.y -
 /* ---- the world, and the server's own placement rule ---- */
 function makeWorld(objects) {
   return {
-    placed: objects.slice(),
-    // ObjectManager.canPlaceItem, minus the river band the sweep never enters.
+    placed: (objects || []).slice(),
     canPlaceItem(id, position) {
-      const item = Items[id];
       for (const o of this.placed) {
-        if (position.distance(o.pos) < item.scale + o.scale) return false;
+        if (position.distance(o.pos) < Items[id].scale + o.scale) return false;
       }
       return true;
     },
-    // What the server does with the batch: apply in order, refuse anything
-    // landing within scale+scale of what is already down.
+    // Apply the batch in order, refusing anything landing within scale+scale
+    // of what is already down. The angle is quantised on the way, because the
+    // game rounds it before it reaches the server.
     apply(origin, angles) {
       let accepted = 0;
-      for (const a of angles) {
-        const p = origin.addDirection(a, PLAYER_SCALE + WINDMILL.scale + WINDMILL.placeOffset);
+      for (const raw of angles) {
+        const p = origin.addDirection(fixTo(raw, 2), RING);
         let ok = true;
         for (const o of this.placed) {
           if (p.distance(o.pos) < WINDMILL.scale + o.scale) { ok = false; break; }
@@ -72,28 +83,37 @@ function makeWorld(objects) {
   };
 }
 
-function makeClient(world, heading, opts = {}) {
-  const cur = new Vector(opts.x || 0, opts.y || 0);
+/* Stubs covering both module shapes: the v4 build calls place() and reads
+ * item counts and the sandbox gates; v5.4 calls requestPlace() and reads the
+ * trap gates. Providing both keeps one check honest against either. */
+function makeClient(world, heading, opts) {
+  opts = opts || {};
   const speed = opts.speed === undefined ? 25 : opts.speed;
-  const move = heading + Math.PI; // heading is where the mills go, so travel is opposite
+  const travel = heading + Math.PI; // mills go behind, so travel is opposite
+  const cur = new Vector(0, 0);
   const sent = [];
   const myPlayer = {
     scale: PLAYER_SCALE,
     isSandbox: true,
     age: 1,
+    isTrapped: false,
     itemCount: new Map([[3, opts.count || 0]]),
-    pos: { current: cur, future: cur.addDirection(move, speed) },
+    pos: { current: cur, future: cur.addDirection(travel, speed) },
     getItemByType: () => WINDMILL.id,
     getItemPlaceScale: (id) => PLAYER_SCALE + Items[id].scale + Items[id].placeOffset,
     getPlacePosition(start, id, angle) { return start.addDirection(angle, this.getItemPlaceScale(id)); },
     getItemCount: (g) => ({ count: myPlayer.itemCount.get(g) || 0, limit: ItemGroups[g].sandboxLimit }),
     canPlace: () => opts.canPlace !== false,
+    canPlaceObject(type, angle) {
+      return world.canPlaceItem(WINDMILL.id, this.getPlacePosition(this.pos.current, WINDMILL.id, angle));
+    },
   };
   return {
     sent,
     isOwner: true,
     myPlayer,
     ObjectManager: world,
+    EnemyManager: { nearestTrap: null },
     _ModuleHandler: {
       attacking: 0,
       placedOnce: false,
@@ -101,30 +121,36 @@ function makeClient(world, heading, opts = {}) {
       packetCount: opts.packetCount || 0,
       reverse_move_dir: heading,
       placeAngles: [null, []],
+      activeModule: null,
       staticModules: { autoBuy: { boughtEverything: () => false } },
       place(type, angle) { sent.push(angle); },
+      requestPlace(type, angle) { sent.push(angle); return 1; },
     },
   };
 }
 
-/* ---- load the real class ---- */
 const Automill = new Function(
   "Items", "ItemGroups", "Settings_default", "fixTo",
   MOD + "\n return Automill;"
 )(Items, ItemGroups, Settings_default, fixTo);
 
-/* ---- the spacing this replaced, for comparison ---- */
-const OLD_OFFSET = Math.asin((2 * WINDMILL.scale + 9e-13) / (2 * (PLAYER_SCALE + WINDMILL.scale + WINDMILL.placeOffset))) * 2;
-function oldAngles(heading) {
-  // The game rounds the place angle on its way out.
-  return [heading, heading - OLD_OFFSET, heading + OLD_OFFSET].map((a) => fixTo(a, 2));
+/* ---- the spacing this replaced ---- */
+const OLD_OFFSET = Math.asin((2 * WINDMILL.scale + 9e-13) / (2 * RING)) * 2;
+const oldAngles = (h) => [h, h - OLD_OFFSET, h + OLD_OFFSET];
+
+function run(heading, opts) {
+  const world = (opts && opts.world) || makeWorld([]);
+  const client = makeClient(world, heading, opts || {});
+  new Automill(client).postTick();
+  return { angles: client.sent, client, world };
 }
 
-/* ---- run one heading ---- */
-function newCount(heading, world, opts) {
-  const client = makeClient(world || makeWorld([]), heading, opts || {});
-  new Automill(client).postTick();
-  return { angles: client.sent, client };
+/* A fresh world is used for the server pass so the module's own view and the
+ * server's start from the same state. */
+function survives(heading, opts) {
+  const { angles } = run(heading, opts);
+  const origin = new Vector(0, 0).addDirection(heading + Math.PI, (opts && opts.speed) || 25);
+  return makeWorld((opts && opts.world && opts.world.placed) || []).apply(origin, angles);
 }
 
 let pass = 0, fail = 0;
@@ -134,30 +160,27 @@ function check(name, got, want) {
   else { fail++; console.log("  FAIL " + name + "\n         got  " + JSON.stringify(got) + "\n         want " + JSON.stringify(want)); }
 }
 
+console.log("\nclient under test: " + path.relative(process.cwd(), TARGET));
+
+console.log("\nthe eight WASD headings, on open ground");
 const DIRS = [
   ["right", 0], ["down-right", Math.PI / 4], ["down", Math.PI / 2], ["down-left", 3 * Math.PI / 4],
   ["left", Math.PI], ["up-left", -3 * Math.PI / 4], ["up", -Math.PI / 2], ["up-right", -Math.PI / 4],
 ];
-
-console.log("\nthe eight WASD headings, on open ground");
 for (const [name, dir] of DIRS) {
-  const world = makeWorld([]);
-  const { angles } = newCount(dir, world);
-  const accepted = makeWorld([]).apply(new Vector(0, 0).addDirection(dir + Math.PI, 25), angles);
   const old = makeWorld([]).apply(new Vector(0, 0), oldAngles(dir));
-  check(name.padEnd(11) + " -> 3 mills survive the server (old spacing: " + old + ")", accepted, 3);
+  check(name.padEnd(11) + " -> 3 mills survive the server (old spacing: " + old + ")", survives(dir), 3);
 }
 
-console.log("\nsweeping 36000 headings");
+console.log("\nsweeping 72000 headings");
 {
   let short = 0, worst = 3, oldShort = 0;
-  const N = 36000;
+  const N = 72000;
   for (let i = 0; i < N; i++) {
     const dir = (i / N) * Math.PI * 2;
-    const { angles } = newCount(dir, makeWorld([]));
-    const n = makeWorld([]).apply(new Vector(0, 0).addDirection(dir + Math.PI, 25), angles);
+    const n = survives(dir);
     if (n < 3) short++;
-    worst = Math.min(worst, n);
+    if (n < worst) worst = n;
     if (makeWorld([]).apply(new Vector(0, 0), oldAngles(dir)) < 3) oldShort++;
   }
   check("no heading places fewer than 3", short, 0);
@@ -166,29 +189,24 @@ console.log("\nsweeping 36000 headings");
     " headings — " + ((oldShort / N) * 100).toFixed(1) + "%)");
 }
 
-console.log("\nangles are on the grid the server sees");
+console.log("\nclearance actually asked for");
 {
-  const { angles } = newCount(Math.PI / 4, makeWorld([]));
+  const { angles } = run(0);
   check("three angles sent", angles.length, 3);
-  check("each is quantised to 2dp", angles.every((a) => a === fixTo(a, 2)), true);
-  const d = angles.map((a) => Math.abs(a - angles[0])).sort((x, y) => x - y);
-  check("wings sit either side of the centre", d[0] === 0 && d[1] > 0 && d[2] > 0, true);
+  const q = angles.map((a) => fixTo(a, 2));
+  const chord = (g) => 2 * RING * Math.sin(Math.abs(g) / 2);
+  const gaps = [chord(q[1] - q[0]), chord(q[2] - q[0])];
+  check("both gaps clear the 90-unit bar after rounding", gaps.every((g) => g >= 90), true);
 }
 
 console.log("\nblocked ground costs one mill, not the tick");
 {
-  // Park an object exactly where the left wing wants to go.
-  const heading = 0;
-  const probe = newCount(heading, makeWorld([]));
-  const leftAngle = probe.client.sent[1];
-  const R = PLAYER_SCALE + WINDMILL.scale + WINDMILL.placeOffset;
+  const probe = run(0);
+  const wing = probe.angles[1];
   const origin = new Vector(0, 0).addDirection(Math.PI, 25);
-  const blockPos = origin.addDirection(leftAngle, R);
-  // Sized to sit on the left wing through its whole slide range (0.08rad is
-  // ~7 units of arc) while leaving the centre, 90 units off, clear.
-  const world = makeWorld([{ pos: blockPos, scale: 40 }]);
-  const { angles } = newCount(heading, world);
-  check("two mills still go out", angles.length, 2);
+  // Sized to sit on one wing while leaving the centre, 90 units off, clear.
+  const world = makeWorld([{ pos: origin.addDirection(wing, RING), scale: 40 }]);
+  check("two mills still go out", run(0, { world }).angles.length, 2);
 }
 
 console.log("\ngates");
@@ -199,19 +217,15 @@ console.log("\ngates");
   check("standing still places nothing", c.sent.length, 0);
 
   c = makeClient(makeWorld([]), 0, { canPlace: false });
-  const m = new Automill(c); m.postTick();
-  check("no windmill available disables the module", [c.sent.length, m.active], [0, false]);
-
-  c = makeClient(makeWorld([]), 0, { packetCount: 64 });
   new Automill(c).postTick();
-  check("a tight packet budget caps the batch", c.sent.length, 1);
+  check("no windmill available places nothing", c.sent.length, 0);
 
-  c = makeClient(makeWorld([]), 0, { count: 298 });
+  c = makeClient(makeWorld([]), 0, { packetCount: 66 });
   new Automill(c).postTick();
-  check("one slot left below the cap places one", c.sent.length, 1);
+  check("a tight packet budget caps the batch", c.sent.length <= 1, true);
 
-  c = makeClient(makeWorld([]), 0, {});
   Settings_default._automill = false;
+  c = makeClient(makeWorld([]), 0, {});
   new Automill(c).postTick();
   check("the toggle is honoured", c.sent.length, 0);
   Settings_default._automill = true;

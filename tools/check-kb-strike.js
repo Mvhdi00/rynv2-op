@@ -17,15 +17,15 @@
 const fs = require("fs");
 const path = require("path");
 
+const { extractModule } = require("./lib/extract");
+
 const TARGET = process.argv[2] || path.join(__dirname, "..", "ReUp_Mix.user.js");
 const SOURCE = fs.readFileSync(TARGET, "utf8");
-const START = SOURCE.indexOf("  const KB_STRIKE_TURRET_TRAVEL");
-const END = SOURCE.indexOf("  class ShameSpam {");
-if (START === -1 || END === -1 || END < START) {
+const MOD = extractModule(SOURCE, "  const KB_STRIKE_TURRET_TRAVEL", "KnockbackStrike");
+if (MOD === null) {
   console.error("could not find the KnockbackStrike module in " + path.relative(process.cwd(), TARGET));
   process.exit(1);
 }
-const MOD = SOURCE.slice(START, END);
 
 /* ---- stubs ---- */
 class PlayerObject {

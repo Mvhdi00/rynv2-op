@@ -1,0 +1,34 @@
+  class TrapKB {
+    moduleName="trapKB";
+    client;
+    constructor(client2) {
+      this.client = client2;
+    }
+    postTick() {
+      const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
+      const nearestEnemy = EnemyManager2.nearestKBTrapEnemy;
+      if (nearestEnemy === null || nearestEnemy.isTrapped || ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule() || !Settings_default._trapKB) {
+        return;
+      }
+      const pos1 = myPlayer.pos.current;
+      const pos2 = nearestEnemy.pos.current;
+      const angle = pos1.angle(pos2);
+      const {reloading: reloading} = ModuleHandler.staticModules;
+      const primaryReloaded = reloading.isReloaded(0);
+      const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
+      if (!primaryReloaded) {
+        return;
+      }
+      const range = DataHandler_default.getWeapon(myPlayer.getItemByType(0)).range + nearestEnemy.hitScale;
+      if (!myPlayer.collidingSimple(nearestEnemy, range)) {
+        return;
+      }
+      ModuleHandler.moduleActive = true;
+      ModuleHandler.useAngle = angle;
+      if (turretReloaded) {
+        ModuleHandler.forceHat = 53;
+      }
+      ModuleHandler.forceWeapon = 0;
+      ModuleHandler.shouldAttack = true;
+    }
+  }

@@ -1,0 +1,3 @@
+    canPlaceWindmill(angle) {
+      return this.client.myPlayer.canPlaceObject(5, angle);
+    }

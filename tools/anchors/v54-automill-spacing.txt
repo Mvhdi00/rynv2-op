@@ -1,0 +1,11 @@
+      const item = Items[myPlayer.getItemByType(5)];
+      const distance = myPlayer.getItemPlaceScale(item.id);
+      const offset = Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2;
+      const leftAngle = angle - offset;
+      const rightAngle = angle + offset;
+      // Novastorm gates the trio on the centre mill being placeable, then tests
+      // each of the three on its own and places the ones that fit. Requiring all
+      // three, as this did, meant one rock behind you cancelled the whole thing.
+      // The offset stays RYN's exact solve rather than novastorm's
+      // `toRad(scale + scale / 2)`, which is a degrees-for-radians approximation
+      // that only lands near the right answer for a windmill's scale.

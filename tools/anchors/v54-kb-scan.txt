@@ -1,0 +1,30 @@
+          if (!target.isTrapped && isEnemyObject && object.type === 15 && this.isNear(target, this.nearestKBTrapEnemy)) {
+            const KBDistance = myPlayer.getActualMaxKnockback(target);
+            const trapScale = object.collisionScale + target.collisionScale;
+            const angleToEnemy = pos1.angle(pos2);
+            const angleToSpike = pos1.angle(pos3);
+            const distanceToTrap1 = pos1.distance(pos3);
+            const offset = Math.asin(2 * trapScale / (2 * distanceToTrap1));
+            const angleDistance = getAngleDist(angleToEnemy, angleToSpike);
+            const intersecting = angleDistance <= offset;
+            const overlapping = distanceToTarget <= distanceToTrap1;
+            const inRange2 = KBDistance !== 0 && target.collidingObject(object, KBDistance);
+            if (intersecting && overlapping && inRange2) {
+              if (this.nearestKBTrap === null) {
+                this.nearestKBTrapEnemy = target;
+                this.nearestKBTrap = object;
+              } else {
+                const pos4 = this.nearestKBTrap.pos.current;
+                const angle1 = pos2.angle(pos3);
+                const angle2 = pos1.angle(pos3);
+                const angle3 = pos2.angle(pos4);
+                const angle4 = pos1.angle(pos4);
+                const angleDist1 = getAngleDist(angle1, angle2);
+                const angleDist2 = getAngleDist(angle3, angle4);
+                if (angleDist1 < angleDist2) {
+                  this.nearestKBTrapEnemy = target;
+                  this.nearestKBTrap = object;
+                }
+              }
+            }
+          }

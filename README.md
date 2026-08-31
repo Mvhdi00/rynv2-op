@@ -212,7 +212,8 @@ but nothing in the client needs it. It is stripped from the build.
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
-src/RYN_Client_v4.js      base client (input)
+src/RYN_Client_v4.js      base client for ReUp_Mix (input)
+src/RYN_Client_v5.4.js    base client for the v5.4 build (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
@@ -221,15 +222,33 @@ tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/check-kb-strike.js  KnockbackStrike geometry vs. synthetic scenes
 tools/check-automill.js   Automill spacing vs. the server's placement rule
-tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/lib/extract.js      brace-matching class extractor used by both checks
+tools/anchors/            exact anchor text for the v5.4 build
+tools/modules/            replacement module bodies
+tools/build-reup.js       src/RYN_Client_v4.js  -> ReUp_Mix.user.js
+tools/build-v54.js        src/RYN_Client_v5.4.js -> RYN_Client_v5.4_ReUp.user.js
 ```
 
 ## Build
 
 ```sh
 node tools/extract-drivers.js    # refresh drivers from src/game_*.js
-node tools/build-reup.js         # produce ReUp_Mix.user.js
+node tools/build-reup.js         # produce ReUp_Mix.user.js       (from v4)
+node tools/build-v54.js          # produce RYN_Client_v5.4_ReUp.user.js
 ```
+
+Two bases, two builds. `ReUp_Mix.user.js` is the v4 core with the Luna
+features folded in. `RYN_Client_v5.4_ReUp.user.js` is RYN v5.4 with only the
+two fixes below applied — v5.4 is a newer client and had already fixed some of
+what the v4 build has to repair, so what it got right is left alone.
+
+| | ReUp_Mix (v4) | v5.4 build |
+|---|---|---|
+| Automill all-or-nothing gate | removed here | already fixed upstream |
+| Automill sandbox / age gates | present upstream | already removed upstream |
+| **Automill spacing** | **fixed** | **fixed** |
+| **Trap KB → Knockback Strike** | **done** | **done** |
+| Luna features | ported | not ported |
 
 Every edit in `build-reup.js` is anchored to an exact string in the base
 client, and an anchor that is missing or ambiguous fails the build. Dropping in
