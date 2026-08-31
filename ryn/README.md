@@ -1,6 +1,6 @@
 # RYN Client v5.4
 
-`RYN_Client_v5.4.user.js` — the client as uploaded, with six changes.
+`RYN_Client_v5.4.user.js` — the client as uploaded, with seven changes.
 
 1. [Autoheal](#autoheal) — novastorm's rule and nothing else
 2. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
@@ -8,6 +8,7 @@
 4. [Knockback tick](#knockback-tick--hit-them-onto-a-spike) — added from Glotus; RYN had the trap half only
 5. [Automill](#automill--the-ragged-wall) — the whole trio or none, fixing the ragged wall
 6. [Blood Wings](#blood-wings-while-standing-still) — no longer forced while standing still
+7. [Bot names](#bot-names) — one name for all of them, optionally numbered
 
 ---
 
@@ -760,6 +761,56 @@ The two legitimate Blood Wings branches are untouched: with the bull helmet
 active, and behind the `_cowboyWhenSafe` toggle. A standing check asserts
 exactly that — idle branch gone, those two kept — and a mutation putting it
 back goes red.
+
+---
+
+## Bot names
+
+Every bot used to need a name typed into its own row — or a dice roll, or
+whatever `Ryn` placeholder was sitting there. The Bots page now has two things
+next to **Auto random bot names**:
+
+| | |
+| --- | --- |
+| **Name bots** | type one name; every bot you add connects as that |
+| **Number them (1, 2, 3…)** | appends the bot's number: `Ryn1`, `Ryn2`, `Ryn3` |
+
+**It prefills each row's own input rather than opening a second path.** The
+connect button already reads that field and nothing else:
+
+```js
+const botName = nameInput && nameInput.value.trim() ? nameInput.value.trim() : "";
+...
+player._botCustomName = botName;
+```
+
+so one shared name flows down the path that already worked, and every row stays
+editable — a single bot can still be renamed by hand before connecting.
+
+Precedence: a typed shared name beats the random-name switch; with the field
+empty, everything behaves exactly as before.
+
+`_numberedBotName` trims the base so the digits always survive moomoo's 15
+character cap — `ExactlyFifteenX` with 100 bots gives `ExactlyFifte100`, not a
+name whose number fell off the end.
+
+### Verifying it
+
+```
+node harness/bot-names.js
+```
+
+The prefill block and `_numberedBotName` are lifted from the client, so this
+runs the real rule:
+
+```
+  name typed, numbering off       Ryn, Ryn, Ryn, Ryn
+  name typed, numbering on        Ryn1, Ryn2, Ryn3, Ryn4
+  name with spaces, numbered      King1, King2, King3, King4
+  no name, random names on        RND, RND, RND, RND
+  no name, nothing on             (blank), (blank), (blank), (blank)
+  name set, random also on        Ryn, Ryn, Ryn, Ryn
+```
 
 ---
 

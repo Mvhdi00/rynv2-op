@@ -644,6 +644,16 @@ This file exists as a record of two hypotheses that were measured and
 falsified before anything was changed. The rate tracks how crowded your own
 ring is (100% empty, ~23–36% with four spikes placed), which is real geometry.
 
+### `bot-names.js`
+
+One name typed once on the Bots page, optionally numbered, reaching every bot.
+The prefill block and `_numberedBotName` are lifted out of the client, so the
+rule under test is the shipped one rather than a copy of it.
+
+Covers the precedence that matters — a typed name beats the random-name switch,
+an empty field leaves the old behaviour untouched — and that numbering survives
+moomoo's 15 character cap by trimming the base rather than the digits.
+
 ### `knockback-duel.js`
 
 Glotus 5.5.5's `KnockbackTick` against the copy now in RYN — hit them so the

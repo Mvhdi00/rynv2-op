@@ -317,6 +317,7 @@ check("wire", "spikeTickController still runs after the three spike tick modules
 });
 
 for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "false"],
+                           ["_botNameAll", '""'], ["_botNumberNames", "false"],
                            ["_knockbackTick", "false"],
                            ["_velocityTickTimes", "0"], ["_knockbackTickTimes", "0"]]) {
   check("wire", key + " has a default", () => {
@@ -326,12 +327,17 @@ for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "fa
 }
 
 for (const id of ["_velocityTick", "_velocityTickTrap", "_knockbackTick",
+                  "_botNameAll", "_botNumberNames",
                   "_velocityTickTimes", "_knockbackTickTimes", "_spikeTickOutcome"]) {
   check("wire", id + " has a UI element", () => {
     const asInput = src.includes('id=\\"' + id + '\\" type=\\"checkbox\\"');
     const asSpan = src.includes('id=\\"' + id + '\\" class=\\"text-value\\"');
-    if (!asInput && !asSpan) return [false, "no element carries this id"];
-    return [true, asInput ? "checkbox" : "stat span"];
+    // A text field carries its class between the id and the type, so the two
+    // patterns above miss it — the first version of this check reported a
+    // present element as missing.
+    const asText = new RegExp('id=\\\\"' + id + '\\\\"[^>]*type=\\\\"text\\\\"').test(src);
+    if (!asInput && !asSpan && !asText) return [false, "no element carries this id"];
+    return [true, asInput ? "checkbox" : asText ? "text field" : "stat span"];
   });
 }
 
@@ -379,6 +385,26 @@ check("wire", "the spike tick never preempts the other placers", () => {
   if (/\.preempt\(/.test(cls)) return [false, "it calls preempt — that takes ground from a placer"];
   if (!/availableGround\(c\)/.test(cls)) return [false, "acquire does not check availability"];
   return [true, "checks availability, never preempts"];
+});
+
+check("wire", "one bot name reaches every bot row", () => {
+  if (!/_botNameAll: ""/.test(src)) return [false, "_botNameAll has no default"];
+  if (!src.includes("const sharedName = (Settings_default._botNameAll"))
+    return [false, "the row builder does not read it"];
+  if (!/inp\.value = Settings_default\._botNumberNames/.test(src))
+    return [false, "the numbering switch is not consulted"];
+  // It must prefill the row's own input, not open a second path to the socket.
+  if (!/\? this\._numberedBotName\(sharedName, botCount\)\s*\n\s*: sharedName;/.test(src))
+    return [false, "numbering does not use _numberedBotName"];
+  return [true, "prefills the row input the connect button already reads"];
+});
+
+check("wire", "a numbered bot name never exceeds moomoo's 15 characters", () => {
+  const m = /_numberedBotName\(base, n\) \{([\s\S]*?)\n    \}/.exec(src);
+  if (!m) return [false, "_numberedBotName not found"];
+  if (!/15 - suffix\.length/.test(m[1]))
+    return [false, "the base is not trimmed to leave room for the digits"];
+  return [true, "base trimmed so the number always survives"];
 });
 
 check("wire", "automill reports what it sent", () => {
