@@ -510,6 +510,25 @@ does fire and flips each gate on its own — every flip must turn **both** clien
 off, which is what proves each gate is carrying weight on both sides rather than
 being absent from both.
 
+### `velocity-duel.js`
+
+Glotus 5.5.5's `VelocityTick` against the copy now in RYN. Both classes are
+lifted with `vm` and driven by **one** stub client, so nothing is transcribed
+and neither side sees a world the other did not. 768 scenes across eight axes;
+all three signals (arms, fires, walks on the firing tick) must match.
+
+Two things this file has to get right, and both are easy to get wrong:
+
+* The real `ModuleHandler.postTick` resets `moveTo` to `"disable"` every tick
+  (RYN 17332). Without the stub doing the same between ticks, tick two bails on
+  the module's own `moveTo !== "disable"` guard and the FIRE step is never
+  exercised — the run passes while testing half the feature.
+* `almostReloaded` and `futureHat` are the two halves of one OR
+  (`canSend = almostReloaded || detectFutureHat`), not two gates. Flipping either
+  alone correctly leaves the tick firing on the other. The first version of the
+  gate table flipped them separately and failed a working client; the table is
+  one row per *gate* now, not per field.
+
 ### `preplace-duel.js`
 
 `preplace-duel.js` enumerates 162 situations (their reload × building toughness

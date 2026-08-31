@@ -1,11 +1,10 @@
 # RYN Client v5.4
 
-`RYN_Client_v5.4.user.js` — the client as uploaded, with two changes. Both are
-the same change in spirit: a system RYN had reworked is put back to what X-
-Precision and Novastorm actually run, expressed in RYN's own idiom.
+`RYN_Client_v5.4.user.js` — the client as uploaded, with three changes.
 
 1. [Autoheal](#autoheal) — novastorm's rule and nothing else
 2. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
+3. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
 
 ---
 
@@ -194,6 +193,90 @@ three lines inside a loop that is already walking those objects, so it costs
 almost nothing, and removing shared manager state is a separate decision from
 this one — but it is dead, and it should not stay dead silently. Say so and it
 goes.
+
+---
+
+## Velocity tick
+
+RYN had none. It has a full `MotionTracker` — measured velocity, stability,
+confidence, six ticks of lookahead — but no velocity tick built on it. This is
+Glotus 5.5.5's `VelocityTick`, ported whole.
+
+Glotus and RYN are the same architecture (module classes with `postTick`,
+`ModuleHandler`, `EnemyManager`, `Settings_default`), so every primitive the
+module needs already existed and nothing had to be reinvented: `moveTo`,
+`shouldIgnoreModule()`, `getWeaponVariant().current`, `reloading.isReloaded`,
+`atExact`, `futureHat`, and the `inRange` helper.
+
+### The move
+
+Two ticks, and the second is the point:
+
+| | |
+| --- | --- |
+| **ARM** | at 220–245 from where they will be, wear turret gear (53) and set `moveTo` toward them. The turret's range is 700, so the shot lands from here |
+| **FIRE** | next tick: hat 7, polearm, swing along the same angle — still walking |
+
+**The window is the trick, and it is not a range check.** 220–245 is where the
+turret's knockback leaves them after the shot. Closer and the shot pushes them
+out of the polearm's 142 before the swing; further and the walk cannot close it.
+
+**`moveTo` is what makes it work.** Copying the window without the walk is the
+mistake that leaves only the turret landing — the distance never closes and the
+polearm swings at nothing. The duel checks for it explicitly.
+
+`canSend` is Glotus's read of whether the moment is worth spending: either their
+melee is one tick off reloaded (`atExact(type, 1)`, so they are committed and
+cannot dodge) or their predicted hat is one they can be hurt through —
+`isValidHat` rules out hat 6 (soldier, eats the damage) and hat 22 (eats the
+knockback the window depends on).
+
+### Two decisions worth knowing
+
+**Off by default** (`_velocityTick: false`). It is new to this client, it moves
+you, and it commits a turret shot — none of which should start happening because
+the client was updated. The toggle is in Combat → Instakills, next to Auto sync,
+and there is a counter in Devtool → Statistics.
+
+**Glotus's ANTI velocity tick is not ported.** `Player.velocityTicking` and
+`EnemyManager.velocityTickThreat` are the flags Glotus raises when someone does
+this to *you*. Same page in Glotus, separate feature; say the word if you want it.
+
+### Verifying it
+
+```
+node harness/velocity-duel.js
+```
+
+Both classes are lifted with `vm` and driven by **one** stub client, so nothing
+is transcribed and neither side sees a world the other did not:
+
+```
+  scenes                  768
+  agree on all 3 signals  768 (100.0%)
+  disagree                0
+
+  gate flipped                glotus      ryn         gate is live
+  (nothing — the scene)       fires       fires       —
+  primary -> katana           declines    declines    yes
+  variant -> gold             declines    declines    yes
+  primary not reloaded        declines    declines    yes
+  turret not reloaded         declines    declines    yes
+  dist 260, past the window   declines    declines    yes
+  dist 200, short of it       declines    declines    yes
+  canSend (both halves)       declines    declines    yes
+  their hat is soldier        declines    declines    yes
+  shouldIgnoreModule          declines    declines    yes
+
+  glotus walks on the firing tick   true
+  ryn walks on the firing tick      true
+```
+
+One thing the harness had to get right to test this at all: the real
+`ModuleHandler.postTick` resets `moveTo` to `"disable"` every tick (17332). Without
+the stub doing the same, tick two bails on the module's own
+`moveTo !== "disable"` guard and the FIRE step is never exercised — the run
+would pass while testing half the feature.
 
 ---
 
