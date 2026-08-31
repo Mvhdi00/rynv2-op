@@ -510,6 +510,32 @@ does fire and flips each gate on its own — every flip must turn **both** clien
 off, which is what proves each gate is carrying weight on both sides rather than
 being absent from both.
 
+### `automill-*.js` — four theories, all wrong
+
+Four files, because automill was reported broken twice and the cause was
+guessed wrong four times. Each file is the measurement that killed one theory,
+and they are kept as a record of how the question was actually settled.
+
+* **`automill-shape.js`** — the one that found something. Walks 60 ticks past
+  scattered rocks under both placement policies: 60.7% of placing ticks laid a
+  partial row under "whatever fits", 0% under "all three or none". That is the
+  ragged wall.
+* **`automill-spacing.js`** — floating point. The spacing solve is exact
+  (`2·R·sin(asin(r/R)) = 2r`), so mills sit *exactly* touching and the `9e-13`
+  epsilon is the whole margin. Sweeping 360 headings through the real
+  `PlacementLedger`: three at every one. The coordinate error is correlated
+  between the two points compared, so it cancels.
+* **`automill-ledger.js`** — the ledger, and `GeometrySolver.norm`. The real
+  path normalises each angle before projecting it, which rewrites its bits and
+  only fires for angles outside `[0, 2pi)` — heading-dependent, and a good
+  theory. Measured: margin 9.09e-13 raw, 7.67e-13 after a normalise from seven
+  turns out. Three mills at every heading either way.
+* **`automill-apertures.js`** — the gate that actually limits it, and it is not
+  a bug. A windmill is 45 on a ring of 85, so **one existing mill occludes 128°
+  of your own ring**. Your last row blocks the next one, a step of 25 does not
+  clear 270 of row, and the result is a clean trio every ~4 ticks at *every*
+  heading. Novastorm's wider spacing gives exactly the same pattern.
+
 ### `automill-shape.js` and `automill-spacing.js`
 
 `automill-shape.js` answers "why does automill build a ragged wall". It walks a

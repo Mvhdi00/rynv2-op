@@ -1,12 +1,13 @@
 # RYN Client v5.4
 
-`RYN_Client_v5.4.user.js` — the client as uploaded, with five changes.
+`RYN_Client_v5.4.user.js` — the client as uploaded, with six changes.
 
 1. [Autoheal](#autoheal) — novastorm's rule and nothing else
 2. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
 3. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
 4. [Knockback tick](#knockback-tick--hit-them-onto-a-spike) — added from Glotus; RYN had the trap half only
 5. [Automill](#automill--the-ragged-wall) — the whole trio or none, fixing the ragged wall
+6. [Blood Wings](#blood-wings-while-standing-still) — no longer forced while standing still
 
 ---
 
@@ -596,6 +597,62 @@ Losing a row to a rock costs little — automill runs every tick, and one tick
 later you are ~25 units further on, where the trio usually fits. Fewer mills,
 all of them in straight rows.
 
+### Still reported broken — what the measurement says
+
+Reported again: *going right it places one mill and not the rest, with nothing
+blocking.* Four more theories were measured and **all four were wrong**:
+
+| theory | file | verdict |
+| --- | --- | --- |
+| the exact spacing solve + floating point | `automill-spacing.js` | 3 mills at all 360 headings |
+| the placement ledger rejecting siblings | `automill-ledger.js` | 3 mills at all 360 headings |
+| `GeometrySolver.norm` rewriting the angles | `automill-ledger.js` | margin survives: 9.09e-13 → 7.67e-13 |
+| the spacing being too tight (novastorm's is wider) | `automill-apertures.js` | identical behaviour |
+
+What the current code actually does, measured through the real
+`CandidateGenerator.apertures` and `GeometrySolver` while walking
+(`automill-apertures.js`):
+
+```
+  heading      mills   ticks placing  per-tick pattern
+  right        9       3 of 12        3 0 0 0 3 0 0 0 3 0 0 0
+  down         9       3 of 12        3 0 0 0 3 0 0 0 3 0 0 0
+  left         9       3 of 12        3 0 0 0 3 0 0 0 3 0 0 0
+  up           9       3 of 12        3 0 0 0 3 0 0 0 3 0 0 0
+```
+
+**Identical at every heading, and never 1.** A row of 3 or nothing — which is
+what atomic placement means. The "one mill" pattern is what the *previous*
+per-angle policy produced, so that report describes the pre-fix build.
+
+And the reason for the gaps is geometry, not a bug. A windmill is 45 on a ring
+of 85, so **one existing mill occludes 128° of your own ring** — a third of it.
+Your last row is the blocker:
+
+```
+  tick 1 open ring      100.0%   placed 3
+  tick 2 open ring      39.7%    placed 0   legal: false, false, false
+  tick 3 open ring      49.5%    placed 0   legal: false, false, false
+```
+
+One step of 25 does not clear a row that is 270 wide. A row every ~4 ticks is
+the ceiling, and Novastorm and Glotus hit the same one.
+
+### Telling the two remaining possibilities apart
+
+If mills are still missing in a real game, the client and the server disagree
+about what was legal — and from outside, "the client sent one" and "the client
+sent three and two were refused" look the same. So automill now reports what it
+**sent**, in Devtool → Statistics → **Automill**:
+
+```
+7 rows, 21 mills sent
+```
+
+Count the mills on the ground against that. Matching means the client is
+placing exactly what you see and the pattern above is what you have. Fewer on
+the ground means the loss is on the wire, which is a different fix entirely.
+
 ### A wrong turn worth recording
 
 The first theory was floating point. The spacing solve is exact —
@@ -609,6 +666,29 @@ real `PlacementLedger` and gets **three mills at every one** — the coordinate
 error is correlated between the two points being compared, so it cancels. The
 file is kept because the theory is a natural one to have and the sweep is the
 thing that settles it.
+
+---
+
+## Blood Wings while standing still
+
+`DefaultAcc.getBestCurrentAcc` carried an explicit branch:
+
+```js
+if (!ModuleHandler.isMoving && myPlayer.speed <= 5) {
+  if (beAngel) return 13;
+  if (useBloodWings) return 18;      // <- Blood Wings, just for standing still
+}
+```
+
+Removed. Nothing about being stationary calls for a different accessory, and
+the `beAngel` line below it already covers the bot case, so the whole block was
+redundant once Blood Wings came out. Standing still now takes the ordinary
+path.
+
+The two legitimate Blood Wings branches are untouched: with the bull helmet
+active, and behind the `_cowboyWhenSafe` toggle. A standing check asserts
+exactly that — idle branch gone, those two kept — and a mutation putting it
+back goes red.
 
 ---
 

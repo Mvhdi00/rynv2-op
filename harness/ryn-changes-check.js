@@ -140,6 +140,7 @@ check("execute", "Automill places the whole trio or nothing", () => {
     Settings_default: { _automill: true },
     Items: { 10: { id: 10, scale: 45, placeOffset: 5 } },
     AUTOMILL_PLACE_COST: 5,
+    GameUI_default: { updateAutomill: () => {} },
   };
   vm.createContext(sandbox);
   vm.runInContext(cls + "\nthis.make = (c) => new Automill(c);", sandbox);
@@ -344,6 +345,28 @@ check("wire", "updateSpikeTick targets the id the Devtool row uses", () => {
   if (!m) return [false, "updateSpikeTick not found or does not query"];
   return m[1] === "_spikeTickOutcome" ? [true, "queries #" + m[1]]
                                      : [false, "queries #" + m[1] + ", row is #_spikeTickOutcome"];
+});
+
+/* Blood Wings on a stationary player was an explicit branch; the check is that
+ * it is gone from THAT branch without disturbing the two legitimate ones (bull
+ * helmet active, and the _cowboyWhenSafe toggle). */
+check("wire", "standing still no longer forces Blood Wings", () => {
+  const cls = lift("class DefaultAcc\\s*\\{", "DefaultAcc");
+  const m = /if \(!ModuleHandler\.isMoving[\s\S]{0,240}?\n      \}/.exec(cls);
+  if (m && /useBloodWings/.test(m[0]))
+    return [false, "the stationary branch still returns 18"];
+  const remaining = (cls.match(/if \(useBloodWings\) return 18;/g) || []).length;
+  if (remaining !== 2)
+    return [false, remaining + " useBloodWings returns left, expected 2 (bullActive, cowboyWhenSafe)"];
+  return [true, "idle branch gone, bullActive and cowboyWhenSafe kept"];
+});
+
+check("wire", "automill reports what it sent", () => {
+  const cls = lift("class Automill\\s*\\{", "Automill");
+  if (!/this\._report\(3\);/.test(cls)) return [false, "the trio does not report"];
+  if (!/updateAutomill/.test(cls)) return [false, "_report does not reach the UI"];
+  if (!src.includes('id=\\"_automillSent\\"')) return [false, "no Devtool row carries #_automillSent"];
+  return [true, "rows and mills sent, painted to #_automillSent"];
 });
 
 check("wire", "KnockbackTick is defined, registered and in the run order", () => {
