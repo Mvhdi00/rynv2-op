@@ -347,7 +347,67 @@ reaches. Not a bug.
 * `attemptSpikePlacement()` is only the fallback for when no controller exists;
   the live path is `spikeTickController.arm()`.
 
-### What was shipped instead: the counter
+### The conflict, found and reproduced
+
+`node harness/spike-tick-trap.js` drives the trap combo over **both** its ticks,
+with `spikeTickState`, `spikeTickCounterThreat`, `spikeTickNearSpike`,
+`spikeTickTarget`, `spikeTickHit`, `spikeTickTurret`, `SpikeTickTrap`,
+`SpikeTickBreak` and `SpikeTickController` all lifted from the file. Only the
+world is staged.
+
+**The combo itself is sound.** Given a clean tick it hammers on tick 1
+(`forceWeapon 1`, `forceHat 40`) and commits a spike on tick 2. So the problem
+is not the combo — it is that it rarely gets to start:
+
+```
+  precondition removed              hammer tick  spike
+  an enemy spike within reach       no           none
+  ...same, but autobreak off        swings       placed
+```
+
+The gate is **`spikeTickNearSpike`**, at the top of `spikeTickTarget`:
+
+```js
+const spikeTickNearSpike = client2 => {
+  if (!Settings_default._autobreak) return false;     // only armed when autobreak is on
+  const spike = EnemyManager2.nearestSpike;
+  if (spike === null) return false;
+  const reach = spike.scale + Math.min(weapon.range, SPIKE_TICK_NEAR_SPIKE_REACH);
+  return myPlayer.collidingSimple(spike, reach);
+};
+```
+
+```js
+if (spikeTickCounterThreat(client2, state) || spikeTickNearSpike(client2)) return null;
+```
+
+Its radius is `spike.scale + min(primaryRange, 75)` = **124 around you**, and
+any enemy spike inside that cancels **every** spike tick variant before it
+starts. It is a deliberate rule — it stops the tick fighting autobreak for the
+same tick — but it does not know what it is cancelling, and an enemy pinned in a
+trap is nearly always standing beside their own spikes. That is the conflict.
+
+**Two ways out, neither applied** (both change combat behaviour, so they are
+yours to call):
+
+1. Turn `_autobreak` off — the suppressor disarms itself and the trap tick
+   works. Costs you autobreak.
+2. Narrow the rule so it does not apply to the trap variant. When they are
+   pinned, the spike beside their trap is the thing you are exploiting, not an
+   obstacle. One line, and the bench above measures it either way.
+
+### A conflict that turned out not to cost a spike
+
+`SpikeTickTrap`'s second tick is guarded by `if (!ModuleHandler.moduleActive)`,
+and clears `this.target` *before* that check — so anything claiming the tick
+first destroys the combo rather than delaying it. `spikeTickBreak` runs earlier
+in the module order and its trigger is `deletedObjects`, which on tick 2 holds
+the very trap you just hammered. It does steal the tick. But it then arms the
+controller itself, so a spike still goes out — row B of the bench: **1 spike
+either way.** What is lost is the trap variant's turret follow-up, not the
+spike.
+
+### What was shipped earlier: the counter
 
 The controller already records why it stands down — `lastReason`, and
 `stats {armed, consumed, requested, executed, replanned, cancelled, lost}` — and

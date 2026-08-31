@@ -510,6 +510,24 @@ does fire and flips each gate on its own — every flip must turn **both** clien
 off, which is what proves each gate is carrying weight on both sides rather than
 being absent from both.
 
+### `spike-tick-trap.js`
+
+Drives RYN's spike tick (trap) over **both** ticks of the combo, in the order
+`ModuleHandler` runs the modules. Every helper and all three classes —
+`spikeTickTarget`, `spikeTickHit`, `SpikeTickTrap`, `SpikeTickBreak`,
+`SpikeTickController` and the rest — are lifted from the file; only the world is
+staged.
+
+It answers a reported "spike tick doesn't place on a trapped enemy" with a named
+gate rather than a guess. The combo is sound (hammer on tick 1, spike on tick
+2); what stops it is `spikeTickNearSpike`, which cancels **every** spike tick
+variant whenever an enemy spike is within `spike.scale + min(primaryRange, 75)`
+= 124 of you, and is armed by `_autobreak` being on. Turning autobreak off in
+the same bench makes the spike appear.
+
+Its row C removes one precondition at a time so the blocking gate is named
+rather than inferred — the same shape as the gate tables in the duels.
+
 ### `ryn-changes-check.js` and `ryn-changes-mutate.py`
 
 The standing check over every change made to `ryn/`. It exists because RYN
