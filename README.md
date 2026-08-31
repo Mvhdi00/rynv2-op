@@ -75,6 +75,62 @@ against synthetic scenes — 31 cases, including the three the cone test got
 wrong and the pit trap whose `colDiv` of 0.2 would otherwise shrink the catch
 radius from 47.5 to 10.
 
+### Automill: three mills in every direction
+
+Automill lays a wall of windmills behind you. It is meant to be three wide; it
+came out one, two or three depending on which way you walked.
+
+The cause was the spacing. The old offset was
+
+```js
+Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2
+```
+
+which is exact tangency — neighbouring mills land centre-to-centre at exactly
+`2 * scale`, and the server's test is a strict `distance < scaleA + scaleB`, so
+the build is accepted only while nothing rounds the gap down by even one unit.
+The `9e-13` on the chord moves a mill about 1e-12 units; it is not a margin
+against anything.
+
+Something does round it. The game sends the place angle through
+`M.fixTo(dir, 2)` (`Ci()` in `src/game_index.js`), so the angle that decides
+where the build lands is quantised to 0.01rad. At the windmill's 85-unit place
+radius that is ~0.85 units of arc per angle, and two neighbours can round
+toward each other for a combined ~1.7. A gap with zero clearance does not
+survive it — and which mill is lost depends on where `base ± offset` falls on
+the 0.01 grid, i.e. on the heading.
+
+**Sweeping 36000 headings, the old spacing places fewer than three mills at
+83.7% of them.** The eight WASD headings specifically:
+
+| heading | old | new |
+|---|---|---|
+| right, down | 3 | 3 |
+| left, up | 2 | 3 |
+| all four diagonals | 2 | 3 |
+
+Three other faults in the same function are fixed with it:
+
+- One blocked angle threw away the whole tick (`if (a && b && c) place all three`).
+  The mills are independent, so a genuinely occupied slot now costs one mill.
+- Each candidate was tested against a world containing neither of the other
+  two, while the server applies them in order and tests each against the ones
+  already down.
+- Legality was tested at `pos.current`, but a place sent this tick is applied
+  after the move. `AutoGrind.placeTurret` in this same client already tests at
+  `pos.future`.
+
+The fan is now spaced with a real margin, each angle is quantised to the grid
+the server will see *before* it is tested, the test runs at `pos.future`
+against both the world and the mills already committed this tick, and each mill
+is sent on its own. A wing that still lands short slides outward one grid step
+at a time — bounded to 0.08rad, and away from the centre, so it stays part of
+the wall instead of wandering off looking for space.
+
+`node tools/check-automill.js` drives the real class against a model of the
+server's placement rule and sweeps the heading — 19 cases, and it reproduces
+the old spacing alongside so the regression stays visible.
+
 Luna features that were **not** ported, and why:
 
 - *Song / auto-chat lyric loop* — RYN already has a fuller version of this
@@ -164,6 +220,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/check-kb-strike.js  KnockbackStrike geometry vs. synthetic scenes
+tools/check-automill.js   Automill spacing vs. the server's placement rule
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 
@@ -184,6 +241,7 @@ a newer RYN will surface as a build error rather than a half-merged script.
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
 node tools/check-kb-strike.js ReUp_Mix.user.js
+node tools/check-automill.js ReUp_Mix.user.js
 node --check ReUp_Mix.user.js
 ```
 
@@ -199,6 +257,8 @@ Current state of the build:
 - **KB Strike** — 31/31 geometry cases pass: travel figures, segment distance,
   the three cone-test regressions, ownership, item kinds, chaining, and the
   `postTick` gates.
+- **Automill** — 19/19 cases pass, including three mills at every one of 36000
+  swept headings where the old spacing was short at 83.7% of them.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here

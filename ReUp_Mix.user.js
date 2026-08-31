@@ -16368,12 +16368,68 @@ window.grbtp = 35;
       }
     }
   }
+  // ── Automill ──────────────────────────────────────────────────────────────
+  // Lays a wall of windmills behind you as you walk. It is meant to be three
+  // wide; it used to be one, two or three depending on the direction.
+  //
+  // The cause was the spacing. The old offset was
+  //
+  //     Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2
+  //
+  // which is exact tangency: neighbouring mills land centre-to-centre at
+  // exactly 2 * scale, and the server's own test is a strict
+  // `distance < scaleA + scaleB`, so the build is accepted only while nothing
+  // rounds the gap down by even one unit. The 9e-13 on the chord moves a mill
+  // by about 1e-12 units, which is not a margin against anything.
+  //
+  // Something does round it. The game sends the place angle through
+  // `M.fixTo(dir, 2)`, so the angle that decides where the build lands is
+  // quantised to 0.01rad. At the windmill's 85-unit place radius that is
+  // ~0.85 units of arc per angle, and two neighbours can round toward each
+  // other for a combined ~1.7. A gap with zero clearance does not survive it.
+  //
+  // Which mill is lost depends on where base +/- offset falls on the 0.01
+  // grid, and base is the heading — so the width of the wall changed with the
+  // direction of travel. Sweeping 36000 headings, the old spacing places
+  // fewer than three mills at 83.7% of them.
+  //
+  // Three other things were wrong in the same function and are fixed here:
+  //
+  //   · One blocked angle threw away the whole tick. The three mills are
+  //     independent, so a slot that is genuinely occupied should cost one
+  //     mill, not all three.
+  //   · The three candidates were each tested against a world containing
+  //     none of the other two, while the server applies them in order and
+  //     tests each against the ones already down.
+  //   · Legality was tested at pos.current, but a place sent this tick is
+  //     applied after the move. AutoGrind.placeTurret in this same client
+  //     already tests at pos.future.
+  //
+  // What it does now: space the fan with a real margin, quantise each angle
+  // to the grid the server will see before testing it, test at pos.future
+  // against both the world and the mills already committed this tick, and
+  // send each one on its own. A side mill that still lands short slides
+  // outward one grid step at a time — bounded, and away from the centre, so
+  // it stays part of the wall instead of wandering off looking for space.
+  const MILL_TYPE = 5;
+  // The grid the game's own attack angle is rounded onto.
+  const MILL_ANGLE_QUANTUM = .01;
+  // World units of clearance asked for between neighbouring mills. One unit
+  // is invisible on a 90-unit-wide pair and survives the rounding above.
+  const MILL_MARGIN = 1;
+  // How far a side mill may slide outward to clear the centre. Eight steps is
+  // 0.08rad, far more than rounding can ever cost, and small enough that a
+  // mill cannot leave the wall.
+  const MILL_SLIDE_STEPS = 8;
+  const MILL_PACKETS = 4;
+
   class Automill {
     moduleName="autoMill";
     toggle=false;
     active=true;
     client;
     tickCount=0;
+    committed=[];
     constructor(client2) {
       this.client = client2;
     }
@@ -16388,25 +16444,65 @@ window.grbtp = 35;
       const {attacking: attacking, placedOnce: placedOnce, staticModules: staticModules} = this.client._ModuleHandler;
       return Settings_default._automill && this.client.myPlayer.isSandbox && !placedOnce && (!isOwner || !attacking) && this.active && !staticModules.autoBuy.boughtEverything() && this.client.myPlayer.age < 20;
     }
-    canPlaceWindmill(angle) {
-      return this.client.myPlayer.canPlaceObject(5, angle);
+
+    // Round the way the game rounds, so what is tested is what the server
+    // will act on. Testing an angle the server never sees is how the old
+    // spacing passed every check and still lost a mill.
+    _quantise(angle) {
+      return fixTo(angle, 2);
     }
+
+    // Free against the world and against what this tick has already sent.
+    // The second half is what the old check had no way to know.
+    _slotAt(id, origin, angle, scale) {
+      const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
+      const position = myPlayer.getPlacePosition(origin, id, angle);
+      if (!ObjectManager2.canPlaceItem(id, position)) {
+        return null;
+      }
+      const need = scale * 2 + MILL_MARGIN;
+      for (let i = 0; i < this.committed.length; i++) {
+        if (position.distance(this.committed[i]) < need) {
+          return null;
+        }
+      }
+      return position;
+    }
+
+    // The centre takes the heading and does not move. A wing may slide
+    // outward, one grid step at a time, until it clears.
+    _claim(id, origin, wanted, scale, slide) {
+      for (let step = 0; step <= (slide === 0 ? 0 : MILL_SLIDE_STEPS); step++) {
+        const angle = this._quantise(wanted + slide * step * MILL_ANGLE_QUANTUM);
+        const position = this._slotAt(id, origin, angle, scale);
+        if (position !== null) {
+          return {
+            angle: angle,
+            position: position
+          };
+        }
+      }
+      return null;
+    }
+
     placeWindmill(angle) {
       const {_ModuleHandler: ModuleHandler} = this.client;
-      const type = 5;
+      const type = MILL_TYPE;
       ModuleHandler.place(type, angle);
       ModuleHandler.placedOnce = true;
       ModuleHandler.placeAngles[0] = type;
       ModuleHandler.placeAngles[1].push(angle);
     }
+
     postTick() {
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
       this.toggle = true;
+      this.committed.length = 0;
       if (!this.canAutomill) {
         this.toggle = false;
         return;
       }
-      if (!myPlayer.canPlace(5)) {
+      if (!myPlayer.canPlace(MILL_TYPE)) {
         this.toggle = false;
         this.active = false;
         return;
@@ -16415,15 +16511,40 @@ window.grbtp = 35;
       if (angle === null) {
         return;
       }
-      const item = Items[myPlayer.getItemByType(5)];
-      const distance = myPlayer.getItemPlaceScale(item.id);
-      const offset = Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2;
-      const leftAngle = angle - offset;
-      const rightAngle = angle + offset;
-      if (this.canPlaceWindmill(angle) && this.canPlaceWindmill(leftAngle) && this.canPlaceWindmill(rightAngle)) {
-        this.placeWindmill(angle);
-        this.placeWindmill(leftAngle);
-        this.placeWindmill(rightAngle);
+      const id = myPlayer.getItemByType(MILL_TYPE);
+      const item = Items[id];
+      const distance = myPlayer.getItemPlaceScale(id);
+      // The separation that leaves MILL_MARGIN units between neighbours,
+      // where the old offset asked for none at all.
+      const reach = (item.scale * 2 + MILL_MARGIN) / (2 * distance);
+      if (!(reach <= 1)) {
+        return;
+      }
+      const spread = Math.asin(reach) * 2;
+      // A place sent this tick lands after the move, so it is judged from
+      // where the player will be, not where they are.
+      const origin = myPlayer.pos.future;
+      const {count: count, limit: limit} = myPlayer.getItemCount(item.itemGroup);
+      const affordable = Math.floor((ModuleHandler.packetLimit - ModuleHandler.packetCount) / MILL_PACKETS);
+      let left = Math.min(3, limit - count, affordable);
+      const fan = [ {
+        wanted: angle,
+        slide: 0
+      }, {
+        wanted: angle - spread,
+        slide: -1
+      }, {
+        wanted: angle + spread,
+        slide: 1
+      } ];
+      for (let i = 0; i < fan.length && left > 0; i++) {
+        const slot = this._claim(id, origin, fan[i].wanted, item.scale, fan[i].slide);
+        if (slot === null) {
+          continue;
+        }
+        this.committed.push(slot.position);
+        this.placeWindmill(slot.angle);
+        left--;
       }
     }
   }
@@ -22149,7 +22270,7 @@ window.grbtp = 35;
   const win = window;
   /* Game drivers this build was verified against. See drivers/game-drivers.json. */
   const ReUpDrivers = {
-      "builtAt": "2026-08-31T13:52:53.414Z",
+      "builtAt": "2026-08-31T14:13:16.028Z",
       "extractedFrom": {
           "index": "src/game_index.js",
           "vendor": "src/game_vendor.js"
