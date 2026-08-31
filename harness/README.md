@@ -474,15 +474,22 @@ things in it are easy to get backwards:
 
 ```
   trade, a hit every 5 ticks
-  ping    client    apples   packets   wasted     shame locks
-  30      X-        288      1152      144 (50%)  0
-  30      RYN       144      576       0 (0%)     0
+  ping    client         apples   packets   wasted     shame locks
+  30      X-             288      1152      144 (50%)  0
+  30      RYN (was)      144      576       0 (0%)     0
+  30      RYN (ported)   288      1152      144 (50%)  0
 ```
 
 The 50% is one mechanism: X- computes `heal(100 - myPlayer.health)` from the
 server's last echo and nothing subtracts what is already on the wire, so the
 same missing health is paid for on every tick of the round trip. RYN's
-`_healsInFlight` subtracts it.
+`_healsInFlight` used to subtract it.
+
+The third row is `ryn/RYN_Client_v5.4.user.js` after its autoheal was replaced
+with novastorm's rule. Its acceptance test is that it becomes
+**indistinguishable from X- on every row**, since both are now the same rule —
+the file exits non-zero if it is not, so a guard left behind anywhere would
+fail the run rather than pass quietly.
 
 `preplace-duel.js` enumerates 162 situations (their reload × building toughness
 × in range × motion × distance) and applies each client's *gate conditions* as

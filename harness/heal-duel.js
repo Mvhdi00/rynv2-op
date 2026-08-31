@@ -153,6 +153,30 @@ class RynRule {
   }
 }
 
+// ── RYN after the port ────────────────────────────────────────────────────
+// ryn/RYN_Client_v5.4.user.js:14265, transcribed the same way. If the port is
+// really novastorm's rule and nothing else, this must land on XRule's numbers
+// exactly — any guard left behind would show up as a smaller apple count.
+//
+//     let totalDmgPot = EnemyManager.potentialDamage + EnemyManager.potentialSpikeDamage;
+//     if (totalDmgPot > 140) totalDmgPot = 140;
+//     if (hatID === 6) totalDmgPot *= Hats[6].dmgMult;
+//     if (hatID === 7) totalDmgPot += 5;
+//     const healing = tempHealth <= totalDmgPot;
+//     if (!(((healing && myPlayer.shameCount < 7) || myPlayer.tickCount - myPlayer.damageTick > 0)
+//           && tempHealth < maxHealth)) return;
+//     for (let i = 0; i < maxHealth - tempHealth; i += restore) ModuleHandler.heal();
+class RynPortedRule {
+  decide(s) {
+    const healing = s.knownHealth <= s.dmgPot;
+    const quiet = s.tick - s.damageTick > 0;
+    if (!(((healing && s.knownShame < 7) || quiet) && s.knownHealth < MAX_HP)) return 0;
+    let presses = 0;
+    for (let i = 0; i < MAX_HP - s.knownHealth; i += RESTORE) presses++;
+    return presses;
+  }
+}
+
 // ── the fight ─────────────────────────────────────────────────────────────
 function run(rule, script, ping, seconds) {
   const srv = new Server();
@@ -231,21 +255,30 @@ const pad = (s, n) => String(s).padEnd(n);
 console.log("autoheal — RYN v5.4 against X- Precision, same fight, same server rule\n");
 console.log("  " + SECONDS + "s per row; the shame rule is the game's own, quoted at the top of this file\n");
 
-let xTotals = { apples: 0, packets: 0, wasted: 0, locks: 0, deaths: 0 };
-let rTotals = { apples: 0, packets: 0, wasted: 0, locks: 0, deaths: 0 };
+const blank = () => ({ apples: 0, packets: 0, wasted: 0, locks: 0, deaths: 0 });
+const totals = { "X-": blank(), "RYN (was)": blank(), "RYN (ported)": blank() };
+const CLIENTS = [
+  ["X-", () => new XRule()],
+  ["RYN (was)", () => new RynRule()],
+  ["RYN (ported)", () => new RynPortedRule()],
+];
+const rowsByClient = {};
 
 for (const [name, script] of Object.entries(SCRIPTS)) {
   console.log("  " + name);
-  console.log("  " + pad("ping", 8) + pad("client", 10) + pad("apples", 9) + pad("packets", 10) +
-    pad("wasted", 9) + pad("of which shame-locked", 23) + pad("shame locks", 13) + "deaths");
-  console.log("  " + "-".repeat(96));
+  console.log("  " + pad("ping", 8) + pad("client", 15) + pad("apples", 9) + pad("packets", 10) +
+    pad("wasted", 11) + pad("shame-locked", 14) + pad("shame locks", 13) + "deaths");
+  console.log("  " + "-".repeat(94));
   for (const ping of PINGS) {
-    for (const [label, rule, acc] of [["X-", new XRule(), xTotals], ["RYN", new RynRule(), rTotals]]) {
-      const r = run(rule, script, ping, SECONDS);
-      acc.apples += r.apples; acc.packets += r.packets; acc.wasted += r.wasted;
-      acc.locks += r.locks; acc.deaths += r.deaths;
-      console.log("  " + pad(ping, 8) + pad(label, 10) + pad(r.apples, 9) + pad(r.packets, 10) +
-        pad(r.wasted + " (" + r.waste.toFixed(0) + "%)", 9) + pad(r.shamed, 23) +
+    for (const [label, make] of CLIENTS) {
+      const r = run(make(), script, ping, SECONDS);
+      const a = totals[label];
+      a.apples += r.apples; a.packets += r.packets; a.wasted += r.wasted;
+      a.locks += r.locks; a.deaths += r.deaths;
+      (rowsByClient[label] = rowsByClient[label] || []).push(
+        [r.apples, r.packets, r.wasted, r.locks, r.deaths].join(","));
+      console.log("  " + pad(ping, 8) + pad(label, 15) + pad(r.apples, 9) + pad(r.packets, 10) +
+        pad(r.wasted + " (" + r.waste.toFixed(0) + "%)", 11) + pad(r.shamed, 14) +
         pad(r.locks, 13) + r.deaths);
     }
   }
@@ -253,13 +286,22 @@ for (const [name, script] of Object.entries(SCRIPTS)) {
 }
 
 console.log("  totals across every row");
-console.log("  " + pad("client", 10) + pad("apples", 9) + pad("packets", 10) + pad("wasted", 12) +
+console.log("  " + pad("client", 15) + pad("apples", 9) + pad("packets", 10) + pad("wasted", 12) +
   pad("shame locks", 13) + "deaths");
 console.log("  " + "-".repeat(66));
-for (const [label, a] of [["X-", xTotals], ["RYN", rTotals]]) {
-  console.log("  " + pad(label, 10) + pad(a.apples, 9) + pad(a.packets, 10) +
+for (const [label] of CLIENTS) {
+  const a = totals[label];
+  console.log("  " + pad(label, 15) + pad(a.apples, 9) + pad(a.packets, 10) +
     pad(a.wasted + " (" + ((a.wasted / a.apples) * 100).toFixed(0) + "%)", 12) +
     pad(a.locks, 13) + a.deaths);
 }
 console.log("\n  wasted = the apple reached the server at full health, or while shame-locked.");
 console.log("  Both cost " + PLACE_PACKETS + " packets and one food either way.");
+
+// The port's acceptance test: identical to X- on every row, or it is not
+// novastorm's rule.
+const same = rowsByClient["X-"].join("|") === rowsByClient["RYN (ported)"].join("|");
+console.log("\n  " + (same
+  ? "RYN (ported) matches X- on every row — the rule is novastorm's, with nothing on top"
+  : "RYN (ported) DIFFERS from X- — something is still guarding the heal"));
+process.exit(same ? 0 : 1);
