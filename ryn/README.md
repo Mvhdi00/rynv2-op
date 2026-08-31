@@ -3,7 +3,7 @@
 `RYN_Client_v5.4.user.js` — the client as uploaded, with nine changes.
 The spike tick has a document of its own: [`SPIKE_TICK.md`](SPIKE_TICK.md).
 
-1. [Autoheal](#autoheal) — novastorm's rule and nothing else
+1. [Autoheal](#autoheal) — novastorm's rule and nothing else, and [its antis audited](#the-antis-audited--and-the-two-that-were-missing) against novastorm and X- term by term (two were missing; both ported)
 2. [The automatic Q](#the-automatic-q) — food is no longer pressed into the shame rule
 3. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
 4. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
@@ -85,7 +85,112 @@ labelled feature. Say the word and it goes too.
 (the UI's fast-Q indicator), and `this.blockBreak = false` at the top of
 `postTick` (autoBreak reads the latch on the following tick). All still set.
 
+### The antis, audited — and the two that were missing
+
+The rule is only as good as the number it is given, so every block in
+novastorm's damage summation (15473) was checked off against RYN's. X- Precision
+ships that block at 14681 and `diff` says the two are byte for byte identical,
+so it is one audit, not two.
+
+Ten of the twelve terms were already there. **Two were not**, and both are the
+same omission: RYN's `+25` for a turret comes from `canPossiblyInstakill`, which
+only counts a turret once the enemy is inside *weapon* reach. That is most of a
+turret's useful range missing.
+
+```js
+// PREDICT TURRET HIT                                   novastorm 15473
+if (getDistance(enemy, myPlayer) <= 350 && turretReload == 1) {
+    if (collidingspike && lastPrimaryReload == 1 && primaryReload < 1) turretDmgPot += 25;
+    else if (willcollide && primaryReload < 1) turretDmgPot += 25;
+    else if (myPlayer.health <= 25 && (hit + turret + spike) < 25) turretDmgPot += 25;
+}
+// VELOCITY TICK ANTI
+if (dist > 150 && dist < 350) {
+    if (turretReload < 1 && primaryReload == 1 && enemy.skinIndex == 53) {
+        turretDmgPot += 25;
+        hitDmgPot += primaryDmg;
+    }
+}
+```
+
+Both are now `EnemyManager.antiLongRangeTurret(enemy)`, called from
+`handleDanger` **before** `this.potentialDamage += enemy.potentialDamage` — after
+it, the `+25` would be written and then never read, which is precisely the
+`pushingOnSpike` bug this client already had once.
+
+The first block's three cases are the moment a spike is doing the other half of
+the work: I am standing on one, or a hit is about to put me on one, and their
+primary has just gone. The turret finishes it. The third case is the plain
+"prediction for autosteal turret" — on 25 or less with nothing else predicted,
+assume it is coming.
+
+The second block is the **anti to the move this client now has as an offence**.
+Turret gear, at that distance, with a loaded primary and a spent turret, is
+someone lining a velocity tick up.
+
+`collidingSpike` and `willCollideSpike` are read off `this`, not off the enemy:
+`checkCollision` sets them inside its `if (isOwner)` block, so they are mine, and
+they have already been computed for `myPlayer` before this loop starts.
+
+### The rest of the list
+
+| novastorm / X- block | in RYN | how |
+| --- | --- | --- |
+| PREDICT TURRET HIT | yes | **ported now** — 3 cases, +25, out to 350 |
+| VELOCITY TICK ANTI | yes | **ported now** — turret gear at 150–350 |
+| KNOCKBACK ANTI | yes | present; RYN uses an angular cone where novastorm uses `lineInRect` |
+| …including cactuses | yes | present — `Resource.getDamage` returns 35 for a desert cactus |
+| ANTI SPIKE TICK | yes | present; RYN asks the real placement solver, novastorm scans 36 fixed angles |
+| ANTI NORMAL INSTAKILL | yes | present, **different bounds** — below |
+| SHAME RESET | yes | present as its own module |
+| poison / bull tick | yes | present — +5 a tick, novastorm's `poisonDmgPot` |
+| projectiles in flight | yes | **RYN only** — novastorm has no equivalent |
+| cap at 140 | yes | present |
+| soldier ×0.75 / bull +5 | yes | present |
+| safe soldier | yes | present in `ModuleHandler.postTick` |
+
+**The one non-cosmetic difference, left alone on purpose.** ANTI NORMAL
+INSTAKILL: novastorm fires for a ranged secondary within 400 given a recent hit;
+RYN fires within `primaryRange + 130` (about 272 with a polearm) with no
+recent-hit requirement. So RYN predicts more often up close and not at all
+between roughly 272 and 400. Those bounds belong to `canPossiblyInstakill`,
+which feeds danger detection, the soldier hat and every insta module — not only
+the heal — so moving them to match novastorm would change five features to fix
+one. It is a separate decision, and it is yours to make.
+
+One convention difference is also left in and printed by the bench rather than
+buried: `isReloaded(type, 1)` is `current >= max - 1`, so RYN calls a turret
+ready one tick before novastorm does. For an anti, one tick early is the safe
+side.
+
 ### Verifying it
+
+```
+node harness/anti-audit.js
+```
+
+The shipped `antiLongRangeTurret` is lifted out of the client and run beside a
+transcription of novastorm's block, over every world both can see:
+
+```
+  situation                                     novastorm   RYN
+  on a spike, their primary just fired          25          25
+  about to be knocked onto a spike              25          25
+  low health, nothing else predicted            25          25
+  low health, but plenty already predicted      0           0
+  turret gear at 200, turret spent, primary up  70          70
+  turret gear at 100 — too close for the band   0           0
+  turret gear but the turret is loaded          0           0
+
+  exhaustive sweep: 2048 of 2048 worlds agree
+```
+
+That sweep is worth the trouble it took. Its first run showed 444 disagreements
+and every one was the bench's own fault — novastorm's reload is a 0/1 scale and
+RYN's is a tick counter — but fixing that left **one real bug in my port**: the
+band leaned on the outer `> 350` guard, so `dist === 350` passed, where
+novastorm's `dist < 350` is strict. One line, invisible to reading, and the
+sweep is the only thing that found it.
 
 ```
 node harness/heal-duel.js
@@ -763,7 +868,7 @@ runs the real rule:
 ## Verifying the whole set
 
 ```
-node harness/ryn-changes-check.js      # 58 checks over every change
+node harness/ryn-changes-check.js      # 104 checks over every change
 python3 harness/ryn-changes-mutate.py  # proves those checks can fail
 ```
 
@@ -778,15 +883,18 @@ ways:
 | **EXECUTE** | every changed block lifted with `vm` and actually run against stubs, so a `ReferenceError` inside it surfaces |
 | **RESOLVE** | every identifier the new code reads from an outer scope confirmed declared |
 | **WIRE** | settings, module registration, run-order slot and UI ids confirmed present and consistent — including that every one of the 63 `staticModules` constructors names something real |
-| **NO GHOSTS** | each of the 12 deleted helpers confirmed to have no surviving reader |
+| **NO GHOSTS** | each of the 20 deleted helpers confirmed to have no surviving reader |
 
 **And the checker is itself tested.** `ryn-changes-mutate.py` breaks the client
-23 different ways — heal presses once instead of per restore, `velocityTick`
+45 different ways — heal presses once instead of per restore, `velocityTick`
 dropped from the run order, a deleted helper called again, the Devtool span
 renamed, the `VelocityTick` class renamed while still registered, `heal()`
 pressing food through the shame lock again, the food guard waiting for the
 window forever or answering twice in one tick, a spike tick module registered
-again — and requires the checker to go red on every one. It catches 23 of 23.
+again, auto place sending without asking the resolver or asking only after it
+has sent, the tick's hold taken hard instead of soft, the long-range turret anti
+never called or called after its damage has been counted — and requires the
+checker to go red on every one. It catches 45 of 45.
 
 That last one mattered: the first version of the class-existence check used
 `indexOf("class VelocityTick")`, which still matched after the class was renamed

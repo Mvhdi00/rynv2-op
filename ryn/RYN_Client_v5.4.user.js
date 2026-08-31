@@ -2548,6 +2548,20 @@ window.grbtp = 35;
     }
   }
   const Entity_default = Entity;
+  // novastorm 15473 and X- Precision 14681 — byte for byte the same block in
+  // both — reach out to 350 for a turret shot. canPossiblyInstakill's +25 only
+  // counts a turret when the enemy is already inside weapon reach, which is
+  // most of a turret's useful range missing.
+  const ANTI_TURRET_RANGE = 350;
+  const ANTI_TURRET_DAMAGE = 25;
+  // "Prediction for autosteal turret": on 25 health or less, with almost
+  // nothing else predicted, assume the turret is coming.
+  const ANTI_TURRET_LOW_HEALTH = 25;
+  // The velocity tick's own band. Closer than this and the ordinary weapon
+  // terms already cover it.
+  const ANTI_VELOCITY_TICK_MIN = 150;
+  const ANTI_VELOCITY_TICK_HAT = 53;
+
   class EnemyManager {
     client;
     dangerousEnemies=[];
@@ -2732,6 +2746,7 @@ window.grbtp = 35;
       if (enemy.canPlaceSpikeObject) {
         this.potentialSpikeDamage = Math.max(this.potentialSpikeDamage, enemy.spikeDamage);
       }
+      this.antiLongRangeTurret(enemy);
       this.potentialDamage += enemy.potentialDamage;
       this.primaryDamage = Math.max(enemy.primaryDamage, this.primaryDamage);
       if (enemy.prevDanger !== enemy.danger && enemy.danger >= 2) {
@@ -2749,6 +2764,69 @@ window.grbtp = 35;
       if (enemy.spikeSyncThreat) {
         this.spikeSyncThreat = true;
       }
+    }
+    // The two turret predictions canPossiblyInstakill cannot make. Its +25
+    // requires the enemy to be inside weapon reach; these fire from up to 350,
+    // and both are lifted from novastorm 15473 / X- Precision 14681:
+    //
+    //     // PREDICT TURRET HIT
+    //     if (getDistance(enemy, myPlayer) <= 350 && turretReload == 1) {
+    //         if (collidingspike && lastPrimaryReload == 1 && primaryReload < 1) turretDmgPot += 25;
+    //         else if (willcollide && primaryReload < 1) turretDmgPot += 25;
+    //         else if (myPlayer.health <= 25 && (hit + turret + spike) < 25) turretDmgPot += 25;
+    //     }
+    //
+    //     // VELOCITY TICK ANTI
+    //     if (dist > 150 && dist < 350) {
+    //         if (turretReload < 1 && primaryReload == 1 && enemy.skinIndex == 53) {
+    //             turretDmgPot += 25;
+    //             hitDmgPot += primaryDmg;
+    //         }
+    //     }
+    //
+    // The first two cases are the moment a spike is already doing the other
+    // half of the work: I am standing on one, or a hit is about to put me on
+    // one, and their primary has just gone. The turret is what finishes it.
+    //
+    // The second block is the anti to the move this client now has as an
+    // offence. Someone in turret gear at that distance with a loaded primary
+    // and a spent turret is lining a velocity tick up.
+    //
+    // collidingSpike and willCollideSpike are the owner's own — checkCollision
+    // sets them inside its `if (isOwner)` block, and it has already run for
+    // myPlayer before this loop starts.
+    antiLongRangeTurret(enemy) {
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager} = this.client;
+      const distance = myPlayer.pos.current.distance(enemy.pos.current);
+      if (distance > ANTI_TURRET_RANGE) {
+        return;
+      }
+      const primaryReloaded = enemy.isReloaded(0, 1);
+      const turretReloaded = enemy.isReloaded(2, 1);
+      if (turretReloaded) {
+        // `lastPrimaryReload == 1 && primaryReload < 1`: ready last tick and not
+        // now, which is the tick they swung.
+        const primaryJustFired = enemy.reload[0].previous >= enemy.reload[0].max && !primaryReloaded;
+        const predictedSoFar = this.potentialDamage + enemy.potentialDamage + this.potentialSpikeDamage;
+        if (this.collidingSpike && primaryJustFired
+            || this.willCollideSpike && !primaryReloaded
+            || myPlayer.currentHealth <= ANTI_TURRET_LOW_HEALTH && predictedSoFar < ANTI_TURRET_LOW_HEALTH) {
+          enemy.potentialDamage += ANTI_TURRET_DAMAGE;
+        }
+        return;
+      }
+      // novastorm's band is `dist > 150 && dist < 350` — strictly inside both
+      // ends, where the turret test above is `<= 350`.
+      if (distance <= ANTI_VELOCITY_TICK_MIN || distance >= ANTI_TURRET_RANGE) {
+        return;
+      }
+      if (!primaryReloaded || enemy.hatID !== ANTI_VELOCITY_TICK_HAT) {
+        return;
+      }
+      const primary = enemy.weapon.primary;
+      const lookingShield = PlayerManager.lookingShield(myPlayer, enemy);
+      enemy.potentialDamage += ANTI_TURRET_DAMAGE +
+        (primary !== null && primary !== undefined ? enemy.getMaxWeaponDamage(primary, lookingShield) : 0);
     }
     checkCollision(target, isOwner = false) {
       target.isTrapped = false;

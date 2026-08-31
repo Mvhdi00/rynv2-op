@@ -687,6 +687,58 @@ so the bench asserts against the source that the emit it models is the emit the
 client has, and refuses to run otherwise. It also names, in its header, the one
 line it cannot cover with a failing case and why.
 
+### `anti-audit.js`
+
+Every anti in novastorm's damage prediction, checked off against RYN's — and
+the two that were missing, run side by side after being ported.
+
+novastorm 15473 and X- Precision 14681 are byte for byte the same block; `diff`
+says so. Two pieces of it had no counterpart in RYN, because RYN's `+25` for a
+turret comes from `canPossiblyInstakill`, which only counts a turret once the
+enemy is already inside weapon reach — most of a turret's useful range missing:
+
+* **PREDICT TURRET HIT** — out to 350, three cases: standing on a spike as their
+  primary goes, about to be knocked onto one, or on ≤25 health with almost
+  nothing else predicted.
+* **VELOCITY TICK ANTI** — turret gear between 150 and 350 with a loaded primary
+  and a spent turret is someone lining up the move this client now has as an
+  offence.
+
+Both are now `EnemyManager.antiLongRangeTurret`. The bench lifts that method out
+of the client with `vm` and transcribes novastorm's block beside it:
+
+```
+  situation                                     novastorm   RYN
+  on a spike, their primary just fired          25          25
+  about to be knocked onto a spike              25          25
+  low health, nothing else predicted            25          25
+  low health, but plenty already predicted      0           0
+  turret gear at 200, turret spent, primary up  70          70
+  turret gear at 100 — too close for the band   0           0
+  turret gear but the turret is loaded          0           0
+
+  exhaustive sweep: 2048 of 2048 worlds agree
+```
+
+The first run showed 444 disagreements and every one was the bench's fault:
+novastorm's reload is a 0/1 scale and RYN's is a tick counter, so driving one
+into the other invented a difference. Modelling ticks properly (`RELOAD_MAX = 3`,
+`charged = ticks >= max`) removed all 444 — and left **one real bug**, which is
+the reason to build the sweep at all: my band used the outer `> 350` guard, so
+`dist === 350` passed, where novastorm's `dist < 350` is strict. Fixed with its
+own return, and the sweep closed at 2048/2048.
+
+One convention difference is left in and printed by the bench rather than hidden:
+`isReloaded(type, 1)` is `current >= max - 1`, so RYN calls a turret ready one
+tick before novastorm does. For an anti, one tick early is the safe side.
+
+The rest of the file is the audit proper — a term-by-term table of every other
+block in novastorm's summation against RYN's, including the one non-cosmetic
+difference deliberately not changed (**ANTI NORMAL INSTAKILL**: novastorm fires
+within 400 given a recent hit, RYN within `primaryRange + 130` with no recent-hit
+requirement — those bounds are `canPossiblyInstakill`'s, and it feeds danger
+detection, the soldier hat and every insta module, not only the heal).
+
 ### `ryn-changes-check.js` and `ryn-changes-mutate.py`
 
 The standing check over every change made to `ryn/`. It exists because RYN
@@ -694,7 +746,7 @@ cannot be booted here, so `node --check` is the only whole-file check available
 and it validates syntax only — it will not notice a call to a deleted helper, an
 identifier that resolves nowhere, or a UI id no element carries.
 
-95 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
+104 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
 actually run against stubs), **RESOLVE** (outer identifiers declared),
 **WIRE** (settings, registration, run order, UI ids — including that all 63
 `staticModules` constructors name something real, and that the spike tick takes
@@ -702,9 +754,9 @@ no ground of its own), **NO GHOSTS** (the 17 deleted helpers have no surviving
 reader — including `SpikeSync`'s three `EnemyManager` members and the two spike
 tick guards that measurement showed could never decide anything).
 
-`ryn-changes-mutate.py` is the check on the check: it breaks the client 37 ways
-and requires a red result each time. Two real holes came out of it and are worth
-knowing about, because both are easy to reproduce elsewhere:
+`ryn-changes-mutate.py` is the check on the check: it breaks the client 45 ways
+and requires a red result each time. Three real holes came out of it and are
+worth knowing about, because all three are easy to reproduce elsewhere:
 
 * `indexOf("class VelocityTick")` still matches after the class is renamed to
   `VelocityTickX` — a prefix match kept the check green while the thing it
@@ -712,6 +764,12 @@ knowing about, because both are easy to reproduce elsewhere:
 * The original `check()` treated any returned string as a pass-with-note, so a
   check whose failure path returned `"still read somewhere"` printed that
   message next to an `ok`. The contract is now `true` or `[pass, note]`.
+* A check that lifts a method into a `vm` and *stubs the constants it reads*
+  is not testing those constants. Shrinking `ANTI_TURRET_RANGE` from 350 to 200
+  in the client left the check green, because the sandbox still said 350. The
+  constants are now read out of the source with `constant()` and the distances
+  in the assertions are the literals — so the check asserts the reach, not that
+  the file contains the digits.
 
 ### `bot-names.js`
 

@@ -67,6 +67,16 @@ function lift(header, label) {
   throw new Error("unbalanced " + label);
 }
 
+/* Read a `const NAME = <number>;` out of the client rather than restating its
+ * value here. A bench that hard-codes 350 next to a client that says 350 is not
+ * testing the client — mutate the client to 200 and the bench stays green,
+ * which is exactly what happened the first time these were written. */
+function constant(name) {
+  const m = new RegExp("const " + name + " = (-?[0-9.]+)").exec(src);
+  if (!m) throw new Error("no `const " + name + "` in the file");
+  return Number(m[1]);
+}
+
 class Vec {
   constructor(x, y) { this.x = x; this.y = y; }
   distance(o) { return Math.hypot(o.x - this.x, o.y - this.y); }
@@ -228,6 +238,11 @@ const OUTER = [
   ["SPIKE_TICK_HOLD_TTL", "const SPIKE_TICK_HOLD_TTL"],
   ["SPIKE_TICK_HOLD_ANGLES", "const SPIKE_TICK_HOLD_ANGLES"],
   ["SPIKE_TICK_BULL_MULT", "const SPIKE_TICK_BULL_MULT"],
+  ["ANTI_TURRET_RANGE", "const ANTI_TURRET_RANGE"],
+  ["ANTI_TURRET_DAMAGE", "const ANTI_TURRET_DAMAGE"],
+  ["ANTI_TURRET_LOW_HEALTH", "const ANTI_TURRET_LOW_HEALTH"],
+  ["ANTI_VELOCITY_TICK_MIN", "const ANTI_VELOCITY_TICK_MIN"],
+  ["ANTI_VELOCITY_TICK_HAT", "const ANTI_VELOCITY_TICK_HAT"],
 ];
 for (const [name, decl] of OUTER) {
   check("resolve", name + " is declared", () =>
@@ -558,6 +573,112 @@ check("wire", "updateSpikeTick targets the id the Devtool row uses", () => {
   if (!m) return [false, "updateSpikeTick not found or does not query"];
   return m[1] === "_spikeTickOutcome" ? [true, "queries #" + m[1]]
                                       : [false, "queries #" + m[1] + ", row is #_spikeTickOutcome"];
+});
+
+/* The two long-range turret antis ported from novastorm 15473 / X- 14681.
+ * harness/anti-audit.js runs the shipped method against a transcription of
+ * novastorm's block over every world; these are the wiring facts that bench
+ * cannot see, because it calls the method directly. */
+check("wire", "antiLongRangeTurret is summed into the same total as every other anti", () => {
+  const cls = lift("class EnemyManager\\s*\\{", "EnemyManager");
+  if (!/antiLongRangeTurret\(enemy\) \{/.test(cls)) return [false, "the method is gone"];
+  const dh = /handleDanger\(enemy\) \{([\s\S]*?)\n    \}/.exec(cls);
+  if (!dh) return [false, "handleDanger not found"];
+  const call = dh[1].indexOf("this.antiLongRangeTurret(enemy);");
+  if (call < 0) return [false, "handleDanger never calls it"];
+  // It adds to enemy.potentialDamage, so it has to run BEFORE that field is
+  // folded into the manager's running total — after it, the additions are
+  // written and then never read, which is exactly the pushingOnSpike bug.
+  const sum = dh[1].indexOf("this.potentialDamage += enemy.potentialDamage;");
+  if (sum < 0) return [false, "handleDanger no longer sums enemy.potentialDamage"];
+  if (call > sum) return [false, "called after the sum, so its +25 is written and dropped"];
+  return [true, "called before the sum, so the +25 reaches the heal"];
+});
+
+check("wire", "it reads the spike flags that belong to me, not to the enemy", () => {
+  const cls = lift("class EnemyManager\\s*\\{", "EnemyManager");
+  const m = /antiLongRangeTurret\(enemy\) \{([\s\S]*?)\n    \}/.exec(cls);
+  const body = m[1];
+  // collidingSpike/willCollideSpike are set by checkCollision inside `if
+  // (isOwner)`, so `this.` is mine. `enemy.collidingSpike` would be a field
+  // nothing writes — silently undefined, and the anti would never fire.
+  for (const f of ["collidingSpike", "willCollideSpike"]) {
+    if (!new RegExp("this\\." + f).test(body)) return [false, "does not read this." + f];
+    if (new RegExp("enemy\\." + f).test(body)) return [false, "reads enemy." + f + ", which nothing writes"];
+  }
+  const guard = /if \(isOwner\) \{/.test(cls);
+  return guard ? [true, "this.collidingSpike / this.willCollideSpike, both owner-side"]
+               : [false, "checkCollision no longer has the isOwner block those flags live in"];
+});
+
+/* The distances below are literals on purpose. The constants come out of the
+ * client, so shrinking ANTI_TURRET_RANGE to 200 or zeroing ANTI_TURRET_DAMAGE
+ * moves the answer at 349 and these go red; what they assert is the reach and
+ * the size of the prediction, not that the file contains the digits 350. */
+const ANTI_CONSTANTS = () => ({
+  ANTI_TURRET_RANGE: constant("ANTI_TURRET_RANGE"),
+  ANTI_TURRET_DAMAGE: constant("ANTI_TURRET_DAMAGE"),
+  ANTI_TURRET_LOW_HEALTH: constant("ANTI_TURRET_LOW_HEALTH"),
+  ANTI_VELOCITY_TICK_MIN: constant("ANTI_VELOCITY_TICK_MIN"),
+  ANTI_VELOCITY_TICK_HAT: constant("ANTI_VELOCITY_TICK_HAT"),
+});
+
+check("execute", "antiLongRangeTurret adds 25 at 349 and nothing at 351", () => {
+  const cls = lift("class EnemyManager\\s*\\{", "EnemyManager");
+  const m = /( {4}antiLongRangeTurret\(enemy\) \{[\s\S]*?\n {4}\})/.exec(cls);
+  if (!m) return [false, "the method is gone"];
+  const box = { ...ANTI_CONSTANTS(), Vec };
+  vm.createContext(box);
+  vm.runInContext("this.EM = { collidingSpike: true, willCollideSpike: false," +
+    " potentialDamage: 0, potentialSpikeDamage: 0," +
+    " client: { myPlayer: { pos: { current: new Vec(0, 0) }, currentHealth: 100 }," +
+    "           PlayerManager: { lookingShield: () => false } },\n" +
+    m[1].replace(/^ {4}/, "") + "\n};", box);
+  const EM = box.EM;
+  const at = d => {
+    const enemy = {
+      pos: { current: new Vec(d, 0) }, hatID: 6, potentialDamage: 0,
+      reload: [{ previous: 3, max: 3 }, {}, {}],
+      weapon: { primary: 0 }, getMaxWeaponDamage: () => 35,
+      isReloaded: (i) => i === 2,          // turret up, primary spent this tick
+    };
+    EM.antiLongRangeTurret(enemy);
+    return enemy.potentialDamage;
+  };
+  if (at(349) !== 25) return [false, "no turret damage predicted at 349, got " + at(349)];
+  if (at(350) !== 25) return [false, "the turret test is `<= 350` and 350 gave " + at(350)];
+  if (at(351) !== 0) return [false, "fired past 350, got " + at(351)];
+  return [true, "25 in at 349 and 350, nothing at 351"];
+});
+
+check("execute", "the velocity-tick band is open at 151 and shut at 150 and 350", () => {
+  const cls = lift("class EnemyManager\\s*\\{", "EnemyManager");
+  const m = /( {4}antiLongRangeTurret\(enemy\) \{[\s\S]*?\n {4}\})/.exec(cls);
+  const box = { ...ANTI_CONSTANTS(), Vec };
+  vm.createContext(box);
+  vm.runInContext("this.EM = { collidingSpike: false, willCollideSpike: false," +
+    " potentialDamage: 0, potentialSpikeDamage: 0," +
+    " client: { myPlayer: { pos: { current: new Vec(0, 0) }, currentHealth: 100 }," +
+    "           PlayerManager: { lookingShield: () => false } },\n" +
+    m[1].replace(/^ {4}/, "") + "\n};", box);
+  const EM = box.EM;
+  const at = (d, hat) => {
+    const enemy = {
+      pos: { current: new Vec(d, 0) }, hatID: hat, potentialDamage: 0,
+      reload: [{ previous: 3, max: 3 }, {}, {}],
+      weapon: { primary: 0 }, getMaxWeaponDamage: () => 35,
+      isReloaded: (i) => i === 0,          // primary up, turret spent
+    };
+    EM.antiLongRangeTurret(enemy);
+    return enemy.potentialDamage;
+  };
+  // novastorm's band is `dist > 150 && dist < 350` — strictly inside both ends,
+  // and the outer guard alone (`> 350`) would have let 350 through.
+  if (at(151, 53) !== 60) return [false, "turret gear at 151 predicted " + at(151, 53) + ", want 25 + 35"];
+  if (at(150, 53) !== 0) return [false, "fired at exactly 150"];
+  if (at(350, 53) !== 0) return [false, "fired at exactly 350 — the band is `< 350`"];
+  if (at(200, 6) !== 0) return [false, "fired on a soldier hat, not turret gear"];
+  return [true, "25 + primary inside (150, 350), and only on hat 53"];
 });
 
 // ── 4. NO GHOSTS ──────────────────────────────────────────────────────────
