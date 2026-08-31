@@ -491,6 +491,27 @@ with novastorm's rule. Its acceptance test is that it becomes
 the file exits non-zero if it is not, so a guard left behind anywhere would
 fail the run rather than pass quietly.
 
+### `antipush-duel.js`
+
+Unlike the two duels above, this one transcribes nothing. Novastorm's
+`isNearestEnemyPushPlayer()` is a top-level function and RYN's `AntiSpikePush`
+is a class, so both are lifted out of the shipped files with `vm` and run
+against the same staged world — it compares the real code, and the only thing
+written here is the scenery.
+
+All 96 combinations of the six inputs the rule looks at (am I trapped, is a
+spike against that trap, which primary, are they in reach, `spikeDmgCount`, are
+they in a trap of mine) are staged in each client's world shape. A single
+disagreement fails the run.
+
+It also prints a second table, and that one is the point: agreement across 96
+scenes where only 2 fire could be agreement on "no". So it takes the scene that
+does fire and flips each gate on its own — every flip must turn **both** clients
+off, which is what proves each gate is carrying weight on both sides rather than
+being absent from both.
+
+### `preplace-duel.js`
+
 `preplace-duel.js` enumerates 162 situations (their reload × building toughness
 × in range × motion × distance) and applies each client's *gate conditions* as
 written, counting where each produces a candidate at all. It measures coverage,

@@ -16692,44 +16692,154 @@ window.grbtp = 35;
       ModuleHandler.shouldAttack = true;
     }
   }
+  // --------------------------------------------------------------------------
+  // Anti spike push — novastorm's rule and nothing else.
+  //
+  // isNearestEnemyPushPlayer(), Novastorm_1.41.4.user.js:14227 and, identically,
+  // X_Precision_2.0.user.js:13344:
+  //
+  //     if (!nearestEnemy) return false;
+  //     if (visibleObjects.filter((o) => o.id == 15 && dist(nearestEnemy, o) <= 50
+  //         && (o.owner.sid == myPlayer.sid || isAlly(o.owner.sid)))[0]) return false;
+  //     if ((nearestTrap && spikeDmgCount < 1)
+  //         && (myPlayer.weapons[0] == 6 || myPlayer.weapons[0] == 7)) {
+  //         const nearestSpike = enemySpikes.sort((a, b) =>
+  //             dist(myPlayer, a) - dist(myPlayer, b))[0];
+  //         if ((nearestTrap && nearestSpike)
+  //             && dist(nearestSpike, nearestTrap) <= (35 + nearestSpike.scale + nearestTrap.scale)
+  //             && dist(myPlayer.x2, myPlayer.y2, nearestEnemy.xVel, nearestEnemy.yVel)
+  //                <= (35 * 1.8 + items.weapons[myPlayer.weapons[0]].range)) {
+  //             antiPushAngle = atan2(nearestEnemy.y2 - myPlayer.y2,
+  //                                   nearestEnemy.x2 - myPlayer.x2);
+  //             return true;
+  //         }
+  //     }
+  //     return false;
+  //
+  // The reading: you are standing in their trap, an enemy spike sits against
+  // that trap, and you hold a bat or daggers — the two knockback primaries. One
+  // push and you are on the spike, so hit THEM first and the knockback moves
+  // them out of pushing range before they can line it up.
+  //
+  // And what being true buys, in novastorm's own tick: predictWeapon becomes
+  // weapons[0] (15237), getAttackDir() returns antiPushAngle ahead of autoBreak
+  // and everything under it (10287), the swing is held down (needAutoGather),
+  // and the hat becomes 7 rather than 40 while breaking.
+  //
+  // What was here instead tested a different geometry and a different weapon
+  // state: a spike within 25 of ME rather than one against the trap
+  // (EnemyManager.pushingOnSpike), collidingSpike rather than spikeDmgCount,
+  // the enemy's own trapped flag rather than whose trap they stand in, the
+  // enemy's hitScale rather than mine, turret gear rather than hat 7, and it
+  // waited on the primary's reload before committing. All of it is gone.
+  //
+  // Three quantities novastorm reads off its own globals are built from this
+  // client's world instead, and each is the same quantity:
+  //   · spikeDmgCount — kept below, from "damage landed this tick" and "a spike
+  //     is touching me", which is what novastorm's spikeDamages amounts to
+  //   · enemySpikes   — itemGroup 2 is exactly novastorm's `id > 5 && id < 10`
+  //   · xVel/yVel     — pos.future is current + (current - previous), which is
+  //     literally novastorm's `x2 * 2 - lastX`
+  // --------------------------------------------------------------------------
   class AntiSpikePush {
     moduleName="antiSpikePush";
     client;
+    _spikeDmgCount=0;
     constructor(client2) {
       this.client = client2;
     }
+    // novastorm 13911: spikeDamages non-empty this tick raises the count,
+    // empty resets it to zero.
+    _trackSpikeDamage(myPlayer, EnemyManager2) {
+      const tookDamage = myPlayer.tickCount - myPlayer.damageTick <= 0;
+      if (tookDamage && EnemyManager2.collidingSpike) {
+        this._spikeDmgCount += 1;
+      } else {
+        this._spikeDmgCount = 0;
+      }
+    }
+    // novastorm 13536: every visible spike that is neither mine nor an ally's,
+    // nearest to me first.
+    _nearestEnemySpike(myPlayer, ObjectManager2, PlayerManager2) {
+      const pos = myPlayer.pos.current;
+      const cells = Math.ceil(200 / ObjectManager2.grid2D.cellSize) + 1;
+      let best = null;
+      let bestDistance = Infinity;
+      ObjectManager2.grid2D.query(pos.x, pos.y, cells, id => {
+        const object = ObjectManager2.objects.get(id);
+        if (!object || !(object instanceof PlayerObject)) return false;
+        if (object.itemGroup !== 2) return false;
+        if (!PlayerManager2.isEnemyByID(object.ownerID, myPlayer)) return false;
+        const distance = pos.distance(object.pos.current);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = object;
+        }
+        return false;
+      });
+      return best;
+    }
     postTick() {
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
+      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2, ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
+      if (!myPlayer) {
+        return;
+      }
+      // Kept every tick, whatever the toggle says, or the count would freeze at
+      // whatever it held when the module was last allowed to run.
+      this._trackSpikeDamage(myPlayer, EnemyManager2);
       if (!Settings_default._antiSpikePush || ModuleHandler.moduleActive) {
         return;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
-      if (nearestEnemy === null || !myPlayer.isTrapped || !EnemyManager2.pushingOnSpike || EnemyManager2.collidingSpike || nearestEnemy.isTrapped) {
+      if (nearestEnemy === null) {
         return;
       }
+
+      // novastorm's first line: a trap of ours on them means they are the one
+      // pinned, and being pushed is not the danger. trappedIn is the trap they
+      // are standing in, if any.
+      const trappedIn = nearestEnemy.trappedIn;
+      if (trappedIn && !PlayerManager2.isEnemyByID(trappedIn.ownerID, myPlayer)) {
+        return;
+      }
+
+      // (nearestTrap && spikeDmgCount < 1)
+      const nearestTrap = EnemyManager2.nearestTrap;
+      if (nearestTrap === null || this._spikeDmgCount >= 1) {
+        return;
+      }
+
+      // (weapons[0] == 6 || weapons[0] == 7) — bat or daggers
       const primary = myPlayer.getItemByType(0);
-      const isDaggers = primary === 7 || primary === 6;
-      if (!isDaggers) {
+      if (primary !== 6 && primary !== 7) {
         return;
       }
-      const primaryRange = DataHandler_default.getWeapon(primary).range + nearestEnemy.hitScale;
-      if (!myPlayer.collidingSimple(nearestEnemy, primaryRange)) {
+
+      const nearestSpike = this._nearestEnemySpike(myPlayer, ObjectManager2, PlayerManager2);
+      if (nearestSpike === null) {
         return;
       }
-      const pos1 = myPlayer.pos.current;
-      const pos2 = nearestEnemy.pos.current;
-      const angle = pos1.angle(pos2);
-      const {reloading: reloading} = ModuleHandler.staticModules;
-      const primaryReloaded = reloading.isReloaded(0);
-      const turretReloaded = ModuleHandler.hasStoreItem(0, 53) && reloading.isReloaded(2);
+
+      // dist(nearestSpike, nearestTrap) <= 35 + nearestSpike.scale + nearestTrap.scale
+      if (nearestSpike.pos.current.distance(nearestTrap.pos.current)
+          > 35 + nearestSpike.scale + nearestTrap.scale) {
+        return;
+      }
+
+      // dist(me, where they will be) <= 35 * 1.8 + my primary's range
+      const range = DataHandler_default.getWeapon(primary).range;
+      if (myPlayer.pos.current.distance(nearestEnemy.pos.future) > myPlayer.hitScale + range) {
+        return;
+      }
+
+      // antiPushAngle, and the three things novastorm does with it.
+      ModuleHandler.moduleActive = true;
       ModuleHandler.forceWeapon = 0;
-      if (primaryReloaded) {
-        ModuleHandler.moduleActive = true;
-        ModuleHandler.useAngle = angle;
-        if (turretReloaded) {
-          ModuleHandler.forceHat = 53;
-        }
-        ModuleHandler.shouldAttack = true;
+      ModuleHandler.useAngle = myPlayer.pos.current.angle(nearestEnemy.pos.current);
+      ModuleHandler.shouldAttack = true;
+      const {reloading: reloading} = ModuleHandler.staticModules;
+      if (reloading.isReloaded(0) && ModuleHandler.hasStoreItem(0, 7)) {
+        ModuleHandler.forceHat = 7;
       }
     }
   }
