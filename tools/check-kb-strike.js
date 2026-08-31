@@ -149,52 +149,62 @@ console.log("\npath reading — the cone-test fixes");
 
   // On the line, inside the travel.
   let m = new KnockbackStrike(makeClient(makeScene([spike(280, 0)]), [e]));
-  check("spike on the line inside travel is found", m._readPath(e, 0, 111.1).worth, 25);
+  check("spike on the line inside travel is found", m._readPath(e, 0, 111.1, true, true).worth, 25);
 
   // On the line but past where the push ends. The old cone test passed this.
   m = new KnockbackStrike(makeClient(makeScene([spike(600, 0)]), [e]));
-  check("spike past the travel is refused", m._readPath(e, 0, 111.1).worth, 0);
+  check("spike past the travel is refused", m._readPath(e, 0, 111.1, true, true).worth, 0);
 
   // Off-axis but within (spike 35 + enemy 35) of the line. Cone missed this.
   m = new KnockbackStrike(makeClient(makeScene([spike(280, 60)]), [e]));
-  check("spike off-axis but within reach is found", m._readPath(e, 0, 111.1).worth, 25);
+  check("spike off-axis but within reach is found", m._readPath(e, 0, 111.1, true, true).worth, 25);
 
   // Far enough off-axis to genuinely miss.
   m = new KnockbackStrike(makeClient(makeScene([spike(280, 120)]), [e]));
-  check("spike too far off-axis is refused", m._readPath(e, 0, 120).worth, 0);
+  check("spike too far off-axis is refused", m._readPath(e, 0, 120, true, true).worth, 0);
 
   // Behind the enemy, opposite the push.
   m = new KnockbackStrike(makeClient(makeScene([spike(120, 0)]), [e]));
-  check("spike behind the target is refused", m._readPath(e, 0, 111.1).worth, 0);
+  check("spike behind the target is refused", m._readPath(e, 0, 111.1, true, true).worth, 0);
 }
 
 console.log("\nownership and item kinds");
 {
   const e = enemy(200, 0);
   let m = new KnockbackStrike(makeClient(makeScene([theirSpike(280, 0)]), [e]));
-  check("their spike is not a prize", m._readPath(e, 0, 111.1).worth, 0);
+  check("their spike is not a prize", m._readPath(e, 0, 111.1, true, true).worth, 0);
 
   m = new KnockbackStrike(makeClient(makeScene([trap(280, 0)]), [e]));
-  check("our trap counts, at trap worth", m._readPath(e, 0, 111.1).worth, 120);
+  check("our trap counts, at trap worth", m._readPath(e, 0, 111.1, true, true).worth, 120);
 
+  // The two switches are independent: neither is a master for the other.
   Settings_default._knockbackStrikeTrap = false;
   m = new KnockbackStrike(makeClient(makeScene([trap(280, 0)]), [e]));
-  check("trap ignored when the sub-toggle is off", m._readPath(e, 0, 111.1).worth, 0);
+  check("trap ignored with the trap switch off", m._readPath(e, 0, 111.1, true, false).worth, 0);
+  m = new KnockbackStrike(makeClient(makeScene([spike(280, 0)]), [e]));
+  check("spikes still count with the trap switch off", m._readPath(e, 0, 111.1, true, false).worth, 25);
   Settings_default._knockbackStrikeTrap = true;
 
+  Settings_default._knockbackStrike = false;
+  m = new KnockbackStrike(makeClient(makeScene([spike(280, 0)]), [e]));
+  check("spike ignored with the spike switch off", m._readPath(e, 0, 111.1, false, true).worth, 0);
+  m = new KnockbackStrike(makeClient(makeScene([trap(280, 0)]), [e]));
+  check("traps still count with the spike switch off", m._readPath(e, 0, 111.1, false, true).worth, 120);
+  Settings_default._knockbackStrike = true;
+
   m = new KnockbackStrike(makeClient(makeScene([cactus(280, 0)]), [e]));
-  check("cactus counts at 35", m._readPath(e, 0, 111.1).worth, 35);
+  check("cactus counts at 35", m._readPath(e, 0, 111.1, true, true).worth, 35);
 
   // colDiv 0.2 would put the trap catch radius at 10 and miss; 47.5 catches.
   m = new KnockbackStrike(makeClient(makeScene([trap(300, 70)]), [e]));
-  check("trap catch uses 47.5, not colDiv", m._readPath(e, 0, 111.1).worth, 120);
+  check("trap catch uses 47.5, not colDiv", m._readPath(e, 0, 111.1, true, true).worth, 120);
 }
 
 console.log("\nchaining");
 {
   const e = enemy(200, 0);
   const m = new KnockbackStrike(makeClient(makeScene([spike(260, 0), spike(300, 0, 45)]), [e]));
-  const read = m._readPath(e, 0, 111.1);
+  const read = m._readPath(e, 0, 111.1, true, true);
   // Two on the line: first at full worth, second at 0.6. Order of the grid
   // walk decides which is "first", so accept either arrangement's total.
   const totals = [25 + 45 * .6, 45 + 25 * .6].map((n) => Math.round(n * 100) / 100);
@@ -244,6 +254,21 @@ console.log("\npostTick gating");
   c = makeClient(scene, [e], { hasTurret: true, turretReloaded: false });
   m = new KnockbackStrike(c); m.postTick();
   check("no turret hat when the turret is not ready", c._ModuleHandler.forceHat, null);
+
+  Settings_default._knockbackStrike = false;
+  Settings_default._knockbackStrikeTrap = false;
+  c = makeClient(scene, [e]);
+  m = new KnockbackStrike(c); m.postTick();
+  check("both switches off stops the module", c._ModuleHandler.shouldAttack, false);
+  Settings_default._knockbackStrike = true;
+  Settings_default._knockbackStrikeTrap = true;
+
+  // Spikes off, traps on: a spike on the path is no longer a reason to swing.
+  Settings_default._knockbackStrike = false;
+  c = makeClient(scene, [e]);
+  m = new KnockbackStrike(c); m.postTick();
+  check("spike switch off ignores a spike-only path", c._ModuleHandler.shouldAttack, false);
+  Settings_default._knockbackStrike = true;
 }
 
 console.log("\ntarget selection");

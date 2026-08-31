@@ -2,22 +2,11 @@
 /*
  * build-v54.js
  *
- * Applies the two fixes in this repo to RYN Client v5.4 and writes
- * RYN_Client_v5.4_ReUp.user.js.
+ * RYN Client v5.4 with one change: TrapKB is replaced by KnockbackStrike.
+ * Everything else in v5.4 is left exactly as it shipped.
  *
- * v5.4 is a newer client than the v4 that build-reup.js targets, so the two
- * builds are separate rather than one script guessing which base it has. What
- * v5.4 already fixed is left alone: its Automill has lost the sandbox/age
- * gates, no longer latches itself off on the first refusal, and already places
- * each mill on its own. Only what is still wrong is touched.
- *
- *   1. Automill spacing. The offset is exact tangency, and the game rounds the
- *      place angle to two decimals, so a gap with no clearance loses a mill —
- *      which one depending on the heading.
- *   2. TrapKB, replaced by KnockbackStrike, same as in the v4 build.
- *
- * Anchors live in tools/anchors/ and replacement bodies in tools/modules/, so
- * a stale anchor fails the build loudly rather than producing a half-patched
+ * Anchors live in tools/anchors/ and the module body in tools/modules/, so a
+ * stale anchor fails the build loudly rather than producing a half-patched
  * script.
  *
  *   node tools/build-v54.js
@@ -75,102 +64,19 @@ function replaceInPage(constName, findHtml, replaceHtml, label) {
 }
 
 /* ------------------------------------------------------------------ *
- * 1. Userscript header
- * ------------------------------------------------------------------ */
-
-const header = `// ==UserScript==
-// @name            RYN v5.4 (ReUp)
-// @namespace       reup-mix
-// @author          RYN v5.4 by Raptor
-// @description     RYN v5.4 with the automill spacing fixed and Trap KB replaced by Knockback Strike
-// @icon            https://i.postimg.cc/d0mMvHYF/ryn5.webp
-// @version         5.4.1
-// @match           *://moomoo.io/
-// @match           *://moomoo.io/?server*
-// @match           *://*.moomoo.io/
-// @match           *://*.moomoo.io/?server*
-// @run-at          document-start
-// @grant           none
-// @license         MIT
-// ==/UserScript==
-`;
-
-{
-  const end = code.indexOf("// ==/UserScript==");
-  if (end === -1) throw new Error("could not find end of base userscript header");
-  code = header + code.slice(end + "// ==/UserScript==".length).replace(/^\r?\n/, "\n");
-  applied.push("header: rewritten for the ReUp build");
-}
-
-/* ------------------------------------------------------------------ *
- * 2. Drop the phone-home beacon
+ * Knockback Strike (replaces TrapKB)
  *
- * v5.4 opens with a fetch to a webhook.site endpoint on first run, gated by a
- * localStorage flag. It carries no payload beyond the hit itself, but it is an
- * unannounced call to a third party, so it goes — same as in the v4 build.
- * ------------------------------------------------------------------ */
-
-{
-  const beacon = code.match(
-    /\(function\(\) \{\s*try \{\s*if \(!localStorage\.getItem\("_ryn_sent"\)\)[\s\S]*?\}\)\(\);\s*/
-  );
-  if (beacon) {
-    code = code.replace(
-      beacon[0],
-      "/* removed in the ReUp build: v5.4's first-run beacon to webhook.site */\n\n"
-    );
-    applied.push("privacy: removed first-run webhook.site beacon");
-  }
-}
-
-/* ------------------------------------------------------------------ *
- * 3. Automill: three mills in every direction
+ * TrapKB asked, once per pit trap, whether the trap fell inside a cone drawn
+ * from the player through the target and whether the target was within
+ * getActualMaxKnockback of it. A cone anchored at the player widens with
+ * distance, the range gate spent a knockback budget with the secondary and the
+ * turret folded in whether or not either was firing, and it only ever looked
+ * at pit traps.
  *
- * v5.4 already places each mill independently, so the all-or-nothing gate that
- * the v4 build had to remove is gone here. What is left is the spacing and the
- * reference position:
- *
- *   · The offset is exact tangency. Neighbouring mills land centre-to-centre
- *     at exactly 2 * scale and the server's test is a strict
- *     `distance < scaleA + scaleB`, so the build survives only while nothing
- *     rounds the gap down. The game rounds the place angle to two decimals
- *     (`M.fixTo(dir, 2)`, Ci() in src/game_index.js), which at the windmill's
- *     85-unit place radius is ~0.85 units of arc per angle. Whether a mill is
- *     lost depends on where base +/- offset lands on the 0.01 grid — the
- *     heading. Sweeping 72000 headings it is short at 89.5% of them.
- *   · canPlaceObject tests at pos.current, but a place sent this tick is
- *     applied after the move. AutoGrind.placeTurret already tests at
- *     pos.future.
- * ------------------------------------------------------------------ */
-
-/* Two world units of clearance between neighbouring mills. One unit is the
- * minimum that survives the rounding above; two leaves the worst-case gap at
- * 91.3 against a bar of 90, and is invisible on a 90-unit-wide pair. */
-edit(
-  "automill: clearance constant",
-  `  const AUTOMILL_PLACE_COST = 5;`,
-  `  const AUTOMILL_PLACE_COST = 5;
-  const AUTOMILL_MARGIN = 2;`
-);
-
-edit(
-  "automill: spacing with real clearance",
-  anchor("v54-automill-spacing.txt"),
-  body("v54-automill-spacing.js")
-);
-
-edit(
-  "automill: test where the server will place",
-  anchor("v54-automill-canplace.txt"),
-  body("v54-automill-canplace.js")
-);
-
-/* ------------------------------------------------------------------ *
- * 4. Knockback Strike (replaces TrapKB)
- *
- * Identical to the v4 build: TrapKB and the EnemyManager scan behind it are
- * removed and one module takes their place. See the comment written into the
- * client for what changed and why.
+ * KnockbackStrike walks the actual push segment instead, and covers spikes and
+ * cactus as well as traps. Its two switches are independent — spikes and traps
+ * are separate reasons to swing, so neither is a sub-option of the other and
+ * turning one off leaves the other running.
  * ------------------------------------------------------------------ */
 
 edit(
@@ -220,6 +126,9 @@ edit(
     _knockbackStrikeTrap: true,`
 );
 
+/* Two switches at the same level. Nesting the trap one under the spike one
+ * made the spike switch a master that silenced both, which is not what either
+ * of them is for. */
 replaceInPage(
   "Combat_default",
   `            <div class="content-option">\r
@@ -231,22 +140,18 @@ replaceInPage(
             </div>\r
 `,
   `            <div class="content-option">\r
-                <label class="option-title" for="_knockbackStrike">KB Strike</label>\r
+                <label class="option-title" for="_knockbackStrike">KB Strike (spike)</label>\r
                 <label class="switch-checkbox">\r
                     <input id="_knockbackStrike" type="checkbox"></input>\r
                     <span></span>\r
                 </label>\r
-                <span class="option-description">Hits when the recoil would carry them onto one of your spikes or traps.</span>\r
             </div>\r
-            <div class="sub-options">\r
             <div class="content-option">\r
                 <label class="option-title" for="_knockbackStrikeTrap">KB Strike (trap)</label>\r
                 <label class="switch-checkbox">\r
                     <input id="_knockbackStrikeTrap" type="checkbox"></input>\r
                     <span></span>\r
                 </label>\r
-                <span class="option-description">Counts your pit traps as a landing spot, not just spikes.</span>\r
-            </div>\r
             </div>\r
 `,
   "kb strike: menu entries"

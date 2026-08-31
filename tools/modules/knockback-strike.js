@@ -1,39 +1,16 @@
-  // ── Knockback strike ──────────────────────────────────────────────────
   // Hit them so the recoil carries them onto something that hurts.
   //
-  // The module this replaces asked one question, once per pit trap: does the
-  // trap fall inside a cone drawn from me through them, and are they within
-  // getActualMaxKnockback of it. Three things were wrong with that.
+  // The push is a radial impulse along me -> them, so the question is where
+  // that impulse runs out and what the segment between here and there passes
+  // through. Travel is the weapon's own knockback figure from the item table,
+  // plus the turret's 33.3 only on a tick the turret is going out.
   //
-  //   · A cone anchored at the player widens with distance, so a trap well
-  //     behind the target passed the test while a spike sitting just off the
-  //     push axis failed it.
-  //   · The range gate spent a knockback budget with the secondary and the
-  //     turret already folded in, whether or not either was going out that
-  //     tick, so the module committed to pushes it could not deliver.
-  //   · It only ever looked at pit traps. Every spike on the map was
-  //     invisible to it, which is most of what a knockback is for.
-  //
-  // The push is a radial impulse along me -> them, so the honest question is
-  // where that impulse runs out and what the segment between here and there
-  // passes through:
-  //
-  //   travel   the weapon's own knockback figure straight off the item table
-  //            (33.3 / 55.6 / 111.1 — that is 111ms x (0.3 + knock) under the
-  //            game's 0.993/ms decay), plus the turret's 33.3 only on a tick
-  //            the turret is actually going out
-  //   path     a segment from their predicted position along the push axis,
-  //            each hazard tested by closest approach to it, so a hazard is
-  //            found wherever along the line it sits and one past the end of
-  //            the travel is not found at all
-  //   worth    what landing there does — a trap ends the fight, a spike deals
-  //            its own damage, and a second hazard on the same line chains —
-  //            so the target is chosen by outcome rather than by proximity
-  //
-  // Ours only, in both directions: their spikes are their prize, not ours,
-  // and a target already pinned does not move when hit, so there is no push
-  // to aim and nothing here can use them.
+  // Ours only: their spikes are their prize, and a pinned target does not move
+  // when hit, so there is no push to aim.
   const KB_STRIKE_TURRET_TRAVEL = 33.3;
+  // A trap catches at its own radius, not the collision radius its colDiv
+  // leaves behind: pit trap is scale 50 with colDiv 0.2, so collisionScale
+  // would put the catch at 10.
   const KB_STRIKE_TRAP_CATCH = 47.5;
   const KB_STRIKE_TRAP_WORTH = 120;
   const KB_STRIKE_CHAIN = .6;
@@ -55,9 +32,7 @@
       this.worth = 0;
     }
 
-    // Closest approach from a point to the segment a->b, squared. Testing the
-    // segment rather than an angle is the whole point: it catches a hazard
-    // wherever on the push it sits, and refuses one beyond the travel.
+    // Closest approach from a point to the segment a->b, squared.
     _segmentDistance2(px, py, ax, ay, bx, by) {
       const dx = bx - ax;
       const dy = by - ay;
@@ -69,8 +44,6 @@
       return ex * ex + ey * ey;
     }
 
-    // One hit's carry. The item table already holds the finished distance per
-    // weapon, so the impulse and the decay are not re-derived here.
     _travel(primary, withTurret) {
       const travel = DataHandler_default.getWeapon(primary).knockback || 0;
       if (travel <= 0) {
@@ -79,15 +52,16 @@
       return travel + (withTurret ? KB_STRIKE_TURRET_TRAVEL : 0);
     }
 
-    // What the push line runs through, and what that is worth.
-    _readPath(target, dir, travel) {
+    // What the push line runs through, and what that is worth. The two
+    // switches are independent: spikes and traps are separate reasons to
+    // swing, and neither one is a sub-option of the other.
+    _readPath(target, dir, travel, allowSpike, allowTrap) {
       const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
       const from = target.pos.future;
       const toX = from.x + Math.cos(dir) * travel;
       const toY = from.y + Math.sin(dir) * travel;
       const ids = ObjectManager2.grid2D.queryFull((from.x + toX) / 2, (from.y + toY) / 2, KB_STRIKE_CELLS);
       const reach = target.collisionScale;
-      const allowTrap = Settings_default._knockbackStrikeTrap;
       let worth = 0;
       let landing = null;
       let bestWorth = 0;
@@ -102,16 +76,11 @@
           continue;
         }
         const isTrap = isBuild && object.type === 15;
-        if (isTrap && !allowTrap) {
-          continue;
-        }
-        if (!isTrap && !(isBuild ? object.isSpike : object.isCactus)) {
+        const isSpike = !isTrap && (isBuild ? object.isSpike : object.isCactus);
+        if (isTrap ? !allowTrap : !(isSpike && allowSpike)) {
           continue;
         }
         const pos = object.pos.current;
-        // A trap catches at its own radius, not at the collision radius its
-        // colDiv leaves behind — pit trap is scale 50 with colDiv 0.2, so
-        // collisionScale would put the catch at 10 and miss every time.
         const radius = (isTrap ? KB_STRIKE_TRAP_CATCH : object.collisionScale) + reach;
         if (this._segmentDistance2(pos.x, pos.y, from.x, from.y, toX, toY) > radius * radius) {
           continue;
@@ -121,8 +90,8 @@
           continue;
         }
         found++;
-        // Only the first landing is certain; anything further along the line
-        // depends on them still travelling, so it is worth a fraction.
+        // Only the first landing is certain; further along the line depends on
+        // them still travelling, so it is worth a fraction.
         worth += found > 1 ? value * KB_STRIKE_CHAIN : value;
         if (value > bestWorth) {
           bestWorth = value;
@@ -140,7 +109,12 @@
       this.target = null;
       this.landing = null;
       this.worth = 0;
-      if (!Settings_default._knockbackStrike || ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
+      const allowSpike = !!Settings_default._knockbackStrike;
+      const allowTrap = !!Settings_default._knockbackStrikeTrap;
+      if (!allowSpike && !allowTrap) {
+        return;
+      }
+      if (ModuleHandler.moduleActive || EnemyManager2.shouldIgnoreModule()) {
         return;
       }
       const {reloading: reloading} = ModuleHandler.staticModules;
@@ -170,7 +144,7 @@
           continue;
         }
         const dir = myPos.angle(enemy.pos.future);
-        const read = this._readPath(enemy, dir, travel);
+        const read = this._readPath(enemy, dir, travel, allowSpike, allowTrap);
         if (read.worth <= bestWorth) {
           continue;
         }
@@ -187,8 +161,6 @@
       this.worth = bestWorth;
       ModuleHandler.moduleActive = true;
       ModuleHandler.useAngle = bestAngle;
-      // The turret is free knockback and free damage on the same tick, so it
-      // is worn when it is up — the travel above was measured with it.
       if (turretReady) {
         ModuleHandler.forceHat = 53;
       }

@@ -39,97 +39,32 @@ onto the RYN core instead, and everything else in RYN was left alone.
 
 ### Knockback Strike (replaces Trap KB)
 
-Combat → Spikes & Traps. Hits when the recoil from that hit would carry the
-target onto one of your own spikes or traps. `KB Strike (trap)` is a
-sub-option: off, only spikes and cactus count as a landing spot.
+Combat → Spikes & Traps, as two switches: **KB Strike (spike)** and **KB Strike
+(trap)**. Each hits when the recoil from that hit would carry the target onto
+one of your own spikes (or cactus) / pit traps.
 
-This **removes** RYN's `TrapKB` module and the `EnemyManager` scan behind it
-(`nearestKBTrapEnemy` / `nearestKBTrap`) and puts one module in their place.
-What the old one did was ask, once per pit trap: does the trap fall inside a
-cone drawn from me through them, and are they within `getActualMaxKnockback` of
-it. Three things were wrong with that:
+They are independent. Turning one off leaves the other running — neither is a
+master for the other.
+
+This removes RYN's `TrapKB` module and the `EnemyManager` scan behind it
+(`nearestKBTrapEnemy` / `nearestKBTrap`). TrapKB asked, once per pit trap,
+whether the trap fell inside a cone drawn from the player through the target
+and whether the target was within `getActualMaxKnockback` of it:
 
 - A cone anchored at the player widens with distance, so a trap well behind the
-  target passed the test while a spike sitting just off the push axis failed it.
+  target passed while a spike just off the push axis failed.
 - The range gate spent a knockback budget with the secondary and the turret
-  already folded in, whether or not either was going out that tick, so the
-  module committed to pushes it could not deliver.
-- It only ever looked at pit traps. Every spike on the map was invisible to it,
-  which is most of what a knockback is for.
+  already folded in, whether or not either was firing that tick.
+- It only ever looked at pit traps.
 
-The push is a radial impulse along me → them, so the replacement asks where
-that impulse runs out and what the segment between here and there passes
-through:
+The push is a radial impulse along me → them, so the replacement walks that
+segment instead: travel is the weapon's own `knockback` figure from the item
+table (plus the turret's 33.3 only on a tick the turret fires), each hazard is
+tested by closest approach to the segment, and the target is chosen by what
+landing there is worth rather than by proximity.
 
-| | |
-|---|---|
-| **travel** | The weapon's own `knockback` figure straight off the item table — 33.3 / 55.6 / 111.1, which is 111ms × (0.3 + `knock`) under the game's 0.993/ms decay — plus the turret's 33.3 only on a tick the turret is actually going out. |
-| **path** | A segment from the target's predicted position along the push axis. Each hazard is tested by closest approach to it, so one is found wherever along the line it sits, and one past the end of the travel is not found at all. |
-| **worth** | What landing there does. A trap ends the fight, a spike deals its own damage, and a second hazard on the same line chains at 0.6. The target is chosen by outcome, not by proximity. |
-
-Ours only, in both directions: enemy spikes are their prize rather than ours,
-and a target already pinned does not move when hit, so there is no push to aim.
-
-`node tools/check-kb-strike.js` lifts the class out of the build and runs it
-against synthetic scenes — 31 cases, including the three the cone test got
-wrong and the pit trap whose `colDiv` of 0.2 would otherwise shrink the catch
-radius from 47.5 to 10.
-
-### Automill: three mills in every direction
-
-Automill lays a wall of windmills behind you. It is meant to be three wide; it
-came out one, two or three depending on which way you walked.
-
-The cause was the spacing. The old offset was
-
-```js
-Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2
-```
-
-which is exact tangency — neighbouring mills land centre-to-centre at exactly
-`2 * scale`, and the server's test is a strict `distance < scaleA + scaleB`, so
-the build is accepted only while nothing rounds the gap down by even one unit.
-The `9e-13` on the chord moves a mill about 1e-12 units; it is not a margin
-against anything.
-
-Something does round it. The game sends the place angle through
-`M.fixTo(dir, 2)` (`Ci()` in `src/game_index.js`), so the angle that decides
-where the build lands is quantised to 0.01rad. At the windmill's 85-unit place
-radius that is ~0.85 units of arc per angle, and two neighbours can round
-toward each other for a combined ~1.7. A gap with zero clearance does not
-survive it — and which mill is lost depends on where `base ± offset` falls on
-the 0.01 grid, i.e. on the heading.
-
-**Sweeping 36000 headings, the old spacing places fewer than three mills at
-83.7% of them.** The eight WASD headings specifically:
-
-| heading | old | new |
-|---|---|---|
-| right, down | 3 | 3 |
-| left, up | 2 | 3 |
-| all four diagonals | 2 | 3 |
-
-Three other faults in the same function are fixed with it:
-
-- One blocked angle threw away the whole tick (`if (a && b && c) place all three`).
-  The mills are independent, so a genuinely occupied slot now costs one mill.
-- Each candidate was tested against a world containing neither of the other
-  two, while the server applies them in order and tests each against the ones
-  already down.
-- Legality was tested at `pos.current`, but a place sent this tick is applied
-  after the move. `AutoGrind.placeTurret` in this same client already tests at
-  `pos.future`.
-
-The fan is now spaced with a real margin, each angle is quantised to the grid
-the server will see *before* it is tested, the test runs at `pos.future`
-against both the world and the mills already committed this tick, and each mill
-is sent on its own. A wing that still lands short slides outward one grid step
-at a time — bounded to 0.08rad, and away from the centre, so it stays part of
-the wall instead of wandering off looking for space.
-
-`node tools/check-automill.js` drives the real class against a model of the
-server's placement rule and sweeps the heading — 19 cases, and it reproduces
-the old spacing alongside so the regression stays visible.
+`node tools/check-kb-strike.js` lifts the class out of a build and runs it
+against synthetic scenes — 36 cases, including both switches in isolation.
 
 Luna features that were **not** ported, and why:
 
@@ -221,7 +156,6 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/check-kb-strike.js  KnockbackStrike geometry vs. synthetic scenes
-tools/check-automill.js   Automill spacing vs. the server's placement rule
 tools/lib/extract.js      brace-matching class extractor used by both checks
 tools/anchors/            exact anchor text for the v5.4 build
 tools/modules/            replacement module bodies
@@ -239,16 +173,14 @@ node tools/build-v54.js          # produce RYN_Client_v5.4_ReUp.user.js
 
 Two bases, two builds. `ReUp_Mix.user.js` is the v4 core with the Luna
 features folded in. `RYN_Client_v5.4_ReUp.user.js` is RYN v5.4 with only the
-two fixes below applied — v5.4 is a newer client and had already fixed some of
-what the v4 build has to repair, so what it got right is left alone.
+one change below applied. Nothing else in v5.4 is touched: same header, same
+automill, same everything.
 
 | | ReUp_Mix (v4) | v5.4 build |
 |---|---|---|
-| Automill all-or-nothing gate | removed here | already fixed upstream |
-| Automill sandbox / age gates | present upstream | already removed upstream |
-| **Automill spacing** | **fixed** | **fixed** |
 | **Trap KB → Knockback Strike** | **done** | **done** |
 | Luna features | ported | not ported |
+| Everything else | as in v4 | untouched from stock v5.4 |
 
 Every edit in `build-reup.js` is anchored to an exact string in the base
 client, and an anchor that is missing or ambiguous fails the build. Dropping in
@@ -260,7 +192,6 @@ a newer RYN will surface as a build error rather than a half-merged script.
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
 node tools/check-kb-strike.js ReUp_Mix.user.js
-node tools/check-automill.js ReUp_Mix.user.js
 node --check ReUp_Mix.user.js
 ```
 
@@ -273,11 +204,9 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
-- **KB Strike** — 31/31 geometry cases pass: travel figures, segment distance,
+- **KB Strike** — 36/36 geometry cases pass: travel figures, segment distance,
   the three cone-test regressions, ownership, item kinds, chaining, and the
   `postTick` gates.
-- **Automill** — 19/19 cases pass, including three mills at every one of 36000
-  swept headings where the old spacing was short at 83.7% of them.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
