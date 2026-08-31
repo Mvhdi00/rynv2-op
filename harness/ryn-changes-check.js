@@ -361,6 +361,26 @@ check("wire", "standing still no longer forces Blood Wings", () => {
   return [true, "idle branch gone, bullActive and cowboyWhenSafe kept"];
 });
 
+check("wire", "the spike tick takes yes for an answer", () => {
+  const cls = lift("class SpikeTickController\\s*\\{", "SpikeTickController");
+  if (!/_alreadyCovered\(\)/.test(cls)) return [false, "no _alreadyCovered"];
+  if (!/if \(this\._alreadyCovered\(\)\)/.test(cls))
+    return [false, "noGround does not consult it"];
+  if (!/lastReason = "covered"/.test(cls)) return [false, "the covered outcome is not named"];
+  if (!/SPIKE_TICK_PHASE\.COMPLETE;\n              return this\.postTick\(\);/.test(cls))
+    return [false, "covered does not complete — it would still read as a failure"];
+  return [true, "an existing spike completes the tick instead of cancelling it"];
+});
+
+/* The acquire walk takes ground from nobody. If it ever starts preempting,
+ * that is the three placers being damaged, which is the thing not to do. */
+check("wire", "the spike tick never preempts the other placers", () => {
+  const cls = lift("class SpikeTickController\\s*\\{", "SpikeTickController");
+  if (/\.preempt\(/.test(cls)) return [false, "it calls preempt — that takes ground from a placer"];
+  if (!/availableGround\(c\)/.test(cls)) return [false, "acquire does not check availability"];
+  return [true, "checks availability, never preempts"];
+});
+
 check("wire", "automill reports what it sent", () => {
   const cls = lift("class Automill\\s*\\{", "Automill");
   if (!/this\._report\(3\);/.test(cls)) return [false, "the trio does not report"];

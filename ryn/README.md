@@ -403,7 +403,78 @@ reaches. Not a bug.
 * `attemptSpikePlacement()` is only the fallback for when no controller exists;
   the live path is `spikeTickController.arm()`.
 
-### The conflict, found and reproduced
+### The real conflict, and why it cannot be solved with angles
+
+You were right that auto place, preplace and replace are what stops it — and
+right that they should not be touched. Here is the whole mechanism, in the
+ledger:
+
+```js
+blocked(x, y, radius, priority, value, ignoreToken) {
+  for (const e of this.entries) {
+    if (hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
+    if (!e.soft) return true;               // hard entry wins outright
+    if (e.priority > priority) return true; // never reached for a hard entry
+```
+
+Every placement the engine **sends** leaves a hard reservation for two ticks
+(`_record` → `take(..., soft = false)`). All three placers build on the ring
+toward the enemy, and so does a spike tick — so whoever sent first owns that
+ground, and `!e.soft` returns before priority is read. The spike tick's SYNC
+(80) never gets to outrank ENGAGEMENT (40), ANTICIPATION (50) or RECOVERY (60).
+
+`_validate` then returned `"blocked"`, which is non-terminal, so the controller
+went to REPLAN — and REPLAN re-ran `_acquire`, which asked for the same three
+angles and took the same `angles[0]` again. Two replans, same refusal, CANCEL.
+
+**And no angle-hunting fixes it.** Measured:
+
+```
+enemy at  90   reaches within +-65.6 deg   needs >= 76.7 deg from an existing spike   DISJOINT
+enemy at 100   reaches within +-60.5 deg   needs >= 76.7 deg from an existing spike   DISJOINT
+enemy at 120   reaches within +-50.0 deg   needs >= 76.7 deg from an existing spike   DISJOINT
+enemy at 140   reaches within +-38.2 deg   needs >= 76.7 deg from an existing spike   DISJOINT
+```
+
+A spike only reaches the target from within ~±60° of the aim, and can only be
+*placed* at least 76.7° from a spike already on the ring. **Disjoint at every
+distance.** Once any spike stands toward the target, a second one that also
+reaches does not exist. The first fix attempted — walk the three angles instead
+of taking the head — was written, measured, and shown to be nearly useless for
+exactly this reason. It is kept because it is free and helps when the offered
+angles are spread, but it is not the fix.
+
+### The fix: stop calling a finished job a failure
+
+The combo is *"a spike they can be knocked onto, plus the hit."* If the spike is
+already standing — because auto place, preplace or replace put it there — the
+tick is **complete**. The swing was already ordered by `spikeTickHit` before the
+controller was armed, which is exactly why it "swings but never places".
+
+So `_alreadyCovered()` asks whether one of our spikes already reaches the
+target, and if it does the controller finishes instead of cancelling:
+
+```
+what the three placers left behind              expected  got
+nothing on the ring at all                      placed    placed
+auto place already built toward them (hard, 40) covered   covered
+preplace already built toward them (hard, 50)   covered   covered
+replace already built toward them (hard, 60)    covered   covered
+ground reserved this tick, nothing standing yet none      none
+a spike standing, but too far to reach them     placed    placed
+```
+
+`node harness/spike-tick-conflict.js`, against the **real** `PlacementLedger`
+and `ConflictResolver`.
+
+**Nothing about the three placers changes.** No reservation is preempted, no
+priority re-read, no ground taken. A standing check asserts the controller
+never calls `preempt`, so that cannot drift.
+
+The Devtool line now reads `covered` for these ticks rather than counting them
+as losses, so the counter finally means what it says.
+
+### The trap variant's own gate, found earlier
 
 `node harness/spike-tick-trap.js` drives the trap combo over **both** its ticks,
 with `spikeTickState`, `spikeTickCounterThreat`, `spikeTickNearSpike`,

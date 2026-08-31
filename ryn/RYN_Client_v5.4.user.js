@@ -12997,19 +12997,105 @@ window.grbtp = 35;
       // 4. nothing to consume: ask the engine, through the solver every other
       //    caller uses, for the few angles nearest the target. This is the
       //    engine's cached aperture set, not a fresh scan.
+      //
+      // It asks for three and used to build an intent from angles[0] alone,
+      // which is what made a spike tick swing with nothing under it. The other
+      // placers are hard to argue with, and they should not have to be:
+      //
+      //     blocked(...)  ->  if (!e.soft) return true;   // hard entry wins,
+      //                          if (e.priority > priority) ...  // never reached
+      //
+      // Every placement the engine SENDS leaves a hard reservation for two
+      // ticks (_record -> take(..., soft = false)). Auto place, preplace and
+      // replace all build on the ring toward the enemy, and so does a spike
+      // tick — so whichever of them sent first owns that ground outright, and
+      // the `!e.soft` short-circuit means a spike tick's SYNC (80) never gets
+      // to outrank their ENGAGEMENT (40), ANTICIPATION (50) or RECOVERY (60).
+      //
+      // _validate then returned "blocked", which is non-terminal, so the
+      // controller went to REPLAN — and REPLAN re-ran this method, which asked
+      // for the same three angles and took the same angles[0] again. Two
+      // replans, same refusal, CANCEL. It deadlocked on one taken angle while
+      // two free ones sat in the list it had already fetched.
+      //
+      // So walk the list instead of taking its head. This takes ground from
+      // nobody and changes no arbitration: it only declines to ask for ground
+      // that is already spoken for.
       const myPos = this.client.myPlayer.pos.current;
       const aim = Math.atan2(this.target.pos.current.y - myPos.y, this.target.pos.current.x - myPos.x);
       const angles = engine.anglesFor(4, aim, { limit: 3 });
       if (!angles.length) return null;
-      const cand = engine.intentAt(4, angles[0], {
+
+      const target = this.target;
+      const tPos = target.pos.current;
+      const build = angle => engine.intentAt(4, angle, {
         owner: this.source,
         priority: RPE_PRIORITY.SYNC
       });
+      // Reach is _validate's own test, applied here so a free angle that
+      // cannot touch them is not preferred over one that can.
+      const reaches = c => {
+        const r = c.profile.footR + target.collisionScale + 8;
+        return Math.hypot(c.x - tPos.x, c.y - tPos.y) <= r;
+      };
+
+      let cand = null;
+      let fallback = null;
+      for (const angle of angles) {
+        const c = build(angle);
+        if (!c) continue;
+        if (!engine._conflicts.availableGround(c)) continue;
+        if (reaches(c)) { cand = c; break; }
+        if (fallback === null) fallback = c;
+      }
+      // Nothing both free and in reach: the best free one still beats standing
+      // down, and is exactly what the old code would have offered anyway.
+      if (cand === null) cand = fallback;
       if (cand) {
         cand.consumedFrom = "requested";
         this.stats.requested += 1;
       }
       return cand;
+    }
+
+    // Is a spike that reaches them already standing?
+    //
+    // This is the answer to "the tick swings but never places". A spike only
+    // reaches the target from within about +-60 degrees of the aim, and it can
+    // only be placed at all if it is at least 76.7 degrees from any spike
+    // already on the ring — two windows that are DISJOINT at every distance
+    // (measured in harness/spike-tick-conflict.js). So the moment auto place,
+    // preplace or replace has built toward the target, the ground this tick
+    // wants is both taken and, by geometry, impossible to replace with another
+    // that still reaches. No amount of angle-hunting fixes that.
+    //
+    // But it is not a failure. The combo is "a spike they can be knocked onto,
+    // plus the hit" — and if the spike is already standing, the tick is
+    // complete. The swing was ordered by spikeTickHit before this controller
+    // was ever armed, so there is nothing left to do but say so.
+    //
+    // Nothing here touches the other three placers: it reads the world they
+    // built and takes yes for an answer.
+    _alreadyCovered() {
+      const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2, myPlayer: myPlayer} = this.client;
+      const target = this.target;
+      if (!target || !ObjectManager2 || !ObjectManager2.grid2D || !myPlayer) return false;
+      const tPos = target.pos.current;
+      const cells = Math.ceil(200 / ObjectManager2.grid2D.cellSize) + 1;
+      let covered = false;
+      ObjectManager2.grid2D.query(tPos.x, tPos.y, cells, id => {
+        if (covered) return false;
+        const object = ObjectManager2.objects.get(id);
+        if (!object || !(object instanceof PlayerObject)) return false;
+        if (object.itemGroup !== 2) return false;
+        if (PlayerManager2.isEnemyByID(object.ownerID, myPlayer)) return false;
+        const reach = object.scale + target.collisionScale + 8;
+        if (Math.hypot(object.pos.current.x - tPos.x, object.pos.current.y - tPos.y) <= reach) {
+          covered = true;
+        }
+        return false;
+      });
+      return covered;
     }
 
     // ── VALIDATE ────────────────────────────────────────────────────────────
@@ -13087,6 +13173,14 @@ window.grbtp = 35;
           }
           const intent = this._acquire(engine, tick);
           if (!intent) {
+            // No ground — but check whether the job is already done before
+            // calling it a failure. See _alreadyCovered.
+            if (this._alreadyCovered()) {
+              this.lastReason = "covered";
+              this._report("covered");
+              this.phase = SPIKE_TICK_PHASE.COMPLETE;
+              return this.postTick();
+            }
             this.lastReason = "noGround";
             this.phase = SPIKE_TICK_PHASE.CANCEL;
             return this.postTick();

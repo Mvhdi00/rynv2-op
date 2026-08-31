@@ -562,6 +562,29 @@ at **every** one: the coordinate error is correlated between the two points
 being compared, so it cancels. Worth keeping — it is a natural theory, and this
 is the thing that settles it.
 
+### `spike-tick-conflict.js`
+
+Why a spike tick swings and no spike lands, with auto place / preplace /
+replace suspected. Drives the controller against the **real** `PlacementLedger`
+and `ConflictResolver`, with those placers reserving ground first exactly as
+`_record` does on every send.
+
+Two things it establishes. First the mechanism: a sent placement leaves a
+**hard** reservation, and `blocked()` returns on `!e.soft` before priority is
+ever read — so the spike tick's SYNC (80) cannot outrank ENGAGEMENT (40),
+ANTICIPATION (50) or RECOVERY (60), and REPLAN re-picks the same taken angle
+until it cancels.
+
+Second, and this is what settles the fix: a spike reaches the target only from
+within ~±60° of the aim, but can only be *placed* ≥76.7° from a spike already
+on the ring. **Disjoint at every distance** — so a second spike that also
+reaches does not exist, and no angle search can find one. The answer is to
+recognise the spike already standing rather than fight for ground.
+
+One harness note worth keeping: `lastReason` cannot be read after `postTick`,
+because `reset()` clears it on the way out of COMPLETE and CANCEL. The outcome
+is taken from what `_report` painted — the same string the Devtool row shows.
+
 ### `spike-tick-trap.js`
 
 Drives RYN's spike tick (trap) over **both** ticks of the combo, in the order
