@@ -81,6 +81,19 @@ MUTATIONS = [
    "          ModuleHandler.forceHat = 7;"),
   ("updateSpikeTick queries the wrong element",
    'querySelector("#_spikeTickOutcome")', 'querySelector("#nope")'),
+  ("auto place goes back to sending without asking",
+   '        if (placementEngine && !placementEngine.groundIsFree(type, obj.angle, "autoPlacer")) return;\n', ""),
+  ("auto place asks after it has already sent",
+   '        if (placementEngine && !placementEngine.groundIsFree(type, obj.angle, "autoPlacer")) return;\n        ModuleHandler.place(type, obj.angle);',
+   '        ModuleHandler.place(type, obj.angle);\n        if (placementEngine && !placementEngine.groundIsFree(type, obj.angle, "autoPlacer")) return;'),
+  ("Luna's trap branch is quietly gated on the spike tick",
+   "            if (neitherTrapped) return true;", "            if (neitherTrapped) return false;"),
+  ("the spike tick's hold is taken hard instead of soft",
+   "ttl === undefined ? 2 : ttl, true);", "ttl === undefined ? 2 : ttl, false);"),
+  ("the hold is never released when the tick fires",
+   '      this._release("fired");\n', ""),
+  ("the trap-versus-spike comparison is dropped",
+   "          if (!why) {", "          if (false) {"),
 ]
 
 print("mutation tests — break it on purpose, confirm the checker goes red\n")

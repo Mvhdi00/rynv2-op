@@ -223,6 +223,11 @@ const OUTER = [
   ["SPIKE_TICK_ANGLE_LIMIT", "const SPIKE_TICK_ANGLE_LIMIT"],
   ["SPIKE_TICK_TRAPPED_BONUS", "const SPIKE_TICK_TRAPPED_BONUS"],
   ["SPIKE_TICK_REASON", "const SPIKE_TICK_REASON"],
+  ["SPIKE_TICK_HOLD_LEAD", "const SPIKE_TICK_HOLD_LEAD"],
+  ["SPIKE_TICK_HOLD_CONFIDENCE", "const SPIKE_TICK_HOLD_CONFIDENCE"],
+  ["SPIKE_TICK_HOLD_TTL", "const SPIKE_TICK_HOLD_TTL"],
+  ["SPIKE_TICK_HOLD_ANGLES", "const SPIKE_TICK_HOLD_ANGLES"],
+  ["SPIKE_TICK_BULL_MULT", "const SPIKE_TICK_BULL_MULT"],
 ];
 for (const [name, decl] of OUTER) {
   check("resolve", name + " is declared", () =>
@@ -276,7 +281,7 @@ check("wire", "velocityTick runs in the module loop, after autoPush", () => {
 
 for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "false"],
                            ["_spikeTick", "false"], ["_spikeTickTrapped", "true"],
-                           ["_spikeTickFree", "true"],
+                           ["_spikeTickFree", "true"], ["_spikeTickDebug", "false"],
                            ["_botNameAll", '""'], ["_botNumberNames", "false"],
                            ["_knockbackTick", "false"],
                            ["_velocityTickTimes", "0"], ["_knockbackTickTimes", "0"]]) {
@@ -287,7 +292,7 @@ for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "fa
 }
 
 for (const id of ["_velocityTick", "_velocityTickTrap", "_knockbackTick",
-                  "_spikeTick", "_spikeTickTrapped", "_spikeTickFree",
+                  "_spikeTick", "_spikeTickTrapped", "_spikeTickFree", "_spikeTickDebug",
                   "_botNameAll", "_botNumberNames",
                   "_velocityTickTimes", "_knockbackTickTimes", "_spikeTickOutcome"]) {
   check("wire", id + " has a UI element", () => {
@@ -501,6 +506,51 @@ check("wire", "SpikeSyncHammer delegates its strike instead of repeating it", ()
   if (/forceHat = 7;/.test(cls)) return [false, "still sets the bull helmet itself"];
   if (/requestPlace\(itemType/.test(cls)) return [false, "still places the spikes itself"];
   return [true, "one execution path for a spike tick"];
+});
+
+/* The execution-order fix. Auto place was the one placement path that sent
+ * without consulting the resolver, and a trap forbids a spike within 77
+ * degrees — wider than the reach window at any distance — so its trap took the
+ * tick's ground before the tick could ask for it. harness/spike-vs-trap.js
+ * measures the behaviour; these check the wiring it depends on. */
+check("wire", "auto place asks the resolver before it sends", () => {
+  const cls = lift("class AutoPlacer\\s*\\{", "AutoPlacer");
+  if (!/const placementEngine = ModuleHandler\.staticModules && ModuleHandler\.staticModules\.placementEngine;/.test(cls))
+    return [false, "does not resolve the engine"];
+  const m = /const emit = obj => \{([\s\S]*?)\n      \};/.exec(cls);
+  if (!m) return [false, "emit not found"];
+  if (!/groundIsFree\(type, obj\.angle, "autoPlacer"\)/.test(m[1]))
+    return [false, "emit still sends without asking"];
+  if (m[1].indexOf("groundIsFree") > m[1].indexOf("ModuleHandler.place("))
+    return [false, "asks after sending, which answers nothing"];
+  return [true, "emit declines ground another module holds"];
+});
+
+check("wire", "the ladder that chooses auto place's angles is untouched", () => {
+  const cls = lift("class AutoPlacer\\s*\\{", "AutoPlacer");
+  // The one thing that must not have been done: quietly reordering or gating
+  // Luna's own decision so spikes win. The trap branch is still unconditional.
+  if (!/if \(isTrap\) \{[\s\S]{0,320}?if \(neitherTrapped\) return true;/.test(cls))
+    return [false, "the trap branch has been changed"];
+  if (!/\[ \[ trapId, LUNA_TRAP_TYPE, trapAngles \], \[ spikeId, LUNA_SPIKE_TYPE, spikeAngles \] \]/.test(cls))
+    return [false, "the trapped fallback order has been changed"];
+  return [true, "isAutoPlaceAngle and the fallback order are as they were"];
+});
+
+check("wire", "the spike tick holds ground softly and gives it back", () => {
+  const cls = lift("class SpikeTick\\s*\\{", "SpikeTick");
+  if (!/engine\.holdGround\(SPIKE_TICK_TYPE/.test(cls)) return [false, "never holds"];
+  if (!/_release\("fired"\)/.test(cls)) return [false, "does not release when it fires"];
+  if (!/_release\("nothingSoon"\)/.test(cls)) return [false, "does not release a stale hold"];
+  if (!/_holdVerdict\(/.test(cls)) return [false, "no trap-versus-spike comparison"];
+  if (!/roomForBoth/.test(cls)) return [false, "does not check the trap still has somewhere to go"];
+  if (!/const why = this\._holdVerdict\(/.test(cls) || !/if \(!why\) \{/.test(cls))
+    return [false, "the verdict is computed and then ignored"];
+  const hold = /holdGround\(type, angle, owner, value, ttl\) \{([\s\S]*?)\n    \}/.exec(src);
+  if (!hold) return [false, "engine.holdGround not found"];
+  if (!/ttl === undefined \? 2 : ttl, true\)/.test(hold[1]))
+    return [false, "the claim is not soft — it would not yield to an insta"];
+  return [true, "soft SYNC claim, released on fire and on staleness"];
 });
 
 check("wire", "updateSpikeTick targets the id the Devtool row uses", () => {

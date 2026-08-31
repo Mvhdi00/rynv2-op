@@ -285,7 +285,113 @@ Both were written, then measured, then deleted — which is the point of measuri
   in a 0.13°-wide sliver. It was kept but **retuned to 30°**, where it bites
   first and is the test that decides — which is what the brief asks for.
 
-## 7. Limits that remain
+## 7. Execution order: why a trap was taking the tick's window
+
+Reported after the rebuild: the tick fires, but a trap goes down first and the
+spike interaction is weak or missing. It was not a priority bug or a queue
+bug — it was geometry plus one unarbitrated send.
+
+### The geometry
+
+`checkItemLocation` refuses a build within `s + blockS`, and for a placed item
+`blockS` is its **full** scale — colDiv does not apply to blocking. Spike 49,
+pit trap 50, so they need 99 between them. Both sit on the ring, at 79 and 80:
+
+```
+acos((79² + 80² − 99²) / (2·79·80)) = 77.0°
+```
+
+**A trap on the ring forbids every spike within 77° of it.** The reach window
+is ±64° at d=79 and narrower at every greater distance, so one trap dropped
+toward the enemy forbids *every* spike that would reach them — at every
+distance — until it is broken.
+
+| d | 60 | 79 | 100 | 120 | 140 | 160 |
+| --- | --- | --- | --- | --- | --- | --- |
+| reach window | ±72.9° | ±64.2° | ±54.5° | ±44.2° | ±31.9° | ±11.4° |
+| left after a trap on the aim | none | none | none | none | none | none |
+
+### The send
+
+Auto place was the one placement path in the client that did not go through the
+resolver:
+
+```js
+const emit = obj => {
+  if (!myPlayer.canPlace(type)) return;
+  ModuleHandler.place(type, obj.angle);      // raw — no ledger check
+```
+
+`ModuleHandler.place()` calls `_notePlacement()`, which records the footprint in
+the ledger **after** the decision to send and discards the result. Everything
+else — the spike tick, spike sync, preplace, replace, the manual placer — goes
+through `requestPlace()` → `engine.request()` → `_validAt()` →
+`availableGround()`. And auto place's trap branch is unconditional:
+
+```js
+if (isTrap) {
+  if (closestTrapToEnemy && config === closestTrapToEnemy && neitherTrapped) return true;
+  if (neitherTrapped) return true;           // ANY trap, any angle
+}
+```
+
+while every spike branch is conditional. So against a free, closing enemy auto
+place places traps and no spikes, and carpets exactly the arc the tick was
+about to need — before the tick had any prediction to reserve against.
+
+### The fix, in three parts
+
+**Auto place asks.** One guard in `emit`, calling a new read-only
+`engine.groundIsFree(type, angle, owner)`. Luna's ladder still decides which
+angles it wants and in what order; it now declines one another module is
+holding, which is the check every other path already gets. Its
+`isAutoPlaceAngle` and its trapped-fallback order are untouched, and the
+checker asserts that.
+
+**The tick reserves, conditionally.** `_soon()` asks the engine's own motion
+track whether the target enters both weapon reach and spike reach within
+`SPIKE_TICK_HOLD_LEAD` (3) ticks at confidence ≥ `SPIKE_TICK_HOLD_CONFIDENCE`
+(0.45). If so it takes **soft** SYNC-80 claims on the angles it will need,
+through `engine.holdGround()` → `ConflictResolver.take()` — which also drops any
+preplace book record holding that slot and tells it why. Soft means it stops
+auto place (ANTICIPATION 50) and replace (RECOVERY 60) and **yields to an insta
+(90)**. It expires on its own after `SPIKE_TICK_HOLD_TTL` (2) ticks, and is
+released the moment the tick fires, the opportunity goes stale, danger appears,
+or the toggle goes off.
+
+**Trap versus spike is compared, not assumed.** The two are not usually
+competing: the ring carries about seventy legal angles and the tick needs one
+or two. So `_holdVerdict` asks whether holding leaves the trap anywhere to go —
+`roomForBoth`. Where it does not, the trap wins, because auto place is right
+that a trap which pins beats a spike that chips. Unless the spike is better on
+its own terms: they are already pinned, already on a spike, or the tick would
+kill (`_wouldKill`, weapon damage × bull 1.5 + spike damage vs their health).
+
+### Measured
+
+`node harness/spike-vs-trap.js` — the real ledger, resolver, motion track and
+spike tick, with auto place's emit modelled both ways:
+
+```
+  auto place emit           traps   spikes  spike tick swung  held ground on
+  raw place() — before      4       0       never             0 ticks
+  groundIsFree() — after    1       1       tick 1            1 ticks
+
+              before                            after
+  tick 0      trap@-0                           trap@80
+  tick 1      trap@80                           spike@-0
+```
+
+Before, the trap lands on the aim at tick 0 and the tick never fires. After, the
+aim is held, auto place puts its trap at 80° instead — still a trap — and the
+spike lands on the aim at tick 1 with the swing. Eleven cases and ten
+properties, and twelve mutations of the fix all turn it red.
+
+**No delays were added.** Nothing sleeps, nothing is deferred by a timer, and no
+second scheduler exists. The change is a ledger question auto place was not
+asking, and a soft claim with an expiry.
+
+## 8. Limits that remain
 
 - RYN does not boot in this harness and did not before any of these changes
   (`boot-check.js` gives the same `appendChild` fault on the pristine upload),
@@ -303,3 +409,10 @@ Both were written, then measured, then deleted — which is the point of measuri
   spike kinds of the same scale are indistinguishable there.
 - `SpikeTick` reads `EnemyManager.enemySpikeCollider` as a candidate but derives
   contact itself, because that field only ever holds one target.
+- The hold window is one or two ticks wide at any realistic closing speed — the
+  gap between "predicted into reach within three ticks" and "in reach now, so
+  fire instead". `_release("retake")` is protective rather than load-bearing at
+  that depth, and `harness/spike-vs-trap.js` says so in its header instead of
+  pretending a case covers it.
+- `_wouldKill` ignores weapon variants, so it under-estimates. A "lethal" hold
+  is one that really is; a lethal tick it misses simply does not get a hold.

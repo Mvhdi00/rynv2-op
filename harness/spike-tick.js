@@ -54,8 +54,10 @@ const sandbox = {
   Vector_default: Vec,
   getAngleDist: (a, b) => { const p = Math.abs(b - a) % (Math.PI * 2); return p > Math.PI ? Math.PI * 2 - p : p; },
   Items: { 6: SPIKE },
-  Settings_default: { _spikeTick: true, _spikeTickTrapped: true, _spikeTickFree: true },
-  DataHandler_default: { getWeapon: () => ({ range: 142, knockback: 0.7 }) },
+  Settings_default: { _spikeTick: true, _spikeTickTrapped: true, _spikeTickFree: true,
+                      _spikeTickDebug: false },
+  DataHandler_default: { getWeapon: () => ({ range: 142, knockback: 0.7, damage: 45 }),
+                         getItem: (id) => SPIKE },
   GameUI_default: { updateSpikeTick: (v) => { sandbox.__painted = v; } },
   PlayerObject: class PlayerObject {},
   RPE_EPS: 1e-6, RPE_TAU: Math.PI * 2, RPE_MOTION_SAMPLES: 5,
@@ -68,7 +70,9 @@ vm.runInContext(lift("class TargetMotion\\s*\\{", "TargetMotion") + "\nthis.Targ
 vm.runInContext(lift("class PlacementLedger\\s*\\{", "PlacementLedger") + "\nthis.Ledger = PlacementLedger;", sandbox);
 for (const name of ["SPIKE_TICK_TYPE", "SPIKE_TICK_KB_SAFE", "SPIKE_TICK_STICK",
                     "SPIKE_TICK_TURN_LIMIT", "SPIKE_TICK_LEAD", "SPIKE_TICK_MIN_CONFIDENCE",
-                    "SPIKE_TICK_ANGLE_LIMIT", "SPIKE_TICK_TRAPPED_BONUS"]) {
+                    "SPIKE_TICK_ANGLE_LIMIT", "SPIKE_TICK_TRAPPED_BONUS",
+                    "SPIKE_TICK_HOLD_LEAD", "SPIKE_TICK_HOLD_CONFIDENCE",
+                    "SPIKE_TICK_HOLD_TTL", "SPIKE_TICK_HOLD_ANGLES", "SPIKE_TICK_BULL_MULT"]) {
   vm.runInContext("const " + name + " = " + constant(name) + ";", sandbox);
 }
 vm.runInContext("const SPIKE_TICK_REASON = " +
@@ -83,6 +87,7 @@ function world(opts) {
   const enemies = (opts.enemies || []).map((e, i) => ({
     id: 2 + i,
     scale: 35, collisionScale: 35, get hitScale() { return 35 * 1.8; },
+    currentHealth: e.health === undefined ? 100 : e.health,
     isTrapped: !!e.trapped,
     pos: { current: new Vec(e.x, e.y), previous: new Vec(e.x - (e.vx || 0), e.y - (e.vy || 0)) },
     _vx: e.vx || 0, _vy: e.vy || 0,
@@ -165,8 +170,9 @@ function world(opts) {
     myPlayer: {
       id: 1, inGame: true, isTrapped: !!opts.meTrapped,
       pos: { current: me },
-      getItemByType: (t) => (t === 0 ? 5 : t === 4 ? 6 : null),
+      getItemByType: (t) => (t === 0 ? 5 : t === 4 ? 6 : t === 7 ? 15 : null),
       getItemPlaceScale: () => RING,
+      canPlace: () => opts.noTrap !== true,
       collidingSimple(e, range) { return me.distance(e.pos.current) <= range; },
     },
     EnemyManager: {

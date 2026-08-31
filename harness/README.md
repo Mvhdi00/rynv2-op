@@ -655,6 +655,38 @@ could never be the test that decided anything — which is the point of measurin
   confidence floor only in a 0.13°-wide sliver. Retuned to 30°, where it bites
   first and actually decides.
 
+### `spike-vs-trap.js`
+
+Why a trap was reaching the wire before the spike tick's window, and what the
+fix changes. Real `PlacementLedger`, `ConflictResolver`, `TargetMotion` and
+`SpikeTick`; auto place reduced to the one branch that matters, with its emit
+modelled both ways.
+
+Two facts, and between them they are the whole bug. `checkItemLocation` refuses
+a build within `s + blockS`, and for a placed item `blockS` is the full scale —
+so a spike (49) and a pit trap (50) need 99 between them, and on rings of 79 and
+80 that is **77 degrees**. The reach window is ±64° at best and narrower
+everywhere else, so **one trap dropped toward the enemy forbids every spike that
+would reach them, at every distance.** And auto place was the one placement path
+that sent with `ModuleHandler.place()` — raw, with `_notePlacement` recording the
+footprint in the ledger *after* the decision — while its trap branch is
+`if (neitherTrapped) return true` and every spike branch is conditional.
+
+```
+  auto place emit           traps   spikes  spike tick swung  held ground on
+  raw place() — before      4       0       never             0 ticks
+  groundIsFree() — after    1       1       tick 1            1 ticks
+```
+
+Eleven cases and ten properties, and twelve mutations of the fix all turn it
+red — including auto place sending without asking, asking after it has sent, the
+hold taken hard instead of soft, and the trap-versus-spike comparison dropped.
+
+Auto place is 490 lines of Luna ladder and is modelled here rather than lifted,
+so the bench asserts against the source that the emit it models is the emit the
+client has, and refuses to run otherwise. It also names, in its header, the one
+line it cannot cover with a failing case and why.
+
 ### `ryn-changes-check.js` and `ryn-changes-mutate.py`
 
 The standing check over every change made to `ryn/`. It exists because RYN
@@ -662,7 +694,7 @@ cannot be booted here, so `node --check` is the only whole-file check available
 and it validates syntax only — it will not notice a call to a deleted helper, an
 identifier that resolves nowhere, or a UI id no element carries.
 
-85 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
+95 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
 actually run against stubs), **RESOLVE** (outer identifiers declared),
 **WIRE** (settings, registration, run order, UI ids — including that all 63
 `staticModules` constructors name something real, and that the spike tick takes
@@ -670,7 +702,7 @@ no ground of its own), **NO GHOSTS** (the 17 deleted helpers have no surviving
 reader — including `SpikeSync`'s three `EnemyManager` members and the two spike
 tick guards that measurement showed could never decide anything).
 
-`ryn-changes-mutate.py` is the check on the check: it breaks the client 31 ways
+`ryn-changes-mutate.py` is the check on the check: it breaks the client 37 ways
 and requires a red result each time. Two real holes came out of it and are worth
 knowing about, because both are easy to reproduce elsewhere:
 

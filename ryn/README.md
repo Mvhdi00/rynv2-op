@@ -484,12 +484,21 @@ in [`SPIKE_TICK.md`](SPIKE_TICK.md); the short version:
 * It absorbs `SpikeSync`, whose gate — a rising edge on the reaching-angle set
   **and** an object destroyed in the same frame — almost never opened.
   `SpikeSyncHammer` keeps its trigger and delegates the execution.
-* Off by default (`_spikeTick`), with `_spikeTickTrapped` and `_spikeTickFree`
-  under it. Devtool → Statistics → "Spike tick swung/armed".
+* **Execution order.** A trap forbids a spike within 77° of it — wider than the
+  reach window at any distance — and auto place was the one placement path that
+  sent without consulting the resolver, so its trap took the tick's ground
+  before the tick could ask for it. Auto place now asks (`engine.groundIsFree`,
+  one guard in its emit; its ladder is untouched), and the tick takes a **soft,
+  expiring** SYNC claim on the angles it is about to need — but only when the
+  trap still has somewhere else to go, or the target is already pinned, or the
+  tick would kill.
+* Off by default (`_spikeTick`), with `_spikeTickTrapped`, `_spikeTickFree` and
+  `_spikeTickDebug` under it. Devtool → Statistics → "Spike tick swung/armed".
 
 ```
 node harness/spike-geometry.js   # what the game's own rules allow
 node harness/spike-tick.js       # the class itself, lifted and run: 26 rows, 5 properties
+node harness/spike-vs-trap.js    # the execution-order fix: 11 cases, 10 properties
 ```
 
 ## Knockback tick — hit them onto a spike
