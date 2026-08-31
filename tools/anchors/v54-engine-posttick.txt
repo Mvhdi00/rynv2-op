@@ -1,0 +1,5 @@
+      if (modes.length === 0) {
+        if (this.book.records.length) this.book.invalidateAll("disabled", this);
+        return;
+      }
+      this.ledger.expire(this.client._ModuleHandler.tickCount);

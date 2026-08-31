@@ -11815,7 +11815,22 @@ window.grbtp = 35;
         y: myPos.y + profile.ringR * Math.sin(a)
       };
       cand.expected = cand.value;
-      PlacementIntent.stamp(cand, this._threat.frame, opts.lifetime);
+      // A directed intent is stamped against now, not against whatever frame
+      // the engine last built. The engine only builds a frame while it is
+      // planning, so with preplace off there is either no frame at all or a
+      // stale one, and stamping from it gave the intent a createdTick of 0 —
+      // born already past RPE_INTENT_LIFETIME, so its consumer rejected it as
+      // "expired" on every tick after the sixth. When the engine is planning
+      // the live frame is this tick's and this is the same stamp as before.
+      const tick = this.client._ModuleHandler.tickCount;
+      const live = this._threat.frame;
+      PlacementIntent.stamp(cand, live && live.tick === tick ? live : {
+        tick: tick,
+        target: null,
+        targetId: null,
+        targetPos: null,
+        myPos: myPos
+      }, opts.lifetime);
       return cand;
     }
 
@@ -11938,11 +11953,19 @@ window.grbtp = 35;
       // ModuleHandler._notePlacement, so a preplace never claims ground an
       // auto place just took.
       if (Settings_default._prePlace) modes.push(RPE_MODE.PREPLACE);
+      // Housekeeping before the gate, not after it. The ledger's only expiry
+      // used to sit below this early return, so with preplace off every
+      // reservation ever made — and every place() makes one through
+      // ModuleHandler._notePlacement — outlived its ttl forever. Anything that
+      // asks the ledger whether ground is free then gets a permanent no. Spike
+      // tick is the caller that noticed. This changes nothing about how
+      // preplace or replace decide anything; it only stops entries outliving
+      // the two or three ticks they were granted.
+      this.ledger.expire(this.client._ModuleHandler.tickCount);
       if (modes.length === 0) {
         if (this.book.records.length) this.book.invalidateAll("disabled", this);
         return;
       }
-      this.ledger.expire(this.client._ModuleHandler.tickCount);
       this.stats.substituted = 0;
       this.cycle({
         modes: modes,

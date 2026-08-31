@@ -164,6 +164,41 @@ replaceInPage(
   if (left > 0) throw new Error(`_trapKB still referenced ${left} time(s) after the swap`);
 }
 
+/* ------------------------------------------------------------------ *
+ * Spike tick: make it work on its own switch
+ *
+ * The spike-tick modules never place a spike unless preplace happens to be on.
+ * SpikeTickController is a timing layer over the placement engine, and two
+ * pieces of engine state it leans on only exist while the engine is planning —
+ * which it only does when _prePlace is set:
+ *
+ *   · RynPlacementEngine.postTick returns early when no mode is enabled, and
+ *     the ledger's only expire() call sits below that return. Every place()
+ *     in the client reserves ground through ModuleHandler._notePlacement, so
+ *     with preplace off those reservations never expire and the ledger answers
+ *     "taken" forever. The controller reads that as `blocked`.
+ *   · intentAt stamps a directed intent from this._threat.frame, which is only
+ *     built during a cycle. With no frame the stamp writes createdTick 0, so
+ *     the intent is born past RPE_INTENT_LIFETIME and the controller rejects
+ *     it as `expired` on every tick after the sixth.
+ *
+ * Both are fixed below. Neither touches how preplace or replace decide
+ * anything: the first is housekeeping the engine already meant to do every
+ * tick, and intentAt has exactly one caller — the spike tick controller.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "spike tick: expire the ledger every tick, not only while planning",
+  anchor("v54-engine-posttick.txt"),
+  body("v54-engine-posttick.js")
+);
+
+edit(
+  "spike tick: stamp a directed intent against the current tick",
+  anchor("v54-intentat-stamp.txt"),
+  body("v54-intentat-stamp.js")
+);
+
 /* ------------------------------------------------------------------ */
 
 fs.writeFileSync(OUT, code);

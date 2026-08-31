@@ -1,0 +1,6 @@
+      cand.expected = cand.value;
+      PlacementIntent.stamp(cand, this._threat.frame, opts.lifetime);
+      return cand;
+    }
+
+    // Sends an intent a consumer has already validated.

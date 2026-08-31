@@ -66,6 +66,38 @@ landing there is worth rather than by proximity.
 `node tools/check-kb-strike.js` lifts the class out of a build and runs it
 against synthetic scenes — 36 cases, including both switches in isolation.
 
+### Spike tick fires on its own switch
+
+The spike-tick modules placed nothing unless preplace happened to be on.
+`SpikeTickController` is a timing layer over the placement engine, and two
+pieces of engine state it leans on only exist while the engine is planning —
+which it only does when `_prePlace` is set:
+
+- **The ledger never expired.** `RynPlacementEngine.postTick` returns early
+  when no mode is enabled, and the ledger's only `expire()` call sat below that
+  return. Every `place()` in the client reserves ground through
+  `ModuleHandler._notePlacement`, so with preplace off those hard reservations
+  outlived their 2-tick ttl forever and the ledger answered "taken" to
+  everything. The controller read that as `blocked`.
+- **Directed intents were born expired.** `intentAt` stamped from
+  `this._threat.frame`, which is only built during a cycle. With no frame the
+  stamp writes `createdTick: 0`, putting the intent past
+  `RPE_INTENT_LIFETIME` — so from tick 7 onward the controller rejected its own
+  freshly made intent as `expired`, replanned twice, and cancelled.
+
+Driving the real controller: stock places a spike at ticks 2 and 5 and then
+never again. Fixed, it places at every tick from 2 to 5000.
+
+Neither edit changes how preplace or replace decide anything. Expiring the
+ledger is housekeeping the engine already meant to do every tick, and `intentAt`
+has exactly one caller — the spike tick controller. `cycle`, `_validAt`,
+`requestMany`, `commitIntent`, `PreplaceBook`, `onVacated`, `_generatePreplace`
+and `_generateReplace` are byte-identical to stock.
+
+`node tools/check-spike-tick.js` binds the real `intentAt` into a stub engine,
+drives the real `SpikeTickController`, and checks the ledger ordering in the
+source — 6 cases. Run it against `src/RYN_Client_v5.4.js` to see both faults.
+
 Luna features that were **not** ported, and why:
 
 - *Song / auto-chat lyric loop* — RYN already has a fuller version of this
@@ -156,6 +188,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/check-kb-strike.js  KnockbackStrike geometry vs. synthetic scenes
+tools/check-spike-tick.js SpikeTickController vs. a stub engine
 tools/lib/extract.js      brace-matching class extractor used by both checks
 tools/anchors/            exact anchor text for the v5.4 build
 tools/modules/            replacement module bodies
@@ -173,12 +206,13 @@ node tools/build-v54.js          # produce RYN_Client_v5.4_ReUp.user.js
 
 Two bases, two builds. `ReUp_Mix.user.js` is the v4 core with the Luna
 features folded in. `RYN_Client_v5.4_ReUp.user.js` is RYN v5.4 with only the
-one change below applied. Nothing else in v5.4 is touched: same header, same
+changes below applied. Nothing else in v5.4 is touched: same header, same
 automill, same everything.
 
 | | ReUp_Mix (v4) | v5.4 build |
 |---|---|---|
 | **Trap KB → Knockback Strike** | **done** | **done** |
+| **Spike tick without preplace** | n/a | **fixed** |
 | Luna features | ported | not ported |
 | Everything else | as in v4 | untouched from stock v5.4 |
 
@@ -192,6 +226,7 @@ a newer RYN will surface as a build error rather than a half-merged script.
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
 node tools/check-kb-strike.js ReUp_Mix.user.js
+node tools/check-spike-tick.js RYN_Client_v5.4_ReUp.user.js
 node --check ReUp_Mix.user.js
 ```
 
