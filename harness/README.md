@@ -510,6 +510,30 @@ does fire and flips each gate on its own — every flip must turn **both** clien
 off, which is what proves each gate is carrying weight on both sides rather than
 being absent from both.
 
+### `ryn-changes-check.js` and `ryn-changes-mutate.py`
+
+The standing check over every change made to `ryn/`. It exists because RYN
+cannot be booted here, so `node --check` is the only whole-file check available
+and it validates syntax only — it will not notice a call to a deleted helper, an
+identifier that resolves nowhere, or a UI id no element carries.
+
+42 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
+actually run against stubs), **RESOLVE** (outer identifiers declared),
+**WIRE** (settings, registration, run order, UI ids — including that all 67
+`staticModules` constructors name something real), **NO GHOSTS** (the 12 deleted
+helpers have no surviving reader).
+
+`ryn-changes-mutate.py` is the check on the check: it breaks the client ten ways
+and requires a red result each time. Two real holes came out of it and are worth
+knowing about, because both are easy to reproduce elsewhere:
+
+* `indexOf("class VelocityTick")` still matches after the class is renamed to
+  `VelocityTickX` — a prefix match kept the check green while the thing it
+  looked for no longer existed. Anchor on `class X\s*\{`, not a substring.
+* The original `check()` treated any returned string as a pass-with-note, so a
+  check whose failure path returned `"still read somewhere"` printed that
+  message next to an `ok`. The contract is now `true` or `[pass, note]`.
+
 ### `spike-tick-angles.js`
 
 Asks whether RYN's spike ticks fail because of the angle they pick. Lifts

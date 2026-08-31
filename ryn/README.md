@@ -367,14 +367,50 @@ leaving a trap), and `spikeTickCounterThreat`.
 
 ---
 
+## Verifying the whole set
+
+```
+node harness/ryn-changes-check.js      # 42 checks over every change
+python3 harness/ryn-changes-mutate.py  # proves those checks can fail
+```
+
+`node --check` validates **syntax only**. It will not notice a call to a helper
+the edits deleted, an identifier that resolves nowhere, or a UI id no element
+carries — which are exactly the mistakes this kind of editing makes, and the
+client cannot be booted here to find them. So the checker closes that gap four
+ways:
+
+| | |
+| --- | --- |
+| **EXECUTE** | every changed block lifted with `vm` and actually run against stubs, so a `ReferenceError` inside it surfaces |
+| **RESOLVE** | every identifier the new code reads from an outer scope confirmed declared |
+| **WIRE** | settings, module registration, run-order slot and UI ids confirmed present and consistent — including that every one of the 67 `staticModules` constructors names something real |
+| **NO GHOSTS** | each of the 12 deleted helpers confirmed to have no surviving reader |
+
+**And the checker is itself tested.** `ryn-changes-mutate.py` breaks the client
+ten different ways — heal presses once instead of per restore, `velocityTick`
+dropped from the run order, a deleted helper called again, the Devtool span
+renamed, the `VelocityTick` class renamed while still registered — and requires
+the checker to go red on every one. It catches 10 of 10.
+
+That last one mattered: the first version of the class-existence check used
+`indexOf("class VelocityTick")`, which still matched after the class was renamed
+to `VelocityTickX`, so the mutation passed a green checker. Both the check and
+the general "every registration names a real constructor" check came out of
+that. The `check()` contract was tightened for the same reason — it used to
+treat any returned string as a pass, so one check printed *"still read
+somewhere"* next to an `ok`.
+
 ## What is not verified
 
-**The client does not boot in this harness**, and did not before either change —
-`boot-check.js` reports `Cannot read properties of null (reading 'appendChild')`
-in all four SDK states for both the pristine upload and this file, identically.
-RYN builds DOM the mock page does not provide.
+**The client does not boot in this harness**, and did not before any of these
+changes — `boot-check.js` reports `Cannot read properties of null (reading
+'appendChild')` in all four SDK states for both the pristine upload and this
+file, identically. RYN builds DOM the mock page does not provide.
 
-So both changes are verified by `node --check`, by a dangling-reference sweep,
-by reading every removed line, and by the two duels — the autoheal one against a
-transcription, the anti-spike-push one against the shipped code itself. Neither
-is verified by running the client in a game.
+So nothing here is verified by playing. What is verified: syntax, that each
+changed block runs, that every identifier resolves, that the wiring is
+consistent, that no deleted helper is still called, and — through the three
+duels — that autoheal matches X- Precision's numbers, anti spike push agrees
+with novastorm on all 96 scenes, and velocity tick agrees with Glotus on all
+768. The live server is still the untested part.
