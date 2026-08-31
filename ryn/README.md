@@ -1,12 +1,13 @@
 # RYN Client v5.4
 
 `RYN_Client_v5.4.user.js` — the client as uploaded, with nine changes.
+The spike tick has a document of its own: [`SPIKE_TICK.md`](SPIKE_TICK.md).
 
 1. [Autoheal](#autoheal) — novastorm's rule and nothing else
 2. [The automatic Q](#the-automatic-q) — food is no longer pressed into the shame rule
 3. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
 4. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
-5. [Spike tick](#spike-tick-removed-all-of-it) — removed, every variant
+5. [Spike tick](#spike-tick) — rebuilt as a timing module; see `SPIKE_TICK.md`
 6. [Knockback tick](#knockback-tick--hit-them-onto-a-spike) — added from Glotus; RYN had the trap half only
 7. [Automill](#automill--the-ragged-wall) — the whole trio or none, fixing the ragged wall
 8. [Blood Wings](#blood-wings-while-standing-still) — no longer forced while standing still
@@ -461,60 +462,35 @@ would pass while testing half the feature.
 
 ---
 
-## Spike tick: removed, all of it
+## Spike tick
 
-Every spike tick is gone from the client — `SpikeTickBreak`, `SpikeTickNear`,
-`SpikeTickTrap`, the `SpikeTickController` they armed, the six helpers only they
-called (`spikeTickState`, `spikeTickCounterThreat`, `spikeTickNearSpike`,
-`spikeTickTarget`, `spikeTickHit`, `spikeTickTurret`), the nine `SPIKE_TICK_*`
-constants, the four toggles in Combat → Instakills, the Devtool row and
-`GameUI_default.updateSpikeTick`, and both registrations. About 750 lines.
+Removed entirely one change ago, then rebuilt as a **timing** module rather than
+a placer. The whole design, the geometry it has to obey and the measurements are
+in [`SPIKE_TICK.md`](SPIKE_TICK.md); the short version:
 
-What deliberately stayed: `EnemyManager.attemptSpikePlacement()` and
-`nearestSpikePlacerAngle`, which `spikeSync`, `spikeSyncHammer`, `spikeTrap`,
-`teammateSpikeTrap` and `ToolHammerSpearInsta` all still use; and
-`AutoPlacer`'s own `canSpikeTick` scoring term, which is Luna's and has nothing
-to do with these modules. `LUNA_SPIKE_TICK_MODULES` lost the three names of
-modules that no longer exist and kept the four that do — removing names that
-can never match `activeModule` cannot change what autoPlacer does.
+* A build always lands on your own ring at the angle you face, so the only
+  decision available is **one angle**. The old controller tried to be a fourth
+  placer and lost every contest to auto place's hard reservations, because
+  `PlacementLedger.blocked()` returns on `!e.soft` before priority is read.
+* The new `SpikeTick` never reserves ground of its own. It reads what auto
+  place, preplace and replace have already done — standing objects,
+  `ledger.entries`, `book.pending()` — and classifies the moment:
+  **CONTACT** (a spike is already touching them: swing, spend nothing),
+  **COVERED** (one is coming: swing, do not pay twice), **OPEN** (nothing
+  reaches and an angle is free: ask the engine, and swing only if the send went
+  out).
+* It uses `engine.motion` for prediction and `engine.anglesFor` for angles, and
+  builds neither of its own.
+* It absorbs `SpikeSync`, whose gate — a rising edge on the reaching-angle set
+  **and** an object destroyed in the same frame — almost never opened.
+  `SpikeSyncHammer` keeps its trigger and delegates the execution.
+* Off by default (`_spikeTick`), with `_spikeTickTrapped` and `_spikeTickFree`
+  under it. Devtool → Statistics → "Spike tick swung/armed".
 
-`Anti Spike Tick` went with them. It read as a defensive option, but its only
-consumer in this client was `spikeTickCounterThreat`, the gate deciding whether
-RYN's **own** spike tick opened. With the offence gone it controlled nothing,
-and a switch in the menu that does nothing is worse than no switch.
-
-### Why removal, and not another fix
-
-Two measurements, both of which said the feature could not be made to work
-without touching auto place, preplace or replace — which was the standing
-instruction not to do.
-
-**The tick was blocked by the placers, and priority could not help it.** Every
-placement the engine sends leaves a HARD reservation for two ticks. All three
-placers build on the ring toward the enemy, and so did a spike tick, so whoever
-sent first owned that ground — and `PlacementLedger.blocked()` returns on
-`!e.soft` **before priority is read**:
-
-```js
-if (hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
-if (!e.soft) return true;               // <- hard entry wins outright
-if (e.priority > priority) return true;
 ```
-
-So the tick's SYNC (80) never got to outrank ENGAGEMENT (40), ANTICIPATION (50)
-or RECOVERY (60). It then replanned onto the same angle twice and cancelled.
-
-**And no second angle existed to move to.** A spike reaches the target only from
-within about ±60° of the aim, and can only be *placed* at least 76.7° from a
-spike already on the ring. Those two windows are disjoint at every distance —
-measured, not derived — so "hunt for another angle" had no answer to find. The
-only honest outcome was to notice the spike the placers had already put there
-and call the tick complete, which is a report change, not a feature.
-
-Three benches went with the feature: `spike-tick-angles.js`,
-`spike-tick-trap.js` and `spike-tick-conflict.js`.
-
----
+node harness/spike-geometry.js   # what the game's own rules allow
+node harness/spike-tick.js       # the class itself, lifted and run: 26 rows, 5 properties
+```
 
 ## Knockback tick — hit them onto a spike
 

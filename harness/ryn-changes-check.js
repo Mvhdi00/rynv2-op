@@ -214,6 +214,15 @@ const OUTER = [
   ["ANTI_INSTA_DMG_CAP", "const ANTI_INSTA_DMG_CAP"],
   ["ANTI_INSTA_SCUBA_BIAS", "const ANTI_INSTA_SCUBA_BIAS"],
   ["SHAME_SAFE_WINDOW", "const SHAME_SAFE_WINDOW"],
+  ["SPIKE_TICK_TYPE", "const SPIKE_TICK_TYPE"],
+  ["SPIKE_TICK_KB_SAFE", "const SPIKE_TICK_KB_SAFE"],
+  ["SPIKE_TICK_STICK", "const SPIKE_TICK_STICK"],
+  ["SPIKE_TICK_TURN_LIMIT", "const SPIKE_TICK_TURN_LIMIT"],
+  ["SPIKE_TICK_LEAD", "const SPIKE_TICK_LEAD"],
+  ["SPIKE_TICK_MIN_CONFIDENCE", "const SPIKE_TICK_MIN_CONFIDENCE"],
+  ["SPIKE_TICK_ANGLE_LIMIT", "const SPIKE_TICK_ANGLE_LIMIT"],
+  ["SPIKE_TICK_TRAPPED_BONUS", "const SPIKE_TICK_TRAPPED_BONUS"],
+  ["SPIKE_TICK_REASON", "const SPIKE_TICK_REASON"],
 ];
 for (const [name, decl] of OUTER) {
   check("resolve", name + " is declared", () =>
@@ -266,6 +275,8 @@ check("wire", "velocityTick runs in the module loop, after autoPush", () => {
 });
 
 for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "false"],
+                           ["_spikeTick", "false"], ["_spikeTickTrapped", "true"],
+                           ["_spikeTickFree", "true"],
                            ["_botNameAll", '""'], ["_botNumberNames", "false"],
                            ["_knockbackTick", "false"],
                            ["_velocityTickTimes", "0"], ["_knockbackTickTimes", "0"]]) {
@@ -276,8 +287,9 @@ for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "fa
 }
 
 for (const id of ["_velocityTick", "_velocityTickTrap", "_knockbackTick",
+                  "_spikeTick", "_spikeTickTrapped", "_spikeTickFree",
                   "_botNameAll", "_botNumberNames",
-                  "_velocityTickTimes", "_knockbackTickTimes"]) {
+                  "_velocityTickTimes", "_knockbackTickTimes", "_spikeTickOutcome"]) {
   check("wire", id + " has a UI element", () => {
     const asInput = src.includes('id=\\"' + id + '\\" type=\\"checkbox\\"');
     const asSpan = src.includes('id=\\"' + id + '\\" class=\\"text-value\\"');
@@ -433,11 +445,81 @@ check("execute", "_foodIsShameSafe holds once, then gives way", () => {
   return [true, "holds one tick, releases the whole tick, free once the window is past"];
 });
 
+/* The spike tick. It is a timing module: everything it knows about placement
+ * it asks the engine for, and everything it sends goes back through the engine.
+ * These are the properties that make that true, checked against the source
+ * rather than assumed. harness/spike-tick.js runs the class itself. */
+check("wire", "SpikeTick is defined, registered, and runs before the placers", () => {
+  if (!/class SpikeTick\s*\{/.test(src)) return [false, "no `class SpikeTick {`"];
+  if (!src.includes("spikeTick: new SpikeTick_default(client2)")) return [false, "not registered"];
+  const m = /this\.modules = \[([^\]]+)\]/.exec(src);
+  const order = m[1].split(",").map(x => x.trim().replace("this.staticModules.", ""));
+  const i = order.indexOf("spikeTick");
+  if (i < 0) return [false, "not in the run order"];
+  for (const later of ["autoPlacer", "placementEngine", "updateAttack"]) {
+    const j = order.indexOf(later);
+    if (j >= 0 && j < i) return [false, "runs after " + later + ", so it cannot set the swing or read a clean world"];
+  }
+  const hammer = order.indexOf("spikeSyncHammer");
+  if (hammer >= 0 && hammer > i) return [false, "spikeSyncHammer runs after it, so its delegated strike would be a tick late"];
+  return [true, "slot " + i + " of " + order.length + ", before autoPlacer and updateAttack"];
+});
+
+check("wire", "the spike tick takes no ground of its own", () => {
+  const cls = lift("class SpikeTick\\s*\\{", "SpikeTick");
+  for (const bad of ["preempt(", "ledger.reserve", "claimPlacement", "_conflicts.take"]) {
+    if (cls.includes(bad)) return [false, "calls " + bad + " - that takes ground from a placer"];
+  }
+  if (!/requestPlaceMany\(SPIKE_TICK_TYPE/.test(cls))
+    return [false, "does not send through requestPlaceMany, so it is off the engine's packet path"];
+  return [true, "reads the ledger, sends through the engine, reserves nothing itself"];
+});
+
+check("wire", "it stands down rather than paying twice", () => {
+  const cls = lift("class SpikeTick\\s*\\{", "SpikeTick");
+  if (!/_coveredBy\(/.test(cls)) return [false, "no _coveredBy"];
+  for (const src2 of ["ledger.entries", "book.pending()"]) {
+    if (!cls.includes(src2)) return [false, "does not consult " + src2];
+  }
+  if (!/if \(sent <= 0\) return false;/.test(cls))
+    return [false, "swings even when the placement did not go out"];
+  return [true, "standing spikes, hard reservations and the preplace book all read"];
+});
+
+check("wire", "it uses the engine's motion track, not one of its own", () => {
+  const cls = lift("class SpikeTick\\s*\\{", "SpikeTick");
+  if (!/engine\.motion\.predict/.test(cls)) return [false, "does not use engine.motion.predict"];
+  if (!/engine\.motion\.get/.test(cls)) return [false, "does not read the track"];
+  if (/new TargetMotion/.test(cls)) return [false, "builds a second motion tracker"];
+  if (!/engine\.anglesFor/.test(cls)) return [false, "does not use the engine's angle solver"];
+  return [true, "one tracker, one solver, both the engine's"];
+});
+
+check("wire", "SpikeSyncHammer delegates its strike instead of repeating it", () => {
+  const cls = lift("class SpikeSyncHammer\\s*\\{", "SpikeSyncHammer");
+  if (!/spikeTick\.strike\(/.test(cls)) return [false, "does not delegate"];
+  if (/forceHat = 7;/.test(cls)) return [false, "still sets the bull helmet itself"];
+  if (/requestPlace\(itemType/.test(cls)) return [false, "still places the spikes itself"];
+  return [true, "one execution path for a spike tick"];
+});
+
+check("wire", "updateSpikeTick targets the id the Devtool row uses", () => {
+  const m = /updateSpikeTick\(state\) \{[\s\S]{0,160}?querySelector\("#([A-Za-z_]+)"\)/.exec(src);
+  if (!m) return [false, "updateSpikeTick not found or does not query"];
+  return m[1] === "_spikeTickOutcome" ? [true, "queries #" + m[1]]
+                                      : [false, "queries #" + m[1] + ", row is #_spikeTickOutcome"];
+});
+
 // ── 4. NO GHOSTS ──────────────────────────────────────────────────────────
 const DELETED = [
   "_healsInFlight", "isSaveHealTime", "isSaveHealTick", "isSaveHeal", "_healSent",
   "_rawHeal", "_healBudgetLeft", "_flushShameHealQueue", "_shameHealQueue",
   "_shameHealDeadline", "_SHAME_GUARD_MARGIN", "pushingOnSpike",
+  // SpikeSync, and the three EnemyManager members that existed only to gate it.
+  "canSpikeSync", "nearestPlaceSpikeAngle", "prevNearestSpikePlacerAngle",
+  // The spike tick's own angle cooldown: unreachable behind _coveredBy, and
+  // PlacementMemory already owns the case it would have covered.
+  "_onCooldown", "SPIKE_TICK_COOLDOWN", "_askedAngle",
 ];
 /* A line mentioning the name is a WRITE if it is a field declaration or an
  * assignment to it, and a READ otherwise. Comments do not count either way.
@@ -488,23 +570,6 @@ check("no ghosts", "heal() carries no queue and no packet budget", () => {
   if (!/this\.selectItem\(2\);[\s\S]*this\.attack\(null, 1\);/.test(body))
     return [false, "no longer sends the food"];
   return [true, "lock, window, then the same three sends"];
-});
-
-/* Every spike tick is gone: three modules, the controller, the helpers only
- * they called, the constants, the toggles and the Devtool row. This is the one
- * check that would notice a fragment left behind anywhere in the file, in code
- * or in a comment. */
-check("no ghosts", "no spike tick survives anywhere in the client", () => {
-  const hits = [];
-  src.split("\n").forEach((line, i) => {
-    // AutoPlacer's own Luna scoring term is called canSpikeTick and is not one
-    // of these modules; the stand-off set it feeds is named for them but lists
-    // only the syncs and traps that still exist.
-    const l = line.replace(/canSpikeTick/g, "").replace(/LUNA_SPIKE_TICK_MODULES/g, "")
-                  .replace(/lunaSpikeTickBusy/g, "");
-    if (/spikeTick|SpikeTick|SPIKE_TICK/.test(l)) hits.push((i + 1) + ": " + l.trim().slice(0, 60));
-  });
-  return hits.length === 0 ? [true, "nothing left"] : [false, hits.length + " left, first at " + hits[0]];
 });
 
 check("no ghosts", "the stand-off set no longer names modules that do not exist", () => {

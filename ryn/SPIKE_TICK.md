@@ -1,4 +1,4 @@
-# Spike Tick — Phase 1 analysis
+# Spike Tick
 
 Everything below is read out of source: moomoo's own server code (which
 X- Precision ships verbatim), `ryn/RYN_Client_v5.4.user.js`, and the ten
@@ -177,7 +177,7 @@ It then replanned onto the same taken angle twice and cancelled.
 The lesson is not "raise the priority". It is that **the spike tick was trying
 to be a placer**, which is the responsibility split the brief gets right.
 
-## 5. Proposed architecture
+## 5. What shipped
 
 One module, `SpikeTick`, that owns **timing and target selection** and nothing
 else. It never reserves ground speculatively and never runs a second search.
@@ -234,28 +234,58 @@ EnemyManager (target, trapped, colliders)   engine.motion (velocity, heading,
   `engine.request`, so the existing budget, batching, ledger and memory all
   apply. No new packet path.
 
-**Open design question:** `SpikeSync` and `SpikeSyncHammer` already do
-"place the reaching angles, swing with hat 7, turret next tick" — they are 90%
-of this feature behind a gate that almost never opens. Either the new module
-absorbs them, or it must be carefully fenced off from their cases. See the
-question raised with this document.
+**Resolved:** the new module **absorbs** `SpikeSync`, which is deleted along
+with the three `EnemyManager` members that existed only to gate it
+(`canSpikeSync`, `nearestPlaceSpikeAngle`, `prevNearestSpikePlacerAngle`).
+`SpikeSyncHammer` keeps its hammer-break trigger and calls
+`spikeTick.strike(...)` for the execution, so there is one place that decides
+how a spike tick is performed rather than two.
 
-## 6. What will be measured
+**Aggression:** trapped first, free enemies too, with a sub-toggle each
+(`_spikeTickTrapped`, `_spikeTickFree`, both on; `_spikeTick` itself ships off).
+A trapped target is worth `SPIKE_TICK_TRAPPED_BONUS` (45) more than a free one,
+because it cannot walk off the spike.
 
-Nothing ships on assertion. Planned benches, in the style of the existing ones:
+## 6. What was measured
 
-1. `spike-geometry.js` — **done**; the reach window, separation rule and the
-   d ≈ 130 crossover, derived from the item table.
-2. `spike-tick-opportunity.js` — the four opportunity classes against staged
-   worlds, using the real `EnemyManager` derivations where they can be lifted.
-3. `spike-tick-conflict.js` — the new module against the **real** ledger and
-   conflict resolver with auto place / preplace / replace holding ground first;
-   the acceptance test is that it never preempts and never duplicates.
-4. `spike-tick-predict.js` — prediction staleness: straight line, sudden turn,
-   stop, trapped, escaping. A turn must invalidate within one tick.
-5. The 20 scenarios in the brief, as a table with a pass rule each.
+`node harness/spike-geometry.js` — the reach window, the separation rule and the
+d ≈ 130 crossover, derived from the item table rather than restated.
 
-## 7. Limits that will remain
+`node harness/spike-tick.js` — **the class itself**, lifted out of the client
+with `vm` and run, together with the real `GeometrySolver`, `TargetMotion` and
+`PlacementLedger`. Only the world around them is staged. 26 scenarios (the 20
+in the brief plus six the geometry made worth adding) and 5 multi-tick
+properties. 18 mutations of the module are run against it and all 18 turn it
+red, so the table is not vacuous.
+
+`node harness/ryn-changes-check.js` — 85 checks, of which the spike tick's are:
+it is registered and runs before `autoPlacer`, `placementEngine` and
+`updateAttack` and after `spikeSyncHammer`; it never calls `preempt`,
+`ledger.reserve`, `claimPlacement` or `_conflicts.take`; it consults
+`ledger.entries` and `book.pending()` and refuses to swing when a send did not
+go out; it uses `engine.motion` and `engine.anglesFor` and builds neither of its
+own; and `SpikeSyncHammer` no longer sets a hat or places a spike itself.
+`python3 harness/ryn-changes-mutate.py` breaks the client 31 ways and requires
+the checker to go red each time.
+
+### Two guards that were removed because they could never decide anything
+
+Both were written, then measured, then deleted — which is the point of measuring.
+
+* **An angle cooldown** (do not ask for the same angle twice within two ticks).
+  Unreachable: `_coveredBy` sees the hard ledger entry a send leaves and returns
+  COVERED before `_openAngles` is consulted, so an angle just asked for is never
+  offered again while the claim stands. Where it *would* be reachable — the
+  server refusing the build, so no object and no reservation — blocking a retry
+  is wrong, and `PlacementMemory` already penalises angles the server keeps
+  refusing.
+* **A 60° turn limit** on the motion track. `TargetMotion`'s own confidence
+  carries a `turning` factor, and by 60° it has already collapsed below
+  `SPIKE_TICK_MIN_CONFIDENCE`; a guard at 60° cleared the confidence floor only
+  in a 0.13°-wide sliver. It was kept but **retuned to 30°**, where it bites
+  first and is the test that decides — which is what the brief asks for.
+
+## 7. Limits that remain
 
 - RYN does not boot in this harness and did not before any of these changes
   (`boot-check.js` gives the same `appendChild` fault on the pristine upload),
@@ -264,4 +294,12 @@ Nothing ships on assertion. Planned benches, in the style of the existing ones:
   half round trip old. Every "will it touch" test is a prediction, and at high
   ping the target has already moved.
 - Spike group limit is 15 and each placement costs 5 packets of a 119 budget;
-  a spike tick that fires often is a spike tick that starves auto place.
+  a spike tick that fires often is a spike tick that starves auto place. It is
+  off by default for that reason, and it asks for **one** angle per tick.
+- `engine._exits` is written by the engine's own sweep, which runs later in the
+  tick, so the enclosure term reads a one-tick-old escape analysis.
+- The ledger records a radius, not an item type, so "a claim the size of my
+  spike" is how a pending spike is told from a pending trap (49 vs 50). Two
+  spike kinds of the same scale are indistinguishable there.
+- `SpikeTick` reads `EnemyManager.enemySpikeCollider` as a candidate but derives
+  contact itself, because that field only ever holds one target.

@@ -613,30 +613,47 @@ at **every** one: the coordinate error is correlated between the two points
 being compared, so it cancels. Worth keeping — it is a natural theory, and this
 is the thing that settles it.
 
-### `spike-tick-*.js` — deleted with the feature
+### `spike-geometry.js`
 
-`spike-tick-conflict.js`, `spike-tick-trap.js` and `spike-tick-angles.js` are
-gone, because every spike tick is gone from the client. Three findings from them
-are worth keeping, because they are the reason removal was the right answer
-rather than another fix:
+What a spike tick can and cannot do, derived from moomoo's own item table and
+collision rule rather than restated. A build always lands on your own ring
+(79 for spikes, 82 for the age-5 kinds) at the angle you face; a spike hurts
+within 84 of its centre and **your own spikes hurt them as much as theirs do**;
+two spikes on one ring must be 98 apart, which is 76.7 degrees.
 
-* A sent placement leaves a **hard** reservation, and `PlacementLedger.blocked()`
-  returns on `!e.soft` **before priority is read**. So a spike tick's SYNC (80)
-  could never outrank auto place's ENGAGEMENT (40), preplace's ANTICIPATION (50)
-  or replace's RECOVERY (60), and REPLAN re-picked the same taken angle until it
-  cancelled. Nothing short of changing the three placers could fix that.
-* A spike **reaches** the target only from within ~±60° of the aim, but can only
-  be **placed** ≥76.7° from a spike already on the ring. Disjoint at every
-  distance, so a second spike that also reaches does not exist — no angle search
-  had anything to find.
-* The angle it picked was never the problem: `angles[0]`, the best of the three
-  offered, and the ceiling with `contactAngles` added all came out at 64.2%,
-  because `anglesFor` sorts by proximity to the aim and the contact window is
-  centred on the aim.
+From those three, the reach window: a spike touches a target at distance *d*
+only from within `acos((R² + d² − 84²) / 2Rd)` of the aim — ±64° at d=79,
+±38° at d=130, nothing past 163. The window is exactly one separation wide at
+**d = 130.2**, which is the distance above which a second reaching spike simply
+does not exist.
 
-One harness note that outlived them: `lastReason` cannot be read after
-`postTick`, because `reset()` clears it on the way out of COMPLETE and CANCEL.
-Read what `_report` painted instead — the same string the Devtool row shows.
+That last figure corrects the note left when the old spike tick was removed.
+"Disjoint at every distance" is true only when the existing spike sits **on the
+aim line** — which was both the case that bench tested and the angle the old
+controller kept asking for. Off-aim, a second spike fits comfortably below 130.
+
+### `spike-tick.js`
+
+The spike tick itself, lifted out of the client with `vm` and run — together
+with the real `GeometrySolver`, `TargetMotion` and `PlacementLedger`. Only the
+world around them is staged.
+
+26 scenarios (the 20 in the brief, plus six the geometry made worth adding) and
+5 multi-tick properties: the bull-then-turret combo lands on consecutive ticks,
+a strike delegated from `SpikeSyncHammer` keeps its follow-up for the next tick,
+hysteresis holds a target against a marginal rival but yields to a clear one,
+and auto place's reservation survives untouched.
+
+18 mutations of the module are run against it and all 18 turn it red.
+
+Two guards were written, measured, and then deleted or retuned because they
+could never be the test that decided anything — which is the point of measuring:
+
+* an angle cooldown, unreachable behind the `_coveredBy` check that sees the
+  hard ledger entry a send leaves;
+* a 60° turn limit on the motion track, which cleared `TargetMotion`'s own
+  confidence floor only in a 0.13°-wide sliver. Retuned to 30°, where it bites
+  first and actually decides.
 
 ### `ryn-changes-check.js` and `ryn-changes-mutate.py`
 
@@ -645,14 +662,15 @@ cannot be booted here, so `node --check` is the only whole-file check available
 and it validates syntax only — it will not notice a call to a deleted helper, an
 identifier that resolves nowhere, or a UI id no element carries.
 
-58 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
+85 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
 actually run against stubs), **RESOLVE** (outer identifiers declared),
 **WIRE** (settings, registration, run order, UI ids — including that all 63
-`staticModules` constructors name something real), **NO GHOSTS** (the 12 deleted
-helpers have no surviving reader, plus a sweep confirming no spike tick fragment
-survives anywhere in the file, in code or comment).
+`staticModules` constructors name something real, and that the spike tick takes
+no ground of its own), **NO GHOSTS** (the 17 deleted helpers have no surviving
+reader — including `SpikeSync`'s three `EnemyManager` members and the two spike
+tick guards that measurement showed could never decide anything).
 
-`ryn-changes-mutate.py` is the check on the check: it breaks the client 23 ways
+`ryn-changes-mutate.py` is the check on the check: it breaks the client 31 ways
 and requires a red result each time. Two real holes came out of it and are worth
 knowing about, because both are easy to reproduce elsewhere:
 
