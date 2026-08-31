@@ -280,6 +280,93 @@ would pass while testing half the feature.
 
 ---
 
+## Spike tick: why it fires and no spike appears
+
+Investigated, **not fixed** — because two plausible causes were measured and
+both turned out to be wrong, and a third guess is not worth shipping.
+
+### The one thing that is certainly wrong
+
+`_spikeTick: false` is the master gate, and it ships **off**, while all three
+sub-toggles ship **on**:
+
+```js
+_spikeTick: false,
+_spikeTickBreak: true,
+_spikeTickNear: true,
+_spikeTickTrap: true,
+```
+
+`spikeTickTarget()` returns `null` on its second line when the master is off, so
+Break, Near and Trap are all inert. In the menu the three sit in a
+`<div class="sub-options">` under an unchecked parent — so the panel shows three
+switches ON that do nothing. **Turn on "Spike Tick" first.**
+
+### Two hypotheses, both measured, both wrong
+
+`node harness/spike-tick-angles.js` runs the real geometry — `GeometrySolver`,
+`CandidateGenerator` and `anglesFor` lifted from the file with `vm`.
+
+**Wrong #1: "`anglesFor` never offers an angle that touches the enemy."** It
+offers the direct line (when free), aperture edges, and wide-aperture midpoints,
+and never calls `GeometrySolver.contactAngles` — which `AngleSolver.propose`
+uses and calls *"the ones that touch the target"*. Adding contact angles moved
+the rate **49.3% → 49.6%**. Nothing. Whatever blocks the direct line blocks its
+neighbourhood too, so the contact angles are illegal in exactly the cases where
+they would have helped.
+
+**Wrong #2: "the controller takes `angles[0]` and ignores the other two."** It
+does take only `angles[0]` (`_acquire` step 4, `{ limit: 3 }`), and `_validate`
+then demands that spike reach the target — two different questions. But:
+
+```
+  overall                 takes angles[0]  best of the 3   any legal angle
+                          64.2%            64.2%           64.2%
+```
+
+Identical. `anglesFor` sorts by proximity to the aim and the contact window is
+centred on the aim, so if any offered angle reaches, the nearest one already
+does. `angles[0]` is the best of what is on offer.
+
+### What the rate actually tracks
+
+How crowded your own ring already is — 100% with nothing around you, ~23–36%
+with four spikes already placed. That is real geometry: a spike needs 76.6° of
+clear ring at this radius, so four of them leave almost nothing legal that also
+reaches. Not a bug.
+
+### What was ruled out by reading
+
+* **Ordering** — `EnemyManager.handleEnemies` (which sets
+  `nearestSpikePlacerAngle`) runs before `ModuleHandler.postTick`, so the field
+  is fresh when the modules read it.
+* **Staleness** — the controller's phase machine runs PREPARE → VALIDATE →
+  EXECUTE within one tick via recursive `postTick()`, so `selfMoved` and
+  `targetMoved` compare an intent against the same tick that made it. Drift is
+  zero on the normal path.
+* `attemptSpikePlacement()` is only the fallback for when no controller exists;
+  the live path is `spikeTickController.arm()`.
+
+### What was shipped instead: the counter
+
+The controller already records why it stands down — `lastReason`, and
+`stats {armed, consumed, requested, executed, replanned, cancelled, lost}` — and
+threw all of it away. It now reports, in **Devtool → Statistics → "Spike tick
+placed/armed"**:
+
+```
+3/47  (outOfReach 28, noGround 11, outranked 5)
+```
+
+Every arm ends in exactly one outcome, so `armed` equals the sum and the ratio
+is readable rather than guessed at. Play one round with Spike Tick on and that
+line names the gate. Suppressors worth suspecting, none of them measured:
+`spikeTickNearSpike` (any enemy spike within your primary's reach cancels the
+tick, and `_autobreak` is on by default), `SPIKE_TICK_TRAP_GRACE` (3 ticks after
+leaving a trap), and `spikeTickCounterThreat`.
+
+---
+
 ## What is not verified
 
 **The client does not boot in this harness**, and did not before either change —

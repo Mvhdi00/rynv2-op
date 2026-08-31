@@ -510,6 +510,23 @@ does fire and flips each gate on its own — every flip must turn **both** clien
 off, which is what proves each gate is carrying weight on both sides rather than
 being absent from both.
 
+### `spike-tick-angles.js`
+
+Asks whether RYN's spike ticks fail because of the angle they pick. Lifts
+`GeometrySolver`, `CandidateGenerator` and `anglesFor` out of the client with
+`vm`, so the geometry is the shipped geometry; only `_acquire` step 4 and
+`_validate`'s reach test are re-stated, and both are quoted in full at the top.
+
+**The answer is no, and that is the useful part.** Three columns — what the
+controller takes (`angles[0]`), the best of the three it already asked for, and
+the ceiling with the engine's own `contactAngles` added — come out identical at
+64.2%. `anglesFor` sorts by proximity to the aim and the contact window is
+centred on the aim, so the nearest offered angle is already the best one.
+
+This file exists as a record of two hypotheses that were measured and
+falsified before anything was changed. The rate tracks how crowded your own
+ring is (100% empty, ~23–36% with four spikes placed), which is real geometry.
+
 ### `velocity-duel.js`
 
 Glotus 5.5.5's `VelocityTick` against the copy now in RYN. Both classes are
