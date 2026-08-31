@@ -315,14 +315,17 @@ check("wire", "spikeTickController still runs after the three spike tick modules
   return [true, "controller at " + ctrl + ", after all three"];
 });
 
-for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "false"], ["_velocityTickTimes", "0"]]) {
+for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "false"],
+                           ["_knockbackTick", "false"],
+                           ["_velocityTickTimes", "0"], ["_knockbackTickTimes", "0"]]) {
   check("wire", key + " has a default", () => {
     const re = new RegExp("\\b" + key + ":\\s*" + want + "\\s*,");
     return re.test(src) ? [true, key + ": " + want] : [false, "missing or not " + want];
   });
 }
 
-for (const id of ["_velocityTick", "_velocityTickTrap", "_velocityTickTimes", "_spikeTickOutcome"]) {
+for (const id of ["_velocityTick", "_velocityTickTrap", "_knockbackTick",
+                  "_velocityTickTimes", "_knockbackTickTimes", "_spikeTickOutcome"]) {
   check("wire", id + " has a UI element", () => {
     const asInput = src.includes('id=\\"' + id + '\\" type=\\"checkbox\\"');
     const asSpan = src.includes('id=\\"' + id + '\\" class=\\"text-value\\"');
@@ -341,6 +344,31 @@ check("wire", "updateSpikeTick targets the id the Devtool row uses", () => {
   if (!m) return [false, "updateSpikeTick not found or does not query"];
   return m[1] === "_spikeTickOutcome" ? [true, "queries #" + m[1]]
                                      : [false, "queries #" + m[1] + ", row is #_spikeTickOutcome"];
+});
+
+check("wire", "KnockbackTick is defined, registered and in the run order", () => {
+  if (!/class KnockbackTick\s*\{/.test(src)) return [false, "no `class KnockbackTick {`"];
+  if (!src.includes("knockbackTick: new KnockbackTick(client2)")) return [false, "not registered"];
+  const m = /this\.modules = \[([^\]]+)\]/.exec(src);
+  const order = m[1].split(",").map(x => x.trim().replace("this.staticModules.", ""));
+  const i = order.indexOf("knockbackTick");
+  if (i < 0) return [false, "not in the run order"];
+  // Glotus runs it just before antiRetrap.
+  if (order[i + 1] !== "antiRetrap")
+    return [false, "sits before " + order[i + 1] + ", Glotus puts it before antiRetrap"];
+  return [true, "slot " + i + ", right before antiRetrap"];
+});
+
+/* The turret follow-up is the half a port loses quietly: the swing still lands,
+ * and a missing latch only shows as the enemy stopping short of the spike. */
+check("wire", "the knockback turret follow-up is still wired", () => {
+  const cls = lift("class KnockbackTick\\s*\\{", "KnockbackTick");
+  if (!/isPrimaryEnough/.test(cls)) return [false, "no isPrimaryEnough — the two-tier budget is gone"];
+  if (!/if \(!isPrimaryEnough\) \{\s*this\.useTurret = true;/.test(cls))
+    return [false, "useTurret is not latched when the primary alone cannot cover the gap"];
+  if (!/if \(this\.useTurret\) \{/.test(cls)) return [false, "nothing consumes useTurret"];
+  if (!/forceHat = 53/.test(cls)) return [false, "the follow-up does not equip turret gear"];
+  return [true, "latched when needed, consumed next tick, hat 53"];
 });
 
 check("wire", "the trap branch widens the window rather than replacing it", () => {

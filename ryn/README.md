@@ -1,10 +1,12 @@
 # RYN Client v5.4
 
-`RYN_Client_v5.4.user.js` — the client as uploaded, with three changes.
+`RYN_Client_v5.4.user.js` — the client as uploaded, with five changes.
 
 1. [Autoheal](#autoheal) — novastorm's rule and nothing else
 2. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
 3. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
+4. [Knockback tick](#knockback-tick--hit-them-onto-a-spike) — added from Glotus; RYN had the trap half only
+5. [Automill](#automill--the-ragged-wall) — the whole trio or none, fixing the ragged wall
 
 ---
 
@@ -477,6 +479,75 @@ line names the gate. Suppressors worth suspecting, none of them measured:
 `spikeTickNearSpike` (any enemy spike within your primary's reach cancels the
 tick, and `_autobreak` is on by default), `SPIKE_TICK_TRAP_GRACE` (3 ticks after
 leaving a trap), and `spikeTickCounterThreat`.
+
+---
+
+## Knockback tick — hit them onto a spike
+
+RYN had `TrapKB`, which hits enemies so the knockback carries them into a
+**trap**. The **spike** half was missing. This is Glotus 5.5.5's
+`KnockbackTick`, ported whole; off by default, in Combat → Instakills.
+
+**The port was three-quarters already done.** `EnemyManager` derives
+`nearestEnemySpikeCollider` and `spikeCollider` in code that is byte for byte
+Glotus's (2923) — the enemy standing on the far side of a spike from you, and
+the spike a hit would drive them onto — and **nothing read either field.** Same
+situation as `pushingOnSpike`: computed every tick and thrown away.
+
+The pick is not "nearest spike". It keeps the pair whose angle from you to the
+spike best lines up with the angle from them to the spike:
+
+```js
+const intersecting = angleDistance <= offset;                  // spike is behind them
+const overlapping  = distanceToTarget <= distanceToSpike1;     // they are nearer than it
+const inRange2     = KBDistance !== 0 && target.collidingObject(object, KBDistance);
+```
+
+### The reach test is a budget, not a range
+
+```js
+const knockback = primaryKnockback + 60;                       // 60 is the turret's
+const collisionScale = spike.collisionScale + enemy.collisionScale;   // 84
+const isPrimaryEnough = distanceToSpike <= collisionScale + primaryKnockback;
+if (distanceToSpike <= collisionScale + knockback) { ...swing... }
+```
+
+If the gap fits inside the primary's own knockback, one swing does it. If it
+only fits once the turret's ~60 is counted, the swing goes now and the turret
+follows on the next tick — that is what `useTurret` latches. Weapon knockback in
+RYN: daggers 44.4, polearm 55.6, **bat 111.1**, which is why bat and daggers are
+the weapons this is worth holding.
+
+### Verifying it
+
+```
+node harness/knockback-duel.js
+```
+
+Both classes lifted with `vm`, one stub client, nothing transcribed:
+
+```
+  case                                  ryn                       glotus
+  daggers, gap 100 — primary alone      swings                    swings
+  daggers, gap 150 — needs the turret   swings + turret next      swings + turret next
+  daggers, gap 250 — out of budget      declines                  declines
+  bat, gap 150 — primary alone          swings                    swings
+  bat, gap 240 — needs the turret       swings + turret next      swings + turret next
+  they are already trapped              declines                  declines
+  no spike behind them                  declines                  declines
+  primary not reloaded                  declines                  declines
+  another module has the tick           declines                  declines
+
+  rows 12   agree 12   swings on 5
+```
+
+The duel drives **two** ticks and checks the follow-up separately, because that
+is the half a port loses quietly: the swing still lands either way, and a
+missing latch shows only as the enemy stopping just short of the spike. A
+standing check asserts the latch, and a mutation that deletes it goes red.
+
+**Not ported:** Glotus's other two variants, `KnockbackTickHammer` and
+`KnockbackTickTrap` (break a trap, then knock them onto a spike). Say the word.
 
 ---
 

@@ -595,6 +595,20 @@ This file exists as a record of two hypotheses that were measured and
 falsified before anything was changed. The rate tracks how crowded your own
 ring is (100% empty, ~23–36% with four spikes placed), which is real geometry.
 
+### `knockback-duel.js`
+
+Glotus 5.5.5's `KnockbackTick` against the copy now in RYN — hit them so the
+knockback carries them onto a spike. Both classes lifted with `vm`, one stub
+client, nothing transcribed. 12 rows, all agreeing.
+
+It drives **two** ticks on purpose. The reach test is a knockback budget rather
+than a range — primary knockback alone, or primary plus the turret's ~60 — and
+when only the two-tier budget covers the gap the turret goes out on the tick
+after. That follow-up is the half a port loses quietly: the swing still lands
+either way, and a missing latch shows only as the enemy stopping just short of
+the spike. So the file checks the latch and the next-tick hat 53 separately from
+the swing.
+
 ### `velocity-duel.js`
 
 Glotus 5.5.5's `VelocityTick` against the copy now in RYN. Both classes are
