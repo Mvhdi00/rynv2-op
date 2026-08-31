@@ -231,6 +231,59 @@ cannot dodge) or their predicted hat is one they can be hurt through —
 `isValidHat` rules out hat 6 (soldier, eats the damage) and hat 22 (eats the
 knockback the window depends on).
 
+### The trap sub-toggle — `_velocityTickTrap`
+
+Added on top of the port, off by default, sitting under Velocity tick in
+Combat → Instakills.
+
+**Why the window can be relaxed for a pinned target, and only for one.** 220–245
+is not a range check — it is where the turret's knockback leaves them after the
+shot, which is why it has both a floor and a ceiling. A target standing in a
+trap **cannot be knocked anywhere**, so for them the window has nothing left to
+describe, and anything inside 200 is worth the combo.
+
+Their own trap does not count. Being pinned by someone else does not stop them
+being pushed out of your polearm's way, so the branch checks who owns the trap:
+
+```js
+_pinnedInMyTrap(nearestEnemy) {
+  if (!Settings_default._velocityTickTrap) return false;
+  const trappedIn = nearestEnemy.trappedIn;
+  if (!trappedIn) return false;
+  return !PlayerManager2.isEnemyByID(trappedIn.ownerID, myPlayer);
+}
+```
+
+**It widens the condition, it does not replace it:**
+
+```js
+const inAttackRange = inRange(dist1, this.minKB, this.maxKB) ||
+  pinned && dist1 <= VELOCITY_TICK_TRAP_RANGE;
+```
+
+The first version replaced the window, and the duel caught it: a pinned enemy at
+232 is *still in the knockback window*, and replacing the test threw that shot
+away. The check `the trap branch widens the window rather than replacing it`
+exists so that cannot come back.
+
+Everything else about the combo is untouched — polearm, diamond variant, both
+reloads, `canSend`, `shouldIgnoreModule`. A soldier hat still calls it off.
+
+```
+  case                                expected    ryn         glotus
+  120 away, in my trap                fires       fires       declines
+  180 away, in my trap                fires       fires       declines
+  232 away, in my trap                fires       fires       fires
+  120 away, in my trap, toggle off    declines    declines    declines
+  120 away, in THEIR trap             declines    declines    declines
+  120 away, not trapped               declines    declines    declines
+  120, in my trap, soldier hat        declines    declines    declines
+```
+
+Glotus's column shows what the sub-toggle adds. Every row where they differ is
+a shot Glotus does not take, and there is no row where Glotus fires and RYN does
+not — and with the toggle off, the 768-scene match is untouched.
+
 ### Two decisions worth knowing
 
 **Off by default** (`_velocityTick: false`). It is new to this client, it moves

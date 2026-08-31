@@ -66,10 +66,14 @@ function makeClient(s) {
     newTick() { this.moveTo = "disable"; this.forceHat = null; this.forceWeapon = null;
                 this.shouldAttack = false; this.moduleActive = !!s.moduleActive; },
   };
+  // trapped: 0 not trapped, 1 in a trap of mine, 2 in someone else's
+  const trappedIn = s.trapped ? { ownerID: s.trapped === 1 ? 1 : 9 } : null;
   return {
     _ModuleHandler: ModuleHandler,
     StatsManager: { velocityTickTimes: 0 },
+    PlayerManager: { isEnemyByID: (ownerID) => ownerID !== 1 },
     myPlayer: {
+      id: 1,
       pos: { current: new Vec(0, 0), previous: new Vec(0, 0), future: new Vec(0, 0) },
       getItemByType: () => s.primary,
       getWeaponVariant: () => ({ current: s.variant }),
@@ -83,6 +87,7 @@ function makeClient(s) {
         weapon: { current: KATANA },
         futureHat: s.futureHat,
         atExact: () => !!s.almostReloaded,
+        trappedIn: trappedIn,
       },
     },
   };
@@ -91,7 +96,8 @@ function makeClient(s) {
 function drive(classSrc, s) {
   const sandbox = {
     Math,
-    Settings_default: { _velocityTick: true },
+    VELOCITY_TICK_TRAP_RANGE: 200,
+    Settings_default: { _velocityTick: true, _velocityTickTrap: !!s.trapToggle },
     DataHandler_default: { getWeapon: (id) => WEAPONS[id], isMelee: () => true },
     inRange: (v, min, max) => v >= min && v <= max,
   };
@@ -208,8 +214,59 @@ console.log("  " + pad("glotus walks on the firing tick", 34) + bg.walksOnFire);
 console.log("  " + pad("ryn walks on the firing tick", 34) + br.walksOnFire);
 if (!bg.walksOnFire || !br.walksOnFire) dead++;
 
-const ok = differ.length === 0 && dead === 0;
+/* ── the trap sub-toggle ──────────────────────────────────────────────────
+ *
+ * Two things have to be true and they pull in opposite directions:
+ *   1. with the toggle OFF, RYN must still be Glotus exactly — the 768 scenes
+ *      above already prove that, since they all run with it off
+ *   2. with it ON and the target pinned in a trap of MINE, the knockback
+ *      window is replaced by a plain distance, because a pinned target cannot
+ *      be knocked anywhere for the window to describe
+ *
+ * Everything else about the combo has to survive the change, so the rows below
+ * check the gates that must still bite. */
+const trapBase = { primary: POLEARM, variant: 2, primaryReloaded: true, turretReloaded: true,
+                   almostReloaded: true, futureHat: 0, ignore: false };
+const TRAP_ROWS = [
+  ["120 away, in my trap",            { dist: 120, trapped: 1, trapToggle: true }, "fires"],
+  ["180 away, in my trap",            { dist: 180, trapped: 1, trapToggle: true }, "fires"],
+  ["232 away, in my trap",            { dist: 232, trapped: 1, trapToggle: true }, "fires"],
+  ["120 away, in my trap, toggle off",{ dist: 120, trapped: 1, trapToggle: false }, "declines"],
+  ["120 away, in THEIR trap",         { dist: 120, trapped: 2, trapToggle: true }, "declines"],
+  ["120 away, not trapped",           { dist: 120, trapped: 0, trapToggle: true }, "declines"],
+  ["120, in my trap, katana",         { dist: 120, trapped: 1, trapToggle: true, primary: KATANA }, "declines"],
+  ["120, in my trap, gold polearm",   { dist: 120, trapped: 1, trapToggle: true, variant: 1 }, "declines"],
+  ["120, in my trap, turret down",    { dist: 120, trapped: 1, trapToggle: true, turretReloaded: false }, "declines"],
+  ["120, in my trap, soldier hat",    { dist: 120, trapped: 1, trapToggle: true, almostReloaded: false, futureHat: 6 }, "declines"],
+  ["232 in the window, toggle on",    { dist: 232, trapped: 0, trapToggle: true }, "fires"],
+];
+console.log("\n  the trap sub-toggle — a pinned target cannot be knocked into the window,");
+console.log("  so with it on, anything pinned in a trap of mine inside 200 counts too.");
+console.log("  It WIDENS the window rather than replacing it: 232 still fires either way.");
+console.log("  " + pad("case", 36) + pad("expected", 12) + pad("ryn", 12) + "glotus");
+console.log("  " + "-".repeat(72));
+let trapBad = 0;
+for (const [label, patch, expect] of TRAP_ROWS) {
+  const s = Object.assign({}, trapBase, patch);
+  const r = drive(rynClass, s);
+  const g = drive(gloClass, s);
+  const got = r.fires ? "fires" : "declines";
+  if (got !== expect) trapBad++;
+  console.log("  " + pad(label, 36) + pad(expect, 12) + pad(got + (got === expect ? "" : " <-"), 12) +
+    (g.fires ? "fires" : "declines"));
+}
+console.log("\n  Glotus's column is there to show what the sub-toggle adds: every row where");
+console.log("  the two differ is a shot Glotus does not take, and none of them is a row");
+console.log("  where Glotus fires and RYN does not.");
+const regressions = TRAP_ROWS.filter(([, patch]) => {
+  const s = Object.assign({}, trapBase, patch);
+  return drive(gloClass, s).fires && !drive(rynClass, s).fires;
+}).length;
+if (regressions) { trapBad += regressions; console.log("  " + regressions + " row(s) where Glotus fires and RYN does not"); }
+
+const ok = differ.length === 0 && dead === 0 && trapBad === 0;
 console.log("\n  " + (ok
-  ? "identical on every scene, every gate shuts both off, and both walk — the tick is Glotus's"
-  : (differ.length ? differ.length + " scenes differ. " : "") + (dead ? dead + " check(s) failed." : "")));
+  ? "Glotus's tick, unchanged with the sub-toggle off, plus the trap branch on top"
+  : (differ.length ? differ.length + " scenes differ. " : "") + (dead ? dead + " gate check(s) failed. " : "") +
+    (trapBad ? trapBad + " trap row(s) wrong." : "")));
 process.exit(ok ? 0 : 1);

@@ -266,14 +266,14 @@ check("wire", "spikeTickController still runs after the three spike tick modules
   return [true, "controller at " + ctrl + ", after all three"];
 });
 
-for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTimes", "0"]]) {
+for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "false"], ["_velocityTickTimes", "0"]]) {
   check("wire", key + " has a default", () => {
     const re = new RegExp("\\b" + key + ":\\s*" + want + "\\s*,");
     return re.test(src) ? [true, key + ": " + want] : [false, "missing or not " + want];
   });
 }
 
-for (const id of ["_velocityTick", "_velocityTickTimes", "_spikeTickOutcome"]) {
+for (const id of ["_velocityTick", "_velocityTickTrap", "_velocityTickTimes", "_spikeTickOutcome"]) {
   check("wire", id + " has a UI element", () => {
     const asInput = src.includes('id=\\"' + id + '\\" type=\\"checkbox\\"');
     const asSpan = src.includes('id=\\"' + id + '\\" class=\\"text-value\\"');
@@ -292,6 +292,28 @@ check("wire", "updateSpikeTick targets the id the Devtool row uses", () => {
   if (!m) return [false, "updateSpikeTick not found or does not query"];
   return m[1] === "_spikeTickOutcome" ? [true, "queries #" + m[1]]
                                      : [false, "queries #" + m[1] + ", row is #_spikeTickOutcome"];
+});
+
+check("wire", "the trap branch widens the window rather than replacing it", () => {
+  const cls = lift("class VelocityTick\\s*\\{", "VelocityTick");
+  const m = /const inAttackRange = ([\s\S]*?);/.exec(cls);
+  if (!m) return [false, "inAttackRange not found"];
+  const expr = m[1];
+  if (!/inRange\(dist1, this\.minKB, this\.maxKB\)/.test(expr))
+    return [false, "the knockback window is no longer part of the condition"];
+  if (!/pinned/.test(expr)) return [false, "the trap branch is not in the condition"];
+  if (!/\|\|/.test(expr)) return [false, "not an OR — replacing the window loses the 220-245 band"];
+  return [true, "window OR pinned-and-close"];
+});
+
+check("wire", "the trap branch only counts traps that are mine", () => {
+  const cls = lift("class VelocityTick\\s*\\{", "VelocityTick");
+  if (!/_pinnedInMyTrap/.test(cls)) return [false, "no _pinnedInMyTrap"];
+  if (!/isEnemyByID\(trappedIn\.ownerID, myPlayer\)/.test(cls))
+    return [false, "does not check who owns the trap"];
+  if (!/Settings_default\._velocityTickTrap/.test(cls))
+    return [false, "not behind its own toggle"];
+  return [true, "own toggle, and ownership checked"];
 });
 
 check("wire", "_report is called on both outcomes, placed and cancelled", () => {
