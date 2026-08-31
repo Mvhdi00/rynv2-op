@@ -450,6 +450,47 @@ degree grid is blind to a gap a placement really fits through.
 Pure geometry, no browser — it lifts the helpers out of the client with `vm` so
 the test runs the shipped code rather than a copy.
 
+### `heal-duel.js` and `preplace-duel.js`
+
+Two comparisons against RYN v5.4 rather than against an earlier version of this
+client. Both are **models**, and both say so at the top: neither client's heal
+or preplace path can be lifted into a `vm` — X-'s lives inside one enormous
+inline tick block, RYN's reaches through five managers — so the rules are
+transcribed from source with the line each came from and run against a shared
+scenario. Read the transcription before believing the table.
+
+`heal-duel.js` is the more trustworthy of the two, because the part that
+decides the result is not modelled at all: the shame rule is the game's own
+server code, which `X_Precision_2.0.user.js` ships verbatim at line 18516. Two
+things in it are easy to get backwards:
+
+* `this.hitTime = 0` runs inside the branch, so only the **first** food after
+  each hit is ever judged. A burst of five apples costs at most one shame
+  point — spamming food is not what gets you shamed, the timing of the first
+  apple after a hit is.
+* The shame arithmetic runs **before** the `shameTimer <= 0` check, so apples
+  sent while already shame-locked keep feeding the counter and re-arm the lock.
+  A client that does not track the lock can hold itself in it.
+
+```
+  trade, a hit every 5 ticks
+  ping    client    apples   packets   wasted     shame locks
+  30      X-        288      1152      144 (50%)  0
+  30      RYN       144      576       0 (0%)     0
+```
+
+The 50% is one mechanism: X- computes `heal(100 - myPlayer.health)` from the
+server's last echo and nothing subtracts what is already on the wire, so the
+same missing health is paid for on every tick of the round trip. RYN's
+`_healsInFlight` subtracts it.
+
+`preplace-duel.js` enumerates 162 situations (their reload × building toughness
+× in range × motion × distance) and applies each client's *gate conditions* as
+written, counting where each produces a candidate at all. It measures coverage,
+not quality — RYN's candidates then face a scorer, a `minValue` and a conflict
+resolver, and some die there — and it weights every situation equally, which a
+real fight does not.
+
 ## Limits
 
 The mock server speaks the real transport (`io-init`, per-connection opcode
