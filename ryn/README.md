@@ -1,14 +1,16 @@
 # RYN Client v5.4
 
-`RYN_Client_v5.4.user.js` — the client as uploaded, with seven changes.
+`RYN_Client_v5.4.user.js` — the client as uploaded, with nine changes.
 
 1. [Autoheal](#autoheal) — novastorm's rule and nothing else
-2. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
-3. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
-4. [Knockback tick](#knockback-tick--hit-them-onto-a-spike) — added from Glotus; RYN had the trap half only
-5. [Automill](#automill--the-ragged-wall) — the whole trio or none, fixing the ragged wall
-6. [Blood Wings](#blood-wings-while-standing-still) — no longer forced while standing still
-7. [Bot names](#bot-names) — one name for all of them, optionally numbered
+2. [The automatic Q](#the-automatic-q) — food is no longer pressed into the shame rule
+3. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
+4. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
+5. [Spike tick](#spike-tick-removed-all-of-it) — removed, every variant
+6. [Knockback tick](#knockback-tick--hit-them-onto-a-spike) — added from Glotus; RYN had the trap half only
+7. [Automill](#automill--the-ragged-wall) — the whole trio or none, fixing the ragged wall
+8. [Blood Wings](#blood-wings-while-standing-still) — no longer forced while standing still
+9. [Bot names](#bot-names) — one name for all of them, optionally numbered
 
 ---
 
@@ -51,8 +53,11 @@ function heal(value) {
 }
 ```
 
-Two branches with an OR between them and no third thing. `ModuleHandler.heal()`
-is now the same shape: select food, swing, put the weapon back — unconditional.
+Two branches with an OR between them and no third thing, and that is the whole
+decision — nothing was added back to it. `ModuleHandler.heal()` is the same
+three sends, select food, swing, put the weapon back, behind the two questions
+in [The automatic Q](#the-automatic-q) below: those are about whether the server
+will *count* the press, never about whether to heal.
 
 **The number feeding the rule stays RYN's**, which is what "novastorm's rule,
 RYN's logic" means here. `EnemyManager.potentialDamage +
@@ -85,8 +90,8 @@ labelled feature. Say the word and it goes too.
 node harness/heal-duel.js
 ```
 
-The port's acceptance test is that it becomes **indistinguishable from X-
-Precision**, since both are now the same rule. It is:
+The port's acceptance test is that the **decision** is indistinguishable from
+X- Precision's, since both are now the same rule:
 
 ```
   totals across every row
@@ -94,13 +99,132 @@ Precision**, since both are now the same rule. It is:
   X-             2676     10704     1815 (68%)  30           108
   RYN (was)      1230     4920      300 (24%)   6            96
   RYN (ported)   2676     10704     1815 (68%)  30           108
-
-  RYN (ported) matches X- on every row — the rule is novastorm's, with nothing on top
+  RYN (now)      1698     6792      860 (51%)   2            112
 ```
 
-The middle row is what was deleted, priced. Those guards were worth 1,446
-apples and 5,784 packets across the three fights, and 24 of the 30 shame locks.
-That is the cost of the change, and it is deliberate: novastorm pays it too.
+`RYN (was)` is what was deleted, priced: those four guards were worth 1,446
+apples and 24 of the 30 shame locks. `RYN (now)` is the section below.
+
+---
+
+## The automatic Q
+
+The bare rule above pressed food on 22–40% of all ticks and took 30 shame locks
+across the bench. In play that reads as Q being held down, and shame in seconds.
+This is the fix, and it is measured in `harness/auto-q.js`.
+
+### Why the bare rule runs away
+
+The whole cause is ten lines of the game's own server code, which X- Precision
+ships verbatim at 18516:
+
+```js
+if (this.hitTime) {
+    var timeSinceHit = Date.now() - this.hitTime;
+    this.hitTime = 0;                    // only the FIRST food after a hit
+    if (timeSinceHit <= 120) {           // is ever judged
+        this.shameCount++;
+        if (this.shameCount >= 8) { this.shameTimer = 30000; this.shameCount = 0; }
+    } else {
+        this.shameCount -= 2;
+    }
+}
+if (this.shameTimer <= 0) worked = item.consume(this);   // <- AFTER
+```
+
+Two consequences, and between them they are the entire bug:
+
+1. **The shame arithmetic runs above the refusal.** Food sent during the 30
+   second lock is thrown away *and still counted*, so it can take the count back
+   to 8 and re-arm another 30 seconds. And since nothing lands, `tempHealth`
+   never rises, so `tempHealth < maxHealth` stays true and the rule asks again
+   next tick — for thirty seconds. That is the Q that never lets go: 1,095 of
+   the bench's food presses were spent inside a lock.
+2. **Only the first food after each hit is judged.** In a fight that is the
+   *emergency* press, which goes out on the tick the health drop is seen, about
+   one tick plus a round trip after the hit. On a good connection that is inside
+   120ms, so it is +1 shame per hit instead of −2. Eight of those is a lock.
+
+RYN's client-side `shameCount` mirror can't see any of this: it only counts when
+health is observed to **rise** (3431), and during a lock health never rises. So
+the client thinks its count is low the whole time the server is re-arming.
+
+### The fix
+
+Two questions, both inside `ModuleHandler.heal()` — which is where *every*
+automatic food press in the client goes through, so they cover the novastorm
+rule, anti sync and anti smart tick alike. Neither changes **which ticks decide
+to heal**; the decision above is untouched.
+
+```js
+if (myPlayer && myPlayer.shameActive) return;   // the food cannot be eaten
+if (!this._foodIsShameSafe()) return;           // ...and would be counted
+```
+
+`_foodIsShameSafe()` asks what the server will measure: the press leaves now and
+lands half a round trip later, and the hit happened half a round trip before the
+client saw it, so the figure is `(Date.now() - myPlayer.receivedDamage) + pong`,
+against `SHAME_SAFE_WINDOW = 125`. Two details that are not decoration:
+
+* **It gives up after one tick.** Under damage every tick the window never
+  opens, because `receivedDamage` is refreshed faster than it closes. A guard
+  that waits forever is a guard that stops you eating — measured: at ping 30 and
+  100 the wait-forever variant never eats at all and dies 40 times.
+* **It answers once per tick and remembers.** `Date.now()` moves while a tick
+  runs, and `heal(100 - health)` asks four times. Without the memo the window
+  could open between two of those calls and the heal would go out in pieces.
+
+`receivedDamage` is cleared the moment health is seen to rise, which is the same
+moment the server clears `hitTime` — so a press following one that already
+landed is never held. The guard only ever delays the press the server judges.
+
+### What was measured, including four things that did not work
+
+```
+node harness/auto-q.js
+```
+
+The row marked `<-` is not a description of the client, it *is* the client:
+`_foodIsShameSafe` is lifted out of the file and asked the same question on the
+same ticks.
+
+```
+  guards                   apples   refused   judged +1  judged -2  locks   deaths
+  v5.4 as shipped          2676     1095      294        231        30      108
+  lock                     1716     30        102        231        6       96
+  window, bypass           2676     1095      294        231        30      108
+  lock + bypass            1716     30        102        231        6       96
+  lock + wait forever      1628     10        34         267        2       112
+  lock + wait unless held  1716     30        102        231        6       96
+  lock + wait 1 tick       1698     10        48         267        2       112
+  RYN v5.4 now  <-         1698     10        48         267        2       112
+```
+
+* **`window, bypass` is inert** — identical to shipped on every row. Letting an
+  emergency press through defeats the guard completely, because the shaming
+  press *is* the emergency press. This was my first design, and the table
+  killed it.
+* **`lock + wait forever` starves**, as above.
+* **`lock + wait unless held`** — skip the wait when hits land on back-to-back
+  ticks — collapses straight back to the lock guard, because a burst *is* three
+  consecutive ticks of damage. It does not separate a burst you survive from a
+  spike you do not.
+* **`lock` alone** is safe and good (30 → 6 locks, and fewer deaths) but leaves
+  the counting-up untouched.
+
+### The cost, stated plainly
+
+Deaths across the whole table go **up by 4**, and every one of them is on the
+third fight — 12 damage every single tick, no gap, ever, where every candidate
+in the table dies about once a second. On the two fights anyone survives, deaths
+are unchanged, shame is **zero at ping 30 and 100**, and it eats *more* than
+before, not less.
+
+At a 200ms round trip the guard stops helping on the burst fight — not because
+of a bug, but because the hit it aims away from is already stale: the server has
+taken a newer one that this client will not see for another half trip, and the
+newest is what the server measures. It stops helping there rather than starting
+to hurt.
 
 ---
 
@@ -337,221 +461,58 @@ would pass while testing half the feature.
 
 ---
 
-## Spike tick: why it fires and no spike appears
+## Spike tick: removed, all of it
 
-Investigated, **not fixed** — because two plausible causes were measured and
-both turned out to be wrong, and a third guess is not worth shipping.
+Every spike tick is gone from the client — `SpikeTickBreak`, `SpikeTickNear`,
+`SpikeTickTrap`, the `SpikeTickController` they armed, the six helpers only they
+called (`spikeTickState`, `spikeTickCounterThreat`, `spikeTickNearSpike`,
+`spikeTickTarget`, `spikeTickHit`, `spikeTickTurret`), the nine `SPIKE_TICK_*`
+constants, the four toggles in Combat → Instakills, the Devtool row and
+`GameUI_default.updateSpikeTick`, and both registrations. About 750 lines.
 
-### The one thing that is certainly wrong
+What deliberately stayed: `EnemyManager.attemptSpikePlacement()` and
+`nearestSpikePlacerAngle`, which `spikeSync`, `spikeSyncHammer`, `spikeTrap`,
+`teammateSpikeTrap` and `ToolHammerSpearInsta` all still use; and
+`AutoPlacer`'s own `canSpikeTick` scoring term, which is Luna's and has nothing
+to do with these modules. `LUNA_SPIKE_TICK_MODULES` lost the three names of
+modules that no longer exist and kept the four that do — removing names that
+can never match `activeModule` cannot change what autoPlacer does.
 
-`_spikeTick: false` is the master gate, and it ships **off**, while all three
-sub-toggles ship **on**:
+`Anti Spike Tick` went with them. It read as a defensive option, but its only
+consumer in this client was `spikeTickCounterThreat`, the gate deciding whether
+RYN's **own** spike tick opened. With the offence gone it controlled nothing,
+and a switch in the menu that does nothing is worse than no switch.
 
-```js
-_spikeTick: false,
-_spikeTickBreak: true,
-_spikeTickNear: true,
-_spikeTickTrap: true,
-```
+### Why removal, and not another fix
 
-`spikeTickTarget()` returns `null` on its second line when the master is off, so
-Break, Near and Trap are all inert. In the menu the three sit in a
-`<div class="sub-options">` under an unchecked parent — so the panel shows three
-switches ON that do nothing. **Turn on "Spike Tick" first.**
+Two measurements, both of which said the feature could not be made to work
+without touching auto place, preplace or replace — which was the standing
+instruction not to do.
 
-### Two hypotheses, both measured, both wrong
-
-`node harness/spike-tick-angles.js` runs the real geometry — `GeometrySolver`,
-`CandidateGenerator` and `anglesFor` lifted from the file with `vm`.
-
-**Wrong #1: "`anglesFor` never offers an angle that touches the enemy."** It
-offers the direct line (when free), aperture edges, and wide-aperture midpoints,
-and never calls `GeometrySolver.contactAngles` — which `AngleSolver.propose`
-uses and calls *"the ones that touch the target"*. Adding contact angles moved
-the rate **49.3% → 49.6%**. Nothing. Whatever blocks the direct line blocks its
-neighbourhood too, so the contact angles are illegal in exactly the cases where
-they would have helped.
-
-**Wrong #2: "the controller takes `angles[0]` and ignores the other two."** It
-does take only `angles[0]` (`_acquire` step 4, `{ limit: 3 }`), and `_validate`
-then demands that spike reach the target — two different questions. But:
-
-```
-  overall                 takes angles[0]  best of the 3   any legal angle
-                          64.2%            64.2%           64.2%
-```
-
-Identical. `anglesFor` sorts by proximity to the aim and the contact window is
-centred on the aim, so if any offered angle reaches, the nearest one already
-does. `angles[0]` is the best of what is on offer.
-
-### What the rate actually tracks
-
-How crowded your own ring already is — 100% with nothing around you, ~23–36%
-with four spikes already placed. That is real geometry: a spike needs 76.6° of
-clear ring at this radius, so four of them leave almost nothing legal that also
-reaches. Not a bug.
-
-### What was ruled out by reading
-
-* **Ordering** — `EnemyManager.handleEnemies` (which sets
-  `nearestSpikePlacerAngle`) runs before `ModuleHandler.postTick`, so the field
-  is fresh when the modules read it.
-* **Staleness** — the controller's phase machine runs PREPARE → VALIDATE →
-  EXECUTE within one tick via recursive `postTick()`, so `selfMoved` and
-  `targetMoved` compare an intent against the same tick that made it. Drift is
-  zero on the normal path.
-* `attemptSpikePlacement()` is only the fallback for when no controller exists;
-  the live path is `spikeTickController.arm()`.
-
-### The real conflict, and why it cannot be solved with angles
-
-You were right that auto place, preplace and replace are what stops it — and
-right that they should not be touched. Here is the whole mechanism, in the
-ledger:
+**The tick was blocked by the placers, and priority could not help it.** Every
+placement the engine sends leaves a HARD reservation for two ticks. All three
+placers build on the ring toward the enemy, and so did a spike tick, so whoever
+sent first owned that ground — and `PlacementLedger.blocked()` returns on
+`!e.soft` **before priority is read**:
 
 ```js
-blocked(x, y, radius, priority, value, ignoreToken) {
-  for (const e of this.entries) {
-    if (hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
-    if (!e.soft) return true;               // hard entry wins outright
-    if (e.priority > priority) return true; // never reached for a hard entry
+if (hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
+if (!e.soft) return true;               // <- hard entry wins outright
+if (e.priority > priority) return true;
 ```
 
-Every placement the engine **sends** leaves a hard reservation for two ticks
-(`_record` → `take(..., soft = false)`). All three placers build on the ring
-toward the enemy, and so does a spike tick — so whoever sent first owns that
-ground, and `!e.soft` returns before priority is read. The spike tick's SYNC
-(80) never gets to outrank ENGAGEMENT (40), ANTICIPATION (50) or RECOVERY (60).
+So the tick's SYNC (80) never got to outrank ENGAGEMENT (40), ANTICIPATION (50)
+or RECOVERY (60). It then replanned onto the same angle twice and cancelled.
 
-`_validate` then returned `"blocked"`, which is non-terminal, so the controller
-went to REPLAN — and REPLAN re-ran `_acquire`, which asked for the same three
-angles and took the same `angles[0]` again. Two replans, same refusal, CANCEL.
+**And no second angle existed to move to.** A spike reaches the target only from
+within about ±60° of the aim, and can only be *placed* at least 76.7° from a
+spike already on the ring. Those two windows are disjoint at every distance —
+measured, not derived — so "hunt for another angle" had no answer to find. The
+only honest outcome was to notice the spike the placers had already put there
+and call the tick complete, which is a report change, not a feature.
 
-**And no angle-hunting fixes it.** Measured:
-
-```
-enemy at  90   reaches within +-65.6 deg   needs >= 76.7 deg from an existing spike   DISJOINT
-enemy at 100   reaches within +-60.5 deg   needs >= 76.7 deg from an existing spike   DISJOINT
-enemy at 120   reaches within +-50.0 deg   needs >= 76.7 deg from an existing spike   DISJOINT
-enemy at 140   reaches within +-38.2 deg   needs >= 76.7 deg from an existing spike   DISJOINT
-```
-
-A spike only reaches the target from within ~±60° of the aim, and can only be
-*placed* at least 76.7° from a spike already on the ring. **Disjoint at every
-distance.** Once any spike stands toward the target, a second one that also
-reaches does not exist. The first fix attempted — walk the three angles instead
-of taking the head — was written, measured, and shown to be nearly useless for
-exactly this reason. It is kept because it is free and helps when the offered
-angles are spread, but it is not the fix.
-
-### The fix: stop calling a finished job a failure
-
-The combo is *"a spike they can be knocked onto, plus the hit."* If the spike is
-already standing — because auto place, preplace or replace put it there — the
-tick is **complete**. The swing was already ordered by `spikeTickHit` before the
-controller was armed, which is exactly why it "swings but never places".
-
-So `_alreadyCovered()` asks whether one of our spikes already reaches the
-target, and if it does the controller finishes instead of cancelling:
-
-```
-what the three placers left behind              expected  got
-nothing on the ring at all                      placed    placed
-auto place already built toward them (hard, 40) covered   covered
-preplace already built toward them (hard, 50)   covered   covered
-replace already built toward them (hard, 60)    covered   covered
-ground reserved this tick, nothing standing yet none      none
-a spike standing, but too far to reach them     placed    placed
-```
-
-`node harness/spike-tick-conflict.js`, against the **real** `PlacementLedger`
-and `ConflictResolver`.
-
-**Nothing about the three placers changes.** No reservation is preempted, no
-priority re-read, no ground taken. A standing check asserts the controller
-never calls `preempt`, so that cannot drift.
-
-The Devtool line now reads `covered` for these ticks rather than counting them
-as losses, so the counter finally means what it says.
-
-### The trap variant's own gate, found earlier
-
-`node harness/spike-tick-trap.js` drives the trap combo over **both** its ticks,
-with `spikeTickState`, `spikeTickCounterThreat`, `spikeTickNearSpike`,
-`spikeTickTarget`, `spikeTickHit`, `spikeTickTurret`, `SpikeTickTrap`,
-`SpikeTickBreak` and `SpikeTickController` all lifted from the file. Only the
-world is staged.
-
-**The combo itself is sound.** Given a clean tick it hammers on tick 1
-(`forceWeapon 1`, `forceHat 40`) and commits a spike on tick 2. So the problem
-is not the combo — it is that it rarely gets to start:
-
-```
-  precondition removed              hammer tick  spike
-  an enemy spike within reach       no           none
-  ...same, but autobreak off        swings       placed
-```
-
-The gate is **`spikeTickNearSpike`**, at the top of `spikeTickTarget`:
-
-```js
-const spikeTickNearSpike = client2 => {
-  if (!Settings_default._autobreak) return false;     // only armed when autobreak is on
-  const spike = EnemyManager2.nearestSpike;
-  if (spike === null) return false;
-  const reach = spike.scale + Math.min(weapon.range, SPIKE_TICK_NEAR_SPIKE_REACH);
-  return myPlayer.collidingSimple(spike, reach);
-};
-```
-
-```js
-if (spikeTickCounterThreat(client2, state) || spikeTickNearSpike(client2)) return null;
-```
-
-Its radius is `spike.scale + min(primaryRange, 75)` = **124 around you**, and
-any enemy spike inside that cancels **every** spike tick variant before it
-starts. It is a deliberate rule — it stops the tick fighting autobreak for the
-same tick — but it does not know what it is cancelling, and an enemy pinned in a
-trap is nearly always standing beside their own spikes. That is the conflict.
-
-**Two ways out, neither applied** (both change combat behaviour, so they are
-yours to call):
-
-1. Turn `_autobreak` off — the suppressor disarms itself and the trap tick
-   works. Costs you autobreak.
-2. Narrow the rule so it does not apply to the trap variant. When they are
-   pinned, the spike beside their trap is the thing you are exploiting, not an
-   obstacle. One line, and the bench above measures it either way.
-
-### A conflict that turned out not to cost a spike
-
-`SpikeTickTrap`'s second tick is guarded by `if (!ModuleHandler.moduleActive)`,
-and clears `this.target` *before* that check — so anything claiming the tick
-first destroys the combo rather than delaying it. `spikeTickBreak` runs earlier
-in the module order and its trigger is `deletedObjects`, which on tick 2 holds
-the very trap you just hammered. It does steal the tick. But it then arms the
-controller itself, so a spike still goes out — row B of the bench: **1 spike
-either way.** What is lost is the trap variant's turret follow-up, not the
-spike.
-
-### What was shipped earlier: the counter
-
-The controller already records why it stands down — `lastReason`, and
-`stats {armed, consumed, requested, executed, replanned, cancelled, lost}` — and
-threw all of it away. It now reports, in **Devtool → Statistics → "Spike tick
-placed/armed"**:
-
-```
-3/47  (outOfReach 28, noGround 11, outranked 5)
-```
-
-Every arm ends in exactly one outcome, so `armed` equals the sum and the ratio
-is readable rather than guessed at. Play one round with Spike Tick on and that
-line names the gate. Suppressors worth suspecting, none of them measured:
-`spikeTickNearSpike` (any enemy spike within your primary's reach cancels the
-tick, and `_autobreak` is on by default), `SPIKE_TICK_TRAP_GRACE` (3 ticks after
-leaving a trap), and `spikeTickCounterThreat`.
+Three benches went with the feature: `spike-tick-angles.js`,
+`spike-tick-trap.js` and `spike-tick-conflict.js`.
 
 ---
 
@@ -817,7 +778,7 @@ runs the real rule:
 ## Verifying the whole set
 
 ```
-node harness/ryn-changes-check.js      # 42 checks over every change
+node harness/ryn-changes-check.js      # 58 checks over every change
 python3 harness/ryn-changes-mutate.py  # proves those checks can fail
 ```
 
@@ -831,14 +792,16 @@ ways:
 | --- | --- |
 | **EXECUTE** | every changed block lifted with `vm` and actually run against stubs, so a `ReferenceError` inside it surfaces |
 | **RESOLVE** | every identifier the new code reads from an outer scope confirmed declared |
-| **WIRE** | settings, module registration, run-order slot and UI ids confirmed present and consistent — including that every one of the 67 `staticModules` constructors names something real |
+| **WIRE** | settings, module registration, run-order slot and UI ids confirmed present and consistent — including that every one of the 63 `staticModules` constructors names something real |
 | **NO GHOSTS** | each of the 12 deleted helpers confirmed to have no surviving reader |
 
 **And the checker is itself tested.** `ryn-changes-mutate.py` breaks the client
-ten different ways — heal presses once instead of per restore, `velocityTick`
+23 different ways — heal presses once instead of per restore, `velocityTick`
 dropped from the run order, a deleted helper called again, the Devtool span
-renamed, the `VelocityTick` class renamed while still registered — and requires
-the checker to go red on every one. It catches 10 of 10.
+renamed, the `VelocityTick` class renamed while still registered, `heal()`
+pressing food through the shame lock again, the food guard waiting for the
+window forever or answering twice in one tick, a spike tick module registered
+again — and requires the checker to go red on every one. It catches 23 of 23.
 
 That last one mattered: the first version of the class-existence check used
 `indexOf("class VelocityTick")`, which still matched after the class was renamed

@@ -154,9 +154,9 @@ class RynRule {
 }
 
 // ── RYN after the port ────────────────────────────────────────────────────
-// ryn/RYN_Client_v5.4.user.js:14265, transcribed the same way. If the port is
-// really novastorm's rule and nothing else, this must land on XRule's numbers
-// exactly — any guard left behind would show up as a smaller apple count.
+// ryn/RYN_Client_v5.4.user.js, AntiInsta.postTick, transcribed the same way.
+// The DECISION is novastorm's and nothing else — that is the point of the port,
+// and it is what this row has to show:
 //
 //     let totalDmgPot = EnemyManager.potentialDamage + EnemyManager.potentialSpikeDamage;
 //     if (totalDmgPot > 140) totalDmgPot = 140;
@@ -177,6 +177,38 @@ class RynPortedRule {
   }
 }
 
+// ── RYN as it stands now ──────────────────────────────────────────────────
+// The same decision, with two questions asked inside ModuleHandler.heal —
+// which is where every automatic food press in the client goes through, so they
+// apply to anti sync and anti smart tick as well:
+//
+//     if (myPlayer && myPlayer.shameActive) return;       // the 30s lock
+//     if (!this._foodIsShameSafe()) return;               // the 120ms window
+//
+// Neither changes WHICH ticks decide to heal — RynPortedRule.decide is called
+// here unchanged, and the rows prove it — only whether the press it asks for is
+// one the server would refuse or count against you.
+//
+// This is a transcription, like everything else in this file. auto-q.js lifts
+// _foodIsShameSafe out of the client and runs the real thing.
+class RynNowRule {
+  constructor() { this.heldTick = -1; this.freeTick = -1; }
+  _shameSafe(s) {
+    if (this.freeTick === s.tick) return true;
+    if (this.heldTick === s.tick) return false;
+    const lands = !s.hitAt ? Infinity : s.now - s.hitAt + s.ping;
+    if (lands >= 125 || this.heldTick === s.tick - 1) { this.freeTick = s.tick; return true; }
+    this.heldTick = s.tick;
+    return false;
+  }
+  decide(s) {
+    const want = RynPortedRule.prototype.decide.call(this, s);
+    if (!want) return 0;
+    if (s.shameActive) return 0;
+    return this._shameSafe(s) ? want : 0;
+  }
+}
+
 // ── the fight ─────────────────────────────────────────────────────────────
 function run(rule, script, ping, seconds) {
   const srv = new Server();
@@ -189,6 +221,9 @@ function run(rule, script, ping, seconds) {
     tick: 0, damageTick: -1, now: 0, ping,
     knownHealth: MAX_HP, knownShame: 0, shameActive: false,
     lastSeenHit: 0, dmgPot: 0,
+    // myPlayer.receivedDamage: stamped when a hit is seen, cleared the moment
+    // health is seen to rise — the same moment the server clears hitTime.
+    hitAt: null,
   };
 
   let apples = 0, packets = 0;
@@ -206,8 +241,9 @@ function run(rule, script, ping, seconds) {
     // echoes the client receives now (one half-trip behind)
     while (inbound.length && inbound[0].at <= now) {
       const e = inbound.shift();
+      if (e.health > st.knownHealth) st.hitAt = null;
       st.knownHealth = e.health; st.knownShame = e.shame; st.shameActive = e.shameActive;
-      if (e.hit) { st.damageTick = t + 1; st.lastSeenHit = now; }
+      if (e.hit) { st.damageTick = t + 1; st.lastSeenHit = now; st.hitAt = now; }
     }
     // the server queues this tick's state for the client
     inbound.push({ at: now + half, health: srv.health, shame: srv.shameCount,
@@ -256,11 +292,12 @@ console.log("autoheal — RYN v5.4 against X- Precision, same fight, same server
 console.log("  " + SECONDS + "s per row; the shame rule is the game's own, quoted at the top of this file\n");
 
 const blank = () => ({ apples: 0, packets: 0, wasted: 0, locks: 0, deaths: 0 });
-const totals = { "X-": blank(), "RYN (was)": blank(), "RYN (ported)": blank() };
+const totals = { "X-": blank(), "RYN (was)": blank(), "RYN (ported)": blank(), "RYN (now)": blank() };
 const CLIENTS = [
   ["X-", () => new XRule()],
   ["RYN (was)", () => new RynRule()],
   ["RYN (ported)", () => new RynPortedRule()],
+  ["RYN (now)", () => new RynNowRule()],
 ];
 const rowsByClient = {};
 
@@ -276,7 +313,7 @@ for (const [name, script] of Object.entries(SCRIPTS)) {
       a.apples += r.apples; a.packets += r.packets; a.wasted += r.wasted;
       a.locks += r.locks; a.deaths += r.deaths;
       (rowsByClient[label] = rowsByClient[label] || []).push(
-        [r.apples, r.packets, r.wasted, r.locks, r.deaths].join(","));
+        [r.apples, r.packets, r.wasted, r.shamed, r.locks, r.deaths].join(","));
       console.log("  " + pad(ping, 8) + pad(label, 15) + pad(r.apples, 9) + pad(r.packets, 10) +
         pad(r.wasted + " (" + r.waste.toFixed(0) + "%)", 11) + pad(r.shamed, 14) +
         pad(r.locks, 13) + r.deaths);
@@ -298,10 +335,43 @@ for (const [label] of CLIENTS) {
 console.log("\n  wasted = the apple reached the server at full health, or while shame-locked.");
 console.log("  Both cost " + PLACE_PACKETS + " packets and one food either way.");
 
-// The port's acceptance test: identical to X- on every row, or it is not
-// novastorm's rule.
-const same = rowsByClient["X-"].join("|") === rowsByClient["RYN (ported)"].join("|");
-console.log("\n  " + (same
-  ? "RYN (ported) matches X- on every row — the rule is novastorm's, with nothing on top"
-  : "RYN (ported) DIFFERS from X- — something is still guarding the heal"));
-process.exit(same ? 0 : 1);
+/* What these rows have to show, and what they deliberately do not.
+ *
+ * First: the port is still a port. "RYN (ported)" is novastorm's decision with
+ * nothing on top, so it must land on X- exactly, row for row. If it ever
+ * drifts, a guard has crept back into the DECISION, which is not where the two
+ * that shipped live.
+ *
+ * Second: what ships costs fewer shame locks and spends less food into a lock
+ * than the bare rule, on every row.
+ *
+ * What it does NOT have to do is send fewer apples. On the burst row it sends
+ * MORE: a press held one tick is one more tick of damage before the top-up, so
+ * `heal(100 - health)` asks for a bigger number. That is the same arithmetic on
+ * a lower figure, not a regression — and the row that matters, shame locks,
+ * still goes the right way. */
+const col = { apples: 0, packets: 1, wasted: 2, shamed: 3, locks: 4, deaths: 5 };
+const at = (label, i, c) => Number(rowsByClient[label][i].split(",")[col[c]]);
+const everyRow = (c, cmp) => rowsByClient["RYN (now)"].every((_, i) =>
+  cmp(at("RYN (now)", i, c), at("RYN (ported)", i, c)));
+
+const checks = [
+  ["the ported rule is still exactly X-'s, row for row",
+   rowsByClient["X-"].join("|") === rowsByClient["RYN (ported)"].join("|")],
+  ["what ships never takes more shame locks than the bare rule",
+   everyRow("locks", (a, b) => a <= b)],
+  ["and never spends more food into a lock",
+   everyRow("shamed", (a, b) => a <= b)],
+  ["and takes strictly fewer locks somewhere, so the guard is not inert",
+   rowsByClient["RYN (now)"].some((_, i) => at("RYN (now)", i, "locks") < at("RYN (ported)", i, "locks"))],
+];
+let bad = 0;
+console.log("");
+for (const [label, ok] of checks) {
+  if (!ok) bad++;
+  console.log("  " + (ok ? "ok  " : "FAIL") + "  " + label);
+}
+console.log("\n  " + (bad === 0
+  ? "the decision is novastorm's; the guard only refuses presses the server would not have counted for you"
+  : bad + " of the above does not hold"));
+process.exit(bad === 0 ? 0 : 1);

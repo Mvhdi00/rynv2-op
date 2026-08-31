@@ -179,47 +179,6 @@ check("execute", "Automill places the whole trio or nothing", () => {
   return [true, "3 on clean ground, 0 when any one spot is blocked"];
 });
 
-// The spike tick reporter — new code, no duel.
-check("execute", "SpikeTickController._report formats and reaches the UI", () => {
-  const cls = lift("class SpikeTickController\\s*\\{", "SpikeTickController");
-  let painted = null;
-  const sandbox = {
-    Math, Object,
-    GameUI_default: { updateSpikeTick: (s) => { painted = s; } },
-    SPIKE_TICK_PHASE: { IDLE: 0, PREPARE: 1, VALIDATE: 2, REPLAN: 3, EXECUTE: 4, COMPLETE: 5, CANCEL: 6 },
-    RPE_INTENT_LIFETIME: 6, RPE_PRIORITY: {}, RPE_INTENT: {}, PlacementIntent: {},
-    SPIKE_TICK_REPLANS: 2, SPIKE_TICK_SELF_DRIFT: 45, SPIKE_TICK_TARGET_DRIFT: 70,
-    RPE_PLACE_PACKETS: 5,
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(cls + "\nthis.make = (c) => new SpikeTickController(c);", sandbox);
-  const mod = sandbox.make({ isOwner: true, _ModuleHandler: { tickCount: 1 } });
-  mod.stats.armed = 47;
-  mod.stats.executed = 3;
-  mod._report("outOfReach");
-  mod._report("outOfReach");
-  mod._report("noGround");
-  if (painted === null) return [false, "nothing reached the UI"];
-  if (!/^3\/47/.test(painted)) return [false, "expected to open with 3/47, got: " + painted];
-  if (!/outOfReach 2/.test(painted)) return [false, "outcome tally missing: " + painted];
-  return [true, painted];
-});
-
-check("execute", "_report stays silent for a non-owner client", () => {
-  const cls = lift("class SpikeTickController\\s*\\{", "SpikeTickController");
-  let painted = null;
-  const sandbox = {
-    Math, Object,
-    GameUI_default: { updateSpikeTick: (s) => { painted = s; } },
-    SPIKE_TICK_PHASE: { IDLE: 0, CANCEL: 6 },
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(cls + "\nthis.make = (c) => new SpikeTickController(c);", sandbox);
-  sandbox.make({ isOwner: false, _ModuleHandler: { tickCount: 1 } })._report("x");
-  return painted === null ? [true, "silent, as bots must be"]
-                          : [false, "a bot painted the owner's UI"];
-});
-
 check("execute", "StatsManager.velocityTickTimes accumulates and paints", () => {
   const cls = lift("class StatsManager\\s*\\{", "StatsManager");
   let painted = null;
@@ -254,7 +213,7 @@ const OUTER = [
   ["inRange", "const inRange"],
   ["ANTI_INSTA_DMG_CAP", "const ANTI_INSTA_DMG_CAP"],
   ["ANTI_INSTA_SCUBA_BIAS", "const ANTI_INSTA_SCUBA_BIAS"],
-  ["SPIKE_TICK_PHASE", "const SPIKE_TICK_PHASE"],
+  ["SHAME_SAFE_WINDOW", "const SHAME_SAFE_WINDOW"],
 ];
 for (const [name, decl] of OUTER) {
   check("resolve", name + " is declared", () =>
@@ -306,16 +265,6 @@ check("wire", "velocityTick runs in the module loop, after autoPush", () => {
   return [true, "slot " + i + " of " + order.length + ", right after autoPush"];
 });
 
-check("wire", "spikeTickController still runs after the three spike tick modules", () => {
-  const m = /this\.modules = \[([^\]]+)\]/.exec(src);
-  const order = m[1].split(",").map(s => s.trim().replace("this.staticModules.", ""));
-  const ctrl = order.indexOf("spikeTickController");
-  for (const n of ["spikeTickBreak", "spikeTickNear", "spikeTickTrap"]) {
-    if (order.indexOf(n) > ctrl) return [false, n + " runs after the controller — its arm would be a tick late"];
-  }
-  return [true, "controller at " + ctrl + ", after all three"];
-});
-
 for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "false"],
                            ["_botNameAll", '""'], ["_botNumberNames", "false"],
                            ["_knockbackTick", "false"],
@@ -328,7 +277,7 @@ for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "fa
 
 for (const id of ["_velocityTick", "_velocityTickTrap", "_knockbackTick",
                   "_botNameAll", "_botNumberNames",
-                  "_velocityTickTimes", "_knockbackTickTimes", "_spikeTickOutcome"]) {
+                  "_velocityTickTimes", "_knockbackTickTimes"]) {
   check("wire", id + " has a UI element", () => {
     const asInput = src.includes('id=\\"' + id + '\\" type=\\"checkbox\\"');
     const asSpan = src.includes('id=\\"' + id + '\\" class=\\"text-value\\"');
@@ -346,13 +295,6 @@ check("wire", "the checkbox binder picks settings up by id", () =>
     ? [true, "generic id binder present, so _velocityTick binds itself"]
     : [false, "no generic binder — the new checkbox would be inert"]);
 
-check("wire", "updateSpikeTick targets the id the Devtool row uses", () => {
-  const m = /updateSpikeTick\(state\) \{[\s\S]{0,160}?querySelector\("#([A-Za-z_]+)"\)/.exec(src);
-  if (!m) return [false, "updateSpikeTick not found or does not query"];
-  return m[1] === "_spikeTickOutcome" ? [true, "queries #" + m[1]]
-                                     : [false, "queries #" + m[1] + ", row is #_spikeTickOutcome"];
-});
-
 /* Blood Wings on a stationary player was an explicit branch; the check is that
  * it is gone from THAT branch without disturbing the two legitimate ones (bull
  * helmet active, and the _cowboyWhenSafe toggle). */
@@ -365,26 +307,6 @@ check("wire", "standing still no longer forces Blood Wings", () => {
   if (remaining !== 2)
     return [false, remaining + " useBloodWings returns left, expected 2 (bullActive, cowboyWhenSafe)"];
   return [true, "idle branch gone, bullActive and cowboyWhenSafe kept"];
-});
-
-check("wire", "the spike tick takes yes for an answer", () => {
-  const cls = lift("class SpikeTickController\\s*\\{", "SpikeTickController");
-  if (!/_alreadyCovered\(\)/.test(cls)) return [false, "no _alreadyCovered"];
-  if (!/if \(this\._alreadyCovered\(\)\)/.test(cls))
-    return [false, "noGround does not consult it"];
-  if (!/lastReason = "covered"/.test(cls)) return [false, "the covered outcome is not named"];
-  if (!/SPIKE_TICK_PHASE\.COMPLETE;\n              return this\.postTick\(\);/.test(cls))
-    return [false, "covered does not complete — it would still read as a failure"];
-  return [true, "an existing spike completes the tick instead of cancelling it"];
-});
-
-/* The acquire walk takes ground from nobody. If it ever starts preempting,
- * that is the three placers being damaged, which is the thing not to do. */
-check("wire", "the spike tick never preempts the other placers", () => {
-  const cls = lift("class SpikeTickController\\s*\\{", "SpikeTickController");
-  if (/\.preempt\(/.test(cls)) return [false, "it calls preempt — that takes ground from a placer"];
-  if (!/availableGround\(c\)/.test(cls)) return [false, "acquire does not check availability"];
-  return [true, "checks availability, never preempts"];
 });
 
 check("wire", "one bot name reaches every bot row", () => {
@@ -412,6 +334,9 @@ check("wire", "automill reports what it sent", () => {
   if (!/this\._report\(3\);/.test(cls)) return [false, "the trio does not report"];
   if (!/updateAutomill/.test(cls)) return [false, "_report does not reach the UI"];
   if (!src.includes('id=\\"_automillSent\\"')) return [false, "no Devtool row carries #_automillSent"];
+  const q = /updateAutomill\(state\) \{[\s\S]{0,160}?querySelector\("#([A-Za-z_]+)"\)/.exec(src);
+  if (!q) return [false, "updateAutomill not found or does not query"];
+  if (q[1] !== "_automillSent") return [false, "paints #" + q[1] + ", row is #_automillSent"];
   return [true, "rows and mills sent, painted to #_automillSent"];
 });
 
@@ -462,12 +387,50 @@ check("wire", "the trap branch only counts traps that are mine", () => {
   return [true, "own toggle, and ownership checked"];
 });
 
-check("wire", "_report is called on both outcomes, placed and cancelled", () => {
-  const placed = src.includes('this._report("placed")');
-  const cancelled = src.includes('this._report(this.lastReason || "cancelled")');
-  if (!placed) return [false, "never reports a success — the ratio would only ever fall"];
-  if (!cancelled) return [false, "never reports a stand-down"];
-  return [true, "both arms report"];
+/* The food guard, lifted and actually run rather than pattern-matched. Three
+ * behaviours, and all three matter: it holds the first press inside the
+ * window, it gives up holding after one tick so a fight with no gap in it
+ * cannot starve you, and it answers once per tick so a heal asking for four
+ * presses gets four or none. */
+check("execute", "_foodIsShameSafe holds once, then gives way", () => {
+  const m = /\n {4}_foodIsShameSafe\(\) \{/.exec(src);
+  if (!m) return [false, "the method is gone"];
+  const open = src.indexOf("{", m.index + m[0].length - 1);
+  let d = 0, body = null;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") d++;
+    else if (src[i] === "}") { d--; if (!d) { body = src.slice(m.index + 1, i + 1); break; } }
+  }
+  const box = { SHAME_SAFE_WINDOW: 125, Infinity, Date: { now: () => box.__now } };
+  vm.createContext(box);
+  vm.runInContext("this.MH = { tickCount: 0, _foodHeldTick: -1, _foodFreeTick: -1," +
+    " client: { myPlayer: { receivedDamage: null }, SocketManager: { pong: 30 } }," +
+    body + " };", box);
+  const MH = box.MH;
+
+  box.__now = 1000;
+  if (MH._foodIsShameSafe() !== true) return [false, "held a press with no hit behind it"];
+
+  MH.tickCount = 1; box.__now = 1050; MH.client.myPlayer.receivedDamage = 1040;
+  if (MH._foodIsShameSafe() !== false) return [false, "did not hold a press 10ms after a hit"];
+  if (MH._foodIsShameSafe() !== false) return [false, "changed its mind inside one tick"];
+  // Date.now() moves while a tick runs, and a heal asking for four presses asks
+  // four times. If the window opens between two of those calls the tick must
+  // still answer the way it already answered, or the heal goes out in pieces.
+  box.__now = 1400;
+  if (MH._foodIsShameSafe() !== false) return [false, "let a press through mid-tick after holding the tick"];
+  box.__now = 1050;
+
+  MH.tickCount = 2; box.__now = 1060;
+  if (MH._foodIsShameSafe() !== true) return [false, "held for a second tick — that is how you starve"];
+  if (MH._foodIsShameSafe() !== true) return [false, "released only the first press of the tick"];
+
+  MH.tickCount = 3; box.__now = 1400;
+  if (MH._foodIsShameSafe() !== true) return [false, "held a press well outside the window"];
+
+  MH.tickCount = 4; box.__now = 1410; MH.client.myPlayer.receivedDamage = null;
+  if (MH._foodIsShameSafe() !== true) return [false, "held after the hit stamp was cleared"];
+  return [true, "holds one tick, releases the whole tick, free once the window is past"];
 });
 
 // ── 4. NO GHOSTS ──────────────────────────────────────────────────────────
@@ -509,14 +472,48 @@ check("no ghosts", "AntiSpikePush no longer reads EnemyManager.pushingOnSpike", 
   return code.includes("pushingOnSpike") ? [false, "still reads it"] : [true, "clean"];
 });
 
-check("no ghosts", "heal() is a plain press with no queue or budget", () => {
+check("no ghosts", "heal() carries no queue and no packet budget", () => {
   const m = /\n    heal\(\) \{([\s\S]*?)\n    \}/.exec(src);
   if (!m) return [false, "heal() not found"];
   const body = m[1];
-  for (const bad of ["_healBudgetLeft", "_shameHealQueue", "receivedDamage"]) {
+  // The old deferral queue and budget are still gone. What is back is two
+  // questions asked inline, both of them about the server's shame rule.
+  for (const bad of ["_healBudgetLeft", "_shameHealQueue", "packetCount"]) {
     if (body.includes(bad)) return [false, "still references " + bad];
   }
-  return [true, "selectItem / attack / whichWeapon, unconditional"];
+  if (!/if \(myPlayer && myPlayer\.shameActive\) \{\s*\n\s*return;/.test(body))
+    return [false, "does not stand down during the 30s lock"];
+  if (!/if \(!this\._foodIsShameSafe\(\)\) \{\s*\n\s*return;/.test(body))
+    return [false, "does not consult the shame window"];
+  if (!/this\.selectItem\(2\);[\s\S]*this\.attack\(null, 1\);/.test(body))
+    return [false, "no longer sends the food"];
+  return [true, "lock, window, then the same three sends"];
+});
+
+/* Every spike tick is gone: three modules, the controller, the helpers only
+ * they called, the constants, the toggles and the Devtool row. This is the one
+ * check that would notice a fragment left behind anywhere in the file, in code
+ * or in a comment. */
+check("no ghosts", "no spike tick survives anywhere in the client", () => {
+  const hits = [];
+  src.split("\n").forEach((line, i) => {
+    // AutoPlacer's own Luna scoring term is called canSpikeTick and is not one
+    // of these modules; the stand-off set it feeds is named for them but lists
+    // only the syncs and traps that still exist.
+    const l = line.replace(/canSpikeTick/g, "").replace(/LUNA_SPIKE_TICK_MODULES/g, "")
+                  .replace(/lunaSpikeTickBusy/g, "");
+    if (/spikeTick|SpikeTick|SPIKE_TICK/.test(l)) hits.push((i + 1) + ": " + l.trim().slice(0, 60));
+  });
+  return hits.length === 0 ? [true, "nothing left"] : [false, hits.length + " left, first at " + hits[0]];
+});
+
+check("no ghosts", "the stand-off set no longer names modules that do not exist", () => {
+  const m = /const LUNA_SPIKE_TICK_MODULES = new Set\(\[([^\]]+)\]\)/.exec(src);
+  if (!m) return [false, "the set is gone — autoPlacer would stop standing off"];
+  const names = m[1].split(",").map(x => x.trim().replace(/"/g, ""));
+  const dead = names.filter(n => !src.includes('moduleName="' + n + '"'));
+  return dead.length === 0 ? [true, names.length + " names, all real modules"]
+                           : [false, "names a module that no longer exists: " + dead.join(", ")];
 });
 
 // ── report ────────────────────────────────────────────────────────────────

@@ -473,23 +473,74 @@ things in it are easy to get backwards:
   A client that does not track the lock can hold itself in it.
 
 ```
-  trade, a hit every 5 ticks
-  ping    client         apples   packets   wasted     shame locks
-  30      X-             288      1152      144 (50%)  0
-  30      RYN (was)      144      576       0 (0%)     0
-  30      RYN (ported)   288      1152      144 (50%)  0
+  totals across every row
+  client         apples   packets   wasted      shame locks  deaths
+  X-             2676     10704     1815 (68%)  30           108
+  RYN (was)      1230     4920      300 (24%)   6            96
+  RYN (ported)   2676     10704     1815 (68%)  30           108
+  RYN (now)      1698     6792      860 (51%)   2            112
 ```
 
-The 50% is one mechanism: X- computes `heal(100 - myPlayer.health)` from the
+The 68% is one mechanism: X- computes `heal(100 - myPlayer.health)` from the
 server's last echo and nothing subtracts what is already on the wire, so the
 same missing health is paid for on every tick of the round trip. RYN's
 `_healsInFlight` used to subtract it.
 
-The third row is `ryn/RYN_Client_v5.4.user.js` after its autoheal was replaced
-with novastorm's rule. Its acceptance test is that it becomes
-**indistinguishable from X- on every row**, since both are now the same rule —
-the file exits non-zero if it is not, so a guard left behind anywhere would
-fail the run rather than pass quietly.
+`RYN (ported)` is the client after its autoheal was replaced with novastorm's
+rule, and its acceptance test is that the **decision** is indistinguishable from
+X- on every row — the file exits non-zero otherwise, so a guard creeping back
+into the decision fails the run rather than passing quietly. `RYN (now)` is the
+same decision with the two shame guards from `auto-q.js` in
+`ModuleHandler.heal()`; it is asserted to take no more locks and spend no more
+food into a lock than the bare rule, on every row.
+
+It is **not** asserted to send fewer apples, and on the burst fight it sends
+more: a press held one tick is one more tick of damage before the top-up, so
+`heal(100 - health)` asks for a bigger number. Same arithmetic, lower figure.
+
+### `auto-q.js`
+
+Why the ported autoheal reads as Q being held down, and which guard fixes it.
+Seven candidates over three fights and three pings, against the game's own shame
+rule — the same server code `heal-duel.js` quotes.
+
+The row marked `<-` is not a description of the client, it **is** the client:
+`ModuleHandler._foodIsShameSafe` is lifted out of the file with `vm` and asked
+the same question on the same ticks, and the bench refuses to run if the
+client's `SHAME_SAFE_WINDOW` has moved or `heal()` has stopped standing down
+during the lock.
+
+```
+  guards                   apples   refused   judged +1  judged -2  locks   deaths
+  v5.4 as shipped          2676     1095      294        231        30      108
+  lock                     1716     30        102        231        6       96
+  window, bypass           2676     1095      294        231        30      108
+  lock + wait forever      1628     10        34         267        2       112
+  lock + wait unless held  1716     30        102        231        6       96
+  RYN v5.4 now  <-         1698     10        48         267        2       112
+```
+
+Four of the seven rows are there because they did **not** work, which is the
+point of keeping them:
+
+* `window, bypass` — let an emergency press through — is inert, identical to
+  shipped everywhere. The shaming press *is* the emergency press. This was the
+  first design, and the table killed it.
+* `lock + wait forever` starves: under damage every tick the window never opens,
+  and at ping 30 and 100 it never eats at all.
+* `lock + wait unless held` — skip the wait when hits land on back-to-back ticks
+  — collapses back to the lock guard, because a burst *is* three consecutive
+  ticks of damage.
+* `lock` alone is safe and good but leaves the counting-up untouched.
+
+The cost is printed rather than buried: deaths go up by 4, all of them on the
+third fight — 12 damage every single tick with no gap, where every candidate
+dies about once a second. On the two fights anyone survives, deaths are
+unchanged and shame is zero at ping 30 and 100.
+
+Five mutations of the client's own method were run against this bench — drop the
+one-tick cap, invert the window test, never hold, stop standing down during the
+lock, widen the window to a second — and it goes red on all five.
 
 ### `antipush-duel.js`
 
@@ -562,46 +613,30 @@ at **every** one: the coordinate error is correlated between the two points
 being compared, so it cancels. Worth keeping — it is a natural theory, and this
 is the thing that settles it.
 
-### `spike-tick-conflict.js`
+### `spike-tick-*.js` — deleted with the feature
 
-Why a spike tick swings and no spike lands, with auto place / preplace /
-replace suspected. Drives the controller against the **real** `PlacementLedger`
-and `ConflictResolver`, with those placers reserving ground first exactly as
-`_record` does on every send.
+`spike-tick-conflict.js`, `spike-tick-trap.js` and `spike-tick-angles.js` are
+gone, because every spike tick is gone from the client. Three findings from them
+are worth keeping, because they are the reason removal was the right answer
+rather than another fix:
 
-Two things it establishes. First the mechanism: a sent placement leaves a
-**hard** reservation, and `blocked()` returns on `!e.soft` before priority is
-ever read — so the spike tick's SYNC (80) cannot outrank ENGAGEMENT (40),
-ANTICIPATION (50) or RECOVERY (60), and REPLAN re-picks the same taken angle
-until it cancels.
+* A sent placement leaves a **hard** reservation, and `PlacementLedger.blocked()`
+  returns on `!e.soft` **before priority is read**. So a spike tick's SYNC (80)
+  could never outrank auto place's ENGAGEMENT (40), preplace's ANTICIPATION (50)
+  or replace's RECOVERY (60), and REPLAN re-picked the same taken angle until it
+  cancelled. Nothing short of changing the three placers could fix that.
+* A spike **reaches** the target only from within ~±60° of the aim, but can only
+  be **placed** ≥76.7° from a spike already on the ring. Disjoint at every
+  distance, so a second spike that also reaches does not exist — no angle search
+  had anything to find.
+* The angle it picked was never the problem: `angles[0]`, the best of the three
+  offered, and the ceiling with `contactAngles` added all came out at 64.2%,
+  because `anglesFor` sorts by proximity to the aim and the contact window is
+  centred on the aim.
 
-Second, and this is what settles the fix: a spike reaches the target only from
-within ~±60° of the aim, but can only be *placed* ≥76.7° from a spike already
-on the ring. **Disjoint at every distance** — so a second spike that also
-reaches does not exist, and no angle search can find one. The answer is to
-recognise the spike already standing rather than fight for ground.
-
-One harness note worth keeping: `lastReason` cannot be read after `postTick`,
-because `reset()` clears it on the way out of COMPLETE and CANCEL. The outcome
-is taken from what `_report` painted — the same string the Devtool row shows.
-
-### `spike-tick-trap.js`
-
-Drives RYN's spike tick (trap) over **both** ticks of the combo, in the order
-`ModuleHandler` runs the modules. Every helper and all three classes —
-`spikeTickTarget`, `spikeTickHit`, `SpikeTickTrap`, `SpikeTickBreak`,
-`SpikeTickController` and the rest — are lifted from the file; only the world is
-staged.
-
-It answers a reported "spike tick doesn't place on a trapped enemy" with a named
-gate rather than a guess. The combo is sound (hammer on tick 1, spike on tick
-2); what stops it is `spikeTickNearSpike`, which cancels **every** spike tick
-variant whenever an enemy spike is within `spike.scale + min(primaryRange, 75)`
-= 124 of you, and is armed by `_autobreak` being on. Turning autobreak off in
-the same bench makes the spike appear.
-
-Its row C removes one precondition at a time so the blocking gate is named
-rather than inferred — the same shape as the gate tables in the duels.
+One harness note that outlived them: `lastReason` cannot be read after
+`postTick`, because `reset()` clears it on the way out of COMPLETE and CANCEL.
+Read what `_report` painted instead — the same string the Devtool row shows.
 
 ### `ryn-changes-check.js` and `ryn-changes-mutate.py`
 
@@ -610,13 +645,14 @@ cannot be booted here, so `node --check` is the only whole-file check available
 and it validates syntax only — it will not notice a call to a deleted helper, an
 identifier that resolves nowhere, or a UI id no element carries.
 
-42 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
+58 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
 actually run against stubs), **RESOLVE** (outer identifiers declared),
-**WIRE** (settings, registration, run order, UI ids — including that all 67
+**WIRE** (settings, registration, run order, UI ids — including that all 63
 `staticModules` constructors name something real), **NO GHOSTS** (the 12 deleted
-helpers have no surviving reader).
+helpers have no surviving reader, plus a sweep confirming no spike tick fragment
+survives anywhere in the file, in code or comment).
 
-`ryn-changes-mutate.py` is the check on the check: it breaks the client ten ways
+`ryn-changes-mutate.py` is the check on the check: it breaks the client 23 ways
 and requires a red result each time. Two real holes came out of it and are worth
 knowing about, because both are easy to reproduce elsewhere:
 
@@ -626,23 +662,6 @@ knowing about, because both are easy to reproduce elsewhere:
 * The original `check()` treated any returned string as a pass-with-note, so a
   check whose failure path returned `"still read somewhere"` printed that
   message next to an `ok`. The contract is now `true` or `[pass, note]`.
-
-### `spike-tick-angles.js`
-
-Asks whether RYN's spike ticks fail because of the angle they pick. Lifts
-`GeometrySolver`, `CandidateGenerator` and `anglesFor` out of the client with
-`vm`, so the geometry is the shipped geometry; only `_acquire` step 4 and
-`_validate`'s reach test are re-stated, and both are quoted in full at the top.
-
-**The answer is no, and that is the useful part.** Three columns — what the
-controller takes (`angles[0]`), the best of the three it already asked for, and
-the ceiling with the engine's own `contactAngles` added — come out identical at
-64.2%. `anglesFor` sorts by proximity to the aim and the contact window is
-centred on the aim, so the nearest offered angle is already the best one.
-
-This file exists as a record of two hypotheses that were measured and
-falsified before anything was changed. The rate tracks how crowded your own
-ring is (100% empty, ~23–36% with four spikes placed), which is real geometry.
 
 ### `bot-names.js`
 
