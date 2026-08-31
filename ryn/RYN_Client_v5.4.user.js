@@ -15507,24 +15507,42 @@ window.grbtp = 35;
       const offset = Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2;
       const leftAngle = angle - offset;
       const rightAngle = angle + offset;
-      // Novastorm gates the trio on the centre mill being placeable, then tests
-      // each of the three on its own and places the ones that fit. Requiring all
-      // three, as this did, meant one rock behind you cancelled the whole thing.
+      // All three, or none — Glotus's rule, and the reason the wall comes out
+      // straight.
+      //
+      // This used to gate on the centre and then place whichever of the three
+      // fit, which is novastorm's shape (13805) and was defended here on the
+      // grounds that requiring all three means one rock behind you cancels the
+      // row. That is true and it is the smaller problem. Placing a partial row
+      // is what produces a wall of one mill here, two there and three
+      // somewhere else — and each straggler becomes a blocker for the next
+      // tick's trio, so the raggedness compounds. Measured over 60 ticks of
+      // walking past scattered rocks, 60.7% of the ticks that placed anything
+      // placed a partial row (harness/automill-shape.js).
+      //
+      // Losing the row to a rock costs almost nothing by comparison: automill
+      // runs every tick, and one tick later you are ~25 units further on, where
+      // the trio usually fits. Fewer mills, all of them in straight rows.
+      //
       // The offset stays RYN's exact solve rather than novastorm's
-      // `toRad(scale + scale / 2)`, which is a degrees-for-radians approximation
-      // that only lands near the right answer for a windmill's scale.
-      if (!this.canPlaceWindmill(angle)) {
+      // `toRad(scale + scale / 2)`, which is a degrees-for-radians
+      // approximation that only lands near the right answer for a windmill's
+      // scale. Glotus uses the same exact solve.
+      if (!this.canPlaceWindmill(angle) ||
+          !this.canPlaceWindmill(leftAngle) ||
+          !this.canPlaceWindmill(rightAngle)) {
         return;
       }
+      // The budget is checked for the whole trio rather than per mill: sending
+      // two of three because the packet counter ran out is the same ragged row
+      // by another route.
       const budget = ModuleHandler.packetLimit - ModuleHandler.packetCount;
-      let spend = Math.floor(budget / AUTOMILL_PLACE_COST);
-      for (const a of [ angle, leftAngle, rightAngle ]) {
-        if (spend <= 0) break;
-        if (!myPlayer.canPlace(5)) break;
-        if (!this.canPlaceWindmill(a)) continue;
-        this.placeWindmill(a);
-        spend--;
+      if (budget < 3 * AUTOMILL_PLACE_COST) {
+        return;
       }
+      this.placeWindmill(angle);
+      this.placeWindmill(leftAngle);
+      this.placeWindmill(rightAngle);
     }
   }
   const Automill_default = Automill;

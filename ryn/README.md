@@ -480,6 +480,67 @@ leaving a trap), and `spikeTickCounterThreat`.
 
 ---
 
+## Automill — the ragged wall
+
+Reported as building one mill in one place, two in another, three somewhere
+else. It is not a heading bug and it is not the geometry: **it is the policy for
+when one of the three does not fit.**
+
+The trio spacing is identical in RYN and Glotus, to the character:
+
+```js
+const offset = Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2;
+```
+
+The whole difference was the next few lines:
+
+| | |
+| --- | --- |
+| **Glotus** | `if (canPlace(a) && canPlace(l) && canPlace(r)) { place(a); place(l); place(r); }` — all three, or none |
+| **RYN (was)** | gate on the centre, then `for (...) { if (!canPlace(a)) continue; place(a); }` — whatever fits |
+
+RYN's was novastorm's shape (13805), and the comment defended it: requiring all
+three means one rock behind you cancels the row. True, and it is the smaller
+problem — because a partial row is exactly a wall of 1 here, 2 there and 3
+somewhere else, **and each straggler becomes a blocker for the next tick's
+trio, so the raggedness compounds.**
+
+`node harness/automill-shape.js` walks a player 60 ticks past scattered rocks
+under both policies, adding each mill to the world as it lands:
+
+```
+  policy                      mills total   placing ticks   uneven
+  whatever fits (RYN was)     3218          1423            60.7%
+  all three or none (Glotus)  1854          618             0.0%
+```
+
+**60.7% of the ticks that placed anything placed a partial row.** That is the
+symptom, measured.
+
+Now Glotus's rule, plus one thing Glotus does not do: the packet budget is
+checked for the whole trio rather than per mill, since sending two of three
+because the counter ran out is the same ragged row by another route.
+
+Losing a row to a rock costs little — automill runs every tick, and one tick
+later you are ~25 units further on, where the trio usually fits. Fewer mills,
+all of them in straight rows.
+
+### A wrong turn worth recording
+
+The first theory was floating point. The spacing solve is exact —
+`2·R·sin(asin(r/R)) = 2r` for any R — so the mills sit *exactly* touching and
+the `9e-13` buys about 8.8e-13 of daylight, which is the same order as the
+rounding error in `cos(θ)·R`. That predicts a heading-dependent count, which
+matched the report closely.
+
+It is wrong. `automill-spacing.js` sweeps all 360 headings through the client's
+real `PlacementLedger` and gets **three mills at every one** — the coordinate
+error is correlated between the two points being compared, so it cancels. The
+file is kept because the theory is a natural one to have and the sweep is the
+thing that settles it.
+
+---
+
 ## Verifying the whole set
 
 ```

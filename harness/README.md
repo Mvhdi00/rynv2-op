@@ -510,6 +510,32 @@ does fire and flips each gate on its own — every flip must turn **both** clien
 off, which is what proves each gate is carrying weight on both sides rather than
 being absent from both.
 
+### `automill-shape.js` and `automill-spacing.js`
+
+`automill-shape.js` answers "why does automill build a ragged wall". It walks a
+player 60 ticks past scattered rocks under both placement policies, adding each
+mill to the world as it lands so stragglers block the next trio the way they do
+in the game:
+
+```
+  policy                      mills total   placing ticks   uneven
+  whatever fits (RYN was)     3218          1423            60.7%
+  all three or none (Glotus)  1854          618             0.0%
+```
+
+The trio *geometry* is identical between the clients; the difference is only
+what happens when one of the three does not fit.
+
+`automill-spacing.js` is the wrong turn, kept on purpose. The first theory was
+floating point: the spacing solve is exact — `2·R·sin(asin(r/R)) = 2r` for any
+R — so the mills sit *exactly* touching, and the `9e-13` epsilon buys ~8.8e-13
+of daylight, the same order as the rounding error in `cos(θ)·R`. That predicts
+a heading-dependent count, which matched the report almost too well. Sweeping
+all 360 headings through the client's real `PlacementLedger` gives three mills
+at **every** one: the coordinate error is correlated between the two points
+being compared, so it cancels. Worth keeping — it is a natural theory, and this
+is the thing that settles it.
+
 ### `spike-tick-trap.js`
 
 Drives RYN's spike tick (trap) over **both** ticks of the combo, in the order

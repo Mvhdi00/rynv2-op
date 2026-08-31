@@ -129,6 +129,55 @@ check("execute", "AntiInsta.postTick declines at full health", () => {
                      : [false, "healed " + heals + " times at full health"];
 });
 
+/* Automill. The reported symptom was a ragged wall — one mill in one place,
+ * three in another — and the cause was placing whichever of the trio fit. This
+ * runs the real module and requires all-or-nothing: with one spot blocked it
+ * must place ZERO, not two. */
+check("execute", "Automill places the whole trio or nothing", () => {
+  const cls = lift("class Automill\\s*\\{", "Automill");
+  const sandbox = {
+    Math, Object,
+    Settings_default: { _automill: true },
+    Items: { 10: { id: 10, scale: 45, placeOffset: 5 } },
+    AUTOMILL_PLACE_COST: 5,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(cls + "\nthis.make = (c) => new Automill(c);", sandbox);
+
+  const run = (blockedIndex) => {
+    const placed = [];
+    let seen = 0;
+    const client = {
+      isOwner: true,
+      _ModuleHandler: {
+        attacking: false, placedOnce: false, reverse_move_dir: 0.7,
+        packetLimit: 119, packetCount: 0,
+        placeAngles: [ null, [] ],
+        requestPlace: (t, a) => placed.push(a),
+      },
+      myPlayer: {
+        isTrapped: false,
+        canPlace: () => true,
+        getItemByType: () => 10,
+        getItemPlaceScale: () => 85,
+        // canPlaceObject is asked about each of the three in order; refuse the
+        // nominated one.
+        canPlaceObject: () => (seen++ !== blockedIndex),
+      },
+      EnemyManager: { nearestTrap: null },
+    };
+    sandbox.make(client).postTick();
+    return placed.length;
+  };
+
+  if (run(-1) !== 3) return [false, "clean ground placed " + run(-1) + ", expected 3"];
+  for (const i of [0, 1, 2]) {
+    const n = run(i);
+    if (n !== 0) return [false, "with spot " + i + " blocked it placed " + n + ", expected 0"];
+  }
+  return [true, "3 on clean ground, 0 when any one spot is blocked"];
+});
+
 // The spike tick reporter — new code, no duel.
 check("execute", "SpikeTickController._report formats and reaches the UI", () => {
   const cls = lift("class SpikeTickController\\s*\\{", "SpikeTickController");
