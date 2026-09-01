@@ -276,6 +276,35 @@ window question asks the engine how much damage can actually land inside the
 wait, so an exchange whose next hit is three ticks away is answered with a `-2`
 instead of a `+1`.
 
+## Predictive defense
+
+Module 5 acts on the tick *before* the bar moves. Motion prediction is not
+rebuilt: the placement engine's `TargetMotion` already does samples, velocity,
+acceleration, heading shift, stability, `predict(ticks)` with confidence and
+`intercept()`, so the engine borrows that **class** and constructs a private
+instance — same code, separate tracks, nothing written into another system's
+state. Without the placement engine it falls back to the linear extrapolation
+every `Entity` already carries.
+
+It forecasts over 6 ticks from four sources — a projectile already in the air,
+an enemy whose course enters weapon reach, someone already in reach, and the
+fixed-period DoT tick — and publishes incoming damage, timing, expected health,
+expected shame delta, threat duration and confidence.
+
+Three rules keep it from burning food:
+
+1. **A prediction never pays a shame charge.** A charged press is for damage
+   that already landed; this hasn't. Not free? Wait — the hit isn't here yet.
+2. **HIGH acts, MEDIUM acts on consequence, LOW never acts.**
+3. **Compare against the floor at impact, not the floor now.**
+
+Predictions are cached and thrown away by named event —
+`target-changed` · `enemy-turned` · `enemy-stopped` (edge-triggered, so standing
+still doesn't rebuild every tick) · `projectile-changed` · `collision-changed` ·
+`player-moved` · `threat-gone` — with the enemy and projectile reads shared with
+the threat engine rather than gathered twice. A still field serves 35 of 40
+ticks from cache.
+
 Combat, Auto Place / Preplace / Replace, Spike Tick, Safe Soldier, Anti Smart
 Tick, Auto Mills and Velocity Tick are **read only** — for the threat numbers,
 the packet budget and the tick claim. Nothing in them is modified or duplicated.
@@ -285,7 +314,7 @@ the packet budget and the tick claim. Nothing in them is modified or duplicated.
 `tools/sim-autoheal.js` runs the engine against the game's own rules
 transcribed — `buildItem`'s arithmetic, `changeHealth`'s hit stamp and
 full-health refusal, the one-second regen counter, `canBuild`'s resource gate —
-with latency modelled on both legs. Over nineteen scenarios: no 30 s lock is
+with latency modelled on both legs. Over twenty-two scenarios: no 30 s lock is
 ever armed, nothing is sent while one is on, the count never passes 7, every
 scenario that starts in debt ends at 0, and most hold shame at 0 for 100 % of
 ticks — including a 90 dps pressure run and a 250 ms ping run. A threat that

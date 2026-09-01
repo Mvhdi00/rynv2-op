@@ -248,6 +248,54 @@ check(
   !/detect\(ctx\)[\s\S]{0,4000}?this\.client/.test(ENGINE_SRC)
 );
 
+/* Predictive defense: short horizons, the borrowed tracker, and the rules that
+ * keep a forecast from spending anything it should not. */
+check(
+  "the forecast horizon is short",
+  AH.PREDICT_HORIZON_TICKS <= AH.DOT_PERIOD_TICKS &&
+  AH.PREEMPT_HORIZON_TICKS <= AH.PREDICT_HORIZON_TICKS,
+  `${AH.PREEMPT_HORIZON_TICKS} / ${AH.PREDICT_HORIZON_TICKS} ticks of ${AH.DOT_PERIOD_TICKS}`
+);
+check(
+  "motion prediction is RYN's own TargetMotion, borrowed rather than rebuilt",
+  /borrowTargetMotion\(\)/.test(ENGINE_SRC) &&
+  /staticModules && mh\.staticModules\.placementEngine/.test(ENGINE_SRC) &&
+  /const Ctor = motion\.constructor;/.test(ENGINE_SRC)
+);
+check(
+  "the borrow takes a private instance, never the placement engine's tracks",
+  /const instance = new Ctor\(\);/.test(ENGINE_SRC)
+);
+check(
+  "a prediction never pays a shame charge",
+  /if \(canHeal && verdict !== VERDICT\.CHARGED && fc\.incomingDamage > 0/.test(ENGINE_SRC)
+);
+check(
+  "LOW confidence spends nothing",
+  /fc\.level === CONFIDENCE\.HIGH/.test(ENGINE_SRC) &&
+  /fc\.level === CONFIDENCE\.MEDIUM/.test(ENGINE_SRC) &&
+  !/fc\.level === CONFIDENCE\.LOW/.test(ENGINE_SRC)
+);
+{
+  const required = ["TARGET", "TURNED", "STOPPED", "PROJECTILE", "COLLISION", "MOVED", "GONE"];
+  const probe = new Engine({});
+  const inv = probe.predict && probe.predict.invalidatedBy !== undefined;
+  check("the predictor starts with no cached prediction", inv);
+  for (const key of required) {
+    check(`invalidation reason present: ${key.toLowerCase()}`,
+      new RegExp("INVALIDATION\\." + key + "\\b").test(ENGINE_SRC));
+  }
+}
+check(
+  "stopping invalidates on the edge, not on standing still",
+  /if \(stopped && \(!was \|\| !was\.stopped\)\) return INVALIDATION\.STOPPED;/.test(ENGINE_SRC)
+);
+check(
+  "the enemy and projectile reads are shared with the threat engine, not repeated",
+  /this\.lastEnemies = ctx\.enemies;/.test(ENGINE_SRC) &&
+  /threat\.lastEnemies \|\| \[\]/.test(ENGINE_SRC)
+);
+
 /* The client field the engine deliberately does not trust. */
 const client = fs.readFileSync(path.join(ROOT, "src/RYN_Client_v5.4.user.js"), "utf8");
 check(

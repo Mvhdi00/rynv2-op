@@ -123,6 +123,105 @@ function makeEnemy(opts) {
   };
 }
 
+/* A stand-in for the placement engine's TargetMotion, with the same shape and
+ * the same arithmetic: a short sample history, velocity and acceleration from
+ * it, heading and heading shift, a stability score, and predict/intercept with
+ * a horizon decay. The engine borrows this class's constructor exactly as it
+ * borrows the real one, so the borrow path and the confidence curve are both
+ * under test rather than stubbed out. */
+class SimTargetMotion {
+  constructor() { this.tracks = new Map(); }
+
+  observe(entity, tick) {
+    const id = entity.id;
+    let track = this.tracks.get(id);
+    if (!track) {
+      track = { samples: [], vx: 0, vy: 0, ax: 0, ay: 0, heading: null,
+        headingShift: 0, speed: 0, peakSpeed: 0, stability: 0, lastTick: tick };
+      this.tracks.set(id, track);
+    }
+    if (track.samples.length && track.samples[track.samples.length - 1].tick === tick) return track;
+    if (tick - track.lastTick > 2) track.samples.length = 0;
+    const pos = entity.pos.current;
+    track.samples.push({ x: pos.x, y: pos.y, tick });
+    if (track.samples.length > 5) track.samples.shift();
+    track.lastTick = tick;
+
+    const s = track.samples;
+    if (s.length >= 2) {
+      const a = s[s.length - 2], b = s[s.length - 1];
+      const span = Math.max(1, b.tick - a.tick);
+      const vx = (b.x - a.x) / span, vy = (b.y - a.y) / span;
+      if (s.length >= 3) {
+        const c = s[s.length - 3];
+        const prevSpan = Math.max(1, a.tick - c.tick);
+        track.ax = vx - (a.x - c.x) / prevSpan;
+        track.ay = vy - (a.y - c.y) / prevSpan;
+      } else { track.ax = 0; track.ay = 0; }
+      track.vx = vx; track.vy = vy;
+      track.speed = Math.hypot(vx, vy);
+      track.peakSpeed = Math.max(track.peakSpeed, track.speed);
+      const prev = track.heading;
+      track.heading = track.speed > 0.5 ? Math.atan2(vy, vx) : prev;
+      track.headingShift = prev !== null && track.heading !== null
+        ? Math.abs(((track.heading - prev + Math.PI) % (Math.PI * 2)) - Math.PI) : 0;
+    }
+    track.stability = this._stability(track);
+    return track;
+  }
+
+  _stability(track) {
+    const s = track.samples;
+    if (s.length < 3) return 0.35;
+    if (track.speed < 0.5) return 0.95;
+    const headings = [];
+    for (let i = 1; i < s.length; i++) {
+      const dx = s[i].x - s[i - 1].x, dy = s[i].y - s[i - 1].y;
+      if (Math.hypot(dx, dy) < 0.5) continue;
+      headings.push(Math.atan2(dy, dx));
+    }
+    if (headings.length < 2) return 0.5;
+    let spread = 0;
+    for (let i = 1; i < headings.length; i++) {
+      spread += Math.abs(((headings[i] - headings[i - 1] + Math.PI) % (Math.PI * 2)) - Math.PI);
+    }
+    spread /= headings.length - 1;
+    return Math.max(0.05, 1 - spread / (Math.PI / 2));
+  }
+
+  get(id) { return this.tracks.get(id) || null; }
+
+  predict(entity, ticks) {
+    const track = this.tracks.get(entity.id);
+    const pos = entity.pos.current;
+    if (!track || track.samples.length < 2) {
+      return { x: pos.x, y: pos.y, confidence: ticks === 0 ? 1 : 0.25 };
+    }
+    let x = pos.x, y = pos.y, vx = track.vx, vy = track.vy;
+    for (let i = 0; i < ticks; i++) { x += vx; y += vy; vx += track.ax; vy += track.ay; }
+    const depth = Math.min(1, (track.samples.length - 1) / 2);
+    const horizon = Math.exp(-ticks / 3.5);
+    const turning = 1 - Math.min(1, (track.headingShift || 0) / (Math.PI / 2));
+    return { x, y, confidence: Math.max(0.02, track.stability * depth * horizon * (0.4 + 0.6 * turning)) };
+  }
+
+  intercept(entity, cx, cy, radius, maxTicks) {
+    for (let n = 0; n <= maxTicks; n++) {
+      const p = this.predict(entity, n);
+      if (Math.hypot(p.x - cx, p.y - cy) < radius) {
+        return { tick: n, confidence: p.confidence, x: p.x, y: p.y };
+      }
+    }
+    return null;
+  }
+
+  expire(tick) {
+    for (const [id, track] of this.tracks) {
+      if (tick - track.lastTick > 20) this.tracks.delete(id);
+    }
+  }
+}
+
 function makeProjectile(opts) {
   const o = Object.assign({ type: 5, x: 300, y: 0, angle: Math.PI, speed: 3.6 }, opts || {});
   return {
@@ -256,7 +355,9 @@ function makeClient(sim) {
     shouldAttack: false,
     forceHat: null,
     store: [{ last: 0 }, { last: 0 }],
-    staticModules: {},
+    /* The predictive engine borrows this class's constructor for its own
+     * private tracker; the instance itself is never written to by it. */
+    staticModules: { placementEngine: { motion: new SimTargetMotion() } },
     selectItem() { this.packetCount += 1; },
     attack() { this.packetCount += 1; sim.queuePress(); },
     whichWeapon() { this.packetCount += 1; },
@@ -350,7 +451,8 @@ class Sim {
     this.stats = {
       presses: 0, healedPresses: 0, refused: 0, ticksAtZeroShame: 0,
       maxServerShame: 0, deaths: 0, foodSpent: 0, packetPeak: 0,
-      pressesWhileLocked: 0, staleAborts: 0, zones: {}, threats: {}
+      pressesWhileLocked: 0, staleAborts: 0, zones: {}, threats: {},
+      preempts: 0, cacheHits: 0, cacheMisses: 0, invalidations: {}, motion: "-"
     };
   }
 
@@ -510,6 +612,17 @@ class Sim {
       this.stats.staleAborts += 1;
     }
     this.stats.zones[tm.zone] = (this.stats.zones[tm.zone] || 0) + 1;
+    if (typeof tm.reason === "string" && tm.reason.indexOf("preempt") === 0) {
+      this.stats.preempts += 1;
+    }
+    if (tm.invalidatedBy) {
+      this.stats.invalidations[tm.invalidatedBy] =
+        (this.stats.invalidations[tm.invalidatedBy] || 0) + 1;
+    }
+    this.stats.motion = tm.motionSource || "-";
+    const [hits, total] = String(tm.predictCache || "0/0").split("/").map(Number);
+    this.stats.cacheHits = hits;
+    this.stats.cacheMisses = total - hits;
     /* Highest confidence each detector ever reached, and how often it fired. */
     for (const entry of tm.threats || []) {
       const [type, confidence] = entry.split(":");
@@ -530,6 +643,7 @@ class Sim {
       locked: server.shameTimer > 0,
       urgency: tm.urgency,
       reason: tm.reason,
+      fc: `${tm.forecastDamage}@${tm.forecastTiming}/${tm.forecastLevel}`,
       presses: this.queued
     });
   }
@@ -738,6 +852,59 @@ scenario("pinned in an enemy trap with someone in reach", () => {
   return sim;
 });
 
+/* ---------------------------------------------------------------- *
+ * Predictive defense.
+ * ---------------------------------------------------------------- */
+
+/* Someone crossing the field on a straight line, arriving in polearm reach
+ * around tick 13. Chip damage keeps the gap under one cookie, which is exactly
+ * where the food-economy rule would otherwise say "not worth a press" — so any
+ * healing that happens before contact is the forecast's doing. */
+scenario("an enemy closing on a straight line", () => {
+  const sim = new Sim({ foodId: 1 });
+  let x = 620;
+  for (let t = 1; t <= 40; t++) {
+    if (x > 180) x -= 40;
+    const enemy = makeEnemy({
+      id: 1, x, px: x + 40, current: 5, primary: 5, primaryReload: 1
+    });
+    const arrived = x <= 210;
+    /* Chip damage every other tick on the way in: it keeps the gap under one
+     * cookie, which is where the food-economy rule says "not worth a press",
+     * so any healing before contact is the forecast's doing and not the
+     * ordinary top-up's. */
+    const chip = !arrived && t % 2 === 0 ? 6 : 0;
+    sim.step(chip || (arrived && t % 3 === 0 ? 45 : 0), arrived ? 45 : 0,
+      { enemies: [enemy] });
+  }
+  return sim;
+});
+
+/* The same approach, abandoned. The enemy turns away at tick 8, and the
+ * prediction that had them arriving has to be dropped rather than spent
+ * against. */
+scenario("a closing enemy turns away", () => {
+  const sim = new Sim({ foodId: 1 });
+  let x = 620, y = 0;
+  for (let t = 1; t <= 40; t++) {
+    if (t < 8) { x -= 40; } else { y += 40; }        // straight in, then across
+    const enemy = makeEnemy({
+      id: 1, x, y, px: t < 8 ? x + 40 : x, py: t < 8 ? y : y - 40,
+      current: 5, primary: 5, primaryReload: 1
+    });
+    sim.step(t <= 4 ? 5 : 0, 0, { enemies: [enemy] });
+  }
+  return sim;
+});
+
+/* Nothing moves for forty ticks. The prediction is built once and reused. */
+scenario("a still field rebuilds nothing", () => {
+  const sim = new Sim({ foodId: 1 });
+  const idle = makeEnemy({ id: 1, x: 500, px: 500, current: 5, primary: 5 });
+  for (let t = 1; t <= 40; t++) sim.step(0, 0, { enemies: [idle] });
+  return sim;
+});
+
 scenario("cheese, with its damage-over-time heal", () => {
   const sim = new Sim({ foodId: 2 });
   for (let t = 1; t <= 90; t++) sim.step(t % 7 === 0 ? 30 : 0, 25);
@@ -790,6 +957,23 @@ function runAll(factory, label) {
       checks.push(["caught the stale count", s.staleAborts > 0]);
     }
 
+    /* ---- predictive defense ---------------------------------------- */
+    if (name.indexOf("closing on a straight line") !== -1) {
+      checks.push(["acted before contact", s.preempts > 0]);
+      checks.push(["borrowed RYN's motion tracker", s.motion === "ryn-target-motion"]);
+    }
+    if (name.indexOf("turns away") !== -1) {
+      /* The prediction that had them arriving has to be dropped, and nothing
+       * may be spent on it afterwards. */
+      checks.push(["dropped the abandoned approach", !!s.invalidations["enemy-turned"]]);
+      checks.push(["spent nothing on it", s.presses <= 2]);
+    }
+    if (name.indexOf("still field") !== -1) {
+      /* Nothing changed for forty ticks, so nothing should have been rebuilt. */
+      const total = s.cacheHits + s.cacheMisses;
+      checks.push(["reused the prediction", total > 0 && s.cacheHits / total >= 0.7]);
+    }
+
     /* ---- threat detection ------------------------------------------ */
     const threatBest = type => (s.threats[type] || {}).best || "NONE";
     if (name.indexOf("possession only") !== -1) {
@@ -835,12 +1019,18 @@ function runAll(factory, label) {
     const threats = Object.keys(s.threats)
       .map(t => `${t}=${s.threats[t].best}(${s.threats[t].ticks})`).join("  ");
     console.log(`      threats: ${threats || "none"}`);
+    const invalid = Object.keys(s.invalidations)
+      .filter(k => k).map(k => `${k}:${s.invalidations[k]}`).join(" ");
+    console.log(
+      `      predict: preempts ${pad(s.preempts, 3)} cache ${s.cacheHits}/${s.cacheHits + s.cacheMisses}` +
+      ` motion ${pad(s.motion, 18)}${invalid ? " invalidated " + invalid : ""}`
+    );
     for (const [label2] of bad) console.log(`      -> failed: ${label2}`);
     if (process.env.SIM_TRACE) {
       for (const row of sim.log) {
         console.log(
           `      t${pad(row.tick, 4)} hp ${pad(row.hp, 4)} shame ${row.shame}/${row.mirror} ` +
-          `${row.locked ? "LOCK " : "     "}${pad(row.urgency, 9)} ${pad(row.reason, 26)} x${row.presses}`
+          `${row.locked ? "LOCK " : "     "}${pad(row.urgency, 9)} ${pad(row.reason, 22)} ${pad(row.fc, 14)} x${row.presses}`
         );
       }
     }

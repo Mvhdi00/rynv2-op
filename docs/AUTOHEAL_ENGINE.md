@@ -449,20 +449,100 @@ tick by the HostAdapter (`enemyList`, `incomingProjectiles`, `spikeContext`,
 `trapContext`, `turretContext`), and a weapon id is only ever reported alongside
 the reload, range and facing that say whether it can be used on me right now.
 
-### 5. PredictionEngine
+### 5. PredictiveDefenseEngine
 
-Projects health forward:
+Two jobs. The first is the health projection everything else spends against:
 
 ```
-projected(k) = health
-             + inFlightHeals                      (presses sent, not yet seen)
-             + regenPerSecond  * k/9              (hats, tails, healing pad, cheese)
-             - dotPerSecond    * k/9              (poison, Bull)
-             - effectiveThreat * confidence(k)
+projected = health + inFlightHeals - (a DoT tick due this tick)
+afterHold(ms) = projected + regenPerSecond × ms/1000 - (a DoT tick inside the wait)
+survivesHold(ms) = afterHold(ms) - threat.imminentWithin(ticks) > 0
 ```
 
-and answers: `ticksToDeath`, `healsNeeded(target)`, `willSurviveHold(ms)` — the
-question the shame deferral turns on ("can I afford to wait for the window?").
+The second is acting before the bar moves. Reacting to health is reacting late:
+by the time the number changed the hit landed and the shame window is already
+open. So the forecast looks at the tick *before* that.
+
+#### Motion is RYN's, borrowed not rebuilt
+
+The placement engine already carries `TargetMotion`: a five-sample history per
+entity turned into velocity, acceleration, heading, heading shift, a stability
+score, `predict(ticks) → {x, y, confidence}` with a horizon decay, and
+`intercept()` for the earliest tick a path enters a circle. Writing a second one
+would be writing that twice.
+
+So the engine borrows the **class** and constructs a private instance from it.
+The instance matters: sharing the placement engine's tracks would mean observing
+entities on its behalf, on our tick basis, into state its planner reads. Same
+code, separate tracks, no interference. Where the placement engine is absent, the
+fallback is not a second predictor either — it is the linear extrapolation every
+`Entity` already carries (`pos.previous → pos.current`, `speed`, `move_dir`),
+read one tick at a time and with a confidence that decays accordingly.
+
+#### What it predicts
+
+Four sources, each with its own confidence, none of them assumed:
+
+| Source | Evidence | Confidence |
+|---|---|---|
+| projectile | already in the air, on a line the client tested | 0.85 |
+| closing | `intercept()` says this course enters weapon reach within the horizon | the tracker's own, × armed, × facing |
+| in-reach | already able to swing | 0.6 facing, 0.4 not |
+| DoT tick | a fixed period | 1.0 |
+| spike sequence | the threat engine's tracked sequence | the sequence's own |
+
+and publishes `{incomingDamage, timing, expectedHealth, expectedShameDelta,
+threatDuration, confidence, level, sources[]}`. `expectedShameDelta` is the shame
+engine's arithmetic asked rather than repeated: a hit stamps `hitTime`, and what
+it costs depends on whether the first press after it lands on that tick (`+1`) or
+the next one (`-2`), with the ceiling case (no `+1` available at 7) folded in.
+
+Horizons are deliberately short — 6 ticks to forecast, 3 to act on. Past about
+two thirds of a second a moomoo fight has changed shape, and a prediction that
+far out is a guess wearing a number.
+
+#### What it is allowed to spend
+
+`PREEMPT` sits between `WASH` and `SUSTAIN`, and it is fenced by three rules:
+
+1. **A prediction never pays a shame charge.** A charged press is for damage
+   that already landed; this damage has not. If the window is not free, the
+   answer is to wait for it — the hit is not here yet, so waiting costs nothing.
+2. **HIGH acts, MEDIUM acts on consequence, LOW never acts.** MEDIUM is "use
+   cautiously", which is about the consequence rather than the efficiency of the
+   press: half a wasted cookie is a fine trade against a hit that would take the
+   bar under half, and a bad one against a graze.
+3. **The comparison is against the floor at impact, not the floor now.** Right
+   now the field is quiet — that is the point of being early. What matters is
+   whether the health left after the hit clears the buffer the situation will
+   need once the thing that is closing has arrived.
+
+Most pre-healing is still `TOPUP`'s: a quiet tick with a gap worth filling is
+already handled, and that *is* predictive defense in effect. `PREEMPT` covers the
+case `TOPUP`'s food-economy rule declines — under chip damage, with a small gap,
+in a free window, with something credible about to land.
+
+#### Invalidation
+
+A cached forecast is thrown away the moment the world that produced it changes,
+and every reason is named rather than timed:
+
+`target-changed` · `enemy-turned` (heading shift past 45°) · `enemy-stopped`
+(**edge-triggered** — someone *becoming* stationary, not their continuing to
+stand there) · `projectile-changed` · `collision-changed` · `player-moved`
+(60 px) · `threat-gone` · `world-changed` (the fingerprint) · `aged-out` (9 ticks)
+
+#### Performance
+
+- The enemy and projectile reads are the threat engine's, published once per
+  tick and shared — not gathered twice.
+- Tracking is capped: enemies within 700 px, nearest four.
+- One `observe()` per tracked enemy per tick; `TargetMotion.observe` is
+  idempotent within a tick, so it cannot double-sample.
+- The forecast is rebuilt only when an invalidation fires or the fingerprint
+  changes. On a still field the simulator measures **35 of 40 ticks served from
+  cache**; when a tracked enemy stops, the edge trigger fires once rather than
+  every tick it stands there.
 
 ### 6. HealDecisionEngine
 
@@ -535,7 +615,8 @@ postTick()
   ├─ shame.update(snap, state, ...) count, verdict, credit clock, zone, rates
   ├─ threat.evaluate(snap, damage)  raw → effective → lethal, confidence
   ├─ predict.build(...)             projection, survivesHold, healsNeeded
-  ├─ shame.project(...)             forecast + earliest way down
+  ├─ predict.predictAhead(...)      forecast, or the cached one if nothing moved
+  ├─ shame.project(...)             shame forecast + earliest way down
   ├─ ledger.noteOutcome(...)        did the last press land? back off if not
   ├─ decide.plan(..., cooldown)     urgency + press count + hold
   ├─ arbiter.resolve(plan, snap)    yield / clamp against other systems
@@ -557,6 +638,9 @@ shame    count, previous, delta, zone, ticksInZone, increaseRate, decreaseRate,
 forecast confidence, expectedEvents, expectedCharges, expectedCredits,
          projectedShame, ticksToCritical, willReachCritical
 chance   mode (credit-now | credit-wait | bull | none), etaTicks, reason
+predict  incomingDamage, timing, expectedHealth, expectedShameDelta,
+         threatDuration, confidence, level, sources[], invalidatedBy,
+         cacheHits / cacheMisses, motion source
 damage   lastDelta, burst, hiddenDamage, rate9, damageFrequency,
          dotActive, dotPerSec, msUntilDotTick
 threat   melee, secondary, turret, projectile, spike, spikeKB, dot,
@@ -574,9 +658,10 @@ plan     urgency, presses, allowCharge, holdMs, reason
 | 1 | `IDLE` | full health, no debt | no press |
 | 2 | `TOPUP` | health below max, tick is quiet | uncharged only; economy rule at `SAFE`, relaxed while a debt is owed or a *believable* threat exists |
 | 3 | `WASH` | `count > 0` and the opportunity finder has a way down | credit only — this is the `-2`; `credit-wait` holds a tick for it |
-| 4 | `SUSTAIN` | health below `effectiveThreat + reserve + zone bias` | hold ≤ 1 tick for the window, then press if budget ≥ 2 |
-| 5 | `CRITICAL` | `projected <= effectiveThreat`, death inside 1 tick | press now; spend `+1` if `budget >= 1` |
-| 6 | `LOCKGUARD` | `count === 7` and verdict is `CHARGED` | **never press** — wait for the window |
+| 4 | `PREEMPT` | a credible hit lands within 3 ticks and would leave us under the floor it will need | never charged — a prediction does not pay `+1` |
+| 5 | `SUSTAIN` | health below `effectiveThreat + reserve + zone bias` | hold ≤ 1 tick for the window, then press if budget ≥ 2 |
+| 6 | `CRITICAL` | `projected <= effectiveThreat`, death inside 1 tick | press now; spend `+1` if `budget >= 1` |
+| 7 | `LOCKGUARD` | `count === 7` and verdict is `CHARGED` | **never press** — wait for the window |
 
 `LOCKGUARD` outranks `CRITICAL` by construction, and that is not a survival
 compromise: at `count === 7` the charged press is refused by `consume` anyway
@@ -662,12 +747,14 @@ fire at all: it gates on `tempHealth < maxHealth`, and `Player.maxHealth` is
 
 ### What the simulator reports
 
-Against the transcribed server rules, over nineteen scenarios — the healing and
+Against the transcribed server rules, over twenty-two scenarios — the healing and
 shame set (sustained melee, every-other-tick pressure, an insta burst, poison,
 a 5-, 6- and 7-count debt, 250 ms ping, no food, an active lock, cheese, a
 low-confidence threat, a count that moves between the plan and the press, an
-unsurvivable every-tick beatdown) and the threat set (possession only, a musket
-ball in flight, dagger pressure, a spike-tick sequence, a trap pin):
+unsurvivable every-tick beatdown), the threat set (possession only, a musket
+ball in flight, dagger pressure, a spike-tick sequence, a trap pin) and the
+prediction set (an enemy closing on a straight line, one that turns away, a
+still field):
 
 - no scenario arms the 30 s lock, and none sends a press while one is on;
 - the count never exceeds 7, and every scenario that starts in debt ends at 0;
@@ -686,6 +773,13 @@ ball in flight, dagger pressure, a spike-tick sequence, a trap pin):
 - a musket ball in the air is `HIGH`, dagger pressure reaches `CRITICAL` on hit
   frequency, a spike sequence is reported as one sequence rather than five
   hits, and a trap pin with an attacker in reach is `CRITICAL`;
+- the closing enemy is healed against **before contact**, using RYN's own
+  motion tracker (the run reports `motion ryn-target-motion`, so the borrow
+  path is the one under test);
+- when that enemy turns away the prediction is dropped on `enemy-turned` and
+  the whole approach costs **one press**;
+- a still field serves **35 of 40 ticks from cache**, rebuilding only on the
+  9-tick age-out;
 - the every-tick beatdown is the one shape the shame rule makes unsurvivable —
   the hit stamp is refreshed faster than the window closes, so all seven charges
   go and the eighth press is refused rather than sent. Dying at 7 without a lock

@@ -111,6 +111,23 @@ function createRynAutoHealEngine(deps) {
     PRESSURE_WINDOW_TICKS: 9,
     SUSTAINED_WINDOW_TICKS: 27,
 
+    /* Predictive defense. Short-term only: past about two thirds of a second
+     * a moomoo fight has changed shape, and a prediction that far out is a
+     * guess wearing a number. */
+    PREDICT_HORIZON_TICKS: 6,
+    PREEMPT_HORIZON_TICKS: 3,
+    /* How far a prediction may be reused before it is rebuilt regardless of
+     * whether anything looked like it changed. */
+    PREDICT_MAX_AGE_TICKS: 9,
+    /* Invalidation thresholds, in the units the client already measures. */
+    PREDICT_TURN_RADIANS: Math.PI / 4,   // a real course change
+    PREDICT_STOP_SPEED: 0.5,             // TargetMotion's own "standing still"
+    PREDICT_MOVING_SPEED: 2,             // ...and what counts as having moved
+    PREDICT_PLAYER_MOVE_PX: 60,          // my own position moving significantly
+    /* Only enemies this close are worth tracking motion for. */
+    PREDICT_RELEVANT_RANGE: 700,
+    PREDICT_MAX_TRACKED: 4,
+
     /* Engine pacing. */
     MAX_PRESSES_PER_TICK: 6,
     /* A press sent during tick T is processed by the server on tick T+1, so its
@@ -198,9 +215,26 @@ function createRynAutoHealEngine(deps) {
     IDLE: 1,
     TOPUP: 2,
     WASH: 3,
-    SUSTAIN: 4,
-    CRITICAL: 5,
-    LOCKGUARD: 6
+    PREEMPT: 4,
+    SUSTAIN: 5,
+    CRITICAL: 6,
+    LOCKGUARD: 7
+  };
+
+  /* Why a cached prediction was thrown away. Named rather than boolean because
+   * which one fired is the useful thing in a trace. */
+  const INVALIDATION = {
+    NONE: "",
+    FIRST: "first",
+    AGE: "aged-out",
+    TARGET: "target-changed",
+    TURNED: "enemy-turned",
+    STOPPED: "enemy-stopped",
+    PROJECTILE: "projectile-changed",
+    COLLISION: "collision-changed",
+    MOVED: "player-moved",
+    GONE: "threat-gone",
+    WORLD: "world-changed"
   };
 
   const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
@@ -627,6 +661,35 @@ function createRynAutoHealEngine(deps) {
         }
       } catch (_) {}
       return out;
+    }
+
+    /* RYN already has a motion predictor, and a good one: the placement
+     * engine's TargetMotion keeps a short sample history per entity and turns
+     * it into velocity, acceleration, heading, heading shift, a stability score
+     * and `predict(ticks) -> {x, y, confidence}` with a horizon decay, plus
+     * `intercept()` for the earliest tick a path enters a circle. Writing a
+     * second one would be writing that twice.
+     *
+     * So the class is borrowed and a private instance constructed from it. The
+     * instance matters: sharing the placement engine's own tracks would mean
+     * observing entities on its behalf, on our tick basis, into state its
+     * planner reads — which is exactly the kind of reach into another system
+     * this engine is not allowed. Same code, separate tracks, no interference.
+     *
+     * Returns null when the placement engine is not present; MotionSource then
+     * falls back to the linear extrapolation every Entity already carries. */
+    borrowTargetMotion() {
+      try {
+        const mh = this.mh;
+        const engine = mh && mh.staticModules && mh.staticModules.placementEngine;
+        const motion = engine && engine.motion;
+        if (!motion || typeof motion.observe !== "function" ||
+            typeof motion.predict !== "function") return null;
+        const Ctor = motion.constructor;
+        if (typeof Ctor !== "function") return null;
+        const instance = new Ctor();
+        return typeof instance.observe === "function" ? instance : null;
+      } catch (_) { return null; }
     }
 
     /* Standing on a healing pad is +15/s of real health income
@@ -1961,6 +2024,8 @@ function createRynAutoHealEngine(deps) {
       this.top = null;
       this.escalation = CONFIDENCE.NONE;
       this.soonest = Infinity;
+      this.lastEnemies = [];
+      this.lastProjectiles = [];
       for (const d of this.detectors) if (d.reset) d.reset();
     }
 
@@ -1998,6 +2063,11 @@ function createRynAutoHealEngine(deps) {
 
       /* ---- the detectors -------------------------------------------- */
       const ctx = this._context(snap, damage, state, shame, ledger, eff, soldierMult);
+      /* The adapter reads are done once per tick and published here, so the
+       * predictive defense engine works from the same enemy list and the same
+       * projectile list rather than gathering its own copy. */
+      this.lastEnemies = ctx.enemies;
+      this.lastProjectiles = ctx.projectiles;
       this.reports = [];
       this.byType = {};
       this.top = null;
@@ -2127,21 +2197,184 @@ function createRynAutoHealEngine(deps) {
   }
 
   /* ================================================================== *
-   * 5. PredictionEngine — health forward, and whether a wait is survivable.
+   * 5. PredictiveDefenseEngine — act before the bar moves, not after.
+   *
+   * Reacting to health is reacting late: by the time the number changed, the
+   * hit landed and the shame window is already open. This engine's job is the
+   * tick before that — an enemy closing on a straight line, a ball in the air,
+   * a poison tick with a known period — and its whole discipline is knowing
+   * when it is allowed to spend anything on that.
+   *
+   * Three rules keep it from becoming a food-burning machine:
+   *
+   *   1. It never spends a shame charge on a prediction. A press that would
+   *      count +1 is a press for damage that has already landed; the hit this
+   *      engine is talking about has not happened yet, so if the window is not
+   *      free the answer is to wait.
+   *   2. Confidence gates the action, not the reporting. HIGH acts, MEDIUM
+   *      acts only when the press wastes no food, LOW never acts.
+   *   3. A prediction is thrown away the moment the world that produced it
+   *      changes, and the seven ways that happens are named.
    * ================================================================== */
-  class PredictionEngine {
+
+  /* Motion, borrowed from the placement engine's TargetMotion where it exists.
+   * The fallback is not a second predictor — it is the linear extrapolation
+   * every Entity in the client already carries (pos.previous -> pos.current,
+   * `speed` and `move_dir`, which Entity.setFuturePosition maintains), read
+   * one tick at a time. */
+  class MotionSource {
     constructor(adapter) {
       this.adapter = adapter;
+      this.impl = null;
+      this.kind = "pending";
+    }
+
+    reset() {
+      this.impl = null;
+      this.kind = "pending";
+    }
+
+    _ensure() {
+      if (this.kind !== "pending") return;
+      this.impl = this.adapter.borrowTargetMotion();
+      this.kind = this.impl ? "ryn-target-motion" : "entity-fallback";
+    }
+
+    observe(enemy, tick) {
+      this._ensure();
+      if (!this.impl) return null;
+      try { return this.impl.observe(enemy.ref, tick); } catch (_) { return null; }
+    }
+
+    expire(tick) {
+      if (this.impl && typeof this.impl.expire === "function") {
+        try { this.impl.expire(tick); } catch (_) {}
+      }
+    }
+
+    /* {x, y, confidence} — the client's own answer where it is available. */
+    predict(enemy, ticks) {
+      this._ensure();
+      if (this.impl) {
+        try { return this.impl.predict(enemy.ref, ticks); } catch (_) {}
+      }
+      const pos = enemy.ref && enemy.ref.pos && enemy.ref.pos.current;
+      if (!pos) return null;
+      const speed = enemy.speed || 0;
+      const dir = enemy.moveDir;
+      if (dir === null || dir === undefined || speed <= 0) {
+        return { x: pos.x, y: pos.y, confidence: ticks === 0 ? 1 : 0.3 };
+      }
+      return {
+        x: pos.x + Math.cos(dir) * speed * ticks,
+        y: pos.y + Math.sin(dir) * speed * ticks,
+        /* No sample history behind it, so it decays fast and never claims
+         * more than the borrowed tracker would. */
+        confidence: Math.max(0.05, 0.45 * Math.exp(-ticks / 3.5))
+      };
+    }
+
+    /* Earliest tick the predicted path enters a circle, or null. */
+    intercept(enemy, x, y, radius, maxTicks) {
+      this._ensure();
+      if (this.impl && typeof this.impl.intercept === "function") {
+        try { return this.impl.intercept(enemy.ref, x, y, radius, maxTicks); } catch (_) {}
+      }
+      for (let n = 0; n <= maxTicks; n++) {
+        const p = this.predict(enemy, n);
+        if (!p) return null;
+        if (Math.hypot(p.x - x, p.y - y) <= radius) {
+          return { tick: n, confidence: p.confidence, x: p.x, y: p.y };
+        }
+      }
+      return null;
+    }
+
+    track(enemy) {
+      if (!this.impl || typeof this.impl.get !== "function") return null;
+      try { return this.impl.get(enemy.id); } catch (_) { return null; }
+    }
+  }
+
+  /* What the world looked like when a prediction was made, reduced to the
+   * things that would change the answer. Two identical fingerprints mean the
+   * cached forecast is still the right one and nothing needs rebuilding. */
+  class PredictionFingerprint {
+    static of(snap, threat, enemies, projectiles, motion) {
+      const parts = [
+        Math.round(snap.health / 5),
+        threat.top ? threat.top.type + ":" + threat.top.confidence : "-",
+        projectiles.length,
+        projectiles.length ? Math.min.apply(null, projectiles.map(p => p.ticksToImpact)) : -1,
+        snap.systems && snap.systems.soldierClaimed ? "s" : "-",
+        threat.spikeContact ? "spike" : "-",
+        snap.isTrapped ? "trap" : "-"
+      ];
+      for (const e of enemies) {
+        const track = motion.track(e);
+        const heading = track && track.heading !== null && track.heading !== undefined
+          ? Math.round(track.heading / (Math.PI / 8))
+          : "-";
+        parts.push([
+          e.id,
+          Math.round(e.distance / 40),
+          heading,
+          Math.round((e.speed || 0) / 2),
+          e.weaponCurrent,
+          e.primaryReloaded ? 1 : 0,
+          e.secondaryReloaded ? 1 : 0
+        ].join(","));
+      }
+      return parts.join("|");
+    }
+  }
+
+  class PredictiveDefenseEngine {
+    constructor(adapter) {
+      this.adapter = adapter;
+      this.motion = new MotionSource(adapter);
       this.reset();
     }
 
     reset() {
+      /* health projection */
       this.inFlight = 0;
       this.projected = AH.MAX_HEALTH;
       this.regenPerSecond = 0;
       this.padRegen = 0;
+
+      /* prediction */
+      this.forecast = this._empty();
+      this.motion.reset();
+      this._cache = null;
+      this._cacheTick = -999;
+      this._fingerprint = "";
+      this._lastPos = null;
+      this._lastTargetId = null;
+      this._lastProjectiles = -1;
+      this._lastCollision = "";
+      this._hadThreat = false;
+      this._motionState = new Map();
+      this.invalidatedBy = INVALIDATION.FIRST;
+      this.cacheHits = 0;
+      this.cacheMisses = 0;
     }
 
+    _empty() {
+      return {
+        incomingDamage: 0,
+        timing: Infinity,
+        expectedHealth: AH.MAX_HEALTH,
+        expectedShameDelta: 0,
+        threatDuration: 0,
+        confidence: 0,
+        level: CONFIDENCE.NONE,
+        sources: [],
+        motion: "none"
+      };
+    }
+
+    /* ---- the health projection the heal engine spends against ------- */
     build(snap, state, damage, threat, ledger) {
       this.inFlight = ledger.expectedHeal(snap);
       this.padRegen = this.adapter.healingPadRegen(snap);
@@ -2181,6 +2414,255 @@ function createRynAutoHealEngine(deps) {
       if (restore <= 0) return 0;
       const gap = target - this.projected;
       return gap <= 0 ? 0 : Math.ceil(gap / restore);
+    }
+
+    /* ---- the forecast ------------------------------------------------ */
+    predictAhead(snap, state, damage, threat, shame) {
+      const enemies = this._relevant(threat.lastEnemies || []);
+      const projectiles = threat.lastProjectiles || [];
+      const tick = snap.tick;
+
+      /* One observation per tracked enemy per tick, and the tracker's own
+       * expiry. TargetMotion.observe is idempotent within a tick, so this
+       * cannot double-sample. */
+      this.motion.expire(tick);
+      for (const e of enemies) this.motion.observe(e, tick);
+
+      const reason = this._invalidation(snap, threat, enemies, projectiles);
+      this._recordMotionState(enemies);
+      if (!reason && this._cache) {
+        this.cacheHits += 1;
+        this.forecast = this._cache;
+        this.invalidatedBy = INVALIDATION.NONE;
+        return this.forecast;
+      }
+
+      this.cacheMisses += 1;
+      this.invalidatedBy = reason;
+      const forecast = this._compute(snap, state, damage, threat, shame, enemies, projectiles);
+      this._cache = forecast;
+      this._cacheTick = tick;
+      this._fingerprint = PredictionFingerprint.of(snap, threat, enemies, projectiles, this.motion);
+      this._lastPos = snap.pos ? { x: snap.pos.x, y: snap.pos.y } : null;
+      this._lastTargetId = enemies.length ? enemies[0].id : null;
+      this._lastProjectiles = projectiles.length;
+      this._lastCollision = this._collisionKey(snap, threat);
+      this._hadThreat = threat.reports.length > 0;
+      this.forecast = forecast;
+      return forecast;
+    }
+
+    /* Last tick's motion verdict per enemy, so stopping is an edge and not a
+     * standing condition. Bounded by the tracked-enemy cap. */
+    _recordMotionState(enemies) {
+      const live = new Set();
+      for (const e of enemies) {
+        live.add(e.id);
+        const track = this.motion.track(e);
+        if (!track) continue;
+        this._motionState.set(e.id, {
+          stopped: (track.peakSpeed || 0) >= AH.PREDICT_MOVING_SPEED &&
+            (track.speed || 0) < AH.PREDICT_STOP_SPEED,
+          heading: track.heading
+        });
+      }
+      for (const id of this._motionState.keys()) {
+        if (!live.has(id)) this._motionState.delete(id);
+      }
+    }
+
+    /* Only what is close enough and armed enough to matter, capped, nearest
+     * first — the short list keeps the per-tick work bounded. */
+    _relevant(enemies) {
+      const out = [];
+      for (const e of enemies) {
+        if (e.distance > AH.PREDICT_RELEVANT_RANGE) continue;
+        out.push(e);
+      }
+      out.sort((a, b) => a.distance - b.distance);
+      return out.slice(0, AH.PREDICT_MAX_TRACKED);
+    }
+
+    _collisionKey(snap, threat) {
+      return (threat.spikeContact ? "s" : "-") + (snap.isTrapped ? "t" : "-");
+    }
+
+    /* The seven ways a prediction stops being true, checked before anything is
+     * rebuilt. Each one is a real event, not a timer. */
+    _invalidation(snap, threat, enemies, projectiles) {
+      if (!this._cache) return INVALIDATION.FIRST;
+      if (snap.tick - this._cacheTick >= AH.PREDICT_MAX_AGE_TICKS) return INVALIDATION.AGE;
+
+      /* the target changed */
+      const targetId = enemies.length ? enemies[0].id : null;
+      if (targetId !== this._lastTargetId) return INVALIDATION.TARGET;
+
+      /* the threat disappeared */
+      if (this._hadThreat && threat.reports.length === 0) return INVALIDATION.GONE;
+
+      /* a projectile appeared, landed or changed course */
+      if (projectiles.length !== this._lastProjectiles) return INVALIDATION.PROJECTILE;
+
+      /* collision state changed under us */
+      if (this._collisionKey(snap, threat) !== this._lastCollision) return INVALIDATION.COLLISION;
+
+      /* I moved significantly */
+      if (this._lastPos && snap.pos) {
+        const moved = Math.hypot(snap.pos.x - this._lastPos.x, snap.pos.y - this._lastPos.y);
+        if (moved > AH.PREDICT_PLAYER_MOVE_PX) return INVALIDATION.MOVED;
+      }
+
+      /* An enemy turned or stopped — TargetMotion measures both for us. Both
+       * are edge-triggered: a prediction is invalidated by someone *becoming*
+       * stationary, not by their continuing to stand there. Re-firing on the
+       * standing would mean rebuilding the same answer every tick, which is
+       * the one thing this cache exists to avoid. */
+      for (const e of enemies) {
+        const track = this.motion.track(e);
+        if (!track) continue;
+        const was = this._motionState.get(e.id);
+        if ((track.headingShift || 0) > AH.PREDICT_TURN_RADIANS) return INVALIDATION.TURNED;
+        const stopped = (track.peakSpeed || 0) >= AH.PREDICT_MOVING_SPEED &&
+          (track.speed || 0) < AH.PREDICT_STOP_SPEED;
+        if (stopped && (!was || !was.stopped)) return INVALIDATION.STOPPED;
+      }
+
+      /* anything else the fingerprint covers */
+      const print = PredictionFingerprint.of(snap, threat, enemies, projectiles, this.motion);
+      if (print !== this._fingerprint) return INVALIDATION.WORLD;
+
+      return INVALIDATION.NONE;
+    }
+
+    _compute(snap, state, damage, threat, shame, enemies, projectiles) {
+      const H = AH.PREDICT_HORIZON_TICKS;
+      const out = this._empty();
+      const events = [];
+
+      /* 1. What is already in the air. The client established the line; the
+       *    arrival tick is its own arithmetic. */
+      for (const p of projectiles) {
+        if (p.ticksToImpact > H) continue;
+        events.push({
+          damage: p.damage, tick: p.ticksToImpact, confidence: 0.85, source: "projectile"
+        });
+      }
+
+      /* 2. Who is going to be able to reach me, and when. This is the part
+       *    that is genuinely ahead of the health bar: an enemy outside reach
+       *    now, on a course that puts them inside it within the horizon. */
+      const myPos = snap.pos;
+      for (const e of enemies) {
+        const reach = Math.max(e.primaryRange, e.secondaryRange);
+        if (reach <= 0) continue;
+        const armed = e.primaryReloaded || e.secondaryReloaded;
+        const damageIfHit = Math.max(e.primaryDamage, e.secondaryDamage);
+        if (damageIfHit <= 0) continue;
+
+        if (e.distance <= reach) {
+          /* Already in reach: this is Combat's number, not a prediction, and
+           * it is only counted here so the timing model has it. */
+          if (armed) {
+            events.push({
+              damage: damageIfHit, tick: 1,
+              confidence: e.facing ? 0.6 : 0.4, source: "in-reach"
+            });
+          }
+          continue;
+        }
+        if (!myPos) continue;
+        const hit = this.motion.intercept(e, myPos.x, myPos.y, reach, H);
+        if (!hit) continue;
+        events.push({
+          damage: damageIfHit,
+          tick: Math.max(1, hit.tick),
+          /* The tracker's own confidence in the path, tempered by whether the
+           * weapon will actually be ready when they arrive. */
+          confidence: (hit.confidence || 0.3) * (armed ? 1 : 0.6) * (e.facing ? 1 : 0.8),
+          source: "closing"
+        });
+      }
+
+      /* 3. The damage-over-time tick, which is a period rather than a guess. */
+      if (damage.dotActive && damage.ticksUntilDot <= H) {
+        events.push({
+          damage: damage.dotPerSecond, tick: damage.ticksUntilDot,
+          confidence: 1, source: "dot"
+        });
+      }
+
+      /* 4. The next contact of a spike sequence the threat engine is tracking. */
+      const spikeSeq = threat.byType[THREAT.SPIKE_TICK];
+      if (spikeSeq && spikeSeq.timing <= H && spikeSeq.rank >= CONFIDENCE_RANK.MEDIUM) {
+        events.push({
+          damage: spikeSeq.severity, tick: spikeSeq.timing,
+          confidence: spikeSeq.value, source: "spike-sequence"
+        });
+      }
+
+      if (!events.length) return out;
+
+      /* Only credible events are spent against. The rest are still reported —
+       * they are what makes the confidence low. */
+      let total = 0, weighted = 0, soonest = Infinity, credible = 0;
+      for (const ev of events) {
+        total += ev.damage;
+        weighted += ev.damage * ev.confidence;
+        if (ev.confidence >= AH.CONFIDENCE_LOW) {
+          credible += ev.damage;
+          if (ev.tick < soonest) soonest = ev.tick;
+        }
+        out.sources.push(`${ev.source}:${Math.round(ev.damage)}@${ev.tick}`);
+      }
+      const confidence = total > 0 ? weighted / total : 0;
+
+      out.incomingDamage = Math.min(AH.DMG_CAP, credible) * (snap.soldierOn ? 0.75 : 1);
+      out.timing = soonest;
+      out.confidence = confidence;
+      out.level = confidence >= AH.CONFIDENCE_HIGH ? CONFIDENCE.HIGH
+        : confidence >= AH.CONFIDENCE_LOW ? CONFIDENCE.MEDIUM
+        : CONFIDENCE.LOW;
+      out.motion = this.motion.kind;
+
+      /* Expected health when it lands, regen included. */
+      const seconds = (soonest === Infinity ? 0 : soonest) * (snap.TICK / 1000);
+      out.expectedHealth = clamp(
+        this.projected + this.regenPerSecond * seconds - out.incomingDamage,
+        0, snap.maxHealth
+      );
+
+      /* Expected shame: the hit stamps hitTime, and what it costs depends on
+       * when the first press after it lands. Healing on the damage tick is +1,
+       * a tick later is -2 — the shame engine's own arithmetic, asked rather
+       * than repeated. */
+      const willHaveToHeal = out.expectedHealth < snap.maxHealth * 0.5 ||
+        out.expectedHealth <= threat.effective;
+      out.expectedShameDelta = willHaveToHeal
+        ? (out.expectedHealth <= out.incomingDamage ? 1 : -AH.SHAME_CREDIT)
+        : 0;
+      if (shame && shame.critical && out.expectedShameDelta > 0) {
+        /* At the ceiling there is no +1 available: the press would be refused
+         * and the wait is forced. */
+        out.expectedShameDelta = 0;
+      }
+
+      /* How long this is expected to last: while someone stays in reach, plus
+       * whatever the sustained detector is still seeing. */
+      let duration = 0;
+      for (const e of enemies) {
+        const reach = Math.max(e.primaryRange, e.secondaryRange);
+        if (reach <= 0) continue;
+        for (let n = 0; n <= H; n++) {
+          const p = this.motion.predict(e, n);
+          if (!p || !myPos) break;
+          if (Math.hypot(p.x - myPos.x, p.y - myPos.y) <= reach) duration = Math.max(duration, n + 1);
+        }
+      }
+      const sustained = threat.byType[THREAT.SUSTAINED];
+      if (sustained) duration = Math.max(duration, Math.min(H, sustained.timing));
+      out.threatDuration = duration;
+
+      return out;
     }
   }
 
@@ -2413,6 +2895,53 @@ function createRynAutoHealEngine(deps) {
           urgency: URGENCY.SUSTAIN, presses: 0, holdMs: hold,
           reason: "sustain-hold", verdict
         };
+      }
+
+      /* ---- 4 PREEMPT --------------------------------------------------- *
+       * Health is above the floor, so nothing here is urgent — which is
+       * exactly the condition under which acting early is cheap. If something
+       * credible is going to land inside the next few ticks and would put us
+       * under the floor when it does, buy the health now, while the press is
+       * still free.
+       *
+       * The rule that keeps this from being a food-burning machine: a
+       * prediction never pays a shame charge. A charged press is for damage
+       * that has already landed; this damage has not. If the window is not
+       * free, the answer is to wait for it — the hit is not here yet, so
+       * waiting costs nothing.
+       *
+       * HIGH acts. MEDIUM acts only when the press wastes no food (a full
+       * restore's worth of gap to fill). LOW never acts, which is the whole
+       * of "do not waste healing resources on a low-confidence prediction". */
+      const fc = predict.forecast;
+      /* The comparison is against the floor as it will be *when the damage
+       * lands*, not the floor right now. Right now the field is quiet — that
+       * is the whole point of being early. What matters is whether the health
+       * left after the hit clears the buffer the situation will need once the
+       * thing that is closing has arrived. */
+      const futureFloor = Math.min(max, fc.incomingDamage + reserve + defensiveBias);
+      if (canHeal && verdict !== VERDICT.CHARGED && fc.incomingDamage > 0 &&
+          fc.timing <= AH.PREEMPT_HORIZON_TICKS && fc.expectedHealth < futureFloor) {
+        const target = Math.min(max, futureFloor + fc.incomingDamage);
+        const presses = predict.healsNeeded(target, restore);
+        if (presses > 0) {
+          if (fc.level === CONFIDENCE.HIGH) {
+            return {
+              urgency: URGENCY.PREEMPT, presses,
+              holdMs: 0, reason: "preempt-" + Math.round(fc.timing) + "t", verdict
+            };
+          }
+          /* "Use cautiously" is about the consequence, not the efficiency of
+           * the press. A press that wastes half a cookie is a fine trade
+           * against a hit that would take the bar under half; the same press
+           * for a graze is the waste the LOW rule exists to prevent. */
+          if (fc.level === CONFIDENCE.MEDIUM && fc.expectedHealth < max * 0.5) {
+            return {
+              urgency: URGENCY.PREEMPT, presses: 1,
+              holdMs: 0, reason: "preempt-cautious", verdict
+            };
+          }
+        }
       }
 
       /* ---- 3 WASH ------------------------------------------------------ *
@@ -2715,7 +3244,7 @@ function createRynAutoHealEngine(deps) {
       this.damage = new DamageAnalyzer();
       this.shame = new ShameController(this.adapter);
       this.threat = new ThreatEngine(this.adapter);
-      this.predict = new PredictionEngine(this.adapter);
+      this.predict = new PredictiveDefenseEngine(this.adapter);
       this.ledger = new AntiSpamManager();
       this.decision = new HealDecisionEngine(this.adapter);
       this.arbiter = new PriorityArbiter(this.adapter);
@@ -2780,6 +3309,9 @@ function createRynAutoHealEngine(deps) {
       });
       this.threat.evaluate(snap, this.damage, this.state, this.shame, this.ledger);
       this.predict.build(snap, this.state, this.damage, this.threat, this.ledger);
+      /* Ahead of the health bar: what is going to land, when, and how sure we
+       * are. Rebuilt only when the world that produced it changed. */
+      this.predict.predictAhead(snap, this.state, this.damage, this.threat, this.shame);
       /* The forecast and the way down both need the threat and the projection,
        * so the shame engine's second half runs after them. */
       this.shame.project(snap, this.state, this.damage, this.threat, this.predict, snap.systems);
@@ -2842,7 +3374,19 @@ function createRynAutoHealEngine(deps) {
         damageFrequency: Number(this.damage.damageFrequency.toFixed(2)),
         rate: Math.round(this.damage.rate),
         projected: Math.round(this.predict.projected),
-        inFlight: this.predict.inFlight
+        inFlight: this.predict.inFlight,
+        /* predictive defense */
+        forecastDamage: Math.round(this.predict.forecast.incomingDamage),
+        forecastTiming: this.predict.forecast.timing === Infinity
+          ? "-" : this.predict.forecast.timing,
+        forecastHealth: Math.round(this.predict.forecast.expectedHealth),
+        forecastShame: this.predict.forecast.expectedShameDelta,
+        forecastLevel: this.predict.forecast.level,
+        forecastConfidence: Number(this.predict.forecast.confidence.toFixed(2)),
+        threatDuration: this.predict.forecast.threatDuration,
+        invalidatedBy: this.predict.invalidatedBy,
+        predictCache: `${this.predict.cacheHits}/${this.predict.cacheHits + this.predict.cacheMisses}`,
+        motionSource: this.predict.motion.kind
       };
     }
 
