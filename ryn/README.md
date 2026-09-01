@@ -1,13 +1,12 @@
 # RYN Client v5.4
 
 `RYN_Client_v5.4.user.js` — the client as uploaded, with nine changes.
-The spike tick has a document of its own: [`SPIKE_TICK.md`](SPIKE_TICK.md).
 
 1. [Autoheal](#autoheal) — novastorm's rule and nothing else, and [its antis audited](#the-antis-audited--and-the-two-that-were-missing) against novastorm and X- term by term (two were missing; both ported)
 2. [The automatic Q](#the-automatic-q) — food is no longer pressed into the shame rule
 3. [Anti spike push](#anti-spike-push) — novastorm's `isNearestEnemyPushPlayer`, whole
 4. [Velocity tick](#velocity-tick) — added from Glotus 5.5.5; RYN had none
-5. [Spike tick](#spike-tick) — rebuilt as a timing module; see `SPIKE_TICK.md`
+5. [Spike tick](#spike-tick--removed) — removed entirely; the three placers restored
 6. [Knockback tick](#knockback-tick--hit-them-onto-a-spike) — added from Glotus; RYN had the trap half only
 7. [Automill](#automill--the-ragged-wall) — the whole trio or none, fixing the ragged wall
 8. [Blood Wings](#blood-wings-while-standing-still) — no longer forced while standing still
@@ -134,20 +133,45 @@ they have already been computed for `myPlayer` before this loop starts.
 
 ### The rest of the list
 
-| novastorm / X- block | in RYN | how |
+Each term is checked **two** ways, because "the name is in the file" is not a
+measurement. `AntiInsta` sums exactly this and nothing else:
+
+```js
+let totalDmgPot = EnemyManager2.potentialDamage + EnemyManager2.potentialSpikeDamage;
+```
+
+so a term whose value does not end up in one of those two accumulators is a term
+the heal never sees, however present its name is. That is not hypothetical —
+`pushingOnSpike` in this same client is computed every tick and read by nothing.
+So the table has a **reaches** column, and it is checked against the real write
+line, not the name:
+
+| novastorm / X- block | present | reaches | how |
+| --- | --- | --- | --- |
+| PREDICT TURRET HIT | yes | yes | **ported now** — 3 cases, +25, out to 350 |
+| VELOCITY TICK ANTI | yes | yes | **ported now** — turret gear at 150–350 |
+| KNOCKBACK ANTI | yes | yes | present; an angular cone where novastorm uses `lineInRect` |
+| …including cactuses | yes | yes | present — the spike write is guarded by `(isSpike \|\| isCactus)` |
+| ANTI SPIKE TICK | yes | yes | present; RYN asks the real placement solver, novastorm scans 36 fixed angles |
+| ANTI NORMAL INSTAKILL | yes | yes | present, **different bounds** — below |
+| …its turret half | yes | yes | +25 when a melee reaches and the turret is loaded |
+| …its primary half | yes | yes | only off reload, as novastorm has it |
+| poison / bull tick | yes | yes | +5 a tick, novastorm's `poisonDmgPot` |
+| projectiles in flight | yes | yes | **RYN only** — novastorm has no equivalent |
+
+and the terms that shape the total rather than add to it:
+
+| block | present | how |
 | --- | --- | --- |
-| PREDICT TURRET HIT | yes | **ported now** — 3 cases, +25, out to 350 |
-| VELOCITY TICK ANTI | yes | **ported now** — turret gear at 150–350 |
-| KNOCKBACK ANTI | yes | present; RYN uses an angular cone where novastorm uses `lineInRect` |
-| …including cactuses | yes | present — `Resource.getDamage` returns 35 for a desert cactus |
-| ANTI SPIKE TICK | yes | present; RYN asks the real placement solver, novastorm scans 36 fixed angles |
-| ANTI NORMAL INSTAKILL | yes | present, **different bounds** — below |
+| cap at 140 | yes | applied before the hat multipliers, as novastorm has it |
+| soldier ×0.75 | yes | present |
+| bull +5 | yes | present |
 | SHAME RESET | yes | present as its own module |
-| poison / bull tick | yes | present — +5 a tick, novastorm's `poisonDmgPot` |
-| projectiles in flight | yes | **RYN only** — novastorm has no equivalent |
-| cap at 140 | yes | present |
-| soldier ×0.75 / bull +5 | yes | present |
 | safe soldier | yes | present in `ModuleHandler.postTick` |
+
+The mutation set proves those verdicts can fail: dropping the poison tick,
+the projectile total, the knockback anti or the secondary's damage into a dead
+local leaves every name intact and turns the **reaches** column red.
 
 **The one non-cosmetic difference, left alone on purpose.** ANTI NORMAL
 INSTAKILL: novastorm fires for a ranged secondary within 400 given a recent hit;
@@ -210,6 +234,60 @@ X- Precision's, since both are now the same rule:
 
 `RYN (was)` is what was deleted, priced: those four guards were worth 1,446
 apples and 24 of the 30 shame locks. `RYN (now)` is the section below.
+
+### The mirror underneath all of it
+
+```
+node harness/shame-model.js
+```
+
+Every shame guard in this client is a bet on a number **the server owns and the
+client only estimates**. `shameCount < 7`, `shameActive`, `_foodIsShameSafe` —
+all three read RYN's local mirror of the server's counter, and nothing had ever
+checked the mirror. This does: the server rule transcribed from X- Precision
+18518 on one side, RYN's own `updateHealth`, hat-45 block and `_foodIsShameSafe`
+lifted out of the file on the other, and a wire with latency between them.
+
+Each of the three guards is also run **alone**, because "the three guards" is a
+description, not a measurement:
+
+```
+  ping   guards   ate   refused  judged +1  judged -2  locks  drift avg  drift max
+  30     none     7     293      34         0          4      0.00       0
+  30     lock     25    1        8          1          1      0.00       0
+  30     count    7     0        7          0          0      0.00       0
+  30     window   32    0        8          16         0      0.00       0
+  30     RYN      32    0        8          16         0      0.00       0
+```
+
+Three findings, none of which was obvious from reading:
+
+* **The 120ms window guard is the load-bearing one.** Alone it prevents every
+  lock at every ping *and* still eats 32 apples. The other two do not.
+* **`shameCount < 7` alone is safe the way not playing is safe** — 7 apples where
+  the shipped client eats 32. There is a trap inside it: `shameCount` only comes
+  **down** on a press the server judges slow, so a guard that refuses every press
+  once the count hits 7 has removed the only thing that could lower it again. It
+  starves and never recovers. The three together break that trap — the window
+  guard keeps presses slow, slow presses decrement, and the shipped mirror peaks
+  at **2** where the count-alone run reaches 7 and stops.
+* **At 200ms the mirror runs two judgements behind**, because 200ms spans nearly
+  two 111ms ticks. That is exactly why the count cannot be the guard that
+  matters, and the isolation rows show it is not.
+
+Four places the mirror cannot be exact, each measured rather than waved at:
+
+| | |
+| --- | --- |
+| the ceiling | the server counts to 8 and locks; RYN clamps to 7 and never predicts a lock — it waits to **see** hat 45. So `shameCount < 7` is exactly "not the press that locks" |
+| inside the lock | the server zeroes its count on locking, RYN parks its mirror at **8**. Deliberate: it makes the count guard refuse as well as the `shameActive` one |
+| what clears the stamp | the server clears `hitTime` on the food *attempt*, RYN clears `receivedDamage` when health is seen to *rise*. Moot only because `updateHealth` early-returns while `shameActive` |
+| the lock's clock | the server counts 30000 **down** from the judgement, RYN counts **up** from the tick it first sees hat 45 — a round trip later. Measured: the client never frees itself before the server does |
+
+One result in that table is **not** a client property and is labelled as such:
+at 200ms every row is identical, because the round trip alone pushes every press
+past 120ms and no guard binds. The 0 and 30ms rows are where the guards do the
+work.
 
 ---
 
@@ -567,44 +645,33 @@ would pass while testing half the feature.
 
 ---
 
-## Spike tick
+## Spike tick — removed
 
-Removed entirely one change ago, then rebuilt as a **timing** module rather than
-a placer. The whole design, the geometry it has to obey and the measurements are
-in [`SPIKE_TICK.md`](SPIKE_TICK.md); the short version:
+There is no spike tick in this client, in any form. It was built, then removed
+at your request, and the removal is total: no `SpikeTick` class, no
+`SPIKE_TICK_*` constants, no `_spikeTick` settings, no Devtool row, and nothing
+in the run order. `harness/ryn-changes-check.js` asserts each of those
+absences, and the mutation set puts each one back to prove the assertion can
+fail.
 
-* A build always lands on your own ring at the angle you face, so the only
-  decision available is **one angle**. The old controller tried to be a fourth
-  placer and lost every contest to auto place's hard reservations, because
-  `PlacementLedger.blocked()` returns on `!e.soft` before priority is read.
-* The new `SpikeTick` never reserves ground of its own. It reads what auto
-  place, preplace and replace have already done — standing objects,
-  `ledger.entries`, `book.pending()` — and classifies the moment:
-  **CONTACT** (a spike is already touching them: swing, spend nothing),
-  **COVERED** (one is coming: swing, do not pay twice), **OPEN** (nothing
-  reaches and an angle is free: ask the engine, and swing only if the send went
-  out).
-* It uses `engine.motion` for prediction and `engine.anglesFor` for angles, and
-  builds neither of its own.
-* It absorbs `SpikeSync`, whose gate — a rising edge on the reaching-angle set
-  **and** an object destroyed in the same frame — almost never opened.
-  `SpikeSyncHammer` keeps its trigger and delegates the execution.
-* **Execution order.** A trap forbids a spike within 77° of it — wider than the
-  reach window at any distance — and auto place was the one placement path that
-  sent without consulting the resolver, so its trap took the tick's ground
-  before the tick could ask for it. Auto place now asks (`engine.groundIsFree`,
-  one guard in its emit; its ladder is untouched), and the tick takes a **soft,
-  expiring** SYNC claim on the angles it is about to need — but only when the
-  trap still has somewhere else to go, or the target is already pinned, or the
-  tick would kill.
-* Off by default (`_spikeTick`), with `_spikeTickTrapped`, `_spikeTickFree` and
-  `_spikeTickDebug` under it. Devtool → Statistics → "Spike tick swung/armed".
+**The three placement systems are back exactly as they were.** The execution-
+order work had added one guard to auto place's `emit` and two methods
+(`groundIsFree`, `holdGround`) to `RynPlacementEngine`; both are gone. The
+client is byte-for-byte the pre-spike-tick file apart from the `EnemyManager`
+anti block described under [Autoheal](#autoheal) — three hunks, 78 added lines,
+nothing removed. Two checks keep it that way:
 
-```
-node harness/spike-geometry.js   # what the game's own rules allow
-node harness/spike-tick.js       # the class itself, lifted and run: 26 rows, 5 properties
-node harness/spike-vs-trap.js    # the execution-order fix: 11 cases, 10 properties
-```
+* auto place's emit is `canPlace`, then `place`, with nothing between them, and
+  Luna's unconditional trap branch (`if (neitherTrapped) return true`) is as she
+  wrote it;
+* `RynPlacementEngine` carries no reservation API, and still carries every part
+  of preplace and replace.
+
+Two names that contain "spike tick" and are **not** part of it stay: auto
+place's own `canSpikeTick` local and `LUNA_SPIKE_TICK_MODULES`, its stand-off
+set. Both predate all of this and belong to auto place. `SpikeSync`,
+`SpikeSyncHammer`, `SpikeTrap` and `TeammateSpikeTrap` are the client's own
+modules and are untouched.
 
 ## Knockback tick — hit them onto a spike
 
@@ -868,7 +935,9 @@ runs the real rule:
 ## Verifying the whole set
 
 ```
-node harness/ryn-changes-check.js      # 104 checks over every change
+node harness/ryn-changes-check.js      # 70 checks over every change
+node harness/shame-model.js            # the shame mirror against the server's own rule
+node harness/anti-audit.js             # every damage term, present AND reaching the total
 python3 harness/ryn-changes-mutate.py  # proves those checks can fail
 ```
 
@@ -883,18 +952,24 @@ ways:
 | **EXECUTE** | every changed block lifted with `vm` and actually run against stubs, so a `ReferenceError` inside it surfaces |
 | **RESOLVE** | every identifier the new code reads from an outer scope confirmed declared |
 | **WIRE** | settings, module registration, run-order slot and UI ids confirmed present and consistent — including that every one of the 63 `staticModules` constructors names something real |
-| **NO GHOSTS** | each of the 20 deleted helpers confirmed to have no surviving reader |
+| **NO GHOSTS** | each deleted heal helper confirmed to have no surviving reader, and the spike tick confirmed gone in every form |
 
 **And the checker is itself tested.** `ryn-changes-mutate.py` breaks the client
-45 different ways — heal presses once instead of per restore, `velocityTick`
-dropped from the run order, a deleted helper called again, the Devtool span
-renamed, the `VelocityTick` class renamed while still registered, `heal()`
-pressing food through the shame lock again, the food guard waiting for the
-window forever or answering twice in one tick, a spike tick module registered
-again, auto place sending without asking the resolver or asking only after it
-has sent, the tick's hold taken hard instead of soft, the long-range turret anti
-never called or called after its damage has been counted — and requires the
-checker to go red on every one. It catches 45 of 45.
+51 different ways and requires a red result each time. It drives **three**
+verifiers — the checker, `anti-audit.js` and `shame-model.js` — and counts a
+mutation as caught if any goes red, because they divide the client between them:
+wiring, the damage terms, and the shame counter. It catches 51 of 51.
+
+Two of those 51 were **missed on the first run**, and both were real coverage
+holes rather than bench faults:
+
+* *the lock never lifts after 30 seconds* — nothing asserted on the unlock at
+  all. `shame-model.js` now measures it on both sides and requires the client to
+  free itself **after** the server, never before.
+* *the heal rule stops checking the shame count* — the executed `AntiInsta` case
+  passed `shameCount: 0`, so the guard never bound. There is now a case that
+  drives it at 0, 6 and 7, and a fourth that checks the *other* branch of the OR
+  still heals at 7 — or a shamed player could never top up again.
 
 That last one mattered: the first version of the class-existence check used
 `indexOf("class VelocityTick")`, which still matched after the class was renamed

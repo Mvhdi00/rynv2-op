@@ -613,80 +613,6 @@ at **every** one: the coordinate error is correlated between the two points
 being compared, so it cancels. Worth keeping — it is a natural theory, and this
 is the thing that settles it.
 
-### `spike-geometry.js`
-
-What a spike tick can and cannot do, derived from moomoo's own item table and
-collision rule rather than restated. A build always lands on your own ring
-(79 for spikes, 82 for the age-5 kinds) at the angle you face; a spike hurts
-within 84 of its centre and **your own spikes hurt them as much as theirs do**;
-two spikes on one ring must be 98 apart, which is 76.7 degrees.
-
-From those three, the reach window: a spike touches a target at distance *d*
-only from within `acos((R² + d² − 84²) / 2Rd)` of the aim — ±64° at d=79,
-±38° at d=130, nothing past 163. The window is exactly one separation wide at
-**d = 130.2**, which is the distance above which a second reaching spike simply
-does not exist.
-
-That last figure corrects the note left when the old spike tick was removed.
-"Disjoint at every distance" is true only when the existing spike sits **on the
-aim line** — which was both the case that bench tested and the angle the old
-controller kept asking for. Off-aim, a second spike fits comfortably below 130.
-
-### `spike-tick.js`
-
-The spike tick itself, lifted out of the client with `vm` and run — together
-with the real `GeometrySolver`, `TargetMotion` and `PlacementLedger`. Only the
-world around them is staged.
-
-26 scenarios (the 20 in the brief, plus six the geometry made worth adding) and
-5 multi-tick properties: the bull-then-turret combo lands on consecutive ticks,
-a strike delegated from `SpikeSyncHammer` keeps its follow-up for the next tick,
-hysteresis holds a target against a marginal rival but yields to a clear one,
-and auto place's reservation survives untouched.
-
-18 mutations of the module are run against it and all 18 turn it red.
-
-Two guards were written, measured, and then deleted or retuned because they
-could never be the test that decided anything — which is the point of measuring:
-
-* an angle cooldown, unreachable behind the `_coveredBy` check that sees the
-  hard ledger entry a send leaves;
-* a 60° turn limit on the motion track, which cleared `TargetMotion`'s own
-  confidence floor only in a 0.13°-wide sliver. Retuned to 30°, where it bites
-  first and actually decides.
-
-### `spike-vs-trap.js`
-
-Why a trap was reaching the wire before the spike tick's window, and what the
-fix changes. Real `PlacementLedger`, `ConflictResolver`, `TargetMotion` and
-`SpikeTick`; auto place reduced to the one branch that matters, with its emit
-modelled both ways.
-
-Two facts, and between them they are the whole bug. `checkItemLocation` refuses
-a build within `s + blockS`, and for a placed item `blockS` is the full scale —
-so a spike (49) and a pit trap (50) need 99 between them, and on rings of 79 and
-80 that is **77 degrees**. The reach window is ±64° at best and narrower
-everywhere else, so **one trap dropped toward the enemy forbids every spike that
-would reach them, at every distance.** And auto place was the one placement path
-that sent with `ModuleHandler.place()` — raw, with `_notePlacement` recording the
-footprint in the ledger *after* the decision — while its trap branch is
-`if (neitherTrapped) return true` and every spike branch is conditional.
-
-```
-  auto place emit           traps   spikes  spike tick swung  held ground on
-  raw place() — before      4       0       never             0 ticks
-  groundIsFree() — after    1       1       tick 1            1 ticks
-```
-
-Eleven cases and ten properties, and twelve mutations of the fix all turn it
-red — including auto place sending without asking, asking after it has sent, the
-hold taken hard instead of soft, and the trap-versus-spike comparison dropped.
-
-Auto place is 490 lines of Luna ladder and is modelled here rather than lifted,
-so the bench asserts against the source that the emit it models is the emit the
-client has, and refuses to run otherwise. It also names, in its header, the one
-line it cannot cover with a failing case and why.
-
 ### `anti-audit.js`
 
 Every anti in novastorm's damage prediction, checked off against RYN's — and
@@ -739,6 +665,46 @@ within 400 given a recent hit, RYN within `primaryRange + 130` with no recent-hi
 requirement — those bounds are `canPossiblyInstakill`'s, and it feeds danger
 detection, the soldier hat and every insta module, not only the heal).
 
+### `shame-model.js`
+
+RYN's picture of the shame counter against the server's, with a wire between
+them. Every shame guard in the client — `shameCount < 7`, `shameActive`,
+`_foodIsShameSafe` — is a bet on a number the server owns and the client only
+estimates, and nothing had checked the estimate.
+
+The server side is X- Precision 18452 / 18518 / 18265 transcribed; the client
+side is RYN's own `updateHealth`, its hat-45 block and `_foodIsShameSafe`, all
+lifted out of the file. Latency is one-way `pong/2` each way, and the fight runs
+a millisecond at a time so both clocks are honest.
+
+The useful part is that each guard is run **alone**:
+
+```
+  ping   guards   ate   refused  judged +1  judged -2  locks  drift avg  drift max
+  30     none     7     293      34         0          4      0.00       0
+  30     lock     25    1        8          1          1      0.00       0
+  30     count    7     0        7          0          0      0.00       0
+  30     window   32    0        8          16         0      0.00       0
+  30     RYN      32    0        8          16         0      0.00       0
+```
+
+* The **120ms window guard alone** prevents every lock at every ping and still
+  eats 32 apples. It is the load-bearing one.
+* **`shameCount < 7` alone** takes no locks either — by starving, at 7 apples.
+  There is a trap in it: the count only comes *down* on a press the server judges
+  slow, so refusing every press at 7 removes the only thing that lowers it. The
+  three together break that trap, and the shipped mirror peaks at 2.
+* **At 200ms the mirror is two judgements behind**, because 200ms spans nearly
+  two 111ms ticks — which is why the count cannot be the guard that matters.
+
+Four divergences between the two models are printed rather than smoothed over,
+including the deliberate one: on a lock the server zeroes its count and RYN parks
+its mirror at 8, so the count guard refuses as well as the `shameActive` one.
+That is asserted, not assumed.
+
+One row is labelled as **not** a client property: at 200ms every guard set gives
+the same answer, because the round trip alone pushes every press past 120ms.
+
 ### `ryn-changes-check.js` and `ryn-changes-mutate.py`
 
 The standing check over every change made to `ryn/`. It exists because RYN
@@ -746,16 +712,21 @@ cannot be booted here, so `node --check` is the only whole-file check available
 and it validates syntax only — it will not notice a call to a deleted helper, an
 identifier that resolves nowhere, or a UI id no element carries.
 
-104 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
+70 checks in four groups: **EXECUTE** (each changed block lifted with `vm` and
 actually run against stubs), **RESOLVE** (outer identifiers declared),
 **WIRE** (settings, registration, run order, UI ids — including that all 63
 `staticModules` constructors name something real, and that the spike tick takes
-no ground of its own), **NO GHOSTS** (the 17 deleted helpers have no surviving
-reader — including `SpikeSync`'s three `EnemyManager` members and the two spike
-tick guards that measurement showed could never decide anything).
+no ground of its own), **NO GHOSTS** (the deleted heal helpers have no
+surviving reader). The spike tick is not on that list: it was not pared back but
+removed whole, and a dedicated check asserts that no class, constant, setting,
+UI row or run-order slot of it survives — while auto place's own `canSpikeTick`
+and `LUNA_SPIKE_TICK_MODULES`, which predate all of it, are still there.
 
-`ryn-changes-mutate.py` is the check on the check: it breaks the client 45 ways
-and requires a red result each time. Three real holes came out of it and are
+`ryn-changes-mutate.py` is the check on the check: it breaks the client 51 ways
+and requires a red result each time. It drives **three** verifiers — the checker,
+`anti-audit.js` and `shame-model.js` — and counts a mutation as caught if any of
+them goes red, since they divide the client between them: wiring, the damage
+terms, and the shame counter. Three real holes came out of it and are
 worth knowing about, because all three are easy to reproduce elsewhere:
 
 * `indexOf("class VelocityTick")` still matches after the class is renamed to

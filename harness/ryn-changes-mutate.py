@@ -31,11 +31,6 @@ MUTATIONS = [
    "      if (lands >= SHAME_SAFE_WINDOW) {"),
   ("the food guard answers twice in one tick",
    "      if (this._foodHeldTick === this.tickCount) {\n        return false;\n      }\n", ""),
-  ("a spike tick module is registered again",
-   "        spikeTrap: new SpikeTrap(client2),",
-   "        spikeTickTrap: new SpikeTickTrap(client2),\n        spikeTrap: new SpikeTrap(client2),"),
-  ("the autoPlacer stand-off set names a module that is gone",
-   'new Set([ "spikeTick"', 'new Set([ "spikeSync", "spikeTick"'),
   ("trap branch replaces the window instead of widening it",
    "const inAttackRange = inRange(dist1, this.minKB, this.maxKB) ||\n        pinned && dist1 <= VELOCITY_TICK_TRAP_RANGE;",
    "const inAttackRange = pinned ? dist1 <= VELOCITY_TICK_TRAP_RANGE : inRange(dist1, this.minKB, this.maxKB);"),
@@ -61,39 +56,6 @@ MUTATIONS = [
    'querySelector("#_automillSent")', 'querySelector("#nope")'),
   ("VelocityTick class deleted but still registered",
    "  class VelocityTick {", "  class VelocityTickX {"),
-  ("spike tick dropped from the run order",
-   "this.staticModules.spikeTick, ", ""),
-  ("spike tick moved after the placers",
-   "this.staticModules.spikeTick, this.staticModules.spikeTrap,",
-   "this.staticModules.spikeTrap,"),
-  ("_spikeTick setting removed",
-   "    _spikeTick: false,\n", ""),
-  ("the spike tick starts taking ground of its own",
-   "        const sent = ModuleHandler.requestPlaceMany(SPIKE_TICK_TYPE, angles, \"spikeTick\");",
-   "        const sent = this._engine().ledger.reserve(0, 0, 49, 80, \"spikeTick\", tick, 2) ? 1 : 0;"),
-  ("the spike tick stops reading the preplace book",
-   "      for (const rec of engine.book.pending()) {", "      for (const rec of []) {"),
-  ("the spike tick grows a second motion tracker",
-   "      const p = engine.motion.predict(target, SPIKE_TICK_LEAD);",
-   "      const p = new TargetMotion().predict(target, SPIKE_TICK_LEAD);"),
-  ("SpikeSyncHammer goes back to placing and swinging itself",
-   "          spikeTick.strike(nearest, futureAngle, placementAngles, ModuleHandler.tickCount);",
-   "          ModuleHandler.forceHat = 7;"),
-  ("updateSpikeTick queries the wrong element",
-   'querySelector("#_spikeTickOutcome")', 'querySelector("#nope")'),
-  ("auto place goes back to sending without asking",
-   '        if (placementEngine && !placementEngine.groundIsFree(type, obj.angle, "autoPlacer")) return;\n', ""),
-  ("auto place asks after it has already sent",
-   '        if (placementEngine && !placementEngine.groundIsFree(type, obj.angle, "autoPlacer")) return;\n        ModuleHandler.place(type, obj.angle);',
-   '        ModuleHandler.place(type, obj.angle);\n        if (placementEngine && !placementEngine.groundIsFree(type, obj.angle, "autoPlacer")) return;'),
-  ("Luna's trap branch is quietly gated on the spike tick",
-   "            if (neitherTrapped) return true;", "            if (neitherTrapped) return false;"),
-  ("the spike tick's hold is taken hard instead of soft",
-   "ttl === undefined ? 2 : ttl, true);", "ttl === undefined ? 2 : ttl, false);"),
-  ("the hold is never released when the tick fires",
-   '      this._release("fired");\n', ""),
-  ("the trap-versus-spike comparison is dropped",
-   "          if (!why) {", "          if (false) {"),
   ("the long-range turret anti is never called",
    "      this.antiLongRangeTurret(enemy);\n", ""),
   ("the turret anti runs after its damage has been counted",
@@ -115,22 +77,98 @@ MUTATIONS = [
   ("the velocity-tick anti forgets the primary that comes with it",
    "      enemy.potentialDamage += ANTI_TURRET_DAMAGE +\n        (primary !== null && primary !== undefined ? enemy.getMaxWeaponDamage(primary, lookingShield) : 0);",
    "      enemy.potentialDamage += ANTI_TURRET_DAMAGE;"),
+  # The spike tick is gone in every form; these put a piece of it back, or
+  # reach into one of the three placement systems again.
+  ("a spike tick class comes back",
+   "  class SpikeSync {",
+   "  class SpikeTick {\n    moduleName=\"spikeTick\";\n  }\n  class SpikeSync {"),
+  ("a SPIKE_TICK constant comes back",
+   "  const ANTI_TURRET_RANGE = 350;",
+   "  const SPIKE_TICK_TYPE = 4;\n  const ANTI_TURRET_RANGE = 350;"),
+  ("a _spikeTick setting comes back",
+   "    _velocityTick: false,", "    _spikeTick: false,\n    _velocityTick: false,"),
+  ("auto place asks the placement engine before it sends again",
+   "        if (!myPlayer.canPlace(type)) return;\n        ModuleHandler.place(type, obj.angle);",
+   "        if (!myPlayer.canPlace(type)) return;\n        if (!placementEngine.groundIsFree(type, obj.angle)) return;\n        ModuleHandler.place(type, obj.angle);"),
+  ("auto place stops sending at all",
+   "        ModuleHandler.place(type, obj.angle);\n        ModuleHandler.placedOnce = true;",
+   "        ModuleHandler.placedOnce = true;"),
+  ("Luna's unconditional trap branch is made conditional",
+   "            if (neitherTrapped) return true;", "            if (neitherTrapped) return false;"),
+  ("the placement engine grows a reservation API",
+   "    anglesFor(", "    groundIsFree(t, a) { return true; }\n    anglesFor("),
+  ("preplace generation is removed from the engine",
+   "    _generatePreplace(", "    _generatePreplaceX("),
+  ("replace generation is removed from the engine",
+   "    _generateReplace(", "    _generateReplaceX("),
+  ("auto place loses its own canSpikeTick",
+   "        let canSpikeTick = Math.hypot(", "        let canSpikeTickX = Math.hypot("),
+
+  # Aimed at anti-audit's dataflow column: a term whose name survives but whose
+  # value stops reaching the total AntiInsta sums. This is the pushingOnSpike
+  # failure mode, and a name-existence probe cannot see it.
+  ("the poison tick is computed and dropped",
+   "        this.potentialDamage += 5;", "        const unusedPoison = 5;"),
+  ("projectiles in flight stop being counted",
+   "      this.potentialDamage += this.client.ProjectileManager.totalDamage;",
+   "      const unusedProjectiles = this.client.ProjectileManager.totalDamage;"),
+  ("the knockback anti stops feeding the spike total",
+   "              this.potentialSpikeKnockbackDamage = Math.max(this.potentialSpikeKnockbackDamage, object.getDamage());",
+   "              this.possibleToKnockbackDamage = object.getDamage();"),
+  ("the secondary's damage is dropped from the total",
+   "          this.potentialDamage += secondaryDamage;", "          const unusedSecondary = secondaryDamage;"),
+  ("AntiInsta sums something other than the two accumulators",
+   "      let totalDmgPot = EnemyManager2.potentialDamage + EnemyManager2.potentialSpikeDamage;",
+   "      let totalDmgPot = EnemyManager2.potentialDamage;"),
+  ("the 140 cap is removed",
+   "      if (totalDmgPot > ANTI_INSTA_DMG_CAP) {", "      if (false) {"),
+  # Aimed at shame-model: the three guards, and the mirror they read.
+  ("the shame mirror stops counting up",
+   "          this.shameCount += 1;", "          this.shameCount += 0;"),
+  ("the shame mirror stops counting down",
+   "          this.shameCount -= 2;", "          this.shameCount -= 0;"),
+  ("the mirror is not clamped, so it runs away",
+   "        this.shameCount = clamp(this.shameCount, 0, 7);", ""),
+  ("the hat-45 lock latch never fires",
+   "      if (this.hatID === 45 && !this.shameActive) {", "      if (false) {"),
+  ("the lock never lifts after 30 seconds",
+   "      if (this.shameTimer >= 3e4 && this.shameActive) {", "      if (false) {"),
+  ("the heal rule stops checking the shame count",
+   "      if (!(((healing && myPlayer.shameCount < 7) || myPlayer.tickCount - myPlayer.damageTick > 0)",
+   "      if (!(((healing) || myPlayer.tickCount - myPlayer.damageTick > 0)"),
 ]
 
-print("mutation tests — break it on purpose, confirm the checker goes red\n")
+# Every verifier that reads the client, not just the checker. A mutation counts
+# as caught if ANY of them goes red — which is the honest question, since they
+# divide the client between them: the checker owns wiring, anti-audit owns the
+# damage terms, shame-model owns the counter and its guards.
+VERIFIERS = [
+    ("check",  ["node", "harness/ryn-changes-check.js"]),
+    ("anti",   ["node", "harness/anti-audit.js"]),
+    ("shame",  ["node", "harness/shame-model.js"]),
+]
+
+print("mutation tests — break it on purpose, confirm a verifier goes red\n")
+print("  each mutation is run past all three: %s\n" % ", ".join(n for n, _ in VERIFIERS))
 missed = 0
 for label, old, new in MUTATIONS:
     n = base.count(old)
     if n != 1:
         print("  %-44s SKIPPED — anchor matched %d times" % (label, n)); missed += 1; continue
     open(MUT, "w", encoding="utf-8").write(base.replace(old, new))
-    r = subprocess.run(["node", "harness/ryn-changes-check.js", MUT],
-                       capture_output=True, text=True)
-    fails = [l for l in r.stdout.splitlines() if l.strip().startswith("FAIL")]
-    if fails:
-        first = fails[0].strip()[4:].strip()
-        print("  %-44s caught (%d)  %s" % (label, len(fails), first[:56]))
+    caught_by, detail = [], ""
+    for name, cmd in VERIFIERS:
+        r = subprocess.run(cmd + [MUT], capture_output=True, text=True)
+        # A verifier that CRASHES on the mutant has still noticed it: an anchor
+        # it needs is gone. That is a red result, not a skip.
+        fails = [l for l in (r.stdout + r.stderr).splitlines() if l.strip().startswith("FAIL")]
+        if fails or r.returncode != 0:
+            caught_by.append(name)
+            if not detail:
+                detail = fails[0].strip()[4:].strip() if fails else "non-zero exit"
+    if caught_by:
+        print("  %-44s caught by %-18s %s" % (label, "+".join(caught_by), detail[:44]))
     else:
-        print("  %-44s MISSED — checker stayed green" % label); missed += 1
+        print("  %-44s MISSED — every verifier stayed green" % label); missed += 1
 print("\n  %d of %d mutations caught" % (len(MUTATIONS) - missed, len(MUTATIONS)))
 sys.exit(1 if missed else 0)

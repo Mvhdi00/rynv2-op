@@ -139,6 +139,54 @@ check("execute", "AntiInsta.postTick declines at full health", () => {
                      : [false, "healed " + heals + " times at full health"];
 });
 
+/* The two branches of novastorm's heal rule, run rather than read. Mutation
+ * testing found this gap: the case above passes shameCount 0, so removing
+ * `myPlayer.shameCount < 7` from the rule left every check green. These drive
+ * the guard from both sides.
+ *
+ *     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0) ...
+ *
+ * The OR is what makes the guard subtle. At shameCount 7 the LEFT branch is
+ * shut, but the right one — a tick passed without being hit — still heals, and
+ * must, or a shamed player could never top up again. So the guard has to be
+ * tested with the right branch shut too: damageTick == tickCount. */
+check("execute", "the heal rule shuts the healing branch at shameCount 7", () => {
+  const cls = lift("class AntiInsta\\s*\\{", "AntiInsta");
+  const sandbox = {
+    Math, Object,
+    Settings_default: { _autoheal: true, _antiSmartTick: false },
+    Items: { 0: { restore: 20 } }, Hats: { 6: { dmgMult: .75 } },
+    ANTI_INSTA_DMG_CAP: 140, ANTI_INSTA_SCUBA_BIAS: 5,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(cls + "\nthis.make = (c) => new AntiInsta(c);", sandbox);
+
+  // shameCount, and whether a tick has passed without damage. tickCount ===
+  // damageTick means one has NOT, so the right branch of the OR is shut.
+  const run = (shameCount, quietTick) => {
+    let heals = 0;
+    sandbox.make({
+      myPlayer: {
+        tempHealth: 30, maxHealth: 100, shameCount, hatID: 0,
+        tickCount: 10, damageTick: quietTick ? 2 : 10,
+        isTrapped: false, getItemByType: () => 0,
+      },
+      _ModuleHandler: { heal: () => heals++, tickCount: 10 },
+      // 60 predicted against 30 health: `healing` is true.
+      EnemyManager: { potentialDamage: 60, potentialSpikeDamage: 0, nearestEnemy: null },
+    }).postTick();
+    return heals;
+  };
+
+  if (run(0, false) === 0) return [false, "did not heal at shameCount 0 under lethal damage"];
+  if (run(6, false) === 0) return [false, "did not heal at shameCount 6 — the guard is `< 7`"];
+  if (run(7, false) !== 0) return [false, "healed at shameCount 7 with no quiet tick — the guard is not being read"];
+  // ...and the right branch of the OR must still work, or a shamed player could
+  // never top up again.
+  if (run(7, true) === 0) return [false, "a quiet tick no longer heals at shameCount 7 — the OR is gone"];
+  return [true, "heals at 0 and 6, refuses at 7, and a quiet tick still heals at 7"];
+});
+
 /* Automill. The reported symptom was a ragged wall — one mill in one place,
  * three in another — and the cause was placing whichever of the trio fit. This
  * runs the real module and requires all-or-nothing: with one spot blocked it
@@ -224,20 +272,6 @@ const OUTER = [
   ["ANTI_INSTA_DMG_CAP", "const ANTI_INSTA_DMG_CAP"],
   ["ANTI_INSTA_SCUBA_BIAS", "const ANTI_INSTA_SCUBA_BIAS"],
   ["SHAME_SAFE_WINDOW", "const SHAME_SAFE_WINDOW"],
-  ["SPIKE_TICK_TYPE", "const SPIKE_TICK_TYPE"],
-  ["SPIKE_TICK_KB_SAFE", "const SPIKE_TICK_KB_SAFE"],
-  ["SPIKE_TICK_STICK", "const SPIKE_TICK_STICK"],
-  ["SPIKE_TICK_TURN_LIMIT", "const SPIKE_TICK_TURN_LIMIT"],
-  ["SPIKE_TICK_LEAD", "const SPIKE_TICK_LEAD"],
-  ["SPIKE_TICK_MIN_CONFIDENCE", "const SPIKE_TICK_MIN_CONFIDENCE"],
-  ["SPIKE_TICK_ANGLE_LIMIT", "const SPIKE_TICK_ANGLE_LIMIT"],
-  ["SPIKE_TICK_TRAPPED_BONUS", "const SPIKE_TICK_TRAPPED_BONUS"],
-  ["SPIKE_TICK_REASON", "const SPIKE_TICK_REASON"],
-  ["SPIKE_TICK_HOLD_LEAD", "const SPIKE_TICK_HOLD_LEAD"],
-  ["SPIKE_TICK_HOLD_CONFIDENCE", "const SPIKE_TICK_HOLD_CONFIDENCE"],
-  ["SPIKE_TICK_HOLD_TTL", "const SPIKE_TICK_HOLD_TTL"],
-  ["SPIKE_TICK_HOLD_ANGLES", "const SPIKE_TICK_HOLD_ANGLES"],
-  ["SPIKE_TICK_BULL_MULT", "const SPIKE_TICK_BULL_MULT"],
   ["ANTI_TURRET_RANGE", "const ANTI_TURRET_RANGE"],
   ["ANTI_TURRET_DAMAGE", "const ANTI_TURRET_DAMAGE"],
   ["ANTI_TURRET_LOW_HEALTH", "const ANTI_TURRET_LOW_HEALTH"],
@@ -295,8 +329,6 @@ check("wire", "velocityTick runs in the module loop, after autoPush", () => {
 });
 
 for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "false"],
-                           ["_spikeTick", "false"], ["_spikeTickTrapped", "true"],
-                           ["_spikeTickFree", "true"], ["_spikeTickDebug", "false"],
                            ["_botNameAll", '""'], ["_botNumberNames", "false"],
                            ["_knockbackTick", "false"],
                            ["_velocityTickTimes", "0"], ["_knockbackTickTimes", "0"]]) {
@@ -307,9 +339,8 @@ for (const [key, want] of [["_velocityTick", "false"], ["_velocityTickTrap", "fa
 }
 
 for (const id of ["_velocityTick", "_velocityTickTrap", "_knockbackTick",
-                  "_spikeTick", "_spikeTickTrapped", "_spikeTickFree", "_spikeTickDebug",
                   "_botNameAll", "_botNumberNames",
-                  "_velocityTickTimes", "_knockbackTickTimes", "_spikeTickOutcome"]) {
+                  "_velocityTickTimes", "_knockbackTickTimes"]) {
   check("wire", id + " has a UI element", () => {
     const asInput = src.includes('id=\\"' + id + '\\" type=\\"checkbox\\"');
     const asSpan = src.includes('id=\\"' + id + '\\" class=\\"text-value\\"');
@@ -465,114 +496,65 @@ check("execute", "_foodIsShameSafe holds once, then gives way", () => {
   return [true, "holds one tick, releases the whole tick, free once the window is past"];
 });
 
-/* The spike tick. It is a timing module: everything it knows about placement
- * it asks the engine for, and everything it sends goes back through the engine.
- * These are the properties that make that true, checked against the source
- * rather than assumed. harness/spike-tick.js runs the class itself. */
-check("wire", "SpikeTick is defined, registered, and runs before the placers", () => {
-  if (!/class SpikeTick\s*\{/.test(src)) return [false, "no `class SpikeTick {`"];
-  if (!src.includes("spikeTick: new SpikeTick_default(client2)")) return [false, "not registered"];
-  const m = /this\.modules = \[([^\]]+)\]/.exec(src);
-  const order = m[1].split(",").map(x => x.trim().replace("this.staticModules.", ""));
-  const i = order.indexOf("spikeTick");
-  if (i < 0) return [false, "not in the run order"];
-  for (const later of ["autoPlacer", "placementEngine", "updateAttack"]) {
-    const j = order.indexOf(later);
-    if (j >= 0 && j < i) return [false, "runs after " + later + ", so it cannot set the swing or read a clean world"];
+/* The spike tick is gone, in every form. Checked by naming the things that
+ * would have to exist if any of it were left, rather than by grepping for the
+ * word — auto place has carried its own `canSpikeTick` local and
+ * LUNA_SPIKE_TICK_MODULES since long before any of this, and a substring
+ * search would either flag those or be silently defeated by them. */
+check("wire", "no spike tick module, setting, constant or UI survives", () => {
+  const left = [];
+  if (/class SpikeTick\s*\{/.test(src)) left.push("class SpikeTick");
+  if (/\bspikeTick:\s*new /.test(src)) left.push("a staticModules registration");
+  if (/staticModules\.spikeTick\b/.test(src)) left.push("a run-order slot");
+  if (/moduleName\s*=\s*"spikeTick"/.test(src)) left.push('moduleName="spikeTick"');
+  if (/const SPIKE_TICK_[A-Z_]+/.test(src)) left.push("SPIKE_TICK_* constants");
+  if (/_spikeTick(Trapped|Free|Debug|Outcome)?\s*[:=]/.test(src)) left.push("a _spikeTick setting");
+  if (/updateSpikeTick/.test(src)) left.push("GameUI.updateSpikeTick");
+  if (left.length) return [false, "still present: " + left.join(", ")];
+  // ...and the two names auto place has always had are still there, because
+  // deleting those would be deleting part of auto place.
+  if (!/const LUNA_SPIKE_TICK_MODULES/.test(src)) return [false, "auto place's stand-off set went with it"];
+  if (!/let canSpikeTick =/.test(src)) return [false, "auto place's own canSpikeTick went with it"];
+  return [true, "gone; auto place's own canSpikeTick and stand-off set untouched"];
+});
+
+/* The three placement systems the spike tick work reached into, put back.
+ * `git diff` says the client is byte-identical to the pre-spike-tick commit
+ * apart from the EnemyManager anti block, but a diff is a fact about one
+ * checkout and this file has to keep being true afterwards — so the two
+ * specific intrusions are named. */
+check("wire", "auto place sends the way Luna wrote it, consulting nothing", () => {
+  const m = /const emit = obj => \{([\s\S]*?)\n {6}\};/.exec(src);
+  if (!m) return [false, "auto place's emit not found"];
+  const body = m[1];
+  if (/groundIsFree|holdGround|placementEngine/.test(body))
+    return [false, "emit still asks the placement engine before it sends"];
+  if (!/if \(!myPlayer\.canPlace\(type\)\) return;/.test(body))
+    return [false, "the resource check went missing"];
+  if (!/ModuleHandler\.place\(type, obj\.angle\);/.test(body))
+    return [false, "emit no longer sends"];
+  // Luna's ladder: the trap branch is unconditional and the spike branches are
+  // not. That asymmetry is auto place's design, and it is back.
+  if (!/if \(neitherTrapped\) return true;/.test(src))
+    return [false, "Luna's unconditional trap branch is not as she wrote it"];
+  return [true, "canPlace, then place — nothing between them"];
+});
+
+check("wire", "the placement engine has no reservation API bolted on", () => {
+  const cls = lift("class RynPlacementEngine\\s*\\{", "RynPlacementEngine");
+  for (const added of ["groundIsFree", "holdGround"]) {
+    if (cls.includes(added)) return [false, "still carries " + added + "()"];
   }
-  const hammer = order.indexOf("spikeSyncHammer");
-  if (hammer >= 0 && hammer > i) return [false, "spikeSyncHammer runs after it, so its delegated strike would be a tick late"];
-  return [true, "slot " + i + " of " + order.length + ", before autoPlacer and updateAttack"];
-});
-
-check("wire", "the spike tick takes no ground of its own", () => {
-  const cls = lift("class SpikeTick\\s*\\{", "SpikeTick");
-  for (const bad of ["preempt(", "ledger.reserve", "claimPlacement", "_conflicts.take"]) {
-    if (cls.includes(bad)) return [false, "calls " + bad + " - that takes ground from a placer"];
+  /* Preplace and replace are the engine's two jobs and every part of both is
+   * still here. Anchored on the METHOD DEFINITION (four-space indent, open
+   * paren) rather than on any mention: renaming `_generatePreplace(` to
+   * `_generatePreplaceX(` leaves `this._generatePreplace(` at the call site,
+   * and a bare-name search stayed green through exactly that mutation. */
+  for (const kept of ["_generatePreplace", "_generateReplace", "_replaceContext",
+                      "promoteRecord", "onVacated"]) {
+    if (!new RegExp("\\n {4}" + kept + "\\(").test(cls)) return [false, "lost " + kept + "()"];
   }
-  if (!/requestPlaceMany\(SPIKE_TICK_TYPE/.test(cls))
-    return [false, "does not send through requestPlaceMany, so it is off the engine's packet path"];
-  return [true, "reads the ledger, sends through the engine, reserves nothing itself"];
-});
-
-check("wire", "it stands down rather than paying twice", () => {
-  const cls = lift("class SpikeTick\\s*\\{", "SpikeTick");
-  if (!/_coveredBy\(/.test(cls)) return [false, "no _coveredBy"];
-  for (const src2 of ["ledger.entries", "book.pending()"]) {
-    if (!cls.includes(src2)) return [false, "does not consult " + src2];
-  }
-  if (!/if \(sent <= 0\) return false;/.test(cls))
-    return [false, "swings even when the placement did not go out"];
-  return [true, "standing spikes, hard reservations and the preplace book all read"];
-});
-
-check("wire", "it uses the engine's motion track, not one of its own", () => {
-  const cls = lift("class SpikeTick\\s*\\{", "SpikeTick");
-  if (!/engine\.motion\.predict/.test(cls)) return [false, "does not use engine.motion.predict"];
-  if (!/engine\.motion\.get/.test(cls)) return [false, "does not read the track"];
-  if (/new TargetMotion/.test(cls)) return [false, "builds a second motion tracker"];
-  if (!/engine\.anglesFor/.test(cls)) return [false, "does not use the engine's angle solver"];
-  return [true, "one tracker, one solver, both the engine's"];
-});
-
-check("wire", "SpikeSyncHammer delegates its strike instead of repeating it", () => {
-  const cls = lift("class SpikeSyncHammer\\s*\\{", "SpikeSyncHammer");
-  if (!/spikeTick\.strike\(/.test(cls)) return [false, "does not delegate"];
-  if (/forceHat = 7;/.test(cls)) return [false, "still sets the bull helmet itself"];
-  if (/requestPlace\(itemType/.test(cls)) return [false, "still places the spikes itself"];
-  return [true, "one execution path for a spike tick"];
-});
-
-/* The execution-order fix. Auto place was the one placement path that sent
- * without consulting the resolver, and a trap forbids a spike within 77
- * degrees — wider than the reach window at any distance — so its trap took the
- * tick's ground before the tick could ask for it. harness/spike-vs-trap.js
- * measures the behaviour; these check the wiring it depends on. */
-check("wire", "auto place asks the resolver before it sends", () => {
-  const cls = lift("class AutoPlacer\\s*\\{", "AutoPlacer");
-  if (!/const placementEngine = ModuleHandler\.staticModules && ModuleHandler\.staticModules\.placementEngine;/.test(cls))
-    return [false, "does not resolve the engine"];
-  const m = /const emit = obj => \{([\s\S]*?)\n      \};/.exec(cls);
-  if (!m) return [false, "emit not found"];
-  if (!/groundIsFree\(type, obj\.angle, "autoPlacer"\)/.test(m[1]))
-    return [false, "emit still sends without asking"];
-  if (m[1].indexOf("groundIsFree") > m[1].indexOf("ModuleHandler.place("))
-    return [false, "asks after sending, which answers nothing"];
-  return [true, "emit declines ground another module holds"];
-});
-
-check("wire", "the ladder that chooses auto place's angles is untouched", () => {
-  const cls = lift("class AutoPlacer\\s*\\{", "AutoPlacer");
-  // The one thing that must not have been done: quietly reordering or gating
-  // Luna's own decision so spikes win. The trap branch is still unconditional.
-  if (!/if \(isTrap\) \{[\s\S]{0,320}?if \(neitherTrapped\) return true;/.test(cls))
-    return [false, "the trap branch has been changed"];
-  if (!/\[ \[ trapId, LUNA_TRAP_TYPE, trapAngles \], \[ spikeId, LUNA_SPIKE_TYPE, spikeAngles \] \]/.test(cls))
-    return [false, "the trapped fallback order has been changed"];
-  return [true, "isAutoPlaceAngle and the fallback order are as they were"];
-});
-
-check("wire", "the spike tick holds ground softly and gives it back", () => {
-  const cls = lift("class SpikeTick\\s*\\{", "SpikeTick");
-  if (!/engine\.holdGround\(SPIKE_TICK_TYPE/.test(cls)) return [false, "never holds"];
-  if (!/_release\("fired"\)/.test(cls)) return [false, "does not release when it fires"];
-  if (!/_release\("nothingSoon"\)/.test(cls)) return [false, "does not release a stale hold"];
-  if (!/_holdVerdict\(/.test(cls)) return [false, "no trap-versus-spike comparison"];
-  if (!/roomForBoth/.test(cls)) return [false, "does not check the trap still has somewhere to go"];
-  if (!/const why = this\._holdVerdict\(/.test(cls) || !/if \(!why\) \{/.test(cls))
-    return [false, "the verdict is computed and then ignored"];
-  const hold = /holdGround\(type, angle, owner, value, ttl\) \{([\s\S]*?)\n    \}/.exec(src);
-  if (!hold) return [false, "engine.holdGround not found"];
-  if (!/ttl === undefined \? 2 : ttl, true\)/.test(hold[1]))
-    return [false, "the claim is not soft — it would not yield to an insta"];
-  return [true, "soft SYNC claim, released on fire and on staleness"];
-});
-
-check("wire", "updateSpikeTick targets the id the Devtool row uses", () => {
-  const m = /updateSpikeTick\(state\) \{[\s\S]{0,160}?querySelector\("#([A-Za-z_]+)"\)/.exec(src);
-  if (!m) return [false, "updateSpikeTick not found or does not query"];
-  return m[1] === "_spikeTickOutcome" ? [true, "queries #" + m[1]]
-                                      : [false, "queries #" + m[1] + ", row is #_spikeTickOutcome"];
+  return [true, "preplace and replace intact, nothing added"];
 });
 
 /* The two long-range turret antis ported from novastorm 15473 / X- 14681.
@@ -686,11 +668,10 @@ const DELETED = [
   "_healsInFlight", "isSaveHealTime", "isSaveHealTick", "isSaveHeal", "_healSent",
   "_rawHeal", "_healBudgetLeft", "_flushShameHealQueue", "_shameHealQueue",
   "_shameHealDeadline", "_SHAME_GUARD_MARGIN", "pushingOnSpike",
-  // SpikeSync, and the three EnemyManager members that existed only to gate it.
-  "canSpikeSync", "nearestPlaceSpikeAngle", "prevNearestSpikePlacerAngle",
-  // The spike tick's own angle cooldown: unreachable behind _coveredBy, and
-  // PlacementMemory already owns the case it would have covered.
-  "_onCooldown", "SPIKE_TICK_COOLDOWN", "_askedAngle",
+  // Nothing from the spike tick is listed here: it was not pared back, it was
+  // removed whole, and "no spike tick module, setting, constant or UI
+  // survives" above is the check for that. SpikeSync and the three
+  // EnemyManager getters that gate it are the client's own code and are back.
 ];
 /* A line mentioning the name is a WRITE if it is a field declaration or an
  * assignment to it, and a READ otherwise. Comments do not count either way.

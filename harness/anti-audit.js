@@ -210,28 +210,111 @@ console.log("    including canPossiblyInstakill. For an anti, one tick early is 
  * changed, because each already exists in RYN and altering its bounds would
  * move canPossiblyInstakill, which feeds danger detection, the soldier hat and
  * every insta module, not just the heal. */
+/* Each term is checked TWO ways, because "the name is in the file" is not a
+ * measurement. The first version of this table probed for an identifier, and an
+ * identifier that nothing reads would have passed it.
+ *
+ *   present   the name that carries the term exists
+ *   reaches   its value is written into one of the two accumulators AntiInsta
+ *             actually sums, on a line the file really contains
+ *
+ * AntiInsta reads exactly this and nothing else (14620):
+ *
+ *     let totalDmgPot = EnemyManager2.potentialDamage + EnemyManager2.potentialSpikeDamage;
+ *
+ * so a term that does not end in one of those two is a term the heal never
+ * sees, however present its name is. That is not hypothetical — `pushingOnSpike`
+ * in this same file is computed every tick and read by nothing. */
 const has = (re) => new RegExp(re).test(src);
+
+const ACCUMULATORS = /^\s*(this|enemy)\.(potentialDamage|potentialSpikeDamage|potentialSpikeKnockbackDamage)\s*(\+=|=)/;
+{
+  // Confirm the two names really are what AntiInsta sums, rather than trusting
+  // the comment above. If AntiInsta is rewritten to sum something else, every
+  // "reaches" verdict below becomes meaningless, so fail loudly here instead.
+  const m = /let totalDmgPot = ([A-Za-z0-9_]+)\.potentialDamage \+ \1\.potentialSpikeDamage;/.exec(src);
+  if (!m) {
+    console.log("\n  AntiInsta no longer sums potentialDamage + potentialSpikeDamage.");
+    console.log("  Every 'reaches' verdict below would be measuring the wrong thing.\n");
+    process.exit(1);
+  }
+}
+
+/* For a term, find the line that writes its contribution and confirm the target
+ * is an accumulator. `write` is a fragment of the real line; the check is that
+ * the line exists AND matches the accumulator shape, so renaming the target
+ * (potentialDamage -> potentialDamageX) fails it while leaving the name intact. */
+function reaches(write) {
+  for (const line of src.split("\n")) {
+    if (!line.includes(write)) continue;
+    if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue;
+    if (ACCUMULATORS.test(line)) return true;
+  }
+  return false;
+}
+
 const TERMS = [
-  ["PREDICT TURRET HIT", "antiLongRangeTurret", "ported now — 3 cases, +25, out to 350"],
-  ["VELOCITY TICK ANTI", "ANTI_VELOCITY_TICK_HAT", "ported now — turret gear at 150-350"],
-  ["KNOCKBACK ANTI", "potentialSpikeKnockbackDamage", "present; RYN uses an angular cone where novastorm uses lineInRect"],
-  ["  ...including cactuses", "isCactus", "present — Resource.getDamage returns 35 for a desert cactus"],
-  ["ANTI SPIKE TICK", "detectSpikeInsta", "present; RYN asks the real placement solver, novastorm scans 36 fixed angles"],
-  ["ANTI NORMAL INSTAKILL", "collidingSecondary", "present, DIFFERENT BOUNDS — see below"],
+  ["PREDICT TURRET HIT", "antiLongRangeTurret",
+   "enemy.potentialDamage += ANTI_TURRET_DAMAGE;",
+   "ported now — 3 cases, +25, out to 350"],
+  ["VELOCITY TICK ANTI", "ANTI_VELOCITY_TICK_HAT",
+   "enemy.potentialDamage += ANTI_TURRET_DAMAGE +",
+   "ported now — turret gear at 150-350"],
+  ["KNOCKBACK ANTI", "possibleToKnockback",
+   "this.potentialSpikeKnockbackDamage = Math.max(",
+   "present; an angular cone where novastorm uses lineInRect"],
+  ["  ...including cactuses", "isCactus",
+   "this.potentialSpikeDamage = Math.max(this.potentialSpikeDamage, object.getDamage())",
+   "present — the spike write is guarded by (isSpike || isCactus)"],
+  ["ANTI SPIKE TICK", "spikeSyncThreat",
+   "this.potentialSpikeDamage = Math.max(this.potentialSpikeDamage, enemy.spikeDamage)",
+   "present; RYN asks the real placement solver, novastorm scans 36 fixed angles"],
+  ["ANTI NORMAL INSTAKILL", "collidingSecondary",
+   "this.potentialDamage += secondaryDamage;",
+   "present, DIFFERENT BOUNDS — see below"],
+  ["  ...its turret half", "includeTurret",
+   "this.potentialDamage += 25;",
+   "present — +25 when a melee reaches and the turret is loaded"],
+  ["  ...its primary half", "primaryReloaded",
+   "this.potentialDamage += primaryDamage;",
+   "present — only off reload, as novastorm has it"],
+  ["poison / bull tick", "isBullTickTime\\(\\)",
+   "this.potentialDamage += 5;",
+   "present — +5 a tick, novastorm's poisonDmgPot"],
+  ["projectiles in flight", "ProjectileManager.totalDamage",
+   "this.potentialDamage += this.client.ProjectileManager.totalDamage;",
+   "RYN only — novastorm has no equivalent"],
+];
+
+console.log("\n  the whole list, term by term\n");
+console.log("  " + pad("novastorm / X- block", 26) + pad("present", 9) + pad("reaches", 9) + "how");
+console.log("  " + "-".repeat(104));
+for (const [name, probe, write, note] of TERMS) {
+  const present = has(probe);
+  const feeds = reaches(write);
+  if (!present || !feeds) bad++;
+  console.log("  " + pad(name, 26) + pad(present ? "yes" : "NO", 9) +
+              pad(feeds ? "yes" : "NO", 9) + note);
+}
+
+/* Four more terms that are not summands — they shape the total or act on it
+ * after the fact, so "reaches an accumulator" is the wrong question for them.
+ * Each is anchored on the line that does the work. */
+const SHAPERS = [
+  ["cap at 140", "if \\(totalDmgPot > ANTI_INSTA_DMG_CAP\\) \\{",
+   "present — applied before the hat multipliers, as novastorm has it"],
+  ["soldier x0.75", "totalDmgPot \\*= Hats\\[6\\]\\.dmgMult;", "present"],
+  ["bull +5", "totalDmgPot \\+= ANTI_INSTA_SCUBA_BIAS;", "present"],
   ["SHAME RESET", "class ShameReset", "present as its own module"],
-  ["poison / bull tick", "isBullTickTime\\(\\)", "present — +5 a tick, novastorm's poisonDmgPot"],
-  ["projectiles in flight", "ProjectileManager.totalDamage", "RYN only — novastorm has no equivalent"],
-  ["cap at 140", "ANTI_INSTA_DMG_CAP", "present"],
-  ["soldier x0.75 / bull +5", "ANTI_INSTA_SCUBA_BIAS", "present"],
   ["safe soldier", "SAFE_SOLDIER_RANGE", "present in ModuleHandler.postTick"],
 ];
-console.log("\n  the whole list, term by term\n");
-console.log("  " + pad("novastorm / X- block", 26) + pad("in RYN", 9) + "how");
-console.log("  " + "-".repeat(100));
-for (const [name, probe, note] of TERMS) {
+console.log("\n  and the terms that shape the total rather than add to it\n");
+console.log("  " + pad("block", 26) + pad("present", 18) + "how");
+console.log("  " + "-".repeat(104));
+for (const [name, probe, note] of SHAPERS) {
   const present = has(probe);
   if (!present) bad++;
-  console.log("  " + pad(name, 26) + pad(present ? "yes" : "NO", 9) + note);
+  console.log("  " + pad(name, 26) + pad(present ? "yes" : "NO", 18) + note);
 }
 
 console.log("\n  ANTI NORMAL INSTAKILL, the one difference that is not cosmetic:");
