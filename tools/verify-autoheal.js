@@ -302,6 +302,31 @@ check(
     ["HEAL_NOW", "WAIT", "PREPARE", "CANCEL", "RECALCULATE"].every(k => DECISION[k] === k)
   );
 }
+{
+  /* Every input the decision is specified to evaluate has to be read somewhere
+   * on the decision path — value model, candidate choice or arbitration. A
+   * term that is computed and then ignored is the failure this catches. */
+  const region = ENGINE_SRC.slice(
+    ENGINE_SRC.indexOf("class HealValueModel"),
+    ENGINE_SRC.indexOf("class ActionValidator")
+  );
+  const inputs = {
+    "HP": /ctx\.health|snap\.health/,
+    "shame": /shame\.count|chargeSafeCount/,
+    "expected damage": /ctx\.imminent|forecast\.incomingDamage/,
+    "expected shame increase": /forecast\.expectedShameDelta/,
+    "threat severity": /report\.severity|rank\.severity|severity/,
+    "threat confidence": /report\.value|forecast\.confidence|lethalConfidence/,
+    "healing value": /healthGain\(/,
+    "cooldown": /cooldown\.mayHold/,
+    "available resources": /foodStock|packetLimit/,
+    "combat state": /snap\.systems|snap\.activeModule|moduleActive/,
+    "player state": /ctx\.trapped|snap\.isTrapped|soldierOn|bullOn/
+  };
+  for (const label of Object.keys(inputs)) {
+    check(`the decision evaluates: ${label}`, inputs[label].test(region));
+  }
+}
 check(
   "the decision is now-versus-wait, not a health threshold",
   /const now = this\.value\.now\(ctx, candidate\);/.test(ENGINE_SRC) &&

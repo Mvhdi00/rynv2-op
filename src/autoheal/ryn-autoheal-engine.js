@@ -2954,8 +2954,14 @@ function createRynAutoHealEngine(deps) {
      * still wasted once the incoming damage has landed. */
     wait(ctx, candidate) {
       const { snap, damage, shame } = ctx;
-      /* Damage expected inside the wait, and whether it lands at all. */
-      const pHit = clamp(damage.damageFrequency * (snap.TICK / 1000), 0, 1);
+      /* Damage expected inside the wait, and whether it lands at all.
+       *
+       * Being pinned changes that answer rather than the damage: a pit trap
+       * holds you where you are (`isTrapped`), so the swing that is coming is
+       * one you cannot walk out of. Waiting while trapped is not a bet on
+       * whether the hit lands. */
+      let pHit = clamp(damage.damageFrequency * (snap.TICK / 1000), 0, 1);
+      if (ctx.trapped) pHit = Math.max(pHit, 0.9);
       const incoming = ctx.imminent;
       const healthThen = Math.max(0, ctx.health - incoming * pHit + ctx.regenPerTick);
       const gain = this.healthGain(candidate.presses, snap.restore, healthThen, snap.maxHealth);
@@ -2989,8 +2995,26 @@ function createRynAutoHealEngine(deps) {
       const dies = ctx.health - incoming <= 0;
       const risk = dies ? this.lifeValue(snap) * ctx.lethalConfidence * pHit : 0;
 
-      const total = gain + credit + chargeAvoided - food - packets - risk - chargeRisk;
-      return { total, gain, credit, chargeAvoided, chargeRisk, risk, converts, pHit };
+      /* The shame the forecast says the wait will cost.
+       *
+       * The predictive engine has already worked out what the coming hit does
+       * to the count: if it lands on a bar too low to ignore, the heal that
+       * answers it is the first press after a fresh stamp, and that press is a
+       * charge. Buying the buffer now, while the window is free, is what stops
+       * that charge from ever being needed — so its price belongs on this side
+       * of the comparison, weighted by how much the forecast is believed. */
+      const forecast = ctx.forecast;
+      const futureCharge = forecast && forecast.expectedShameDelta > 0 && gain > 0
+        ? forecast.expectedShameDelta *
+          this.shamePenalty(snap, shame.chargeSafeCount(snap)) *
+          clamp(forecast.confidence, 0, 1)
+        : 0;
+
+      const total = gain + credit + chargeAvoided
+        - food - packets - risk - chargeRisk - futureCharge;
+      return {
+        total, gain, credit, chargeAvoided, chargeRisk, risk, futureCharge, converts, pHit
+      };
     }
   }
 
@@ -3217,6 +3241,10 @@ function createRynAutoHealEngine(deps) {
       /* ---- now, or next tick? --------------------------------------- */
       const ctx = {
         snap, damage, shame, verdict, health,
+        forecast,
+        /* Player state the decision itself turns on, rather than only the
+         * threat model: pinned in a trap, there is nowhere to be instead. */
+        trapped: !!snap.isTrapped,
         regenPerTick: predict.regenPerSecond / AH.DOT_PERIOD_TICKS,
         imminent: typeof threat.imminentWithin === "function"
           ? threat.imminentWithin(1) : threat.effective,
