@@ -587,7 +587,8 @@ is the shame arithmetic and the risk:
 
 ```
 V(now)  = gain + credit + survivalAvoided − food − packets − charge
-V(wait) = gain' + credit' + chargeAvoided − food − packets − deathRisk − creditRisk
+V(wait) = gain' + credit' + chargeAvoided
+        − food − packets − deathRisk − creditRisk − forecastCharge
 ```
 
 - a **charged** press becomes a credit press one tick later, but only if no new
@@ -595,7 +596,16 @@ V(wait) = gain' + credit' + chargeAvoided − food − packets − deathRisk −
   under damage every tick the conversion goes to zero on its own;
 - a press that is already a **credit** has the opposite exposure: waiting risks
   *losing* it. That term is what stops the model sitting on a credit forever
-  congratulating itself — pressing banks it, waiting only might.
+  congratulating itself — pressing banks it, waiting only might;
+- waiting also carries **the shame the forecast says it will cost**. The
+  predictive engine has already worked out what the coming hit does to the
+  count: if it lands on a bar too low to ignore, the press that answers it is
+  the first after a fresh stamp — a charge. Buying the buffer now, while the
+  window is free, is what stops that charge from ever being needed, so its
+  price sits on this side, weighted by how much the forecast is believed;
+- **player state changes the odds, not the damage.** Pinned in a pit trap there
+  is nowhere to be instead, so waiting stops being a bet on whether the swing
+  lands: `pHit` floors at 0.9 while `isTrapped`.
 
 The old heuristics fall out of this rather than being coded: a prediction still
 never pays a charge, because for a non-survival candidate `V(wait)` keeps the
