@@ -93,13 +93,14 @@ const parts = [
   grab('class PlacementMemory {'),
   grab('class PlacementPlanner {'),
   grab('class AngleSolver {'),
+  grab('class AutoPlacer {'),
   'const ' + grab('PlacementWeights = {') + ';',
-  'return { GeometrySolver, SiegeAnalysis, TargetMotion, PlacementLedger, PlacementMemory, PlacementPlanner, AngleSolver, PlacementWeights, ' +
+  'return { GeometrySolver, SiegeAnalysis, TargetMotion, PlacementLedger, PlacementMemory, PlacementPlanner, AngleSolver, AutoPlacer, PlacementWeights, ' +
     'K: { RPE_KB_TRAVEL, RPE_KB_IMPULSE, RPE_PLACE_PACKETS, RPE_BATCH_PACKETS, RPE_TICK_MS, RPE_DECEL, RPE_MAX_ITEM_RADIUS, RPE_STOP_SPEED } };',
 ];
 
 const M = new Function(...Object.keys(sandbox), parts.join('\n\n'))(...Object.values(sandbox));
-const { GeometrySolver: G, SiegeAnalysis: S, TargetMotion, PlacementLedger, PlacementMemory, PlacementPlanner, AngleSolver, PlacementWeights, K } = M;
+const { GeometrySolver: G, SiegeAnalysis: S, TargetMotion, PlacementLedger, PlacementMemory, PlacementPlanner, AngleSolver, AutoPlacer, PlacementWeights, K } = M;
 
 // ── item constants, read from the driver tables ─────────────────────────────
 
@@ -869,6 +870,174 @@ suite('Interaction — auto place, preplace and replace on one ledger');
   // Spike on the trap's own side: the push is away from it.
   const bad = S.simulateKnockback(tx + (CONTACT2 - 4), sy, SPIKE.scale, [trap], tx, ty, 0, 0);
   ok(!bad.stopped, 'trap chain: a spike on the trap’s own side does not');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 10. Ring seal — choosing the ring as a set
+// ════════════════════════════════════════════════════════════════════════════
+
+suite('Ring seal — packing the placement ring');
+
+// _sealRingOrder touches only this._predictObjects, Items and Config, so it
+// runs on a bare object carrying the method.
+const sealer = { _predictObjects: [], _sealRingOrder: AutoPlacer.prototype._sealRingOrder };
+const TAU = Math.PI * 2;
+
+function ringGeom(item) {
+  const ring = PS + item.scale + (item.placeOffset || 0);
+  const sep = item.scale * 2;
+  const minSep = 2 * Math.asin(sep / (2 * ring));
+  return { ring, sep, minSep, maxSpots: Math.floor(TAU / minSep) };
+}
+// Candidates in the shape the ladder produces.
+function ringCands(item, angles) {
+  const R = PS + item.scale + (item.placeOffset || 0);
+  return angles.map(a => ({
+    id: item.id, angle: G.norm(a), scale: item.scale, perfect: false,
+    x: 5000 + R * Math.cos(a), y: 5000 + R * Math.sin(a),
+  }));
+}
+function widestGap(set) {
+  const a = set.map(c => c.angle).sort((x, y) => x - y);
+  let worst = 0;
+  for (let i = 0; i < a.length; i++) {
+    let g = a[(i + 1) % a.length] - a[i];
+    if (g <= 0) g += TAU;
+    if (g > worst) worst = g;
+  }
+  return worst;
+}
+function minPairSep(set) {
+  let m = Infinity;
+  for (let i = 0; i < set.length; i++) for (let j = i + 1; j < set.length; j++) {
+    m = Math.min(m, G.angleDist(set[i].angle, set[j].angle));
+  }
+  return m;
+}
+
+{
+  for (const item of [SPIKE, Items.find(i => i.name === 'greater spikes')]) {
+    const g = ringGeom(item);
+    ok(g.maxSpots === 4, `${item.name}: the ring holds exactly 4`,
+       `ring=${g.ring} gap=${g.sep} minSep=${(g.minSep * 180 / Math.PI).toFixed(1)}deg spots=${g.maxSpots}`);
+    const largest = 360 - 3 * (g.minSep * 180 / Math.PI);
+    ok(largest < 138.6, `${item.name}: four legs cannot leave a walkable hole`, `${largest.toFixed(1)}deg`);
+  }
+}
+
+{
+  // A fully open ring at the resolution the ladder scans.
+  const item = SPIKE, g = ringGeom(item);
+  const cands = ringCands(item, Array.from({ length: 72 }, (_, i) => i * TAU / 72));
+  sealer._predictObjects = [];
+  const out = sealer._sealRingOrder(cands, item.id, null);
+  const head = out.slice(0, g.maxSpots);
+  ok(out.length === cands.length, 'every candidate is returned — the packer orders, it does not discard');
+  ok(head.length === 4, 'an open ring yields a full set of four at the front');
+  ok(minPairSep(head) >= g.minSep - 1e-9, 'the four are all at least the minimum separation apart',
+     `min=${(minPairSep(head) * 180 / Math.PI).toFixed(1)}deg need=${(g.minSep * 180 / Math.PI).toFixed(1)}deg`);
+  ok(widestGap(head) * 180 / Math.PI < 138.6, 'and they leave no walkable hole',
+     `widest=${(widestGap(head) * 180 / Math.PI).toFixed(1)}deg`);
+}
+
+{
+  // Greedy earliest-feasible must find a full ring whenever one exists at all.
+  // Brute force over every 4-subset is the reference.
+  const item = SPIKE, g = ringGeom(item);
+  function bruteHasRing(cands) {
+    const n = cands.length;
+    for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) for (let c = b + 1; c < n; c++) for (let d = c + 1; d < n; d++) {
+      const set = [cands[a], cands[b], cands[c], cands[d]];
+      if (minPairSep(set) >= g.minSep - 1e-9) return true;
+    }
+    return false;
+  }
+  let agree = 0, existed = 0, found = 0, scenes = 0;
+  for (let s = 0; s < 300; s++) {
+    const rand = rng(7000 + s);
+    // A random subset of the ring is legal.
+    const angles = [];
+    for (let i = 0; i < 72; i++) if (rand() < 0.35 + rand() * 0.5) angles.push(i * TAU / 72);
+    if (angles.length < 4) continue;
+    scenes++;
+    const cands = ringCands(item, angles);
+    sealer._predictObjects = [];
+    const head = sealer._sealRingOrder(cands, item.id, null).slice(0, 4);
+    const gotRing = head.length === 4 && minPairSep(head) >= g.minSep - 1e-9;
+    const hasRing = bruteHasRing(cands);
+    if (hasRing) existed++;
+    if (gotRing) found++;
+    if (gotRing === hasRing) agree++;
+  }
+  ok(agree === scenes, `greedy agrees with brute force on all ${scenes} scenes`, `${agree}/${scenes}`);
+  ok(found === existed, 'it finds a full ring exactly when one exists', `found ${found}, existed ${existed}`);
+}
+
+{
+  // Against the order the ladder actually produces -- the ring in angle order,
+  // committed through the same footprint dedup _addPredictObject applies --
+  // packing must never do worse, on legs placed or on the hole left behind.
+  const item = SPIKE;
+  const commit = list => {
+    const out = [];
+    for (const c of list) {
+      if (out.every(o => Math.hypot(o.x - c.x, o.y - c.y) >= o.scale + c.scale)) out.push(c);
+    }
+    return out;
+  };
+  let worse = 0, better = 0, scenes = 0;
+  for (let s = 0; s < 200; s++) {
+    const rand = rng(8000 + s);
+    // Three usable arcs, so a full four-leg ring cannot be built.
+    const angles = [];
+    for (const centre of [0.2, 2.3, 4.4]) {
+      for (let k = 0; k < 6; k++) angles.push(centre + (rand() - 0.5) * 0.5);
+    }
+    const cands = ringCands(item, angles);
+    sealer._predictObjects = [];
+    const packed = commit(sealer._sealRingOrder(cands, item.id, null));
+    const scan = commit(cands.slice().sort((a, b) => a.angle - b.angle));
+    if (packed.length < 2 || scan.length < 2) continue;
+    scenes++;
+    if (packed.length < scan.length || (packed.length === scan.length && widestGap(packed) > widestGap(scan) + 1e-9)) worse++;
+    if (packed.length > scan.length || (packed.length === scan.length && widestGap(packed) < widestGap(scan) - 1e-9)) better++;
+  }
+  ok(scenes > 0, 'partial-ring scenes were generated', String(scenes));
+  ok(worse === 0, 'with no full ring available it is never worse than scan order',
+     `${worse}/${scenes} worse, ${better} better`);
+}
+
+{
+  // Ground already committed this tick is not offered to the ring.
+  const item = SPIKE;
+  const cands = ringCands(item, Array.from({ length: 72 }, (_, i) => i * TAU / 72));
+  const blocked = cands[10];
+  sealer._predictObjects = [{ id: item.id, x: blocked.x, y: blocked.y, scale: item.scale }];
+  const out = sealer._sealRingOrder(cands, item.id, null);
+  // What the ladder actually commits: the prefix that clears every footprint,
+  // which is what _addPredictObject enforces downstream.
+  const committed = [];
+  for (const c of out) {
+    if (Math.hypot(c.x - blocked.x, c.y - blocked.y) < c.scale + item.scale) continue;
+    if (committed.every(o => Math.hypot(o.x - c.x, o.y - c.y) >= o.scale + c.scale)) committed.push(c);
+  }
+  const leadIsFree = out.slice(0, committed.length).every(
+    c => Math.hypot(c.x - blocked.x, c.y - blocked.y) >= c.scale + item.scale);
+  ok(leadIsFree, 'the ring the packer proposes never spends a slot on ground already committed',
+     `${committed.length} legs`);
+  ok(committed.length >= 3, 'and a ring with one slot taken still yields three legs', `${committed.length}`);
+  sealer._predictObjects = [];
+}
+
+{
+  // The preferred angle leads when a full ring can be built through it.
+  const item = SPIKE, g = ringGeom(item);
+  const cands = ringCands(item, Array.from({ length: 72 }, (_, i) => i * TAU / 72));
+  const prefer = cands[9];
+  sealer._predictObjects = [];
+  const out = sealer._sealRingOrder(cands, item.id, prefer);
+  ok(out[0] === prefer, 'the preferred angle anchors a full ring');
+  ok(minPairSep(out.slice(0, 4)) >= g.minSep - 1e-9, 'and the ring through it is still valid');
 }
 
 // ── report ──────────────────────────────────────────────────────────────────
