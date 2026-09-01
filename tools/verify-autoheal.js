@@ -241,7 +241,7 @@ check(
 );
 check(
   "every report carries type, confidence, severity and timing",
-  /function threatReport\(type, confidence, severity, timing, evidence, additive, rate\)/
+  /function threatReport\(type, confidence, severity, timing, evidence, additive, rate, addAmount\)/
     .test(ENGINE_SRC)
 );
 check(
@@ -486,6 +486,162 @@ check(
   "the engine derives max health from the bundle, not that field",
   /v !== null && v > 0 \? v : AH\.MAX_HEALTH/.test(ENGINE_SRC)
 );
+
+/* ------------------------------------------------------------------ *
+ * The integration contract: Auto Heal is a reader of the nine systems and a
+ * writer of nothing but its own state. These checks are what stops a later
+ * change from quietly turning a read into a write.
+ * ------------------------------------------------------------------ */
+
+/* The nine systems named as off-limits, by the property each is reached
+ * through on ModuleHandler.staticModules. */
+const SYSTEMS = {
+  "Auto Place / Preplace / Replace": ["placementEngine", "autoPlace", "prePlace", "replace"],
+  "Spike Tick": ["spikeSync", "spikeSyncHammer", "trapTick"],
+  "Combat": ["combat", "reloading"],
+  "Safe Soldier": ["safeSoldier"],
+  "Anti Smart Tick": ["antiInsta"],
+  "Auto Mills": ["autoMill"],
+  "Velocity Tick": ["velocityTick"]
+};
+
+for (const [name, props] of Object.entries(SYSTEMS)) {
+  const writes = [];
+  for (const prop of props) {
+    /* Any assignment through the system's own handle: `x.velocityTick.foo =`,
+     * `s.autoMill.bar +=`, and so on. Comparisons (=== / !== / <= / >=) and
+     * the property read itself are deliberately not matched. */
+    const re = new RegExp(
+      "\\.\\s*" + prop + "\\s*(?:\\.[A-Za-z_$][\\w$]*)+\\s*(?:\\+|-|\\*|\\/|\\|\\||&&|\\?\\?)?=(?!=)",
+      "g"
+    );
+    const found = ENGINE_SRC.match(re);
+    if (found) writes.push(...found);
+  }
+  check(`the engine never writes into ${name}`, writes.length === 0, writes.join(", "));
+}
+
+check(
+  "the engine constructs none of the nine systems",
+  !/new\s+(VelocityTick|SpikeSync|SpikeSyncHammer|TrapTick|PlacementEngine|AutoPlace|PrePlace|Replace|AutoMill|SafeSoldier|AntiInsta|Combat)\b/
+    .test(ENGINE_SRC)
+);
+
+/* The one class it does borrow, and the reason that is a read and not a
+ * duplicate: it takes the constructor off the placement engine's own instance
+ * so there is one motion model in the build, not two. */
+check(
+  "the motion tracker is RYN's own class, borrowed rather than reimplemented",
+  /borrowTargetMotion\(\)[\s\S]{0,600}placementEngine[\s\S]{0,200}motion[\s\S]{0,200}constructor/
+    .test(ENGINE_SRC)
+);
+
+/* Velocity Tick: consumed, not rebuilt. The band is the module's own field. */
+check(
+  "the velocity band is read from VelocityTick's own minKB/maxKB",
+  /num\(vt\.minKB\)[\s\S]{0,200}num\(vt\.maxKB\)/.test(ENGINE_SRC)
+);
+check(
+  "and the module still declares them, so there is something to read",
+  /class VelocityTick \{[\s\S]{0,400}minKB=220;[\s\S]{0,40}maxKB=245;/.test(client)
+);
+check(
+  "the engine keeps no second copy of the band as a live constant",
+  !/VELOCITY_BAND_(MIN|MAX)/.test(ENGINE_SRC)
+);
+
+/* Spike Tick: the client's own placement scan is consumed, not repeated. */
+check(
+  "the spike-tick warning comes from EnemyManager.spikeSyncThreat",
+  /spikeSync: !!em\.spikeSyncThreat/.test(ENGINE_SRC)
+);
+check(
+  "and the client still computes it from a real placement scan",
+  /detectSpikeInsta\(\)[\s\S]{0,1200}return spike\.damage;/.test(client) &&
+  /spikeSyncDamage >= 100\)\s*\{\s*this\.spikeSyncThreat = true;/.test(client)
+);
+check(
+  "the engine runs no placement scan of its own",
+  !/getBestPlacementAngles|getItemPlaceScale/.test(ENGINE_SRC)
+);
+check(
+  "a spike that can be placed is never reported above MEDIUM",
+  /_beforeFirstHit\(ctx\) \{[\s\S]{0,1600}imminent \? CONFIDENCE\.MEDIUM : CONFIDENCE\.LOW/
+    .test(ENGINE_SRC)
+);
+check(
+  "and it adds only the damage the client's baseline has not already counted",
+  /const uncounted = Math\.max\(0, worst - ctx\.spike\.damage\);/.test(ENGINE_SRC) &&
+  /additive = Math\.max\(additive, r\.addAmount\)/.test(ENGINE_SRC)
+);
+
+/* Cooperation with the placement systems. The stand-down has to key off live
+ * state — a system actually mid-commit — not off whether the user has the
+ * feature switched on, which would disable healing for anyone who does. */
+check(
+  "the spike-tick stand-down reads the modules' armed state, not their settings",
+  /spikeTick: \(has\(s\.spikeSync\) && !!s\.spikeSync\.useTurret\)/.test(ENGINE_SRC) &&
+  !/spikeTick:[\s\S]{0,240}S\._spikeSync/.test(ENGINE_SRC)
+);
+check(
+  "and those modules still expose that state",
+  /class SpikeSync \{[\s\S]{0,200}useTurret=false;/.test(client) &&
+  /class SpikeSyncHammer \{[\s\S]{0,240}targetEnemy=null;[\s\S]{0,40}useTurret=false;/.test(client)
+);
+check(
+  "the placement engine's mid-send flag is the real one",
+  /placementEngineBusy: has\(s\.placementEngine\) && !!s\.placementEngine\.sending/.test(ENGINE_SRC) &&
+  /\bsending=false;/.test(client)
+);
+check(
+  "a system mid-commit is yielded to below DEFENSE and only below it",
+  /if \(sys\.placementEngineBusy \|\| sys\.spikeTick\) \{[\s\S]{0,200}rank\.cls < this\.adapter\.priorityClass\("DEFENSE"\)/
+    .test(ENGINE_SRC)
+);
+/* Two reads that meant nothing: TrapTick is an empty stub in v5.4, and the
+ * Anti Sync / Safe Soldier settings flags duplicate live state the engine
+ * already has. A read nobody consumes is not integration. */
+check(
+  "the engine reads no system state it does not act on",
+  !/\bantiSync:|safeSoldier:|trapTick\b/.test(ENGINE_SRC)
+);
+check(
+  "TrapTick is still the empty stub that made one of those reads dead",
+  /class TrapTick \{[\s\S]{0,200}reset\(\) \{\}\s*postTick\(\) \{\}/.test(client)
+);
+check(
+  "a module that already pressed food this tick is detected live instead",
+  /if \(live\.healedOnce\) return stop\(DECISION\.RECALCULATE, "already-healed-this-tick"\)/
+    .test(ENGINE_SRC)
+);
+
+/* Combat runs after us on the same tick and assumes the held item is a weapon.
+ * No path out of a burst may leave it holding food. */
+check(
+  "the weapon restore runs in a finally, so no exit path leaves food in hand",
+  /\} finally \{[\s\S]{0,400}if \(this\.adapter\.holdingFood\) this\.adapter\.restoreWeapon\(\);/
+    .test(ENGINE_SRC)
+);
+check(
+  "and the flag is set before the select, not after it",
+  /this\.holdingFood = true;\s*\n\s*mh\.selectItem/.test(ENGINE_SRC)
+);
+
+/* The only ModuleHandler fields the engine may write are the three every RYN
+ * module sets to claim a tick. */
+{
+  const writes = new Set();
+  const re = /\bmh\.([A-Za-z_$][\w$]*)\s*(?:\+|-|\*|\/|\|\||&&|\?\?)?=(?!=)/g;
+  let m;
+  while ((m = re.exec(ENGINE_SRC)) !== null) writes.add(m[1]);
+  const allowed = ["moduleActive", "healedOnce", "didAntiInsta"];
+  const extra = [...writes].filter(w => allowed.indexOf(w) === -1);
+  check(
+    "the engine writes only the tick-claim fields on ModuleHandler",
+    extra.length === 0,
+    extra.join(", ")
+  );
+}
 
 /* ------------------------------------------------------------------ */
 console.log("\n2. wiring — the built userscript\n");

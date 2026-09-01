@@ -389,7 +389,7 @@ the packet budget and the tick claim. Nothing in them is modified or duplicated.
 `tools/sim-autoheal.js` runs the engine against the game's own rules
 transcribed — `buildItem`'s arithmetic, `changeHealth`'s hit stamp and
 full-health refusal, the one-second regen counter, `canBuild`'s resource gate —
-with latency modelled on both legs. Over twenty-three scenarios: no 30 s lock is
+with latency modelled on both legs. Over twenty-six scenarios: no 30 s lock is
 ever armed, nothing is sent while one is on, the count never passes 7, every
 scenario that starts in debt ends at 0, and most hold shame at 0 for 100 % of
 ticks — including a 90 dps pressure run and a 250 ms ping run. A threat that

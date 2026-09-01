@@ -896,17 +896,75 @@ Escalation flags read straight from Combat: `instaThreat()`,
 | System | Read | Used for |
 |---|---|---|
 | Combat | `EnemyManager.*`, `ProjectileManager.totalDamage`, `ModuleHandler.attacking / shouldAttack / moduleActive` | threat, and yielding a committed combat tick |
-| Auto Place / Preplace / Replace | `staticModules.placementEngine`, `ModuleHandler.placedOnce / totalPlaces`, `Settings._autoplacer / _prePlace / _replace` | packet reserve, no interleaving |
-| Spike Tick | `staticModules.spikeSync / spikeTrap / trapTick` | defer non-critical heals on a committed spike tick |
-| Safe Soldier | `ModuleHandler.shouldEquipSoldier`, `forceHat === 6`, `Settings._safeSoldier` | `×0.75` in the threat model; never contest the hat |
-| Anti Smart Tick | `staticModules.antiInsta.blockBreak`, `Settings._antiSmartTick` | it eats on that tick already — stand down |
+| Auto Place / Preplace / Replace | `staticModules.placementEngine.sending`, `ModuleHandler.placedOnce / totalPlaces`, `Settings._autoplacer / _prePlace / _replace` | packet reserve; stand down while a batch is mid-send |
+| Spike Tick | `staticModules.spikeSync.useTurret`, `spikeSyncHammer.useTurret / targetEnemy`, `EnemyManager.spikeSyncThreat` | defer non-critical heals on a committed spike tick; consume its threat warning |
+| Safe Soldier | `ModuleHandler.forceHat === 6`, `store[0].last === 6` | `×0.75` in the threat model; never contest the hat |
+| Anti Smart Tick | `staticModules.antiInsta.blockBreak / forceHeal`, `Settings._antiSmartTick` | it eats on that tick already — stand down |
 | Auto Mills | `staticModules.autoMill.isActive` | packet reserve |
-| Velocity Tick | `staticModules.velocityTick.nearestTarget / target` | it owns Bull for the combo — no wash, defer non-critical |
+| Velocity Tick | `staticModules.velocityTick.nearestTarget / target / minKB / maxKB` | it owns Bull for the combo — no wash, defer non-critical; its band is the detector's band |
 
 Nothing in that column is written to. The only writes the engine makes are its
-own presses, `ModuleHandler.moduleActive` / `healedOnce` (the tick-claim
-protocol every module uses), and `setForceHat(7)` for a bull wash — which is a
-no-op if any other module already claimed a hat.
+own presses, `ModuleHandler.moduleActive` / `healedOnce` / `didAntiInsta` (the
+tick-claim protocol every module uses), and `setForceHat(7)` for a bull wash —
+which is a no-op if any other module already claimed a hat.
+`verify-autoheal.js` asserts all of that from the source: no assignment through
+any of the nine handles, no constructor call for any of them, and an allow-list
+of exactly three writable `ModuleHandler` fields.
+
+### Consumed, not rebuilt
+
+Three places where the temptation was to compute something the client already
+computes:
+
+- **The Velocity Tick band.** `VelocityTick` declares `minKB=220` / `maxKB=245`
+  as instance fields and measures them the same way the detector does — the gap
+  between my position and the target's. When the combo is pointed at us instead
+  of by us the numbers transfer unchanged, so the detector reads them off the
+  module rather than keeping a second copy that a retune there would silently
+  desynchronise. The only thing added is the error in the reading: the module
+  compares against `pos.future` and the detector has `pos.current`, so the
+  window opens by my own last-tick travel (`Entity.speed`, floored at a body
+  radius) plus the enemy's. Both are measurements, not padding.
+
+- **The Spike Tick warning.** `EnemyManager` runs a real per-enemy placement
+  scan — can this enemy put a spike where it would touch me, right now
+  (`Player.detectSpikeInsta`) — and raises `spikeSyncThreat` once the combined
+  damage of the enemies that can clears 100. That is the client's own spike-tick
+  alarm, and it is the one thing that lets `AntiSpikeTickDetector` speak before
+  a spike has landed. It never exceeds MEDIUM there: a spike that *can* be
+  placed still has to be placed, and only a confirmed hit earns HIGH. The
+  severity it adds is capped at the slice `potentialSpikeDamage` has not already
+  banked, because that field is edge-triggered and double-counting it would
+  inflate every sustained hold.
+
+- **A module that already ate this tick.** Not a settings flag — the live
+  `ModuleHandler.healedOnce`, which every module that presses food sets. That
+  covers Anti Sync and anything else added later, and it answers the right
+  question: *did someone press*, not *is the feature switched on*.
+
+That last distinction removed two reads and rewrote a third. `Settings._antiSync`
+and `Settings._safeSoldier` were being read and never used; had they been wired
+in as written they would have stood the engine down for anyone who merely had
+those options enabled. The spike-tick check had the same shape and was rewritten
+onto the modules' armed flags. `staticModules.trapTick` is an empty stub in v5.4
+(`postTick(){}`), so that read was dead in a third way.
+
+### Where the exception lives
+
+"Must not interfere with Auto Place / Preplace / Replace, *except where the
+existing architecture explicitly requires defensive priority*" — the architecture
+in question is `RPE_PRIORITY`, and it is the thing that decides. A system
+mid-commit (placement engine sending, spike tick half-fired) has not set
+`moduleActive` yet, so the ordinary comparison would not see it; the engine
+checks those two flags directly and stands down unless its own rank reaches
+`DEFENSE`, which on RYN's scale sits above the classes those systems act in. A
+top-up is `UTILITY` and waits. A burst answering real damage does not.
+
+Combat runs after the engine on the same tick and assumes the item in hand is a
+weapon. The weapon restore therefore runs in a `finally` keyed on a
+`holdingFood` flag set *before* `selectItem`, so no exit from a burst — an early
+break, a packet-budget bail, or a throw between select and attack — can hand
+Combat a cookie to swing.
 
 ## Ownership handoff
 
@@ -926,7 +984,7 @@ shipped code, unchanged.
 |---|---|
 | `src/autoheal/ryn-autoheal-engine.js` | `createRynAutoHealEngine(deps)` → `AutoHealEngine`; the twelve classes above; the `AH` constants |
 | `tools/build-autoheal.js` | anchored injection into `src/RYN_Client_v5.4.user.js` → `RYN_AutoHeal.user.js`: engine source, module registration, settings keys, menu entries, the two ownership guards |
-| `tools/sim-autoheal.js` | the game's own rules transcribed as a server model, plus eleven scenarios the engine is run through |
+| `tools/sim-autoheal.js` | the game's own rules transcribed as a server model, plus the scenarios the engine is run through |
 | `tools/verify-autoheal.js` | re-derives every constant from `src/game_index.js` and `drivers/game-drivers.json`, checks the wiring in the built script, and re-runs the whole simulation suite against the engine copy pulled back out of it |
 | `src/RYN_Client_v5.4.user.js` | the base client, untouched |
 
@@ -948,7 +1006,7 @@ fire at all: it gates on `tempHealth < maxHealth`, and `Player.maxHealth` is
 
 ### What the simulator reports
 
-Against the transcribed server rules, over twenty-three scenarios — the healing and
+Against the transcribed server rules, over twenty-six scenarios — the healing and
 shame set (sustained melee, every-other-tick pressure, an insta burst, poison,
 a 5-, 6- and 7-count debt, 250 ms ping, no food, an active lock, cheese, a
 low-confidence threat, a count that moves between the plan and the press, an

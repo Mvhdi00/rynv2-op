@@ -357,7 +357,14 @@ function makeClient(sim) {
     store: [{ last: 0 }, { last: 0 }],
     /* The predictive engine borrows this class's constructor for its own
      * private tracker; the instance itself is never written to by it. */
-    staticModules: { placementEngine: { motion: new SimTargetMotion() } },
+    /* placementEngine: the predictive engine borrows this class's constructor
+     * for its own private tracker; the instance itself is never written to.
+     * velocityTick: only its declared knockback window is read, which is what
+     * the engine consumes instead of keeping a second copy of those numbers. */
+    staticModules: {
+      placementEngine: { motion: new SimTargetMotion() },
+      velocityTick: { nearestTarget: null, target: null, minKB: 220, maxKB: 245 }
+    },
     selectItem() { this.packetCount += 1; sim.stats.packets += 1; },
     attack() { this.packetCount += 1; sim.stats.packets += 1; sim.queuePress(); },
     whichWeapon() { this.packetCount += 1; sim.stats.packets += 1; },
@@ -384,6 +391,7 @@ function makeClient(sim) {
       collidingSpike: false,
       willCollideSpike: false,
       pushingOnSpike: false,
+      spikeSyncThreat: false,
       nearestEnemy: null,
       nearestSpike: null,
       nearestTrap: null,
@@ -454,7 +462,7 @@ class Sim {
       pressesWhileLocked: 0, staleAborts: 0, zones: {}, threats: {},
       preempts: 0, cacheHits: 0, cacheMisses: 0, invalidations: {}, motion: "-",
       decisions: {}, ranks: {}, reasonless: 0, survivalPresses: 0,
-      rejections: {}, packets: 0, duplicatesBlocked: 0
+      rejections: {}, packets: 0, duplicatesBlocked: 0, yields: {}
     };
   }
 
@@ -565,6 +573,11 @@ class Sim {
     em.willCollideSpike = !!spike.willCollide;
     em.pushingOnSpike = !!spike.pushing;
     em.potentialSpikeDamage = spike.damage || 0;
+    /* The client's own spike-tick warning: an enemy standing where a spike it
+     * places would touch me, once the combined damage clears 100
+     * (v5.4:3955-3962). Set by the scenario, read by the engine, never
+     * recomputed by it. */
+    em.spikeSyncThreat = !!spike.syncThreat;
     em.nearestEnemyPush = spike.pusher ? pmgr.enemies[0] || null : null;
     em.nearestSpike = spike.colliding || spike.willCollide
       ? {
@@ -636,6 +649,10 @@ class Sim {
     if (typeof tm.reason === "string" && tm.reason.indexOf("survival:") === 0 && this.queued) {
       this.stats.survivalPresses += 1;
     }
+    /* Who the arbiter stood down for, so cooperation with the other systems is
+     * observable rather than assumed. */
+    const yielded = /yield:([\w-]+)/.exec(tm.reason || "");
+    if (yielded) this.stats.yields[yielded[1]] = (this.stats.yields[yielded[1]] || 0) + 1;
     const [hits, total] = String(tm.predictCache || "0/0").split("/").map(Number);
     this.stats.cacheHits = hits;
     this.stats.cacheMisses = total - hits;
@@ -855,6 +872,64 @@ scenario("spike tick — one sequence, not five hits", () => {
   return sim;
 });
 
+/* Consuming the client's spike-tick warning rather than running a second
+ * placement scan. EnemyManager raises spikeSyncThreat when enough enemies are
+ * standing where a spike they place would touch me; the engine may speak on it
+ * before anything has landed, but not above MEDIUM — a spike that can be placed
+ * still has to be placed. */
+scenario("spike sync warning, before the first hit", () => {
+  const sim = new Sim({ foodId: 1 });
+  const placer = makeEnemy({
+    id: 1, x: 130, px: 150, current: 5, primary: 5, primaryReload: 1
+  });
+  placer.canPlaceSpike = true;
+  placer.spikeDamage = 45;
+  for (let t = 1; t <= 30; t++) {
+    const warned = t >= 6 && t <= 24;
+    /* No damage at all: the whole point is the pre-damage branch. */
+    sim.step(0, 0, {
+      enemies: [placer],
+      spike: warned ? { syncThreat: true, damage: 45, willCollide: t >= 14 } : {}
+    });
+  }
+  return sim;
+});
+
+/* The Velocity Tick band comes from the module that owns it. The enemy sits at
+ * 232 — inside VelocityTick's own 220-245 window — with the polearm and turret
+ * halves of the combo actually present, which is what makes it a threat rather
+ * than someone standing at a distance. */
+scenario("velocity tick aimed at us, inside the module's own band", () => {
+  const sim = new Sim({ foodId: 1 });
+  const combo = makeEnemy({
+    id: 1, x: 232, px: 240, current: 5, primary: 5, primaryReload: 1, turretReload: 1
+  });
+  for (let t = 1; t <= 30; t++) {
+    sim.step(t === 18 ? 45 : 0, t >= 16 ? 45 : 0, { enemies: [combo], turret: 300 });
+  }
+  return sim;
+});
+
+/* Cooperation with the placement systems, both halves of it.
+ *
+ * A spike tick is half-fired (useTurret set) while a scratch is waiting to be
+ * topped up. A top-up is UTILITY on RYN's own scale and has to wait; the burst
+ * that follows reaches DEFENSE and does not, which is the exception the
+ * existing architecture names rather than one invented here. */
+scenario("a spike sync mid-combo outranks a top-up but not a burst", () => {
+  const sim = new Sim({ foodId: 1 });
+  /* The module's own armed flag, set the way SpikeSync sets it. */
+  sim.client._ModuleHandler.staticModules.spikeSync = { useTurret: false };
+  const enemy = makeEnemy({ id: 1, x: 150, current: 5, primary: 5, primaryReload: 1 });
+  for (let t = 1; t <= 40; t++) {
+    sim.client._ModuleHandler.staticModules.spikeSync.useTurret = t >= 6 && t <= 30;
+    /* A scratch early, then a real burst while the combo is still armed. */
+    const dmg = t === 4 ? 12 : (t === 20 || t === 22 ? 45 : 0);
+    sim.step(dmg, dmg ? 45 : 0, { enemies: [enemy] });
+  }
+  return sim;
+});
+
 scenario("pinned in an enemy trap with someone in reach", () => {
   const sim = new Sim({ foodId: 1 });
   const attacker = makeEnemy({ id: 1, x: 100, current: 5, primary: 5, primaryReload: 1 });
@@ -1043,6 +1118,31 @@ function runAll(factory, label) {
     if (name.indexOf("dagger pressure") !== -1) {
       checks.push(["dagger pressure recognised",
         ["HIGH", "CRITICAL"].indexOf(threatBest("spam-dagger")) !== -1]);
+    }
+    if (name.indexOf("spike sync warning") !== -1) {
+      /* The client's warning is consumed: the detector speaks before any
+       * damage has landed. */
+      checks.push(["spike-tick warning consumed before any damage",
+        ["LOW", "MEDIUM"].indexOf(threatBest("spike-tick")) !== -1]);
+      /* And not above MEDIUM — a placeable spike is not a placed one, and only
+       * a confirmed hit earns HIGH. */
+      checks.push(["a placeable spike is not a HIGH threat",
+        ["HIGH", "CRITICAL"].indexOf(threatBest("spike-tick")) === -1]);
+      /* A warning is not a reason to spend food. */
+      checks.push(["spent nothing on a warning alone", s.presses === 0]);
+    }
+    if (name.indexOf("spike sync mid-combo") !== -1) {
+      /* It actually stood down, and named the system it stood down for. */
+      checks.push(["stood down for the spike tick", (s.yields["spike-tick"] || 0) > 0]);
+      /* And the exception the architecture names still works: the burst got
+       * through while the same combo was armed. */
+      checks.push(["but the burst still got healed", s.presses > 0]);
+      checks.push(["and nobody died waiting", s.deaths === 0]);
+    }
+    if (name.indexOf("velocity tick aimed") !== -1) {
+      /* Read from VelocityTick's own band, so an enemy at 232 is inside it. */
+      checks.push(["velocity tick recognised inside the module's band",
+        ["MEDIUM", "HIGH", "CRITICAL"].indexOf(threatBest("velocity-tick")) !== -1]);
     }
     if (name.indexOf("spike tick") !== -1) {
       checks.push(["spike tick recognised",

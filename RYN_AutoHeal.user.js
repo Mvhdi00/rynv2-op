@@ -16702,8 +16702,11 @@ window.grbtp = 35;
        * velocity tick is aimed through. RYN's own VelocityTick uses 220-245 as
        * the window and the client carries ANTI_VELOCITY_TICK_MIN = 150; this is
        * the detection band around both. */
-      VELOCITY_BAND_MIN: 150,
-      VELOCITY_BAND_MAX: 270,
+      /* Fallbacks only. The live band is read off the VelocityTick module's own
+       * minKB/maxKB (v5.4:13235-13236); these two are what that module ships with
+       * and are used solely when the module is absent from the build. */
+      VELOCITY_KB_MIN: 220,
+      VELOCITY_KB_MAX: 245,
       /* A run of spike contacts is one sequence until this many quiet ticks. */
       SPIKE_SEQUENCE_GAP_TICKS: 12,
       /* Windows the repeated-pressure detectors count hits over. */
@@ -16860,6 +16863,11 @@ window.grbtp = 35;
       constructor(client) {
         this.client = client;
         this._warned = false;
+        /* True from the moment a press asks for food until the weapon is back.
+         * The executor restores on this flag in a finally, so no path out of a
+         * burst — including a throw partway through one — can leave the client
+         * holding a cookie into Combat's turn. */
+        this.holdingFood = false;
       }
   
       get Items() { return deps.Items; }
@@ -16964,6 +16972,8 @@ window.grbtp = 35;
           isTrapped: !!me.isTrapped,
           pos: me.pos && me.pos.current ? me.pos.current : null,
           scale: num(me.scale) || 35,
+          /* Last tick's travel, as Entity.setFuturePosition measures it. */
+          speed: num(me.speed) || 0,
   
           packetCount: num(mh.packetCount) || 0,
           packetLimit: num(mh.packetLimit) || 119,
@@ -16988,7 +16998,8 @@ window.grbtp = 35;
           return {
             potential: 0, spike: 0, spikeKB: 0, primary: 0, projectile: 0,
             instaThreat: false, dangerEnemy: false, dangerNoSoldier: false,
-            collidingSpike: false, willCollideSpike: false, nearestDistance: Infinity
+            collidingSpike: false, willCollideSpike: false, spikeSync: false,
+            nearestDistance: Infinity
           };
         }
         let nearestDistance = Infinity;
@@ -17012,6 +17023,12 @@ window.grbtp = 35;
           dangerNoSoldier: !!em.dangerWithoutSoldier,
           collidingSpike: !!em.collidingSpike,
           willCollideSpike: !!em.willCollideSpike,
+          /* The spike-tick threat EnemyManager already computes for its own
+           * defensive pass (v5.4:3955-3962): an enemy standing where a spike it
+           * places would touch me, summed across enemies until the combined
+           * spike damage clears 100. This is the client's spike-tick warning and
+           * the engine consumes it — it does not run a second placement scan. */
+          spikeSync: !!em.spikeSyncThreat,
           nearestDistance
         };
       }
@@ -17027,24 +17044,60 @@ window.grbtp = 35;
           /* Anti Smart Tick eats on the tick it refuses to break out. */
           antiSmartTick: !!S._antiSmartTick && has(s.antiInsta) && !!s.antiInsta.blockBreak,
           antiInstaForceHeal: has(s.antiInsta) && !!s.antiInsta.forceHeal,
-          /* Anti Sync drives its own presses through ModuleHandler.heal. */
-          antiSync: !!S._antiSync,
-          /* Safe Soldier / soldier default own the hat and the 0.75 multiplier. */
-          safeSoldier: !!S._safeSoldier,
+          /* Safe Soldier, soldier default and Anti Sync all express themselves
+           * through state the engine already reads live: the hat slot below, and
+           * ModuleHandler.healedOnce for a module that has pressed food this tick
+           * (v5.4:13346, 13896, 13936). Reading their settings flags on top of
+           * that would stand the engine down for anyone who merely has them
+           * switched on, which is not the same question. */
           soldierClaimed: mh ? mh.forceHat === AH.HAT_SOLDIER || storeHat === AH.HAT_SOLDIER : false,
           /* Placement systems share the packet budget with us. */
           placer: !!(S._autoplacer || S._prePlace || S._replace),
           placementEngineBusy: has(s.placementEngine) && !!s.placementEngine.sending,
-          /* Spike ticks commit a tick to a placement combo. */
-          spikeTick: (has(s.spikeSync) && !!S._spikeSync) ||
-                     (has(s.spikeSyncHammer) && !!S._spikeSyncHammer) ||
-                     (has(s.trapTick) && !!s.trapTick.active),
+          /* Spike ticks commit a tick to a placement combo. Read from the armed
+           * state each module keeps, the same way VelocityTick is read below —
+           * SpikeSync.useTurret and SpikeSyncHammer.useTurret/targetEnemy are set
+           * on the tick the combo is half-fired and cleared when it is not
+           * (v5.4:12786-12802, 12842-12847). The settings flags answer a
+           * different question: whether the feature is switched on at all, which
+           * is not a reason to stand down. */
+          spikeTick: (has(s.spikeSync) && !!s.spikeSync.useTurret) ||
+                     (has(s.spikeSyncHammer) &&
+                       (!!s.spikeSyncHammer.useTurret || s.spikeSyncHammer.targetEnemy != null)),
           /* Auto Mills drops three windmills in a tick when it fires. */
           mills: has(s.autoMill) && !!s.autoMill.isActive,
           /* Velocity Tick owns Bull for its combo; never contest it. */
           velocityArmed: has(s.velocityTick) &&
-            (s.velocityTick.nearestTarget !== null || s.velocityTick.target !== null)
+            (s.velocityTick.nearestTarget !== null || s.velocityTick.target !== null),
+          /* The knockback window the combo is built around, read from the module
+           * that owns it rather than kept as a second copy of the same two
+           * numbers. VelocityTick declares minKB/maxKB as instance fields
+           * (v5.4:13235-13236), so a retune there moves the detector with it. */
+          velocityBand: this._velocityBand(s.velocityTick)
         };
+      }
+  
+      /* VelocityTick's window is measured the same way the detector measures:
+       * the gap between my position and the target's (v5.4:13299-13302 against
+       * minKB/maxKB). So the numbers transfer directly when the combo is pointed
+       * at me instead of by me, and the only thing that has to be added is the
+       * error in the reading.
+       *
+       * That error is my own displacement: the module compares against
+       * `pos.future`, one tick ahead, and the detector has only `pos.current`.
+       * Entity.speed is precisely last tick's travel (v5.4:2493-2494), so it is
+       * the measurement, not an estimate. It floors at my own collision scale
+       * because positions in this game are not meaningful below a body radius —
+       * an enemy half a body outside the window is not outside it.
+       *
+       * The enemy's own displacement is the other half and is added per enemy by
+       * the detector, which is where that number lives. */
+      _velocityBand(vt) {
+        const min = vt && num(vt.minKB) !== null ? num(vt.minKB) : AH.VELOCITY_KB_MIN;
+        const max = vt && num(vt.maxKB) !== null ? num(vt.maxKB) : AH.VELOCITY_KB_MAX;
+        const me = this.me;
+        const drift = Math.max((num(me && me.scale) || 35), (num(me && me.speed) || 0));
+        return { min, max, drift, source: vt ? "module" : "default" };
       }
   
       /* ---- combat evidence, for the threat engine --------------------- *
@@ -17388,9 +17441,11 @@ window.grbtp = 35;
         const mh = this.mh;
         if (!mh) return false;
         try {
+          this.holdingFood = true;
           mh.selectItem(AH.FOOD_TYPE);
           mh.attack(null, 1);
           mh.whichWeapon(mh._getPredictWeapon());
+          this.holdingFood = false;
           return true;
         } catch (e) {
           return this._pressFailed(e);
@@ -17405,6 +17460,12 @@ window.grbtp = 35;
         const mh = this.mh;
         if (!mh) return false;
         try {
+          /* Set before the select, not after: if selectItem lands and attack
+           * throws, the client is holding food and the restore is mandatory.
+           * Setting it on a select that itself throws costs one harmless
+           * whichWeapon; not setting it on a select that landed leaves Combat
+           * swinging a cookie. */
+          this.holdingFood = true;
           mh.selectItem(AH.FOOD_TYPE);
           mh.attack(null, 1);
           return true;
@@ -17418,6 +17479,7 @@ window.grbtp = 35;
         if (!mh) return false;
         try {
           mh.whichWeapon(mh._getPredictWeapon());
+          this.holdingFood = false;
           return true;
         } catch (e) {
           return this._pressFailed(e);
@@ -18175,16 +18237,22 @@ window.grbtp = 35;
      * baseline has not already counted — almost always false, because Combat has
      * usually counted it, and the two places it is true are named where they are
      * set. */
-    function threatReport(type, confidence, severity, timing, evidence, additive, rate) {
+    function threatReport(type, confidence, severity, timing, evidence, additive, rate, addAmount) {
+      const value = Math.max(0, Math.round(severity || 0));
       return {
         type,
         confidence,
         value: CONFIDENCE_VALUE[confidence] || 0,
         rank: CONFIDENCE_RANK[confidence] || 0,
-        severity: Math.max(0, Math.round(severity || 0)),
+        severity: value,
         timing: timing === undefined || timing === null ? Infinity : timing,
         evidence: evidence || [],
         additive: !!additive,
+        /* What the additive path may add, when that is smaller than the severity
+         * the report ranks on. A detector reports the whole threat so it sorts
+         * against the others, but may only contribute the slice of it the
+         * baseline has not already counted — anything more would double it. */
+        addAmount: addAmount === undefined ? value : Math.max(0, Math.round(addAmount)),
         /* Whether `severity` is one event's damage or a rate per second. The
          * sustained detector is the only rate, and the difference matters: 95
          * damage a second is ordinary pressure, while 95 damage in one hit is a
@@ -18308,7 +18376,7 @@ window.grbtp = 35;
           this.reset();
           return null;
         }
-        if (!this.hits.length) return null;
+        if (!this.hits.length) return this._beforeFirstHit(ctx);
   
         const count = this.hits.length;
         const meanInterval = this.intervals.length
@@ -18342,6 +18410,49 @@ window.grbtp = 35;
           CONFIDENCE_RANK[confidence] >= CONFIDENCE_RANK.HIGH;
   
         return threatReport(this.id, confidence, perHit, nextIn, evidence, additive);
+      }
+  
+      /* The spike tick before it has landed anything.
+       *
+       * This is the one place the detector may speak without having seen damage,
+       * and it does so only on the client's own verdict. EnemyManager runs a real
+       * placement scan per enemy — can this enemy put a spike where it would
+       * touch me, right now (Player.detectSpikeInsta, v5.4:3868-3899) — and
+       * raises spikeSyncThreat once the combined damage of the enemies that can
+       * clears 100 (v5.4:3955-3962). That is a computed fact about the board, not
+       * "an enemy owns spikes", and the engine consumes it rather than running
+       * the scan a second time.
+       *
+       * It never exceeds MEDIUM: a spike that can be placed still has to be
+       * placed, and the confirmed-hit path above is what earns HIGH. */
+      _beforeFirstHit(ctx) {
+        if (!ctx.snap.threat || !ctx.snap.threat.spikeSync) return null;
+  
+        /* Who the client says can do it, aggregated the way the client does it:
+         * potentialSpikeDamage is a max across placers (v5.4:2759-2761), not a
+         * sum, so a max is what compares against it. */
+        const placers = ctx.enemies.filter(e => e.canPlaceSpike);
+        let worst = 0;
+        for (const e of placers) if (e.spikeDamage > worst) worst = e.spikeDamage;
+        const damage = worst || ctx.spike.damage;
+        if (damage <= 0) return null;
+  
+        const evidence = ["spike-sync-threat", "placers:" + placers.length];
+        if (ctx.spike.willCollide) evidence.push("will-collide");
+        if (ctx.spike.pusher) evidence.push("enemy-pushing");
+  
+        /* Only the part the baseline has not already counted is new damage.
+         * EnemyManager banks potentialSpikeDamage on the tick a placer becomes
+         * one (canPlaceSpikeObject is edge-triggered, v5.4:3401-3402), so on a
+         * sustained hold the flag is still up while the damage figure has gone
+         * back to zero — that gap is the only thing worth adding, and it is zero
+         * on the tick the client already counted it. */
+        const uncounted = Math.max(0, worst - ctx.spike.damage);
+  
+        /* Placed and pushed is a tick away; merely placeable is two. */
+        const imminent = ctx.spike.pusher || ctx.spike.willCollide;
+        return threatReport(this.id, imminent ? CONFIDENCE.MEDIUM : CONFIDENCE.LOW,
+          damage, imminent ? 1 : 2, evidence, uncounted > 0, false, uncounted);
       }
     }
   
@@ -18533,9 +18644,15 @@ window.grbtp = 35;
           const turretGear = e.hatId === AH.HAT_TURRET_GEAR;
           if (!polearm && !turretGear) continue;
   
-          /* The band. Inside it the ordinary weapon terms already cover the
-           * threat; outside it the knockback cannot bring them to us. */
-          const inBand = e.distance >= AH.VELOCITY_BAND_MIN && e.distance <= AH.VELOCITY_BAND_MAX;
+          /* The band, taken from the module that owns the combo rather than kept
+           * as a second copy of it. Inside it the ordinary weapon terms already
+           * cover the threat; outside it the knockback cannot bring them to us.
+           * Both readings are a tick stale, so the window opens by my drift and
+           * theirs — measured travel on both sides, not a padding guess. */
+          const band = (ctx.snap.systems && ctx.snap.systems.velocityBand) ||
+            { min: AH.VELOCITY_KB_MIN, max: AH.VELOCITY_KB_MAX, drift: 35 };
+          const slack = band.drift + e.speed;
+          const inBand = e.distance >= band.min - slack && e.distance <= band.max + slack;
           if (!inBand) continue;
   
           const evidence = ["band:" + Math.round(e.distance)];
@@ -18822,7 +18939,7 @@ window.grbtp = 35;
          * cap still applies, and soldier still reduces it. */
         let additive = 0;
         for (const r of this.reports) {
-          if (r.additive && r.timing <= 1) additive = Math.max(additive, r.severity);
+          if (r.additive && r.timing <= 1) additive = Math.max(additive, r.addAmount);
         }
         if (additive > 0) {
           this.raw = Math.min(AH.DMG_CAP, this.raw + additive);
@@ -19850,6 +19967,22 @@ window.grbtp = 35;
           return false;
         }
   
+        /* A system mid-commit. The placement engine sending a batch and a spike
+         * tick holding a placement combo are both critical work already under
+         * way, and neither has set moduleActive yet, so the ordinary comparison
+         * below would not see them.
+         *
+         * The exception is the one the architecture itself names: RPE_PRIORITY
+         * puts DEFENSE above the classes those systems act in, so a heal that
+         * genuinely reaches DEFENSE takes the tick and anything below it waits.
+         * That is the existing arbitration deciding, not a rule of our own. */
+        if (sys.placementEngineBusy || sys.spikeTick) {
+          if (rank.cls < this.adapter.priorityClass("DEFENSE")) {
+            this.yielded = sys.placementEngineBusy ? "placement-engine" : "spike-tick";
+            return false;
+          }
+        }
+  
         if (!snap.moduleActive) return true;
   
         /* Someone already claimed the tick. Compare classes on RYN's scale, and
@@ -20360,20 +20493,28 @@ window.grbtp = 35;
         let sent = 0;
         let expected = health;
   
-        for (let i = 0; i < presses; i++) {
-          /* Per-press revalidation. Inside one synchronous burst the only thing
-           * that changes is what we ourselves have already sent, so this is what
-           * that costs: packets spent, and health already bought. A press that
-           * would land on a full bar is a wasted press and a wasted food. */
-          if (this.adapter.packetsLeft() < 2) break;
-          if (expected >= snap.maxHealth && plan.urgency !== URGENCY.WASH) break;
-          if (!this.adapter.pressFoodOnly()) break;
-          sent += 1;
-          expected += snap.restore;
-          /* Only the first press of a burst is judged: it clears hitTime, so the
-           * rest are free whatever they cost in food (game_index.js:2461-2463). */
-          if (sent === 1) shame.notePress(snap, verdict);
-          ledger.notePress(snap, willHeal ? snap.restore : 0);
+        try {
+          for (let i = 0; i < presses; i++) {
+            /* Per-press revalidation. Inside one synchronous burst the only thing
+             * that changes is what we ourselves have already sent, so this is what
+             * that costs: packets spent, and health already bought. A press that
+             * would land on a full bar is a wasted press and a wasted food. */
+            if (this.adapter.packetsLeft() < 2) break;
+            if (expected >= snap.maxHealth && plan.urgency !== URGENCY.WASH) break;
+            if (!this.adapter.pressFoodOnly()) break;
+            sent += 1;
+            expected += snap.restore;
+            /* Only the first press of a burst is judged: it clears hitTime, so the
+             * rest are free whatever they cost in food (game_index.js:2461-2463). */
+            if (sent === 1) shame.notePress(snap, verdict);
+            ledger.notePress(snap, willHeal ? snap.restore : 0);
+          }
+        } finally {
+          /* One weapon restore for the whole burst, and it happens on every way
+           * out of the loop. Combat, Auto Place and the placement engine all run
+           * after us on this tick and all assume the weapon in hand is a weapon;
+           * a burst that threw or bailed early must not hand them food. */
+          if (this.adapter.holdingFood) this.adapter.restoreWeapon();
         }
   
         if (!sent) {
@@ -20381,9 +20522,6 @@ window.grbtp = 35;
           this.lastDecision = DECISION.CANCEL;
           return 0;
         }
-  
-        /* One weapon restore for the whole burst. */
-        this.adapter.restoreWeapon();
   
         /* ---- 4. commit ------------------------------------------------ *
          * Everything the press just changed, updated now rather than next tick,
