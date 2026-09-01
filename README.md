@@ -170,8 +170,90 @@ width, transport mode, live opcode table size. A server-side protocol change
 shows up as a console warning instead of as packets that quietly stop being
 understood.
 
+---
+
+# Auto Heal Engine (RYN v5.4)
+
+A second, independent build in this repo: **`RYN_AutoHeal.user.js`** — the RYN
+v5.4 client with a new Auto Heal engine spliced in as one more module. It is not
+an extension of RYN's existing autoheal; it is a separate engine built from the
+shipped game bundle, and RYN's own heal paths stand down while it is on.
+
+Full derivation and architecture: **[docs/AUTOHEAL_ENGINE.md](docs/AUTOHEAL_ENGINE.md)**.
+
+```sh
+node tools/build-autoheal.js     # src/RYN_Client_v5.4.user.js -> RYN_AutoHeal.user.js
+node tools/verify-autoheal.js    # mechanics + wiring + behaviour
+node tools/sim-autoheal.js       # scenarios only (SIM_TRACE=1 for a per-tick trace)
+```
+
+## What it is built on
+
+The shame rule, whole, from `src/game_index.js:2458`:
+
+```js
+if (this.hitTime) {                          // only a PENDING hit is judged
+    const W = Date.now() - this.hitTime;
+    this.hitTime = 0;                        // the first food after a hit only
+    W <= 120 ? (this.shameCount++,
+                this.shameCount >= 8 && (this.shameTimer = 3e4, this.shameCount = 0))
+             : (this.shameCount -= 2, this.shameCount <= 0 && (this.shameCount = 0));
+}
+this.shameTimer <= 0 && (V = f.consume(this));   // refused during the lock
+```
+
+Four things the engine is shaped by:
+
+- Each damage event is worth `+1` or `-2` depending only on when the *first*
+  press after it lands. At 111 ms a server tick, one tick is inside the 120 ms
+  window and two are not — so **one tick of patience turns `+1` into `-2`**.
+- The press that takes the count to 8 sets the lock *before* `consume` is
+  reached: it does not heal, and it buys 30 seconds of not healing. The engine
+  never sends it, which is the `SHAME <= 7` objective in one rule.
+- A press at full health costs no food (`useRes` is never reached) but still
+  runs the shame arithmetic — the cheapest `-2` in the game.
+- A charge is paid once per damage event however many presses follow, so a burst
+  that pays it fills to full rather than to the floor.
+
+## Twelve modules
+
+State Tracker · Damage Analyzer · Shame Controller · Threat Detector ·
+Prediction Engine · Heal Decision Engine · Priority Arbitration · Action
+Validator · Cooldown Manager · Anti-Spam Manager · Action Executor ·
+Integration Layer.
+
+Combat, Auto Place / Preplace / Replace, Spike Tick, Safe Soldier, Anti Smart
+Tick, Auto Mills and Velocity Tick are **read only** — for the threat numbers,
+the packet budget and the tick claim. Nothing in them is modified or duplicated.
+
+## Measured
+
+`tools/sim-autoheal.js` runs the engine against the game's own rules
+transcribed — `buildItem`'s arithmetic, `changeHealth`'s hit stamp and
+full-health refusal, the one-second regen counter, `canBuild`'s resource gate —
+with latency modelled on both legs. Over eleven scenarios: no 30 s lock is ever
+armed, nothing is sent while one is on, the count never passes 7, and eight of
+the eleven hold shame at 0 for 100 % of ticks, including a 90 dps pressure run
+and a 250 ms ping run. `verify-autoheal.js` re-runs all of it against the engine
+copy pulled back out of the built userscript.
+
+## Two defects in the base it works around
+
+- `Player.maxHealth` is `Math.LN1`, i.e. `undefined` (v5.4:3294, v4:3252). Every
+  comparison against it is false and every subtraction `NaN`, so the shipped
+  heal rule's `tempHealth < maxHealth` gate can never be true — the autoheal it
+  replaces cannot fire. The engine takes max health from the bundle (100).
+- `ModuleHandler.heal()`'s shame gate holds one tick and then presses anyway.
+  Correct below 7; at 7 it is the press that arms the lock. The engine gates its
+  own presses instead.
+
+Neither is repaired in place, so `_autoHealEngine` off restores the shipped
+behaviour exactly.
+
 ## Notes
 
+- The base client's first-run `webhook.site` beacon is left as it is — it is not
+  part of the heal path. The ReUp build strips it; this one does not touch it.
 - `_spikeRotation`, `_millRotation` and `_usernameCycler` are excluded from
   Legit Mode — they are cosmetic and naming options, not combat automation.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
