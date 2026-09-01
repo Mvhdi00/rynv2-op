@@ -276,6 +276,46 @@ window question asks the engine how much damage can actually land inside the
 wait, so an exchange whose next hit is three ticks away is answered with a `-2`
 instead of a `+1`.
 
+## The decision: a price, not a threshold
+
+`IF HP < X THEN HEAL` cannot answer the real question, because the same 40
+health is worth different amounts depending on what it costs — nearly free at
+shame 0, and at shame 6 it spends the last charge between you and a 30 s lock.
+So module 6 prices every candidate twice, in health-equivalent points: once for
+pressing **now**, once for pressing **next tick**. The larger number wins and
+the reason it won is the reason reported.
+
+Prices are anchored to the game, not to tuning knobs: overheal is thrown away,
+a life is three bars, food is free until the larder runs low, packets cost
+nothing until the budget is tight, and a shame charge costs the option it
+consumes — `lifeValue / (7 − count)²`, which is ~6 points at count 0, 75 at 5
+and 300 at 6. The zone behaviour is that curve, not a set of `if`s.
+
+Waiting is not "don't heal" — it is the same heal one tick later, with the
+shame arithmetic and the risk changed. A charged press converts to a credit
+press if no new damage restamps the clock (the measured hit frequency prices
+that); a press that is *already* a credit risks losing it by waiting. The old
+heuristics fall out of the pricing rather than being coded.
+
+One rule sits outside the arithmetic: **if waiting kills you, the shame numbers
+don't get a vote.** Starting at shame 6 under 55 damage every three ticks, the
+engine spends charges, reaches the ceiling and never crosses it — 0 deaths, 0
+locks.
+
+Five decisions, each with its reason: `HEAL_NOW` · `WAIT` · `PREPARE` ·
+`CANCEL` · `RECALCULATE`. Real reasons look like
+`topup: credit worth 128 beats pressing at -45` and
+`survival: waiting loses 300 to save 75 of shame`.
+
+**Priority is computed, not declared.** `urgency = severity × confidence ×
+1/(1+timing) × (lethal ? 3 : 1)` produces the requested order — survival,
+catastrophic, burst, rapid, spike, ranged, dagger, ordinary, shame — and the
+verifier asserts that ranking by feeding the function representative cases
+rather than trusting the prose. Arbitration against the rest of the client runs
+on RYN's own `RPE_PRIORITY` scale through its own `priorityFor`, so a heal
+answering a lethal burst is INSTA-class and outranks a sync, while a top-up is
+UTILITY and yields to nearly everything.
+
 ## Predictive defense
 
 Module 5 acts on the tick *before* the bar moves. Motion prediction is not
@@ -314,7 +354,7 @@ the packet budget and the tick claim. Nothing in them is modified or duplicated.
 `tools/sim-autoheal.js` runs the engine against the game's own rules
 transcribed — `buildItem`'s arithmetic, `changeHealth`'s hit stamp and
 full-health refusal, the one-second regen counter, `canBuild`'s resource gate —
-with latency modelled on both legs. Over twenty-two scenarios: no 30 s lock is
+with latency modelled on both legs. Over twenty-three scenarios: no 30 s lock is
 ever armed, nothing is sent while one is on, the count never passes 7, every
 scenario that starts in debt ends at 0, and most hold shame at 0 for 100 % of
 ticks — including a 90 dps pressure run and a 250 ms ping run. A threat that

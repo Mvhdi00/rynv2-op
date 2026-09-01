@@ -240,8 +240,12 @@ check(
 );
 check(
   "every report carries type, confidence, severity and timing",
-  /function threatReport\(type, confidence, severity, timing, evidence, additive\)/
+  /function threatReport\(type, confidence, severity, timing, evidence, additive, rate\)/
     .test(ENGINE_SRC)
+);
+check(
+  "a rate is never mistaken for a burst",
+  /const lethal = !report\.rate && amount >= health;/.test(ENGINE_SRC)
 );
 check(
   "the detectors read the client only through the adapter",
@@ -267,14 +271,8 @@ check(
   /const instance = new Ctor\(\);/.test(ENGINE_SRC)
 );
 check(
-  "a prediction never pays a shame charge",
-  /if \(canHeal && verdict !== VERDICT\.CHARGED && fc\.incomingDamage > 0/.test(ENGINE_SRC)
-);
-check(
-  "LOW confidence spends nothing",
-  /fc\.level === CONFIDENCE\.HIGH/.test(ENGINE_SRC) &&
-  /fc\.level === CONFIDENCE\.MEDIUM/.test(ENGINE_SRC) &&
-  !/fc\.level === CONFIDENCE\.LOW/.test(ENGINE_SRC)
+  "LOW confidence never produces a candidate",
+  /forecast\.level !== CONFIDENCE\.LOW/.test(ENGINE_SRC)
 );
 {
   const required = ["TARGET", "TURNED", "STOPPED", "PROJECTILE", "COLLISION", "MOVED", "GONE"];
@@ -295,6 +293,67 @@ check(
   /this\.lastEnemies = ctx\.enemies;/.test(ENGINE_SRC) &&
   /threat\.lastEnemies \|\| \[\]/.test(ENGINE_SRC)
 );
+
+/* The decision engine: a value comparison, not a threshold. */
+{
+  const DECISION = Engine.DECISION;
+  check(
+    "decisions are HEAL_NOW / WAIT / PREPARE / CANCEL / RECALCULATE",
+    ["HEAL_NOW", "WAIT", "PREPARE", "CANCEL", "RECALCULATE"].every(k => DECISION[k] === k)
+  );
+}
+check(
+  "the decision is now-versus-wait, not a health threshold",
+  /const now = this\.value\.now\(ctx, candidate\);/.test(ENGINE_SRC) &&
+  /const wait = this\.value\.wait\(ctx, candidate\);/.test(ENGINE_SRC) &&
+  /if \(now\.total > wait\.total\)/.test(ENGINE_SRC)
+);
+check(
+  "a charged press is priced against the option it consumes",
+  /verdict === VERDICT\.CHARGED\s*\n\s*\? this\.shamePenalty\(snap, shame\.chargeSafeCount\(snap\)\) : 0;/
+    .test(ENGINE_SRC)
+);
+check(
+  "the shame price is convex in the remaining budget",
+  /return this\.lifeValue\(snap\) \/ \(budget \* budget\);/.test(ENGINE_SRC)
+);
+check(
+  "the ceiling price is finite, so the comparison cannot go NaN",
+  /if \(budget <= 0\) return this\.lifeValue\(snap\) \* 4;/.test(ENGINE_SRC)
+);
+check(
+  "survival is not a term that can be outbid",
+  /const waitIsFatal = rank\.survival &&/.test(ENGINE_SRC) &&
+  /if \(waitIsFatal\) \{/.test(ENGINE_SRC)
+);
+check(
+  "arbitration runs on RYN's own priority scale",
+  /priorityFor/.test(ENGINE_SRC) &&
+  /const theirs = this\.adapter\.priorityOf\(snap\.activeModule\);/.test(ENGINE_SRC) &&
+  /if \(rank\.cls > theirs\) return true;/.test(ENGINE_SRC)
+);
+check(
+  "the requested priority order is computed, not written down",
+  /_urgency\(severity, confidence, timing, health\)/.test(ENGINE_SRC) &&
+  !/CRITICAL_SURVIVAL|CATASTROPHIC_DAMAGE/.test(ENGINE_SRC)
+);
+{
+  /* The order the objective describes has to fall out of the arithmetic. Feed
+   * the urgency function representative cases and check the ranking. */
+  const probe = new Engine({});
+  const u = (sev, conf, timing) => probe.arbiter._urgency(sev, conf, timing, 100);
+  const catastrophic = u(120, 1, 0);      // a lethal burst, landing now
+  const burst = u(60, 0.75, 0);           // high-confidence burst
+  const rapid = u(20, 0.75, 1);           // rapid damage, next tick
+  const ranged = u(50, 0.5, 3);           // a held ranged weapon, three ticks out
+  const dagger = u(20, 0.5, 2);           // dagger pressure
+  const ordinary = u(10, 0.4, 4);         // ordinary chip
+  check("catastrophic outranks a burst", catastrophic > burst);
+  check("a burst outranks rapid damage", burst > rapid);
+  check("rapid damage outranks a distant ranged threat", rapid > ranged);
+  check("a ranged threat outranks dagger chip", ranged > dagger);
+  check("dagger chip outranks ordinary damage", dagger > ordinary);
+}
 
 /* The client field the engine deliberately does not trust. */
 const client = fs.readFileSync(path.join(ROOT, "src/RYN_Client_v5.4.user.js"), "utf8");

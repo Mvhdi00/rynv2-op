@@ -221,6 +221,16 @@ function createRynAutoHealEngine(deps) {
     LOCKGUARD: 7
   };
 
+  /* What the decision engine concluded. Every one of these carries a reason,
+   * and the reason is the arithmetic that produced it rather than a label. */
+  const DECISION = {
+    HEAL_NOW: "HEAL_NOW",       // pressing now is worth more than pressing later
+    WAIT: "WAIT",               // pressing later is worth more, and why
+    PREPARE: "PREPARE",         // no press, but set up a better one (the bull wash)
+    CANCEL: "CANCEL",           // dropped: refused, outranked, or illegal
+    RECALCULATE: "RECALCULATE"  // the world moved under the plan; re-plan next tick
+  };
+
   /* Why a cached prediction was thrown away. Named rather than boolean because
    * which one fired is the useful thing in a trace. */
   const INVALIDATION = {
@@ -359,6 +369,7 @@ function createRynAutoHealEngine(deps) {
         packetCount: num(mh.packetCount) || 0,
         packetLimit: num(mh.packetLimit) || 119,
         moduleActive: !!mh.moduleActive,
+        activeModule: mh.activeModule || null,
         healedOnce: !!mh.healedOnce,
         placedOnce: !!mh.placedOnce,
         totalPlaces: num(mh.totalPlaces) || 0,
@@ -661,6 +672,58 @@ function createRynAutoHealEngine(deps) {
         }
       } catch (_) {}
       return out;
+    }
+
+    /* RYN's own priority scale, read rather than reinvented.
+     *
+     * The placement engine defines RPE_PRIORITY — INSTA 90, SYNC 80, DEFENSE
+     * 70, RECOVERY 60, ANTICIPATION 50, ENGAGEMENT 40, UTILITY 20 — and
+     * classifies module names into it with `priorityFor`. Healing and placing
+     * are then ranked by one authority instead of two, which is the point:
+     * a heal that answers a lethal burst should outrank a sync, and a top-up
+     * should not.
+     *
+     * The fallback numbers are the same scale, used only if the placement
+     * engine is absent. */
+    priorityClass(name) {
+      const fallback = {
+        INSTA: 90, SYNC: 80, DEFENSE: 70, RECOVERY: 60,
+        ANTICIPATION: 50, ENGAGEMENT: 40, UTILITY: 20
+      };
+      try {
+        const engine = this.mh && this.mh.staticModules && this.mh.staticModules.placementEngine;
+        /* priorityFor maps a module name onto the scale; these probes are the
+         * names its own classifier recognises for each class. */
+        if (engine && typeof engine.priorityFor === "function") {
+          const probe = {
+            INSTA: "insta", SYNC: "sync", DEFENSE: "anti",
+            ANTICIPATION: "autoPlacer", ENGAGEMENT: "placementEngine", UTILITY: ""
+          }[name];
+          if (probe !== undefined) {
+            const v = num(engine.priorityFor(probe));
+            if (v !== null) return v;
+          }
+        }
+      } catch (_) {}
+      return fallback[name] === undefined ? fallback.UTILITY : fallback[name];
+    }
+
+    /* Where the module that already claimed this tick sits on that scale. */
+    priorityOf(moduleName) {
+      try {
+        const engine = this.mh && this.mh.staticModules && this.mh.staticModules.placementEngine;
+        if (engine && typeof engine.priorityFor === "function") {
+          const v = num(engine.priorityFor(moduleName));
+          if (v !== null) return v;
+        }
+      } catch (_) {}
+      if (!moduleName) return this.priorityClass("UTILITY");
+      if (moduleName.indexOf("nsta") !== -1) return this.priorityClass("INSTA");
+      if (moduleName.indexOf("ync") !== -1 || moduleName.indexOf("ick") !== -1) {
+        return this.priorityClass("SYNC");
+      }
+      if (moduleName.indexOf("nti") !== -1) return this.priorityClass("DEFENSE");
+      return this.priorityClass("UTILITY");
     }
 
     /* RYN already has a motion predictor, and a good one: the placement
@@ -1453,7 +1516,7 @@ function createRynAutoHealEngine(deps) {
    * baseline has not already counted — almost always false, because Combat has
    * usually counted it, and the two places it is true are named where they are
    * set. */
-  function threatReport(type, confidence, severity, timing, evidence, additive) {
+  function threatReport(type, confidence, severity, timing, evidence, additive, rate) {
     return {
       type,
       confidence,
@@ -1462,7 +1525,13 @@ function createRynAutoHealEngine(deps) {
       severity: Math.max(0, Math.round(severity || 0)),
       timing: timing === undefined || timing === null ? Infinity : timing,
       evidence: evidence || [],
-      additive: !!additive
+      additive: !!additive,
+      /* Whether `severity` is one event's damage or a rate per second. The
+       * sustained detector is the only rate, and the difference matters: 95
+       * damage a second is ordinary pressure, while 95 damage in one hit is a
+       * death. Comparing the two without the flag turns every busy fight into
+       * a survival emergency. */
+      rate: !!rate
     };
   }
 
@@ -1987,7 +2056,7 @@ function createRynAutoHealEngine(deps) {
       const confidence = this.window.length >= 5 && perSecond >= 60 ? CONFIDENCE.HIGH
         : this.window.length >= 3 && perSecond >= 30 ? CONFIDENCE.MEDIUM
         : CONFIDENCE.LOW;
-      return threatReport(this.id, confidence, perSecond, ticksToEmpty, evidence, false);
+      return threatReport(this.id, confidence, perSecond, ticksToEmpty, evidence, false, true);
     }
   }
 
@@ -2763,316 +2832,514 @@ function createRynAutoHealEngine(deps) {
   }
 
   /* ================================================================== *
-   * 6. HealDecisionEngine — one plan per tick.
+   * 6. HealDecisionEngine — is healing now worth more than healing later?
+   *
+   * Not "HP below X, eat". A threshold cannot answer the question this engine
+   * actually faces, because the same 40 health is worth wildly different
+   * amounts depending on what it costs: at shame 0 with a full larder a press
+   * is nearly free, and at shame 6 the same press spends the last charge
+   * standing between us and a thirty-second lock. A ladder of thresholds
+   * cannot express that. A price can.
+   *
+   * So every candidate is priced, in health-equivalent points, twice: once for
+   * pressing now and once for pressing on the next tick instead. The larger
+   * number wins, and the reason it won is the reason reported.
+   *
+   * The requested priority order is not written down anywhere in here. It
+   * falls out of the prices: a lethal burst carries the value of a life, a
+   * shame credit at 6 carries most of one, and a top-up carries forty points
+   * of health minus the food. Ordering them is arithmetic.
    * ================================================================== */
-  class HealDecisionEngine {
+
+  /* What things are worth, in health.
+   *
+   * One health point is one point. Everything else is priced against it, and
+   * every price is anchored to something the game actually does rather than a
+   * tuning knob:
+   *
+   *   - dying costs the whole bar and the run that produced it, so it is worth
+   *     several bars, not one;
+   *   - food costs nothing while you have plenty and a great deal when you are
+   *     nearly out, because what it really costs is the next heal you cannot
+   *     make;
+   *   - a packet costs nothing until the budget is tight, at which point it
+   *     costs the placement engine its tick;
+   *   - a shame charge costs the option it consumes: at count 0 it is one of
+   *     seven, at count 6 it is the last one, and the last one is the
+   *     difference between healing and a thirty-second lock.
+   */
+  class HealValueModel {
     constructor(adapter) { this.adapter = adapter; }
 
-    plan(snap, state, damage, shame, threat, predict, cooldown) {
+    /* Three bars. Death is not merely the loss of current health: it is the
+     * loss of age, gear, position and whatever the run was worth. */
+    lifeValue(snap) { return snap.maxHealth * 3; }
+
+    /* Per press. Free while the larder is full, steep as it empties. */
+    foodValue(snap) {
+      if (snap.sandbox) return 0;
+      const cost = snap.foodCost || 0;
+      if (!cost) return 0;
+      const pressesLeft = snap.foodStock / cost;
+      if (pressesLeft >= 8) return 0;
+      /* Below eight presses in reserve the marginal press starts costing the
+       * heal it will not be able to make later. */
+      return (8 - pressesLeft) * 4;
+    }
+
+    /* Per press. Only real when the budget is tight enough that spending
+     * three frames costs somebody else their tick. */
+    packetValue(snap, systems) {
+      const left = snap.packetLimit - snap.packetCount;
+      const reserve = (systems.placer ? AH.PACKET_RESERVE_PLACER : 0) +
+        (systems.mills ? AH.PACKET_RESERVE_MILL : 0);
+      const spare = left - reserve;
+      if (spare >= AH.PACKETS_PER_PRESS * 4) return 0;
+      if (spare <= 0) return this.lifeValue(snap);      // effectively forbidden
+      return (AH.PACKETS_PER_PRESS * 4 - spare) * 3;
+    }
+
+    /* The option value of the charged press this one would consume.
+     *
+     * At count c there are (7 - c) charges left before the count reaches the
+     * ceiling, where a charged press stops healing altogether. Spending one is
+     * therefore worth a share of a life, and the share is convex: the seventh
+     * charge is cheap, the last one is nearly the whole thing. */
+    shamePenalty(snap, count) {
+      const budget = Math.max(0, AH.SHAME_MAX - count);
+      /* At the ceiling the press is forbidden outright, and that is enforced
+       * as a constraint before anything is priced — so the price here only has
+       * to be large enough to dominate every other term, not infinite.
+       * Infinity would be the honest number and a terrible one: it makes the
+       * comparison arithmetic produce NaN the moment it meets a zero
+       * probability, and a NaN loses every comparison it is in. That is a
+       * decision engine that stops deciding, which is worse than any price. */
+      if (budget <= 0) return this.lifeValue(snap) * 4;
+      return this.lifeValue(snap) / (budget * budget);
+    }
+
+    /* What a credit press is worth: the options it hands back. */
+    creditValue(snap, count) {
+      if (count <= 0) return 0;
+      const after = Math.max(0, count - AH.SHAME_CREDIT);
+      return this.shamePenalty(snap, count) - this.shamePenalty(snap, after);
+    }
+
+    /* Health a press actually delivers, which is not the same as its restore:
+     * anything over the cap is thrown away (game_index.js:2418). */
+    healthGain(presses, restore, from, max) {
+      return Math.max(0, Math.min(presses * restore, max - from));
+    }
+
+    /* Pressing this tick. */
+    now(ctx, candidate) {
+      const { snap, shame, verdict } = ctx;
+      const gain = this.healthGain(candidate.presses, snap.restore, ctx.health, snap.maxHealth);
+      const food = this.foodValue(snap) * candidate.presses;
+      const packets = this.packetValue(snap, snap.systems) * candidate.presses;
+      const charge = verdict === VERDICT.CHARGED
+        ? this.shamePenalty(snap, shame.chargeSafeCount(snap)) : 0;
+      const credit = verdict === VERDICT.CREDIT
+        ? this.creditValue(snap, shame.count) : 0;
+      /* The death this press prevents. */
+      const survival = ctx.lethalNow && gain > 0
+        ? this.lifeValue(snap) * ctx.lethalConfidence : 0;
+      const total = gain + credit + survival - food - packets - charge;
+      return { total, gain, credit, survival, food, packets, charge };
+    }
+
+    /* Pressing on the next tick instead. The heal itself does not go away —
+     * that is the whole point of the comparison — so what differs is the shame
+     * arithmetic, the risk taken while waiting, and how much of the restore is
+     * still wasted once the incoming damage has landed. */
+    wait(ctx, candidate) {
+      const { snap, damage, shame } = ctx;
+      /* Damage expected inside the wait, and whether it lands at all. */
+      const pHit = clamp(damage.damageFrequency * (snap.TICK / 1000), 0, 1);
+      const incoming = ctx.imminent;
+      const healthThen = Math.max(0, ctx.health - incoming * pHit + ctx.regenPerTick);
+      const gain = this.healthGain(candidate.presses, snap.restore, healthThen, snap.maxHealth);
+      const food = this.foodValue(snap) * candidate.presses;
+      const packets = this.packetValue(snap, snap.systems) * candidate.presses;
+
+      /* What the shame arithmetic does to a press deferred by one tick, which
+       * is the whole reason waiting is ever worth anything.
+       *
+       * A charged press becomes a credit press — but only if no new damage
+       * refreshes the stamp in the meantime, and the measured hit frequency is
+       * what says how likely that is. Under damage every tick the window never
+       * opens and `converts` goes to zero on its own.
+       *
+       * A press that is already a credit has the opposite exposure: waiting
+       * risks *losing* it, because a fresh hit restamps hitTime and the next
+       * press is charged again. That term is what stops the model sitting on a
+       * credit forever congratulating itself — pressing now banks it, waiting
+       * only might. */
+      let credit = 0, chargeAvoided = 0, chargeRisk = 0, converts = 0;
+      if (ctx.verdict === VERDICT.CHARGED) {
+        converts = 1 - pHit;
+        credit = converts * this.creditValue(snap, shame.count);
+        chargeAvoided = converts * this.shamePenalty(snap, shame.chargeSafeCount(snap));
+      } else if (ctx.verdict === VERDICT.CREDIT) {
+        credit = (1 - pHit) * this.creditValue(snap, shame.count);
+        chargeRisk = pHit * this.shamePenalty(snap, shame.chargeSafeCount(snap));
+      }
+
+      /* The risk of the wait: dying in it. */
+      const dies = ctx.health - incoming <= 0;
+      const risk = dies ? this.lifeValue(snap) * ctx.lethalConfidence * pHit : 0;
+
+      const total = gain + credit + chargeAvoided - food - packets - risk - chargeRisk;
+      return { total, gain, credit, chargeAvoided, chargeRisk, risk, converts, pHit };
+    }
+  }
+
+  /* ================================================================== *
+   * 7. PriorityArbiter — one place where everything is ranked.
+   *
+   * Two jobs, both centralised here so no other part of the engine decides
+   * what matters more than what.
+   *
+   * First: which situation dominates this tick. That ranking is computed from
+   * severity, confidence and timing rather than written down, so the order the
+   * objective describes — survival, catastrophic damage, high-confidence
+   * burst, rapid damage, spike, ranged, dagger, ordinary damage, shame — comes
+   * out of the numbers. A musket ball three ticks out and a dagger already
+   * landing are ordered by what they will do, not by which list they are on.
+   *
+   * Second: whether this engine may act at all, against the rest of the
+   * client. That comparison runs on RYN's own scale — the placement engine's
+   * RPE_PRIORITY classes, read through its own `priorityFor` — so healing and
+   * placing are ranked by one authority rather than two.
+   * ================================================================== */
+  class PriorityArbiter {
+    constructor(adapter) {
+      this.adapter = adapter;
+      this.reset();
+    }
+
+    reset() {
+      this.rank = null;
+      this.yielded = "";
+    }
+
+    /* Urgency in health-per-tick: how much damage, how sure, how soon. */
+    _urgency(severity, confidence, timing, health) {
+      const soon = 1 / (1 + Math.max(0, timing === Infinity ? 9 : timing));
+      const catastrophic = severity >= health ? 3 : 1;
+      return severity * confidence * soon * catastrophic;
+    }
+
+    /* What dominates this tick, and what class of action answering it is. */
+    classify(snap, threat, predict, shame, damage) {
+      const health = predict.projected;
+      const forecast = predict.forecast;
+      let best = {
+        label: "quiet", urgency: 0, severity: 0, timing: Infinity,
+        cls: this.adapter.priorityClass("UTILITY"), survival: false
+      };
+
+      /* Already lethal: the top of any order, and the only case that is
+       * allowed to spend a charge. */
+      const imminent = typeof threat.imminentWithin === "function"
+        ? threat.imminentWithin(1) : threat.effective;
+      if (imminent >= health && imminent > 0) {
+        best = {
+          label: "critical-survival",
+          urgency: this._urgency(imminent, 1, 0, health) * 10,
+          severity: imminent, timing: 0,
+          cls: this.adapter.priorityClass("INSTA"), survival: true
+        };
+      }
+
+      /* Everything the detectors found, ranked by what it will do. */
+      for (const report of threat.reports) {
+        /* A rate is converted to what it does in one tick before it is ranked
+         * against amounts, and a rate is never "lethal now" however large. */
+        const amount = report.rate
+          ? report.severity * (snap.TICK / 1000)
+          : report.severity;
+        const urgency = this._urgency(amount, report.value, report.timing, health);
+        if (urgency <= best.urgency) continue;
+        const lethal = !report.rate && amount >= health;
+        best = {
+          label: report.type,
+          urgency,
+          severity: amount,
+          timing: report.timing,
+          cls: this.adapter.priorityClass(
+            lethal ? "INSTA" : report.rank >= CONFIDENCE_RANK.HIGH ? "DEFENSE" : "RECOVERY"
+          ),
+          survival: lethal
+        };
+      }
+
+      /* A forecast that has not landed yet ranks below anything that has, by
+       * construction: its timing is in the future and its confidence is under
+       * one, and both divide the urgency. */
+      if (forecast.incomingDamage > 0) {
+        const urgency = this._urgency(
+          forecast.incomingDamage, forecast.confidence, forecast.timing, health
+        );
+        if (urgency > best.urgency) {
+          best = {
+            label: "forecast", urgency,
+            severity: forecast.incomingDamage, timing: forecast.timing,
+            cls: this.adapter.priorityClass("ANTICIPATION"), survival: false
+          };
+        }
+      }
+
+      /* Shame optimisation is last by price, not by decree: with nothing
+       * threatening, the credit is the only thing on the board. */
+      if (best.urgency === 0 && shame.count > 0) {
+        best = {
+          label: "shame-optimisation", urgency: 0.01,
+          severity: 0, timing: shame.opportunity.etaTicks,
+          cls: this.adapter.priorityClass("UTILITY"), survival: false
+        };
+      }
+
+      this.rank = best;
+      return best;
+    }
+
+    /* Whether the engine may take this tick, judged on RYN's own priority
+     * scale. A heal that answers a lethal burst is an INSTA-class action and
+     * outranks a sync; a top-up is UTILITY and yields to almost anything. */
+    mayAct(snap, rank) {
+      this.yielded = "";
+      const sys = snap.systems;
+
+      /* Anti Smart Tick's whole answer to a trap it will not break out of is
+       * to eat instead; it presses on this same tick. A second opinion here is
+       * just double food, whatever the class. */
+      if (sys.antiSmartTick || sys.antiInstaForceHeal) {
+        this.yielded = "anti-smart-tick";
+        return false;
+      }
+
+      if (!snap.moduleActive) return true;
+
+      /* Someone already claimed the tick. Compare classes on RYN's scale, and
+       * yield on a tie: they claimed first. */
+      const theirs = this.adapter.priorityOf(snap.activeModule);
+      if (rank.cls > theirs) return true;
+      this.yielded = `module:${snap.activeModule || "unknown"}`;
+      return false;
+    }
+
+    /* How many presses the budget can actually carry, after leaving the
+     * placement systems and the mills room to work. Survival is allowed to
+     * spend the reserve; nothing else is. */
+    affordable(snap, rank) {
+      const sys = snap.systems;
+      let budget = snap.packetLimit - snap.packetCount;
+      if (!rank.survival) {
+        if (sys.placer) budget -= AH.PACKET_RESERVE_PLACER;
+        if (sys.mills) budget -= AH.PACKET_RESERVE_MILL;
+      }
+      return Math.max(0, Math.floor(budget / AH.PACKETS_PER_PRESS));
+    }
+  }
+
+  /* ---- the decision ------------------------------------------------ */
+  class HealDecisionEngine {
+    constructor(adapter) {
+      this.adapter = adapter;
+      this.value = new HealValueModel(adapter);
+    }
+
+    plan(snap, state, damage, shame, threat, predict, cooldown, arbiter) {
       const restore = snap.restore;
       const max = snap.maxHealth;
       const health = predict.projected;
       const verdict = shame.verdictNow;
       const reserve = this.adapter.reserveHealth;
+      const forecast = predict.forecast;
 
-      const idle = { urgency: URGENCY.IDLE, presses: 0, holdMs: 0, reason: "idle", verdict };
+      const none = decision => Object.assign({
+        urgency: URGENCY.IDLE, presses: 0, holdMs: 0, verdict, decision
+      }, decision === DECISION.CANCEL ? {} : {});
 
+      /* ---- hard constraints, before any arithmetic ------------------ */
       if (shame.locked) {
-        return { urgency: URGENCY.BLOCKED, presses: 0, holdMs: 0, reason: "shame-lock", verdict };
+        return this._plan(DECISION.CANCEL, URGENCY.BLOCKED, 0, 0,
+          "shame-lock: food is refused for the whole 30s", verdict);
       }
 
       /* Healing at full health does nothing at all (game_index.js:2418), so no
-       * amount of predicted damage makes a press worth sending while the bar is
-       * still full — the projection can sit below max on the tick before a
-       * damage-over-time tick, and a press planned there is one the validator
-       * would only refuse. The wash path is the exception, and the only one:
-       * there the point is the -2, not the heal. */
+       * amount of predicted damage makes a press worth sending while the bar
+       * is still full. The wash is the exception: there the point is the -2. */
       const canHeal = snap.health < max;
 
-      /* Defensive priority rises with the zone. Health bought at 5 is bought
-       * with presses that are still affordable; the same health bought at 7 is
-       * not buyable at all. So the floor comes up as the count approaches the
-       * ceiling — including when it is the forecast rather than the count that
-       * says so, which is the whole point of forecasting it. */
+      /* ---- centralised priority ------------------------------------- */
+      const rank = arbiter.classify(snap, threat, predict, shame, damage);
+      if (!arbiter.mayAct(snap, rank)) {
+        return this._plan(DECISION.CANCEL, URGENCY.BLOCKED, 0, 0,
+          `yield:${arbiter.yielded}`, verdict, rank);
+      }
+
+      /* The one press that must never be sent: at the ceiling a charged press
+       * arms the lock *before* consume is reached, so it does not heal either
+       * (game_index.js:2465-2469). No price can make that trade good, which is
+       * why it is a constraint and not a term. */
+      if (shame.chargeSafeCount(snap) >= AH.SHAME_MAX && verdict === VERDICT.CHARGED) {
+        return this._plan(DECISION.WAIT, URGENCY.LOCKGUARD, 0, shame.msUntilCredit,
+          "lockguard: a charged press at 7 arms the lock and heals nothing",
+          verdict, rank);
+      }
+
+      /* ---- the candidate this situation calls for -------------------- */
       const defensiveBias = shame.critical ? reserve
-        : shame.approachingCritical ? reserve / 2
-        : 0;
-
-      /* ---- 6 LOCKGUARD ------------------------------------------------ *
-       * At 7, a charged press sets the 30s lock and is then refused by
-       * consume: no heal, thirty seconds of no heals, and the count is not even
-       * where we thought it was. Waiting for the window is never worse. */
-      const lockGuard = shame.chargeSafeCount(snap) >= AH.SHAME_MAX &&
-        verdict === VERDICT.CHARGED;
-
-      /* A charge is paid once per damage event, no matter how many presses
-       * follow it: the first press clears hitTime and the rest are free
-       * (game_index.js:2461-2463). So wherever a branch below decides to pay
-       * one, it fills the bar to the top rather than to the floor — same shame,
-       * several times the health. */
-
-      /* ---- 5 CRITICAL ------------------------------------------------- */
-      const lethalNow = health <= threat.effective || health <= damage.burst;
-      if (lethalNow && health < max && canHeal) {
-        if (lockGuard) {
-          return {
-            urgency: URGENCY.LOCKGUARD, presses: 0, holdMs: shame.msUntilCredit,
-            reason: "lockguard-critical", verdict
-          };
-        }
-        if (verdict !== VERDICT.CHARGED) {
-          return {
-            urgency: URGENCY.CRITICAL,
-            presses: predict.healsNeeded(max, restore),
-            holdMs: 0, reason: "critical-free", verdict
-          };
-        }
-        /* Charged, but survivable: one tick of patience turns +1 into -2. The
-         * hold is bounded by CooldownManager, because under damage every tick
-         * the window never opens and a guard that waits forever stops you
-         * eating at all. */
-        const hold = shame.msUntilCredit;
-        if (cooldown.mayHold(snap, shame) &&
-            hold <= snap.TICK * (AH.HOLD_TICKS_DEFAULT + 1) &&
-            predict.survivesHold(snap, damage, threat, hold)) {
-          return {
-            urgency: URGENCY.CRITICAL, presses: 0, holdMs: hold,
-            reason: "critical-wait-window", verdict
-          };
-        }
-        if (shame.canSpendCharge(snap)) {
-          return {
-            urgency: URGENCY.CRITICAL,
-            presses: predict.healsNeeded(max, restore),
-            holdMs: 0, reason: "critical-spend-charge", verdict
-          };
-        }
-        return {
-          urgency: URGENCY.LOCKGUARD, presses: 0, holdMs: shame.msUntilCredit,
-          reason: "critical-no-budget", verdict
-        };
-      }
-
-      /* ---- 4 SUSTAIN --------------------------------------------------- *
-       * The predictive floor: stay above what the field can currently do to us
-       * plus a reserve, so the emergency branch above is rarely reached. */
+        : shame.approachingCritical ? reserve / 2 : 0;
       const floor = Math.min(max, threat.effective + reserve + defensiveBias);
-      if (health < floor && health < max && canHeal) {
-        if (verdict !== VERDICT.CHARGED) {
-          return {
-            urgency: URGENCY.SUSTAIN,
-            presses: predict.healsNeeded(Math.min(max, floor + restore), restore),
-            holdMs: 0, reason: "sustain-free", verdict
-          };
-        }
-        if (lockGuard) {
-          return {
-            urgency: URGENCY.LOCKGUARD, presses: 0, holdMs: shame.msUntilCredit,
-            reason: "lockguard-sustain", verdict
-          };
-        }
-        const hold = shame.msUntilCredit;
-        const patient = this.adapter.strict
-          ? shame.count > 0
-          : shame.chargeBudget(snap) <= AH.SHAME_CREDIT;
-        if (patient && cooldown.mayHold(snap, shame) &&
-            predict.survivesHold(snap, damage, threat, hold)) {
-          return {
-            urgency: URGENCY.SUSTAIN, presses: 0, holdMs: hold,
-            reason: "sustain-wait-window", verdict
-          };
-        }
-        /* Keep one point of the budget in hand: a charge spent down to exactly
-         * 7 leaves the next emergency with nothing but the LOCKGUARD wait. */
-        if (shame.chargeBudget(snap) >= AH.SHAME_CREDIT) {
-          return {
-            urgency: URGENCY.SUSTAIN,
-            presses: predict.healsNeeded(max, restore),
-            holdMs: 0, reason: "sustain-spend-charge", verdict
-          };
-        }
-        return {
-          urgency: URGENCY.SUSTAIN, presses: 0, holdMs: hold,
-          reason: "sustain-hold", verdict
-        };
+      const candidate = this._candidate(
+        snap, damage, shame, threat, predict, rank, canHeal, floor, restore, max, health, verdict
+      );
+      if (!candidate) {
+        return this._plan(DECISION.WAIT, URGENCY.IDLE, 0, 0,
+          canHeal ? "nothing worth pressing for" : "at full health", verdict, rank);
+      }
+      if (candidate.prepare) {
+        return this._plan(DECISION.PREPARE, URGENCY.WASH, 0, 0,
+          candidate.reason, verdict, rank, { wantBull: true });
       }
 
-      /* ---- 4 PREEMPT --------------------------------------------------- *
-       * Health is above the floor, so nothing here is urgent — which is
-       * exactly the condition under which acting early is cheap. If something
-       * credible is going to land inside the next few ticks and would put us
-       * under the floor when it does, buy the health now, while the press is
-       * still free.
-       *
-       * The rule that keeps this from being a food-burning machine: a
-       * prediction never pays a shame charge. A charged press is for damage
-       * that has already landed; this damage has not. If the window is not
-       * free, the answer is to wait for it — the hit is not here yet, so
-       * waiting costs nothing.
-       *
-       * HIGH acts. MEDIUM acts only when the press wastes no food (a full
-       * restore's worth of gap to fill). LOW never acts, which is the whole
-       * of "do not waste healing resources on a low-confidence prediction". */
-      const fc = predict.forecast;
-      /* The comparison is against the floor as it will be *when the damage
-       * lands*, not the floor right now. Right now the field is quiet — that
-       * is the whole point of being early. What matters is whether the health
-       * left after the hit clears the buffer the situation will need once the
-       * thing that is closing has arrived. */
-      const futureFloor = Math.min(max, fc.incomingDamage + reserve + defensiveBias);
-      if (canHeal && verdict !== VERDICT.CHARGED && fc.incomingDamage > 0 &&
-          fc.timing <= AH.PREEMPT_HORIZON_TICKS && fc.expectedHealth < futureFloor) {
-        const target = Math.min(max, futureFloor + fc.incomingDamage);
-        const presses = predict.healsNeeded(target, restore);
+      /* Clamp to what the packet budget can carry before pricing it. */
+      const affordable = arbiter.affordable(snap, rank);
+      if (affordable <= 0) {
+        return this._plan(DECISION.CANCEL, URGENCY.BLOCKED, 0, 0,
+          "no packet budget left after the placement reserve", verdict, rank);
+      }
+      candidate.presses = Math.min(candidate.presses, affordable, AH.MAX_PRESSES_PER_TICK);
+
+      /* ---- now, or next tick? --------------------------------------- */
+      const ctx = {
+        snap, damage, shame, verdict, health,
+        regenPerTick: predict.regenPerSecond / AH.DOT_PERIOD_TICKS,
+        imminent: typeof threat.imminentWithin === "function"
+          ? threat.imminentWithin(1) : threat.effective,
+        lethalNow: rank.survival,
+        lethalConfidence: rank.survival
+          ? Math.max(threat.confidence, forecast.confidence, 0.5) : 0
+      };
+      const now = this.value.now(ctx, candidate);
+      const wait = this.value.wait(ctx, candidate);
+
+      /* Survival is not a term to be outbid. If waiting kills us, the shame
+       * arithmetic does not get a vote — which is the rule that healing must
+       * never be sacrificed to keep the count at zero, stated as code. */
+      const waitIsFatal = rank.survival &&
+        !predict.survivesHold(snap, damage, threat, shame.msUntilCredit || snap.TICK);
+
+      if (waitIsFatal) {
+        return this._plan(DECISION.HEAL_NOW, URGENCY.CRITICAL, candidate.presses, 0,
+          `survival: waiting loses ${Math.round(this.value.lifeValue(snap))} to save ` +
+          `${Math.round(now.charge)} of shame`, verdict, rank, { values: { now, wait } });
+      }
+
+      if (now.total > wait.total) {
+        return this._plan(DECISION.HEAL_NOW, candidate.urgency, candidate.presses, 0,
+          `${candidate.label}: now ${Math.round(now.total)} > wait ${Math.round(wait.total)}`,
+          verdict, rank, { values: { now, wait } });
+      }
+
+      /* Waiting wins. Say what it is waiting for, and for how long: a hold is
+       * bounded by the cooldown clock unless the ceiling makes it unbounded. */
+      const holdable = cooldown.mayHold(snap, shame);
+      if (!holdable && canHeal && candidate.presses > 0) {
+        /* The hold has run out. Press anyway rather than stall forever — the
+         * failure mode a shame guard has to avoid is refusing to eat at all. */
+        return this._plan(DECISION.HEAL_NOW, candidate.urgency, candidate.presses, 0,
+          `${candidate.label}: hold expired, pressing at ${Math.round(now.total)}`,
+          verdict, rank, { values: { now, wait } });
+      }
+      const why = wait.converts > 0
+        ? `credit worth ${Math.round(wait.credit + wait.chargeAvoided)} beats pressing at ` +
+          `${Math.round(now.total)}`
+        : `wait ${Math.round(wait.total)} >= now ${Math.round(now.total)}`;
+      return this._plan(DECISION.WAIT, candidate.urgency, 0, shame.msUntilCredit || snap.TICK,
+        `${candidate.label}: ${why}`, verdict, rank, { values: { now, wait } });
+    }
+
+    /* Which shape of press this situation calls for. The candidate carries the
+     * target it fills to and the urgency class it reports as; the value model
+     * decides whether it happens at all. */
+    _candidate(snap, damage, shame, threat, predict, rank, canHeal, floor,
+      restore, max, health, verdict) {
+      const forecast = predict.forecast;
+
+      /* Survival and sustain both fill to the top when the press is charged,
+       * because a charge is paid once per damage event however many presses
+       * follow it (game_index.js:2461-2463). */
+      const chargedBurst = verdict === VERDICT.CHARGED;
+
+      /* A candidate that would press nothing is not a candidate: it has to
+       * fall through to whatever is behind it, or a target the bar already
+       * clears silently blocks the wash for the rest of the fight. */
+      if (canHeal && rank.survival) {
+        const presses = predict.healsNeeded(max, restore);
         if (presses > 0) {
-          if (fc.level === CONFIDENCE.HIGH) {
-            return {
-              urgency: URGENCY.PREEMPT, presses,
-              holdMs: 0, reason: "preempt-" + Math.round(fc.timing) + "t", verdict
-            };
-          }
-          /* "Use cautiously" is about the consequence, not the efficiency of
-           * the press. A press that wastes half a cookie is a fine trade
-           * against a hit that would take the bar under half; the same press
-           * for a graze is the waste the LOW rule exists to prevent. */
-          if (fc.level === CONFIDENCE.MEDIUM && fc.expectedHealth < max * 0.5) {
-            return {
-              urgency: URGENCY.PREEMPT, presses: 1,
-              holdMs: 0, reason: "preempt-cautious", verdict
-            };
+          return { label: "survival", urgency: URGENCY.CRITICAL, presses };
+        }
+      }
+      if (canHeal && health < floor) {
+        const presses = predict.healsNeeded(
+          chargedBurst ? max : Math.min(max, floor + restore), restore
+        );
+        if (presses > 0) {
+          return { label: "sustain", urgency: URGENCY.SUSTAIN, presses };
+        }
+      }
+      /* Ahead of the bar: something credible lands soon and would leave us
+       * under the floor the moment it does. */
+      if (canHeal && forecast.incomingDamage > 0 &&
+          forecast.timing <= AH.PREEMPT_HORIZON_TICKS &&
+          forecast.level !== CONFIDENCE.LOW) {
+        const futureFloor = Math.min(max, forecast.incomingDamage + floor);
+        if (forecast.expectedHealth < futureFloor) {
+          /* To be above the floor *after* the hit, the bar has to be that much
+           * higher *before* it — the incoming damage is added, not compared
+           * against. Targeting the floor itself asks for a press whenever the
+           * bar is already over it, which is a press of nothing. */
+          const target = Math.min(max, futureFloor + forecast.incomingDamage);
+          const presses = predict.healsNeeded(target, restore);
+          if (presses > 0) {
+            return { label: "preempt", urgency: URGENCY.PREEMPT, presses };
           }
         }
       }
-
-      /* ---- 3 WASH ------------------------------------------------------ *
-       * The engine's route back to zero. A credit press is worth -2 whether or
-       * not it heals, and at full health it costs no food at all
-       * (game_index.js:2475 — useRes is only reached when consume returned
-       * true). One press: the second would find hitTime already cleared. */
-      const mode = shame.planWash();
-      if (mode === "natural") {
-        return {
-          urgency: URGENCY.WASH, presses: 1, holdMs: 0,
-          reason: health < max ? "wash-heal" : "wash-free", verdict
-        };
+      /* The way down. A credit press is worth -2 whether or not it heals, and
+       * at full health it costs no food at all (game_index.js:2475). */
+      const wash = shame.planWash();
+      if (wash === "natural") {
+        return { label: "wash", urgency: URGENCY.WASH, presses: 1 };
       }
-      if (mode === "bull") {
-        return {
-          urgency: URGENCY.WASH, presses: 0, holdMs: 0,
-          reason: "wash-bull-arm", verdict, wantBull: true
-        };
+      if (wash === "bull") {
+        return { prepare: true, reason: "prepare: bull hat to manufacture a hit to wash" };
       }
-      /* The credit is one tick out. Nothing else here is urgent — health is
-       * above the floor — so wait for it rather than spending a press now that
-       * would count the wrong way. */
-      if (shame.opportunity.mode === "credit-wait" && !shame.safe) {
-        return {
-          urgency: URGENCY.WASH, presses: 0, holdMs: shame.msUntilCredit,
-          reason: "wash-wait-window", verdict
-        };
-      }
-
-      /* ---- 2 TOPUP ----------------------------------------------------- *
-       * Quiet ticks are where health is meant to come back, precisely so the
-       * charged branches above stay unused. Only ever on a free or credit
-       * press, and preferably before the next damage-over-time tick. */
-      if (health < max && canHeal) {
-        if (verdict === VERDICT.CHARGED) {
-          /* Nothing is urgent here, so there is never a reason to buy a top-up
-           * with +1. Skip the tick rather than hold: holding would put the
-           * shame clock on a decision that does not need one. */
-          return {
-            urgency: URGENCY.TOPUP, presses: 0, holdMs: 0,
-            reason: "topup-charged-skip", verdict
-          };
-        }
-        /* `gap >= restore` is food economy: a press that would waste most of
-         * its restore is not worth the food on a quiet field.
-         *
-         * What relaxes it is the zone, not the health. Owing shame makes a
-         * credit press worth more than the food it wastes — it heals *and*
-         * takes two off the count, which is the earliest valid opportunity the
-         * objective asks for. At zero there is nothing to buy, so the economy
-         * rule stands: that is "avoid unnecessary healing", stated as a rule
-         * rather than a hope.
-         *
-         * A threat can relax it too, but only a believable one. Topping up
-         * against a number that is mostly "an enemy is standing nearby holding
-         * a weapon" is the wasted resource the objective warns about, so the
-         * forecast has to be actionable before it counts. */
+      if (canHeal) {
+        /* Ordinary top-up. The food-economy rule stands at shame 0 and relaxes
+         * while a debt is owed, because then the press buys the credit too. */
         const gap = max - health;
         const worthCredit = !shame.safe && verdict === VERDICT.CREDIT;
-        const believableThreat = threat.effective > 0 && shame.predictor.actionable;
-        if (gap >= restore || !damage.underFire || worthCredit || believableThreat) {
-          return {
-            urgency: URGENCY.TOPUP,
-            presses: predict.healsNeeded(max, restore),
-            holdMs: 0, reason: "topup", verdict
-          };
+        const believable = threat.effective > 0 && shame.predictor.actionable;
+        if (gap >= restore || !damage.underFire || worthCredit || believable) {
+          const presses = predict.healsNeeded(max, restore);
+          if (presses > 0) {
+            return { label: "topup", urgency: URGENCY.TOPUP, presses };
+          }
         }
       }
-
-      return idle;
-    }
-  }
-
-  /* ================================================================== *
-   * 7. PriorityArbiter — the rest of the client gets its tick back.
-   * ================================================================== */
-  class PriorityArbiter {
-    constructor(adapter) { this.adapter = adapter; }
-
-    resolve(plan, snap, shame) {
-      const sys = snap.systems;
-      const critical = plan.urgency >= URGENCY.CRITICAL;
-
-      /* Anti Smart Tick's whole answer to a trap it will not break out of is to
-       * eat instead. It presses through ModuleHandler.heal on this same tick;
-       * a second opinion here is just double food. */
-      if (sys.antiSmartTick || sys.antiInstaForceHeal) {
-        return this._cancel(plan, "yield:anti-smart-tick");
-      }
-
-      /* Someone already claimed the tick for a committed combat sequence — an
-       * insta, a sync, a spike tick. Survival still outranks it; a top-up does
-       * not. */
-      if (snap.moduleActive && !critical && plan.urgency !== URGENCY.WASH) {
-        return this._cancel(plan, "yield:module-active");
-      }
-      if (sys.spikeTick && snap.placedOnce && !critical) {
-        return this._cancel(plan, "yield:spike-tick");
-      }
-
-      /* Velocity Tick owns Bull for its combo and a heal in the middle of it
-       * costs the turret window. Never arm a bull wash against it. */
-      if (sys.velocityArmed) {
-        if (plan.wantBull) plan = this._cancel(plan, "yield:velocity-tick");
-        else if (!critical) return this._cancel(plan, "yield:velocity-tick");
-      }
-
-      /* Packets are shared. The placement engine and the mills both spend in
-       * bursts, so leave them room unless we are dying. */
-      let budget = snap.packetLimit - snap.packetCount;
-      if (!critical) {
-        if (sys.placer) budget -= AH.PACKET_RESERVE_PLACER;
-        if (sys.mills) budget -= AH.PACKET_RESERVE_MILL;
-      }
-      const affordable = Math.floor(Math.max(0, budget) / AH.PACKETS_PER_PRESS);
-      if (plan.presses > affordable) {
-        plan = Object.assign({}, plan, {
-          presses: affordable,
-          reason: plan.reason + (affordable ? "+budget-clamp" : "+no-budget")
-        });
-      }
-
-      if (plan.presses > AH.MAX_PRESSES_PER_TICK) {
-        plan = Object.assign({}, plan, { presses: AH.MAX_PRESSES_PER_TICK });
-      }
-      return plan;
+      return null;
     }
 
-    _cancel(plan, reason) {
-      return Object.assign({}, plan, { presses: 0, wantBull: false, reason });
+    _plan(decision, urgency, presses, holdMs, reason, verdict, rank, extra) {
+      return Object.assign({
+        decision, urgency, presses, holdMs, reason, verdict,
+        rank: rank || null
+      }, extra || {});
     }
   }
 
@@ -3175,12 +3442,14 @@ function createRynAutoHealEngine(deps) {
     reset() {
       this.lastReason = "";
       this.lastPresses = 0;
+      this.lastDecision = null;
       this.totalPresses = 0;
     }
 
     run(plan, snap, state, shame, ledger) {
       this.lastReason = plan.reason;
       this.lastPresses = 0;
+      this.lastDecision = null;
 
       if (plan.wantBull) {
         if (this.adapter.requestBullHat()) this.lastReason = plan.reason + "+bull";
@@ -3197,8 +3466,11 @@ function createRynAutoHealEngine(deps) {
       const live = this.adapter.liveShame();
       const check = shame.revalidate(snap, state, live, plan);
       if (!check.ok) {
+        /* The world moved between planning and pressing. Nothing goes out, and
+         * the tick is reported as what it is: a re-plan, not a refusal. */
         this.lastReason = plan.reason + "+stale:" + check.reason;
         this.lastPresses = 0;
+        this.lastDecision = DECISION.RECALCULATE;
         return 0;
       }
       if (check.changed) this.lastReason = plan.reason + "+recalc";
@@ -3325,9 +3597,9 @@ function createRynAutoHealEngine(deps) {
         };
       } else {
         plan = this.decision.plan(
-          snap, this.state, this.damage, this.shame, this.threat, this.predict, this.cooldown
+          snap, this.state, this.damage, this.shame, this.threat, this.predict,
+          this.cooldown, this.arbiter
         );
-        plan = this.arbiter.resolve(plan, snap, this.shame);
         plan = this.validator.check(plan, snap, this.shame);
         plan = this.cooldown.pace(plan, snap);
       }
@@ -3339,6 +3611,12 @@ function createRynAutoHealEngine(deps) {
       const forecast = this.shame.predictor;
       this.telemetry = {
         urgency: this._urgencyName(plan.urgency),
+        decision: this.executor.lastDecision || plan.decision || DECISION.CANCEL,
+        rank: plan.rank ? plan.rank.label : "quiet",
+        rankClass: plan.rank ? plan.rank.cls : 0,
+        rankUrgency: plan.rank ? Number(plan.rank.urgency.toFixed(2)) : 0,
+        valueNow: plan.values ? Math.round(plan.values.now.total) : 0,
+        valueWait: plan.values ? Math.round(plan.values.wait.total) : 0,
         reason: this.executor.lastReason,
         presses: sent,
         /* shame control */
@@ -3402,6 +3680,8 @@ function createRynAutoHealEngine(deps) {
   AutoHealEngine.ZONE = ZONE;
   AutoHealEngine.zoneFor = ShameTracker.zoneFor;
   AutoHealEngine.CONFIDENCE = CONFIDENCE;
+  AutoHealEngine.DECISION = DECISION;
+  AutoHealEngine.INVALIDATION = INVALIDATION;
   AutoHealEngine.CONFIDENCE_VALUE = CONFIDENCE_VALUE;
   AutoHealEngine.THREAT = THREAT;
   return AutoHealEngine;

@@ -452,7 +452,8 @@ class Sim {
       presses: 0, healedPresses: 0, refused: 0, ticksAtZeroShame: 0,
       maxServerShame: 0, deaths: 0, foodSpent: 0, packetPeak: 0,
       pressesWhileLocked: 0, staleAborts: 0, zones: {}, threats: {},
-      preempts: 0, cacheHits: 0, cacheMisses: 0, invalidations: {}, motion: "-"
+      preempts: 0, cacheHits: 0, cacheMisses: 0, invalidations: {}, motion: "-",
+      decisions: {}, ranks: {}, reasonless: 0, survivalPresses: 0
     };
   }
 
@@ -620,6 +621,14 @@ class Sim {
         (this.stats.invalidations[tm.invalidatedBy] || 0) + 1;
     }
     this.stats.motion = tm.motionSource || "-";
+    this.stats.decisions[tm.decision] = (this.stats.decisions[tm.decision] || 0) + 1;
+    this.stats.ranks[tm.rank] = (this.stats.ranks[tm.rank] || 0) + 1;
+    if (!tm.reason || typeof tm.reason !== "string" || !tm.reason.length) {
+      this.stats.reasonless += 1;
+    }
+    if (typeof tm.reason === "string" && tm.reason.indexOf("survival:") === 0 && this.queued) {
+      this.stats.survivalPresses += 1;
+    }
     const [hits, total] = String(tm.predictCache || "0/0").split("/").map(Number);
     this.stats.cacheHits = hits;
     this.stats.cacheMisses = total - hits;
@@ -852,6 +861,17 @@ scenario("pinned in an enemy trap with someone in reach", () => {
   return sim;
 });
 
+/* Survival outranks a perfect count. At 6 the next charge is priced at most of
+ * a life, which is exactly the pressure that would make a shame-optimising
+ * engine sit still and die; the value model has to spend it anyway when the
+ * alternative is dying. */
+scenario("survival beats shame at 6", () => {
+  const sim = new Sim({ foodId: 1, shame: 6 });
+  sim.client.myPlayer.shameCount = 6;
+  for (let t = 1; t <= 60; t++) sim.step(t % 3 === 0 ? 55 : 0, 55);
+  return sim;
+});
+
 /* ---------------------------------------------------------------- *
  * Predictive defense.
  * ---------------------------------------------------------------- */
@@ -940,7 +960,10 @@ function runAll(factory, label) {
     checks.push(["no press during a lock", s.pressesWhileLocked === 0]);
     /* Shame control: a debt it starts with has to come down, and the zone it
      * spends its time in has to be the one the count says it is in. */
-    if (sim.startShame > 0 && !sim.allowDeaths) {
+    /* A debt has to come down — except where survival forces the count up
+     * instead, which is the trade the engine is supposed to make. That
+     * scenario is judged on its own terms below. */
+    if (sim.startShame > 0 && !sim.allowDeaths && name.indexOf("survival beats shame") === -1) {
       checks.push(["debt reduced", server.shameCount < sim.startShame]);
     }
     /* And the engine has to actually work. */
@@ -955,6 +978,29 @@ function runAll(factory, label) {
     /* The re-read has to actually fire when the count moves under it. */
     if (name.indexOf("moves between plan and press") !== -1) {
       checks.push(["caught the stale count", s.staleAborts > 0]);
+      checks.push(["and reported it as a re-plan", !!s.decisions.RECALCULATE]);
+    }
+
+    /* ---- decision engine -------------------------------------------- */
+    /* Every decision, every tick, carries a reason. */
+    checks.push(["every decision has a reason", s.reasonless === 0]);
+    const known = ["HEAL_NOW", "WAIT", "PREPARE", "CANCEL", "RECALCULATE"];
+    checks.push(["decisions are from the enum",
+      Object.keys(s.decisions).every(d => known.indexOf(d) !== -1)]);
+    if (name.indexOf("survival beats shame") !== -1) {
+      checks.push(["spent the charge to live", s.survivalPresses > 0]);
+      checks.push(["and did not arm the lock doing it", server.locksArmed === 0]);
+    }
+    /* The priority order is emergent, so it is checked by what it ranks: a
+     * spike sequence must never be ranked below shame optimisation, and a
+     * quiet field with a debt must rank shame optimisation at all. */
+    if (name.indexOf("spike tick") !== -1) {
+      const top = Object.keys(s.ranks).sort((a, b) => s.ranks[b] - s.ranks[a])[0];
+      checks.push(["ranked the spike above shame", top !== "shame-optimisation"]);
+    }
+    if (name.indexOf("shame debt at 6") !== -1) {
+      checks.push(["ranked shame optimisation on a quiet field",
+        !!s.ranks["shame-optimisation"]]);
     }
 
     /* ---- predictive defense ---------------------------------------- */
@@ -1025,6 +1071,11 @@ function runAll(factory, label) {
       `      predict: preempts ${pad(s.preempts, 3)} cache ${s.cacheHits}/${s.cacheHits + s.cacheMisses}` +
       ` motion ${pad(s.motion, 18)}${invalid ? " invalidated " + invalid : ""}`
     );
+    const decisions = Object.keys(s.decisions).map(d => `${d} ${s.decisions[d]}`).join("  ");
+    const ranks = Object.keys(s.ranks).sort((a, b) => s.ranks[b] - s.ranks[a])
+      .slice(0, 4).map(r => `${r} ${s.ranks[r]}`).join("  ");
+    console.log(`      decisions: ${decisions}`);
+    console.log(`      ranked: ${ranks}`);
     for (const [label2] of bad) console.log(`      -> failed: ${label2}`);
     if (process.env.SIM_TRACE) {
       for (const row of sim.log) {

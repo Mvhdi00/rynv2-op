@@ -544,15 +544,126 @@ stand there) · `projectile-changed` · `collision-changed` · `player-moved`
   cache**; when a tracked enemy stops, the edge trigger fires once rather than
   every tick it stands there.
 
-### 6. HealDecisionEngine
+### 6. HealDecisionEngine — a price, not a threshold
 
-Emits one `HealPlan` per tick: `{urgency, presses, allowCharge, holdMs, reason}`.
+`IF HP < X THEN HEAL` cannot answer the question this engine faces, because the
+same 40 health is worth wildly different amounts depending on what it costs. At
+shame 0 with a full larder a press is nearly free. At shame 6 the same press
+spends the last charge standing between you and a thirty-second lock. A ladder
+of thresholds cannot express that difference. A price can.
 
-### 7. PriorityArbiter
+So every candidate is priced twice, in health-equivalent points: once for
+pressing **now**, once for pressing on the **next tick** instead. The larger
+number wins, and the reason it won is the reason reported.
 
-Resolves the plan against the rest of the client and the packet budget. Yields
-to committed combat, reserves packets for the placement engine and mills, and
-refuses to contest a hat another module has claimed.
+#### What things cost
+
+Every price is anchored to something the game does, not to a tuning knob:
+
+| Term | Price | Why |
+|---|---|---|
+| health gained | `min(presses × restore, max − health)` | overheal is thrown away (`game_index.js:2418`) |
+| a life | `3 × maxHealth` | death costs the bar *and* the run that produced it |
+| food | 0 while ≥ 8 presses are in reserve, rising steeply below | what food really costs is the heal you cannot make later |
+| packets | 0 until the budget is tight, then a life | at the limit, three frames cost somebody else their tick |
+| a shame charge | `lifeValue / (7 − count)²` | the option it consumes: one of seven at count 0, the last one at count 6 |
+| a shame credit | `penalty(count) − penalty(count − 2)` | the options it hands back |
+
+The charge price is convex on purpose: at count 0 it is ~6 points and a top-up
+outbids it easily; at count 5 it is 75 and only real danger does; at count 6 it
+is 300 — a whole life — and essentially nothing does. The zone behaviour the
+objective asks for is that curve, not a set of `if`s.
+
+At the ceiling the price is a large **finite** number rather than `Infinity`.
+Infinity is the honest value and a terrible one: it meets a zero probability in
+the wait branch, produces `NaN`, and a `NaN` loses every comparison it is in —
+a decision engine that stops deciding. The forbidden press is a *constraint*
+enforced before any pricing, so the price only has to dominate.
+
+#### Now versus next tick
+
+Waiting is not "don't heal" — the heal is still there next tick. What differs
+is the shame arithmetic and the risk:
+
+```
+V(now)  = gain + credit + survivalAvoided − food − packets − charge
+V(wait) = gain' + credit' + chargeAvoided − food − packets − deathRisk − creditRisk
+```
+
+- a **charged** press becomes a credit press one tick later, but only if no new
+  damage restamps `hitTime` first — the measured hit frequency prices that, so
+  under damage every tick the conversion goes to zero on its own;
+- a press that is already a **credit** has the opposite exposure: waiting risks
+  *losing* it. That term is what stops the model sitting on a credit forever
+  congratulating itself — pressing banks it, waiting only might.
+
+The old heuristics fall out of this rather than being coded: a prediction still
+never pays a charge, because for a non-survival candidate `V(wait)` keeps the
+same health gain and adds the avoided charge, so waiting simply prices higher.
+
+#### Survival is not a term
+
+One rule sits outside the arithmetic: if waiting kills us, the shame numbers do
+not get a vote.
+
+```js
+const waitIsFatal = rank.survival && !predict.survivesHold(...);
+if (waitIsFatal) → HEAL_NOW  "survival: waiting loses 300 to save 75 of shame"
+```
+
+That is "never sacrifice survival merely to keep shame at 0", written as code
+rather than hoped for. The simulator holds it to it: starting at shame 6 under
+55 damage every three ticks, the engine spends charges, reaches the ceiling,
+and never crosses it — **0 deaths, 0 locks**.
+
+#### Five decisions, each with its reason
+
+| Decision | Means | Example reason |
+|---|---|---|
+| `HEAL_NOW` | pressing now prices higher | `sustain: now 236 > wait 75` |
+| `WAIT` | pressing later prices higher | `topup: credit worth 128 beats pressing at -45` |
+| `PREPARE` | no press, but set one up | `prepare: bull hat to manufacture a hit to wash` |
+| `CANCEL` | dropped: outranked, illegal, or refused | `yield:module:spikeSync` |
+| `RECALCULATE` | the world moved between plan and press | `sustain: now 161 > wait 60+stale:lockguard` |
+
+### 7. PriorityArbiter — one authority
+
+Two jobs, both centralised so nothing else decides what matters more than what.
+
+**What dominates this tick.** Urgency is computed, not declared:
+
+```
+urgency = severity × confidence × 1/(1 + timing) × (severity >= health ? 3 : 1)
+```
+
+The order the objective describes — survival, catastrophic, high-confidence
+burst, rapid, spike, ranged, dagger, ordinary, shame — is what that expression
+produces, and `verify-autoheal.js` asserts it by feeding the function
+representative cases and checking the ranking rather than trusting the text. A
+musket ball three ticks out and a dagger already landing are ordered by what
+they will do, not by which list they are on.
+
+One units rule makes it work: the sustained detector reports a **rate**, and a
+rate is converted to its one-tick equivalent before being ranked against
+amounts — and is never called lethal. 95 damage a second is ordinary pressure;
+95 damage in one hit is a death. Without the distinction every busy fight reads
+as a survival emergency, which is exactly the bug the simulator caught.
+
+**Whether this engine may act.** That comparison runs on RYN's own scale — the
+placement engine's `RPE_PRIORITY` classes, read through its own `priorityFor` —
+so healing and placing are ranked by one authority instead of two:
+
+| Situation | Class |
+|---|---|
+| lethal burst | `INSTA` (90) — outranks a sync, correctly |
+| a HIGH-confidence detector | `DEFENSE` (70) |
+| a forecast that has not landed | `ANTICIPATION` (50) |
+| wash, top-up | `UTILITY` (20) |
+
+A tie yields to the incumbent: they claimed the tick first. Anti Smart Tick is
+yielded to unconditionally whatever the class, because it eats on that same
+tick and a second opinion is just double food. Packet reserves for the
+placement systems and the mills are held back from everything except survival.
 
 ### 8. ActionValidator
 
@@ -618,8 +729,8 @@ postTick()
   ├─ predict.predictAhead(...)      forecast, or the cached one if nothing moved
   ├─ shame.project(...)             shame forecast + earliest way down
   ├─ ledger.noteOutcome(...)        did the last press land? back off if not
-  ├─ decide.plan(..., cooldown)     urgency + press count + hold
-  ├─ arbiter.resolve(plan, snap)    yield / clamp against other systems
+  ├─ decide.plan(..., arbiter)      rank -> candidate -> price now vs wait
+  │    └─ arbiter.classify / mayAct / affordable   (centralised, RPE scale)
   ├─ validator.check(plan, snap)    legality
   ├─ cooldown.pace(plan, snap)      record the hold the plan settled on
   └─ executor.run(plan)             re-read the live count, recalculate,
@@ -647,10 +758,16 @@ threat   melee, secondary, turret, projectile, spike, spikeKB, dot,
          raw, effective, confidence, lethal, instaThreat, spikeContact,
          reports[], byType{}, top, escalation, soonest
 heal     inFlight[], sentThisTick, backoffUntil, lastLandedTick
-plan     urgency, presses, allowCharge, holdMs, reason
+plan     decision (HEAL_NOW | WAIT | PREPARE | CANCEL | RECALCULATE),
+         urgency, presses, holdMs, reason, rank {label, cls, urgency},
+         values {now, wait}
 ```
 
 ## Priority model
+
+The urgency classes below are the *shape* of a plan. Which one fires is decided
+by the arbiter's computed urgency and the value comparison in module 6 — the
+table is what the engine reports, not a ladder it walks.
 
 | # | Class | Fires when | Shame policy |
 |---|---|---|---|
@@ -747,14 +864,14 @@ fire at all: it gates on `tempHealth < maxHealth`, and `Player.maxHealth` is
 
 ### What the simulator reports
 
-Against the transcribed server rules, over twenty-two scenarios — the healing and
+Against the transcribed server rules, over twenty-three scenarios — the healing and
 shame set (sustained melee, every-other-tick pressure, an insta burst, poison,
 a 5-, 6- and 7-count debt, 250 ms ping, no food, an active lock, cheese, a
 low-confidence threat, a count that moves between the plan and the press, an
 unsurvivable every-tick beatdown), the threat set (possession only, a musket
 ball in flight, dagger pressure, a spike-tick sequence, a trap pin) and the
 prediction set (an enemy closing on a straight line, one that turns away, a
-still field):
+still field) and the decision set (survival at shame 6):
 
 - no scenario arms the 30 s lock, and none sends a press while one is on;
 - the count never exceeds 7, and every scenario that starts in debt ends at 0;
@@ -780,6 +897,12 @@ still field):
   the whole approach costs **one press**;
 - a still field serves **35 of 40 ticks from cache**, rebuilding only on the
   9-tick age-out;
+- **survival is never traded for a clean count**: starting at shame 6 under
+  55 damage every three ticks, the engine spends charges, reaches the ceiling
+  and never crosses it — 0 deaths, 0 locks;
+- every decision in every scenario carries a reason, and all five decision
+  types appear in real runs (`WAIT 105  HEAL_NOW 14  PREPARE 1` on a quiet
+  debt; `RECALCULATE 20` when the count is planted to move under the plan);
 - the every-tick beatdown is the one shape the shame rule makes unsurvivable —
   the hit stamp is refreshed faster than the window closes, so all seven charges
   go and the eighth press is refused rather than sent. Dying at 7 without a lock
