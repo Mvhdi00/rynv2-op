@@ -5473,9 +5473,16 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
+    // Objects whose placement radius is larger than any ordinary item's.
+    // Item 21 (blocker) denies 300 and is the only such entry in the table,
+    // limit 3 per player — so this set stays tiny, and holding it means the
+    // placement engine can size its blocker sweep for the other 22 items and
+    // test these few by distance instead of widening every query to 300.
+    wideBlockers=new Set;
     insertObject(object) {
       this.grid2D.insert(object.pos.current.x, object.pos.current.y, Math.max(object.collisionScale, object.placementScale), object.id);
       this.objects.set(object.id, object);
+      if (object.placementScale > RPE_MAX_ITEM_RADIUS) this.wideBlockers.add(object);
       if (object instanceof PlayerObject) {
         const {PlayerManager: PlayerManager, myPlayer: myPlayer} = this.client;
         const owner = PlayerManager.playerData.get(object.ownerID) || PlayerManager.createPlayer({
@@ -5503,12 +5510,19 @@ window.grbtp = 35;
       return this.deletedObjects.size !== 0;
     }
     removeObject(object) {
+      // The engine is told, not run. A player dying broadcasts one deletion
+      // per building they owned, and running the whole placement pipeline
+      // inside this loop meant thirty full cycles — thirty world sweeps,
+      // thirty beam searches — inside a single websocket message. The engine
+      // now collects them and reacts once, after the message has finished
+      // applying, when the world it is reading is actually coherent.
       const engine = this.client._ModuleHandler && this.client._ModuleHandler.staticModules && this.client._ModuleHandler.staticModules.placementEngine;
       if (engine) {
         try {
-          engine.onVacated(object);
+          engine.noteVacated(object);
         } catch (_) {}
       }
+      this.wideBlockers.delete(object);
       this.grid2D.remove(object.pos.current.x, object.pos.current.y, Math.max(object.collisionScale, object.placementScale), object.id);
       this.objects.delete(object.id);
       if (object instanceof PlayerObject) {
@@ -9118,6 +9132,18 @@ window.grbtp = 35;
   // How long an angle stays banned after a build that the server dropped.
   const LUNA_BAN_TICKS = 18;
 
+  // One server tick, in milliseconds. Used to convert a measured ping into the
+  // number of ticks a placement takes to become visible.
+  const LUNA_TICK_MS = 1e3 / 9;
+
+  // Cap on outstanding sends awaiting a verdict, so a burst cannot grow the
+  // list without bound if verdicts stop arriving.
+  const LUNA_PENDING_MAX = 24;
+
+  // Two angles within this are the same piece of ground on the placement ring:
+  // ~2.3 degrees, well under the ~40 degrees a spike occupies at ring radius.
+  const LUNA_BAN_TOLERANCE = .04;
+
   // How many builds the trapped fallback below is allowed to queue in one
   // tick. Every free angle would be five packets each and would empty the
   // resource bar for ground I cannot use until I am out of the trap; three is
@@ -9138,7 +9164,9 @@ window.grbtp = 35;
     moduleName="autoPlacer";
     client;
     _predictObjects=[];
-    _placedAngles=[];
+    // Sends awaiting a verdict: {angle, type, tick}. Judged once the round
+    // trip they were sent on has had time to complete, not on the next tick.
+    _pendingSends=[];
     _bannedAngles=new Map;
     _angleCache=new Map;
     _angleCacheTick=-1;
@@ -9150,12 +9178,26 @@ window.grbtp = 35;
     }
     reset() {
       this._predictObjects = [];
-      this._placedAngles = [];
+      this._pendingSends = [];
       this._bannedAngles.clear();
       this._angleCache.clear();
       this._angleCacheTick = -1;
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
+    }
+
+    // Bans are held by angle, and an angle is now whatever the geometry
+    // produced — an aperture edge, a contact tangent — rather than a multiple
+    // of a fixed step, so it is never bit-identical from one tick to the next.
+    // Matching within a tolerance is what keeps a ban meaning "that ground",
+    // which is what it always meant.
+    _isBanned(angle) {
+      if (this._bannedAngles.size === 0) return false;
+      const a = GeometrySolver.norm(angle);
+      for (const banned of this._bannedAngles.keys()) {
+        if (GeometrySolver.angleDist(a, banned) < LUNA_BAN_TOLERANCE) return true;
+      }
+      return false;
     }
 
     // UTILS.lineInRect, unchanged.
@@ -9250,6 +9292,25 @@ window.grbtp = 35;
       const key = id + "_" + (excludeObj ? excludeObj.id : "n");
       const cached = this._angleCache.get(key);
       if (cached) return cached;
+      // The ring now comes from the placement engine's aperture solver rather
+      // than from 72 grid queries of our own. Same resolution, same entry
+      // shape, exact run edges, and a handful of target-relevant angles the
+      // uniform sweep would never propose — the ladder below is untouched and
+      // reads all of it the way it always did.
+      const engine = this.client._ModuleHandler?.staticModules?.placementEngine;
+      // Item group 5 is the trap group; everything else auto place holds is a
+      // spike. Same mapping ObjectManager.getBestPlacementAngles uses.
+      const type = Items[id] && Items[id].itemGroup === 5 ? LUNA_TRAP_TYPE : LUNA_SPIKE_TYPE;
+      const angles = engine ? engine.ringCandidates(type, {
+        excludes: excludeObj || null
+      }) : this._legacyAngles(id, myPos, ObjectManager2, excludeObj);
+      this._angleCache.set(key, angles);
+      return angles;
+    }
+
+    // The original probe, kept as the fallback for the one case that can still
+    // reach it: a call made before the engine has been constructed.
+    _legacyAngles(id, myPos, ObjectManager2, excludeObj) {
       const getConfig = this._getConfig(id, myPos);
       const angles = [];
       for (let i = 0; i < LUNA_ANGLE_STEPS; i++) {
@@ -9260,11 +9321,15 @@ window.grbtp = 35;
           perfect: false
         });
       }
-      for (let i = 1; i < angles.length; i++) {
-        if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
-        if (angles[i - 1].placeable && !angles[i].placeable) angles[i - 1].perfect = true;
+      // Wrap-aware: index 0's neighbour is index 71. Comparing only forwards
+      // from index 1 left a placeable run that crosses 0 rad with neither of
+      // its ends marked, which is precisely where the most valuable placement
+      // on that run sits.
+      const n = angles.length;
+      for (let i = 0; i < n; i++) {
+        const prev = angles[(i - 1 + n) % n], cur = angles[i], next = angles[(i + 1) % n];
+        if (cur.placeable && (!prev.placeable || !next.placeable)) cur.perfect = true;
       }
-      this._angleCache.set(key, angles);
       return angles;
     }
 
@@ -9498,17 +9563,30 @@ window.grbtp = 35;
       this._spamPrePlacer = false;
       if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) return;
 
-      // Not Luna's: an angle we built at last tick that is still free this
-      // tick is an angle the server refused. Sit it out rather than spend the
-      // tick's packets on it again.
-      if (this._placedAngles.length > 0) {
-        const checked = [ ...this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null), ...this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) ];
-        for (const placed of this._placedAngles) {
-          const match = checked.find(a => Math.abs(a.angle - placed) < .01);
-          if (match && match.placeable) this._bannedAngles.set(placed, this._tick + LUNA_BAN_TICKS);
+      // Not Luna's: ground we built on that is still free is ground the server
+      // refused. Sit it out rather than spend the tick's packets on it again.
+      //
+      // Two corrections. It used to judge a send one tick after it left, but a
+      // build does not exist until the packet has reached the server and come
+      // back — at 100ms that is two ticks, so a placement that worked was read
+      // as a refusal and its angle blacklisted for two seconds. It now waits
+      // for the round trip it measured before judging anything. And it used to
+      // rebuild the entire ring for both items purely to look up at most three
+      // angles; the legality of exactly those three is what it asks for now.
+      if (this._pendingSends.length > 0) {
+        const settleTicks = 1 + Math.ceil((this.client.SocketManager?.pong ?? 0) / LUNA_TICK_MS);
+        const still = [];
+        for (const sent of this._pendingSends) {
+          if (this._tick - sent.tick < settleTicks) {
+            still.push(sent);
+            continue;
+          }
+          if (myPlayer.canPlaceObject(sent.type, sent.angle)) {
+            this._bannedAngles.set(GeometrySolver.norm(sent.angle), this._tick + LUNA_BAN_TICKS);
+          }
         }
+        this._pendingSends = still;
       }
-      this._placedAngles = [];
 
       // ────────────────────────────────────────────────────────────────────
       // AUTO PLACER — Luna updateAngles + isAutoPlaceAngle
@@ -9516,7 +9594,7 @@ window.grbtp = 35;
       {
         const spikeAngles = this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null);
         const trapAngles = this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null);
-        const notBanned = a => !this._bannedAngles.has(a.angle);
+        const notBanned = a => !this._isBanned(a.angle);
         const validSpike = spikeAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validTrap = trapAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validAngles = [ ...validSpike, ...validTrap ];
@@ -9575,7 +9653,7 @@ window.grbtp = 35;
           // which already rejects every angle a build — mine or anyone's — is
           // occupying, so a blocked angle is never scanned twice.
           const openAngles = list => {
-            const free = list.filter(a => a.placeable && !this._bannedAngles.has(a.angle));
+            const free = list.filter(a => a.placeable && !this._isBanned(a.angle));
             // Same order the ladder above uses: packed against something
             // first, then the rest, each of them nearest the enemy first.
             return [ ...free.filter(a => a.perfect).sort(nearestFirst), ...free.filter(a => !a.perfect).sort(nearestFirst) ];
@@ -9602,23 +9680,50 @@ window.grbtp = 35;
       // ────────────────────────────────────────────────────────────────────
       const typeOf = obj => obj.id === trapId ? LUNA_TRAP_TYPE : LUNA_SPIKE_TYPE;
       const outOfBudget = () => ModuleHandler.packetCount + LUNA_PLACE_COST > ModuleHandler.packetLimit;
-      const emit = obj => {
-        const type = typeOf(obj);
+      // Consecutive builds of the same item go out as one run, so the engine's
+      // executor can share a single item select across them — the same saving
+      // preplace and replace already take. The plan order is the ladder's and
+      // is not disturbed to make longer runs.
+      const emitRun = (type, angles) => {
         // Luna only checks the item cap; RYN also knows whether the resources
         // are there, so a build it would refuse never reaches the wire.
         if (!myPlayer.canPlace(type)) return;
-        ModuleHandler.place(type, obj.angle);
+        // Routed through the engine rather than straight at ModuleHandler.place.
+        // That is what makes an auto place visible to the reservation ledger
+        // *before* it is sent: it will not take ground a sync or an insta has
+        // claimed, and where it outranks a booked preplace the book is told its
+        // slot is gone instead of holding a token the ledger no longer has.
+        const went = [];
+        const sent = ModuleHandler.requestPlaceMany(type, angles, "autoPlacer", went);
+        if (sent <= 0) return;
         ModuleHandler.placedOnce = true;
         ModuleHandler.placeAngles[0] = type;
-        ModuleHandler.placeAngles[1].push(obj.angle);
+        for (const angle of went) {
+          ModuleHandler.placeAngles[1].push(angle);
+          this._pendingSends.push({
+            angle: angle,
+            type: type,
+            tick: this._tick
+          });
+        }
         ModuleHandler.moduleActive = true;
-        this._placedAngles.push(obj.angle);
       };
 
+      let runType = null, run = [];
       for (const obj of this._predictObjects) {
         if (obj.preplace) continue;
         if (outOfBudget()) break;
-        emit(obj);
+        const type = typeOf(obj);
+        if (type !== runType) {
+          if (run.length) emitRun(runType, run);
+          runType = type;
+          run = [];
+        }
+        run.push(obj.angle);
+      }
+      if (run.length) emitRun(runType, run);
+      if (this._pendingSends.length > LUNA_PENDING_MAX) {
+        this._pendingSends.splice(0, this._pendingSends.length - LUNA_PENDING_MAX);
       }
     }
   }
@@ -9662,48 +9767,172 @@ window.grbtp = 35;
         exits: exits
       };
     },
-    knockInto(spikeX, spikeY, objects, enemyX, enemyY, dir, playerHasPolearm) {
-      let willHit = false, inEscapable = false, doubleSpike = false;
+    // Where a knockback actually ends, by running the game's own collision
+    // resolve forward rather than guessing from a distance band.
+    //
+    // The server's rule, from checkCollision:
+    //
+    //   P = h.scale + u.getScale()
+    //   h.x = u.x + P*cos(w)      // push out to the surface, w = object -> player
+    //   h.xVel *= 0.75            // damp, BEFORE the impulse
+    //   if (u.dmg) h.xVel += 1.5 * (u.weightM || 1) * cos(w)
+    //   if (u.trap) h.lockMove = true    // ignoreCollision branch: no push, no damp
+    //
+    // and between contacts velocity decays by playerDecel per millisecond and
+    // is zeroed once it falls under 0.01.
+    //
+    // What this replaces was a set of hardcoded distance bands — 320, 250,
+    // 245, 185, 125, 100, 20, 6.7 — none of which came from the item table,
+    // plus 47.5 as the trap radius where the game's trap trigger is
+    // 35 + 50*0.2 = 45. It answered "is there a spike roughly that way at
+    // roughly that distance", which is a different question from "does the
+    // push land them on one".
+    //
+    // The returned flags keep their original meanings and ordering so the
+    // scorer's weights still mean what they were tuned to mean; `damage`,
+    // `x`, `y` and `stopped` are new and are what the pair search uses
+    // instead of projecting a flat 213 units from the target's centre.
+    simulateKnockback(spikeX, spikeY, spikeScale, objects, enemyX, enemyY, enemyVX, enemyVY) {
+      let x = enemyX, y = enemyY;
+      let vx = enemyVX || 0, vy = enemyVY || 0;
+      // First contact is the build itself. It is not in the world yet, so it
+      // is resolved here rather than found by the scan below — but only if it
+      // would actually touch. The game resolves a collision when the two
+      // overlap and does nothing otherwise, so a build that does not reach the
+      // target pushes them nowhere. Snapping them to the contact surface
+      // regardless would move a target 200 units away *towards* the build and
+      // then invent a chain from wherever that landed.
+      const contactR = Config_default.playerScale + spikeScale;
+      const dx0 = x - spikeX, dy0 = y - spikeY;
+      if (dx0 * dx0 + dy0 * dy0 >= contactR * contactR) {
+        return {
+          willHit: false,
+          doubleSpike: false,
+          inEscapable: false,
+          closest: Infinity,
+          damage: 0,
+          hits: 0,
+          stopped: false,
+          touched: false,
+          x: x,
+          y: y
+        };
+      }
+      let w = Math.atan2(dy0, dx0);
+      if (!isFinite(w)) w = 0;
+      x = spikeX + contactR * Math.cos(w);
+      y = spikeY + contactR * Math.sin(w);
+      vx = vx * .75 + RPE_KB_IMPULSE * Math.cos(w);
+      vy = vy * .75 + RPE_KB_IMPULSE * Math.sin(w);
+
+      let damage = 0, hits = 0, trapped = false;
       let closest = Infinity;
-      let building1 = null;
-      for (const o of objects) {
-        if (!o.dmg && !o.isCactus && !o.trap) continue;
-        const distance = Math.hypot(enemyX - o.x, enemyY - o.y);
-        if (distance > 320) continue;
-        const px = enemyX + distance * Math.cos(dir);
-        const py = enemyY + distance * Math.sin(dir);
-        const scale = o.trap ? 47.5 : o.colScale;
-        const closestDist2 = (px - o.x) * (px - o.x) + (py - o.y) * (py - o.y);
-        if (closestDist2 > scale * scale) continue;
-        if ((o.dmg || o.isCactus) && distance <= 250 && distance > 125 && closestDist2 < (scale - 20) * (scale - 20)) {
-          inEscapable = true;
-        }
-        const condition = !o.trap && distance <= 245 && (distance >= 185 || playerHasPolearm && distance >= 100);
-        if (building1 && !o.trap && building1.dmg && Math.abs(distance - closest) < 6.7) {
-          const midAng = Math.atan2((building1.y + o.y) / 2 - enemyY, (building1.x + o.x) / 2 - enemyX);
-          let rel = Math.abs(midAng - dir);
-          if (rel > Math.PI) rel = 2 * Math.PI - rel;
-          if (rel <= 0.4) {
-            doubleSpike = true;
-            if (condition) willHit = true;
+      const struck = new Set;
+
+      // Integrated with the decay solved over each step rather than applied
+      // after it. Velocity falls continuously — playerDecel is per
+      // millisecond — so advancing by v*dt and then damping overshoots by
+      // more the coarser the step, and the error compounds across a chain.
+      // Displacement over a step is v * (1 - decay^dt) / -ln(decay) exactly,
+      // which costs one multiply and makes the answer independent of how the
+      // step was chosen. The step is then free to be chosen for collision
+      // resolution alone: short enough that the body cannot pass through the
+      // smallest thing that could stop it.
+      let elapsed = 0;
+      const limit = RPE_KB_MAX_TICKS * RPE_TICK_MS;
+      while (!trapped && elapsed < limit) {
+        const speed = Math.hypot(vx, vy);
+        if (speed < RPE_KB_MIN_SPEED) break;
+        const dt = Math.min(RPE_TICK_MS, limit - elapsed, RPE_KB_STEP_UNITS / speed);
+        if (dt <= 0) break;
+        elapsed += dt;
+        const r = Math.pow(RPE_DECEL, dt);
+        const travel = (1 - r) / RPE_KB_LN_DECEL;
+        const px = x, py = y;
+        const nx = x + vx * travel, ny = y + vy * travel;
+        vx *= r;
+        vy *= r;
+        // Swept, not sampled. Testing only the point a step lands on lets a
+        // body skim past the edge of a trap it grazed in between; sweeping the
+        // step as a segment finds every contact regardless of step length,
+        // which is what makes the step free to be long.
+        // Solved for the moment of entry, not the moment of closest approach.
+        // Two buildings whose contact circles overlap are both "near" the end
+        // of a step; which one the body actually reaches first is the one it
+        // enters first, and resolving them in the wrong order sends the
+        // knockback off in the wrong direction for the rest of the chain.
+        const sx = nx - px, sy = ny - py;
+        const len2 = sx * sx + sy * sy;
+        let bestT = Infinity, bestObj = null, bestD = 0, bestX = 0, bestY = 0;
+        for (const o of objects) {
+          if (struck.has(o)) continue;
+          // colScale is the game's getScale(): scale * colDiv. For a pit trap
+          // that is 50*0.2 = 10, so the trigger radius is 45 — not the 47.5
+          // the band heuristic used, and not the raw 50.
+          const reach = Config_default.playerScale + o.colScale;
+          const fx = px - o.x, fy = py - o.y;
+          const c = fx * fx + fy * fy - reach * reach;
+          let t;
+          if (c <= 0) {
+            t = 0;
+          } else if (len2 <= RPE_EPS) {
             continue;
+          } else {
+            const b = 2 * (fx * sx + fy * sy);
+            const disc = b * b - 4 * len2 * c;
+            if (disc < 0) continue;
+            t = (-b - Math.sqrt(disc)) / (2 * len2);
+            if (t < 0 || t > 1) continue;
           }
+          if (t >= bestT) continue;
+          const cx = px + t * sx, cy = py + t * sy;
+          bestT = t;
+          bestObj = o;
+          bestD = Math.hypot(cx - o.x, cy - o.y);
+          bestX = cx;
+          bestY = cy;
         }
-        if (condition) {
-          const angD = Math.abs(dir - Math.atan2(o.y - spikeY, o.x - spikeX));
-          const normAngD = angD > Math.PI ? 2 * Math.PI - angD : angD;
-          if (normAngD <= 0.4) willHit = true;
+        if (!bestObj) {
+          x = nx;
+          y = ny;
+          continue;
         }
-        if (distance < closest) {
-          closest = distance;
-          building1 = o;
+        // Resolve the first thing hit, then carry on from there with the
+        // velocity it left us — a chain is a sequence of single contacts, not
+        // a set resolved together.
+        if (bestD < closest) closest = bestD;
+        struck.add(bestObj);
+        if (bestObj.trap) {
+          // ignoreCollision: the trap does not push or damp, it pins.
+          x = bestX;
+          y = bestY;
+          trapped = true;
+          break;
+        }
+        const reach = Config_default.playerScale + bestObj.colScale;
+        const cw = bestD < RPE_EPS ? w : Math.atan2(bestY - bestObj.y, bestX - bestObj.x);
+        x = bestObj.x + reach * Math.cos(cw);
+        y = bestObj.y + reach * Math.sin(cw);
+        vx *= .75;
+        vy *= .75;
+        if (bestObj.dmg > 0) {
+          damage += bestObj.dmg;
+          hits += 1;
+          vx += RPE_KB_IMPULSE * Math.cos(cw);
+          vy += RPE_KB_IMPULSE * Math.sin(cw);
         }
       }
       return {
-        willHit: willHit,
-        inEscapable: inEscapable,
-        doubleSpike: doubleSpike,
-        closest: closest
+        willHit: hits > 0,
+        doubleSpike: hits > 1,
+        inEscapable: trapped,
+        closest: closest,
+        damage: damage,
+        hits: hits,
+        stopped: trapped,
+        touched: true,
+        x: x,
+        y: y
       };
     }
   };
@@ -9734,12 +9963,52 @@ window.grbtp = 35;
   const RPE_TICK_MS = 1e3 / 9;
   const RPE_DECEL = .993;
   const RPE_KB_IMPULSE = 1.5;
-  const RPE_KB_TRAVEL = RPE_KB_IMPULSE / (1 - RPE_DECEL);
-  const RPE_PLACE_PACKETS = 5;
+  // Free-flight travel of a knockback impulse: 1.5 units/ms decaying at
+  // 0.993/ms until the game zeroes it below 0.01. This is an upper bound and
+  // nothing but the simulator below should be using it as a distance — a real
+  // knockback is cut short by the first thing it hits, damped 0.75 on every
+  // contact, and stopped dead by a trap.
+  const RPE_KB_LN_DECEL = -Math.log(RPE_DECEL);
+  const RPE_KB_TRAVEL = RPE_KB_IMPULSE / RPE_KB_LN_DECEL;
+  // place() is selectItem + attack + stopAttack + whichWeapon: four frames on
+  // the wire, no more. It was 5, which refused a placement whenever exactly
+  // four packets were left, dropped plan entries that fitted, and over-charged
+  // the packet cost term by 25%.
+  const RPE_PLACE_PACKETS = 4;
   const RPE_BATCH_PACKETS = 2;
+  // Item 21 (blocker) denies a 300 radius and is the only entry in the whole
+  // item table with a `blocker` field. Sizing every blocker query for it made
+  // the sweep 3.4x wider than it needs to be for the other 22 items, whose
+  // placement radius is their own scale — 52 at the largest.
   const RPE_MAX_BLOCK_RADIUS = 300;
+  const RPE_MAX_ITEM_RADIUS = 52;
   const RPE_EPS = 1e-6;
   const RPE_TAU = Math.PI * 2;
+  // A 1.5 impulse is spent after ~713ms under the 0.993/ms decay, so seven
+  // ticks is past the end of any real knockback; the loop exits on speed long
+  // before this in practice. The floor is the game's own: it zeroes a velocity
+  // component once it falls inside +/-0.01.
+  const RPE_KB_MAX_TICKS = 7;
+  const RPE_KB_MIN_SPEED = .01;
+  // Longest distance the body may cover in one integration step. Well under
+  // the 45-unit trap trigger, so nothing can be stepped over.
+  const RPE_KB_STEP_UNITS = 8;
+  // How far out an enemy is still worth measuring motion for. Wider than the
+  // placement radius, because the point is to already have a velocity for
+  // whoever becomes the nearest enemy next.
+  const RPE_TRACK_RANGE = 600;
+  // Candidate density bands. Inside CLOSE the fight is inside placement reach
+  // and every extra reasoned angle can matter; past MID the target is far
+  // enough that leading and pairing angles describe ground they will not be
+  // standing on. Both are under the 350 default placement radius, so this
+  // widens the search where it counts rather than narrowing it anywhere.
+  const RPE_DENSITY_CLOSE = 220;
+  const RPE_DENSITY_MID = 340;
+  // How far ahead the lead angles look, in ticks.
+  const RPE_LEAD_TICKS = 2;
+  // Slack when deciding whether one of our spikes is close enough to the ring
+  // to be worth a packing angle.
+  const RPE_PACK_SLACK = 30;
 
   // Priority classes for the reservation ledger. A higher class wins the
   // ground; an equal class is resolved by score.
@@ -9764,6 +10033,12 @@ window.grbtp = 35;
     rebound: 4.4,
     reboundDouble: 7.2,
     reboundTrap: 3.4,
+    // Refines a bounce that already scored, by how much damage the simulated
+    // chain actually deals. Deliberately smaller than the smallest bounce
+    // weight so it reorders candidates within a class instead of promoting
+    // between classes.
+    reboundDamage: 1.8,
+    reboundDamageFull: 100,
     sealExit: 3.6,
     capture: 3,
     aimAway: 1.1,
@@ -10111,12 +10386,29 @@ window.grbtp = 35;
       const ratio = Math.min(1, profile.footR / Math.max(1, profile.ringR));
       return Math.max(.08, 2 * Math.asin(ratio) * .5);
     }
+    // Angular key, for deduplicating proposals on one ring within one tick.
+    // Only the angle solver wants this; it is not what a send is remembered by.
     key(profile, angle) {
       const q = this.quantum(profile);
       return profile.type + ":" + Math.round(GeometrySolver.norm(angle) / q);
     }
-    note(profile, angle, tick) {
-      const k = this.key(profile, angle);
+    // What a send is remembered by: the ground it landed on.
+    //
+    // Keying by angle meant every key described a direction from wherever we
+    // were standing, so the whole map had to be thrown away the moment we
+    // moved far enough for those directions to point somewhere else — 70
+    // units, which at the game's terminal speed of 25.4 units a tick is under
+    // three ticks of running. In any moving fight the staleness penalty and
+    // the same-tick guard were being wiped before they could do anything, and
+    // that penalty is the only way to route around ground we are structurally
+    // blind to: an enemy pit trap is hideFromEnemy, denies placement, and can
+    // never be seen. Ground does not move, so keying by it needs no wipe.
+    worldKey(profile, x, y) {
+      const q = Math.max(8, profile.footR * .5);
+      return profile.type + ":" + Math.round(x / q) + ":" + Math.round(y / q);
+    }
+    note(profile, x, y, tick) {
+      const k = this.worldKey(profile, x, y);
       const e = this.sends.get(k);
       if (e) {
         e.tick = tick;
@@ -10128,24 +10420,19 @@ window.grbtp = 35;
         });
       }
     }
-    attempts(profile, angle, tick) {
-      const e = this.sends.get(this.key(profile, angle));
+    attempts(profile, x, y, tick) {
+      const e = this.sends.get(this.worldKey(profile, x, y));
       if (!e) return 0;
       const age = tick - e.tick;
       if (age > 14) return 0;
       return e.count * (1 - age / 14);
     }
     // Ground we have already paid for this tick is not worth paying for again.
-    sentThisTick(profile, angle, tick) {
-      const e = this.sends.get(this.key(profile, angle));
+    sentThisTick(profile, x, y, tick) {
+      const e = this.sends.get(this.worldKey(profile, x, y));
       return !!e && e.tick === tick;
     }
     expire(tick, origin) {
-      // Once we have moved far enough that the ring no longer covers the same
-      // ground, the old keys describe somewhere else.
-      if (this.lastOrigin && Math.hypot(origin.x - this.lastOrigin.x, origin.y - this.lastOrigin.y) > 70) {
-        this.sends.clear();
-      }
       this.lastOrigin = {
         x: origin.x,
         y: origin.y
@@ -10177,7 +10464,6 @@ window.grbtp = 35;
       item: item,
       footR: item.scale,
       ringR: myPlayer.getItemPlaceScale(id),
-      blockR: item.id === 21 ? item.blocker : item.scale,
       touchR: Config_default.playerScale + item.scale * colDiv,
       layer: ItemGroups[item.itemGroup] ? ItemGroups[item.itemGroup].layer : 0,
       riverLegal: item.id === 18,
@@ -10232,10 +10518,35 @@ window.grbtp = 35;
       const targetNext = this._drift(target, true);
 
       const ourSpikes = [], ourTraps = [], enemyObjects = [];
+      // One flat list for the knockback simulator, built here rather than
+      // rebuilt inside the scorer for every candidate. Its contents depend on
+      // the frame and nothing else, so ~200 short-lived allocations a tick
+      // collapse to one pass.
+      //
+      // It carries every solid object, not only ours, because all of them push
+      // a body that is being knocked around — but `dmg` and `trap` are only
+      // set for the ones that can actually act on *this* target. The game
+      // applies build damage and the trap lock only when the owner is not the
+      // victim and not on the victim's team, so an enemy standing among their
+      // own spikes takes nothing from them.
+      const kbObjects = [];
       ObjectManager2.grid2D.query(targetPos.x, targetPos.y, 5, id => {
         const obj = ObjectManager2.objects.get(id);
         if (!obj || !(obj instanceof PlayerObject)) return false;
-        if (PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) {
+        const theirs = !PlayerManager2.isEnemyByID(obj.ownerID, myPlayer);
+        const hostileToTarget = obj.ownerID !== target.id;
+        const item = Items[obj.type];
+        if (!item.ignoreCollision || item.trap) {
+          kbObjects.push({
+            x: obj.pos.current.x,
+            y: obj.pos.current.y,
+            colScale: obj.collisionScale,
+            dmg: hostileToTarget && item.dmg ? item.dmg : 0,
+            trap: !!(hostileToTarget && item.trap),
+            source: obj
+          });
+        }
+        if (!theirs) {
           enemyObjects.push(obj);
           return false;
         }
@@ -10245,7 +10556,14 @@ window.grbtp = 35;
       });
 
       const targetScale = target.collisionScale;
-      const targetTrapped = ourTraps.find(t => t.pos.current.distance(targetPos) < t.scale) ?? null;
+      // The game springs a trap at `h.scale + u.getScale()`, and getScale for a
+      // pit trap is scale*colDiv = 50*0.2 = 10 — so the real trigger radius is
+      // 45. Testing against the raw 50 called the target pinned inside a
+      // five-unit ring where they are still free, which flips targetTrapped,
+      // neitherTrapped, enclosure and capture the wrong way at exactly the
+      // boundary those terms exist to judge.
+      const trapReach = Config_default.playerScale;
+      const targetTrapped = ourTraps.find(t => t.pos.current.distance(targetPos) < trapReach + t.collisionScale) ?? null;
 
       this.frameTick = tick;
       this.frame = {
@@ -10264,10 +10582,25 @@ window.grbtp = 35;
         ourSpikes: ourSpikes,
         ourTraps: ourTraps,
         enemyObjects: enemyObjects,
+        kbObjects: kbObjects,
+        // Every enemy close enough to become the target. Motion is measured for
+        // all of them, so that when the nearest one changes the new target
+        // already has a velocity instead of preplace going dark for the two
+        // ticks it takes to build one.
+        nearbyEnemies: PlayerManager2.enemies ? PlayerManager2.enemies.filter(e => e && e.pos && myPos.distance(e.pos.current) <= RPE_TRACK_RANGE) : [ target ],
         range: myPos.distance(targetPos),
         budgetLeft: Math.max(0, ModuleHandler.packetLimit - ModuleHandler.packetCount)
       };
       return this.frame;
+    }
+    // A deletion is handled while the object is still in the world, so the
+    // frame built before it arrived still lists that object among ourSpikes,
+    // ourTraps and — worst of all — as targetTrapped. Replace has to be able
+    // to say "that snapshot is gone" rather than score a re-trap against the
+    // trap it is replacing.
+    invalidate() {
+      this.frameTick = -1;
+      this.frame = null;
     }
   }
 
@@ -10281,13 +10614,17 @@ window.grbtp = 35;
     constructor(client2) {
       this.client = client2;
     }
-    // Search extent comes from how far a blocker could possibly reach, not
-    // from a hardcoded cell count — the blocker item denies a 300 radius and
-    // a one-cell query would never see it.
+    // Search extent comes from how far a blocker could actually reach.
+    //
+    // That used to mean sizing every sweep for item 21's 300 radius, which
+    // made it 13x13 cells when 7x7 covers all 22 other items — their
+    // placement radius is their own scale, 52 at the largest. The wide ones
+    // are held in a set by ObjectManager as they arrive, so the handful that
+    // exist are tested by distance instead of a three-times-wider grid walk.
     blockersAround(originX, originY, maxRing, maxFoot) {
       const {ObjectManager: ObjectManager2} = this.client;
-      const reach = maxRing + maxFoot + RPE_MAX_BLOCK_RADIUS;
-      const cells = Math.ceil(reach / ObjectManager2.grid2D.cellSize) + 1;
+      const near = maxRing + maxFoot + RPE_MAX_ITEM_RADIUS;
+      const cells = Math.ceil(near / ObjectManager2.grid2D.cellSize) + 1;
       const out = [];
       ObjectManager2.grid2D.query(originX, originY, cells, id => {
         const obj = ObjectManager2.objects.get(id);
@@ -10295,6 +10632,15 @@ window.grbtp = 35;
         out.push(obj);
         return false;
       });
+      const wide = ObjectManager2.wideBlockers;
+      if (wide && wide.size) {
+        const far = maxRing + maxFoot + RPE_MAX_BLOCK_RADIUS;
+        for (const obj of wide) {
+          const pos = obj.pos.current;
+          if (Math.hypot(pos.x - originX, pos.y - originY) > far) continue;
+          if (out.indexOf(obj) === -1) out.push(obj);
+        }
+      }
       return out;
     }
     // Free intervals for one profile, from one origin, optionally pretending
@@ -10344,13 +10690,28 @@ window.grbtp = 35;
           source: source
         });
       };
+      const {myPos: myPos, targetPos: targetPos, targetNext: targetNext, targetScale: targetScale} = frame;
+      // How hard to look. Every angle below is proposed for a stated reason,
+      // so widening the set never means sampling blindly — it means asking
+      // more questions of the same geometry when the fight is close enough
+      // for the answers to matter. Beyond the outer band the extra questions
+      // are about ground the target will not reach this exchange.
+      const close = frame.range <= RPE_DENSITY_CLOSE;
+      const mid = frame.range <= RPE_DENSITY_MID;
+
       for (const ap of apertures) {
         const inset = Math.min(.03, ap[2] / 3);
         push(GeometrySolver.norm(ap[0] + inset), "edge");
         push(GeometrySolver.norm(ap[1] - inset), "edge");
         if (ap[2] > .7) push(GeometrySolver.norm(ap[0] + ap[2] / 2), "span");
+        // A wide aperture close in has room for more than one build. Offering
+        // its quarter points is what lets the planner pack two into it
+        // instead of taking the middle and losing both halves.
+        if (close && ap[2] > 1.4) {
+          push(GeometrySolver.norm(ap[0] + ap[2] * .25), "span");
+          push(GeometrySolver.norm(ap[0] + ap[2] * .75), "span");
+        }
       }
-      const {myPos: myPos, targetPos: targetPos, targetNext: targetNext, targetScale: targetScale} = frame;
       for (const a of GeometrySolver.contactAngles(myPos.x, myPos.y, profile.ringR, profile.footR, targetPos.x, targetPos.y, targetScale)) {
         push(a, "contact");
       }
@@ -10364,6 +10725,62 @@ window.grbtp = 35;
       if (frame.targetTrapped) {
         const t = frame.targetTrapped.pos.current;
         push(GeometrySolver.nearestFree(apertures, Math.atan2(t.y - myPos.y, t.x - myPos.x)), "intent");
+      }
+
+      // Where they are heading, further out than one tick. The one-tick drift
+      // in targetNext is a small step; a target running in a straight line is
+      // somewhere quite different by the time a build lands, and the angle
+      // that catches them there is not the angle that catches them now.
+      if (mid && frame.motion && frame.motion.samples && frame.motion.samples.length >= 2 && frame.motion.speed > .5) {
+        const lead = frame.motion.heading;
+        if (lead !== null && lead !== undefined) {
+          const aheadX = targetPos.x + Math.cos(lead) * frame.motion.speed * RPE_LEAD_TICKS;
+          const aheadY = targetPos.y + Math.sin(lead) * frame.motion.speed * RPE_LEAD_TICKS;
+          for (const a of GeometrySolver.contactAngles(myPos.x, myPos.y, profile.ringR, profile.footR, aheadX, aheadY, targetScale)) {
+            push(a, "lead");
+          }
+          push(GeometrySolver.nearestFree(apertures, Math.atan2(aheadY - myPos.y, aheadX - myPos.x)), "lead");
+        }
+      }
+
+      // Packing against what we already own. The aperture edges cover this
+      // wherever an existing build is close enough to occlude the ring, but a
+      // build just outside that reach still has a contact angle worth taking —
+      // it is how a second spike lands flush against the first rather than a
+      // footprint away from it.
+      if (close && frame.ourSpikes.length) {
+        for (const spike of frame.ourSpikes) {
+          const s = spike.pos.current;
+          if (Math.hypot(s.x - myPos.x, s.y - myPos.y) > profile.ringR + profile.footR + spike.collisionScale + RPE_PACK_SLACK) continue;
+          for (const a of GeometrySolver.contactAngles(myPos.x, myPos.y, profile.ringR, profile.footR, s.x, s.y, spike.collisionScale)) {
+            push(a, "pack");
+          }
+        }
+      }
+
+      // Closing a way out. The scorer already pays for a build that sits
+      // across an escape route, but nothing proposed one — the arc that seals
+      // a gap is not generally an aperture edge or a contact angle, so the
+      // term could only ever fire by accident.
+      if (frame.exits && frame.exits.length) {
+        for (const exit of frame.exits) {
+          const sealX = targetPos.x + Math.cos(exit.angle) * (targetScale + profile.footR);
+          const sealY = targetPos.y + Math.sin(exit.angle) * (targetScale + profile.footR);
+          push(GeometrySolver.nearestFree(apertures, Math.atan2(sealY - myPos.y, sealX - myPos.x)), "seal");
+        }
+      }
+
+      // Spike synergy: a damage build placed on the far side of the target
+      // from one of our traps pushes them into it. The push axis is
+      // build -> target, so the build we want is directly opposite the trap.
+      if (profile.isDamage && mid && frame.ourTraps.length && !frame.targetTrapped) {
+        for (const trap of frame.ourTraps) {
+          const t = trap.pos.current;
+          const toTrap = Math.atan2(t.y - targetPos.y, t.x - targetPos.x);
+          const behindX = targetPos.x - Math.cos(toTrap) * (targetScale + profile.footR);
+          const behindY = targetPos.y - Math.sin(toTrap) * (targetScale + profile.footR);
+          push(GeometrySolver.nearestFree(apertures, Math.atan2(behindY - myPos.y, behindX - myPos.x)), "into-trap");
+        }
       }
       return out;
     }
@@ -10380,31 +10797,39 @@ window.grbtp = 35;
       this.client = client2;
       this.weights = weights;
     }
+    // Runs the push forward through the game's own collision resolve and
+    // caches the result on the candidate, so the planner's pair search reads
+    // the same landing point rather than deriving a second one of its own.
+    //
+    // The object list is the frame's, built once in the sweep; this used to
+    // rebuild it per candidate.
     _reboundOf(cand, frame) {
-      if (frame.ourSpikes.length === 0 && frame.ourTraps.length === 0) return null;
-      const objects = [];
-      for (const o of frame.ourSpikes) objects.push({
-        x: o.pos.current.x,
-        y: o.pos.current.y,
-        dmg: true,
-        trap: false,
-        isCactus: false,
-        colScale: o.collisionScale
-      });
-      for (const o of frame.ourTraps) objects.push({
-        x: o.pos.current.x,
-        y: o.pos.current.y,
-        dmg: false,
-        trap: true,
-        isCactus: false,
-        colScale: o.collisionScale
-      });
-      if (objects.length === 0) return null;
-      // The game pushes the target radially away from the build, so the push
-      // axis is the build-to-target direction and nothing else.
-      const dir = Math.atan2(frame.targetPos.y - cand.y, frame.targetPos.x - cand.x);
-      const primary = this.client.myPlayer.getItemByType(0);
-      return SiegeAnalysis.knockInto(cand.x, cand.y, objects, frame.targetPos.x, frame.targetPos.y, dir, primary === 4 || primary === 5);
+      if (cand.rebound !== undefined) return cand.rebound;
+      const objects = frame.kbObjects;
+      if (!objects || objects.length === 0) {
+        cand.rebound = null;
+        return null;
+      }
+      // The measured velocity is per tick; the simulator integrates in
+      // milliseconds, which is the unit the game's decay is expressed in.
+      const motion = frame.motion;
+      const vx = motion && isFinite(motion.vx) ? motion.vx / RPE_TICK_MS : 0;
+      const vy = motion && isFinite(motion.vy) ? motion.vy / RPE_TICK_MS : 0;
+      // The push happens where the two actually meet. A build touching them
+      // now pushes from where they stand; a build across the path they are
+      // walking pushes from where they walk into it. A build that reaches
+      // neither pushes nothing, and the simulator says so.
+      const reach = Config_default.playerScale + cand.profile.footR;
+      let px = frame.targetPos.x, py = frame.targetPos.y;
+      if (Math.hypot(px - cand.x, py - cand.y) >= reach) {
+        const nx = frame.targetNext.x, ny = frame.targetNext.y;
+        if (Math.hypot(nx - cand.x, ny - cand.y) < reach) {
+          px = nx;
+          py = ny;
+        }
+      }
+      cand.rebound = SiegeAnalysis.simulateKnockback(cand.x, cand.y, cand.profile.footR, objects, px, py, vx, vy);
+      return cand.rebound;
     }
     weigh(cand, frame, ctx) {
       const w = this.weights;
@@ -10434,9 +10859,22 @@ window.grbtp = 35;
       if (p.isDamage) {
         const rebound = this._reboundOf(cand, frame);
         if (rebound) {
+          // The ladder and its weights are unchanged. What changed is that the
+          // three flags are now measured by running the push rather than
+          // inferred from a distance band, so each one is true when it fires.
           const bounce = rebound.doubleSpike ? w.reboundDouble : rebound.willHit ? w.rebound : rebound.inEscapable ? w.reboundTrap : 0;
           tactical += bounce;
           reach += bounce;
+          // The flags cannot separate a chain that deals 20 from one that
+          // deals 90. The simulator counts the damage, so ordering among
+          // candidates that all qualify is decided by what the chain is
+          // actually worth. It only refines a bounce that already scored —
+          // it never buys one on its own.
+          if (bounce > 0 && rebound.damage > 0) {
+            const chain = w.reboundDamage * Math.min(1, rebound.damage / w.reboundDamageFull);
+            tactical += chain;
+            reach += chain;
+          }
         }
         if (ctx.exits && ctx.exits.length) {
           const toCand = Math.atan2(cand.y - frame.targetPos.y, cand.x - frame.targetPos.x);
@@ -10476,9 +10914,12 @@ window.grbtp = 35;
       let recovery = 0;
       if (ctx.replace) {
         const d = Math.hypot(cand.x - ctx.replace.x, cand.y - ctx.replace.y);
-        const reach = p.footR + ctx.replace.radius;
-        if (d < reach) {
-          recovery = w.recovery * (1 - d / reach);
+        // Named apart from the tactical `reach` above. It used to shadow it,
+        // which was correct only because cand.reach is written before this
+        // block runs — one reordering away from silently zeroing it.
+        const freedReach = p.footR + ctx.replace.radius;
+        if (d < freedReach) {
+          recovery = w.recovery * (1 - d / freedReach);
           if (ctx.replace.heldTarget && p.isTrap) recovery += w.recoveryRetrap;
           if (ctx.replace.touchedTarget && p.isDamage) recovery += w.recoveryPin;
         }
@@ -10507,9 +10948,11 @@ window.grbtp = 35;
       // put between us.
       let recession = 0;
       if (touching || intercepts) {
-        const dNow = Math.hypot(frame.targetPos.x - frame.myPos.x, frame.targetPos.y - frame.myPos.y);
-        const dNext = Math.hypot(frame.targetNext.x - frame.myPos.x, frame.targetNext.y - frame.myPos.y);
-        if (dNext > dNow) recession = w.recession * Math.min(1, (dNext - dNow) / 24);
+        // Distances from *me* to the target, not from the candidate to it —
+        // named apart from dTarget/dNext above, which they used to shadow.
+        const myDNow = Math.hypot(frame.targetPos.x - frame.myPos.x, frame.targetPos.y - frame.myPos.y);
+        const myDNext = Math.hypot(frame.targetNext.x - frame.myPos.x, frame.targetNext.y - frame.myPos.y);
+        if (myDNext > myDNow) recession = w.recession * Math.min(1, (myDNext - myDNow) / 24);
       }
       terms.recession = -recession;
 
@@ -10572,7 +11015,7 @@ window.grbtp = 35;
       // half our movement speed and all of our weapon. Thin margins are more
       // likely to be refused, so they carry more of that risk.
       terms.hold = -w.hold * (1 - Math.min(1, marginUnits / w.clearanceIdeal));
-      terms.staleness = -w.staleness * ctx.memory.attempts(p, cand.angle, frame.tick);
+      terms.staleness = -w.staleness * ctx.memory.attempts(p, cand.x, cand.y, frame.tick);
 
       // Timing --------------------------------------------------------------
       // Worth more when the target arrives while the build is still fresh.
@@ -10594,8 +11037,23 @@ window.grbtp = 35;
   // fixed regardless of how many candidates were generated.
   class PlacementPlanner {
     weights;
+    _pairCache=new Map;
     constructor(weights) {
       this.weights = weights;
+    }
+    // The same pair is asked for at every beam depth and in every beam state,
+    // and the answer only depends on the two candidates and the frame. Keyed
+    // on the indices compose() stamps, cleared per compose().
+    _pair(a, b, frame) {
+      const i = a._pi, j = b._pi;
+      if (i === undefined || j === undefined) return this._pairDelta(a, b, frame);
+      const key = i < j ? i * 4096 + j : j * 4096 + i;
+      let hit = this._pairCache.get(key);
+      if (hit === undefined) {
+        hit = this._pairDelta(a, b, frame);
+        this._pairCache.set(key, hit);
+      }
+      return hit;
     }
     _pairDelta(a, b, frame) {
       const w = this.weights;
@@ -10606,11 +11064,20 @@ window.grbtp = 35;
       if (a.profile.isTrap !== b.profile.isTrap && (a.profile.isDamage || b.profile.isDamage)) {
         const trap = a.profile.isTrap ? a : b;
         const spike = a.profile.isTrap ? b : a;
-        // The push from the spike carries them onto the trap. Travel comes
-        // from the game's own impulse and decay, not a guessed constant.
-        const push = Math.atan2(frame.targetPos.y - spike.y, frame.targetPos.x - spike.x);
-        const landX = frame.targetPos.x + RPE_KB_TRAVEL * Math.cos(push);
-        const landY = frame.targetPos.y + RPE_KB_TRAVEL * Math.sin(push);
+        // Where the push actually ends. The scorer already simulated this
+        // spike's knockback against the live world, so the landing point is
+        // read from that rather than derived a second time — and it accounts
+        // for the push-out, the 0.75 damping and anything the target hits on
+        // the way, none of which a flat projection along the push axis can.
+        let landX, landY;
+        if (spike.rebound) {
+          landX = spike.rebound.x;
+          landY = spike.rebound.y;
+        } else {
+          const push = Math.atan2(frame.targetPos.y - spike.y, frame.targetPos.x - spike.x);
+          landX = frame.targetPos.x + RPE_KB_TRAVEL * Math.cos(push);
+          landY = frame.targetPos.y + RPE_KB_TRAVEL * Math.sin(push);
+        }
         if (Math.hypot(landX - trap.x, landY - trap.y) < trap.profile.footR + frame.targetScale) {
           delta += w.synergyTrapSpike;
         } else if (gap < trap.profile.footR + spike.profile.touchR) {
@@ -10634,6 +11101,16 @@ window.grbtp = 35;
       }
       return delta;
     }
+    // What appending this candidate costs on the wire. The executor shares one
+    // item select across a run of the *same type in a row*, so only the entry
+    // the plan currently ends with can make this build cheap. Asking whether
+    // any earlier entry shared the type charged 2 for a build the executor
+    // then pays 4 for — and the executor's own budget re-check silently
+    // dropped the tail of the plan to cover the difference.
+    _appendCost(cand, plan) {
+      if (plan.length === 0) return RPE_PLACE_PACKETS;
+      return plan[plan.length - 1].profile.type === cand.profile.type ? RPE_BATCH_PACKETS : RPE_PLACE_PACKETS;
+    }
     _feasible(cand, plan, ctx) {
       for (const other of plan) {
         if (Math.hypot(cand.x - other.x, cand.y - other.y) < cand.profile.footR + other.profile.footR) return false;
@@ -10641,13 +11118,38 @@ window.grbtp = 35;
       const used = plan.reduce((n, o) => n + (o.profile.type === cand.profile.type ? 1 : 0), 0);
       const cap = ctx.perTypeCap.get(cand.profile.type);
       if (cap !== undefined && used >= cap) return false;
-      const cost = plan.length === 0 ? RPE_PLACE_PACKETS : plan.some(o => o.profile.type === cand.profile.type) ? RPE_BATCH_PACKETS : RPE_PLACE_PACKETS;
-      return ctx.spent + cost <= ctx.budget;
+      return ctx.spent + this._appendCost(cand, plan) <= ctx.budget;
+    }
+    // Top-n by value without sorting the whole list. The search only ever
+    // looks at `limit` entries, so ordering the tail is work thrown away.
+    _top(list, limit, key) {
+      if (list.length <= limit) return list.slice().sort((a, b) => key(b) - key(a));
+      const out = [];
+      for (const item of list) {
+        const v = key(item);
+        if (out.length < limit) {
+          out.push(item);
+          if (out.length === limit) out.sort((a, b) => key(b) - key(a));
+          continue;
+        }
+        if (v <= key(out[limit - 1])) continue;
+        let i = limit - 1;
+        while (i > 0 && key(out[i - 1]) < v) {
+          out[i] = out[i - 1];
+          i--;
+        }
+        out[i] = item;
+      }
+      return out;
     }
     compose(candidates, frame, ctx) {
       const w = this.weights;
-      const pool = candidates.filter(c => c.value > w.minValue).sort((a, b) => b.value - a.value).slice(0, 24);
+      const viable = candidates.filter(c => c.value > w.minValue);
+      const pool = this._top(viable, 24, c => c.value);
       if (pool.length === 0) return [];
+      // Index stamps for the pair cache, valid for this compose only.
+      this._pairCache.clear();
+      for (let i = 0; i < pool.length; i++) pool[i]._pi = i;
       let beam = [ {
         plan: [],
         value: 0,
@@ -10668,21 +11170,19 @@ window.grbtp = 35;
             if (!this._feasible(cand, state.plan, stepCtx)) continue;
             branched++;
             let marginal = cand.value;
-            for (const other of state.plan) marginal += this._pairDelta(cand, other, frame);
+            for (const other of state.plan) marginal += this._pair(cand, other, frame);
             if (marginal <= 0) continue;
-            const cost = state.plan.some(o => o.profile.type === cand.profile.type) ? RPE_BATCH_PACKETS : RPE_PLACE_PACKETS;
             next.push({
               plan: state.plan.concat([ cand ]),
               value: state.value + marginal,
-              spent: state.spent + cost
+              spent: state.spent + this._appendCost(cand, state.plan)
             });
           }
         }
         if (next.length === 0) break;
-        next.sort((a, b) => b.value - a.value);
-        beam = next.slice(0, w.beamWidth);
+        beam = this._top(next, w.beamWidth, s => s.value);
       }
-      const best = beam.sort((a, b) => b.value - a.value)[0];
+      const best = this._top(beam, 1, s => s.value)[0];
       if (!best || best.plan.length === 0) return [];
       // Returned in the order the search chose them, which is by marginal
       // value. Nothing is reordered by item type: batching is a packet saving
@@ -10757,7 +11257,7 @@ window.grbtp = 35;
     _record(cand, type, frame, engine) {
       const ModuleHandler = this.client._ModuleHandler;
       engine._conflicts.take(cand, cand.mode || "placement", frame.tick, 2, false);
-      engine.memory.note(cand.profile, cand.angle, frame.tick);
+      engine.memory.note(cand.profile, cand.x, cand.y, frame.tick);
       ModuleHandler.placeAngles[0] = type;
       ModuleHandler.placeAngles[1].push(cand.angle);
     }
@@ -10786,6 +11286,17 @@ window.grbtp = 35;
   // what bounds the extrapolation.
   const RPE_TICK_DECAY = Math.pow(RPE_DECEL, RPE_TICK_MS);
   const RPE_MOTION_SAMPLES = 5;
+  // How fast the observed peak speed bleeds back towards what the target is
+  // actually doing now. One sprint should not set a permanent ceiling.
+  const RPE_PEAK_DECAY = .85;
+  // Below this the target counts as stopped: no heading, no acceleration, and
+  // any preplace record that was booked for a run gets to notice.
+  const RPE_STOP_SPEED = .35;
+  // A heading change this large invalidates the measured acceleration.
+  const RPE_TURN_RESET = .6;
+  // How many ticks of trajectory to build per observation. Matches the deepest
+  // lead preplace can ask for.
+  const RPE_PATH_DEPTH = 6;
 
   class TargetMotion {
     tracks=new Map;
@@ -10824,6 +11335,7 @@ window.grbtp = 35;
         const a = s[s.length - 2], b = s[s.length - 1];
         const span = Math.max(1, b.tick - a.tick);
         const vx = (b.x - a.x) / span, vy = (b.y - a.y) / span;
+        const prevSpeed = track.speed;
         if (s.length >= 3) {
           const c = s[s.length - 3];
           const prevSpan = Math.max(1, a.tick - c.tick);
@@ -10836,13 +11348,79 @@ window.grbtp = 35;
         track.vx = vx;
         track.vy = vy;
         track.speed = Math.hypot(vx, vy);
-        track.peakSpeed = Math.max(track.peakSpeed ?? 0, track.speed);
+        // A peak that never decays is a ceiling set by one sprint and held for
+        // the life of the track, and it is used to bound extrapolation — so a
+        // target that burst once and then walked kept being predicted to burst
+        // again. It now bleeds back towards the speed actually being observed.
+        const peak = track.peakSpeed ?? track.speed;
+        track.peakSpeed = Math.max(track.speed, peak * RPE_PEAK_DECAY);
         const prevHeading = track.heading;
-        track.heading = track.speed > .5 ? Math.atan2(vy, vx) : prevHeading;
+        // A target that has genuinely stopped has no heading. Holding the old
+        // one made the course-change test in PreplaceBook.sweep unable to fire
+        // on a stop: the candidate was chosen for a run that had ended, and
+        // the record kept passing its own turn check.
+        track.stopped = track.speed < RPE_STOP_SPEED;
+        track.heading = track.speed > .5 ? Math.atan2(vy, vx) : track.stopped ? null : prevHeading;
         track.headingShift = prevHeading !== null && track.heading !== null ? GeometrySolver.angleDist(track.heading, prevHeading) : 0;
+        // Acceleration measured across a turn or a stop describes neither the
+        // course being left nor the one being taken. Carrying it forward is
+        // what made a prediction overshoot hardest exactly when the target had
+        // just done something worth reacting to.
+        if (track.stopped || track.headingShift > RPE_TURN_RESET || track.speed < prevSpeed * .5) {
+          track.ax = 0;
+          track.ay = 0;
+        }
       }
       track.stability = this._stability(track);
+      this._buildPath(track, pos);
       return track;
+    }
+
+    // One forward integration per entity per tick, shared by every predict()
+    // and intercept() call that follows.
+    //
+    // predict() used to integrate from t=0 on every call and intercept()
+    // called it once per lead, so a single interception question re-walked the
+    // same trajectory O(n^2) times — around 264 integration steps a tick
+    // across two build profiles, all of them recomputing one path.
+    _buildPath(track, pos) {
+      const path = track.path || (track.path = []);
+      path.length = 0;
+      const depth = Math.min(1, (track.samples.length - 1) / 2);
+      if (track.samples.length < 2) {
+        path.push({ x: pos.x, y: pos.y, confidence: 1 });
+        return;
+      }
+      let x = pos.x, y = pos.y, vx = track.vx, vy = track.vy;
+      // A target cannot shed speed faster than the game's decay allows, and
+      // will not accelerate past the speed we have already seen it hold, so
+      // the trend is followed between those two bounds.
+      const seen = Math.max(track.speed, track.peakSpeed ?? track.speed);
+      const floor = track.speed * RPE_TICK_DECAY;
+      const turning = 1 - Math.min(1, (track.headingShift ?? 0) / (Math.PI / 2));
+      path.push({ x: x, y: y, confidence: 1 });
+      for (let n = 1; n <= RPE_PATH_DEPTH; n++) {
+        x += vx;
+        y += vy;
+        vx += track.ax;
+        vy += track.ay;
+        const sp = Math.hypot(vx, vy);
+        if (sp > seen * 1.1 && sp > 0) {
+          const k = seen * 1.1 / sp;
+          vx *= k;
+          vy *= k;
+        } else if (sp < floor && sp > 0) {
+          const k = floor / sp;
+          vx *= k;
+          vy *= k;
+        }
+        const horizon = Math.exp(-n / 3.5);
+        path.push({
+          x: x,
+          y: y,
+          confidence: Math.max(.02, track.stability * depth * horizon * (.4 + .6 * turning))
+        });
+      }
     }
 
     // How consistent the recent course has been. A target standing still is
@@ -10870,11 +11448,11 @@ window.grbtp = 35;
     }
 
     // Where the entity will be `ticks` ticks from now, and how much that is
-    // worth believing.
+    // worth believing. Reads the path built once in observe().
     predict(entity, ticks) {
       const track = this.tracks.get(entity.id);
       const pos = entity.pos.current;
-      if (!track || track.samples.length < 2) {
+      if (!track || track.samples.length < 2 || !track.path || track.path.length === 0) {
         // No history: the only honest prediction is that they are where they
         // are, said with low confidence.
         return {
@@ -10883,43 +11461,33 @@ window.grbtp = 35;
           confidence: ticks === 0 ? 1 : .25
         };
       }
-      let x = pos.x, y = pos.y, vx = track.vx, vy = track.vy;
-      // A target cannot shed speed faster than the game's decay allows, and
-      // will not accelerate past the speed we have already seen it hold, so
-      // the trend is followed between those two bounds.
-      const seen = Math.max(track.speed, track.peakSpeed ?? track.speed);
-      const floor = track.speed * RPE_TICK_DECAY;
-      for (let i = 0; i < ticks; i++) {
-        x += vx;
-        y += vy;
-        vx += track.ax;
-        vy += track.ay;
-        const sp = Math.hypot(vx, vy);
-        if (sp > seen * 1.1 && sp > 0) {
-          const k = seen * 1.1 / sp;
-          vx *= k;
-          vy *= k;
-        } else if (sp < floor && sp > 0) {
-          const k = floor / sp;
-          vx *= k;
-          vy *= k;
-        }
-      }
-      const depth = Math.min(1, (track.samples.length - 1) / 2);
-      const horizon = Math.exp(-ticks / 3.5);
-      const turning = 1 - Math.min(1, (track.headingShift ?? 0) / (Math.PI / 2));
+      const p = track.path[Math.min(ticks, track.path.length - 1)];
       return {
-        x: x,
-        y: y,
-        confidence: Math.max(.02, track.stability * depth * horizon * (.4 + .6 * turning))
+        x: p.x,
+        y: p.y,
+        confidence: p.confidence
       };
     }
 
     // Earliest tick at which the predicted path enters a circle, or null.
     intercept(entity, cx, cy, radius, maxTicks) {
-      for (let n = 0; n <= maxTicks; n++) {
-        const p = this.predict(entity, n);
-        if (Math.hypot(p.x - cx, p.y - cy) < radius) {
+      const track = this.tracks.get(entity.id);
+      const path = track && track.path;
+      if (!path || path.length === 0) {
+        const pos = entity.pos.current;
+        return Math.hypot(pos.x - cx, pos.y - cy) < radius ? {
+          tick: 0,
+          confidence: 1,
+          x: pos.x,
+          y: pos.y
+        } : null;
+      }
+      const r2 = radius * radius;
+      const last = Math.min(maxTicks, path.length - 1);
+      for (let n = 0; n <= last; n++) {
+        const p = path[n];
+        const dx = p.x - cx, dy = p.y - cy;
+        if (dx * dx + dy * dy < r2) {
           return {
             tick: n,
             confidence: p.confidence,
@@ -10959,6 +11527,24 @@ window.grbtp = 35;
   const RPE_PREPLACE_BOOK_CONFIDENCE = .12;
   const RPE_PREPLACE_MAX_AGE = 8;
   const RPE_REPLACE_RANGE = 300;
+  // A death frees every building a player owned in one message. The queue only
+  // has to hold enough of them to pick the interesting one out of; past that
+  // the rest are ground the aperture solver already reads as free.
+  const RPE_VACATED_QUEUE_MAX = 64;
+  // A vacancy nobody could act on within two ticks is not news any more.
+  const RPE_VACATED_MAX_AGE = 2;
+  // How near a vanished trap had to be to the target to count as the one that
+  // was holding them. A pit trap's own footprint plus a little drift.
+  const RPE_VACANCY_HOLD_SLACK = 60;
+  // Ceiling on the round-trip allowance, so an outlier ping reading cannot
+  // make preplace fire its whole book at once.
+  const RPE_MAX_LATENCY_TICKS = 3;
+  // Ring resolution offered to auto place. Same 72 the Luna probe used, so
+  // coverage is unchanged; it is only the cost of establishing legality at
+  // that resolution that has gone.
+  const RPE_RING_SAMPLES = 72;
+  // Two angles closer together than this describe the same ground.
+  const RPE_RING_DEDUPE = .02;
   // How much more a soft claim has to be worth to hold ground against a claim
   // of higher priority.
   const RPE_SOFT_DOMINANCE = 1.5;
@@ -11010,6 +11596,25 @@ window.grbtp = 35;
         // expensively.
         if (rec.heading !== null && frame.motion && frame.motion.heading !== null && GeometrySolver.angleDist(rec.heading, frame.motion.heading) > rec.headingTolerance) {
           this.drop(rec, "targetTurned");
+          engine.ledger.releaseToken(rec.token);
+          dropped++;
+          continue;
+        }
+        // A stop is a course change the turn test above cannot see, because a
+        // stopped target has no heading to compare against. An interception
+        // booked for a run that has ended is holding ground for nothing.
+        if (rec.kind === "intercept" && rec.heading !== null && frame.motion && frame.motion.stopped) {
+          this.drop(rec, "targetStopped");
+          engine.ledger.releaseToken(rec.token);
+          dropped++;
+          continue;
+        }
+        // Getting trapped or getting free changes what the candidate was for.
+        // A trap booked to catch a moving target is pointless once something
+        // else has pinned them, and a spike booked against a pinned target is
+        // pointless the moment they are out.
+        if (rec.wasTrapped !== undefined && rec.wasTrapped !== !!frame.targetTrapped) {
+          this.drop(rec, "trapStateChanged");
           engine.ledger.releaseToken(rec.token);
           dropped++;
           continue;
@@ -11175,7 +11780,7 @@ window.grbtp = 35;
       return !this.ledger.blocked(cand.x, cand.y, cand.profile.footR, cand.priority, cand.value, cand.bookToken);
     }
     freshGround(cand, tick) {
-      return !this.memory.sentThisTick(cand.profile, cand.angle, tick);
+      return !this.memory.sentThisTick(cand.profile, cand.x, cand.y, tick);
     }
     unbooked(cand) {
       return !this.book.has(cand.x, cand.y, cand.profile.footR);
@@ -11184,7 +11789,20 @@ window.grbtp = 35;
     // book, so a preplace record learns its slot is gone rather than finding
     // out when it tries to use it.
     take(cand, owner, tick, ttl, soft) {
-      const displaced = this.ledger.preempt(cand.x, cand.y, cand.profile.footR, cand.priority, cand.value);
+      return this.takeGround(cand.x, cand.y, cand.profile.footR, cand.priority, cand.value, owner, tick, ttl, soft);
+    }
+    // The raw form, so that a claim filed from outside the pipeline — an auto
+    // place, a sync, a hotkey — displaces a booked preplace the same way a
+    // planned candidate does, and the book is told either way.
+    //
+    // The engine's claim() used to go straight to ledger.reserve, which
+    // preempts soft holds and then throws the displaced tokens away. The book
+    // record kept state "pending" holding a token the ledger no longer had, so
+    // unbooked() still reported that ground as spoken for and promote() kept
+    // offering the record to the planner — a preplace waiting on a slot that
+    // had already been built on.
+    takeGround(x, y, radius, priority, value, owner, tick, ttl, soft) {
+      const displaced = this.ledger.preempt(x, y, radius, priority, value);
       if (displaced.length) {
         for (const rec of this.book.records) {
           if (rec.state === "pending" && displaced.indexOf(rec.token) !== -1) {
@@ -11192,9 +11810,9 @@ window.grbtp = 35;
           }
         }
       }
-      return this.ledger.reserve(cand.x, cand.y, cand.profile.footR, cand.priority, owner, tick, ttl, soft ? {
+      return this.ledger.reserve(x, y, radius, priority, owner, tick, ttl, soft ? {
         soft: true,
-        value: cand.value
+        value: value
       } : undefined);
     }
   }
@@ -11219,6 +11837,17 @@ window.grbtp = 35;
       const cost = batched ? RPE_BATCH_PACKETS : RPE_PLACE_PACKETS;
       return ModuleHandler.packetCount + spent + cost <= ModuleHandler.packetLimit;
     }
+    // How many ticks pass between deciding to build and the build existing:
+    // half a round trip to reach the server, plus the tick it is applied on.
+    // A preplace exists to be standing there when the target arrives, so what
+    // matters is when it lands, not when it leaves — firing on the raw
+    // interception tick posts it exactly one round trip too late.
+    latencyTicks() {
+      const socket = this.client.SocketManager;
+      const pong = socket && typeof socket.pong === "number" && isFinite(socket.pong) ? socket.pong : 0;
+      const ticks = Math.ceil((pong / 2 + RPE_TICK_MS) / RPE_TICK_MS);
+      return Math.max(1, Math.min(RPE_MAX_LATENCY_TICKS, ticks));
+    }
     // A candidate is due when the moment it was made for has arrived: now for
     // anything reacting to the present, and for a prediction only once the
     // interception is close enough that waiting longer buys nothing.
@@ -11226,7 +11855,7 @@ window.grbtp = 35;
       if (cand.mode !== RPE_MODE.PREPLACE) return true;
       if (cand.confidence < RPE_PREPLACE_MIN_CONFIDENCE) return false;
       if (cand.kind === "vacating") return tick >= cand.dueTick;
-      return cand.interceptTick <= RPE_PREPLACE_FIRE_LEAD;
+      return cand.interceptTick <= RPE_PREPLACE_FIRE_LEAD + this.latencyTicks() - 1;
     }
   }
 
@@ -11289,7 +11918,10 @@ window.grbtp = 35;
     _profileTick=-1;
     _blockers=null;
     _blockersTick=-1;
+    _maintTick=-1;
     _exits=null;
+    // Deletions seen since the last drain, newest last.
+    _vacated=[];
     constructor(client2) {
       this.client = client2;
       this._threat = new ThreatAnalyzer(client2);
@@ -11313,6 +11945,8 @@ window.grbtp = 35;
       this._planTargetPos = null;
       this._blockers = null;
       this._blockersTick = -1;
+      this._vacated.length = 0;
+      this._threat.invalidate();
     }
 
     // ── shared services ─────────────────────────────────────────────────────
@@ -11337,7 +11971,7 @@ window.grbtp = 35;
       return this.claim(pos.x + dist * Math.cos(angle), pos.y + dist * Math.sin(angle), item.scale, priority, owner, ttl);
     }
     claim(x, y, radius, priority, owner, ttl = 3) {
-      return this.ledger.reserve(x, y, radius, priority, owner, this.client._ModuleHandler.tickCount, ttl);
+      return this._conflicts.takeGround(x, y, radius, priority, Infinity, owner, this.client._ModuleHandler.tickCount, ttl, false);
     }
     profileFor(type) {
       const tick = this.client._ModuleHandler.tickCount;
@@ -11364,20 +11998,18 @@ window.grbtp = 35;
     // ── SENSE ───────────────────────────────────────────────────────────────
     // One sweep, one frame, shared by every mode in this cycle.
     sense() {
-      const frame = this._threat.build();
-      if (!frame) return null;
-      if (!this._blockers || this._blockersTick !== frame.tick) {
-        let maxRing = 0, maxFoot = 0;
-        for (const p of this.activeProfiles()) {
-          if (p.ringR > maxRing) maxRing = p.ringR;
-          if (p.footR > maxFoot) maxFoot = p.footR;
-        }
-        this._blockers = this._generator.blockersAround(frame.myPos.x, frame.myPos.y, maxRing || 120, maxFoot || 60);
-        this._blockersTick = frame.tick;
-        this._generator.cache.clear();
+      return this._measuredFrame();
+    }
+
+    // Escape analysis around the target is shared by every candidate that
+    // wants to know whether it closes a way out. Computed once per frame,
+    // whoever asks for it first — auto place runs earlier in the module order
+    // than the engine's own cycle and needs the same answer.
+    _ensureExits(frame) {
+      if (frame.exits !== undefined) {
+        this._exits = frame.exits;
+        return this._exits;
       }
-      // Escape analysis around the target is shared by every candidate that
-      // wants to know whether it closes a way out.
       this._exits = null;
       if (frame.ourSpikes.length + frame.ourTraps.length >= 2) {
         const surround = [];
@@ -11395,6 +12027,40 @@ window.grbtp = 35;
           if (esc.escapable) this._exits = esc.exits;
         }
       }
+      // Also on the frame, so the angle solver can propose a build that seals
+      // an exit rather than only the scorer being able to reward one it
+      // happened to be handed.
+      frame.exits = this._exits;
+      return this._exits;
+    }
+
+    // The measurement half of a cycle, without any of the state the cycle
+    // mutates. Safe for a caller outside the pipeline — auto place — to ask
+    // for, and idempotent within a tick, so the engine's own cycle reuses
+    // whatever has already been worked out rather than repeating it.
+    _measuredFrame() {
+      const frame = this._threat.build();
+      if (!frame) return null;
+      const tick = frame.tick;
+      // Expiry runs once a tick, here rather than in predict(), because the
+      // engine's own cycle can return early — no target, out of range, a sync
+      // owning the tick — and the tracks and the send memory would then grow
+      // for as long as that lasted.
+      if (this._maintTick !== tick) {
+        this._maintTick = tick;
+        this.memory.expire(tick, frame.myPos);
+        this.motion.expire(tick);
+      }
+      this._ensureBlockers(frame.myPos, tick);
+      if (frame.motion === undefined) {
+        if (frame.nearbyEnemies) {
+          for (const enemy of frame.nearbyEnemies) {
+            if (enemy && enemy !== frame.target) this.motion.observe(enemy, tick);
+          }
+        }
+        frame.motion = this.motion.observe(frame.target, tick);
+      }
+      this._ensureExits(frame);
       return frame;
     }
 
@@ -11403,9 +12069,11 @@ window.grbtp = 35;
     // preplace can never disagree about where the target is going.
     predict(frame) {
       const tick = frame.tick;
-      this.memory.expire(tick, frame.myPos);
-      this.motion.expire(tick);
-      frame.motion = this.motion.observe(frame.target, tick);
+      // Motion is measured in _measuredFrame, which whichever of auto place or
+      // the engine reaches first will have run. Observation is idempotent
+      // within a tick, so this is only the path for a frame that arrived
+      // without it.
+      if (frame.motion === undefined) frame.motion = this.motion.observe(frame.target, tick);
       this.stats.dropped = this.book.sweep(tick, frame, this);
       if (this._planIsStale(frame)) this._plan = [];
       this._planTargetId = frame.targetId;
@@ -11620,45 +12288,73 @@ window.grbtp = 35;
     // Merit and belief stay separate: value says how good the ground is,
     // confidence says how much the prediction behind it is worth, and their
     // product is what arbitration uses.
-    score(pool, frame, trigger) {
-      const ctx = {
+    _scoreContext(trigger) {
+      return {
         exits: this._exits,
         memory: this.memory,
         batched: false,
-        replace: trigger.replace || null
+        replace: trigger && trigger.replace || null
       };
-      for (const cand of pool) {
-        ctx.mode = cand.mode;
-        this._scorer.weigh(cand, frame, ctx);
-        const emphasis = RPE_MODE_WEIGHTS[cand.mode];
-        if (emphasis) {
-          let value = 0;
-          for (const k in cand.terms) {
-            if (emphasis[k] !== undefined) cand.terms[k] *= emphasis[k];
-            value += cand.terms[k];
-          }
-          cand.value = value;
+    }
+    _scoreOne(cand, frame, ctx) {
+      ctx.mode = cand.mode;
+      this._scorer.weigh(cand, frame, ctx);
+      const emphasis = RPE_MODE_WEIGHTS[cand.mode];
+      if (emphasis) {
+        let value = 0;
+        for (const k in cand.terms) {
+          if (emphasis[k] !== undefined) cand.terms[k] *= emphasis[k];
+          value += cand.terms[k];
         }
-        cand.expected = cand.value * cand.confidence;
+        cand.value = value;
       }
+      cand.expected = cand.value * cand.confidence;
+      return cand.value;
+    }
+    score(pool, frame, trigger) {
+      const ctx = this._scoreContext(trigger);
+      for (const cand of pool) this._scoreOne(cand, frame, ctx);
       return pool;
     }
 
     // ── RESOLVE ─────────────────────────────────────────────────────────────
     // Ground that is not ours to take, and candidates whose moment has not
     // come. What survives is what may compete for this tick's packets.
+    //
     // A record in the book is a decision already taken and paid for in ground,
     // waiting for its moment. When that moment comes it rejoins the pool and
     // competes for packets on the same terms as everything else, rather than
-    // having a private path to the wire.
-    promote(frame, due) {
+    // having a private path to the wire — and on this tick's terms, not on the
+    // ones it was written with.
+    //
+    // It used to carry `rec.value` forward untouched: a number measured up to
+    // eight ticks earlier, against a target that has since moved as much as
+    // two hundred units, injected past every gate the fresh candidates had to
+    // pass. That made a stale preplace systematically outrank fresh ones late
+    // in its life, because the fight that made it valuable had gone but the
+    // number had not. The prediction is still the book's — confidence comes
+    // from the record — but what the ground is worth is measured now.
+    promote(frame, due, trigger) {
+      const ctx = this._scoreContext(trigger);
       for (const rec of this.book.pending()) {
         const profile = this.profileFor(rec.type);
         if (!profile) continue;
+        const angle = Math.atan2(rec.y - frame.myPos.y, rec.x - frame.myPos.x);
+        const excludes = rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null;
+        const apertures = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, excludes);
+        const aperture = GeometrySolver.inAperture(apertures, angle);
+        // Ground that has stopped being legal while we waited on it is not a
+        // candidate any more. Catching that here rather than in validate frees
+        // the slot for something else in the same tick.
+        if (!aperture) {
+          this.book.drop(rec, "blocked");
+          this.ledger.releaseToken(rec.token);
+          continue;
+        }
         const cand = {
           profile: profile,
-          angle: Math.atan2(rec.y - frame.myPos.y, rec.x - frame.myPos.x),
-          aperture: null,
+          angle: angle,
+          aperture: aperture,
           source: "booked",
           mode: RPE_MODE.PREPLACE,
           priority: RPE_PRIORITY.ANTICIPATION,
@@ -11667,7 +12363,7 @@ window.grbtp = 35;
           dueTick: rec.deadlineTick,
           kind: rec.kind,
           vacates: rec.vacates,
-          excludes: rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null,
+          excludes: excludes,
           x: rec.x,
           y: rec.y,
           value: rec.value,
@@ -11677,6 +12373,12 @@ window.grbtp = 35;
           bookToken: rec.token
         };
         if (!this._scheduler.due(cand, frame.tick)) continue;
+        this._scoreOne(cand, frame, ctx);
+        rec.value = cand.value;
+        rec.expected = cand.expected;
+        if (cand.value < this.weights.minValue) continue;
+        if (!this._conflicts.freshGround(cand, frame.tick)) continue;
+        if (!this._conflicts.availableGround(cand)) continue;
         due.push(cand);
       }
       return due;
@@ -11691,7 +12393,7 @@ window.grbtp = 35;
         if (this._scheduler.due(cand, frame.tick)) due.push(cand);
         else if (cand.mode === RPE_MODE.PREPLACE) deferred.push(cand);
       }
-      this.promote(frame, due);
+      this.promote(frame, due, trigger);
       return {
         due: due,
         deferred: deferred
@@ -11735,6 +12437,7 @@ window.grbtp = 35;
           targetId: frame.targetId,
           heading: frame.motion ? frame.motion.heading : null,
           headingTolerance: cand.kind === "vacating" ? Math.PI : .7,
+          wasTrapped: !!frame.targetTrapped,
           createdTick: frame.tick,
           expiresTick: frame.tick + cand.interceptTick + 2,
           hardExpiry: frame.tick + RPE_PREPLACE_MAX_AGE,
@@ -11886,6 +12589,14 @@ window.grbtp = 35;
       }
       if (accepted.length === 0) return 0;
       const sent = this._executor.flush(accepted, { tick: tick, myPos: myPos }, this.ledger, this.memory, this);
+      // Which angles actually went out, for a caller that has to record them.
+      // A request can be refused in the middle of a list — illegal ground, a
+      // claim someone else holds — so "the first `sent` of them" is not the
+      // same set, and a caller counting that way records placements it never
+      // made.
+      if (opts.out) {
+        for (let i = 0; i < accepted.length && i < sent; i++) opts.out.push(accepted[i].angle);
+      }
       if (sent > 0) {
         ModuleHandler.placedOnce = true;
         this.stats.directed += sent;
@@ -11960,6 +12671,97 @@ window.grbtp = 35;
       return sent;
     }
 
+    // The placement ring as a list of legal angles, in the shape Luna's auto
+    // place ladder reads. This is what lets auto place keep its decision
+    // making — every rung, in order, unchanged — while giving up its private
+    // geometry.
+    //
+    // What it replaces: a probe that asked ObjectManager.grid2D one question
+    // per angle, 72 angles per item, twice an item because the ban check ran
+    // its own pass — 144 spatial queries a tick, each walking an 81-cell block
+    // and allocating a candidate set, to answer a question the engine already
+    // answers for the whole circle at once from a single sweep.
+    //
+    // Three things come out better, not just faster:
+    //
+    //   * `perfect` is exact. Luna inferred the ends of a placeable run by
+    //     walking the samples from index 1, so index 0 and index 71 were never
+    //     compared and a run that wrapped past 0 rad lost both its edges. An
+    //     aperture *is* the run; its boundaries are the packed placements, and
+    //     they are emitted here whether or not a sample happens to land near
+    //     one.
+    //   * the ring stays as densely covered as it was, because legality is now
+    //     arithmetic against the free intervals rather than a query per angle,
+    //     so density costs nothing.
+    //   * angles chosen for a reason — touching the target, leading their run,
+    //     sealing a gap, packing against our own spikes — are offered on top
+    //     of the uniform ring, so the ladder gets to judge placements a blind
+    //     sweep never puts in front of it.
+    ringCandidates(type, opts) {
+      opts = opts || {};
+      const myPlayer = this.client.myPlayer;
+      if (!myPlayer) return [];
+      const profile = this.profileFor(type);
+      if (!profile) return [];
+      const tick = this.client._ModuleHandler.tickCount;
+      const myPos = opts.position || myPlayer.pos.current;
+      // Auto place runs earlier in the module order than the engine's own
+      // cycle, so it is usually the first to ask for the frame. Measuring it
+      // here rather than waiting means the reasoned angles below are available
+      // to auto place too, and the engine's cycle then reuses the same frame,
+      // the same blocker sweep and the same motion tracks.
+      const frame = opts.position ? null : this._measuredFrame();
+      this._ensureBlockers(myPos, tick);
+      const apertures = this._generator.apertures(profile, myPos.x, myPos.y, this._blockers, opts.excludes || null);
+      if (apertures.length === 0) return [];
+      const out = [];
+      const seen = new Map;
+      const q = RPE_RING_DEDUPE;
+      const add = (angle, perfect, source) => {
+        if (angle === null || angle === undefined || !isFinite(angle)) return;
+        const a = GeometrySolver.norm(angle);
+        const ap = GeometrySolver.inAperture(apertures, a);
+        if (!ap) return;
+        const key = Math.round(a / q);
+        const prior = seen.get(key);
+        if (prior !== undefined) {
+          // Keep the stronger classification when two sources land together.
+          if (perfect) prior.perfect = true;
+          return;
+        }
+        const entry = {
+          id: profile.id,
+          type: profile.type,
+          angle: a,
+          x: myPos.x + profile.ringR * Math.cos(a),
+          y: myPos.y + profile.ringR * Math.sin(a),
+          scale: profile.footR,
+          aperture: ap,
+          placeable: true,
+          perfect: !!perfect,
+          source: source
+        };
+        seen.set(key, entry);
+        out.push(entry);
+      };
+      // The uniform ring, same resolution the probe used.
+      const step = RPE_TAU / RPE_RING_SAMPLES;
+      for (let i = 0; i < RPE_RING_SAMPLES; i++) add(i * step, false, "ring");
+      // The exact ends of every free run. These are the packed placements.
+      for (const ap of apertures) {
+        const inset = Math.min(.03, ap[2] / 3);
+        add(ap[0] + inset, true, "edge");
+        add(ap[1] - inset, true, "edge");
+      }
+      // Reasoned angles, when there is a fight to reason about.
+      if (frame) {
+        for (const proposal of this._angles.propose(profile, apertures, frame, this.memory)) {
+          add(proposal.angle, proposal.source === "edge", proposal.source);
+        }
+      }
+      return out;
+    }
+
     // Legal angles for a caller that wants the engine to choose the angle but
     // not the intent. Replaces the standalone angle helper the pre-engine
     // modules used, so there is one geometry engine rather than two that can
@@ -12022,6 +12824,14 @@ window.grbtp = 35;
         this.book.invalidateAll("noTarget", this);
         return 0;
       }
+      // The replace context is derived here, after the sweep, so it describes
+      // the world the candidates are being scored against. Deriving it at the
+      // moment the deletion packet arrived meant reading a frame built before
+      // the deletion — in which the trap being replaced was still listed as
+      // the one pinning the target.
+      if (trigger.vacated && !trigger.replace) {
+        trigger.replace = this._replaceContext(trigger.vacated, frame);
+      }
       this.predict(frame);
       if (frame.range > (Settings_default._autoplacerRadius ?? 350)) {
         this.book.invalidateAll("outOfRange", this);
@@ -12052,65 +12862,127 @@ window.grbtp = 35;
     }
 
     // ── triggers ────────────────────────────────────────────────────────────
-    postTick() {
-      const {myPlayer: myPlayer} = this.client;
+
+    // A deletion packet says ground just opened. It is recorded here and acted
+    // on in postTick, rather than running the pipeline inside the websocket
+    // handler that delivered it.
+    //
+    // Two things were wrong with reacting on the spot. A player dying
+    // broadcasts one deletion per building they owned, and each one ran a
+    // complete cycle — world sweep, motion sweep, book sweep, beam search —
+    // so a death with thirty buildings ran thirty of them back to back inside
+    // one message. And the cycle ran before any module had taken its turn this
+    // tick, so a replacement could commit ground to the wire that the spike
+    // sync, which outranks it and reacts to the very same deletion, was about
+    // to need: the sync's request was then refused by the hard claim the
+    // replacement had just filed, while the sync still armed its hat, its
+    // weapon and its attack with no spike behind them.
+    //
+    // Draining in postTick puts replace after every sync module in the module
+    // order and inside the same server update, so the ordering is right and
+    // the latency is a few milliseconds rather than a tick.
+    noteVacated(object) {
+      if (!object) return;
+      if (!Settings_default._prePlace && !Settings_default._replace) return;
+      const myPlayer = this.client.myPlayer;
       if (!myPlayer || !myPlayer.inGame) return;
-      const modes = [];
-      // Auto place is not this engine's. RYN v5.4's Luna placer owns it and
-      // is left exactly as it was; the engine plans the two modes it was
-      // brought in for. Luna's builds still reach the ledger through
-      // ModuleHandler._notePlacement, so a preplace never claims ground an
-      // auto place just took.
-      if (Settings_default._prePlace) modes.push(RPE_MODE.PREPLACE);
-      if (modes.length === 0) {
+      if (this._vacated.length >= RPE_VACATED_QUEUE_MAX) return;
+      const item = Items[object.type];
+      this._vacated.push({
+        object: object,
+        x: object.pos.current.x,
+        y: object.pos.current.y,
+        // Recorded now: once the drain runs, the object is out of the world
+        // and nothing downstream can tell what it was doing.
+        wasTrap: !!(item && item.trap),
+        wasDamage: !!(item && item.dmg),
+        tick: this.client._ModuleHandler.tickCount
+      });
+    }
+
+    // The one vacancy worth planning around this tick. A death frees a lot of
+    // ground at once and only one piece of it is the interesting one: the
+    // building that was holding the target, or failing that the one nearest
+    // to them. The rest are already gone from the grid, so their ground reads
+    // legal to the aperture solver on its own — they need no separate cycle.
+    _takeVacancy(frame, tick) {
+      let best = null, bestRank = Infinity;
+      for (const entry of this._vacated) {
+        if (tick - entry.tick > RPE_VACATED_MAX_AGE) continue;
+        if (Math.hypot(entry.x - frame.myPos.x, entry.y - frame.myPos.y) > RPE_REPLACE_RANGE) continue;
+        // A trap that was pinning them, then a spike that was hurting them,
+        // then whatever was closest. Ground freed by a wall on the far side of
+        // the fight is still free ground, but it is not the news.
+        const toTarget = Math.hypot(entry.x - frame.targetPos.x, entry.y - frame.targetPos.y);
+        const held = entry.wasTrap && toTarget < frame.targetScale + RPE_VACANCY_HOLD_SLACK;
+        const rank = (held ? 0 : entry.wasDamage ? 1e6 : 2e6) + toTarget;
+        if (rank < bestRank) {
+          bestRank = rank;
+          best = entry;
+        }
+      }
+      this._vacated.length = 0;
+      return best;
+    }
+
+    postTick() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (!myPlayer || !myPlayer.inGame) {
+        this._vacated.length = 0;
+        return;
+      }
+      // Stand down while a spike tick or a sync owns the tick, the same guard
+      // auto place has had all along. The engine never had it, so a preplace
+      // could spend packets out of the allowance a sync burst was relying on.
+      const tick = ModuleHandler.tickCount;
+      this.ledger.expire(tick);
+      if (lunaSpikeTickBusy(ModuleHandler)) return;
+      this.stats.substituted = 0;
+
+      const hasVacancy = this._vacated.length > 0;
+      const wantPreplace = !!Settings_default._prePlace;
+      const wantReplace = hasVacancy && !!Settings_default._replace;
+      if (!wantPreplace && !wantReplace) {
+        this._vacated.length = 0;
         if (this.book.records.length) this.book.invalidateAll("disabled", this);
         return;
       }
-      this.ledger.expire(this.client._ModuleHandler.tickCount);
-      this.stats.substituted = 0;
+      // A deletion changed the world after the last sweep, so the frame and
+      // the blocker set are both rebuilt before anything is judged against
+      // them — including targetTrapped, which may have been the very object
+      // that just went.
+      if (hasVacancy) {
+        this._threat.invalidate();
+        this._blockersTick = -1;
+      }
+      const frame = this.sense();
+      if (!frame) {
+        this._vacated.length = 0;
+        this._plan = [];
+        this._planTargetId = null;
+        this.book.invalidateAll("noTarget", this);
+        return;
+      }
+      const vacancy = hasVacancy ? this._takeVacancy(frame, tick) : null;
+      const modes = [];
+      if (wantPreplace) modes.push(RPE_MODE.PREPLACE);
+      if (vacancy && Settings_default._replace) modes.push(RPE_MODE.REPLACE);
+      if (modes.length === 0) return;
+      // Anything that was waiting for exactly this object is due now. It does
+      // not get a private path to the wire — it rejoins the pool and is
+      // planned, validated and sent with everything else.
+      if (vacancy) {
+        for (const rec of this.book.pending()) {
+          if (rec.vacates === vacancy.object.id) rec.deadlineTick = tick;
+        }
+      }
       this.cycle({
         modes: modes,
-        vacated: null,
+        vacated: vacancy ? vacancy.object : null,
         replace: null
       });
     }
 
-    // The deletion packet is the game telling us ground just opened. Acting on
-    // it is exact where a timer is a guess, so the same pipeline runs again on
-    // the event — for REPLACE, and for any PREPLACE candidate that had been
-    // waiting for precisely this object.
-    onVacated(object) {
-      if (!object) return;
-      const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
-      if (!Settings_default._prePlace && !Settings_default._replace) return;
-      if (!myPlayer || !myPlayer.inGame) return;
-      if (this._scheduler.budget() < RPE_PLACE_PACKETS) return;
-      const frame = this._threat.build();
-      if (!frame) return;
-      if (frame.myPos.distance(object.pos.current) > RPE_REPLACE_RANGE) return;
-      if (frame.range > RPE_REPLACE_RANGE) return;
-      // The object is still in the world while its deletion is handled, so
-      // every legality question below is asked with it taken out.
-      this._blockersTick = -1;
-      this.sense();
-
-      // Anything that was waiting for exactly this object is due now. It does
-      // not get a private path to the wire — it rejoins the pool and is
-      // planned, validated and sent with everything else.
-      for (const rec of this.book.pending()) {
-        if (rec.vacates === object.id) rec.deadlineTick = frame.tick;
-      }
-      const modes = [];
-      if (Settings_default._prePlace) modes.push(RPE_MODE.PREPLACE);
-      if (Settings_default._replace) modes.push(RPE_MODE.REPLACE);
-      if (modes.length === 0) return;
-      this.stats.substituted = 0;
-      this.cycle({
-        modes: modes,
-        vacated: object,
-        replace: this._replaceContext(object, frame)
-      });
-    }
 
     // What the dead object was doing decides what its ground is worth. A trap
     // that was pinning the target and a wall that was holding nothing free the
@@ -16974,11 +17846,13 @@ window.grbtp = 35;
       this.place(type, angle);
       return 1;
     }
-    requestPlaceMany(type, angles, owner) {
+    // `out`, when given, is filled with the angles that actually reached the
+    // wire — which is not always a prefix of `angles`.
+    requestPlaceMany(type, angles, owner, out) {
       const engine = this.staticModules && this.staticModules.placementEngine;
-      if (engine) return engine.requestMany(type, angles, { owner: owner || this.activeModule });
+      if (engine) return engine.requestMany(type, angles, { owner: owner || this.activeModule, out: out });
       let n = 0;
-      for (const a of angles) { this.place(type, a); n++; }
+      for (const a of angles) { this.place(type, a); if (out) out.push(a); n++; }
       return n;
     }
     // Every placement goes out through place(), so recording the footprint
