@@ -83,6 +83,34 @@ function createRynAutoHealEngine(deps) {
     CONFIDENCE_HIGH: 0.7,
     CONFIDENCE_LOW: 0.4,
 
+    /* Threat detection — ids straight out of drivers/game-drivers.json. */
+    WEAPON_POLEARM: 5,
+    WEAPON_DAGGER: 7,
+    WEAPON_BOW: 9,
+    WEAPON_HAMMER: 10,
+    WEAPON_CROSSBOW: 12,
+    WEAPON_REPEATER: 13,
+    WEAPON_MUSKET: 15,
+    PROJ_TURRET: 1,
+    PROJ_MUSKET: 5,
+    PROJ_ARROWS: [0, 2, 3],       // hunting bow, crossbow, repeater crossbow
+    ITEM_TRAP: 15,                // pit trap
+    ITEM_TURRET: 17,
+    GROUP_SPIKES: 2,
+    HAT_TURRET_GEAR: 53,
+    TURRET_RANGE: 700,            // items[17].shootRange
+    /* The band a turret's knockback leaves a target in, which is what a
+     * velocity tick is aimed through. RYN's own VelocityTick uses 220-245 as
+     * the window and the client carries ANTI_VELOCITY_TICK_MIN = 150; this is
+     * the detection band around both. */
+    VELOCITY_BAND_MIN: 150,
+    VELOCITY_BAND_MAX: 270,
+    /* A run of spike contacts is one sequence until this many quiet ticks. */
+    SPIKE_SEQUENCE_GAP_TICKS: 12,
+    /* Windows the repeated-pressure detectors count hits over. */
+    PRESSURE_WINDOW_TICKS: 9,
+    SUSTAINED_WINDOW_TICKS: 27,
+
     /* Engine pacing. */
     MAX_PRESSES_PER_TICK: 6,
     /* A press sent during tick T is processed by the server on tick T+1, so its
@@ -105,6 +133,41 @@ function createRynAutoHealEngine(deps) {
     FREE: "free",       // no hit pending: the arithmetic does not run at all
     CREDIT: "credit",   // pending hit, window passed: -2
     CHARGED: "charged"  // pending hit, still inside 120ms: +1
+  };
+
+  /* Threat confidence. Five levels, and a number for each so the aggregate can
+   * be weighted by damage. A detector that cannot find evidence returns NONE;
+   * the levels above it are earned by what is actually observable, not by how
+   * bad the situation would be if it were true. */
+  const CONFIDENCE = {
+    NONE: "NONE",
+    LOW: "LOW",
+    MEDIUM: "MEDIUM",
+    HIGH: "HIGH",
+    CRITICAL: "CRITICAL"
+  };
+  const CONFIDENCE_VALUE = {
+    NONE: 0,
+    LOW: 0.25,
+    MEDIUM: 0.5,
+    HIGH: 0.75,
+    CRITICAL: 1
+  };
+  const CONFIDENCE_RANK = { NONE: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
+
+  /* The threat types the engine reports. */
+  const THREAT = {
+    INSTAKILL: "instakill",
+    SPIKE_TICK: "spike-tick",
+    INSTA_REV: "insta-rev",
+    MUSKET: "musket",
+    BOW: "bow",
+    SPAM_DAGGER: "spam-dagger",
+    VELOCITY_TICK: "velocity-tick",
+    SPIKE: "spike",
+    TRAP: "trap",
+    BURST: "burst",
+    SUSTAINED: "sustained"
   };
 
   /* The shame zones the control engine switches on. */
@@ -160,6 +223,11 @@ function createRynAutoHealEngine(deps) {
     get Hats() { return deps.Hats; }
     get Accessories() { return deps.Accessories; }
     get Settings() { return deps.Settings; }
+    /* Used only by the ranged detectors, to say what a held weapon's shot would
+     * be worth. Optional: without them that branch reports 0 severity rather
+     * than guessing a number. */
+    get Weapons() { return deps.Weapons; }
+    get Projectiles() { return deps.Projectiles; }
 
     get mh() { return this.client && this.client._ModuleHandler; }
     get me() { return this.client && this.client.myPlayer; }
@@ -333,6 +401,232 @@ function createRynAutoHealEngine(deps) {
         velocityArmed: has(s.velocityTick) &&
           (s.velocityTick.nearestTarget !== null || s.velocityTick.target !== null)
       };
+    }
+
+    /* ---- combat evidence, for the threat engine --------------------- *
+     *
+     * Everything here is state the client already computes for its own combat
+     * modules. None of it is re-derived, and none of it is an assumption about
+     * what an enemy might do: a weapon id is only ever reported alongside the
+     * reload, range and facing that say whether it can be used on us right now.
+     */
+
+    /* One entry per live enemy, with the state a detector is allowed to reason
+     * from. Distances are measured against my player's own position. */
+    enemyList() {
+      const client = this.client;
+      const me = this.me;
+      const pm = client && client.PlayerManager;
+      if (!pm || !me || !me.pos || !Array.isArray(pm.enemies)) return [];
+      const out = [];
+      for (const enemy of pm.enemies) {
+        if (!enemy || !enemy.pos || !enemy.pos.current) continue;
+        try {
+          const weapon = enemy.weapon || {};
+          const primary = num(weapon.primary);
+          const secondary = num(weapon.secondary);
+          const current = num(weapon.current);
+          const distance = me.pos.current.distance(enemy.pos.current);
+          /* Is it pointed at me: the same offset test the client uses for a
+           * projectile's line (ProjectileManager.foundProjectile). */
+          let facing = false;
+          if (distance > 0) {
+            const angleTo = enemy.pos.current.angle(me.pos.current);
+            const offset = Math.asin(Math.min(1, (2 * (num(me.scale) || 35)) / (2 * distance)));
+            facing = Math.abs(this._angleDist(angleTo, num(enemy.angle) || 0)) <= offset;
+          }
+          out.push({
+            ref: enemy,
+            id: enemy.id,
+            distance,
+            facing,
+            /* movement, measured: Entity.setFuturePosition stores last tick's
+             * travel as `speed` and its direction as `move_dir`. */
+            speed: num(enemy.speed) || 0,
+            moveDir: num(enemy.move_dir),
+            closing: this._closing(enemy, me),
+            weaponCurrent: current,
+            weaponPrimary: primary,
+            weaponSecondary: secondary,
+            weaponPrevious: num(weapon.oldCurrent),
+            primaryReloaded: this._reloaded(enemy, 0),
+            secondaryReloaded: this._reloaded(enemy, 1),
+            turretReloaded: this._reloaded(enemy, 2),
+            secondaryEmpty: this._emptyReload(enemy, 1),
+            turretEmpty: this._emptyReload(enemy, 2),
+            primaryRange: this._weaponRange(enemy, primary),
+            secondaryRange: this._weaponRange(enemy, secondary),
+            primaryDamage: this._weaponDamage(enemy, primary),
+            secondaryDamage: this._weaponDamage(enemy, secondary),
+            hatId: num(enemy.hatID) || 0,
+            health: num(enemy.currentHealth),
+            trapped: !!enemy.isTrapped,
+            usingBoost: !!enemy.usingBoost,
+            lastAttacked: num(enemy.lastAttacked) || 0,
+            /* the client's own per-enemy verdicts */
+            danger: num(enemy.danger) || 0,
+            reverseInsta: !!enemy.reverseInsta,
+            toolHammerInsta: !!enemy.toolHammerInsta,
+            rangedBowInsta: !!enemy.rangedBowInsta,
+            canPlaceSpike: !!enemy.canPlaceSpike,
+            spikeDamage: num(enemy.spikeDamage) || 0,
+            potentialDamage: num(enemy.potentialDamage) || 0
+          });
+        } catch (_) { /* one unreadable enemy must not cost the whole list */ }
+      }
+      return out;
+    }
+
+    _angleDist(a, b) {
+      let d = (a - b) % (Math.PI * 2);
+      if (d > Math.PI) d -= Math.PI * 2;
+      if (d < -Math.PI) d += Math.PI * 2;
+      return d;
+    }
+
+    /* Moving toward me, in the sense the client's own Entity uses: last tick's
+     * travel direction against the direction to me. */
+    _closing(enemy, me) {
+      try {
+        const prev = enemy.pos.previous, cur = enemy.pos.current;
+        if (!prev || !cur) return 0;
+        const before = prev.distance(me.pos.current);
+        const after = cur.distance(me.pos.current);
+        return before - after;
+      } catch (_) { return 0; }
+    }
+
+    _reloaded(enemy, type) {
+      try { return !!enemy.isReloaded(type, 1); } catch (_) { return false; }
+    }
+    _emptyReload(enemy, type) {
+      try { return !!enemy.isEmptyReload(type); } catch (_) { return false; }
+    }
+    _weaponRange(enemy, id) {
+      if (id === null) return 0;
+      try { return num(enemy.getWeaponRange(id)) || 0; } catch (_) { return 0; }
+    }
+    _weaponDamage(enemy, id) {
+      if (id === null) return 0;
+      try { return num(enemy.getMaxWeaponDamage(id, false)) || 0; } catch (_) { return 0; }
+    }
+
+    /* Projectiles already in the air and already established as being on a line
+     * to me — the client adds a projectile to dangerProjectiles only after its
+     * own facing test (ProjectileManager.foundProjectile). Fired, not owned. */
+    incomingProjectiles(snap) {
+      const client = this.client;
+      const me = this.me;
+      const pm = client && client.ProjectileManager;
+      if (!pm || !pm.dangerProjectiles || !me || !me.pos) return [];
+      const out = [];
+      try {
+        for (const proj of pm.dangerProjectiles) {
+          if (!proj || !proj.pos || !proj.pos.current) continue;
+          const distance = proj.pos.current.distance(me.pos.current);
+          const speed = num(proj.speed) || 0;
+          const tick = snap && snap.TICK ? snap.TICK : AH.TICK_MS;
+          out.push({
+            ref: proj,
+            type: num(proj.type),
+            damage: num(proj.damage) || 0,
+            distance,
+            /* the client's own arrival arithmetic, from
+             * ProjectileManager.foundProjectileThreat */
+            ticksToImpact: speed > 0 ? Math.ceil(distance / (speed * tick)) : Infinity,
+            life: num(proj.life) || 0,
+            isTurret: !!proj.isTurret
+          });
+        }
+      } catch (_) { return out; }
+      return out;
+    }
+
+    /* Spikes near enough to matter, and whether one is actually being touched.
+     * The collision flags are EnemyManager's, computed in its own pass. */
+    spikeContext(snap) {
+      const em = this.client && this.client.EnemyManager;
+      const me = this.me;
+      const out = {
+        colliding: false, willCollide: false, pushing: false,
+        damage: 0, nearestDistance: Infinity, pusher: null
+      };
+      if (!em) return out;
+      out.colliding = !!em.collidingSpike;
+      out.willCollide = !!em.willCollideSpike;
+      out.pushing = !!em.pushingOnSpike;
+      out.damage = Math.max(num(em.potentialSpikeDamage) || 0,
+        num(em.potentialSpikeKnockbackDamage) || 0);
+      try {
+        const spike = em.nearestSpike || em.spikeCollider || em.nearestCollider;
+        if (spike && spike.pos && spike.pos.current && me && me.pos) {
+          out.nearestDistance = me.pos.current.distance(spike.pos.current) -
+            (num(spike.collisionScale) || 0) - (num(me.scale) || 35);
+          if (!out.damage && typeof spike.getDamage === "function") {
+            out.damage = num(spike.getDamage()) || 0;
+          }
+        }
+        out.pusher = em.nearestEnemyPush || null;
+      } catch (_) {}
+      return out;
+    }
+
+    /* Trap state: whose trap, whether we are in it, and whether we could get
+     * out of it with the weapon we are carrying. */
+    trapContext() {
+      const client = this.client;
+      const me = this.me;
+      const em = client && client.EnemyManager;
+      const out = {
+        trapped: false, enemyOwned: false, health: 0, breakable: false,
+        breakTicks: Infinity, nearestDistance: Infinity
+      };
+      if (!me) return out;
+      out.trapped = !!me.isTrapped;
+      try {
+        const trap = me.trappedIn;
+        if (trap) {
+          const pm = client.PlayerManager;
+          out.enemyOwned = pm ? !!pm.isEnemyByID(trap.ownerID, me) : true;
+          out.health = num(trap.tempHealth) === null ? num(trap.health) || 0 : trap.tempHealth;
+          const secondary = num(me.getItemByType(1));
+          const primary = num(me.getItemByType(0));
+          let best = 0;
+          for (const id of [primary, secondary]) {
+            if (id === null) continue;
+            try {
+              const dmg = num(me.getBuildingDamage(id, false)) || 0;
+              if (dmg > best) best = dmg;
+            } catch (_) {}
+          }
+          if (best > 0 && out.health > 0) {
+            out.breakTicks = Math.ceil(out.health / best);
+            out.breakable = out.breakTicks <= 3;
+          }
+        }
+        const near = em && em.nearestTrap;
+        if (near && near.pos && near.pos.current && me.pos) {
+          out.nearestDistance = me.pos.current.distance(near.pos.current);
+        }
+      } catch (_) {}
+      return out;
+    }
+
+    /* A turret that can reach me: the client tracks the nearest one for its own
+     * anti-turret term. */
+    turretContext() {
+      const em = this.client && this.client.EnemyManager;
+      const me = this.me;
+      const out = { present: false, distance: Infinity };
+      if (!em || !me || !me.pos) return out;
+      try {
+        const turret = em.nearestTurretEntity;
+        if (turret && turret.pos && turret.pos.current) {
+          out.present = true;
+          out.distance = me.pos.current.distance(turret.pos.current);
+        }
+      } catch (_) {}
+      return out;
     }
 
     /* Standing on a healing pad is +15/s of real health income
@@ -1077,11 +1371,581 @@ function createRynAutoHealEngine(deps) {
   }
 
   /* ================================================================== *
-   * 4. ThreatDetector — Combat's numbers, the game's modifiers.
+   * 4. ThreatEngine — one engine, eleven detectors.
+   *
+   * The damage number the heal engine spends against is still Combat's own:
+   * EnemyManager has already summed weapons in range and off reload, spike
+   * contact, turret and knock-onto-spike, and ProjectileManager has already
+   * summed what is in the air. None of that is re-derived here.
+   *
+   * What the detectors add is the shape of the threat rather than its size:
+   * which kind it is, how sure we are, how much it is worth and how soon it
+   * lands. Every one of them is built on the same rule — evidence, not
+   * possession. An enemy carrying a musket is not a musket threat. A musket
+   * ball in the air on a line to me is, and so is a musket held by someone
+   * facing me, in range, off reload, at a lower confidence.
    * ================================================================== */
-  class ThreatDetector {
+
+  /* One detector's answer. `additive` says whether the severity is damage the
+   * baseline has not already counted — almost always false, because Combat has
+   * usually counted it, and the two places it is true are named where they are
+   * set. */
+  function threatReport(type, confidence, severity, timing, evidence, additive) {
+    return {
+      type,
+      confidence,
+      value: CONFIDENCE_VALUE[confidence] || 0,
+      rank: CONFIDENCE_RANK[confidence] || 0,
+      severity: Math.max(0, Math.round(severity || 0)),
+      timing: timing === undefined || timing === null ? Infinity : timing,
+      evidence: evidence || [],
+      additive: !!additive
+    };
+  }
+
+  /* ---- 1. Anti Instakill ------------------------------------------- *
+   * Catastrophic damage, which means damage that can take the whole bar in one
+   * exchange. Combat has already summed the number; what this decides is
+   * whether the number is backed by something that is actually about to
+   * happen, and whether we could answer it if it did — a burst we can heal
+   * through is not the same threat as one we cannot.
+   * ---------------------------------------------------------------- */
+  class AntiInstakillDetector {
+    constructor() { this.id = THREAT.INSTAKILL; }
+
+    detect(ctx) {
+      const { effective, health } = ctx;
+      if (effective <= 0) return null;
+
+      const evidence = [];
+      /* Deterministic components: these are happening, not merely possible. */
+      if (ctx.projectiles.length) evidence.push("projectile-in-flight");
+      if (ctx.spike.colliding) evidence.push("spike-contact");
+      if (ctx.damage.dotActive && ctx.damage.ticksUntilDot <= 1) evidence.push("dot-tick-due");
+
+      /* Committed sequences the client has already recognised from real state. */
+      let committed = false;
+      for (const e of ctx.enemies) {
+        if (e.reverseInsta) { evidence.push("reverse-insta"); committed = true; }
+        if (e.toolHammerInsta) { evidence.push("tool-hammer-insta"); committed = true; }
+        if (e.rangedBowInsta) { evidence.push("ranged-bow-insta"); committed = true; }
+        /* canPossiblyInstakill's own verdict: 3 is "kills through soldier". */
+        if (e.danger >= 3) { evidence.push("enemy-danger-3"); committed = true; }
+        else if (e.danger === 2) evidence.push("enemy-danger-2");
+      }
+
+      /* An enemy who can actually swing at me right now. Possession is not
+       * enough: reloaded, in range, and pointed this way. */
+      let inReach = false;
+      for (const e of ctx.enemies) {
+        const reach = Math.max(e.primaryRange, e.secondaryRange);
+        if (reach > 0 && e.distance <= reach && (e.primaryReloaded || e.secondaryReloaded)) {
+          inReach = true;
+          if (e.facing) evidence.push("armed-in-reach-facing");
+          else evidence.push("armed-in-reach");
+          break;
+        }
+      }
+      if (!evidence.length) return null;
+
+      const deterministic = ctx.projectiles.length > 0 || ctx.spike.colliding || committed;
+      const ratio = health > 0 ? effective / health : 0;
+
+      let confidence = CONFIDENCE.NONE;
+      if (ratio >= 1 && deterministic) confidence = CONFIDENCE.CRITICAL;
+      else if (ratio >= 1 && inReach) confidence = CONFIDENCE.HIGH;
+      else if (ratio >= 0.75 && (deterministic || inReach)) confidence = CONFIDENCE.MEDIUM;
+      else if (ratio >= 0.5 && inReach) confidence = CONFIDENCE.LOW;
+      else return null;
+
+      /* What the heal engine can do about it, which is part of the threat:
+       * a lethal burst with no affordable press behind it is a different
+       * situation from one we can eat through. */
+      const gap = ctx.maxHealth - health;
+      const needed = ctx.restore > 0 ? Math.ceil(gap / ctx.restore) : Infinity;
+      if (needed > ctx.pressesAffordable) evidence.push("not-enough-presses");
+      if (ctx.shameCritical) evidence.push("shame-critical");
+
+      return threatReport(this.id, confidence, effective, deterministic ? 0 : 1, evidence, false);
+    }
+  }
+
+  /* ---- 2. Anti Spike Tick ------------------------------------------ *
+   * Repeated spike damage, treated as one sequence rather than a series of
+   * unrelated hits. The evidence for "that was a spike" is not the size of the
+   * number — soldier and variants move it around — but the collision state at
+   * the moment it landed, which EnemyManager computes in its own pass.
+   * ---------------------------------------------------------------- */
+  class AntiSpikeTickDetector {
+    constructor() {
+      this.id = THREAT.SPIKE_TICK;
+      this.reset();
+    }
+
+    reset() {
+      this.hits = [];          // ticks a spike contact took damage
+      this.startTick = null;
+      this.lastTick = -999;
+      this.intervals = [];
+      this.totalDamage = 0;
+    }
+
+    detect(ctx) {
+      const tick = ctx.snap.tick;
+
+      /* A hit counts as a spike hit when damage landed on a tick where a spike
+       * was actually being touched, or the client saw us pushed onto one. */
+      const tookDamage = ctx.damage.burst > 0;
+      const onSpike = ctx.spike.colliding || ctx.spike.pushing;
+      if (tookDamage && onSpike) {
+        if (this.startTick === null || tick - this.lastTick > AH.SPIKE_SEQUENCE_GAP_TICKS) {
+          /* A new sequence, not a continuation of the old one. */
+          this.startTick = tick;
+          this.hits.length = 0;
+          this.intervals.length = 0;
+          this.totalDamage = 0;
+        } else if (this.lastTick > 0) {
+          this.intervals.push(tick - this.lastTick);
+        }
+        this.hits.push(tick);
+        this.lastTick = tick;
+        this.totalDamage += ctx.damage.burst;
+      }
+
+      /* The sequence ends when the pressure does. */
+      if (this.startTick !== null && tick - this.lastTick > AH.SPIKE_SEQUENCE_GAP_TICKS) {
+        this.reset();
+        return null;
+      }
+      if (!this.hits.length) return null;
+
+      const count = this.hits.length;
+      const meanInterval = this.intervals.length
+        ? this.intervals.reduce((a, b) => a + b, 0) / this.intervals.length
+        : AH.SPIKE_SEQUENCE_GAP_TICKS;
+      const sinceLast = tick - this.lastTick;
+      const nextIn = Math.max(0, Math.round(meanInterval - sinceLast));
+
+      const evidence = ["hits:" + count];
+      if (ctx.spike.colliding) evidence.push("touching-spike");
+      if (ctx.spike.pushing) evidence.push("pushed-onto-spike");
+      if (ctx.spike.pusher) evidence.push("enemy-pushing");
+      if (this.intervals.length) evidence.push("interval:" + Math.round(meanInterval));
+
+      /* Still in contact means the next tick of it is arithmetic; out of
+       * contact means the sequence is only a prediction. */
+      const stillOn = ctx.spike.colliding || ctx.spike.willCollide;
+      let confidence;
+      if (count >= 3 && stillOn && ctx.spike.pusher) confidence = CONFIDENCE.CRITICAL;
+      else if (count >= 3 && stillOn) confidence = CONFIDENCE.HIGH;
+      else if (count >= 2 && stillOn) confidence = CONFIDENCE.MEDIUM;
+      else if (count >= 2) confidence = CONFIDENCE.LOW;
+      else if (stillOn) confidence = CONFIDENCE.LOW;
+      else return null;
+
+      const perHit = this.totalDamage / count;
+      /* Additive only when the next hit is a prediction: EnemyManager's
+       * potentialSpikeDamage already carries a spike we are touching, so
+       * counting that one again would double it. */
+      const additive = !ctx.spike.colliding && stillOn &&
+        CONFIDENCE_RANK[confidence] >= CONFIDENCE_RANK.HIGH;
+
+      return threatReport(this.id, confidence, perHit, nextIn, evidence, additive);
+    }
+  }
+
+  /* ---- 3. Anti Insta Rev ------------------------------------------- *
+   * The reverse instakill: secondary and turret held at empty reload so they
+   * land together with a reloaded primary. The client already recognises the
+   * pattern from real reload and range state (Player.canPossiblyInstakill),
+   * and this reads that rather than inventing a second rule for it.
+   * ---------------------------------------------------------------- */
+  class AntiInstaRevDetector {
+    constructor() { this.id = THREAT.INSTA_REV; }
+
+    detect(ctx) {
+      let best = null;
+      for (const e of ctx.enemies) {
+        const evidence = [];
+        if (e.reverseInsta) evidence.push("client-reverse-insta");
+        /* The reload shape on its own, without the range test having passed. */
+        const held = e.secondaryEmpty && e.turretEmpty && e.primaryReloaded;
+        if (held) evidence.push("secondary+turret-held");
+        if (!evidence.length) continue;
+
+        const reach = Math.max(e.primaryRange, e.secondaryRange);
+        const inReach = reach > 0 && e.distance <= reach;
+        if (inReach) evidence.push("in-reach");
+        if (e.facing) evidence.push("facing");
+        if (e.closing > 0) evidence.push("closing");
+
+        const combined = e.primaryDamage + e.secondaryDamage +
+          (ctx.turret.present ? 25 : 0);
+        const lethal = combined >= ctx.health;
+
+        let confidence;
+        if (e.reverseInsta && lethal) confidence = CONFIDENCE.CRITICAL;
+        else if (e.reverseInsta) confidence = CONFIDENCE.HIGH;
+        else if (held && inReach && lethal) confidence = CONFIDENCE.HIGH;
+        else if (held && inReach) confidence = CONFIDENCE.MEDIUM;
+        else if (held) confidence = CONFIDENCE.LOW;
+        else continue;
+
+        const report = threatReport(this.id, confidence, combined, inReach ? 0 : 1,
+          evidence, false);
+        if (!best || report.rank > best.rank ||
+            (report.rank === best.rank && report.severity > best.severity)) {
+          best = report;
+        }
+      }
+      return best;
+    }
+  }
+
+  /* ---- 4/5. Anti Musket and Anti Bow ------------------------------- *
+   * Ranged threats, and the clearest case of the possession rule. A musket in
+   * someone's hands is not a threat; a bullet in the air on a line to me is,
+   * and the client has already done that line test — dangerProjectiles only
+   * contains what passed it. A held ranged weapon still counts, but lower, and
+   * only with the reload, the range and the facing behind it.
+   * ---------------------------------------------------------------- */
+  class RangedDetector {
+    constructor(id, projectileTypes, weaponIds, weaponRange) {
+      this.id = id;
+      this.projectileTypes = projectileTypes;
+      this.weaponIds = weaponIds;
+      this.weaponRange = weaponRange;
+    }
+
+    detect(ctx) {
+      /* In the air, aimed at me: the strongest evidence there is. */
+      let inFlight = null;
+      for (const p of ctx.projectiles) {
+        if (this.projectileTypes.indexOf(p.type) === -1) continue;
+        if (!inFlight || p.ticksToImpact < inFlight.ticksToImpact) inFlight = p;
+      }
+      if (inFlight) {
+        const lethal = inFlight.damage >= ctx.health;
+        const soon = inFlight.ticksToImpact <= 2;
+        const confidence = lethal && soon ? CONFIDENCE.CRITICAL
+          : soon ? CONFIDENCE.HIGH
+          : CONFIDENCE.MEDIUM;
+        return threatReport(this.id, confidence, inFlight.damage, inFlight.ticksToImpact,
+          ["projectile-in-flight", "impact-in:" + inFlight.ticksToImpact], false);
+      }
+
+      /* Nothing is in the air. A held weapon can still be a threat, but the bar
+       * is deliberately high, because this is exactly where a threat engine
+       * starts crying wolf: a musket reaches 1400, which is most of the screen,
+       * so "loaded and pointed roughly at me" describes half the players on the
+       * map at any moment and a mouse moves faster than a tick.
+       *
+       * So: it has to be loaded, it has to be pointed at me, and it has to be
+       * either inside half its own reach or freshly switched to — the client's
+       * own wind-up signature, bow -> crossbow -> musket, which it uses for the
+       * same purpose in canPossiblyInstakill. Anything less is someone holding
+       * a weapon, and this reports nothing at all for that. Never above MEDIUM
+       * either: nothing has been fired. */
+      let best = null;
+      for (const e of ctx.enemies) {
+        if (this.weaponIds.indexOf(e.weaponCurrent) === -1) continue;
+        const ready = e.weaponCurrent === e.weaponPrimary ? e.primaryReloaded : e.secondaryReloaded;
+        if (!ready || !e.facing) continue;
+
+        const justSwitched = e.weaponPrevious !== null && e.weaponPrevious !== e.weaponCurrent;
+        const close = e.distance <= this.weaponRange * 0.5;
+        if (!close && !justSwitched) continue;
+
+        const evidence = ["holding:" + e.weaponCurrent, "loaded", "facing"];
+        if (justSwitched) evidence.push("just-switched");
+        if (close) evidence.push("inside-half-reach:" + Math.round(e.distance));
+        if (e.closing > 0) evidence.push("closing");
+
+        const confidence = close && justSwitched ? CONFIDENCE.MEDIUM : CONFIDENCE.LOW;
+        const report = threatReport(this.id, confidence,
+          ctx.projectileDamageFor(e.weaponCurrent), 1, evidence, false);
+        if (!best || report.rank > best.rank) best = report;
+      }
+      return best;
+    }
+  }
+
+  /* ---- 6. Anti Spam Dagger ----------------------------------------- *
+   * Daggers swing every 100ms — under one server tick — for 20 a hit, so the
+   * threat is the frequency rather than any single number. Evidence is the
+   * frequency itself: repeated damage at close range from someone holding one.
+   * ---------------------------------------------------------------- */
+  class AntiSpamDaggerDetector {
+    constructor() {
+      this.id = THREAT.SPAM_DAGGER;
+      this.hits = [];
+    }
+
+    reset() { this.hits.length = 0; }
+
+    detect(ctx) {
+      const tick = ctx.snap.tick;
+
+      /* Who, if anyone, is holding a dagger inside its own reach right now. */
+      let holder = null;
+      for (const e of ctx.enemies) {
+        if (e.weaponCurrent !== AH.WEAPON_DAGGER) continue;
+        const reach = e.primaryRange || 0;
+        if (reach > 0 && e.distance <= reach + (e.speed || 0)) { holder = e; break; }
+      }
+
+      /* Damage landing while one is in reach is what makes it dagger pressure
+       * rather than someone standing nearby with a dagger. */
+      if (ctx.damage.burst > 0 && holder && !ctx.spike.colliding) this.hits.push(tick);
+      while (this.hits.length && tick - this.hits[0] > AH.PRESSURE_WINDOW_TICKS) this.hits.shift();
+
+      if (!holder) return null;
+      const count = this.hits.length;
+      if (!count) {
+        /* In reach and armed, nothing landing yet. */
+        return holder.primaryReloaded && holder.facing
+          ? threatReport(this.id, CONFIDENCE.LOW, holder.primaryDamage, 1,
+            ["dagger-in-reach", "loaded"], false)
+          : null;
+      }
+
+      const evidence = ["hits:" + count, "distance:" + Math.round(holder.distance)];
+      if (holder.closing > 0) evidence.push("closing");
+      const perHit = holder.primaryDamage || 20;
+      const confidence = count >= 4 ? CONFIDENCE.CRITICAL
+        : count >= 3 ? CONFIDENCE.HIGH
+        : count >= 2 ? CONFIDENCE.MEDIUM
+        : CONFIDENCE.LOW;
+      /* Sustained rate over the window, expressed as what the next tick costs. */
+      return threatReport(this.id, confidence, perHit * Math.min(2, count), 1, evidence, false);
+    }
+  }
+
+  /* ---- 7. Anti Velocity Tick --------------------------------------- *
+   * The combo aimed at us, not one of ours: a turret shot knocks the target
+   * into the 150-270 band and a polearm covers the gap while they are still
+   * travelling. This only reads state — the client's own VelocityTick module
+   * owns the offensive side and is not touched.
+   * ---------------------------------------------------------------- */
+  class AntiVelocityTickDetector {
+    constructor() { this.id = THREAT.VELOCITY_TICK; }
+
+    detect(ctx) {
+      if (!ctx.turret.present && !ctx.projectiles.some(p => p.isTurret)) return null;
+
+      let best = null;
+      for (const e of ctx.enemies) {
+        /* The reach half of the combo: a polearm, or the bull hat that carries
+         * it. Held, not owned — weaponCurrent is what is in their hands. */
+        const polearm = e.weaponCurrent === AH.WEAPON_POLEARM;
+        const bull = e.hatId === AH.HAT_BULL;
+        const turretGear = e.hatId === AH.HAT_TURRET_GEAR;
+        if (!polearm && !turretGear) continue;
+
+        /* The band. Inside it the ordinary weapon terms already cover the
+         * threat; outside it the knockback cannot bring them to us. */
+        const inBand = e.distance >= AH.VELOCITY_BAND_MIN && e.distance <= AH.VELOCITY_BAND_MAX;
+        if (!inBand) continue;
+
+        const evidence = ["band:" + Math.round(e.distance)];
+        if (polearm) evidence.push("polearm");
+        if (bull) evidence.push("bull");
+        if (turretGear) evidence.push("turret-gear");
+        if (ctx.turret.present) evidence.push("turret-in-range");
+        if (e.primaryReloaded) evidence.push("primary-loaded");
+        if (e.closing > 0) evidence.push("closing");
+        if (e.facing) evidence.push("facing");
+
+        const armed = e.primaryReloaded && e.facing;
+        const turretReady = ctx.projectiles.some(p => p.isTurret) || e.turretReloaded;
+        let confidence;
+        if (armed && turretReady && e.closing > 0) confidence = CONFIDENCE.HIGH;
+        else if (armed && turretReady) confidence = CONFIDENCE.MEDIUM;
+        else if (armed || turretReady) confidence = CONFIDENCE.LOW;
+        else continue;
+
+        const severity = e.primaryDamage + 25;   // polearm plus the turret shot
+        const report = threatReport(this.id, confidence, severity, 1, evidence, false);
+        if (!best || report.rank > best.rank) best = report;
+      }
+      return best;
+    }
+  }
+
+  /* ---- 8. Anti Spike ----------------------------------------------- *
+   * Direct exposure, from the collision state itself rather than from anything
+   * inferred: touching one, about to touch one, or being pushed onto one.
+   * ---------------------------------------------------------------- */
+  class AntiSpikeDetector {
+    constructor() { this.id = THREAT.SPIKE; }
+
+    detect(ctx) {
+      const s = ctx.spike;
+      if (!s.colliding && !s.willCollide && !s.pushing) return null;
+
+      const evidence = [];
+      if (s.colliding) evidence.push("colliding");
+      if (s.willCollide) evidence.push("will-collide");
+      if (s.pushing) evidence.push("pushing");
+      if (s.pusher) evidence.push("enemy-pushing");
+      if (isFinite(s.nearestDistance)) evidence.push("gap:" + Math.round(s.nearestDistance));
+
+      let confidence;
+      if (s.colliding && s.pusher) confidence = CONFIDENCE.CRITICAL;
+      else if (s.colliding) confidence = CONFIDENCE.HIGH;
+      else if (s.pushing) confidence = CONFIDENCE.MEDIUM;
+      else confidence = CONFIDENCE.LOW;
+
+      return threatReport(this.id, confidence, s.damage, s.colliding ? 0 : 1, evidence, false);
+    }
+  }
+
+  /* ---- 9. Anti Trap ------------------------------------------------ *
+   * A trap is only dangerous for what it lets somebody else do. Pinned in an
+   * enemy trap with someone in reach is the threat; standing next to a trap is
+   * a fact.
+   * ---------------------------------------------------------------- */
+  class AntiTrapDetector {
+    constructor() {
+      this.id = THREAT.TRAP;
+      this.damageWhileTrapped = 0;
+      this.trappedSince = null;
+    }
+
+    reset() {
+      this.damageWhileTrapped = 0;
+      this.trappedSince = null;
+    }
+
+    detect(ctx) {
+      const t = ctx.trap;
+      if (!t.trapped) {
+        this.reset();
+        /* Not pinned, but standing on top of one with an enemy closing is the
+         * situation that becomes the threat a tick later. */
+        if (isFinite(t.nearestDistance) && t.nearestDistance < 100) {
+          const closer = ctx.enemies.find(e => e.closing > 0 && e.distance < 300);
+          if (closer) {
+            return threatReport(this.id, CONFIDENCE.LOW, 0, 2,
+              ["trap-underfoot:" + Math.round(t.nearestDistance), "enemy-closing"], false);
+          }
+        }
+        return null;
+      }
+
+      if (this.trappedSince === null) this.trappedSince = ctx.snap.tick;
+      this.damageWhileTrapped += ctx.damage.burst;
+
+      const evidence = ["trapped:" + (ctx.snap.tick - this.trappedSince)];
+      if (t.enemyOwned) evidence.push("enemy-trap");
+      if (!t.breakable) evidence.push("break-ticks:" + (isFinite(t.breakTicks) ? t.breakTicks : "?"));
+      if (this.damageWhileTrapped > 0) evidence.push("damage:" + Math.round(this.damageWhileTrapped));
+
+      /* Who can reach me while I cannot move. */
+      let attacker = null;
+      for (const e of ctx.enemies) {
+        const reach = Math.max(e.primaryRange, e.secondaryRange);
+        if (reach > 0 && e.distance <= reach && (e.primaryReloaded || e.secondaryReloaded)) {
+          attacker = e;
+          break;
+        }
+      }
+      if (attacker) evidence.push("attacker-in-reach");
+
+      let confidence;
+      if (attacker && t.enemyOwned && !t.breakable) confidence = CONFIDENCE.CRITICAL;
+      else if (attacker && t.enemyOwned) confidence = CONFIDENCE.HIGH;
+      else if (t.enemyOwned && this.damageWhileTrapped > 0) confidence = CONFIDENCE.MEDIUM;
+      else if (t.enemyOwned) confidence = CONFIDENCE.MEDIUM;
+      else confidence = CONFIDENCE.LOW;
+
+      const severity = attacker
+        ? attacker.primaryDamage + attacker.secondaryDamage
+        : this.damageWhileTrapped;
+      return threatReport(this.id, confidence, severity, attacker ? 0 : 2, evidence, false);
+    }
+  }
+
+  /* ---- 10. Generic burst ------------------------------------------- *
+   * Damage that already landed, in one tick, big enough to matter. It is
+   * evidence about what is coming rather than a prediction of it, which is why
+   * its timing is 0 and its confidence tops out below the specific detectors.
+   * ---------------------------------------------------------------- */
+  class BurstDamageDetector {
+    constructor() { this.id = THREAT.BURST; }
+
+    detect(ctx) {
+      const burst = ctx.damage.burst;
+      if (burst <= 0) return null;
+      const share = ctx.maxHealth > 0 ? burst / ctx.maxHealth : 0;
+      if (share < 0.15) return null;
+
+      const evidence = ["burst:" + Math.round(burst)];
+      if (ctx.state.hiddenDamage >= 1) evidence.push("hidden-under-heal");
+
+      const confidence = share >= 0.5 ? CONFIDENCE.HIGH
+        : share >= 0.3 ? CONFIDENCE.MEDIUM
+        : CONFIDENCE.LOW;
+      return threatReport(this.id, confidence, burst, 0, evidence, false);
+    }
+  }
+
+  /* ---- 11. Generic sustained --------------------------------------- *
+   * Pressure that is not any one thing: damage arriving often enough, for long
+   * enough, that the bar is going down whatever is causing it.
+   * ---------------------------------------------------------------- */
+  class SustainedDamageDetector {
+    constructor() {
+      this.id = THREAT.SUSTAINED;
+      this.window = [];
+    }
+
+    reset() { this.window.length = 0; }
+
+    detect(ctx) {
+      const tick = ctx.snap.tick;
+      if (ctx.damage.burst > 0) this.window.push({ tick, amount: ctx.damage.burst });
+      while (this.window.length && tick - this.window[0].tick > AH.SUSTAINED_WINDOW_TICKS) {
+        this.window.shift();
+      }
+      if (this.window.length < 2) return null;
+
+      const total = this.window.reduce((a, b) => a + b.amount, 0);
+      const spanTicks = Math.max(1, tick - this.window[0].tick);
+      const perSecond = total / ((spanTicks * ctx.snap.TICK) / 1000);
+      const ticksToEmpty = perSecond > 0
+        ? Math.round((ctx.health / perSecond) * (1000 / ctx.snap.TICK))
+        : Infinity;
+
+      const evidence = [
+        "events:" + this.window.length,
+        "dps:" + Math.round(perSecond)
+      ];
+      const confidence = this.window.length >= 5 && perSecond >= 60 ? CONFIDENCE.HIGH
+        : this.window.length >= 3 && perSecond >= 30 ? CONFIDENCE.MEDIUM
+        : CONFIDENCE.LOW;
+      return threatReport(this.id, confidence, perSecond, ticksToEmpty, evidence, false);
+    }
+  }
+
+  /* ---- the engine -------------------------------------------------- */
+  class ThreatEngine {
     constructor(adapter) {
       this.adapter = adapter;
+      this.detectors = [
+        new AntiInstakillDetector(),
+        new AntiSpikeTickDetector(),
+        new AntiInstaRevDetector(),
+        new RangedDetector(THREAT.MUSKET, [AH.PROJ_MUSKET], [AH.WEAPON_MUSKET], 1400),
+        new RangedDetector(THREAT.BOW, AH.PROJ_ARROWS,
+          [AH.WEAPON_BOW, AH.WEAPON_CROSSBOW, AH.WEAPON_REPEATER], 1200),
+        new AntiSpamDaggerDetector(),
+        new AntiVelocityTickDetector(),
+        new AntiSpikeDetector(),
+        new AntiTrapDetector(),
+        new BurstDamageDetector(),
+        new SustainedDamageDetector()
+      ];
       this.reset();
     }
 
@@ -1092,32 +1956,34 @@ function createRynAutoHealEngine(deps) {
       this.insta = false;
       this.sources = [];
       this.confidence = 0;
+      this.reports = [];
+      this.byType = {};
+      this.top = null;
+      this.escalation = CONFIDENCE.NONE;
+      this.soonest = Infinity;
+      for (const d of this.detectors) if (d.reset) d.reset();
     }
 
-    evaluate(snap, damage) {
+    evaluate(snap, damage, state, shame, ledger) {
       const t = snap.threat;
       const Hats = this.adapter.Hats;
 
-      /* EnemyManager already summed melee-in-range, secondary and turret into
-       * potentialDamage, and took the larger of direct spike contact and
-       * knock-onto-spike (v5.4:3124-3130). Projectiles in flight are the
-       * ProjectileManager's own total. Nothing here is re-derived. */
+      /* ---- the damage number, unchanged ----------------------------- *
+       * EnemyManager already summed melee-in-range-and-off-reload, secondary
+       * and turret into potentialDamage, and took the larger of direct spike
+       * contact and knock-onto-spike (v5.4:3124-3130). Projectiles in flight
+       * are the ProjectileManager's own total. Nothing here is re-derived. */
       const spike = Math.max(t.spike, t.spikeKB);
       let raw = t.potential + spike + t.projectile;
-
-      /* A damage-over-time tick inside the horizon is real incoming damage. */
       if (damage.dotActive && damage.ticksUntilDot <= 2) raw += damage.dotPerSecond;
-
       raw = Math.min(raw, AH.DMG_CAP);
 
       /* Soldier Helmet's dmgMult is applied by the server inside changeHealth
-       * (game_index.js:2420), so it is a true reduction. It counts when the hat
-       * is on, and also when Safe Soldier is putting it on this tick. */
-      const soldierMult = (snap.soldierOn || snap.shouldEquipSoldier)
+       * (game_index.js:2420), so it is a true reduction. */
+      const soldierMult = snap.soldierOn
         ? ((Hats && Hats[AH.HAT_SOLDIER] && num(Hats[AH.HAT_SOLDIER].dmgMult)) || 0.75)
         : 1;
       let eff = raw * soldierMult;
-      /* Bull adds its own -5 a second on top of whatever the enemy does. */
       if (snap.bullOn) eff += 5;
 
       this.raw = raw;
@@ -1130,17 +1996,82 @@ function createRynAutoHealEngine(deps) {
       if (t.projectile) this.sources.push("proj:" + Math.round(t.projectile));
       if (damage.dotActive) this.sources.push("dot:" + damage.dotPerSecond);
 
-      /* How much of this number is going to happen, rather than could happen.
-       *
-       * A damage-over-time tick is arithmetic on a fixed period. An arrow in
-       * flight has already been fired. A spike we are standing on deals its
-       * damage on contact. An enemy in range holding a reloaded weapon is a
-       * player who may or may not swing — the largest term in potentialDamage
-       * and the least certain, which is exactly why spending food on it alone
-       * is what the objective calls wasting healing resources.
-       *
-       * Weighted by damage, so the confidence follows whichever source
-       * dominates the number. */
+      /* ---- the detectors -------------------------------------------- */
+      const ctx = this._context(snap, damage, state, shame, ledger, eff, soldierMult);
+      this.reports = [];
+      this.byType = {};
+      this.top = null;
+      this.soonest = Infinity;
+      for (const detector of this.detectors) {
+        let report = null;
+        try {
+          report = detector.detect(ctx);
+        } catch (_) { report = null; }
+        if (!report || report.rank === 0) continue;
+        this.reports.push(report);
+        this.byType[report.type] = report;
+        if (report.timing < this.soonest) this.soonest = report.timing;
+        if (!this.top || report.rank > this.top.rank ||
+            (report.rank === this.top.rank && report.severity > this.top.severity)) {
+          this.top = report;
+        }
+      }
+      this.reports.sort((a, b) => b.rank - a.rank || b.severity - a.severity);
+      this.escalation = this.top ? this.top.confidence : CONFIDENCE.NONE;
+
+      /* A detector may add damage the baseline has not counted — in practice
+       * only the next hit of a spike sequence we are no longer touching. The
+       * cap still applies, and soldier still reduces it. */
+      let additive = 0;
+      for (const r of this.reports) {
+        if (r.additive && r.timing <= 1) additive = Math.max(additive, r.severity);
+      }
+      if (additive > 0) {
+        this.raw = Math.min(AH.DMG_CAP, this.raw + additive);
+        this.effective = this.raw * soldierMult + (snap.bullOn ? 5 : 0);
+        this.sources.push("predicted:" + Math.round(additive));
+      }
+
+      this.confidence = this._confidence(t, spike, damage);
+      return this;
+    }
+
+    /* How much of the threat can actually land inside the next `ticks` ticks.
+     *
+     * This is what the detectors' timing is for. The heal engine's one real
+     * trade is whether it can wait a tick for the shame window, and without a
+     * timing model the only safe answer is to assume the whole number lands
+     * immediately — which spends a charge on every exchange, including the ones
+     * where the next hit is three ticks out.
+     *
+     * The relaxation is deliberately narrow: any credible report landing inside
+     * the window returns the full number, and no detector view at all returns
+     * the full number too. Only when every credible threat is demonstrably
+     * further out than the window does the wait become affordable. */
+    imminentWithin(ticks) {
+      if (!this.reports.length) return this.effective;
+      let credible = false;
+      let worst = 0;
+      for (const r of this.reports) {
+        if (r.rank < CONFIDENCE_RANK.MEDIUM) continue;
+        credible = true;
+        if (r.timing <= ticks) worst = Math.max(worst, r.severity);
+      }
+      if (!credible) return this.effective;
+      if (worst > 0) return this.effective;
+      /* Nothing credible lands in the window. What is already touching us
+       * still does. */
+      return this.spikeContact ? this.effective : worst;
+    }
+
+    /* How much of the damage number is going to happen rather than could.
+     *
+     * The floor is the source weighting: a damage-over-time tick is arithmetic
+     * on a fixed period, an arrow has already been fired, a spike being touched
+     * deals contact damage, and an enemy in range holding a reloaded weapon is
+     * a player who may not swing. A detector that found real evidence for most
+     * of the number can raise it above that floor, but nothing lowers it. */
+    _confidence(t, spike, damage) {
       const parts = [];
       if (damage.dotActive && damage.ticksUntilDot <= 2) parts.push([damage.dotPerSecond, 1]);
       if (t.projectile) parts.push([t.projectile, 0.85]);
@@ -1148,8 +2079,50 @@ function createRynAutoHealEngine(deps) {
       if (t.potential) parts.push([t.potential, t.instaThreat ? 0.8 : t.primary ? 0.6 : 0.4]);
       let sum = 0, weighted = 0;
       for (const [d, w] of parts) { sum += d; weighted += d * w; }
-      this.confidence = sum > 0 ? weighted / sum : 0;
-      return this;
+      let confidence = sum > 0 ? weighted / sum : 0;
+      if (this.top && this.raw > 0 && this.top.severity >= this.raw * 0.5) {
+        confidence = Math.max(confidence, this.top.value);
+      }
+      return confidence;
+    }
+
+    /* Everything a detector is allowed to look at, read once per tick through
+     * the adapter so the detectors themselves never touch the client. */
+    _context(snap, damage, state, shame, ledger, effective, soldierMult) {
+      const adapter = this.adapter;
+      const Items = adapter.Items;
+      const packets = adapter.packetsLeft();
+      const engine = this;
+      return {
+        snap,
+        damage,
+        state,
+        enemies: adapter.enemyList(),
+        projectiles: adapter.incomingProjectiles(snap),
+        spike: adapter.spikeContext(snap),
+        trap: adapter.trapContext(),
+        turret: adapter.turretContext(),
+        health: snap.health,
+        maxHealth: snap.maxHealth,
+        restore: snap.restore,
+        effective,
+        soldierMult,
+        pressesAffordable: Math.floor(packets / AH.PACKETS_PER_PRESS),
+        shameCritical: shame ? shame.critical : false,
+        /* What a given ranged weapon's projectile is worth, from the tables. */
+        projectileDamageFor(weaponId) {
+          try {
+            const weapons = adapter.Weapons;
+            const projectiles = adapter.Projectiles;
+            if (!weapons || !projectiles) return 0;
+            const weapon = weapons[weaponId];
+            if (!weapon || weapon.projectile === undefined) return 0;
+            const proj = projectiles[weapon.projectile];
+            return proj && num(proj.damage) ? proj.damage : 0;
+          } catch (_) { return 0; }
+        },
+        engine
+      };
     }
   }
 
@@ -1194,9 +2167,14 @@ function createRynAutoHealEngine(deps) {
     }
 
     /* Would waiting `ms` for the shame window still leave us alive if the
-     * predicted damage lands during the wait? */
+     * damage that can land during the wait does land? The threat engine decides
+     * how much of the number that is, from its detectors' timing. */
     survivesHold(snap, damage, threat, ms) {
-      return this.afterHold(snap, damage, ms) - threat.effective > 0;
+      const ticks = Math.max(1, Math.round(ms / (snap.TICK || AH.TICK_MS)));
+      const incoming = typeof threat.imminentWithin === "function"
+        ? threat.imminentWithin(ticks)
+        : threat.effective;
+      return this.afterHold(snap, damage, ms) - incoming > 0;
     }
 
     healsNeeded(target, restore) {
@@ -1736,7 +2714,7 @@ function createRynAutoHealEngine(deps) {
       this.state = new StateTracker();
       this.damage = new DamageAnalyzer();
       this.shame = new ShameController(this.adapter);
-      this.threat = new ThreatDetector(this.adapter);
+      this.threat = new ThreatEngine(this.adapter);
       this.predict = new PredictionEngine(this.adapter);
       this.ledger = new AntiSpamManager();
       this.decision = new HealDecisionEngine(this.adapter);
@@ -1800,7 +2778,7 @@ function createRynAutoHealEngine(deps) {
         holding: this.cooldown.holdSinceTick >= 0,
         backoff: this.ledger.backedOff(snap)
       });
-      this.threat.evaluate(snap, this.damage);
+      this.threat.evaluate(snap, this.damage, this.state, this.shame, this.ledger);
       this.predict.build(snap, this.state, this.damage, this.threat, this.ledger);
       /* The forecast and the way down both need the threat and the projection,
        * so the shame engine's second half runs after them. */
@@ -1850,7 +2828,16 @@ function createRynAutoHealEngine(deps) {
         /* the rest */
         verdict: this.shame.verdictNow,
         creditIn: Math.round(this.shame.msUntilCredit),
+        /* threat engine */
         threat: Math.round(this.threat.effective),
+        escalation: this.threat.escalation,
+        topThreat: this.threat.top
+          ? this.threat.top.type + ":" + this.threat.top.confidence
+          : "none",
+        threats: this.threat.reports.map(
+          r => `${r.type}:${r.confidence}:${r.severity}@${r.timing}`
+        ),
+        soonest: this.threat.soonest === Infinity ? "-" : this.threat.soonest,
         sources: this.threat.sources.join(" "),
         damageFrequency: Number(this.damage.damageFrequency.toFixed(2)),
         rate: Math.round(this.damage.rate),
@@ -1870,6 +2857,9 @@ function createRynAutoHealEngine(deps) {
   AutoHealEngine.VERDICT = VERDICT;
   AutoHealEngine.ZONE = ZONE;
   AutoHealEngine.zoneFor = ShameTracker.zoneFor;
+  AutoHealEngine.CONFIDENCE = CONFIDENCE;
+  AutoHealEngine.CONFIDENCE_VALUE = CONFIDENCE_VALUE;
+  AutoHealEngine.THREAT = THREAT;
   return AutoHealEngine;
 }
 

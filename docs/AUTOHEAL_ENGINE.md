@@ -395,15 +395,59 @@ Objective encoding: `SHAME <= 7` is a hard invariant (never send the press that
 reaches 8); `SHAME = 0` is the target the wash path drives toward whenever the
 tick is otherwise idle.
 
-### 4. ThreatDetector
+### 4. ThreatEngine — one engine, eleven detectors
 
-Never re-derives what Combat already knows. It sums RYN's own numbers —
-`EnemyManager.potentialDamage`, `potentialSpikeDamage`,
-`potentialSpikeKnockbackDamage`, `ProjectileManager.totalDamage` — adds the
-self-inflicted DoT term (poison / Bull `-5`), caps at 140 like the game's own
-worst case, then applies the *game's* modifiers: `×0.75` when Soldier Helmet is
-on or is being equipped this tick by Safe Soldier, `+5` when Bull is on.
-Publishes `{raw, effective, lethal, instaThreat, spikeContact, sources[]}`.
+**The damage number is still Combat's.** The engine never re-derives what the
+client already knows: `EnemyManager.potentialDamage`, `potentialSpikeDamage`,
+`potentialSpikeKnockbackDamage` and `ProjectileManager.totalDamage`, plus the
+self-inflicted DoT term, capped at 140, then the game's own modifiers (`×0.75`
+Soldier, `+5` Bull). What the detectors add is the *shape* of the threat rather
+than its size: which kind, how sure, how much, and how soon.
+
+Every detector is built on one rule: **evidence, not possession.** An enemy
+carrying a musket is not a musket threat.
+
+| # | Detector | Fires on | Never fires on |
+|---|---|---|---|
+| 1 | `instakill` | damage ≥ health backed by something deterministic — a projectile in flight, spike contact, or a committed sequence the client already recognised (`reverseInsta`, `toolHammerInsta`, `rangedBowInsta`, `danger >= 3`) | a big number with nothing behind it |
+| 2 | `spike-tick` | damage landing on ticks where a spike is actually being touched, tracked as **one sequence** with hit count, mean interval and predicted next contact | a spike standing nearby |
+| 3 | `insta-rev` | secondary and turret held at empty reload with a loaded primary — the client's own `canPossiblyInstakill` shape — plus reach and facing | owning two weapons |
+| 4 | `musket` | a type-5 projectile in the air on a line to me (the client's own facing test), or a musket **loaded, facing me, and inside half its reach or freshly switched to** | holding a musket |
+| 5 | `bow` | the same, for arrow projectiles 0/2/3 and the bow / crossbow / repeater | holding a bow |
+| 6 | `spam-dagger` | repeated damage while a dagger is in its own reach — the frequency is the threat, since daggers swing under one tick for 20 | a dagger on the field |
+| 7 | `velocity-tick` | a polearm or turret gear inside the 150–270 knockback band with a turret that can reach me, loaded and closing | a polearm anywhere |
+| 8 | `spike` | the collision state itself: touching, about to touch, or being pushed onto one | proximity |
+| 9 | `trap` | pinned in an enemy trap, weighted by whether anyone can reach me and whether I can break out | standing next to a trap |
+| 10 | `burst` | one tick's damage ≥ 15 % of max health, including damage hidden under a heal | ordinary chip |
+| 11 | `sustained` | ≥ 2 damage events in a 27-tick window, reported as dps and ticks-to-empty | one hit |
+
+Every report is `{type, confidence, severity, timing, evidence[]}`:
+
+- **confidence** — `NONE` · `LOW` · `MEDIUM` · `HIGH` · `CRITICAL`. Earned by
+  what is observable, not by how bad it would be if true. An unfired ranged
+  weapon can never exceed `MEDIUM`; `CRITICAL` needs something already in
+  motion.
+- **severity** — estimated damage, in health.
+- **timing** — estimated ticks to impact. `0` is now.
+- **evidence** — the specific facts that produced the verdict, for the log.
+
+**Timing is not decoration.** `PredictionEngine.survivesHold` asks the engine
+`imminentWithin(ticks)` before deciding whether a tick of patience is
+affordable: any credible report landing inside the window returns the whole
+number, and so does having no detector view at all — the relaxation only applies
+when every credible threat is demonstrably further out than the wait. That is
+what lets the engine take the `-2` instead of paying `+1` on an exchange whose
+next hit is three ticks away, and it is why the every-tick beatdown scenario
+now finishes at full health rather than 95.
+
+Only one detector may add damage the baseline has not counted: `spike-tick`,
+and only for the next contact of a sequence we are *not* currently touching —
+`potentialSpikeDamage` already carries the one we are.
+
+Detectors never touch the client. Everything they read is gathered once per
+tick by the HostAdapter (`enemyList`, `incomingProjectiles`, `spikeContext`,
+`trapContext`, `turretContext`), and a weapon id is only ever reported alongside
+the reload, range and facing that say whether it can be used on me right now.
 
 ### 5. PredictionEngine
 
@@ -516,7 +560,8 @@ chance   mode (credit-now | credit-wait | bull | none), etaTicks, reason
 damage   lastDelta, burst, hiddenDamage, rate9, damageFrequency,
          dotActive, dotPerSec, msUntilDotTick
 threat   melee, secondary, turret, projectile, spike, spikeKB, dot,
-         raw, effective, confidence, lethal, instaThreat, spikeContact
+         raw, effective, confidence, lethal, instaThreat, spikeContact,
+         reports[], byType{}, top, escalation, soonest
 heal     inFlight[], sentThisTick, backoffUntil, lastLandedTick
 plan     urgency, presses, allowCharge, holdMs, reason
 ```
@@ -617,11 +662,12 @@ fire at all: it gates on `tempHealth < maxHealth`, and `Player.maxHealth` is
 
 ### What the simulator reports
 
-Against the transcribed server rules, over thirteen scenarios (sustained melee,
-every-other-tick pressure, an insta burst, poison, a 5-, 6- and 7-count debt,
-250 ms ping, no food, an active lock, cheese, a low-confidence threat, a count
-that moves between the plan and the press, and an unsurvivable every-tick
-beatdown):
+Against the transcribed server rules, over nineteen scenarios — the healing and
+shame set (sustained melee, every-other-tick pressure, an insta burst, poison,
+a 5-, 6- and 7-count debt, 250 ms ping, no food, an active lock, cheese, a
+low-confidence threat, a count that moves between the plan and the press, an
+unsurvivable every-tick beatdown) and the threat set (possession only, a musket
+ball in flight, dagger pressure, a spike-tick sequence, a trap pin):
 
 - no scenario arms the 30 s lock, and none sends a press while one is on;
 - the count never exceeds 7, and every scenario that starts in debt ends at 0;
@@ -633,6 +679,13 @@ beatdown):
   arms 0 locks**: it would rather die than send the press the live count says
   arms the lock, which is the correct trade, since the lock is 30 s of
   guaranteed death anyway;
+- **a field of four armed enemies — musket, bow, daggers, polearm — all loaded
+  and facing, none of whom do anything, produces no threat report at all and no
+  presses**, which is the possession rule holding under the exact case it
+  exists for;
+- a musket ball in the air is `HIGH`, dagger pressure reaches `CRITICAL` on hit
+  frequency, a spike sequence is reported as one sequence rather than five
+  hits, and a trap pin with an attacker in reach is `CRITICAL`;
 - the every-tick beatdown is the one shape the shame rule makes unsurvivable —
   the hit stamp is refreshed faster than the window closes, so all seven charges
   go and the eighth press is refused rather than sent. Dying at 7 without a lock

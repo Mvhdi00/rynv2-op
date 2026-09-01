@@ -41,6 +41,100 @@ Hats[45] = { id: 45, name: "Shame!" };
 Hats[56] = { id: 56, name: "Assassin Gear", noEat: true };
 const Accessories = [];
 Accessories[0] = { id: 0, name: "none" };
+/* Only the weapons and projectiles the detectors name, with the numbers from
+ * drivers/game-drivers.json. */
+const Weapons = [];
+Weapons[5] = { id: 5, name: "polearm", damage: 45, range: 142, knockback: 0.2 };
+Weapons[7] = { id: 7, name: "daggers", damage: 20, range: 65, knockback: 0.1 };
+Weapons[9] = { id: 9, name: "hunting bow", projectile: 0, range: 0 };
+Weapons[10] = { id: 10, name: "great hammer", damage: 10, range: 75 };
+Weapons[12] = { id: 12, name: "crossbow", projectile: 2, range: 0 };
+Weapons[15] = { id: 15, name: "musket", projectile: 5, range: 0 };
+const Projectiles = [
+  { damage: 25, speed: 1.6 },
+  { damage: 25, speed: 1 },
+  { damage: 35, speed: 2.5 },
+  { damage: 30, speed: 2 },
+  { damage: 16, speed: 1 },
+  { damage: 50, speed: 3.6 }
+];
+
+/* A vector with the two methods the engine calls on one. */
+function vec(x, y) {
+  return {
+    x, y,
+    distance(o) { return Math.hypot(this.x - o.x, this.y - o.y); },
+    distanceDefault(o) { return this.distance(o); },
+    angle(o) { return Math.atan2(o.y - this.y, o.x - this.x); },
+    copy() { return vec(this.x, this.y); }
+  };
+}
+
+/* An enemy as the client models one: position history, weapon in hand, reload
+ * state, and the per-enemy verdicts EnemyManager writes onto it. */
+function makeEnemy(opts) {
+  const o = Object.assign({
+    id: 99, x: 400, y: 0, px: null, py: null, angle: Math.PI, scale: 35,
+    primary: 7, secondary: null, current: 7,
+    primaryReload: 1, secondaryReload: 1, turretReload: 1,
+    hatID: 0, health: 100, trapped: false, boost: false,
+    danger: 0, reverseInsta: false, toolHammerInsta: false, rangedBowInsta: false
+  }, opts || {});
+  /* Player.update sets oldCurrent to last tick's weapon, so someone who has not
+   * switched has oldCurrent === current. Only pass oldCurrent to model a switch
+   * that happened on this tick. */
+  if (o.oldCurrent === undefined) o.oldCurrent = o.current;
+  const cur = vec(o.x, o.y);
+  const prev = vec(o.px === null ? o.x : o.px, o.py === null ? o.y : o.py);
+  const speed = prev.distance(cur);
+  return {
+    id: o.id,
+    pos: { current: cur, previous: prev, future: cur },
+    angle: o.angle,
+    scale: o.scale,
+    speed,
+    move_dir: prev.angle(cur),
+    get hitScale() { return this.scale * 1.8; },
+    weapon: { primary: o.primary, secondary: o.secondary, current: o.current, oldCurrent: o.oldCurrent },
+    hatID: o.hatID,
+    currentHealth: o.health,
+    isTrapped: o.trapped,
+    usingBoost: o.boost,
+    lastAttacked: 0,
+    danger: o.danger,
+    reverseInsta: o.reverseInsta,
+    toolHammerInsta: o.toolHammerInsta,
+    rangedBowInsta: o.rangedBowInsta,
+    canPlaceSpike: false,
+    spikeDamage: 0,
+    potentialDamage: 0,
+    _reloads: [o.primaryReload, o.secondaryReload, o.turretReload],
+    isReloaded(type) { return this._reloads[type] >= 1; },
+    isEmptyReload(type) { return this._reloads[type] === 0; },
+    getWeaponRange(id) {
+      const w = Weapons[id];
+      if (!w) return 0;
+      return (w.range || 0) + this.hitScale;
+    },
+    getMaxWeaponDamage(id) {
+      const w = Weapons[id];
+      return w && w.damage ? w.damage : 0;
+    }
+  };
+}
+
+function makeProjectile(opts) {
+  const o = Object.assign({ type: 5, x: 300, y: 0, angle: Math.PI, speed: 3.6 }, opts || {});
+  return {
+    type: o.type,
+    damage: Projectiles[o.type].damage,
+    speed: o.speed,
+    angle: o.angle,
+    pos: { current: vec(o.x, o.y) },
+    life: 9,
+    isTurret: o.type === 1
+  };
+}
 
 /* ---------------------------------------------------------------- *
  * The server, as the bundle writes it.
@@ -143,9 +237,11 @@ function makeClient(sim) {
     inGame: true,
     isSandbox: false,
     isTrapped: false,
+    trappedIn: null,
     scale: 35,
-    pos: { current: { x: 0, y: 0, distance: () => Infinity } },
-    getItemByType(t) { return this.inventory[t]; }
+    pos: { current: vec(0, 0), previous: vec(0, 0), future: vec(0, 0) },
+    getItemByType(t) { return this.inventory[t]; },
+    getBuildingDamage() { return 25; }
   };
 
   const mh = {
@@ -173,6 +269,10 @@ function makeClient(sim) {
     myPlayer,
     _ModuleHandler: mh,
     SocketManager: { TICK, pong: sim.pong },
+    PlayerManager: {
+      enemies: [],
+      isEnemyByID() { return true; }
+    },
     EnemyManager: {
       potentialDamage: 0,
       potentialSpikeDamage: 0,
@@ -182,10 +282,15 @@ function makeClient(sim) {
       dangerWithoutSoldier: false,
       collidingSpike: false,
       willCollideSpike: false,
+      pushingOnSpike: false,
       nearestEnemy: null,
+      nearestSpike: null,
+      nearestTrap: null,
+      nearestEnemyPush: null,
+      nearestTurretEntity: null,
       instaThreat() { return false; }
     },
-    ProjectileManager: { totalDamage: 0 }
+    ProjectileManager: { totalDamage: 0, dangerProjectiles: new Set }
   };
 }
 
@@ -225,6 +330,8 @@ class Sim {
       get Items() { return Items; },
       get Hats() { return Hats; },
       get Accessories() { return Accessories; },
+      get Weapons() { return Weapons; },
+      get Projectiles() { return Projectiles; },
       get Settings() { return settings; }
     });
     this.engine = new Engine(this.client);
@@ -243,7 +350,7 @@ class Sim {
     this.stats = {
       presses: 0, healedPresses: 0, refused: 0, ticksAtZeroShame: 0,
       maxServerShame: 0, deaths: 0, foodSpent: 0, packetPeak: 0,
-      pressesWhileLocked: 0, staleAborts: 0, zones: {}
+      pressesWhileLocked: 0, staleAborts: 0, zones: {}, threats: {}
     };
   }
 
@@ -252,7 +359,10 @@ class Sim {
   }
 
   /* One server tick + one client tick. */
-  step(damage, threat) {
+  /* `world` is what the threat detectors read: who is on the field, what is in
+   * the air, what is being touched. Omitted means an empty field, which is what
+   * the healing scenarios want. */
+  step(damage, threat, world) {
     this.tick += 1;
     this.now = this.tick * TICK;
     const server = this.server;
@@ -338,6 +448,40 @@ class Sim {
     em.potentialDamage = threat || 0;
     em.dangerWithoutSoldier = (threat || 0) >= health;
 
+    /* the field the detectors read */
+    const w = world || {};
+    const pmgr = this.client.PlayerManager;
+    const pm = this.client.ProjectileManager;
+    pmgr.enemies = w.enemies || [];
+    em.nearestEnemy = pmgr.enemies.length ? pmgr.enemies[0] : null;
+    pm.dangerProjectiles = new Set(w.projectiles || []);
+    pm.totalDamage = (w.projectiles || []).reduce((a, p) => a + p.damage, 0);
+    const spike = w.spike || {};
+    em.collidingSpike = !!spike.colliding;
+    em.willCollideSpike = !!spike.willCollide;
+    em.pushingOnSpike = !!spike.pushing;
+    em.potentialSpikeDamage = spike.damage || 0;
+    em.nearestEnemyPush = spike.pusher ? pmgr.enemies[0] || null : null;
+    em.nearestSpike = spike.colliding || spike.willCollide
+      ? {
+        pos: { current: vec(spike.x === undefined ? 60 : spike.x, 0) },
+        collisionScale: 49,
+        getDamage() { return spike.damage || 35; }
+      }
+      : null;
+    const trap = w.trap || {};
+    mp.isTrapped = !!trap.trapped;
+    mp.trappedIn = trap.trapped
+      ? { ownerID: 99, health: trap.health === undefined ? 500 : trap.health,
+          tempHealth: trap.health === undefined ? 500 : trap.health }
+      : null;
+    em.nearestTrap = trap.near
+      ? { pos: { current: vec(trap.near, 0) }, collisionScale: 50 }
+      : null;
+    em.nearestTurretEntity = w.turret
+      ? { pos: { current: vec(w.turret, 0) } }
+      : null;
+
     this.queued = 0;
     if (this.onTickStart) this.onTickStart();
     const clock = Date.now;
@@ -366,6 +510,15 @@ class Sim {
       this.stats.staleAborts += 1;
     }
     this.stats.zones[tm.zone] = (this.stats.zones[tm.zone] || 0) + 1;
+    /* Highest confidence each detector ever reached, and how often it fired. */
+    for (const entry of tm.threats || []) {
+      const [type, confidence] = entry.split(":");
+      const seen = this.stats.threats[type] || { best: "NONE", ticks: 0 };
+      const rank = { NONE: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
+      if (rank[confidence] > rank[seen.best]) seen.best = confidence;
+      seen.ticks += 1;
+      this.stats.threats[type] = seen;
+    }
     this.log.push({
       tick: this.tick,
       hp: Math.round(server.health),
@@ -517,6 +670,74 @@ scenario("already inside the 30s lock", () => {
   return sim;
 });
 
+/* ---------------------------------------------------------------- *
+ * Threat detection.
+ *
+ * The first of these is the one that matters most: a field full of armed
+ * enemies, none of whom do anything. Every detector has to stay quiet.
+ * ---------------------------------------------------------------- */
+scenario("possession only — armed, distant, and doing nothing", () => {
+  const sim = new Sim({ foodId: 1 });
+  const world = {
+    enemies: [
+      makeEnemy({ id: 1, x: 900, current: 15, primary: 15, primaryReload: 1 }), // musket
+      makeEnemy({ id: 2, x: 850, current: 9, primary: 9, primaryReload: 1 }),   // bow
+      makeEnemy({ id: 3, x: 800, current: 7, primary: 7, primaryReload: 1 }),   // daggers
+      makeEnemy({ id: 4, x: 780, current: 5, primary: 5, primaryReload: 1 })    // polearm
+    ]
+  };
+  for (let t = 1; t <= 60; t++) sim.step(0, 0, world);
+  return sim;
+});
+
+scenario("musket ball in the air", () => {
+  const sim = new Sim({ foodId: 1 });
+  const shooter = makeEnemy({ id: 1, x: 700, current: 15, primary: 15 });
+  for (let t = 1; t <= 40; t++) {
+    const flying = t >= 10 && t <= 14;
+    sim.step(t === 15 ? 50 : 0, t === 15 ? 50 : 0, {
+      enemies: [shooter],
+      projectiles: flying ? [makeProjectile({ type: 5, x: 700 - (t - 10) * 160 })] : []
+    });
+  }
+  return sim;
+});
+
+scenario("dagger pressure at close range", () => {
+  const sim = new Sim({ foodId: 1 });
+  const dagger = makeEnemy({ id: 1, x: 90, px: 140, current: 7, primary: 7 });
+  for (let t = 1; t <= 40; t++) {
+    sim.step(t % 2 === 0 ? 20 : 0, 20, { enemies: [dagger] });
+  }
+  return sim;
+});
+
+scenario("spike tick — one sequence, not five hits", () => {
+  const sim = new Sim({ foodId: 1 });
+  const pusher = makeEnemy({ id: 1, x: 120, px: 160, current: 5, primary: 5 });
+  for (let t = 1; t <= 40; t++) {
+    const onSpike = t >= 5 && t <= 22;
+    sim.step(onSpike && t % 3 === 0 ? 35 : 0, onSpike ? 35 : 0, {
+      enemies: [pusher],
+      spike: onSpike ? { colliding: true, pushing: true, pusher: true, damage: 35 } : {}
+    });
+  }
+  return sim;
+});
+
+scenario("pinned in an enemy trap with someone in reach", () => {
+  const sim = new Sim({ foodId: 1 });
+  const attacker = makeEnemy({ id: 1, x: 100, current: 5, primary: 5, primaryReload: 1 });
+  for (let t = 1; t <= 40; t++) {
+    const pinned = t >= 5 && t <= 25;
+    sim.step(pinned && t % 3 === 0 ? 45 : 0, pinned ? 45 : 0, {
+      enemies: [attacker],
+      trap: pinned ? { trapped: true, health: 500 } : {}
+    });
+  }
+  return sim;
+});
+
 scenario("cheese, with its damage-over-time heal", () => {
   const sim = new Sim({ foodId: 2 });
   for (let t = 1; t <= 90; t++) sim.step(t % 7 === 0 ? 30 : 0, 25);
@@ -569,6 +790,32 @@ function runAll(factory, label) {
       checks.push(["caught the stale count", s.staleAborts > 0]);
     }
 
+    /* ---- threat detection ------------------------------------------ */
+    const threatBest = type => (s.threats[type] || {}).best || "NONE";
+    if (name.indexOf("possession only") !== -1) {
+      /* The rule the whole engine is built on: owning a weapon is not a threat.
+       * Nothing landed and nobody is in reach, so nothing may be reported. */
+      checks.push(["no threat from possession alone",
+        Object.keys(s.threats).length === 0]);
+      checks.push(["spent nothing", s.presses === 0]);
+    }
+    if (name.indexOf("musket ball") !== -1) {
+      checks.push(["musket seen in flight", threatBest("musket") === "CRITICAL" ||
+        threatBest("musket") === "HIGH"]);
+    }
+    if (name.indexOf("dagger pressure") !== -1) {
+      checks.push(["dagger pressure recognised",
+        ["HIGH", "CRITICAL"].indexOf(threatBest("spam-dagger")) !== -1]);
+    }
+    if (name.indexOf("spike tick") !== -1) {
+      checks.push(["spike tick recognised",
+        ["HIGH", "CRITICAL"].indexOf(threatBest("spike-tick")) !== -1]);
+    }
+    if (name.indexOf("enemy trap") !== -1) {
+      checks.push(["trap threat recognised",
+        ["HIGH", "CRITICAL"].indexOf(threatBest("trap")) !== -1]);
+    }
+
     const bad = checks.filter(c => !c[1]);
     failures += bad.length;
 
@@ -585,6 +832,9 @@ function runAll(factory, label) {
     const zones = Object.keys(s.zones)
       .map(z => `${z} ${Math.round((s.zones[z] / ticks) * 100)}%`).join("  ");
     console.log(`      zones: ${zones}${s.staleAborts ? `   stale re-reads ${s.staleAborts}` : ""}`);
+    const threats = Object.keys(s.threats)
+      .map(t => `${t}=${s.threats[t].best}(${s.threats[t].ticks})`).join("  ");
+    console.log(`      threats: ${threats || "none"}`);
     for (const [label2] of bad) console.log(`      -> failed: ${label2}`);
     if (process.env.SIM_TRACE) {
       for (const row of sim.log) {

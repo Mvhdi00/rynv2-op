@@ -253,6 +253,29 @@ verdict is re-derived, and the plan is recalculated against what came back —
 dropped if the live number says the press would arm the lock, trimmed if health
 already came up, otherwise sent under its corrected verdict.
 
+## The threat engine
+
+Module 4 is one engine with eleven detectors, all reading the same per-tick
+evidence gathered by the adapter. The damage number stays Combat's own; what
+the detectors add is the shape of the threat.
+
+`instakill` · `spike-tick` · `insta-rev` · `musket` · `bow` · `spam-dagger` ·
+`velocity-tick` · `spike` · `trap` · `burst` · `sustained`
+
+Each reports `{type, confidence, severity, timing, evidence[]}` with confidence
+on `NONE / LOW / MEDIUM / HIGH / CRITICAL`, and every one is built on the same
+rule: **evidence, not possession.** A musket ball in the air on a line to me is
+a threat; a musket in someone's hands is not. A held ranged weapon is only
+reported when it is loaded, pointed at me, and either inside half its own reach
+or freshly switched to — and never above `MEDIUM`, because nothing has been
+fired. Four armed enemies standing around doing nothing produce no report at
+all, which the simulator asserts.
+
+Timing feeds the decision rather than decorating the log: the hold-for-the-shame
+window question asks the engine how much damage can actually land inside the
+wait, so an exchange whose next hit is three ticks away is answered with a `-2`
+instead of a `+1`.
+
 Combat, Auto Place / Preplace / Replace, Spike Tick, Safe Soldier, Anti Smart
 Tick, Auto Mills and Velocity Tick are **read only** — for the threat numbers,
 the packet budget and the tick claim. Nothing in them is modified or duplicated.
@@ -262,14 +285,15 @@ the packet budget and the tick claim. Nothing in them is modified or duplicated.
 `tools/sim-autoheal.js` runs the engine against the game's own rules
 transcribed — `buildItem`'s arithmetic, `changeHealth`'s hit stamp and
 full-health refusal, the one-second regen counter, `canBuild`'s resource gate —
-with latency modelled on both legs. Over thirteen scenarios: no 30 s lock is
+with latency modelled on both legs. Over nineteen scenarios: no 30 s lock is
 ever armed, nothing is sent while one is on, the count never passes 7, every
-scenario that starts in debt ends at 0, and eight of the thirteen hold shame at
-0 for 100 % of ticks — including a 90 dps pressure run and a 250 ms ping run.
-A threat that never actually swings costs one press and 15 food across 90 ticks;
-a count planted to move between the plan and the press is caught 20 times, with
-0 presses sent and 0 locks armed. `verify-autoheal.js` re-runs all of it against
-the engine copy pulled back out of the built userscript.
+scenario that starts in debt ends at 0, and most hold shame at 0 for 100 % of
+ticks — including a 90 dps pressure run and a 250 ms ping run. A threat that
+never actually swings costs one press and 15 food across 90 ticks; a field of
+four loaded, facing enemies who never act produces no threat report and no
+presses; a count planted to move between the plan and the press is caught 20
+times, with 0 presses sent and 0 locks armed. `verify-autoheal.js` re-runs all
+of it against the engine copy pulled back out of the built userscript.
 
 ## Two defects in the base it works around
 

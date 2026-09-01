@@ -184,6 +184,70 @@ check(
   /verdict === VERDICT\.CHARGED && gate >= AH\.SHAME_MAX/.test(ENGINE_SRC)
 );
 
+/* Threat engine: one engine, eleven detectors, and ids that match the tables. */
+const THREAT = Engine.THREAT;
+const CONFIDENCE = Engine.CONFIDENCE;
+check(
+  "confidence is NONE / LOW / MEDIUM / HIGH / CRITICAL, in order",
+  ["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"].every(k => CONFIDENCE[k] === k) &&
+  Engine.CONFIDENCE_VALUE.NONE === 0 && Engine.CONFIDENCE_VALUE.CRITICAL === 1 &&
+  Engine.CONFIDENCE_VALUE.LOW < Engine.CONFIDENCE_VALUE.MEDIUM &&
+  Engine.CONFIDENCE_VALUE.MEDIUM < Engine.CONFIDENCE_VALUE.HIGH
+);
+{
+  const probe = new Engine({});
+  const detectors = probe.threat && probe.threat.detectors;
+  const required = [
+    THREAT.INSTAKILL, THREAT.SPIKE_TICK, THREAT.INSTA_REV, THREAT.MUSKET, THREAT.BOW,
+    THREAT.SPAM_DAGGER, THREAT.VELOCITY_TICK, THREAT.SPIKE, THREAT.TRAP,
+    THREAT.BURST, THREAT.SUSTAINED
+  ];
+  const ids = detectors ? detectors.map(d => d.id) : [];
+  check("eleven detectors, one engine", ids.length === 11, ids.length + " registered");
+  for (const id of required) check(`detector present: ${id}`, ids.indexOf(id) !== -1);
+}
+{
+  const weapons = {};
+  for (const w of DRIVERS.weapons) weapons[w.id] = w;
+  check("musket is weapon 15 firing projectile 5", weapons[AH.WEAPON_MUSKET] &&
+    weapons[AH.WEAPON_MUSKET].name === "musket" &&
+    weapons[AH.WEAPON_MUSKET].projectile === AH.PROJ_MUSKET);
+  check("the bow family fires the arrow projectiles the detector watches",
+    [AH.WEAPON_BOW, AH.WEAPON_CROSSBOW, AH.WEAPON_REPEATER].every(
+      id => weapons[id] && AH.PROJ_ARROWS.indexOf(weapons[id].projectile) !== -1));
+  check("daggers are weapon 7, 100ms between swings", weapons[AH.WEAPON_DAGGER] &&
+    weapons[AH.WEAPON_DAGGER].name === "daggers" && weapons[AH.WEAPON_DAGGER].speed === 100);
+  check("polearm is weapon 5", weapons[AH.WEAPON_POLEARM] &&
+    weapons[AH.WEAPON_POLEARM].name === "polearm");
+  const items = DRIVERS.items;
+  check("pit trap is item 15", items[AH.ITEM_TRAP] && items[AH.ITEM_TRAP].name === "pit trap");
+  check("spikes are item group 2",
+    items.filter(i => i.group.id === AH.GROUP_SPIKES).every(i => i.name.indexOf("spikes") !== -1));
+  check("turret reach is the item's own shootRange",
+    items[AH.ITEM_TURRET] && items[AH.ITEM_TURRET].shootRange === AH.TURRET_RANGE);
+  check("turret gear is hat 53", hats[AH.HAT_TURRET_GEAR] &&
+    hats[AH.HAT_TURRET_GEAR].name === "Turret Gear");
+}
+check(
+  "a held ranged weapon needs loaded + facing + (half reach or a fresh switch)",
+  /if \(!ready \|\| !e\.facing\) continue;/.test(ENGINE_SRC) &&
+  /if \(!close && !justSwitched\) continue;/.test(ENGINE_SRC)
+);
+check(
+  "an unfired ranged weapon never reports above MEDIUM",
+  /const confidence = close && justSwitched \? CONFIDENCE\.MEDIUM : CONFIDENCE\.LOW;/
+    .test(ENGINE_SRC)
+);
+check(
+  "every report carries type, confidence, severity and timing",
+  /function threatReport\(type, confidence, severity, timing, evidence, additive\)/
+    .test(ENGINE_SRC)
+);
+check(
+  "the detectors read the client only through the adapter",
+  !/detect\(ctx\)[\s\S]{0,4000}?this\.client/.test(ENGINE_SRC)
+);
+
 /* The client field the engine deliberately does not trust. */
 const client = fs.readFileSync(path.join(ROOT, "src/RYN_Client_v5.4.user.js"), "utf8");
 check(
