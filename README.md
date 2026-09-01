@@ -316,6 +316,41 @@ on RYN's own `RPE_PRIORITY` scale through its own `priorityFor`, so a heal
 answering a lethal burst is INSTA-class and outranks a sync, while a top-up is
 UTILITY and yields to nearly everything.
 
+## Execution: validate, press, commit
+
+Three stages with nothing between them, and no scheduler or delay anywhere —
+the verifier greps for the absence of `setTimeout`, `setInterval`,
+`requestAnimationFrame` and `queueMicrotask`. A press leaves in the same
+synchronous call that decided to send it, which is the only way to be fast in a
+client whose tick is 111 ms wide.
+
+**Validate.** Immediately before the wire, ten things are re-read live — HP,
+shame, threat, threat confidence, predicted damage, healing availability,
+cooldown, player state, combat state and action priority. A changed critical
+state produces `CANCEL` (the action was wrong) or `RECALCULATE` (the world
+moved, ask again next tick). It reads two already-updated objects; no part of
+the decision is redone, because redoing it is what would cost something.
+
+**Anti-spam.** Three layers: the in-flight ledger (latency-scaled) stops the
+decision re-asking, a pending-action identity (`heal:<food>:<target>:<class>`)
+refuses an identical action while one is still in the air, and an exponential
+backoff stops asking when presses stop landing. A press that would land on a
+full bar is not sent — that alone takes the poison run from 8 presses to 3, and
+the every-tick beatdown from 28 to 19, with identical survival.
+
+**Packets.** The client's own path only: `ModuleHandler.selectItem` / `attack` /
+`whichWeapon`. No socket, no frame construction, no opcode names, no second
+scheduler. The re-select before each press is required by the game (a successful
+consume clears `buildIndex`), but the weapon restore is not — so it happens once
+per burst instead of once per press: **three presses cost seven frames rather
+than nine.**
+
+**Commit.** Everything the press changed, immediately: the projection moves by
+what was bought, shame accounts for the first press of the burst, the pending
+action and in-flight ledger are recorded, the cooldown's hold ends, and the
+forecast built on the old bar is dropped. Nothing is recomputed in the same
+tick — the next tick rebuilds it once.
+
 ## Predictive defense
 
 Module 5 acts on the tick *before* the bar moves. Motion prediction is not

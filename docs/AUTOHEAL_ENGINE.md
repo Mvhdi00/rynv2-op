@@ -675,47 +675,117 @@ yielded to unconditionally whatever the class, because it eats on that same
 tick and a second opinion is just double food. Packet reserves for the
 placement systems and the mills are held back from everything except survival.
 
-### 8. ActionValidator
+### 8. ActionValidator — two moments
 
-Refuses anything the *server* would refuse or punish: not in game, no food item,
-not enough food for `canBuild`, `noEat` hat, Shame hat, active lock, no packets
-left, or a non-wash press at full health.
+**Plan time.** Refuses anything the *server* would refuse or punish: not in
+game, no food item, not enough food for `canBuild`, a `noEat` hat, the Shame
+hat, an active lock, no packets left, or a non-wash press at full health.
+
+**Wire time.** The plan was made against a snapshot taken at the top of the
+tick. `final()` runs against the state as it is at the moment of pressing, and
+re-reads all ten things the decision leaned on:
+
+| Re-read | Cancelled / recalculated when |
+|---|---|
+| HP | the bar is already full |
+| shame | the lock is on, or the count moved (via `ShameController.revalidate`) |
+| threat | a survival-class action whose threat has evaporated |
+| threat confidence | the same, through `rank.survival` and `imminentWithin` |
+| predicted damage | the prediction was invalidated by target-changed or threat-gone |
+| healing availability | the food item changed, or the stock fell below its cost |
+| cooldown | the anti-spam backoff is active |
+| player state | not in game, `noEat`, or the trapped state flipped |
+| combat state | another module already ate on this tick |
+| action priority | someone claimed the tick at an equal or higher `RPE_PRIORITY` class |
+
+The two answers are different on purpose. **`CANCEL`** means the action was
+wrong and should not be retried as it stands. **`RECALCULATE`** means the world
+moved and the same question deserves a fresh answer — which the next tick gives
+it. Nothing is recomputed here; recomputing is what would make this cost
+something.
+
+It reads two already-updated objects and nothing else. No grid queries, no
+enemy walk, no projectile scan — those belong to the decision, which has
+already happened.
 
 ### 9. CooldownManager
 
-Per-tick pacing and the deferral clock. It owns how long a hold may last, and
-the decision consults it before choosing to wait: **one tick by default**,
-because under damage every tick the window never opens — the hit stamp is
-refreshed faster than 120 ms elapses — and a guard that waits for it forever is
-a guard that stops you eating at all. The single exception is `count === 7` with
-a charged press queued, where the hold is unbounded: that press cannot heal, so
-waiting gives up nothing.
+Owns how long a hold may last: **one tick by default**, because under damage
+every tick the window never opens and a guard that waits for it forever stops
+you eating; **unbounded at `count === 7`**, where the press cannot heal anyway.
 
-After the arbiter and validator have had their say it records the hold the plan
-actually settled on, so a plan they cancelled never starts the clock.
+`pace()` records the hold *after* execution, so a plan cancelled at the wire
+never starts the clock, and `notePress()` ends any hold outright.
 
-### 10. AntiSpamManager
+### 10. AntiSpamManager — in-flight, pending, backoff
 
-The in-flight ledger and the escape hatch. Presses already sent count against
-what is still needed, so a four-press gap does not become twelve presses over
-three ticks. If several ticks of presses produce no health rise, it backs off
-exponentially instead of re-asking forever — the failure mode the target client
-calls "the Q that never lets go".
+Three separate jobs:
 
-The ledger's window scales with latency: a press is visible in the health this
-client reads one tick later plus half a round trip each way. At a normal ping
-that is one tick; at 250 ms it is three, and a ledger fixed at one tick spends
-the difference pressing again into food it has already eaten. In the simulator
-that single term is the difference between 48 presses with 19 refused and 29
-presses with none.
+- **In-flight ledger.** Presses already sent count against what is still
+  needed, so a four-press gap does not become twelve presses over three ticks.
+  Its window scales with latency — one tick for the server plus half a round
+  trip each way — so at 250 ms ping it holds three ticks rather than one.
+- **Pending actions.** An action has an identity: `heal:<food>:<target>:<class>`.
+  While one is pending — sent, not yet visible, not aged out — an identical one
+  is refused outright. Normal play rarely reaches this guard because the
+  in-flight ledger already stops the decision re-asking, so it is exercised
+  directly in `verify-autoheal.js` rather than left to chance.
+- **Backoff.** Presses that should have healed and did not mean the server is
+  refusing food. After three, it backs off exponentially instead of asking
+  forever — the failure the target client calls "the Q that never lets go".
 
-### 11. HealExecutor
+### 11. HealExecutor — validate, press, commit
 
-Sends `selectItem(2)` → `attack(null, 1)` → `whichWeapon(predicted)` per press,
-through `ModuleHandler`'s own methods so `currentHolding`, the sent-angle
-priority and the packet counter stay consistent. It deliberately does *not* call
-`ModuleHandler.heal()`, whose gate would both hold an emergency press for a tick
-and permit the forbidden press at `count === 7`.
+Three stages with nothing between them.
+
+**Validate** — `ActionValidator.final()` above, then the pending-action check.
+
+**Press** — the client's own primitives, in the order the game requires:
+
+```
+selectItem(2)  attack(null)     ×N        (the burst)
+whichWeapon(predicted)          ×1        (once, at the end)
+```
+
+The re-select is not optional: a successful consume clears `buildIndex`
+server-side (`game_index.js:2476`), so the next attack would swing the weapon
+instead of eating. The weapon restore *is* optional per press — nothing can
+observe the intermediate state, because the whole burst is one synchronous
+call — so it happens once. **Three presses cost seven frames rather than nine**,
+and a single press still costs three. That is the only packet saving available
+here, and it comes from ordering, not from a new path.
+
+Each press is revalidated against what this burst has already sent: packets
+remaining, and health already bought. A press that would land on a full bar is
+not sent — which in the poison scenario is the difference between **8 presses
+and 3, with identical survival**, and in the every-tick beatdown between 28 and
+19.
+
+**Commit** — everything the press just changed, immediately:
+
+| Updated | How |
+|---|---|
+| HP state | `predict.commitHeal()` moves the projection by what was bought |
+| shame state | `shame.notePress()` — only the first press of a burst is judged |
+| healing state | `ledger.notePress()` and `notePending()` |
+| cooldown state | `cooldown.notePress()` ends any hold |
+| threat / prediction | the cached forecast is dropped: it was built on the old bar |
+
+Nothing is recomputed in the same tick. The next tick rebuilds the forecast
+once, which is the only place rebuilding it is worth anything.
+
+#### Speed
+
+There is no scheduler and no delay anywhere in the engine — `verify-autoheal.js`
+asserts the absence of `setTimeout`, `setInterval`, `requestAnimationFrame` and
+`queueMicrotask` by grep. A press leaves in the same synchronous call that
+decided to send it, which is the only way to be fast in a client whose tick is
+111 ms wide: anything that waits has already missed the tick it was waiting for.
+
+The packet path is the client's own. The engine never touches a socket, never
+constructs a frame and never names an opcode; it calls `ModuleHandler`'s
+`selectItem` / `attack` / `whichWeapon`, which is the same path every other
+module uses and the same one `PacketManager` counts.
 
 ### 12. HostAdapter (integration layer)
 
@@ -741,10 +811,14 @@ postTick()
   ├─ ledger.noteOutcome(...)        did the last press land? back off if not
   ├─ decide.plan(..., arbiter)      rank -> candidate -> price now vs wait
   │    └─ arbiter.classify / mayAct / affordable   (centralised, RPE scale)
-  ├─ validator.check(plan, snap)    legality
-  ├─ cooldown.pace(plan, snap)      record the hold the plan settled on
-  └─ executor.run(plan)             re-read the live count, recalculate,
-                                    then press; ledger + count updated
+  ├─ validator.check(plan, snap)    plan-time legality
+  └─ executor.run(...)              validate -> press -> commit
+       ├─ validator.final(...)        ten dimensions, re-read live
+       ├─ ledger.isPending(...)       an identical action already in the air?
+       ├─ pressFoodOnly() x N         select + attack per press
+       ├─ restoreWeapon()             once, for the whole burst
+       └─ commit                      hp, shame, healing, cooldown, prediction
+  └─ cooldown.pace(plan, snap)      bookkeeping, after the wire
 ```
 
 ## State model
@@ -910,6 +984,12 @@ still field) and the decision set (survival at shame 6):
 - **survival is never traded for a clean count**: starting at shame 6 under
   55 damage every three ticks, the engine spends charges, reaches the ceiling
   and never crosses it — 0 deaths, 0 locks;
+- the pre-wire revalidation removes healing that would have been wasted: the
+  poison run drops from 8 presses to 3 and the every-tick beatdown from 28 to
+  19, both with identical survival, because a press that would land on a full
+  bar is never sent;
+- a burst costs `2N + 1` frames rather than `3N` — three presses are seven
+  frames, not nine — from ordering alone, on the client's own packet path;
 - every decision in every scenario carries a reason, and all five decision
   types appear in real runs (`WAIT 105  HEAL_NOW 14  PREPARE 1` on a quiet
   debt; `RECALCULATE 20` when the count is planted to move under the plan);

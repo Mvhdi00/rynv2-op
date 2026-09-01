@@ -794,26 +794,86 @@ function createRynAutoHealEngine(deps) {
         mh.whichWeapon(mh._getPredictWeapon());
         return true;
       } catch (e) {
-        if (!this._warned) {
-          this._warned = true;
-          try { console.warn("[RYN AutoHeal] press failed:", e); } catch (_) {}
-        }
-        return false;
+        return this._pressFailed(e);
       }
     }
 
-    /* The smallest possible fresh read of the shame state, for the check that
-     * runs immediately before a press. Deliberately not the full snapshot: this
-     * is on the execution path and only these four fields decide whether the
-     * press that is about to leave is the one that must not. */
-    liveShame() {
+    /* The same two frames without the weapon restore, so a burst can pay for
+     * that once at the end instead of once per press. Select is not optional:
+     * a successful consume clears buildIndex server-side
+     * (game_index.js:2476), so the next attack would swing rather than eat. */
+    pressFoodOnly() {
+      const mh = this.mh;
+      if (!mh) return false;
+      try {
+        mh.selectItem(AH.FOOD_TYPE);
+        mh.attack(null, 1);
+        return true;
+      } catch (e) {
+        return this._pressFailed(e);
+      }
+    }
+
+    restoreWeapon() {
+      const mh = this.mh;
+      if (!mh) return false;
+      try {
+        mh.whichWeapon(mh._getPredictWeapon());
+        return true;
+      } catch (e) {
+        return this._pressFailed(e);
+      }
+    }
+
+    _pressFailed(e) {
+      if (!this._warned) {
+        this._warned = true;
+        try { console.warn("[RYN AutoHeal] press failed:", e); } catch (_) {}
+      }
+      return false;
+    }
+
+    /* The live read that runs immediately before a press.
+     *
+     * Deliberately not the full snapshot: this is on the execution path, and
+     * everything here is a direct field read off two objects the client has
+     * already updated this tick. No grid queries, no enemy walk, no
+     * projectile scan — those belong to the decision, which has already
+     * happened. What is left is exactly the state that decides whether the
+     * press about to leave is still the right one. */
+    liveState() {
       const me = this.me;
+      const mh = this.mh;
       if (!me) return null;
+      const hatId = num(me.hatID) || 0;
+      const hat = this.Hats ? this.Hats[hatId] : null;
+      const foodId = num(me.getItemByType ? me.getItemByType(AH.FOOD_TYPE) : null);
+      const Items = this.Items;
+      const item = foodId !== null && Items ? Items[foodId] : null;
+      const res = me.resources || {};
       return {
+        /* shame */
         count: clamp(num(me.shameCount) || 0, 0, AH.SHAME_MAX),
-        active: !!me.shameActive || (num(me.hatID) || 0) === AH.HAT_SHAME,
+        active: !!me.shameActive || hatId === AH.HAT_SHAME,
         receivedDamage: num(me.receivedDamage),
-        health: num(me.currentHealth)
+        /* hp */
+        health: num(me.currentHealth),
+        /* healing availability */
+        foodId,
+        restore: item && num(item.restore) ? item.restore : 0,
+        foodCost: item && item.cost && num(item.cost.food) ? item.cost.food : 0,
+        foodStock: num(res.food) === null ? 0 : res.food,
+        /* player state */
+        inGame: !!me.inGame,
+        noEat: !!(hat && hat.noEat),
+        trapped: !!me.isTrapped,
+        hatId,
+        /* combat state and priority */
+        packetCount: mh ? num(mh.packetCount) || 0 : 0,
+        packetLimit: mh ? num(mh.packetLimit) || 119 : 119,
+        moduleActive: mh ? !!mh.moduleActive : false,
+        activeModule: mh ? mh.activeModule || null : null,
+        healedOnce: mh ? !!mh.healedOnce : false
       };
     }
 
@@ -2461,6 +2521,17 @@ function createRynAutoHealEngine(deps) {
       return this;
     }
 
+    /* Post-execution: the health a press just bought is real, and the rest of
+     * this tick should see it. The forecast built on the old bar is stale by
+     * definition, so it is dropped — but nothing is recomputed here, because
+     * the thing that would use it has already run. The next tick rebuilds it
+     * once, which is the only place rebuilding it is worth anything. */
+    commitHeal(amount, snap) {
+      this.projected = clamp(this.projected + amount, 0, snap.maxHealth);
+      this._cache = null;
+      this.invalidatedBy = INVALIDATION.WORLD;
+    }
+
     /* Health after `ms`, if nothing is done: what a shame-window hold costs. */
     afterHold(snap, damage, ms) {
       const seconds = ms / 1000;
@@ -2747,6 +2818,42 @@ function createRynAutoHealEngine(deps) {
       this.deadPresses = 0;
       this.pressedTotal = 0;
       this.judgedPressTick = -1;
+      this.pendingAction = null;
+      this.duplicatesBlocked = 0;
+    }
+
+    /* The identity of an action, so the same one is never sent twice while the
+     * first is still in the air. Two presses of the same food aiming at the
+     * same bar are the same action; a press aiming higher because more damage
+     * landed is a different one. */
+    static signature(plan, snap, target) {
+      return `heal:${snap.foodId}:${Math.round(target / 5) * 5}:${plan.urgency}`;
+    }
+
+    /* Whether an identical action is already pending and still valid. Pending
+     * means sent and not yet visible; valid means the health it was buying has
+     * not arrived and the expectation has not aged out. */
+    isPending(signature, snap) {
+      const p = this.pendingAction;
+      if (!p) return false;
+      if (p.signature !== signature) return false;
+      if (snap.tick - p.tick > this.visibleTicks(snap)) return false;
+      return !p.resolved;
+    }
+
+    notePending(signature, snap, presses, expect) {
+      this.pendingAction = {
+        signature, tick: snap.tick, presses, expect, resolved: false
+      };
+    }
+
+    /* A pending action resolves when its health shows up, or when it ages out
+     * of the window in which it could have. */
+    resolvePending(snap, state) {
+      const p = this.pendingAction;
+      if (!p) return;
+      if (state.healLandedThisTick) { p.resolved = true; return; }
+      if (snap.tick - p.tick > this.visibleTicks(snap)) this.pendingAction = null;
     }
 
     /* Presses already sent are health we are about to have. Counting them is
@@ -2784,6 +2891,7 @@ function createRynAutoHealEngine(deps) {
     }
 
     update(snap, state) {
+      this.resolvePending(snap, state);
       /* Drop entries that have aged out, and clear the whole ledger the moment
        * a heal is actually observed. */
       if (state.healLandedThisTick) {
@@ -3408,6 +3516,102 @@ function createRynAutoHealEngine(deps) {
       }
       return plan;
     }
+
+    /* ---- final validation, immediately before the wire ---------------- *
+     *
+     * The plan was made against a snapshot taken at the top of the tick. This
+     * runs against the state as it is at the moment of pressing, and it checks
+     * everything the decision leaned on rather than only the shame count: if
+     * any of it moved, the action is cancelled and the next tick plans against
+     * what is actually true.
+     *
+     * The distinction between the two answers matters. CANCEL means the action
+     * was wrong and should not be retried as-is. RECALCULATE means the world
+     * moved and the same question deserves a fresh answer — which is what the
+     * next tick will give it.
+     *
+     * Everything here reads two already-updated objects. No part of the
+     * decision is redone, because redoing it is what would make this cost
+     * something. */
+    final(plan, snap, state, shame, threat, predict, ledger, live) {
+      const stop = (decision, reason) => ({ ok: false, decision, reason, presses: 0 });
+      if (!live) return stop(DECISION.RECALCULATE, "no-live-state");
+
+      /* player state */
+      if (!live.inGame) return stop(DECISION.CANCEL, "not-in-game");
+      if (live.noEat) return stop(DECISION.CANCEL, "noeat-hat");
+      if (live.trapped !== !!snap.isTrapped) {
+        return stop(DECISION.RECALCULATE, "trapped-changed");
+      }
+
+      /* shame, and the one press that must never leave */
+      if (live.active) return stop(DECISION.CANCEL, "shame-lock");
+
+      /* healing availability, priced at the moment of the press rather than
+       * at the top of the tick (game_index.js:2496 — canBuild is hasRes). */
+      if (live.foodId === null || !live.restore) return stop(DECISION.CANCEL, "no-food-item");
+      if (live.foodId !== snap.foodId) return stop(DECISION.RECALCULATE, "food-changed");
+      if (!snap.sandbox && live.foodStock < live.foodCost) {
+        return stop(DECISION.CANCEL, "no-food");
+      }
+
+      /* HP */
+      if (typeof live.health === "number") {
+        if (live.health >= snap.maxHealth && plan.urgency !== URGENCY.WASH) {
+          return stop(DECISION.CANCEL, "already-full");
+        }
+      }
+
+      /* cooldown */
+      if (ledger.backedOff(snap)) return stop(DECISION.CANCEL, "backoff");
+
+      /* combat state and action priority: someone may have claimed the tick
+       * after the plan was made, and they may outrank it. */
+      if (live.moduleActive && live.activeModule && live.activeModule !== "autoHealEngine") {
+        const theirs = this.adapter.priorityOf(live.activeModule);
+        const mine = plan.rank ? plan.rank.cls : this.adapter.priorityClass("UTILITY");
+        if (mine <= theirs) return stop(DECISION.CANCEL, `outranked:${live.activeModule}`);
+      }
+      /* Another module already ate on this tick: the hit stamp it consumed is
+       * not ours to spend again. */
+      if (live.healedOnce) return stop(DECISION.RECALCULATE, "already-healed-this-tick");
+
+      /* threat, its confidence, and the predicted damage the plan was built
+       * on. A survival-class action whose threat has evaporated is not an
+       * emergency any more, and should be re-asked rather than sent. */
+      if (plan.rank && plan.rank.survival) {
+        const stillLethal = typeof threat.imminentWithin === "function"
+          ? threat.imminentWithin(1) >= (typeof live.health === "number"
+            ? live.health : snap.health)
+          : threat.effective >= snap.health;
+        if (!stillLethal && threat.reports.length === 0) {
+          return stop(DECISION.RECALCULATE, "threat-gone");
+        }
+      }
+      if (predict.invalidatedBy === INVALIDATION.TARGET ||
+          predict.invalidatedBy === INVALIDATION.GONE) {
+        if (plan.urgency === URGENCY.PREEMPT) {
+          return stop(DECISION.RECALCULATE, `prediction:${predict.invalidatedBy}`);
+        }
+      }
+
+      /* The shame arithmetic gets the last word, and recalculates the press
+       * count against live health rather than the snapshot's. */
+      const shameCheck = shame.revalidate(snap, state, live, plan);
+      if (!shameCheck.ok) {
+        return stop(
+          shameCheck.reason === "lockguard" ? DECISION.CANCEL : DECISION.RECALCULATE,
+          shameCheck.reason
+        );
+      }
+      return {
+        ok: true,
+        decision: DECISION.HEAL_NOW,
+        reason: shameCheck.changed ? "recalculated" : "",
+        presses: shameCheck.presses,
+        verdict: shameCheck.verdict
+      };
+    }
   }
 
   /* ================================================================== *
@@ -3423,6 +3627,7 @@ function createRynAutoHealEngine(deps) {
       this.holdSinceTick = -1;
       this.holdReason = "";
       this.pressedThisTick = 0;
+      this.lastPressTick = -999;
     }
 
     heldTicks(snap) {
@@ -3443,8 +3648,17 @@ function createRynAutoHealEngine(deps) {
       return this.heldTicks(snap) < AH.HOLD_TICKS_DEFAULT;
     }
 
-    /* Records the hold the plan settled on, after the arbiter and the validator
-     * have had their say, so a plan they cancelled does not start the clock. */
+    /* Part of the post-execution commit: a press ends any hold outright, and
+     * the count is what the next tick's pacing reads. */
+    notePress(snap, presses) {
+      this.pressedThisTick = presses;
+      this.holdSinceTick = -1;
+      this.holdReason = "";
+      this.lastPressTick = snap.tick;
+    }
+
+    /* Records the hold the plan settled on. Runs after execution, so a plan
+     * that was cancelled at the wire does not start the clock either. */
     pace(plan, snap) {
       this.pressedThisTick = plan.presses || 0;
       if (!plan.presses && plan.holdMs > 0 && plan.urgency >= URGENCY.SUSTAIN) {
@@ -3459,7 +3673,17 @@ function createRynAutoHealEngine(deps) {
   }
 
   /* ================================================================== *
-   * 11. HealExecutor — the presses.
+   * 11. HealExecutor — validate, press, commit.
+   *
+   * Three stages with nothing between them. The decision has already been
+   * made; this re-checks it against the state as it is at the moment of
+   * pressing, sends the frames through the client's own packet path, and then
+   * updates everything the press just changed.
+   *
+   * There are no delays anywhere in here, and there is no scheduler. A press
+   * leaves in the same synchronous call that decided to send it, which is the
+   * only way to be fast in a client whose tick is 111ms wide: anything that
+   * waits has already missed the tick it was waiting for.
    * ================================================================== */
   class HealExecutor {
     constructor(adapter) {
@@ -3472,62 +3696,111 @@ function createRynAutoHealEngine(deps) {
       this.lastPresses = 0;
       this.lastDecision = null;
       this.totalPresses = 0;
+      this.lastPackets = 0;
     }
 
-    run(plan, snap, state, shame, ledger) {
+    run(plan, snap, state, shame, ledger, threat, predict, cooldown) {
       this.lastReason = plan.reason;
       this.lastPresses = 0;
       this.lastDecision = null;
+      this.lastPackets = 0;
 
+      /* PREPARE: no press, one hat request, which ModuleHandler ignores if
+       * another module already claimed the slot. */
       if (plan.wantBull) {
         if (this.adapter.requestBullHat()) this.lastReason = plan.reason + "+bull";
         return 0;
       }
       if (!plan.presses) return 0;
 
-      /* Validation — the last thing before the wire. The count, the lock and
-       * the hit stamp are re-read live and the plan is recalculated against
-       * them, so no press ever leaves on a shame reading taken at the top of
-       * the tick. A press that is still affordable goes out under its corrected
-       * verdict; one that is not is dropped, and the next tick plans against
-       * the number that actually holds. */
-      const live = this.adapter.liveShame();
-      const check = shame.revalidate(snap, state, live, plan);
+      /* ---- 1. final validation ------------------------------------- */
+      const live = this.adapter.liveState();
+      const check = this.validator.final(
+        plan, snap, state, shame, threat, predict, ledger, live
+      );
       if (!check.ok) {
-        /* The world moved between planning and pressing. Nothing goes out, and
-         * the tick is reported as what it is: a re-plan, not a refusal. */
-        this.lastReason = plan.reason + "+stale:" + check.reason;
-        this.lastPresses = 0;
-        this.lastDecision = DECISION.RECALCULATE;
+        this.lastReason = `${plan.reason}+${check.decision === DECISION.CANCEL
+          ? "cancel" : "stale"}:${check.reason}`;
+        this.lastDecision = check.decision;
         return 0;
       }
-      if (check.changed) this.lastReason = plan.reason + "+recalc";
+      if (check.reason) this.lastReason = plan.reason + "+recalc";
 
+      const presses = Math.min(plan.presses, check.presses);
+      if (presses <= 0) {
+        this.lastReason = plan.reason + "+cancel:nothing-left-to-heal";
+        this.lastDecision = DECISION.CANCEL;
+        return 0;
+      }
+
+      /* ---- 2. anti-spam: is this action already in the air? ---------- */
+      const health = typeof live.health === "number" ? live.health : snap.health;
+      const target = Math.min(snap.maxHealth, health + presses * snap.restore);
+      const signature = AntiSpamManager.signature(plan, snap, target);
+      if (ledger.isPending(signature, snap)) {
+        ledger.duplicatesBlocked += 1;
+        this.lastReason = plan.reason + "+cancel:already-pending";
+        this.lastDecision = DECISION.CANCEL;
+        return 0;
+      }
+
+      /* ---- 3. execution --------------------------------------------- *
+       *
+       * The client's own primitives, in the order the game requires: the food
+       * has to be selected again for every press, because a successful
+       * consume clears buildIndex on the server (game_index.js:2476), so the
+       * next attack would swing the weapon instead of eating.
+       *
+       * The weapon is restored once, after the burst, rather than once per
+       * press. Nothing can observe the intermediate state — the whole burst is
+       * one synchronous call — and it is one frame instead of N. That is the
+       * only packet saving available here, and it is a real one: three presses
+       * cost seven frames rather than nine. */
       const verdict = check.verdict;
-      const presses = check.presses;
-      const willHeal = (live && typeof live.health === "number" ? live.health : snap.health) <
-        snap.maxHealth;
+      const willHeal = health < snap.maxHealth;
       let sent = 0;
+      let expected = health;
 
       for (let i = 0; i < presses; i++) {
-        /* Read the counter live: it is incremented at the transport for every
-         * frame anyone sends (PacketManager._watchSocket), so it moves under us
-         * as this loop runs. */
-        if (this.adapter.packetsLeft() < AH.PACKETS_PER_PRESS) break;
-        if (!this.adapter.pressFood()) break;
+        /* Per-press revalidation. Inside one synchronous burst the only thing
+         * that changes is what we ourselves have already sent, so this is what
+         * that costs: packets spent, and health already bought. A press that
+         * would land on a full bar is a wasted press and a wasted food. */
+        if (this.adapter.packetsLeft() < 2) break;
+        if (expected >= snap.maxHealth && plan.urgency !== URGENCY.WASH) break;
+        if (!this.adapter.pressFoodOnly()) break;
         sent += 1;
+        expected += snap.restore;
         /* Only the first press of a burst is judged: it clears hitTime, so the
          * rest are free whatever they cost in food (game_index.js:2461-2463). */
         if (sent === 1) shame.notePress(snap, verdict);
         ledger.notePress(snap, willHeal ? snap.restore : 0);
       }
 
-      if (sent) {
-        state.notePress(snap);
-        this.adapter.claimTick(plan.urgency >= URGENCY.CRITICAL);
-        this.totalPresses += sent;
-        this.lastPresses = sent;
+      if (!sent) {
+        this.lastReason = plan.reason + "+cancel:no-packets";
+        this.lastDecision = DECISION.CANCEL;
+        return 0;
       }
+
+      /* One weapon restore for the whole burst. */
+      this.adapter.restoreWeapon();
+
+      /* ---- 4. commit ------------------------------------------------ *
+       * Everything the press just changed, updated now rather than next tick,
+       * and nothing that did not change recomputed. */
+      state.notePress(snap);
+      ledger.notePending(signature, snap, sent, sent * snap.restore);
+      cooldown.notePress(snap, sent);
+      /* The projection is stale the moment a press goes out: the health it is
+       * about to buy is real and the rest of this tick should see it. */
+      predict.commitHeal(sent * snap.restore, snap);
+      this.adapter.claimTick(plan.urgency >= URGENCY.CRITICAL);
+
+      this.lastDecision = DECISION.HEAL_NOW;
+      this.totalPresses += sent;
+      this.lastPresses = sent;
+      this.lastPackets = sent * 2 + 1;
       return sent;
     }
   }
@@ -3551,6 +3824,10 @@ function createRynAutoHealEngine(deps) {
       this.validator = new ActionValidator(this.adapter);
       this.cooldown = new CooldownManager(this.adapter);
       this.executor = new HealExecutor(this.adapter);
+      /* The executor runs the final validation itself, immediately before the
+       * wire, so it holds the validator rather than being handed a verdict
+       * from a stage that ran earlier. */
+      this.executor.validator = this.validator;
       this._pressedThisTick = false;
       this.telemetry = {
         urgency: "idle", reason: "init", presses: 0, shame: 0,
@@ -3628,11 +3905,18 @@ function createRynAutoHealEngine(deps) {
           snap, this.state, this.damage, this.shame, this.threat, this.predict,
           this.cooldown, this.arbiter
         );
+        /* Plan-time legality. The final, pre-wire revalidation is the
+         * executor's own first stage: nothing runs between it and the press. */
         plan = this.validator.check(plan, snap, this.shame);
-        plan = this.cooldown.pace(plan, snap);
       }
 
-      const sent = this.executor.run(plan, snap, this.state, this.shame, this.ledger);
+      const sent = this.executor.run(
+        plan, snap, this.state, this.shame, this.ledger,
+        this.threat, this.predict, this.cooldown
+      );
+      /* Pacing is bookkeeping for the next tick, so it runs after the press
+       * rather than between the decision and it. */
+      this.cooldown.pace(plan, snap);
       this._pressedThisTick = sent > 0;
 
       const tracker = this.shame.tracker;
@@ -3690,6 +3974,11 @@ function createRynAutoHealEngine(deps) {
         forecastLevel: this.predict.forecast.level,
         forecastConfidence: Number(this.predict.forecast.confidence.toFixed(2)),
         threatDuration: this.predict.forecast.threatDuration,
+        /* execution layer */
+        packets: this.executor.lastPackets,
+        duplicatesBlocked: this.ledger.duplicatesBlocked,
+        pending: this.ledger.pendingAction && !this.ledger.pendingAction.resolved
+          ? this.ledger.pendingAction.signature : "-",
         invalidatedBy: this.predict.invalidatedBy,
         predictCache: `${this.predict.cacheHits}/${this.predict.cacheHits + this.predict.cacheMisses}`,
         motionSource: this.predict.motion.kind

@@ -176,8 +176,9 @@ check(
 );
 check(
   "the count is re-read on the execution path, not taken from the snapshot",
-  /liveShame\(\)/.test(ENGINE_SRC) &&
-  /const live = this\.adapter\.liveShame\(\);[\s\S]{0,200}revalidate\(/.test(ENGINE_SRC)
+  /liveState\(\)/.test(ENGINE_SRC) &&
+  /const live = this\.adapter\.liveState\(\);/.test(ENGINE_SRC) &&
+  /shame\.revalidate\(snap, state, live, plan\)/.test(ENGINE_SRC)
 );
 check(
   "revalidation refuses a charged press once the live count is at the ceiling",
@@ -378,6 +379,101 @@ check(
   check("rapid damage outranks a distant ranged threat", rapid > ranged);
   check("a ranged threat outranks dagger chip", ranged > dagger);
   check("dagger chip outranks ordinary damage", dagger > ordinary);
+}
+
+/* The execution layer: final validation, anti-spam, packets, speed. */
+{
+  const region = ENGINE_SRC.slice(
+    ENGINE_SRC.indexOf("final(plan, snap, state, shame"),
+    ENGINE_SRC.indexOf("11. HealExecutor")
+  );
+  const dimensions = {
+    "HP": /live\.health/,
+    "shame": /live\.active|shame\.revalidate/,
+    "threat": /threat\.imminentWithin|threat\.reports/,
+    "threat confidence": /rank\.survival|stillLethal/,
+    "predicted damage": /predict\.invalidatedBy/,
+    "healing availability": /live\.foodStock|live\.restore/,
+    "cooldown": /ledger\.backedOff/,
+    "player state": /live\.noEat|live\.trapped|live\.inGame/,
+    "combat state": /live\.moduleActive|live\.healedOnce/,
+    "action priority": /priorityOf\(live\.activeModule\)/
+  };
+  for (const label of Object.keys(dimensions)) {
+    check(`final validation re-reads: ${label}`, dimensions[label].test(region));
+  }
+  check(
+    "a changed critical state cancels or recalculates",
+    /DECISION\.CANCEL/.test(region) && /DECISION\.RECALCULATE/.test(region)
+  );
+}
+check(
+  "final validation is the executor's own first stage",
+  /const live = this\.adapter\.liveState\(\);[\s\S]{0,200}this\.validator\.final\(/
+    .test(ENGINE_SRC)
+);
+check(
+  "nothing runs between validation and the wire but the press loop",
+  /if \(!this\.adapter\.pressFoodOnly\(\)\) break;/.test(ENGINE_SRC)
+);
+check(
+  "pacing is bookkeeping, and runs after the press",
+  ENGINE_SRC.indexOf("const sent = this.executor.run(") <
+  ENGINE_SRC.indexOf("this.cooldown.pace(plan, snap);") &&
+  !/this\.cooldown\.pace\(plan, snap\);[\s\S]{0,400}const sent = this\.executor\.run\(/
+    .test(ENGINE_SRC)
+);
+
+/* No delays anywhere. A press that waits has missed the tick it waited for. */
+for (const banned of ["setTimeout", "setInterval", "requestAnimationFrame", "queueMicrotask"]) {
+  check(`no ${banned} in the engine`, ENGINE_SRC.indexOf(banned) === -1);
+}
+check(
+  "no second packet scheduler and no invented frames",
+  /mh\.selectItem\(AH\.FOOD_TYPE\)/.test(ENGINE_SRC) &&
+  /mh\.attack\(null, 1\)/.test(ENGINE_SRC) &&
+  /mh\.whichWeapon\(mh\._getPredictWeapon\(\)\)/.test(ENGINE_SRC) &&
+  !/socket|\.send\(|PacketManager/.test(ENGINE_SRC)
+);
+check(
+  "a burst restores the weapon once, not once per press",
+  /this\.adapter\.restoreWeapon\(\);/.test(ENGINE_SRC) &&
+  /pressFoodOnly\(\)/.test(ENGINE_SRC)
+);
+check(
+  "a press that would land on a full bar is not sent",
+  /if \(expected >= snap\.maxHealth && plan\.urgency !== URGENCY\.WASH\) break;/
+    .test(ENGINE_SRC)
+);
+{
+  /* The duplicate guard, exercised directly: normal play rarely reaches it
+   * because the in-flight ledger stops the decision re-asking, so the branch
+   * is tested here rather than left to chance. */
+  const probe = new Engine({});
+  const ledger = probe.ledger;
+  const snap = { tick: 10, pong: 0, TICK: 1000 / 9 };
+  ledger.notePending("heal:1:100:5", snap, 2, 80);
+  check("an identical pending action is refused",
+    ledger.isPending("heal:1:100:5", snap) === true);
+  check("a different action is not refused",
+    ledger.isPending("heal:1:80:5", snap) === false);
+  check("a pending action expires with its visibility window",
+    ledger.isPending("heal:1:100:5", { tick: 40, pong: 0, TICK: 1000 / 9 }) === false);
+  ledger.pendingAction.resolved = true;
+  check("a resolved action stops blocking",
+    ledger.isPending("heal:1:100:5", snap) === false);
+}
+{
+  /* Post-execution commit: the projection has to move the moment a press goes
+   * out, and the forecast built on the old bar has to be dropped. */
+  check(
+    "the commit updates the projection and drops the stale forecast",
+    /commitHeal\(amount, snap\) \{[\s\S]{0,220}this\._cache = null;/.test(ENGINE_SRC)
+  );
+  check(
+    "and recomputes nothing in the same tick",
+    !/commitHeal\(amount, snap\) \{[\s\S]{0,320}predictAhead/.test(ENGINE_SRC)
+  );
 }
 
 /* The client field the engine deliberately does not trust. */

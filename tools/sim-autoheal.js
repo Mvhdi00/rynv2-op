@@ -358,9 +358,9 @@ function makeClient(sim) {
     /* The predictive engine borrows this class's constructor for its own
      * private tracker; the instance itself is never written to by it. */
     staticModules: { placementEngine: { motion: new SimTargetMotion() } },
-    selectItem() { this.packetCount += 1; },
-    attack() { this.packetCount += 1; sim.queuePress(); },
-    whichWeapon() { this.packetCount += 1; },
+    selectItem() { this.packetCount += 1; sim.stats.packets += 1; },
+    attack() { this.packetCount += 1; sim.stats.packets += 1; sim.queuePress(); },
+    whichWeapon() { this.packetCount += 1; sim.stats.packets += 1; },
     _getPredictWeapon() { return 0; },
     setForceHat(h) { if (this.forceHat === null) this.forceHat = h; },
     canBuy(type, id) { return type === 0 && (id === 6 || id === 7); }
@@ -453,7 +453,8 @@ class Sim {
       maxServerShame: 0, deaths: 0, foodSpent: 0, packetPeak: 0,
       pressesWhileLocked: 0, staleAborts: 0, zones: {}, threats: {},
       preempts: 0, cacheHits: 0, cacheMisses: 0, invalidations: {}, motion: "-",
-      decisions: {}, ranks: {}, reasonless: 0, survivalPresses: 0
+      decisions: {}, ranks: {}, reasonless: 0, survivalPresses: 0,
+      rejections: {}, packets: 0, duplicatesBlocked: 0
     };
   }
 
@@ -609,8 +610,13 @@ class Sim {
     this.stats.maxServerShame = Math.max(this.stats.maxServerShame, server.shameCount);
     this.stats.packetPeak = Math.max(this.stats.packetPeak, mh.packetCount);
     const tm = this.engine.telemetry;
-    if (typeof tm.reason === "string" && tm.reason.indexOf("+stale:") !== -1) {
+    /* Anything the pre-wire validation refused, whichever way it classified
+     * it: a stale read to be re-asked, or an action that was simply wrong. */
+    if (typeof tm.reason === "string" &&
+        (tm.reason.indexOf("+stale:") !== -1 || tm.reason.indexOf("+cancel:") !== -1)) {
       this.stats.staleAborts += 1;
+      const why = tm.reason.split(/\+(?:stale|cancel):/)[1];
+      if (why) this.stats.rejections[why] = (this.stats.rejections[why] || 0) + 1;
     }
     this.stats.zones[tm.zone] = (this.stats.zones[tm.zone] || 0) + 1;
     if (typeof tm.reason === "string" && tm.reason.indexOf("preempt") === 0) {
@@ -621,6 +627,7 @@ class Sim {
         (this.stats.invalidations[tm.invalidatedBy] || 0) + 1;
     }
     this.stats.motion = tm.motionSource || "-";
+    this.stats.duplicatesBlocked = tm.duplicatesBlocked || 0;
     this.stats.decisions[tm.decision] = (this.stats.decisions[tm.decision] || 0) + 1;
     this.stats.ranks[tm.rank] = (this.stats.ranks[tm.rank] || 0) + 1;
     if (!tm.reason || typeof tm.reason !== "string" || !tm.reason.length) {
@@ -978,7 +985,7 @@ function runAll(factory, label) {
     /* The re-read has to actually fire when the count moves under it. */
     if (name.indexOf("moves between plan and press") !== -1) {
       checks.push(["caught the stale count", s.staleAborts > 0]);
-      checks.push(["and reported it as a re-plan", !!s.decisions.RECALCULATE]);
+      checks.push(["and named why", !!(s.rejections.lockguard || s.rejections["count-moved"])]);
     }
 
     /* ---- decision engine -------------------------------------------- */
@@ -1074,7 +1081,14 @@ function runAll(factory, label) {
     const decisions = Object.keys(s.decisions).map(d => `${d} ${s.decisions[d]}`).join("  ");
     const ranks = Object.keys(s.ranks).sort((a, b) => s.ranks[b] - s.ranks[a])
       .slice(0, 4).map(r => `${r} ${s.ranks[r]}`).join("  ");
-    console.log(`      decisions: ${decisions}`);
+    const rejects = Object.keys(s.rejections)
+      .map(r => `${r}:${s.rejections[r]}`).join(" ");
+    const perPress = s.presses ? (s.packets / s.presses).toFixed(1) : "-";
+    console.log(`      decisions: ${decisions}${rejects ? "   refused " + rejects : ""}`);
+    console.log(
+      `      packets: ${s.packets} for ${s.presses} presses (${perPress}/press)` +
+      (s.duplicatesBlocked ? `   duplicates blocked ${s.duplicatesBlocked}` : "")
+    );
     console.log(`      ranked: ${ranks}`);
     for (const [label2] of bad) console.log(`      -> failed: ${label2}`);
     if (process.env.SIM_TRACE) {
