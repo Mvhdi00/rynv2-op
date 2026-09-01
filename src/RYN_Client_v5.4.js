@@ -9703,25 +9703,29 @@ window.grbtp = 35;
           const sealTypeOf = a => a.id === trapId ? LUNA_TRAP_TYPE : LUNA_SPIKE_TYPE;
           const mine = eligible.filter(a => !sealEngine || sealEngine.groundIsFree(sealTypeOf(a), a.angle, "autoPlacer"));
           // Packed per item, because the ring radius and the minimum
-          // separation are the item's own.
-          const preferred = closestSpikeToEnemy || closestTrapToEnemy || null;
-          const keep = new Set;
+          // separation are the item's own. Spikes first: the ring that seals
+          // is a ring of spikes, and it is what the packet budget should buy
+          // if it only buys one thing.
+          //
+          // The packer's output order *is* the answer — the chosen set first,
+          // then everything else. It is handed straight to _addPredictObject,
+          // whose footprint dedup then keeps the set and drops whatever
+          // overlaps it. Re-sorting the output by tier here would throw the
+          // set away and leave nothing but the ladder's original order, which
+          // is the thing this option exists to replace.
           for (const itemId of [ spikeId, trapId ]) {
             if (itemId === null || itemId === undefined) continue;
             const group = mine.filter(a => a.id === itemId);
             if (group.length === 0) continue;
+            // Packed against something first, then the rest — the ladder's own
+            // priority, expressed before the packer runs so the packer builds
+            // its ring out of the angles the ladder rates highest.
             const ordered = group.filter(a => a.perfect).concat(group.filter(a => !a.perfect));
-            const prefer = preferred && preferred.id === itemId && ordered.indexOf(preferred) >= 0 ? preferred : null;
-            for (const a of this._sealRingOrder(ordered, itemId, prefer)) keep.add(a);
-          }
-          // Sent in the ladder's own order — packed against something first,
-          // then the rest. The packer chose the set; it does not get to
-          // reorder the priorities the ladder already expressed.
-          for (const obj of eligible.filter(a => a.perfect)) {
-            if (keep.has(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
-          }
-          for (const obj of eligible.filter(a => !a.perfect)) {
-            if (keep.has(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
+            const wanted = itemId === trapId ? closestTrapToEnemy : closestSpikeToEnemy;
+            const prefer = wanted && ordered.indexOf(wanted) >= 0 ? wanted : null;
+            for (const obj of this._sealRingOrder(ordered, itemId, prefer)) {
+              this._addPredictObject(obj.id, obj.angle, false, myPos);
+            }
           }
         } else {
           // Perfect angles first — Luna's two passes, in order.

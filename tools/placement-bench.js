@@ -1040,6 +1040,134 @@ function minPairSep(set) {
   ok(minPairSep(out.slice(0, 4)) >= g.minSep - 1e-9, 'and the ring through it is still valid');
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// 11. Ring seal — the ladder path, not just the packer
+// ════════════════════════════════════════════════════════════════════════════
+
+suite('Ring seal — end to end through the ladder');
+
+// The packer being correct in isolation says nothing about whether the branch
+// that calls it actually uses its answer. It did not, at first: the branch
+// collected every returned candidate into a set and then re-sorted by tier,
+// which threw the chosen ring away and left the ladder's original order. The
+// packer's own tests all passed through that. So this reproduces both sides of
+// the toggle exactly as AutoPlacer.postTick runs them -- the ordering, the
+// per-item grouping and the footprint dedup _addPredictObject applies -- and
+// compares what each one actually commits.
+function addPredictObject(committed, cand) {
+  for (const o of committed) {
+    if (Math.hypot(cand.x - o.x, cand.y - o.y) < cand.scale + o.scale) return;
+  }
+  committed.push(cand);
+}
+// The toggle off: two passes over the eligible set, perfect first.
+function ladderPlain(eligible) {
+  const committed = [];
+  for (const c of eligible.filter(a => a.perfect)) addPredictObject(committed, c);
+  for (const c of eligible.filter(a => !a.perfect)) addPredictObject(committed, c);
+  return committed;
+}
+// The toggle on: packed per item, the packer's output order handed straight
+// through to the dedup.
+function ladderSealed(eligible, itemIds, prefer) {
+  const committed = [];
+  for (const itemId of itemIds) {
+    const group = eligible.filter(a => a.id === itemId);
+    if (!group.length) continue;
+    const ordered = group.filter(a => a.perfect).concat(group.filter(a => !a.perfect));
+    const want = prefer && prefer.id === itemId && ordered.indexOf(prefer) >= 0 ? prefer : null;
+    sealer._predictObjects = committed;
+    for (const c of sealer._sealRingOrder(ordered, itemId, want)) addPredictObject(committed, c);
+  }
+  sealer._predictObjects = [];
+  return committed;
+}
+
+{
+  const item = SPIKE;
+  let sealedBetter = 0, sealedWorse = 0, same = 0, scenes = 0;
+  let fullSealed = 0, fullPlain = 0;
+  for (let s = 0; s < 400; s++) {
+    const rand = rng(9000 + s);
+    const angles = [];
+    for (let i = 0; i < 72; i++) if (rand() < 0.45 + rand() * 0.5) angles.push(i * TAU / 72);
+    if (angles.length < 4) continue;
+    const cands = ringCands(item, angles);
+    for (const c of cands) c.perfect = rand() < 0.15;
+    scenes++;
+    const plain = ladderPlain(cands);
+    const sealed = ladderSealed(cands, [item.id], null);
+    if (plain.length === 4) fullPlain++;
+    if (sealed.length === 4) fullSealed++;
+    if (sealed.length > plain.length) sealedBetter++;
+    else if (sealed.length < plain.length) sealedWorse++;
+    else same++;
+  }
+  ok(scenes > 300, 'ladder scenes were generated', String(scenes));
+  ok(sealedWorse === 0, 'sealed never commits fewer spikes than the plain ladder',
+     `${sealedWorse}/${scenes} worse`);
+  ok(sealedBetter > 0, 'and commits more on some scenes -- the option does something',
+     `${sealedBetter}/${scenes} better, ${same} equal`);
+  ok(fullSealed > fullPlain, 'full four-spike rings go down more often with the toggle on',
+     `sealed ${(100 * fullSealed / scenes).toFixed(1)}% vs plain ${(100 * fullPlain / scenes).toFixed(1)}%`);
+}
+
+{
+  // The seal has to survive the dedup: every committed leg must clear the
+  // minimum separation, or it is not a ring.
+  const item = SPIKE, g = ringGeom(item);
+  let bad = 0, scenes = 0;
+  for (let s = 0; s < 200; s++) {
+    const rand = rng(9500 + s);
+    const angles = [];
+    for (let i = 0; i < 72; i++) if (rand() < 0.6) angles.push(i * TAU / 72);
+    if (angles.length < 4) continue;
+    scenes++;
+    const sealed = ladderSealed(ringCands(item, angles), [item.id], null);
+    if (sealed.length >= 2 && minPairSep(sealed) < g.minSep - 1e-9) bad++;
+  }
+  ok(bad === 0, 'every committed leg clears the minimum separation', `${bad}/${scenes}`);
+}
+
+{
+  // Two items on one ring: spikes are packed first and the trap does not
+  // dismantle the spike ring.
+  const all = ringCands(SPIKE, Array.from({ length: 72 }, (_, i) => i * TAU / 72))
+    .concat(ringCands(TRAP, Array.from({ length: 72 }, (_, i) => i * TAU / 72)));
+  const sealed = ladderSealed(all, [SPIKE.id, TRAP.id], null);
+  const spikes = sealed.filter(c => c.id === SPIKE.id);
+  ok(spikes.length === 4, 'the spike ring still closes with traps in the pool', `${spikes.length} spikes`);
+  ok(sealed[0].id === SPIKE.id, 'spikes lead the commit order');
+  ok(minPairSep(spikes) >= ringGeom(SPIKE).minSep - 1e-9, 'and the spike ring is still separated');
+}
+
+{
+  // The ladder's preferred angle -- the spike that catches a trapped enemy --
+  // is committed, not dropped by the packer.
+  const item = SPIKE;
+  const cands = ringCands(item, Array.from({ length: 72 }, (_, i) => i * TAU / 72));
+  const prefer = cands[17];
+  const sealed = ladderSealed(cands, [item.id], prefer);
+  ok(sealed.indexOf(prefer) >= 0, 'the ladder’s preferred angle survives packing');
+  ok(sealed[0] === prefer, 'and leads when a full ring can be built through it');
+}
+
+{
+  // Cost. The packer is O(seeds x legs x candidates) per item per tick, so it
+  // has to be cheap enough to sit in the module loop. Worst case is no full
+  // ring, where both passes run every seed.
+  const item = SPIKE;
+  const cands = ringCands(item, Array.from({ length: 72 }, (_, i) => i * TAU / 72));
+  const sparse = ringCands(item, [0.1, 0.2, 0.3, 2.0, 2.1, 2.2, 4.0, 4.1, 4.2]);
+  sealer._predictObjects = [];
+  for (let w = 0; w < 200; w++) { sealer._sealRingOrder(cands, item.id, null); sealer._sealRingOrder(sparse, item.id, null); }
+  const t0 = process.hrtime.bigint();
+  for (let r = 0; r < 500; r++) { sealer._sealRingOrder(cands, item.id, null); sealer._sealRingOrder(sparse, item.id, null); }
+  const perTick = Number(process.hrtime.bigint() - t0) / 1e3 / 500;
+  ok(perTick < 200, 'a full-ring and a worst-case pack together cost well under a tick',
+     `${perTick.toFixed(1)}us per tick vs 111000us budget`);
+}
+
 // ── report ──────────────────────────────────────────────────────────────────
 
 console.log('\n' + '─'.repeat(60));
