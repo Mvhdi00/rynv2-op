@@ -9132,18 +9132,6 @@ window.grbtp = 35;
   // How long an angle stays banned after a build that the server dropped.
   const LUNA_BAN_TICKS = 18;
 
-  // One server tick, in milliseconds. Used to convert a measured ping into the
-  // number of ticks a placement takes to become visible.
-  const LUNA_TICK_MS = 1e3 / 9;
-
-  // Cap on outstanding sends awaiting a verdict, so a burst cannot grow the
-  // list without bound if verdicts stop arriving.
-  const LUNA_PENDING_MAX = 24;
-
-  // Two angles within this are the same piece of ground on the placement ring:
-  // ~2.3 degrees, well under the ~40 degrees a spike occupies at ring radius.
-  const LUNA_BAN_TOLERANCE = .04;
-
   // How many builds the trapped fallback below is allowed to queue in one
   // tick. Every free angle would be five packets each and would empty the
   // resource bar for ground I cannot use until I am out of the trap; three is
@@ -9164,9 +9152,7 @@ window.grbtp = 35;
     moduleName="autoPlacer";
     client;
     _predictObjects=[];
-    // Sends awaiting a verdict: {angle, type, tick}. Judged once the round
-    // trip they were sent on has had time to complete, not on the next tick.
-    _pendingSends=[];
+    _placedAngles=[];
     _bannedAngles=new Map;
     _angleCache=new Map;
     _angleCacheTick=-1;
@@ -9178,26 +9164,12 @@ window.grbtp = 35;
     }
     reset() {
       this._predictObjects = [];
-      this._pendingSends = [];
+      this._placedAngles = [];
       this._bannedAngles.clear();
       this._angleCache.clear();
       this._angleCacheTick = -1;
       this._lastPrePlaceObj = null;
       this._spamPrePlacer = false;
-    }
-
-    // Bans are held by angle, and an angle is now whatever the geometry
-    // produced — an aperture edge, a contact tangent — rather than a multiple
-    // of a fixed step, so it is never bit-identical from one tick to the next.
-    // Matching within a tolerance is what keeps a ban meaning "that ground",
-    // which is what it always meant.
-    _isBanned(angle) {
-      if (this._bannedAngles.size === 0) return false;
-      const a = GeometrySolver.norm(angle);
-      for (const banned of this._bannedAngles.keys()) {
-        if (GeometrySolver.angleDist(a, banned) < LUNA_BAN_TOLERANCE) return true;
-      }
-      return false;
     }
 
     // UTILS.lineInRect, unchanged.
@@ -9292,25 +9264,6 @@ window.grbtp = 35;
       const key = id + "_" + (excludeObj ? excludeObj.id : "n");
       const cached = this._angleCache.get(key);
       if (cached) return cached;
-      // The ring now comes from the placement engine's aperture solver rather
-      // than from 72 grid queries of our own. Same resolution, same entry
-      // shape, exact run edges, and a handful of target-relevant angles the
-      // uniform sweep would never propose — the ladder below is untouched and
-      // reads all of it the way it always did.
-      const engine = this.client._ModuleHandler?.staticModules?.placementEngine;
-      // Item group 5 is the trap group; everything else auto place holds is a
-      // spike. Same mapping ObjectManager.getBestPlacementAngles uses.
-      const type = Items[id] && Items[id].itemGroup === 5 ? LUNA_TRAP_TYPE : LUNA_SPIKE_TYPE;
-      const angles = engine ? engine.ringCandidates(type, {
-        excludes: excludeObj || null
-      }) : this._legacyAngles(id, myPos, ObjectManager2, excludeObj);
-      this._angleCache.set(key, angles);
-      return angles;
-    }
-
-    // The original probe, kept as the fallback for the one case that can still
-    // reach it: a call made before the engine has been constructed.
-    _legacyAngles(id, myPos, ObjectManager2, excludeObj) {
       const getConfig = this._getConfig(id, myPos);
       const angles = [];
       for (let i = 0; i < LUNA_ANGLE_STEPS; i++) {
@@ -9321,15 +9274,11 @@ window.grbtp = 35;
           perfect: false
         });
       }
-      // Wrap-aware: index 0's neighbour is index 71. Comparing only forwards
-      // from index 1 left a placeable run that crosses 0 rad with neither of
-      // its ends marked, which is precisely where the most valuable placement
-      // on that run sits.
-      const n = angles.length;
-      for (let i = 0; i < n; i++) {
-        const prev = angles[(i - 1 + n) % n], cur = angles[i], next = angles[(i + 1) % n];
-        if (cur.placeable && (!prev.placeable || !next.placeable)) cur.perfect = true;
+      for (let i = 1; i < angles.length; i++) {
+        if (angles[i].placeable && !angles[i - 1].placeable) angles[i].perfect = true;
+        if (angles[i - 1].placeable && !angles[i].placeable) angles[i - 1].perfect = true;
       }
+      this._angleCache.set(key, angles);
       return angles;
     }
 
@@ -9563,30 +9512,17 @@ window.grbtp = 35;
       this._spamPrePlacer = false;
       if (ModuleHandler.packetCount >= ModuleHandler.packetLimit) return;
 
-      // Not Luna's: ground we built on that is still free is ground the server
-      // refused. Sit it out rather than spend the tick's packets on it again.
-      //
-      // Two corrections. It used to judge a send one tick after it left, but a
-      // build does not exist until the packet has reached the server and come
-      // back — at 100ms that is two ticks, so a placement that worked was read
-      // as a refusal and its angle blacklisted for two seconds. It now waits
-      // for the round trip it measured before judging anything. And it used to
-      // rebuild the entire ring for both items purely to look up at most three
-      // angles; the legality of exactly those three is what it asks for now.
-      if (this._pendingSends.length > 0) {
-        const settleTicks = 1 + Math.ceil((this.client.SocketManager?.pong ?? 0) / LUNA_TICK_MS);
-        const still = [];
-        for (const sent of this._pendingSends) {
-          if (this._tick - sent.tick < settleTicks) {
-            still.push(sent);
-            continue;
-          }
-          if (myPlayer.canPlaceObject(sent.type, sent.angle)) {
-            this._bannedAngles.set(GeometrySolver.norm(sent.angle), this._tick + LUNA_BAN_TICKS);
-          }
+      // Not Luna's: an angle we built at last tick that is still free this
+      // tick is an angle the server refused. Sit it out rather than spend the
+      // tick's packets on it again.
+      if (this._placedAngles.length > 0) {
+        const checked = [ ...this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null), ...this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null) ];
+        for (const placed of this._placedAngles) {
+          const match = checked.find(a => Math.abs(a.angle - placed) < .01);
+          if (match && match.placeable) this._bannedAngles.set(placed, this._tick + LUNA_BAN_TICKS);
         }
-        this._pendingSends = still;
       }
+      this._placedAngles = [];
 
       // ────────────────────────────────────────────────────────────────────
       // AUTO PLACER — Luna updateAngles + isAutoPlaceAngle
@@ -9594,7 +9530,7 @@ window.grbtp = 35;
       {
         const spikeAngles = this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, null);
         const trapAngles = this._getPrePlaceAngles(trapId, myPos, myPlayer, ObjectManager2, null);
-        const notBanned = a => !this._isBanned(a.angle);
+        const notBanned = a => !this._bannedAngles.has(a.angle);
         const validSpike = spikeAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validTrap = trapAngles.filter(a => notBanned(a) && (a.placeable || a.perfect));
         const validAngles = [ ...validSpike, ...validTrap ];
@@ -9653,7 +9589,7 @@ window.grbtp = 35;
           // which already rejects every angle a build — mine or anyone's — is
           // occupying, so a blocked angle is never scanned twice.
           const openAngles = list => {
-            const free = list.filter(a => a.placeable && !this._isBanned(a.angle));
+            const free = list.filter(a => a.placeable && !this._bannedAngles.has(a.angle));
             // Same order the ladder above uses: packed against something
             // first, then the rest, each of them nearest the enemy first.
             return [ ...free.filter(a => a.perfect).sort(nearestFirst), ...free.filter(a => !a.perfect).sort(nearestFirst) ];
@@ -9680,50 +9616,23 @@ window.grbtp = 35;
       // ────────────────────────────────────────────────────────────────────
       const typeOf = obj => obj.id === trapId ? LUNA_TRAP_TYPE : LUNA_SPIKE_TYPE;
       const outOfBudget = () => ModuleHandler.packetCount + LUNA_PLACE_COST > ModuleHandler.packetLimit;
-      // Consecutive builds of the same item go out as one run, so the engine's
-      // executor can share a single item select across them — the same saving
-      // preplace and replace already take. The plan order is the ladder's and
-      // is not disturbed to make longer runs.
-      const emitRun = (type, angles) => {
+      const emit = obj => {
+        const type = typeOf(obj);
         // Luna only checks the item cap; RYN also knows whether the resources
         // are there, so a build it would refuse never reaches the wire.
         if (!myPlayer.canPlace(type)) return;
-        // Routed through the engine rather than straight at ModuleHandler.place.
-        // That is what makes an auto place visible to the reservation ledger
-        // *before* it is sent: it will not take ground a sync or an insta has
-        // claimed, and where it outranks a booked preplace the book is told its
-        // slot is gone instead of holding a token the ledger no longer has.
-        const went = [];
-        const sent = ModuleHandler.requestPlaceMany(type, angles, "autoPlacer", went);
-        if (sent <= 0) return;
+        ModuleHandler.place(type, obj.angle);
         ModuleHandler.placedOnce = true;
         ModuleHandler.placeAngles[0] = type;
-        for (const angle of went) {
-          ModuleHandler.placeAngles[1].push(angle);
-          this._pendingSends.push({
-            angle: angle,
-            type: type,
-            tick: this._tick
-          });
-        }
+        ModuleHandler.placeAngles[1].push(obj.angle);
         ModuleHandler.moduleActive = true;
+        this._placedAngles.push(obj.angle);
       };
 
-      let runType = null, run = [];
       for (const obj of this._predictObjects) {
         if (obj.preplace) continue;
         if (outOfBudget()) break;
-        const type = typeOf(obj);
-        if (type !== runType) {
-          if (run.length) emitRun(runType, run);
-          runType = type;
-          run = [];
-        }
-        run.push(obj.angle);
-      }
-      if (run.length) emitRun(runType, run);
-      if (this._pendingSends.length > LUNA_PENDING_MAX) {
-        this._pendingSends.splice(0, this._pendingSends.length - LUNA_PENDING_MAX);
+        emit(obj);
       }
     }
   }
@@ -11539,12 +11448,6 @@ window.grbtp = 35;
   // Ceiling on the round-trip allowance, so an outlier ping reading cannot
   // make preplace fire its whole book at once.
   const RPE_MAX_LATENCY_TICKS = 3;
-  // Ring resolution offered to auto place. Same 72 the Luna probe used, so
-  // coverage is unchanged; it is only the cost of establishing legality at
-  // that resolution that has gone.
-  const RPE_RING_SAMPLES = 72;
-  // Two angles closer together than this describe the same ground.
-  const RPE_RING_DEDUPE = .02;
   // How much more a soft claim has to be worth to hold ground against a claim
   // of higher priority.
   const RPE_SOFT_DOMINANCE = 1.5;
@@ -12669,97 +12572,6 @@ window.grbtp = 35;
         this.stats.directed += sent;
       }
       return sent;
-    }
-
-    // The placement ring as a list of legal angles, in the shape Luna's auto
-    // place ladder reads. This is what lets auto place keep its decision
-    // making — every rung, in order, unchanged — while giving up its private
-    // geometry.
-    //
-    // What it replaces: a probe that asked ObjectManager.grid2D one question
-    // per angle, 72 angles per item, twice an item because the ban check ran
-    // its own pass — 144 spatial queries a tick, each walking an 81-cell block
-    // and allocating a candidate set, to answer a question the engine already
-    // answers for the whole circle at once from a single sweep.
-    //
-    // Three things come out better, not just faster:
-    //
-    //   * `perfect` is exact. Luna inferred the ends of a placeable run by
-    //     walking the samples from index 1, so index 0 and index 71 were never
-    //     compared and a run that wrapped past 0 rad lost both its edges. An
-    //     aperture *is* the run; its boundaries are the packed placements, and
-    //     they are emitted here whether or not a sample happens to land near
-    //     one.
-    //   * the ring stays as densely covered as it was, because legality is now
-    //     arithmetic against the free intervals rather than a query per angle,
-    //     so density costs nothing.
-    //   * angles chosen for a reason — touching the target, leading their run,
-    //     sealing a gap, packing against our own spikes — are offered on top
-    //     of the uniform ring, so the ladder gets to judge placements a blind
-    //     sweep never puts in front of it.
-    ringCandidates(type, opts) {
-      opts = opts || {};
-      const myPlayer = this.client.myPlayer;
-      if (!myPlayer) return [];
-      const profile = this.profileFor(type);
-      if (!profile) return [];
-      const tick = this.client._ModuleHandler.tickCount;
-      const myPos = opts.position || myPlayer.pos.current;
-      // Auto place runs earlier in the module order than the engine's own
-      // cycle, so it is usually the first to ask for the frame. Measuring it
-      // here rather than waiting means the reasoned angles below are available
-      // to auto place too, and the engine's cycle then reuses the same frame,
-      // the same blocker sweep and the same motion tracks.
-      const frame = opts.position ? null : this._measuredFrame();
-      this._ensureBlockers(myPos, tick);
-      const apertures = this._generator.apertures(profile, myPos.x, myPos.y, this._blockers, opts.excludes || null);
-      if (apertures.length === 0) return [];
-      const out = [];
-      const seen = new Map;
-      const q = RPE_RING_DEDUPE;
-      const add = (angle, perfect, source) => {
-        if (angle === null || angle === undefined || !isFinite(angle)) return;
-        const a = GeometrySolver.norm(angle);
-        const ap = GeometrySolver.inAperture(apertures, a);
-        if (!ap) return;
-        const key = Math.round(a / q);
-        const prior = seen.get(key);
-        if (prior !== undefined) {
-          // Keep the stronger classification when two sources land together.
-          if (perfect) prior.perfect = true;
-          return;
-        }
-        const entry = {
-          id: profile.id,
-          type: profile.type,
-          angle: a,
-          x: myPos.x + profile.ringR * Math.cos(a),
-          y: myPos.y + profile.ringR * Math.sin(a),
-          scale: profile.footR,
-          aperture: ap,
-          placeable: true,
-          perfect: !!perfect,
-          source: source
-        };
-        seen.set(key, entry);
-        out.push(entry);
-      };
-      // The uniform ring, same resolution the probe used.
-      const step = RPE_TAU / RPE_RING_SAMPLES;
-      for (let i = 0; i < RPE_RING_SAMPLES; i++) add(i * step, false, "ring");
-      // The exact ends of every free run. These are the packed placements.
-      for (const ap of apertures) {
-        const inset = Math.min(.03, ap[2] / 3);
-        add(ap[0] + inset, true, "edge");
-        add(ap[1] - inset, true, "edge");
-      }
-      // Reasoned angles, when there is a fight to reason about.
-      if (frame) {
-        for (const proposal of this._angles.propose(profile, apertures, frame, this.memory)) {
-          add(proposal.angle, proposal.source === "edge", proposal.source);
-        }
-      }
-      return out;
     }
 
     // Legal angles for a caller that wants the engine to choose the angle but
