@@ -222,6 +222,37 @@ Prediction Engine · Heal Decision Engine · Priority Arbitration · Action
 Validator · Cooldown Manager · Anti-Spam Manager · Action Executor ·
 Integration Layer.
 
+## The shame control engine
+
+Module 3 is three parts behind one facade, with an objective of its own:
+`SHAME <= 7` as an invariant, `0` as the goal.
+
+- **Tracker** — current, previous, delta, increase and decrease rates over a
+  5 s window, recent damage, damage frequency, healing state, cooldown state,
+  and the zone: `SAFE` 0 · `WARNING` 1-6 · `CRITICAL` ≥ 7.
+- **Predictor** — expected damage events over one second × the share that would
+  force a charged heal × how *believable* the threat is, giving projected shame
+  and ticks-to-critical. Confidence weights each damage source by whether it is
+  going to happen (a DoT tick, 1.0) or merely could (someone standing in range,
+  0.4). Below 0.4 the engine will not spend food on it.
+- **Opportunity** — the earliest valid way down, which is always a *when*:
+  `credit-now` (a pending hit past the window), `credit-wait` (one tick away),
+  or `bull` (manufacture a hit with the −5 helmet on a quiet field).
+
+What the zones change: at `SAFE`, nothing is owed so nothing is spent chasing
+it — top-ups fall back to the food-economy rule. In `WARNING`, every credit
+opportunity is taken at the earliest valid moment, and a top-up on a credit tick
+is worth more than the food it wastes because it heals *and* takes two off. From
+5 up — or as soon as the forecast says the count is heading there — the sustain
+floor rises, so health is bought while presses are still free. At 7 no charged
+press may leave at all.
+
+**Validation.** Nothing is pressed on a count read at the top of the tick. The
+live count, lock and hit stamp are re-read immediately before the wire, the
+verdict is re-derived, and the plan is recalculated against what came back —
+dropped if the live number says the press would arm the lock, trimmed if health
+already came up, otherwise sent under its corrected verdict.
+
 Combat, Auto Place / Preplace / Replace, Spike Tick, Safe Soldier, Anti Smart
 Tick, Auto Mills and Velocity Tick are **read only** — for the threat numbers,
 the packet budget and the tick claim. Nothing in them is modified or duplicated.
@@ -231,11 +262,14 @@ the packet budget and the tick claim. Nothing in them is modified or duplicated.
 `tools/sim-autoheal.js` runs the engine against the game's own rules
 transcribed — `buildItem`'s arithmetic, `changeHealth`'s hit stamp and
 full-health refusal, the one-second regen counter, `canBuild`'s resource gate —
-with latency modelled on both legs. Over eleven scenarios: no 30 s lock is ever
-armed, nothing is sent while one is on, the count never passes 7, and eight of
-the eleven hold shame at 0 for 100 % of ticks, including a 90 dps pressure run
-and a 250 ms ping run. `verify-autoheal.js` re-runs all of it against the engine
-copy pulled back out of the built userscript.
+with latency modelled on both legs. Over thirteen scenarios: no 30 s lock is
+ever armed, nothing is sent while one is on, the count never passes 7, every
+scenario that starts in debt ends at 0, and eight of the thirteen hold shame at
+0 for 100 % of ticks — including a 90 dps pressure run and a 250 ms ping run.
+A threat that never actually swings costs one press and 15 food across 90 ticks;
+a count planted to move between the plan and the press is caught 20 times, with
+0 presses sent and 0 locks armed. `verify-autoheal.js` re-runs all of it against
+the engine copy pulled back out of the built userscript.
 
 ## Two defects in the base it works around
 

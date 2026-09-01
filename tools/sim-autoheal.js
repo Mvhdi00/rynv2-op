@@ -239,10 +239,11 @@ class Sim {
      * on tick T is the server's from T - lag. */
     this.lagTicks = Math.max(0, Math.round((this.pong / 2) / TICK));
     this.healthHistory = [];
+    this.startShame = opts.shame || 0;
     this.stats = {
       presses: 0, healedPresses: 0, refused: 0, ticksAtZeroShame: 0,
       maxServerShame: 0, deaths: 0, foodSpent: 0, packetPeak: 0,
-      pressesWhileLocked: 0
+      pressesWhileLocked: 0, staleAborts: 0, zones: {}
     };
   }
 
@@ -338,6 +339,7 @@ class Sim {
     em.dangerWithoutSoldier = (threat || 0) >= health;
 
     this.queued = 0;
+    if (this.onTickStart) this.onTickStart();
     const clock = Date.now;
     Date.now = () => clientNow;
     try {
@@ -359,14 +361,22 @@ class Sim {
     if (server.shameCount === 0) this.stats.ticksAtZeroShame += 1;
     this.stats.maxServerShame = Math.max(this.stats.maxServerShame, server.shameCount);
     this.stats.packetPeak = Math.max(this.stats.packetPeak, mh.packetCount);
+    const tm = this.engine.telemetry;
+    if (typeof tm.reason === "string" && tm.reason.indexOf("+stale:") !== -1) {
+      this.stats.staleAborts += 1;
+    }
+    this.stats.zones[tm.zone] = (this.stats.zones[tm.zone] || 0) + 1;
     this.log.push({
       tick: this.tick,
       hp: Math.round(server.health),
       shame: server.shameCount,
       mirror: mp.shameCount,
+      zone: tm.zone,
+      conf: tm.confidence,
+      opp: tm.opportunity,
       locked: server.shameTimer > 0,
-      urgency: this.engine.telemetry.urgency,
-      reason: this.engine.telemetry.reason,
+      urgency: tm.urgency,
+      reason: tm.reason,
       presses: this.queued
     });
   }
@@ -445,6 +455,52 @@ scenario("no food in stock", () => {
   return sim;
 });
 
+/* The WARNING zone's job: climb is expensive, so come down at the first valid
+ * chance rather than waiting to be told the count is high. Starting at 5, the
+ * defensive bias should hold the count off the ceiling and walk it back. */
+scenario("warning zone at 5, sustained pressure", () => {
+  const sim = new Sim({ foodId: 1, shame: 5 });
+  sim.client.myPlayer.shameCount = 5;
+  for (let t = 1; t <= 100; t++) sim.step(t % 3 === 0 ? 30 : 0, 40);
+  return sim;
+});
+
+/* An enemy stands in range holding a reloaded weapon and never swings.
+ * potentialDamage is real and nothing is landing: the low-confidence case the
+ * objective says not to spend healing resources on. */
+scenario("low-confidence threat — nobody actually swings", () => {
+  const sim = new Sim({ foodId: 1 });
+  sim.step(20, 45);                                  // one real hit, then quiet
+  for (let t = 2; t <= 90; t++) sim.step(0, 45);
+  return sim;
+});
+
+/* The count moves between the plan and the press: the tick is planned on 4,
+ * where a charged emergency press is affordable, and by the time it would go
+ * out the real count is 7, where that same press arms the lock and heals
+ * nothing. The engine re-reads immediately before execution, so what leaves the
+ * wire is judged on the number that actually holds. Damage every tick, so the
+ * plan really is the charged emergency one. */
+scenario("shame count moves between plan and press", () => {
+  const sim = new Sim({ foodId: 1, shame: 4, allowDeaths: true });
+  const mp = sim.client.myPlayer;
+  let planted = 4;
+  let readsThisTick = 0;
+  sim.onTickStart = () => { readsThisTick = 0; };
+  Object.defineProperty(mp, "shameCount", {
+    configurable: true,
+    get() {
+      readsThisTick += 1;
+      /* First read of the tick is the snapshot; everything after it is the
+       * live re-read on the execution path. */
+      return readsThisTick === 1 ? planted : 7;
+    },
+    set(v) { planted = v; }
+  });
+  for (let t = 1; t <= 50; t++) sim.step(20, 45);
+  return sim;
+});
+
 scenario("high latency — pong 250, over two ticks", () => {
   const sim = new Sim({ foodId: 1, pong: 250 });
   for (let t = 1; t <= 120; t++) sim.step(t % 4 === 0 ? 30 : 0, 35);
@@ -494,11 +550,24 @@ function runAll(factory, label) {
     /* Nothing may be sent while the lock is on: a press there cannot feed you
      * and can re-arm another 30 seconds (game_index.js:2464-2469). */
     checks.push(["no press during a lock", s.pressesWhileLocked === 0]);
+    /* Shame control: a debt it starts with has to come down, and the zone it
+     * spends its time in has to be the one the count says it is in. */
+    if (sim.startShame > 0 && !sim.allowDeaths) {
+      checks.push(["debt reduced", server.shameCount < sim.startShame]);
+    }
     /* And the engine has to actually work. */
     if (!sim.allowDeaths && name.indexOf("no food") === -1) {
       checks.push(["survived", s.deaths === 0]);
     }
     checks.push(["no press storm", s.presses <= ticks * 2]);
+    /* Nothing is spent on a threat that never lands. */
+    if (name.indexOf("low-confidence") !== -1) {
+      checks.push(["did not feed a threat that never landed", s.foodSpent <= 15]);
+    }
+    /* The re-read has to actually fire when the count moves under it. */
+    if (name.indexOf("moves between plan and press") !== -1) {
+      checks.push(["caught the stale count", s.staleAborts > 0]);
+    }
 
     const bad = checks.filter(c => !c[1]);
     failures += bad.length;
@@ -513,6 +582,9 @@ function runAll(factory, label) {
       `at zero ${pad(zeroPct + "%", 5)} locks ${pad(server.locksArmed, 3)} ` +
       `deaths ${pad(s.deaths, 3)} hp ${Math.round(server.health)}`
     );
+    const zones = Object.keys(s.zones)
+      .map(z => `${z} ${Math.round((s.zones[z] / ticks) * 100)}%`).join("  ");
+    console.log(`      zones: ${zones}${s.staleAborts ? `   stale re-reads ${s.staleAborts}` : ""}`);
     for (const [label2] of bad) console.log(`      -> failed: ${label2}`);
     if (process.env.SIM_TRACE) {
       for (const row of sim.log) {

@@ -155,6 +155,35 @@ check(
   `weapon ${weaponMax.toFixed(1)} + spike ${spikeMax} + proj ${projMax} vs cap ${AH.DMG_CAP}`
 );
 
+/* Shame control: the zones, and the rules that are supposed to be
+ * unconditional rather than heuristics. */
+const Engine = createRynAutoHealEngine({ Items: [], Hats: [], Accessories: [], Settings: {} });
+const ZONE = Engine.ZONE;
+check("zones are SAFE 0 / WARNING 1-6 / CRITICAL 7", (() => {
+  const z = n => Engine.zoneFor(n);
+  if (z(0) !== ZONE.SAFE) return false;
+  for (let n = 1; n <= 6; n++) if (z(n) !== ZONE.WARNING) return false;
+  return z(7) === ZONE.CRITICAL && z(8) === ZONE.CRITICAL;
+})());
+check(
+  "'approaching 7' starts below the ceiling",
+  AH.SHAME_WARN_HIGH > 0 && AH.SHAME_WARN_HIGH < AH.SHAME_MAX,
+  `${AH.SHAME_WARN_HIGH}`
+);
+check(
+  "the forecast horizon is one DoT period",
+  AH.SHAME_HORIZON_TICKS === AH.DOT_PERIOD_TICKS
+);
+check(
+  "the count is re-read on the execution path, not taken from the snapshot",
+  /liveShame\(\)/.test(ENGINE_SRC) &&
+  /const live = this\.adapter\.liveShame\(\);[\s\S]{0,200}revalidate\(/.test(ENGINE_SRC)
+);
+check(
+  "revalidation refuses a charged press once the live count is at the ceiling",
+  /verdict === VERDICT\.CHARGED && gate >= AH\.SHAME_MAX/.test(ENGINE_SRC)
+);
+
 /* The client field the engine deliberately does not trust. */
 const client = fs.readFileSync(path.join(ROOT, "src/RYN_Client_v5.4.user.js"), "utf8");
 check(

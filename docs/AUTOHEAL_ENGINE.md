@@ -257,31 +257,134 @@ tick index of the next poison/bull tick from `isBullTickTime`. Publishes
 `msUntilNextDotTick`, which is what lets the engine put a heal *before* a
 self-inflicted hit instead of into the 120 ms shadow behind it.
 
-### 3. ShameController
+### 3. ShameController — the shame control engine
 
-The safety authority. Holds:
+The safety authority, and the only part of the engine with an objective of its
+own: hold `SHAME <= 7` as an invariant, drive toward `0` as a goal. It is three
+parts behind one facade.
 
-- `count` — its own count, moved by the mirror's deltas for presses that healed
-  and by its own deferred adjustments for the presses the mirror cannot see.
-  (RYN's mirror only updates on an observed health *rise*, so it is blind to a
-  press at full health — which is exactly the press the wash path uses.)
-- `locked` — `shameActive` or hat 45.
-- `verdict()` → `CHARGED` | `CREDIT` | `FREE`, on the tick grid above; `FREE`
-  when no hit is pending.
-- `msUntilCredit()` — the remainder of this tick.
-- `chargeSafeCount()` — `max(own count, client mirror)`, used only to gate a
-  charged press. The two can disagree in both directions and the cost is not
-  symmetric: one too low is the press that arms the lock; one too high only
-  postpones a heal.
-- `chargeBudget()` — `SHAME_MAX - chargeSafeCount()`, i.e. how many `+1` presses
-  remain before the count would reach 8. **At 7 the budget is 0 and a charged
-  press is forbidden unconditionally**, because it cannot heal (fact 4 above).
-- `planWash()` — how to bank `-2`: `natural` when a hit is already pending and
-  the window has passed, or `bull` when there is no pending hit and Bull Helmet
-  is available to manufacture one on the next 1 s tick. The bull route is taken
-  only on a genuinely quiet tick — it is `-5` a second with no damage reduction,
-  so arming it in front of anything that can hit back trades health for a point
-  a natural wash would have given free a tick later.
+#### 3a. ShameTracker — what the count is doing
+
+| Tracked | From |
+|---|---|
+| current, previous, delta | the count, tick over tick |
+| increase rate, decrease rate | `+1` and `-2` events over a 45-tick (5 s) window, per second |
+| zone, previous zone, ticks in zone | `SAFE` 0 · `WARNING` 1-6 · `CRITICAL` ≥ 7 |
+| recent damage, damage frequency | DamageAnalyzer's window sums — hits/s is what the forecast multiplies |
+| healing state | `idle` · `pressing` · `awaiting` (pressed, result unseen) · `backoff` · `locked` |
+| cooldown state | `free` · `holding` (waiting for the window) · `backoff` |
+| peak | the high-water mark for the life |
+
+#### 3b. ShamePredictor — where it is heading
+
+Waiting for the count to actually be high means waiting until the only moves
+left are the expensive ones, so the forecast runs every tick over a one-second
+horizon:
+
+```
+expectedEvents  = damageFrequency × horizonSeconds + (a DoT tick in the horizon)
+forcedShare     = 1     when projected health is already at or under the threat
+                = 0.75  when it is within one food of it
+                = 0.35  when within two
+                = 0     otherwise            → the wait for credit is affordable
+expectedCharges = expectedEvents × forcedShare × confidence
+expectedCredits = min(unforced events, count / 2) × 2
+projectedShame  = clamp(count + charges − credits, 0, 7)
+ticksToCritical = (7 − count) ÷ chargesPerTick
+```
+
+`confidence` is the part that keeps the forecast honest. ThreatDetector weights
+each damage source by how much of it is going to happen rather than could:
+
+| Source | Weight | Why |
+|---|---|---|
+| DoT tick due | 1.0 | arithmetic on a fixed period |
+| projectile in flight | 0.85 | already fired |
+| spike being touched | 0.9 | contact damage, deterministic |
+| spike predicted (`willCollide`) | 0.5 | a prediction about movement |
+| melee, insta threat | 0.8 | committed sequence |
+| melee, reloaded primary in range | 0.6 | a player who may not swing |
+| melee, otherwise | 0.4 | proximity, little more |
+
+Weighted by damage, so confidence follows whichever source dominates the number.
+Below `CONFIDENCE_LOW` (0.4) the forecast is a rumour and the engine will not
+spend food on it — the "do not waste healing resources" rule, as a gate rather
+than an intention.
+
+#### 3c. ShameOpportunity — the earliest valid way down
+
+Credit does not accumulate: it is a single `-2` attached to one pending hit, and
+the first press after that hit either takes it or spends it the wrong way. So
+reduction is always a question of *when*, with exactly three answers:
+
+| Mode | Condition | ETA |
+|---|---|---|
+| `credit-now` | a hit is pending and the window has passed | this tick |
+| `credit-wait` | a hit is pending, still inside the window | next tick |
+| `bull` | nothing pending, field quiet, hat free | next DoT tick |
+
+`bull` is the manufactured hit: Bull Helmet's `healthRegen: -5` stamps `hitTime`
+on the next one-second tick, and a press after it is a `-2` that heals the 5
+back. It is gated on a genuinely quiet field — Bull carries no damage reduction,
+so arming it in front of anything that can hit back trades health for a point a
+natural credit would have given free.
+
+#### What the zones actually change
+
+| Zone | Behaviour |
+|---|---|
+| `SAFE` (0) | Nothing is owed, so nothing is spent chasing it: top-ups fall back to the food-economy rule (`gap >= restore`) and no wash is attempted. This is "avoid unnecessary healing", stated as a rule. |
+| `WARNING` (1-6) | Every credit opportunity is taken at the earliest valid moment. A top-up on a credit tick is worth more than the food it wastes — it heals *and* takes two off — so the economy rule is relaxed while a debt is owed. |
+| approaching 7 (≥ 5, or the forecast says so) | Defensive priority rises: the sustain floor gains half the reserve, so health is bought while presses are still free. Charged presses are held for the window unless the projection says the wait is fatal. |
+| `CRITICAL` (7) | Critical mode. No charged press may leave, at all — it cannot heal and it arms 30 s of not healing. The floor gains the full reserve, the hold for the window becomes unbounded, and the only way out is a credit press. |
+
+#### Facade
+
+- `count`, `zone`, `safe` / `warning` / `critical`, `approachingCritical`
+- `verdict()` → `CHARGED` | `CREDIT` | `FREE`, on the tick grid
+- `chargeSafeCount()` — `max(own count, client mirror)`; the two disagree in both
+  directions and the cost is not symmetric, so a charged press is gated on the
+  higher of them
+- `chargeBudget()`, `canSpendCharge()`
+- `planWash()`, `opportunity.mode`
+- `revalidate()` — see below
+
+#### Validation: never press on a stale count
+
+`revalidate()` runs as the last thing before the wire, on every press. It
+re-reads the live count, the live lock and the live hit stamp straight off
+`myPlayer`, re-derives the verdict from them, and recalculates the plan against
+what came back:
+
+- lock now on → drop the press;
+- verdict now `CHARGED` and the live count is at 7 → drop it, and say so
+  (`+stale:lockguard`);
+- the count moved up and this was not an emergency → drop it and let the next
+  tick plan against the number that actually holds (`+stale:count-moved`);
+- health already full → drop it unless it is a wash;
+- otherwise the press count is trimmed to what live health still needs and the
+  press goes out under its *corrected* verdict, so the accounting stays right.
+
+The client is single-threaded, so inside one `postTick` the window this closes
+is small — another client sharing the ModuleHandler, a hook, a future reordering
+that puts work between the plan and the press. What it costs when it is wrong is
+the one press that arms the lock without healing, which is the whole objective,
+so it is checked rather than assumed. The simulator plants a count that moves
+between the snapshot and the press: **20 re-reads catch it, 0 presses go out,
+0 locks are armed.**
+
+#### Where the count itself comes from
+
+`count` is the controller's own, not the client's. RYN's mirror
+(`Player.updateHealth`) only moves on an observed health *rise*, so it is blind
+to a press that healed nothing — which is exactly the press the wash path uses
+at full health. So the mirror's deltas drive the count for every press that
+healed, and the controller's own deferred adjustments cover the ones the mirror
+cannot see: pushed on the press, dropped if the mirror moves within two ticks,
+applied if it does not. Either way the count moves once.
+
+`chargeBudget()` is `SHAME_MAX - chargeSafeCount()`. **At 7 it is 0 and a
+charged press is forbidden unconditionally**, because it cannot heal (fact 4).
 
 One more consequence of fact 1 shapes every burst: **a charge is paid once per
 damage event, however many presses follow it.** The first press clears
@@ -385,15 +488,17 @@ postTick()
   ├─ state.update(snap, ledger)     health delta, hit latch, hidden damage
   ├─ ledger.update(snap, state)     expire in-flight presses
   ├─ damage.update(snap, state)     burst, rate, DoT phase
-  ├─ shame.update(snap, state)      count, verdict, credit clock
-  ├─ threat.evaluate(snap, damage)  raw → effective → lethal
+  ├─ shame.update(snap, state, ...) count, verdict, credit clock, zone, rates
+  ├─ threat.evaluate(snap, damage)  raw → effective → lethal, confidence
   ├─ predict.build(...)             projection, survivesHold, healsNeeded
+  ├─ shame.project(...)             forecast + earliest way down
   ├─ ledger.noteOutcome(...)        did the last press land? back off if not
   ├─ decide.plan(..., cooldown)     urgency + press count + hold
   ├─ arbiter.resolve(plan, snap)    yield / clamp against other systems
   ├─ validator.check(plan, snap)    legality
   ├─ cooldown.pace(plan, snap)      record the hold the plan settled on
-  └─ executor.run(plan)             presses; ledger + shame count updated
+  └─ executor.run(plan)             re-read the live count, recalculate,
+                                    then press; ledger + count updated
 ```
 
 ## State model
@@ -402,10 +507,16 @@ postTick()
 self     health, maxHealth(100), foodId, restore, foodStock, hatId, accId,
          alive, inGame, sandbox
 timing   tick, tickAt, TICK(111), pong, msSinceTick
-shame    count, locked, hitAt, pending, verdict, msUntilCredit, budget
-damage   lastDelta, burst, rate9, dotActive, dotPerSec, msUntilDotTick
+shame    count, previous, delta, zone, ticksInZone, increaseRate, decreaseRate,
+         locked, hitAt, hitTick, pending, verdict, msUntilCredit, chargeBudget,
+         healingState, cooldownState, peak
+forecast confidence, expectedEvents, expectedCharges, expectedCredits,
+         projectedShame, ticksToCritical, willReachCritical
+chance   mode (credit-now | credit-wait | bull | none), etaTicks, reason
+damage   lastDelta, burst, hiddenDamage, rate9, damageFrequency,
+         dotActive, dotPerSec, msUntilDotTick
 threat   melee, secondary, turret, projectile, spike, spikeKB, dot,
-         raw, effective, lethal, instaThreat, spikeContact
+         raw, effective, confidence, lethal, instaThreat, spikeContact
 heal     inFlight[], sentThisTick, backoffUntil, lastLandedTick
 plan     urgency, presses, allowCharge, holdMs, reason
 ```
@@ -416,15 +527,20 @@ plan     urgency, presses, allowCharge, holdMs, reason
 |---|---|---|---|
 | 0 | `BLOCKED` | validator refuses | no press |
 | 1 | `IDLE` | full health, no debt | no press |
-| 2 | `TOPUP` | health below max, tick is quiet | uncharged presses only |
-| 3 | `WASH` | `count > 0` and a credit press is available | credit only — this is the `-2` |
-| 4 | `SUSTAIN` | health below `effectiveThreat + reserve` | hold ≤ 1 tick for the window, then press if budget ≥ 2 |
+| 2 | `TOPUP` | health below max, tick is quiet | uncharged only; economy rule at `SAFE`, relaxed while a debt is owed or a *believable* threat exists |
+| 3 | `WASH` | `count > 0` and the opportunity finder has a way down | credit only — this is the `-2`; `credit-wait` holds a tick for it |
+| 4 | `SUSTAIN` | health below `effectiveThreat + reserve + zone bias` | hold ≤ 1 tick for the window, then press if budget ≥ 2 |
 | 5 | `CRITICAL` | `projected <= effectiveThreat`, death inside 1 tick | press now; spend `+1` if `budget >= 1` |
 | 6 | `LOCKGUARD` | `count === 7` and verdict is `CHARGED` | **never press** — wait for the window |
 
 `LOCKGUARD` outranks `CRITICAL` by construction, and that is not a survival
 compromise: at `count === 7` the charged press is refused by `consume` anyway
 (fact 4), so waiting costs nothing that pressing would have gained.
+
+The zone bias in `SUSTAIN` is where "increase defensive priority as the count
+approaches 7" lives: half the reserve at ≥ 5 or when the forecast says the
+count is heading there, the full reserve at 7. Health bought at 5 is bought
+with presses that are still affordable; the same health at 7 is not buyable.
 
 ## Threat model
 
@@ -501,15 +617,22 @@ fire at all: it gates on `tempHealth < maxHealth`, and `Player.maxHealth` is
 
 ### What the simulator reports
 
-Against the transcribed server rules, over eleven scenarios (sustained melee,
-every-other-tick pressure, an insta burst, poison, a 6- and a 7-count debt,
-250 ms ping, no food, an active lock, cheese, and an unsurvivable every-tick
+Against the transcribed server rules, over thirteen scenarios (sustained melee,
+every-other-tick pressure, an insta burst, poison, a 5-, 6- and 7-count debt,
+250 ms ping, no food, an active lock, cheese, a low-confidence threat, a count
+that moves between the plan and the press, and an unsurvivable every-tick
 beatdown):
 
 - no scenario arms the 30 s lock, and none sends a press while one is on;
-- the count never exceeds 7;
-- eight of the eleven hold shame at **0 for 100 % of ticks**, including the
+- the count never exceeds 7, and every scenario that starts in debt ends at 0;
+- eight of the thirteen hold shame at **0 for 100 % of ticks**, including the
   90 dps pressure run and the 250 ms ping run;
+- the low-confidence run — an enemy in range with a reloaded weapon who never
+  swings, for 90 ticks — spends **one press and 15 food**;
+- the moving-count run catches the stale read **20 times, sends 0 presses and
+  arms 0 locks**: it would rather die than send the press the live count says
+  arms the lock, which is the correct trade, since the lock is 30 s of
+  guaranteed death anyway;
 - the every-tick beatdown is the one shape the shame rule makes unsurvivable —
   the hit stamp is refreshed faster than the window closes, so all seven charges
   go and the eighth press is refused rather than sent. Dying at 7 without a lock

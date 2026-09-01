@@ -16668,6 +16668,20 @@ window.grbtp = 35;
        * turret 25) sits just under it. */
       DMG_CAP: 140,
   
+      /* Shame control.
+       *
+       * The zones are the objective's own: 0 is SAFE, 1-6 is WARNING, 7 is
+       * CRITICAL. WARN_HIGH is where "approaching 7" starts and defensive
+       * priority rises — two points short of the ceiling, which is one charged
+       * press plus the credit that would undo it. */
+      SHAME_WARN_HIGH: 5,
+      SHAME_HORIZON_TICKS: 9,        // one DoT period: the forecast horizon
+      SHAME_RATE_WINDOW_TICKS: 45,   // five seconds of history for the rates
+      /* How much of a predicted threat has to be the deterministic kind before
+       * the engine spends food on it. Below LOW it is a rumour, not a forecast. */
+      CONFIDENCE_HIGH: 0.7,
+      CONFIDENCE_LOW: 0.4,
+  
       /* Engine pacing. */
       MAX_PRESSES_PER_TICK: 6,
       /* A press sent during tick T is processed by the server on tick T+1, so its
@@ -16690,6 +16704,28 @@ window.grbtp = 35;
       FREE: "free",       // no hit pending: the arithmetic does not run at all
       CREDIT: "credit",   // pending hit, window passed: -2
       CHARGED: "charged"  // pending hit, still inside 120ms: +1
+    };
+  
+    /* The shame zones the control engine switches on. */
+    const ZONE = {
+      SAFE: "safe",        // 0        — nothing owed, so nothing is spent chasing it
+      WARNING: "warning",  // 1 to 6   — take the earliest valid chance to come down
+      CRITICAL: "critical" // 7        — no charged press may leave, at all
+    };
+  
+    /* What the healing side is doing, for the tracker. */
+    const HEAL_STATE = {
+      IDLE: "idle",
+      PRESSING: "pressing",
+      AWAITING: "awaiting",   // pressed, result not seen yet
+      BACKOFF: "backoff",     // presses are not landing; stopped asking
+      LOCKED: "locked"
+    };
+  
+    const COOLDOWN_STATE = {
+      FREE: "free",
+      HOLDING: "holding",     // deliberately waiting for the shame window
+      BACKOFF: "backoff"
     };
   
     /* Urgency classes, ordered. See docs/AUTOHEAL_ENGINE.md#priority-model. */
@@ -16945,6 +16981,21 @@ window.grbtp = 35;
         }
       }
   
+      /* The smallest possible fresh read of the shame state, for the check that
+       * runs immediately before a press. Deliberately not the full snapshot: this
+       * is on the execution path and only these four fields decide whether the
+       * press that is about to leave is the one that must not. */
+      liveShame() {
+        const me = this.me;
+        if (!me) return null;
+        return {
+          count: clamp(num(me.shameCount) || 0, 0, AH.SHAME_MAX),
+          active: !!me.shameActive || (num(me.hatID) || 0) === AH.HAT_SHAME,
+          receivedDamage: num(me.receivedDamage),
+          health: num(me.currentHealth)
+        };
+      }
+  
       packetsLeft() {
         const mh = this.mh;
         if (!mh) return 0;
@@ -17106,12 +17157,24 @@ window.grbtp = 35;
         this.ticksUntilDot = AH.DOT_PERIOD_TICKS;
         this.msUntilDot = AH.DOT_PERIOD_MS;
         this.underFire = false;
+        this.hits = [];
+        this.damageFrequency = 0;
       }
   
       update(snap, state) {
         this.burst = Math.max(state.delta < 0 ? -state.delta : 0, state.hiddenDamage);
         this.rate = state.recentDamage(AH.DOT_PERIOD_TICKS);
         this.underFire = snap.tick - snap.damageTick <= 1;
+  
+        /* Damage events per second over the rate window. This is the term the
+         * shame forecast multiplies: every hit is a stamp on hitTime, and every
+         * stamp is a +1 or a -2 waiting to be decided. */
+        if (this.burst > 0) this.hits.push(snap.tick);
+        while (this.hits.length && snap.tick - this.hits[0] > AH.SHAME_RATE_WINDOW_TICKS) {
+          this.hits.shift();
+        }
+        this.damageFrequency =
+          this.hits.length / ((AH.SHAME_RATE_WINDOW_TICKS * snap.TICK) / 1000);
   
         /* Signed damage-over-time per second. Bull is healthRegen -5
          * (drivers: hats[7]) and poison is a flat -5 while poisonCount is set
@@ -17145,9 +17208,243 @@ window.grbtp = 35;
      * uses to bank credit at full health. The mirror still drives every press
      * that did heal; the engine only accounts for the ones the mirror cannot see.
      * ================================================================== */
+    /* ---------------------------------------------------------------- *
+     * 3a. ShameTracker — what the count is doing, and how fast.
+     * ---------------------------------------------------------------- */
+    class ShameTracker {
+      constructor() { this.reset(); }
+  
+      reset() {
+        this.current = 0;
+        this.previous = 0;
+        this.delta = 0;
+        this.events = [];            // {tick, at, delta}
+        this.increaseRate = 0;       // charges per second, over the rate window
+        this.decreaseRate = 0;       // credits per second
+        this.zone = ZONE.SAFE;
+        this.previousZone = ZONE.SAFE;
+        this.zoneSinceTick = 0;
+        this.ticksInZone = 0;
+        this.healingState = HEAL_STATE.IDLE;
+        this.cooldownState = COOLDOWN_STATE.FREE;
+        this.recentDamage = 0;
+        this.damageFrequency = 0;
+        this.peak = 0;
+      }
+  
+      static zoneFor(count) {
+        if (count >= AH.SHAME_MAX) return ZONE.CRITICAL;
+        return count > 0 ? ZONE.WARNING : ZONE.SAFE;
+      }
+  
+      update(snap, count, ctx) {
+        this.previous = this.current;
+        this.current = count;
+        this.delta = this.current - this.previous;
+        if (this.current > this.peak) this.peak = this.current;
+  
+        if (this.delta !== 0) this.events.push({ tick: snap.tick, at: snap.now, delta: this.delta });
+        while (this.events.length && snap.tick - this.events[0].tick > AH.SHAME_RATE_WINDOW_TICKS) {
+          this.events.shift();
+        }
+        const windowSeconds = (AH.SHAME_RATE_WINDOW_TICKS * snap.TICK) / 1000;
+        let up = 0, down = 0;
+        for (const e of this.events) {
+          if (e.delta > 0) up += e.delta;
+          else down -= e.delta;
+        }
+        this.increaseRate = up / windowSeconds;
+        this.decreaseRate = down / windowSeconds;
+  
+        this.previousZone = this.zone;
+        this.zone = ShameTracker.zoneFor(ctx.locked ? AH.SHAME_MAX : count);
+        if (this.zone !== this.previousZone) this.zoneSinceTick = snap.tick;
+        this.ticksInZone = snap.tick - this.zoneSinceTick;
+  
+        this.recentDamage = ctx.recentDamage;
+        this.damageFrequency = ctx.damageFrequency;
+        this.healingState = ctx.locked ? HEAL_STATE.LOCKED
+          : ctx.backoff ? HEAL_STATE.BACKOFF
+          : ctx.pressedLastTick ? HEAL_STATE.PRESSING
+          : ctx.inFlight > 0 ? HEAL_STATE.AWAITING
+          : HEAL_STATE.IDLE;
+        this.cooldownState = ctx.backoff ? COOLDOWN_STATE.BACKOFF
+          : ctx.holding ? COOLDOWN_STATE.HOLDING
+          : COOLDOWN_STATE.FREE;
+      }
+  
+      /* Two points short of the ceiling: one charged press away from a state the
+       * credit that would undo it cannot be relied on to reach first. */
+      get approachingCritical() {
+        return this.current >= AH.SHAME_WARN_HIGH && this.current < AH.SHAME_MAX;
+      }
+    }
+  
+    /* ---------------------------------------------------------------- *
+     * 3b. ShamePredictor — where the count is heading, and how sure we are.
+     *
+     * The forecast exists to answer one question early enough to matter: is the
+     * next stretch of this fight going to force charged presses, and if so should
+     * the engine be banking credit and topping up *now*, while presses are still
+     * free? Waiting for the count to actually be high is waiting until the only
+     * moves left are the expensive ones.
+     *
+     * Everything it multiplies by is a real number from the client. What it adds
+     * is the arithmetic linking damage events to shame: one event is +1 if we
+     * have to heal through it, -2 if we can afford to wait a tick, and 0 if we do
+     * not eat before the next hit overwrites the stamp.
+     * ---------------------------------------------------------------- */
+    class ShamePredictor {
+      constructor() { this.reset(); }
+  
+      reset() {
+        this.confidence = 0;
+        this.expectedEvents = 0;
+        this.expectedCharges = 0;
+        this.expectedCredits = 0;
+        this.projected = 0;
+        this.ticksToCritical = Infinity;
+        this.willReachCritical = false;
+        this.forcedShare = 0;
+      }
+  
+      forecast(snap, count, damage, threat, predict) {
+        const horizonTicks = AH.SHAME_HORIZON_TICKS;
+        const horizonSeconds = (horizonTicks * snap.TICK) / 1000;
+  
+        /* How reliable the incoming damage actually is. A poison tick is
+         * arithmetic; an enemy standing in range holding a reloaded weapon is a
+         * guess. Spending food on the guess is what the objective calls wasting
+         * healing resources. */
+        this.confidence = threat.confidence;
+  
+        /* Damage events expected in the horizon: the observed hit frequency, plus
+         * the damage-over-time tick if one falls inside it. Both are measured,
+         * not assumed. */
+        const dotEvents = damage.dotActive && damage.ticksUntilDot <= horizonTicks ? 1 : 0;
+        this.expectedEvents = damage.damageFrequency * horizonSeconds + dotEvents;
+  
+        /* Of those, the share we would be forced to heal through inside the
+         * window rather than waiting a tick for credit. Being one food short of
+         * the threat is what forces it. */
+        const headroom = predict.projected - threat.effective;
+        const restore = snap.restore || 1;
+        this.forcedShare = headroom <= 0 ? 1
+          : headroom <= restore ? 0.75
+          : headroom <= restore * 2 ? 0.35
+          : 0;
+  
+        const charges = this.expectedEvents * this.forcedShare * Math.max(this.confidence, 0);
+        this.expectedCharges = charges;
+        /* Every event we are not forced to heal through inside the window is a
+         * credit instead, worth two — but only one credit per event, and only if
+         * we eat at all, so it is capped by how much healing we will actually
+         * want to do. */
+        const unforced = Math.max(0, this.expectedEvents - charges);
+        this.expectedCredits = Math.min(unforced, count / AH.SHAME_CREDIT) * AH.SHAME_CREDIT;
+  
+        this.projected = clamp(
+          count + this.expectedCharges - this.expectedCredits, 0, AH.SHAME_MAX
+        );
+        const perTick = this.expectedCharges / horizonTicks;
+        this.ticksToCritical = perTick > 0
+          ? Math.max(0, (AH.SHAME_MAX - count) / perTick)
+          : Infinity;
+        this.willReachCritical =
+          this.projected >= AH.SHAME_MAX || this.ticksToCritical <= horizonTicks;
+        return this;
+      }
+  
+      /* Confident enough to spend food on a threat that has not landed yet. */
+      get actionable() {
+        return this.confidence >= AH.CONFIDENCE_LOW;
+      }
+  
+      get reliable() {
+        return this.confidence >= AH.CONFIDENCE_HIGH;
+      }
+    }
+  
+    /* ---------------------------------------------------------------- *
+     * 3c. ShameOpportunity — the earliest valid way down.
+     *
+     * Credit is not something that accumulates; it is a single -2 attached to a
+     * pending hit, and the first press after that hit either takes it or spends
+     * it the wrong way. So "reduce shame" is always a question of *when*, and
+     * there are exactly three answers.
+     * ---------------------------------------------------------------- */
+    class ShameOpportunity {
+      constructor(adapter) {
+        this.adapter = adapter;
+        this.reset();
+      }
+  
+      reset() {
+        this.mode = "none";
+        this.etaTicks = Infinity;
+        this.reason = "";
+      }
+  
+      find(snap, state, damage, threat, shame, systems) {
+        this.mode = "none";
+        this.etaTicks = Infinity;
+        this.reason = "";
+  
+        if (!this.adapter.washEnabled || shame.locked || shame.count <= 0) {
+          this.reason = shame.locked ? "locked" : shame.count <= 0 ? "nothing-owed" : "off";
+          return this;
+        }
+  
+        /* 1. A hit is pending and the window has passed: press now, take the -2.
+         *    At full health it also costs no food (game_index.js:2475). */
+        if (shame.verdictNow === VERDICT.CREDIT) {
+          this.mode = "credit-now";
+          this.etaTicks = 0;
+          this.reason = "pending-hit-past-window";
+          return this;
+        }
+  
+        /* 2. A hit is pending but still inside the window: the credit is one tick
+         *    away. Worth naming even though the decision may not be able to wait
+         *    for it — that trade is made against health, not here. */
+        if (shame.verdictNow === VERDICT.CHARGED) {
+          this.mode = "credit-wait";
+          this.etaTicks = 1;
+          this.reason = "window-opens-next-tick";
+          return this;
+        }
+  
+        /* 3. Nothing pending. Bull Helmet's healthRegen -5 stamps a hit on the
+         *    next one-second tick (game_index.js:2317), and a press after that
+         *    tick is a -2 that also heals the 5 back. Only on a quiet field: Bull
+         *    carries no damage reduction, so arming it in front of anything that
+         *    can hit back trades health for a point a natural credit would have
+         *    given free. novastorm gates its own reset the same way
+         *    (`totalDmgPot == 0`). */
+        if (threat.effective > 0 || damage.underFire || threat.spikeContact) {
+          this.reason = "not-quiet";
+          return this;
+        }
+        if (snap.poisonCount > 0 || snap.bullOn) { this.reason = "already-ticking"; return this; }
+        if (systems.velocityArmed || systems.soldierClaimed) { this.reason = "hat-claimed"; return this; }
+        if (snap.forceHat !== null) { this.reason = "hat-claimed"; return this; }
+  
+        this.mode = "bull";
+        this.etaTicks = Math.max(1, damage.ticksUntilDot);
+        this.reason = "manufacture-hit";
+        return this;
+      }
+    }
+  
+    /* ---------------------------------------------------------------- *
+     * 3. ShameController — the facade the rest of the engine talks to.
+     * ---------------------------------------------------------------- */
     class ShameController {
       constructor(adapter) {
         this.adapter = adapter;
+        this.tracker = new ShameTracker();
+        this.predictor = new ShamePredictor();
+        this.opportunity = new ShameOpportunity(adapter);
         this.reset();
       }
   
@@ -17160,9 +17457,21 @@ window.grbtp = 35;
         this.deferred = [];      // adjustments the mirror will not see
         this.washMode = null;    // "natural" | "bull" | null
         this.lastWashTick = -999;
+        this.revalidations = 0;
+        this.tracker.reset();
+        this.predictor.reset();
+        this.opportunity.reset();
       }
   
-      update(snap, state) {
+      get zone() { return this.tracker.zone; }
+      get safe() { return this.tracker.zone === ZONE.SAFE; }
+      get warning() { return this.tracker.zone === ZONE.WARNING; }
+      get critical() { return this.tracker.zone === ZONE.CRITICAL; }
+      get approachingCritical() {
+        return this.tracker.approachingCritical || this.predictor.willReachCritical;
+      }
+  
+      update(snap, state, damage, ctx) {
         this.locked = snap.shameActive;
         if (this.locked) {
           /* The lock zeroes the count when it expires (game_index.js:2313). */
@@ -17170,6 +17479,7 @@ window.grbtp = 35;
           this.mirrorPrev = snap.mirrorShame;
           this.deferred.length = 0;
           this.verdictNow = VERDICT.CHARGED;
+          this.tracker.update(snap, 0, Object.assign({ locked: true }, ctx));
           return;
         }
   
@@ -17196,6 +17506,15 @@ window.grbtp = 35;
   
         this.verdictNow = this.verdict(snap, state);
         this.msUntilCredit = this.creditIn(snap, state);
+        this.tracker.update(snap, this.count, Object.assign({ locked: false }, ctx));
+      }
+  
+      /* Second half of the tick's shame work, once the threat and the projection
+       * exist: where the count is heading, and the earliest way down. */
+      project(snap, state, damage, threat, predict, systems) {
+        this.predictor.forecast(snap, this.count, damage, threat, predict);
+        this.opportunity.find(snap, state, damage, threat, this, systems);
+        return this;
       }
   
       /* What a press leaving now would do, server-side.
@@ -17270,25 +17589,76 @@ window.grbtp = 35;
         return this.count > 0 && this.verdictNow === VERDICT.CREDIT;
       }
   
-      /* When nothing has hit us, Bull Helmet's healthRegen -5 manufactures a hit
-       * on the next one-second tick (game_index.js:2317 -> changeHealth(-5) ->
-       * hitTime). A late press then converts it into -2 and heals the 5 back. */
-      planWash(snap, damage, threat, systems) {
-        this.washMode = null;
-        if (!this.adapter.washEnabled || this.locked || this.count <= 0) return null;
-        if (this.verdictNow === VERDICT.CREDIT) { this.washMode = "natural"; return "natural"; }
-        if (this.verdictNow === VERDICT.CHARGED) return null;
-        /* No hit pending: manufacture one with Bull. Only on a genuinely quiet
-         * tick — Bull is -5 a second and no damage reduction, so arming it in
-         * front of anything that can hit back trades health for a shame point
-         * that a natural wash would have given for free a tick later. novastorm
-         * gates its own shame reset the same way (`totalDmgPot == 0`). */
-        if (threat.effective > 0 || damage.underFire || threat.spikeContact) return null;
-        if (snap.poisonCount > 0 || snap.bullOn) return null;
-        if (systems.velocityArmed || systems.soldierClaimed) return null;
-        if (snap.forceHat !== null) return null;
-        this.washMode = "bull";
-        return "bull";
+      /* The wash the decision engine should take this tick, if any. "natural" is
+       * a credit press against a hit that is already pending; "bull" arms the hat
+       * that will stamp one on the next one-second tick. */
+      planWash() {
+        const mode = this.opportunity.mode;
+        this.washMode = mode === "credit-now" ? "natural" : mode === "bull" ? "bull" : null;
+        return this.washMode;
+      }
+  
+      /* ---- validation -------------------------------------------------- *
+       *
+       * Nothing is pressed on a shame count that was read at the top of the tick
+       * and could have moved since. The client is single-threaded, so inside one
+       * postTick the window is small — but it is not nothing (another client
+       * sharing this ModuleHandler, a hook, a future reordering that puts work
+       * between the plan and the press), and what it costs when it is wrong is
+       * the one press that arms the lock without healing.
+       *
+       * So the live count, the live lock and the live hit stamp are re-read
+       * immediately before execution, the verdict is re-derived from them, and
+       * the plan is recalculated against what came back rather than what was
+       * planned: a press that is still affordable goes out under its corrected
+       * verdict, one that is not is dropped and re-planned next tick. */
+      revalidate(snap, state, live, plan) {
+        this.revalidations += 1;
+        const out = {
+          ok: true, verdict: plan.verdict, presses: plan.presses, reason: "", changed: false
+        };
+        if (!live) return out;
+  
+        if (live.active) {
+          return { ok: false, verdict: plan.verdict, presses: 0, reason: "locked", changed: true };
+        }
+  
+        /* Re-derive the verdict from the live hit stamp. A hit that landed after
+         * the snapshot turns a free press into a charged one. */
+        let verdict = plan.verdict;
+        if (live.receivedDamage !== null && live.receivedDamage > state.hitAt) {
+          verdict = VERDICT.CHARGED;
+        } else if (live.receivedDamage === null && !state.pending) {
+          verdict = VERDICT.FREE;
+        }
+        if (verdict !== plan.verdict) out.changed = true;
+        out.verdict = verdict;
+  
+        /* Re-gate on the live count. */
+        const gate = Math.max(this.count, live.count);
+        if (verdict === VERDICT.CHARGED && gate >= AH.SHAME_MAX) {
+          return { ok: false, verdict, presses: 0, reason: "lockguard", changed: true };
+        }
+        if (verdict === VERDICT.CHARGED && gate > this.chargeSafeCount(snap) &&
+            plan.urgency < URGENCY.CRITICAL) {
+          /* The count went up while we were deciding, and this was not an
+           * emergency: let the next tick re-plan against the new number. */
+          return { ok: false, verdict, presses: 0, reason: "count-moved", changed: true };
+        }
+  
+        /* Recalculate the press count against live health: a heal that landed in
+         * the meantime is health we no longer have to buy. */
+        if (typeof live.health === "number" && snap.restore > 0) {
+          if (live.health >= snap.maxHealth && plan.urgency !== URGENCY.WASH) {
+            return { ok: false, verdict, presses: 0, reason: "already-full", changed: true };
+          }
+          const needed = Math.ceil((snap.maxHealth - live.health) / snap.restore);
+          if (plan.urgency !== URGENCY.WASH && out.presses > needed) {
+            out.presses = Math.max(1, needed);
+            out.changed = true;
+          }
+        }
+        return out;
       }
   
       /* Record what the press we just sent should do. It is deferred rather than
@@ -17320,6 +17690,7 @@ window.grbtp = 35;
         this.spikeContact = false;
         this.insta = false;
         this.sources = [];
+        this.confidence = 0;
       }
   
       evaluate(snap, damage) {
@@ -17357,6 +17728,26 @@ window.grbtp = 35;
         if (spike) this.sources.push("spike:" + Math.round(spike));
         if (t.projectile) this.sources.push("proj:" + Math.round(t.projectile));
         if (damage.dotActive) this.sources.push("dot:" + damage.dotPerSecond);
+  
+        /* How much of this number is going to happen, rather than could happen.
+         *
+         * A damage-over-time tick is arithmetic on a fixed period. An arrow in
+         * flight has already been fired. A spike we are standing on deals its
+         * damage on contact. An enemy in range holding a reloaded weapon is a
+         * player who may or may not swing — the largest term in potentialDamage
+         * and the least certain, which is exactly why spending food on it alone
+         * is what the objective calls wasting healing resources.
+         *
+         * Weighted by damage, so the confidence follows whichever source
+         * dominates the number. */
+        const parts = [];
+        if (damage.dotActive && damage.ticksUntilDot <= 2) parts.push([damage.dotPerSecond, 1]);
+        if (t.projectile) parts.push([t.projectile, 0.85]);
+        if (spike) parts.push([spike, t.collidingSpike ? 0.9 : 0.5]);
+        if (t.potential) parts.push([t.potential, t.instaThreat ? 0.8 : t.primary ? 0.6 : 0.4]);
+        let sum = 0, weighted = 0;
+        for (const [d, w] of parts) { sum += d; weighted += d * w; }
+        this.confidence = sum > 0 ? weighted / sum : 0;
         return this;
       }
     }
@@ -17529,6 +17920,23 @@ window.grbtp = 35;
           return { urgency: URGENCY.BLOCKED, presses: 0, holdMs: 0, reason: "shame-lock", verdict };
         }
   
+        /* Healing at full health does nothing at all (game_index.js:2418), so no
+         * amount of predicted damage makes a press worth sending while the bar is
+         * still full — the projection can sit below max on the tick before a
+         * damage-over-time tick, and a press planned there is one the validator
+         * would only refuse. The wash path is the exception, and the only one:
+         * there the point is the -2, not the heal. */
+        const canHeal = snap.health < max;
+  
+        /* Defensive priority rises with the zone. Health bought at 5 is bought
+         * with presses that are still affordable; the same health bought at 7 is
+         * not buyable at all. So the floor comes up as the count approaches the
+         * ceiling — including when it is the forecast rather than the count that
+         * says so, which is the whole point of forecasting it. */
+        const defensiveBias = shame.critical ? reserve
+          : shame.approachingCritical ? reserve / 2
+          : 0;
+  
         /* ---- 6 LOCKGUARD ------------------------------------------------ *
          * At 7, a charged press sets the 30s lock and is then refused by
          * consume: no heal, thirty seconds of no heals, and the count is not even
@@ -17544,7 +17952,7 @@ window.grbtp = 35;
   
         /* ---- 5 CRITICAL ------------------------------------------------- */
         const lethalNow = health <= threat.effective || health <= damage.burst;
-        if (lethalNow && health < max) {
+        if (lethalNow && health < max && canHeal) {
           if (lockGuard) {
             return {
               urgency: URGENCY.LOCKGUARD, presses: 0, holdMs: shame.msUntilCredit,
@@ -17587,8 +17995,8 @@ window.grbtp = 35;
         /* ---- 4 SUSTAIN --------------------------------------------------- *
          * The predictive floor: stay above what the field can currently do to us
          * plus a reserve, so the emergency branch above is rarely reached. */
-        const floor = Math.min(max, threat.effective + reserve);
-        if (health < floor && health < max) {
+        const floor = Math.min(max, threat.effective + reserve + defensiveBias);
+        if (health < floor && health < max && canHeal) {
           if (verdict !== VERDICT.CHARGED) {
             return {
               urgency: URGENCY.SUSTAIN,
@@ -17633,7 +18041,7 @@ window.grbtp = 35;
          * not it heals, and at full health it costs no food at all
          * (game_index.js:2475 — useRes is only reached when consume returned
          * true). One press: the second would find hitTime already cleared. */
-        const mode = shame.planWash(snap, damage, threat, snap.systems);
+        const mode = shame.planWash();
         if (mode === "natural") {
           return {
             urgency: URGENCY.WASH, presses: 1, holdMs: 0,
@@ -17646,12 +18054,21 @@ window.grbtp = 35;
             reason: "wash-bull-arm", verdict, wantBull: true
           };
         }
+        /* The credit is one tick out. Nothing else here is urgent — health is
+         * above the floor — so wait for it rather than spending a press now that
+         * would count the wrong way. */
+        if (shame.opportunity.mode === "credit-wait" && !shame.safe) {
+          return {
+            urgency: URGENCY.WASH, presses: 0, holdMs: shame.msUntilCredit,
+            reason: "wash-wait-window", verdict
+          };
+        }
   
         /* ---- 2 TOPUP ----------------------------------------------------- *
          * Quiet ticks are where health is meant to come back, precisely so the
          * charged branches above stay unused. Only ever on a free or credit
          * press, and preferably before the next damage-over-time tick. */
-        if (health < max) {
+        if (health < max && canHeal) {
           if (verdict === VERDICT.CHARGED) {
             /* Nothing is urgent here, so there is never a reason to buy a top-up
              * with +1. Skip the tick rather than hold: holding would put the
@@ -17662,12 +18079,23 @@ window.grbtp = 35;
             };
           }
           /* `gap >= restore` is food economy: a press that would waste most of
-           * its restore is not worth the food on a quiet field. It stops applying
-           * the moment anything can hit us — a wasted 5 health is cheaper than
-           * being 35 short when the next swing lands, and on a non-damage tick
-           * the press is credit, so it buys shame back rather than costing it. */
+           * its restore is not worth the food on a quiet field.
+           *
+           * What relaxes it is the zone, not the health. Owing shame makes a
+           * credit press worth more than the food it wastes — it heals *and*
+           * takes two off the count, which is the earliest valid opportunity the
+           * objective asks for. At zero there is nothing to buy, so the economy
+           * rule stands: that is "avoid unnecessary healing", stated as a rule
+           * rather than a hope.
+           *
+           * A threat can relax it too, but only a believable one. Topping up
+           * against a number that is mostly "an enemy is standing nearby holding
+           * a weapon" is the wasted resource the objective warns about, so the
+           * forecast has to be actionable before it counts. */
           const gap = max - health;
-          if (gap >= restore || !damage.underFire || threat.effective > 0) {
+          const worthCredit = !shame.safe && verdict === VERDICT.CREDIT;
+          const believableThreat = threat.effective > 0 && shame.predictor.actionable;
+          if (gap >= restore || !damage.underFire || worthCredit || believableThreat) {
             return {
               urgency: URGENCY.TOPUP,
               presses: predict.healsNeeded(max, restore),
@@ -17852,11 +18280,28 @@ window.grbtp = 35;
         }
         if (!plan.presses) return 0;
   
-        const verdict = plan.verdict;
-        const willHeal = snap.health < snap.maxHealth;
+        /* Validation — the last thing before the wire. The count, the lock and
+         * the hit stamp are re-read live and the plan is recalculated against
+         * them, so no press ever leaves on a shame reading taken at the top of
+         * the tick. A press that is still affordable goes out under its corrected
+         * verdict; one that is not is dropped, and the next tick plans against
+         * the number that actually holds. */
+        const live = this.adapter.liveShame();
+        const check = shame.revalidate(snap, state, live, plan);
+        if (!check.ok) {
+          this.lastReason = plan.reason + "+stale:" + check.reason;
+          this.lastPresses = 0;
+          return 0;
+        }
+        if (check.changed) this.lastReason = plan.reason + "+recalc";
+  
+        const verdict = check.verdict;
+        const presses = check.presses;
+        const willHeal = (live && typeof live.health === "number" ? live.health : snap.health) <
+          snap.maxHealth;
         let sent = 0;
   
-        for (let i = 0; i < plan.presses; i++) {
+        for (let i = 0; i < presses; i++) {
           /* Read the counter live: it is incremented at the transport for every
            * frame anyone sends (PacketManager._watchSocket), so it moves under us
            * as this loop runs. */
@@ -17946,9 +18391,19 @@ window.grbtp = 35;
         this.state.update(snap, this.ledger);
         this.ledger.update(snap, this.state);
         this.damage.update(snap, this.state);
-        this.shame.update(snap, this.state);
+        this.shame.update(snap, this.state, this.damage, {
+          recentDamage: this.damage.rate,
+          damageFrequency: this.damage.damageFrequency,
+          inFlight: this.ledger.expectedHeal(snap),
+          pressedLastTick: snap.tick - this.state.lastPressTick <= 1,
+          holding: this.cooldown.holdSinceTick >= 0,
+          backoff: this.ledger.backedOff(snap)
+        });
         this.threat.evaluate(snap, this.damage);
         this.predict.build(snap, this.state, this.damage, this.threat, this.ledger);
+        /* The forecast and the way down both need the threat and the projection,
+         * so the shame engine's second half runs after them. */
+        this.shame.project(snap, this.state, this.damage, this.threat, this.predict, snap.systems);
         this.ledger.noteOutcome(snap, this.state, this.predict.inFlight);
   
         let plan;
@@ -17969,16 +18424,34 @@ window.grbtp = 35;
         const sent = this.executor.run(plan, snap, this.state, this.shame, this.ledger);
         this._pressedThisTick = sent > 0;
   
+        const tracker = this.shame.tracker;
+        const forecast = this.shame.predictor;
         this.telemetry = {
           urgency: this._urgencyName(plan.urgency),
           reason: this.executor.lastReason,
           presses: sent,
+          /* shame control */
           shame: this.shame.count,
+          shamePrev: tracker.previous,
+          shameDelta: tracker.delta,
+          zone: tracker.zone,
+          ticksInZone: tracker.ticksInZone,
+          upRate: Number(tracker.increaseRate.toFixed(2)),
+          downRate: Number(tracker.decreaseRate.toFixed(2)),
           shameGate: this.shame.chargeSafeCount(snap),
+          forecastShame: Number(forecast.projected.toFixed(2)),
+          confidence: Number(forecast.confidence.toFixed(2)),
+          ticksToCritical: forecast.ticksToCritical === Infinity
+            ? "-" : Math.round(forecast.ticksToCritical),
+          opportunity: this.shame.opportunity.mode,
+          healingState: tracker.healingState,
+          cooldownState: tracker.cooldownState,
+          /* the rest */
           verdict: this.shame.verdictNow,
           creditIn: Math.round(this.shame.msUntilCredit),
           threat: Math.round(this.threat.effective),
           sources: this.threat.sources.join(" "),
+          damageFrequency: Number(this.damage.damageFrequency.toFixed(2)),
           rate: Math.round(this.damage.rate),
           projected: Math.round(this.predict.projected),
           inFlight: this.predict.inFlight
@@ -17994,6 +18467,8 @@ window.grbtp = 35;
     AutoHealEngine.AH = AH;
     AutoHealEngine.URGENCY = URGENCY;
     AutoHealEngine.VERDICT = VERDICT;
+    AutoHealEngine.ZONE = ZONE;
+    AutoHealEngine.zoneFor = ShameTracker.zoneFor;
     return AutoHealEngine;
   }
 
