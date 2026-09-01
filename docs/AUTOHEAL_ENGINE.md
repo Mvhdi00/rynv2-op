@@ -1006,7 +1006,7 @@ fire at all: it gates on `tempHealth < maxHealth`, and `Player.maxHealth` is
 
 ### What the simulator reports
 
-Against the transcribed server rules, over twenty-six scenarios — the healing and
+Against the transcribed server rules, over forty-two scenarios — the healing and
 shame set (sustained melee, every-other-tick pressure, an insta burst, poison,
 a 5-, 6- and 7-count debt, 250 ms ping, no food, an active lock, cheese, a
 low-confidence threat, a count that moves between the plan and the press, an

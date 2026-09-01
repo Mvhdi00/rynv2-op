@@ -338,6 +338,8 @@ function makeClient(sim) {
     isTrapped: false,
     trappedIn: null,
     scale: 35,
+    speed: 0,
+    move_dir: 0,
     pos: { current: vec(0, 0), previous: vec(0, 0), future: vec(0, 0) },
     getItemByType(t) { return this.inventory[t]; },
     getBuildingDamage() { return 25; }
@@ -462,7 +464,8 @@ class Sim {
       pressesWhileLocked: 0, staleAborts: 0, zones: {}, threats: {},
       preempts: 0, cacheHits: 0, cacheMisses: 0, invalidations: {}, motion: "-",
       decisions: {}, ranks: {}, reasonless: 0, survivalPresses: 0,
-      rejections: {}, packets: 0, duplicatesBlocked: 0, yields: {}
+      rejections: {}, packets: 0, duplicatesBlocked: 0, yields: {},
+      phantomHeals: 0, unrecordedHeals: 0, threatTicks: [], threatTickList: {}
     };
   }
 
@@ -599,6 +602,21 @@ class Sim {
       ? { pos: { current: vec(w.turret, 0) } }
       : null;
 
+    /* My own movement, as Entity.setFuturePosition computes it: last tick's
+     * travel becomes `speed`, and its direction becomes `move_dir`. The
+     * detectors measure enemy distance against this, so moving the player is
+     * how the "player moves" case gets tested rather than assumed. */
+    if (w.me) {
+      const prev = mp.pos.current;
+      const next = vec(w.me.x === undefined ? prev.x : w.me.x,
+        w.me.y === undefined ? prev.y : w.me.y);
+      mp.pos.previous = prev;
+      mp.pos.current = next;
+      mp.speed = prev.distance(next);
+      mp.move_dir = prev.angle(next);
+      mp.pos.future = vec(next.x + (next.x - prev.x), next.y + (next.y - prev.y));
+    }
+
     this.queued = 0;
     if (this.onTickStart) this.onTickStart();
     const clock = Date.now;
@@ -642,6 +660,11 @@ class Sim {
     this.stats.motion = tm.motionSource || "-";
     this.stats.duplicatesBlocked = tm.duplicatesBlocked || 0;
     this.stats.decisions[tm.decision] = (this.stats.decisions[tm.decision] || 0) + 1;
+    /* A decision record that does not match what happened is worth as little as
+     * no record at all. HEAL_NOW means presses went out on this tick; anything
+     * else is one of the other four decisions. */
+    if (tm.decision === "HEAL_NOW" && !this.queued) this.stats.phantomHeals += 1;
+    if (tm.decision !== "HEAL_NOW" && this.queued) this.stats.unrecordedHeals += 1;
     this.stats.ranks[tm.rank] = (this.stats.ranks[tm.rank] || 0) + 1;
     if (!tm.reason || typeof tm.reason !== "string" || !tm.reason.length) {
       this.stats.reasonless += 1;
@@ -657,8 +680,10 @@ class Sim {
     this.stats.cacheHits = hits;
     this.stats.cacheMisses = total - hits;
     /* Highest confidence each detector ever reached, and how often it fired. */
+    if ((tm.threats || []).length) this.stats.threatTicks.push(this.tick);
     for (const entry of tm.threats || []) {
       const [type, confidence] = entry.split(":");
+      (this.stats.threatTickList[type] = this.stats.threatTickList[type] || []).push(this.tick);
       const seen = this.stats.threats[type] || { best: "NONE", ticks: 0 };
       const rank = { NONE: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
       if (rank[confidence] > rank[seen.best]) seen.best = confidence;
@@ -746,6 +771,79 @@ scenario("shame debt at 7 under fire — the press that must not be sent", () =>
   sim.client.myPlayer.shameCount = 7;
   for (let t = 1; t <= 30; t++) sim.step(t % 2 === 0 ? 25 : 0, 40);
   for (let t = 31; t <= 80; t++) sim.step(0, 0);
+  return sim;
+});
+
+/* ---- the shame ladder ------------------------------------------- *
+ * One scenario per rung, so a regression at any count shows up as that rung
+ * rather than as a general "shame got worse".
+ * ---------------------------------------------------------------- */
+
+/* Rung 0. Nothing is owed and nothing may be borrowed: under pressure the
+ * engine has to find the late press every time, not "mostly". */
+scenario("shame 0 — sustained fire never opens a debt", () => {
+  const sim = new Sim({ foodId: 1, shame: 0 });
+  for (let t = 1; t <= 120; t++) sim.step(t % 3 === 0 ? 30 : 0, 40);
+  return sim;
+});
+
+/* Rung 1. One unit of debt on an otherwise ordinary fight. A single
+ * full-health press banks -2 and clears it, so ending anywhere but 0 means the
+ * wash never found its moment. */
+scenario("shame 1 — a single unit of debt is washed off", () => {
+  const sim = new Sim({ foodId: 1, shame: 1 });
+  sim.client.myPlayer.shameCount = 1;
+  for (let t = 1; t <= 90; t++) sim.step(t % 5 === 0 ? 25 : 0, 30);
+  return sim;
+});
+
+/* Rung 8+. Mechanically the server can never show this: reaching 8 resets the
+ * count to 0 in the same expression that arms the lock, and RYN's mirror
+ * clamps to 0..7. So this is a corrupted read, not a game state — a desynced
+ * mirror, a torn packet, a future client. The engine must not trust it into a
+ * press, must not crash on it, and must recover once the real count is
+ * readable again. */
+scenario("shame above 7 — an impossible count is survived, not trusted", () => {
+  const sim = new Sim({ foodId: 1 });
+  /* Force the mirror past the ceiling the client itself enforces. */
+  sim.client.myPlayer.shameCount = 12;
+  for (let t = 1; t <= 20; t++) {
+    sim.client.myPlayer.shameCount = 12;
+    sim.step(t % 2 === 0 ? 25 : 0, 40);
+  }
+  /* Mirror comes back to reality; the engine has to resume normally. */
+  sim.client.myPlayer.shameCount = 0;
+  for (let t = 21; t <= 70; t++) sim.step(t % 4 === 0 ? 25 : 0, 30);
+  return sim;
+});
+
+/* Rapid: damage on every single tick, so every press is offered the charged
+ * window and the count can only be held down by refusing them. This is the
+ * scenario that walks to 8 if the verdict model is wrong by one tick. */
+scenario("rapid shame increase — a hit every tick for six seconds", () => {
+  const sim = new Sim({ foodId: 1, allowDeaths: true });
+  for (let t = 1; t <= 54; t++) sim.step(12, 20);
+  for (let t = 55; t <= 120; t++) sim.step(0, 0);
+  return sim;
+});
+
+/* Repeated: separate hit events, each far enough apart to be judged on its own
+ * merits, over a long fight. Different failure from "rapid" — nothing here
+ * forces a charge, so any climb at all is the engine choosing badly. */
+scenario("repeated shame increase — sixty separate hit events", () => {
+  const sim = new Sim({ foodId: 1 });
+  for (let t = 1; t <= 240; t++) sim.step(t % 4 === 0 ? 20 : 0, 25);
+  return sim;
+});
+
+/* Recovery: start at the ceiling with the field quiet enough to work in. Every
+ * route down is a late press, so this measures whether the engine actually
+ * takes them rather than sitting on the debt. */
+scenario("shame recovery — 7 back to 0 on a workable field", () => {
+  const sim = new Sim({ foodId: 1, shame: 7 });
+  sim.client.myPlayer.shameCount = 7;
+  for (let t = 1; t <= 40; t++) sim.step(t === 10 ? 30 : 0, t < 15 ? 30 : 0);
+  for (let t = 41; t <= 140; t++) sim.step(0, 0);
   return sim;
 });
 
@@ -845,6 +943,79 @@ scenario("musket ball in the air", () => {
     sim.step(t === 15 ? 50 : 0, t === 15 ? 50 : 0, {
       enemies: [shooter],
       projectiles: flying ? [makeProjectile({ type: 5, x: 700 - (t - 10) * 160 })] : []
+    });
+  }
+  return sim;
+});
+
+/* An arrow on a line to me. Same rule as the musket: the client's own
+ * dangerProjectiles has already done the line test, so something in the air is
+ * evidence in a way that a bow in someone's hands never is. */
+scenario("arrow in flight from a hunting bow", () => {
+  const sim = new Sim({ foodId: 1 });
+  const archer = makeEnemy({ id: 1, x: 600, current: 9, primary: 9 });
+  for (let t = 1; t <= 40; t++) {
+    const flying = t >= 10 && t <= 15;
+    sim.step(t === 16 ? 25 : 0, flying ? 25 : 0, {
+      enemies: [archer],
+      projectiles: flying
+        ? [makeProjectile({ type: 0, x: 600 - (t - 10) * 110, speed: 1.6 })]
+        : []
+    });
+  }
+  return sim;
+});
+
+/* The reverse instakill: secondary and turret both held at empty reload so
+ * they land together with a reloaded primary. The shape is read off real
+ * reload state, and the client's own verdict (reverseInsta) is what turns it
+ * from a shape into a certainty. */
+scenario("insta rev — secondary and turret held at empty reload", () => {
+  const sim = new Sim({ foodId: 1 });
+  const rev = makeEnemy({
+    id: 1, x: 120, current: 5, primary: 5, secondary: 10,
+    primaryReload: 1, secondaryReload: 0, turretReload: 0
+  });
+  for (let t = 1; t <= 40; t++) {
+    /* The client raises its own flag once the pattern completes. */
+    rev.reverseInsta = t >= 12 && t <= 26;
+    sim.step(t === 20 ? 55 : 0, t >= 12 ? 55 : 0, { enemies: [rev], turret: 280 });
+  }
+  return sim;
+});
+
+/* Direct spike exposure, from the collision state rather than anything
+ * inferred: standing on one, with the enemy who is holding me there. */
+scenario("standing on a spike with an enemy pushing", () => {
+  const sim = new Sim({ foodId: 1 });
+  const pusher = makeEnemy({ id: 1, x: 90, px: 130, current: 5, primary: 5 });
+  for (let t = 1; t <= 40; t++) {
+    const on = t >= 8 && t <= 26;
+    sim.step(on && t % 9 === 0 ? 35 : 0, on ? 35 : 0, {
+      enemies: [pusher],
+      spike: on ? { colliding: true, pusher: true, damage: 35 } : {}
+    });
+  }
+  return sim;
+});
+
+/* Everything at once. Four enemies, an arrow in the air, a spike underfoot and
+ * a trap nearby — the case where a threat engine that adds instead of ranking
+ * turns an ordinary fight into a panic. */
+scenario("multiple simultaneous threats", () => {
+  const sim = new Sim({ foodId: 1, allowDeaths: true });
+  const melee = makeEnemy({ id: 1, x: 120, px: 170, current: 5, primary: 5, primaryReload: 1 });
+  const dagger = makeEnemy({ id: 2, x: 80, current: 7, primary: 7, primaryReload: 1 });
+  const archer = makeEnemy({ id: 3, x: 600, current: 9, primary: 9 });
+  const musket = makeEnemy({ id: 4, x: 900, current: 15, primary: 15, primaryReload: 1 });
+  for (let t = 1; t <= 60; t++) {
+    const flying = t % 12 >= 4 && t % 12 <= 8;
+    sim.step(t % 3 === 0 ? 22 : 0, 45, {
+      enemies: [melee, dagger, archer, musket],
+      projectiles: flying ? [makeProjectile({ type: 0, x: 500, speed: 1.6 })] : [],
+      spike: t >= 20 && t <= 40 ? { willCollide: true, damage: 35 } : {},
+      trap: { near: 80 },
+      turret: 320
     });
   }
   return sim;
@@ -1000,6 +1171,95 @@ scenario("a closing enemy turns away", () => {
 });
 
 /* Nothing moves for forty ticks. The prediction is built once and reused. */
+/* ---- edge cases -------------------------------------------------- */
+
+/* Assassin Gear refuses food outright (game_index.js:2462), so every healing
+ * candidate is invalid no matter how good the case for it. The engine has to
+ * recognise that and stop planning presses, not send them into a refusal. */
+scenario("invalid candidate — a noEat hat refuses every press", () => {
+  const sim = new Sim({ foodId: 1, allowDeaths: true });
+  sim.client.myPlayer.hatID = 56;
+  for (let t = 1; t <= 60; t++) {
+    sim.client.myPlayer.hatID = 56;      // nothing may quietly swap it back
+    sim.step(t % 4 === 0 ? 20 : 0, 40);
+  }
+  return sim;
+});
+
+/* Presses that never land drive the cooldown: the engine is spending packets
+ * on nothing and has to back off rather than keep trying. Food runs out mid
+ * fight, which is exactly that situation arriving on its own. */
+scenario("healing cooldown — dead presses force a backoff", () => {
+  const sim = new Sim({ foodId: 1, food: 45, allowDeaths: true });
+  for (let t = 1; t <= 80; t++) sim.step(t % 3 === 0 ? 20 : 0, 35);
+  return sim;
+});
+
+/* At 250 ms a press stays invisible for three ticks, so the same action keeps
+ * looking necessary while the first one is still in the air. Sending it again
+ * is the duplicate the ledger exists to stop. */
+scenario("action already pending — the same heal is not sent twice", () => {
+  const sim = new Sim({ foodId: 1, pong: 250 });
+  for (let t = 1; t <= 80; t++) sim.step(t % 6 === 0 ? 35 : 0, 45);
+  return sim;
+});
+
+/* Eight enemies on the field, none of them doing anything. The per-enemy work
+ * is real but the verdict must not be: this is the possession rule at scale,
+ * and the place a threat engine quietly becomes O(n) panic. */
+scenario("multiple enemies, none of them committing", () => {
+  const sim = new Sim({ foodId: 1 });
+  const crowd = [];
+  for (let i = 0; i < 8; i++) {
+    crowd.push(makeEnemy({
+      id: i + 1, x: 500 + i * 40, y: i * 30,
+      current: 7, primary: 7, primaryReload: 1
+    }));
+  }
+  for (let t = 1; t <= 60; t++) sim.step(0, 0, { enemies: crowd });
+  return sim;
+});
+
+/* The nearest enemy changes identity mid-fight. The prediction is built on a
+ * specific target, so this has to invalidate it rather than carry the old
+ * track onto the new player. */
+scenario("target changes — the nearest enemy is replaced", () => {
+  const sim = new Sim({ foodId: 1 });
+  for (let t = 1; t <= 60; t++) {
+    /* Two enemies swap which of them is closest, every fifteen ticks. */
+    const phase = Math.floor(t / 15) % 2;
+    const a = makeEnemy({
+      id: 1, x: phase ? 400 : 130, px: phase ? 420 : 150,
+      current: 5, primary: 5, primaryReload: 1
+    });
+    const b = makeEnemy({
+      id: 2, x: phase ? 130 : 400, px: phase ? 150 : 420,
+      current: 5, primary: 5, primaryReload: 1
+    });
+    sim.step(t % 7 === 0 ? 25 : 0, 45, { enemies: phase ? [b, a] : [a, b] });
+  }
+  return sim;
+});
+
+/* I am the one moving. Every distance the detectors use is measured against my
+ * position, so walking away from a threat has to make it stop being one — and
+ * walking into one has to make it start. */
+scenario("player moves — walking out of and back into reach", () => {
+  const sim = new Sim({ foodId: 1 });
+  const enemy = makeEnemy({ id: 1, x: 120, current: 7, primary: 7, primaryReload: 1 });
+  for (let t = 1; t <= 60; t++) {
+    /* Close for fifteen ticks, then out to 1000 and back. Daggers reach 65,
+     * so at 1000 nothing this enemy holds can touch me. */
+    const far = t > 15 && t <= 45;
+    const x = far ? -((Math.min(t, 45) - 15) * 40) : 0;
+    sim.step(!far && t % 3 === 0 ? 20 : 0, far ? 0 : 20, {
+      enemies: [enemy],
+      me: { x, y: 0 }
+    });
+  }
+  return sim;
+});
+
 scenario("a still field rebuilds nothing", () => {
   const sim = new Sim({ foodId: 1 });
   const idle = makeEnemy({ id: 1, x: 500, px: 500, current: 5, primary: 5 });
@@ -1024,6 +1284,7 @@ const pad = (s, n) => String(s).padEnd(n);
 function runAll(factory, label) {
   FACTORY = factory || createRynAutoHealEngine;
   let failures = 0;
+  let asserted = 0;
   console.log(`RYN Auto Heal Engine — ${label || "simulation against the bundle's own rules"}\n`);
 
   for (const { name, fn } of scenarios) {
@@ -1052,6 +1313,45 @@ function runAll(factory, label) {
     if (!sim.allowDeaths && name.indexOf("no food") === -1) {
       checks.push(["survived", s.deaths === 0]);
     }
+
+    /* ---- the shame ladder, rung by rung ----------------------------- */
+    if (name.indexOf("shame 0 —") !== -1) {
+      /* A charge here is only ever a survival trade, so at most one. */
+      checks.push(["a clean start stays clean", s.maxServerShame <= 1]);
+      checks.push(["and ends at 0", server.shameCount === 0]);
+    }
+    if (name.indexOf("shame 1 —") !== -1) {
+      checks.push(["the unit of debt is gone", server.shameCount === 0]);
+      checks.push(["without borrowing more first", s.maxServerShame <= 1]);
+    }
+    if (name.indexOf("shame above 7") !== -1) {
+      /* The count the engine was shown is unreachable in the real game, so the
+       * only safe reading is the pessimistic one. It must not have converted
+       * that into a charged press. */
+      checks.push(["an impossible count never becomes a charge", s.maxServerShame === 0]);
+      checks.push(["and the engine kept healing through it", s.healedPresses > 0]);
+      /* Once the count is readable again, normal service resumes. */
+      checks.push(["recovered when the read came back", server.shameCount === 0]);
+    }
+    if (name.indexOf("rapid shame increase") !== -1) {
+      /* Every press is inside the window while a hit lands every tick, so the
+       * count must climb — the requirement is that it stops at the ceiling and
+       * never trips the lock. */
+      checks.push(["climbed but stopped at the ceiling", s.maxServerShame <= 7]);
+      checks.push(["never armed the lock", server.locksArmed === 0]);
+      checks.push(["and washed back to 0 once the fire stopped",
+        server.shameCount === 0]);
+    }
+    if (name.indexOf("repeated shame increase") !== -1) {
+      /* Nothing here forces a charge: hits are far enough apart that the late
+       * press is always available. Any charge at all is a decision error. */
+      checks.push(["separated hits are never charged", s.maxServerShame === 0]);
+      checks.push(["and it healed anyway", s.healedPresses > 40]);
+    }
+    if (name.indexOf("shame recovery") !== -1) {
+      checks.push(["walked the ceiling back to 0", server.shameCount === 0]);
+      checks.push(["without tripping the lock on the way", server.locksArmed === 0]);
+    }
     checks.push(["no press storm", s.presses <= ticks * 2]);
     /* Nothing is spent on a threat that never lands. */
     if (name.indexOf("low-confidence") !== -1) {
@@ -1066,6 +1366,9 @@ function runAll(factory, label) {
     /* ---- decision engine -------------------------------------------- */
     /* Every decision, every tick, carries a reason. */
     checks.push(["every decision has a reason", s.reasonless === 0]);
+    /* And the decision has to be the one that actually happened. */
+    checks.push(["no HEAL_NOW without a press", s.phantomHeals === 0]);
+    checks.push(["no press without a HEAL_NOW", s.unrecordedHeals === 0]);
     const known = ["HEAL_NOW", "WAIT", "PREPARE", "CANCEL", "RECALCULATE"];
     checks.push(["decisions are from the enum",
       Object.keys(s.decisions).every(d => known.indexOf(d) !== -1)]);
@@ -1115,6 +1418,81 @@ function runAll(factory, label) {
       checks.push(["musket seen in flight", threatBest("musket") === "CRITICAL" ||
         threatBest("musket") === "HIGH"]);
     }
+    /* ---- edge cases ------------------------------------------------- */
+    if (name.indexOf("invalid candidate") !== -1) {
+      /* Not one press may go out into a refusal. */
+      checks.push(["nothing was sent into a noEat refusal", s.presses === 0]);
+      checks.push(["and it was recorded as a cancel, not a heal",
+        (s.decisions.HEAL_NOW || 0) === 0 && (s.decisions.CANCEL || 0) > 0]);
+      checks.push(["naming the actual reason",
+        (s.rejections["noeat-hat"] || 0) > 0 || s.reasonless === 0]);
+    }
+    if (name.indexOf("healing cooldown") !== -1) {
+      /* Three cookies is all the food there is. After that every press is
+       * dead, and the engine has to stop rather than keep paying packets. */
+      checks.push(["stopped once the food ran out", s.presses <= 3]);
+      checks.push(["and did not keep paying packets for it", s.packets <= 12]);
+    }
+    if (name.indexOf("action already pending") !== -1) {
+      /* At 250ms a press is invisible for three ticks. Presses must stay near
+       * the number of distinct damage events, not the number of ticks that
+       * still look like they need healing. */
+      checks.push(["no press storm behind the latency", s.presses <= 20]);
+      checks.push(["and the in-flight presses were counted",
+        s.duplicatesBlocked > 0 || s.presses <= 15]);
+    }
+    if (name.indexOf("multiple enemies") !== -1) {
+      /* Eight enemies, none committing: the possession rule, at scale. */
+      checks.push(["a crowd is not a threat", Object.keys(s.threats).length === 0]);
+      checks.push(["and costs nothing", s.presses === 0 && s.packets === 0]);
+    }
+    if (name.indexOf("target changes") !== -1) {
+      checks.push(["the target swap invalidated the prediction",
+        (s.invalidations["target-changed"] || 0) > 0]);
+    }
+    if (name.indexOf("player moves") !== -1) {
+      /* My own movement invalidates a prediction built on the old distance. */
+      checks.push(["my movement invalidated the prediction",
+        (s.invalidations["player-moved"] || 0) > 0]);
+      /* Distance is measured live: out of reach is out of threat, for every
+       * detector that gates on reach. The history-based ones (burst, sustained)
+       * legitimately keep speaking while their window drains — three seconds of
+       * damage taken is still three seconds of damage taken after I walk away,
+       * and SUSTAINED_WINDOW_TICKS is 27. */
+      const reachGated = ["spam-dagger", "instakill", "insta-rev", "musket",
+        "bow", "velocity-tick", "trap"];
+      const far = [];
+      for (const type of reachGated) {
+        for (const t of s.threatTickList[type] || []) {
+          if (t > 18 && t <= 43) far.push(`${type}@${t}`);
+        }
+      }
+      checks.push(["no reach-gated threat fires from 1000 away", far.length === 0,
+        far.slice(0, 5).join(" ")]);
+    }
+
+    if (name.indexOf("arrow in flight") !== -1) {
+      checks.push(["arrow seen in flight",
+        ["HIGH", "CRITICAL"].indexOf(threatBest("bow")) !== -1]);
+    }
+    if (name.indexOf("insta rev") !== -1) {
+      checks.push(["reverse insta recognised",
+        ["HIGH", "CRITICAL"].indexOf(threatBest("insta-rev")) !== -1]);
+    }
+    if (name.indexOf("standing on a spike") !== -1) {
+      checks.push(["spike contact recognised",
+        ["HIGH", "CRITICAL"].indexOf(threatBest("spike")) !== -1]);
+    }
+    if (name.indexOf("multiple simultaneous") !== -1) {
+      /* Several detectors have to speak at once — the point of one engine with
+       * separate detectors rather than one verdict. */
+      checks.push(["several detectors fired at once",
+        Object.keys(s.threats).length >= 4]);
+      /* And they have to be ranked, not summed: a panic here is a press storm
+       * and a walk to the ceiling. */
+      checks.push(["ranked rather than summed into a panic", s.presses <= ticks / 2]);
+      checks.push(["and the count still came home", server.shameCount === 0]);
+    }
     if (name.indexOf("dagger pressure") !== -1) {
       checks.push(["dagger pressure recognised",
         ["HIGH", "CRITICAL"].indexOf(threatBest("spam-dagger")) !== -1]);
@@ -1155,6 +1533,7 @@ function runAll(factory, label) {
 
     const bad = checks.filter(c => !c[1]);
     failures += bad.length;
+    asserted += checks.length;
 
     console.log(`${bad.length ? "FAIL" : "ok  "}  ${name}`);
     console.log(
@@ -1202,12 +1581,14 @@ function runAll(factory, label) {
     console.log("");
   }
 
-  if (failures) console.log(`${failures} check(s) failed\n`);
-  else console.log("all scenarios pass\n");
+  if (failures) console.log(`${failures} of ${asserted} check(s) failed\n`);
+  else console.log(`all ${scenarios.length} scenarios pass (${asserted} checks)\n`);
   return failures;
 }
 
-module.exports = { runAll };
+/* Sim and the entity factories are exported so the performance audit can build
+ * its own workloads against the same server model rather than a second one. */
+module.exports = { runAll, Sim, makeEnemy, makeProjectile, Items, Weapons };
 
 if (require.main === module) {
   process.exit(runAll(createRynAutoHealEngine) ? 1 : 0);

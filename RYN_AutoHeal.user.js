@@ -17338,12 +17338,34 @@ window.grbtp = 35;
        * The fallback numbers are the same scale, used only if the placement
        * engine is absent. */
       priorityClass(name) {
+        /* RPE_PRIORITY is a static table and priorityFor is a pure lookup into
+         * it, so every answer here is a constant for the life of the client.
+         * The arbiter asks up to five times a tick — once per candidate class,
+         * once for the mid-commit gate — and re-deriving a constant that often
+         * is work for nothing, so it is resolved once per placement-engine
+         * instance and kept. Keyed on the instance itself, so a client that
+         * rebuilds its modules gets a fresh answer rather than a stale one. */
+        const engine = this._priorityHost();
+        if (this._priorityCacheFor !== engine) {
+          this._priorityCacheFor = engine;
+          this._priorityCache = {};
+        }
+        const hit = this._priorityCache[name];
+        if (hit !== undefined) return hit;
+        return (this._priorityCache[name] = this._resolvePriorityClass(name, engine));
+      }
+  
+      _priorityHost() {
+        const mh = this.mh;
+        return (mh && mh.staticModules && mh.staticModules.placementEngine) || null;
+      }
+  
+      _resolvePriorityClass(name, engine) {
         const fallback = {
           INSTA: 90, SYNC: 80, DEFENSE: 70, RECOVERY: 60,
           ANTICIPATION: 50, ENGAGEMENT: 40, UTILITY: 20
         };
         try {
-          const engine = this.mh && this.mh.staticModules && this.mh.staticModules.placementEngine;
           /* priorityFor maps a module name onto the scale; these probes are the
            * names its own classifier recognises for each class. */
           if (engine && typeof engine.priorityFor === "function") {
@@ -20220,8 +20242,15 @@ window.grbtp = 35;
       check(plan, snap, shame) {
         if (!plan.presses && !plan.wantBull) return plan;
   
+        /* The decision has to change with the plan. Carrying the original
+         * `decision` through here left an invalidated HEAL_NOW still labelled
+         * HEAL_NOW — zero presses, correct reason, wrong verdict — so a noEat hat
+         * or an empty food stock produced a decision record that said the engine
+         * healed on ticks where it had refused to. An action refused because it
+         * is invalid is a CANCEL. */
         const fail = reason => Object.assign({}, plan, {
-          urgency: URGENCY.BLOCKED, presses: 0, wantBull: false, reason
+          urgency: URGENCY.BLOCKED, presses: 0, wantBull: false,
+          decision: DECISION.CANCEL, reason
         });
   
         if (!snap.inGame) return fail("invalid:not-in-game");

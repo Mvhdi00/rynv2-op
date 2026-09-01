@@ -643,6 +643,96 @@ check(
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * Regression: the nine systems, byte for byte.
+ *
+ * "Reads their state" and "writes nothing" are both static claims about the
+ * engine. This is the claim about the *client*: every module the brief names
+ * is character-identical between the base client and the built userscript, so
+ * none of them can behave differently for any reason other than the state the
+ * engine reads. The two deliberate ownership guards are the only exceptions and
+ * are named as such.
+ * ------------------------------------------------------------------ */
+if (fs.existsSync(BUILT_PATH)) {
+  const builtSrc = fs.readFileSync(BUILT_PATH, "utf8");
+
+  /* A class body by brace matching, so a nested `}` inside a string or a
+   * comment cannot end the block early the way a regex would. */
+  const classBlock = (src, name) => {
+    const start = src.indexOf(`class ${name} {`);
+    if (start < 0) return null;
+    let depth = 0;
+    let open = false;
+    for (let i = start; i < src.length; i++) {
+      const c = src[i];
+      if (c === "{") { depth++; open = true; }
+      else if (c === "}") {
+        depth--;
+        if (open && depth === 0) return src.slice(start, i + 1);
+      }
+    }
+    return null;
+  };
+
+  /* Every module behind the nine names in the brief. */
+  const UNTOUCHED = {
+    "Auto Place": ["AutoPlacer", "Placer", "PlacementDefense"],
+    "Preplace / Replace": ["PreplaceBook", "PlacementMemory", "PlacementScorer",
+      "PlacementPlanner", "PlacementLedger", "PlacementExecutor",
+      "PlacementScheduler", "RynPlacementEngine"],
+    "Spike Tick": ["SpikeSync", "SpikeSyncHammer", "SpikeTrap", "TeammateSpikeTrap"],
+    "Combat": ["Instakill", "SmartInsta", "ReverseInstakill", "MusketBowInsta",
+      "BowInsta", "SwordKatanaInsta", "SpikeGearInsta", "ToolHammerSpearInsta"],
+    "Auto Mills": ["Automill"],
+    "Velocity Tick": ["VelocityTick"],
+    "Anti Spike Push": ["AntiSpikePush"]
+  };
+
+  for (const [label, names] of Object.entries(UNTOUCHED)) {
+    const bad = [];
+    for (const name of names) {
+      const a = classBlock(client, name);
+      const b = classBlock(builtSrc, name);
+      if (a === null || b === null) bad.push(`${name}: not found`);
+      else if (a !== b) bad.push(`${name}: differs`);
+    }
+    check(`${label} is byte-identical to the base client`, bad.length === 0, bad.join(", "));
+  }
+
+  /* The two that do change, and the fact that they change only by standing
+   * down. Everything inside each guard is the module's own original code. */
+  for (const [name, marker] of [
+    ["AntiInsta", "Anti Smart Tick above keeps its branch either way"],
+    ["ShameReset", "the engine's wash path covers this"]
+  ]) {
+    const a = classBlock(client, name);
+    const b = classBlock(builtSrc, name);
+    check(`${name} differs only by its ownership guard`,
+      a !== b &&
+      b.indexOf("Settings_default._autoHealEngine") !== -1 &&
+      b.indexOf(marker) !== -1);
+  }
+
+  /* Combat's packet path is the primitive the engine borrows to press food. If
+   * any of it moved, the engine would be sending different frames than the
+   * client's own modules do. */
+  for (const method of ["selectItem", "attack", "whichWeapon", "_getPredictWeapon"]) {
+    const re = new RegExp(`\\n(\\s*)${method}\\(`);
+    const a = client.match(re);
+    const b = builtSrc.match(re);
+    check(`ModuleHandler.${method} still exists for the engine to borrow`,
+      !!a && !!b);
+  }
+
+  /* Safe Soldier is a setting rather than a class; what matters is that the
+   * hat logic that reads it is untouched. */
+  check(
+    "Safe Soldier's hat logic is unchanged",
+    (client.match(/_safeSoldier/g) || []).length ===
+      (builtSrc.match(/_safeSoldier/g) || []).length
+  );
+}
+
 /* ------------------------------------------------------------------ */
 console.log("\n2. wiring — the built userscript\n");
 

@@ -183,8 +183,9 @@ Full derivation and architecture: **[docs/AUTOHEAL_ENGINE.md](docs/AUTOHEAL_ENGI
 
 ```sh
 node tools/build-autoheal.js     # src/RYN_Client_v5.4.user.js -> RYN_AutoHeal.user.js
-node tools/verify-autoheal.js    # mechanics + wiring + behaviour
+node tools/verify-autoheal.js    # mechanics + integration + regression + wiring + behaviour
 node tools/sim-autoheal.js       # scenarios only (SIM_TRACE=1 for a per-tick trace)
+node tools/perf-autoheal.js      # adapter call counts, cache and packet budgets
 ```
 
 ## What it is built on
@@ -389,7 +390,7 @@ the packet budget and the tick claim. Nothing in them is modified or duplicated.
 `tools/sim-autoheal.js` runs the engine against the game's own rules
 transcribed — `buildItem`'s arithmetic, `changeHealth`'s hit stamp and
 full-health refusal, the one-second regen counter, `canBuild`'s resource gate —
-with latency modelled on both legs. Over twenty-six scenarios: no 30 s lock is
+with latency modelled on both legs. Over forty-two scenarios and 432 checks: no 30 s lock is
 ever armed, nothing is sent while one is on, the count never passes 7, every
 scenario that starts in debt ends at 0, and most hold shame at 0 for 100 % of
 ticks — including a 90 dps pressure run and a 250 ms ping run. A threat that
