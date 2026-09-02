@@ -117,7 +117,9 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+RYN_AutoHeal.user.js      RYN v5.4 + the Auto Heal Engine (see below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
+docs/AUTOHEAL_DEFENSE.md  Auto Heal: threat range, projectiles, gear, packets
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
@@ -126,7 +128,39 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/extract-autoheal.js slices the Auto Heal Engine out for testing
+tools/verify-autoheal.js  Auto Heal constants vs. the game bundle
+tools/autoheal-harness.js a stand-in client for the engine's adapter
+tools/test-autoheal.js    the Anti detectors, gear manager and packet model
 ```
+
+---
+
+## The Auto Heal Engine
+
+`RYN_AutoHeal.user.js` is RYN Client v5.4 with the Auto Heal Engine, which
+lives in it as one `ModuleHandler` module (`autoHealEngine`) built as a
+dependency-injected factory, `createRynAutoHealEngine(deps)`.
+
+Its own pipeline is unchanged. What the defensive work added is a **threat
+range model** derived from the bundle's own rules, a **projectile
+reconstruction** (the client writes a projectile's position once and never
+moves it), improvements to all eight Anti detectors, a **defensive hat
+manager** with hysteresis, and a corrected **heal-packet cost model**. Full
+derivation, with the bundle line behind each rule, is in
+[docs/AUTOHEAL_DEFENSE.md](docs/AUTOHEAL_DEFENSE.md).
+
+```sh
+node tools/verify-autoheal.js               # 47 constants re-derived
+node tools/test-autoheal.js                 # 63 cases
+node tools/test-autoheal.js musket          # ...or one Anti at a time
+node tools/verify-drivers.js RYN_AutoHeal.user.js
+node --check RYN_AutoHeal.user.js
+```
+
+Both tools slice the engine out of the shipped userscript with
+`tools/extract-autoheal.js` and compile it in a `vm` context, so they exercise
+the code that ships rather than a copy kept alongside it.
 
 ## Build
 
