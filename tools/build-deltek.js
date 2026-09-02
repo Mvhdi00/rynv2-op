@@ -366,6 +366,97 @@ edit(
         retrapRush: true,`
 );
 
+/* ------------------------------------------------------------------ *
+ * Auto Break: X- Precision's target order.
+ *
+ * deltek and X- agree on the weapon choice — selectWeaponAndBreak is the same
+ * four branches in both — but disagree on what to swing at while you are held.
+ *
+ * deltek, taking spike damage with the enemy nearer the spike than the trap,
+ * breaks the SPIKE first and only falls back to the trap. X- never does that:
+ * every path through its trap branch calls selectWeaponAndBreak(nearestTrap)
+ * first, because the trap is the thing holding you. The spike is only ever an
+ * opportunistic second swing when weapon and range happen to fit, and is a
+ * target in its own right only when there is no trap at all.
+ * ------------------------------------------------------------------ */
+edit(
+  "auto break: X- Precision's target order",
+  `                if (nearestTrap && nearestTrap.hideFromEnemy) {
+                    nearestTrap.hideFromEnemy = false;
+                }
+
+                if (nearestTrap && nearestSpike) {
+                    if (spikeDmgCount > 0) {
+                        if (nearestEnemy && distToEnemySq(nearestTrap) < distToEnemySq(nearestSpike)) {
+                            selectWeaponAndBreak(nearestTrap);
+                            if (!breakObject) selectWeaponAndBreak(nearestSpike); // Fallback added
+                        } else {
+                            selectWeaponAndBreak(nearestSpike);
+                            if (!breakObject) selectWeaponAndBreak(nearestTrap); // Fallback added
+                        }
+                    } else {
+                        selectWeaponAndBreak(nearestTrap);
+                        if (breakObject && canOneHitWithPrimary(nearestTrap)) {
+                            if (isHammerCached && inSecondaryRange(nearestSpike)) {
+                                selectWeaponAndBreak(nearestSpike);
+                            } else if (isFastPrimaryCached && inPrimaryRange(nearestSpike)) {
+                                selectWeaponAndBreak(nearestSpike);
+                            }
+                        } else if (!breakObject) {
+                            selectWeaponAndBreak(nearestSpike); // Fallback added
+                        }
+                    }
+                } else if (nearestTrap) {
+                    selectWeaponAndBreak(nearestTrap);
+                } else if (nearestSpike) {
+                    selectWeaponAndBreak(nearestSpike);
+                }`,
+  `                // The trap is what holds you, so the trap is what gets
+                // broken. Every path here swings at it first; the spike is an
+                // opportunistic second swing when the weapon and range happen
+                // to fit, and a target of its own only with no trap present.
+                if (nearestTrap) {
+                    if (nearestTrap.hideFromEnemy) {
+                        nearestTrap.hideFromEnemy = false;
+                    }
+
+                    if (nearestSpike) {
+                        if (spikeDmgCount > 0) {
+                            if (nearestEnemy && distToEnemySq(nearestTrap) < distToEnemySq(nearestSpike)) {
+                                selectWeaponAndBreak(nearestTrap);
+                                if (isHammerCached && inSecondaryRange(nearestSpike)) {
+                                    selectWeaponAndBreak(nearestSpike);
+                                } else if (isFastPrimaryCached && inPrimaryRange(nearestSpike)) {
+                                    selectWeaponAndBreak(nearestSpike);
+                                }
+                            } else {
+                                // Taking spike damage and the spike is the
+                                // nearer thing: still the trap. This is the one
+                                // case deltek got backwards.
+                                selectWeaponAndBreak(nearestTrap);
+                            }
+                        } else {
+                            selectWeaponAndBreak(nearestTrap);
+                            // X- writes this as
+                            //   (!canRetrap && oneHit) || oneHit
+                            // which is just oneHit — the canRetrap half can
+                            // never change the answer.
+                            if (canOneHitWithPrimary(nearestTrap)) {
+                                selectWeaponAndBreak(nearestTrap);
+                            } else if (isHammerCached && inPrimaryRange(nearestSpike)) {
+                                selectWeaponAndBreak(nearestSpike);
+                            } else if (isFastPrimaryCached && inPrimaryRange(nearestSpike)) {
+                                selectWeaponAndBreak(nearestSpike);
+                            }
+                        }
+                    } else {
+                        selectWeaponAndBreak(nearestTrap);
+                    }
+                } else if (nearestSpike) {
+                    selectWeaponAndBreak(nearestSpike);
+                }`
+);
+
 fs.writeFileSync(OUT, src.split("\n").join(EOL));
 
 console.log(`\nbuild-deltek: wrote ${path.relative(ROOT, OUT)}`);

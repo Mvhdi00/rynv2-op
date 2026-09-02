@@ -13360,33 +13360,47 @@ for (let tree of trees) {
                 }
 
                 // Priority 1: Break enemy traps/spikes when trapped
-                if (nearestTrap && nearestTrap.hideFromEnemy) {
-                    nearestTrap.hideFromEnemy = false;
-                }
+                // The trap is what holds you, so the trap is what gets
+                // broken. Every path here swings at it first; the spike is an
+                // opportunistic second swing when the weapon and range happen
+                // to fit, and a target of its own only with no trap present.
+                if (nearestTrap) {
+                    if (nearestTrap.hideFromEnemy) {
+                        nearestTrap.hideFromEnemy = false;
+                    }
 
-                if (nearestTrap && nearestSpike) {
-                    if (spikeDmgCount > 0) {
-                        if (nearestEnemy && distToEnemySq(nearestTrap) < distToEnemySq(nearestSpike)) {
-                            selectWeaponAndBreak(nearestTrap);
-                            if (!breakObject) selectWeaponAndBreak(nearestSpike); // Fallback added
+                    if (nearestSpike) {
+                        if (spikeDmgCount > 0) {
+                            if (nearestEnemy && distToEnemySq(nearestTrap) < distToEnemySq(nearestSpike)) {
+                                selectWeaponAndBreak(nearestTrap);
+                                if (isHammerCached && inSecondaryRange(nearestSpike)) {
+                                    selectWeaponAndBreak(nearestSpike);
+                                } else if (isFastPrimaryCached && inPrimaryRange(nearestSpike)) {
+                                    selectWeaponAndBreak(nearestSpike);
+                                }
+                            } else {
+                                // Taking spike damage and the spike is the
+                                // nearer thing: still the trap. This is the one
+                                // case deltek got backwards.
+                                selectWeaponAndBreak(nearestTrap);
+                            }
                         } else {
-                            selectWeaponAndBreak(nearestSpike);
-                            if (!breakObject) selectWeaponAndBreak(nearestTrap); // Fallback added
-                        }
-                    } else {
-                        selectWeaponAndBreak(nearestTrap);
-                        if (breakObject && canOneHitWithPrimary(nearestTrap)) {
-                            if (isHammerCached && inSecondaryRange(nearestSpike)) {
+                            selectWeaponAndBreak(nearestTrap);
+                            // X- writes this as
+                            //   (!canRetrap && oneHit) || oneHit
+                            // which is just oneHit — the canRetrap half can
+                            // never change the answer.
+                            if (canOneHitWithPrimary(nearestTrap)) {
+                                selectWeaponAndBreak(nearestTrap);
+                            } else if (isHammerCached && inPrimaryRange(nearestSpike)) {
                                 selectWeaponAndBreak(nearestSpike);
                             } else if (isFastPrimaryCached && inPrimaryRange(nearestSpike)) {
                                 selectWeaponAndBreak(nearestSpike);
                             }
-                        } else if (!breakObject) {
-                            selectWeaponAndBreak(nearestSpike); // Fallback added
                         }
+                    } else {
+                        selectWeaponAndBreak(nearestTrap);
                     }
-                } else if (nearestTrap) {
-                    selectWeaponAndBreak(nearestTrap);
                 } else if (nearestSpike) {
                     selectWeaponAndBreak(nearestSpike);
                 }

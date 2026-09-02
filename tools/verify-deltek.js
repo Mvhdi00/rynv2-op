@@ -487,10 +487,100 @@ function rushWorld(o) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Auto Break target order (X- Precision's).
+ * ------------------------------------------------------------------ */
+console.log("\n10. auto break — the trap comes first\n");
+
+check("the spike-first branch is gone",
+  !/selectWeaponAndBreak\(nearestSpike\);\n\s*if \(!breakObject\) selectWeaponAndBreak\(nearestTrap\)/.test(built));
+check("the trap is the outer gate, as in X-",
+  /if \(nearestTrap\) \{\n\s*if \(nearestTrap\.hideFromEnemy\)/.test(built));
+check("and a lone spike is still a target",
+  /\} else if \(nearestSpike\) \{\n\s*selectWeaponAndBreak\(nearestSpike\);/.test(built));
+
+const bStart = built.indexOf("                // Priority 1: Break enemy traps/spikes when trapped");
+const bEndMark = "} else if (nearestSpike) {\n                    selectWeaponAndBreak(nearestSpike);\n                }";
+const bEnd = built.indexOf(bEndMark, bStart);
+check("the block can be extracted", bStart > 0 && bEnd > bStart);
+
+function breakWorld(o) {
+  o = o || {};
+  const env = {
+    Math, console,
+    nearestTrap: o.trap === null ? null
+      : Object.assign({ x: 60, y: 0, scale: 32, health: 500, hideFromEnemy: true }, o.trap || {}),
+    nearestSpike: o.spike === null ? null
+      : Object.assign({ x: 0, y: 60, scale: 35, health: 500 }, o.spike || {}),
+    nearestEnemy: o.enemy === null ? null : { x2: 100, y2: 0, scale: 35 },
+    spikeDmgCount: o.spikeDmg === undefined ? 0 : o.spikeDmg,
+    isHammerCached: o.hammer !== false,
+    isFastPrimaryCached: o.fastPrimary !== false,
+    breakObject: null,
+    autoBreakWeapon: null,
+    myPlayer: { weapons: [5, 10] },
+    picks: [],
+    canOneHitWithPrimary: obj => obj.health <= (o.primaryDmg === undefined ? 100 : o.primaryDmg),
+    inPrimaryRange: () => o.inPrimary !== false,
+    inSecondaryRange: () => o.inSecondary !== false,
+    distToEnemySq: obj => (100 - obj.x) ** 2 + (0 - obj.y) ** 2
+  };
+  env.selectWeaponAndBreak = target => {
+    env.picks.push(target === env.nearestTrap ? "trap"
+      : target === env.nearestSpike ? "spike" : "?");
+    env.breakObject = target;
+  };
+  env.globalThis = env;
+  vm.createContext(env);
+  vm.runInContext(built.slice(bStart, bEnd + bEndMark.length), env, { filename: "autobreak.js" });
+  return env;
+}
+
+{
+  /* The case that was backwards: taking spike damage, spike nearer the enemy
+   * than the trap. deltek swung at the spike; X- swings at the trap. */
+  const w = breakWorld({ spikeDmg: 3, spike: { x: 95, y: 0 }, trap: { x: 0, y: 60 } });
+  check("taking spike damage, the trap is still what gets broken",
+    w.picks[0] === "trap", JSON.stringify(w.picks));
+  check("and the final target is the trap", w.breakObject === w.nearestTrap);
+
+  /* Trap nearer the enemy: trap first, spike as the opportunistic extra. */
+  const near = breakWorld({ spikeDmg: 3, trap: { x: 95, y: 0 }, spike: { x: 0, y: 60 } });
+  check("trap first when it is the nearer thing too", near.picks[0] === "trap");
+  check("with the spike as an opportunistic second swing",
+    near.picks.indexOf("spike") === 1, JSON.stringify(near.picks));
+
+  /* No spike damage: trap, then spike only if the trap does not one-hit. */
+  const calm = breakWorld({ spikeDmg: 0, primaryDmg: 10 });
+  check("no spike damage: the trap leads", calm.picks[0] === "trap");
+  check("and a trap that will not one-hit lets the spike follow",
+    calm.picks.indexOf("spike") !== -1, JSON.stringify(calm.picks));
+
+  const oneHit = breakWorld({ spikeDmg: 0, primaryDmg: 9999 });
+  check("a trap that dies in one hit keeps the swing",
+    oneHit.picks.every(p => p === "trap"), JSON.stringify(oneHit.picks));
+
+  /* No trap at all: the spike is a target in its own right. */
+  const lone = breakWorld({ trap: null });
+  check("a lone spike is broken", lone.picks.join(",") === "spike");
+
+  /* No spike: just the trap. */
+  const onlyTrap = breakWorld({ spike: null });
+  check("a lone trap is broken", onlyTrap.picks.join(",") === "trap");
+
+  /* Neither. */
+  const empty = breakWorld({ trap: null, spike: null });
+  check("nothing present, nothing chosen", empty.picks.length === 0);
+
+  /* hideFromEnemy is still cleared. */
+  const hidden = breakWorld({});
+  check("the trap is un-hidden as before", hidden.nearestTrap.hideFromEnemy === false);
+}
+
+/* ------------------------------------------------------------------ *
  * Naming. Labels only — the setting ids and the code behind them are the
  * things that must NOT have moved.
  * ------------------------------------------------------------------ */
-console.log("\n10. spike tick — naming\n");
+console.log("\n11. spike tick — naming\n");
 
 check("the spike tick is findable in the menu",
   /name: "Spike Tick", id: "shameTick"/.test(built) && !/Clown Aids/.test(built));
@@ -539,7 +629,7 @@ for (const fn of ["canTrapTick", "canTrapTick2", "advancedShameCombat",
 /* ------------------------------------------------------------------ *
  * Trap escape ring.
  * ------------------------------------------------------------------ */
-console.log("\n11. trap escape ring\n");
+console.log("\n12. trap escape ring\n");
 
 check("it runs in the tick, after Replace",
   /\/\/ TRAP ESCAPE RING\n\s*trapEscapeRing\(\);/.test(built));
@@ -665,7 +755,7 @@ function ringWorld(o) {
 }
 
 /* ------------------------------------------------------------------ */
-console.log("\n12. nothing else moved\n");
+console.log("\n13. nothing else moved\n");
 {
   const a = SRC.split("\n");
   const b = built.split("\n");
@@ -681,34 +771,62 @@ console.log("\n12. nothing else moved\n");
   /* Replace is purely additive. Velocity Tick is not: it takes deltek's own
    * setTimeout version out. So the bar is that every removed line belongs to
    * that old version and nothing else. */
+  /* Two rewrites take deltek code out: the old setTimeout velocity tick, and
+   * Auto Break's priority-1 block, which broke the spike first while held.
+   * Plus the labels and toasts that were renamed in place. Every line removed
+   * from deltek must be one of these — anything else is collateral. */
   const OLD_VELOCITY = [
-    "function toptop() {", "if (primaryReload[myPlayer.sid] == 1 && turretReload[myPlayer.sid] == 1) {",
-    "setTimeout(() => {", "autoaim = true;", "hat(53, 0);", "hat(7, 0);",
-    "io.send(\"F\", 1);", "autoaim = false;", "io.send(\"F\", 0);", "}, 210);", "}, 93);",
-    "if (autoVelocityTickToggled) {", "if (nearestEnemy && myPlayer && myPlayer.alive) {",
-    "// velocity range around 242", "let minimumOTRange = 222; // 242 - 20",
-    "let maximumOTRange = 262; // 242 + 20", "// simple velocity calculation",
-    "let distance = UTILS.getDistance(", "myPlayer.x2, myPlayer.y2,",
-    "nearestEnemy.x2, nearestEnemy.y2", ");",
-    "if (!nearestTrap && (distance < maximumOTRange && distance > minimumOTRange)) {",
-    "toptop(); // replace with your function", "}", "}", "}",
-    "keyCodeWeapon = myPlayer.weapons[0];", "selectWeapon(keyCodeWeapon);",
+    "} else if (event.key == \"T\") {",
     "autoVelocityTickToggled = !autoVelocityTickToggled;",
     "const oneFrameStatus = autoVelocityTickToggled ? \"on\" : \"off\";",
-    /* labels and toasts, renamed in place */
-    "{ type: 'toggle', name: \"Clown Aids\", id: \"shameTick\" },",
-    "{ type: 'toggle', name: \"LOL aids\", id: \"shameTick2\" },",
-    "{ type: 'toggle', name: \"Giving Aids\", id: \"shameGrind\" },",
+    "sendChat(`velotick: ${(oneFrameStatus)}`);",
     "showSettingText(900, \"LOL Aids\")",
     "showSettingText(900, \"LOL aids\")",
-    /* the old hardcoded T key and its chat announcement */
-    "} else if (event.key == \"T\") {",
-    "sendChat(`velotick: ${(oneFrameStatus)}`);",
-    /* gained a trailing comma when the velocity keybind was appended after it */
-    "{ type: 'keybind', name: \"Auto Clear\", id: \"keyPathBreak\" }"
+    "if (nearestTrap && nearestTrap.hideFromEnemy) {",
+    "nearestTrap.hideFromEnemy = false;",
+    "if (nearestTrap && nearestSpike) {",
+    "if (spikeDmgCount > 0) {",
+    "if (nearestEnemy && distToEnemySq(nearestTrap) < distToEnemySq(nearestSpike)) {",
+    "if (!breakObject) selectWeaponAndBreak(nearestSpike); // Fallback added",
+    "selectWeaponAndBreak(nearestSpike);",
+    "if (!breakObject) selectWeaponAndBreak(nearestTrap); // Fallback added",
+    "if (breakObject && canOneHitWithPrimary(nearestTrap)) {",
+    "if (isHammerCached && inSecondaryRange(nearestSpike)) {",
+    "} else if (isFastPrimaryCached && inPrimaryRange(nearestSpike)) {",
+    "} else if (!breakObject) {",
+    "selectWeaponAndBreak(nearestSpike); // Fallback added",
+    "} else if (nearestTrap) {",
+    "selectWeaponAndBreak(nearestTrap);",
+    "function toptop() {",
+    "if (primaryReload[myPlayer.sid] == 1 && turretReload[myPlayer.sid] == 1) {",
+    "hat(53, 0);",
+    "keyCodeWeapon = myPlayer.weapons[0];",
+    "selectWeapon(keyCodeWeapon);",
+    "setTimeout(() => {",
+    "autoaim = true;",
+    "hat(7, 0);",
+    "io.send(\"F\", 1);",
+    "autoaim = false;",
+    "io.send(\"F\", 0);",
+    "}, 210);",
+    "}, 93);",
+    "if (autoVelocityTickToggled) {",
+    "if (nearestEnemy && myPlayer && myPlayer.alive) {",
+    "// velocity range around 242",
+    "let minimumOTRange = 222; // 242 - 20",
+    "let maximumOTRange = 262; // 242 + 20",
+    "// simple velocity calculation",
+    "let distance = UTILS.getDistance(",
+    "nearestEnemy.x2, nearestEnemy.y2",
+    "if (!nearestTrap && (distance < maximumOTRange && distance > minimumOTRange)) {",
+    "toptop(); // replace with your function",
+    "{ type: 'keybind', name: \"Auto Clear\", id: \"keyPathBreak\" }",
+    "{ type: 'toggle', name: \"Clown Aids\", id: \"shameTick\" },",
+    "{ type: 'toggle', name: \"LOL aids\", id: \"shameTick2\" },",
+    "{ type: 'toggle', name: \"Giving Aids\", id: \"shameGrind\" },"
   ];
   const unexpected = removed.filter(l => OLD_VELOCITY.indexOf(l.trim()) === -1);
-  check("the only lines removed are deltek's old velocity tick",
+  check("the only lines removed are the two blocks that were rewritten",
     unexpected.length === 0, unexpected.slice(0, 3).map(s => s.trim()).join(" | "));
   check("the additions are the two features and their hooks",
     added > 150 && added < 520, `${added} lines added`);
