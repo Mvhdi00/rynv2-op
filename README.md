@@ -117,7 +117,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
-RYN_AutoHeal.user.js      RYN v5.4 + the Auto Heal Engine (see below)
+Ryn Type 2.user.js        RYN v5.4 + the Auto Heal Engine (see below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 docs/AUTOHEAL_DEFENSE.md  Auto Heal: threat range, projectiles, gear, packets
 src/RYN_Client_v4.js      base client (input)
@@ -138,7 +138,7 @@ tools/test-autoheal.js    the Anti detectors, gear manager and packet model
 
 ## The Auto Heal Engine
 
-`RYN_AutoHeal.user.js` is RYN Client v5.4 with the Auto Heal Engine, which
+`Ryn Type 2.user.js` is RYN Client v5.4 with the Auto Heal Engine, which
 lives in it as one `ModuleHandler` module (`autoHealEngine`) built as a
 dependency-injected factory, `createRynAutoHealEngine(deps)`.
 
@@ -152,10 +152,10 @@ derivation, with the bundle line behind each rule, is in
 
 ```sh
 node tools/verify-autoheal.js               # 47 constants re-derived
-node tools/test-autoheal.js                 # 63 cases
+node tools/test-autoheal.js                 # 66 cases
 node tools/test-autoheal.js musket          # ...or one Anti at a time
-node tools/verify-drivers.js RYN_AutoHeal.user.js
-node --check RYN_AutoHeal.user.js
+node tools/verify-drivers.js "Ryn Type 2.user.js"
+node --check "Ryn Type 2.user.js"
 ```
 
 Both tools slice the engine out of the shipped userscript with

@@ -3,7 +3,7 @@
  * test-autoheal.js — the Auto Heal Engine's defensive layers, one Anti at a
  * time, then together.
  *
- * Every case drives the shipped engine (sliced out of RYN_AutoHeal.user.js by
+ * Every case drives the shipped engine (sliced out of Ryn Type 2.user.js by
  * tools/extract-autoheal.js) against the harness client, and asserts on what
  * the engine concluded rather than on what it did to a socket: the threat
  * reports, the gear session, the packet counts, the decision.

@@ -13,7 +13,7 @@
  * disagrees. tools/verify-drivers.js already checks that the client's own
  * tables match; this checks the constants the engine hard-codes on top.
  *
- *     node tools/verify-autoheal.js [RYN_AutoHeal.user.js]
+ *     node tools/verify-autoheal.js [Ryn Type 2.user.js]
  */
 
 const path = require("path");

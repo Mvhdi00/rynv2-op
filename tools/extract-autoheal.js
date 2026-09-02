@@ -6,7 +6,7 @@
  * The engine is written as one dependency-injected factory,
  * `createRynAutoHealEngine(deps)`, precisely so it can be reasoned about
  * without a browser or a game socket. This slices that factory out of
- * RYN_AutoHeal.user.js and returns it as a callable function.
+ * Ryn Type 2.user.js and returns it as a callable function.
  *
  * Nothing is rewritten on the way through. If the slice does not parse, or the
  * markers move, that is a failure and not something to paper over: the tests
@@ -17,7 +17,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const DEFAULT_SCRIPT = path.join(__dirname, "..", "RYN_AutoHeal.user.js");
+const DEFAULT_SCRIPT = path.join(__dirname, "..", "Ryn Type 2.user.js");
 const START = "function createRynAutoHealEngine(deps) {";
 const END = "\n  const AutoHealEngine_default = createRynAutoHealEngine(";
 

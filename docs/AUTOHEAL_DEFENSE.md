@@ -250,9 +250,9 @@ and `setForceHat` — both through the client's own primitives.
 
 ```sh
 node tools/verify-autoheal.js     # 47 constants re-derived from the bundle
-node tools/test-autoheal.js       # 63 cases, every Anti individually and together
-node tools/verify-drivers.js RYN_AutoHeal.user.js
-node --check RYN_AutoHeal.user.js
+node tools/test-autoheal.js       # 66 cases, every Anti individually and together
+node tools/verify-drivers.js "Ryn Type 2.user.js"
+node --check "Ryn Type 2.user.js"
 ```
 
 `tools/extract-autoheal.js` slices `createRynAutoHealEngine` out of the
