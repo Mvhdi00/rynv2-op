@@ -83,6 +83,70 @@ only when actually in sandbox and falls back to `group.limit` otherwise, and
 `AutoRetrap._isItemLimit` is written against that. `AutoPlacer` now makes the
 same call, so all three agree.
 
+### Trap enclosure gap fill
+
+Two switches in Combat → Spikes & Traps, both off by default: **Trap Gap Fill**
+and **Gap Fill Trap Break**.
+
+When the placer's target is boxed in, this prepares the closest spike that seals
+the way out. It is a layer inside `AutoPlacer`, not a second placer: it picks no
+target, owns no scheduler, and sends no packet. Its whole output is one entry in
+`AutoPlacer._predictObjects` — the list the preplace and immediate paths at the
+end of `postTick` already drain — so it inherits the existing packet budget,
+ping-synced timing and anti-duplicate rules rather than repeating them.
+
+**Target.** `EnemyManager.nearestEnemy`, the same one the aim, the preplacer and
+the replacer follow. When it changes, every cached gap goes with it.
+
+**Enclosure.** One grid query two cells wide around the target collects what
+actually stops them moving, by `PlayerManager.canMoveOnTop`'s rules — resources
+always, an `ignoreCollision` building never, and a trap only for whoever its
+owner counts as an enemy, read off `PlayerManager.isEnemyByID` rather than
+guessed from position. Each blocker covers the arc it would stop them walking
+through; the complement of the merged arcs is the set of openings, and an
+opening counts as a way out by the same chord test `SiegeAnalysis.isEscapable`
+uses. Enclosed means 55% of the circle blocked with at most three ways out — 35%
+once a trap is actually holding them. A trap they are standing in decides that
+they are pinned but does not wall off a side; it is where they go on the way out
+that matters. So a ring with a hole reads as enclosed, and three traps off to
+one side does not.
+
+**Escape route.** Movement direction while they are moving, away from us when
+they are not, and the opening that best matches wins.
+
+**Candidates.** The placer's own 72-angle set, already cached for the tick and
+already collision- and range-checked, filtered to the ones that touch the
+opening — the predicted one and a tight band first, everything passable only if
+that finds nothing. Scoring weighs how much of the opening the spike takes away,
+whether it closes it outright, how well it sits on the predicted route, how
+close it is, how crowded the spot is, and whether the timing works at the
+current ping. A spike slightly farther out that seals the route beats a nearer
+one that only clips it.
+
+**Before it commits.** The target still has to be the ActiveTarget, the spot
+still placeable, and nothing else may have claimed it: not this tick's
+placements, not the placer's banned angles, not a position already reserved in
+`_predictObjects`, and not `EnemyManager.nearestSpikePlacerAngle` — Spike Tick's
+own reservation. The layer also stands down for the whole tick whenever Spike
+Tick claimed it or is mid-sequence.
+
+**Pre Placer** decides whether the spike is prepared for where they are going
+(the ping-synced path) or placed on the spot because they are already there.
+**Re Placer** decides whether a better position may replace the one already
+being prepared, and only past a real margin — otherwise the first choice stands.
+
+**Gap Fill Trap Break** is the one action that is not a placement. A trap denies
+a spike the 50 units of placement scale around it, so the trap sitting on the
+opening is often the reason nothing can go there. With the switch on, the layer
+may break one of its own traps — never the trap holding the target, never one
+away from the escape side, never while another module owns the tick, and only
+when it can prove a better spike opens up afterwards. It swings through the same
+`ModuleHandler` fields every other module uses, then remembers where to prepare
+the spike on the next tick.
+
+The layer sits inside the RYN placer path, so Glotus Placer Mode (which replaces
+that path wholesale) runs without it.
+
 ### Driver correction
 
 `ItemGroups[8]` — the platform group — carried `layer: -1` in RYN. The shipped
@@ -125,6 +189,7 @@ src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
+tools/check-gapfill.js    the built gap-fill layer vs. synthetic trap layouts
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 
@@ -144,6 +209,7 @@ a newer RYN will surface as a build error rather than a half-merged script.
 ```sh
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
+node tools/check-gapfill.js ReUp_Mix.user.js
 node --check ReUp_Mix.user.js
 ```
 
@@ -156,6 +222,10 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
+- **Gap fill** — 45 checks over synthetic trap layouts: enclosure detection,
+  ownership, escape prediction, candidate scoring, the Spike Tick and
+  duplicate-placement rejections, target swaps, and every gate on the trap
+  break.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here

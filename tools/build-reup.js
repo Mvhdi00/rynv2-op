@@ -174,6 +174,604 @@ edit(
 );
 
 /* ------------------------------------------------------------------ *
+ * Trap enclosure + smart spike gap fill
+ *
+ * A tactical layer inside AutoPlacer, not a second placer. When the placer's
+ * ActiveTarget (EnemyManager.nearestEnemy — the same target the aim, the
+ * preplacer and the replacer already follow) is boxed in by traps, spikes or
+ * terrain, it works out which way they are going to leave and prepares the
+ * closest spike that seals that opening.
+ *
+ * Everything it decides is expressed as one entry in AutoPlacer._predictObjects,
+ * the list the preplace and immediate paths at the end of postTick already
+ * drain, so it inherits the existing packet budget, ping-synced timing and
+ * anti-duplicate rules instead of owning any of them. It selects no target,
+ * schedules no packet, and stands down for the whole tick whenever Spike Tick
+ * has claimed it.
+ *
+ * The geometry comes from the game's own definitions:
+ *   - PlayerManager.canMoveOnTop for what actually blocks movement (resources
+ *     always, ignoreCollision buildings never, a trap only for whoever its
+ *     owner counts as an enemy),
+ *   - PlayerObject.collisionScale / Items[].scale for the radii,
+ *   - the chord test out of SiegeAnalysis.isEscapable for whether the target
+ *     still fits through an opening,
+ *   - PlayerManager.isEnemyByID for ownership — never appearance or position.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "settings: trap gap fill keys",
+  `    _preplacer: false,
+    _replacer: false,`,
+  `    _preplacer: false,
+    _replacer: false,
+    _trapGapFill: false,
+    _trapGapFillBreak: false,`
+);
+
+edit(
+  "autoplacer: trap enclosure gap-fill layer",
+  `  class AutoPlacer {
+    moduleName="autoPlacer";
+    _glotusAngles=new Map;
+    _glotusCount=0;`,
+  `  class AutoPlacer {
+    moduleName="autoPlacer";
+    _glotusAngles=new Map;
+    _glotusCount=0;
+    // ══════════════════════════════════════════════════════════════════════
+    // TRAP ENCLOSURE + SMART SPIKE GAP FILL
+    //
+    // Reads the geometry around the ActiveTarget, finds the opening they are
+    // most likely to leave through, and hands the closest spike that seals it
+    // to _predictObjects — the same list the preplace/immediate paths at the
+    // end of postTick already drain. No target selection, no scheduler, no
+    // packet of its own, and never on top of Spike Tick.
+    // ══════════════════════════════════════════════════════════════════════
+    _GAP_BAND=62;             // how far past the target's own hitbox a blocker still counts
+    _GAP_RANGE=260;           // beyond this the target is out of reach of any placement
+    _GAP_MIN_ENCLOSURE=.55;   // share of the circle that has to be blocked to call it enclosed
+    _GAP_TRAPPED_ENCLOSURE=.35; // ...lower once a trap is actually holding them
+    _GAP_REPLACE_MARGIN=18;   // a new position has to beat the committed one by this much
+    _GAP_BREAK_COOLDOWN=8;
+    _GAP_BREAK_GAIN=55;       // a break has to open up at least this good a spike
+    _gapFill={
+      targetId: null,
+      tick: -1,
+      analysis: null,
+      committed: null,
+      breakTick: -1,
+      pendingBreak: null,
+      errorUntil: -1
+    };
+    _gapNormalize(angle) {
+      let a = angle % PI2;
+      if (a > PI) a -= PI2;
+      if (a < -PI) a += PI2;
+      return a;
+    }
+    // Ownership comes from the game's tables, never from appearance or
+    // coordinates. isEnemyByID throws for an owner we have not seen yet, and an
+    // unknown owner counts as an enemy — the conservative read.
+    _gapIsEnemyOf(object, entity, PlayerManager2) {
+      try {
+        return PlayerManager2.isEnemyByID(object.ownerID, entity);
+      } catch (e) {
+        return true;
+      }
+    }
+    // Everything within reach of the target that actually stops them moving,
+    // by PlayerManager.canMoveOnTop's rules. One grid query, two cells wide —
+    // no map-wide scan.
+    _gapBlockers(ctx) {
+      const {target: target, ObjectManager2: ObjectManager2, PlayerManager2: PlayerManager2, myPlayer: myPlayer} = ctx;
+      const pos = target.pos.current;
+      const selfScale = target.collisionScale;
+      const reach = selfScale + this._GAP_BAND;
+      const out = [];
+      ObjectManager2.grid2D.query(pos.x, pos.y, 2, id => {
+        const object = ObjectManager2.objects.get(id);
+        if (!object) return;
+        const isPlayerObject = object instanceof PlayerObject;
+        let trapsTarget = false;
+        if (isPlayerObject) {
+          const item = Items[object.type];
+          if ("ignoreCollision" in item) {
+            // A trap is the one pass-through building that still stops
+            // somebody: whoever its owner counts as an enemy. Their own trap,
+            // and a teammate's, they walk straight over.
+            if (object.type !== 15) return;
+            if (!this._gapIsEnemyOf(object, target, PlayerManager2)) return;
+            trapsTarget = true;
+          }
+        }
+        const objPos = object.pos.current;
+        const scale = object.collisionScale;
+        const distance = Math.hypot(objPos.x - pos.x, objPos.y - pos.y);
+        if (distance > reach + scale) return;
+        out.push({
+          object: object,
+          x: objPos.x,
+          y: objPos.y,
+          scale: scale,
+          distance: distance,
+          angle: Math.atan2(objPos.y - pos.y, objPos.x - pos.x),
+          trap: isPlayerObject && object.type === 15,
+          spike: isPlayerObject && object.itemGroup === 2,
+          mine: isPlayerObject && myPlayer.isMyPlayerByID(object.ownerID),
+          friendly: isPlayerObject && !this._gapIsEnemyOf(object, myPlayer, PlayerManager2),
+          trapsTarget: trapsTarget,
+          holding: trapsTarget && distance <= scale + selfScale
+        });
+      });
+      return out;
+    }
+    // Angular occupancy around the target: each blocker covers the arc it would
+    // physically stop them walking through. The complement of the merged arcs is
+    // the set of openings — so a ring of traps that leaves a hole reads as
+    // enclosed, and three traps off to one side do not.
+    _gapAnalyse(target, blockers) {
+      const selfScale = target.collisionScale;
+      const spans = [];
+      for (const b of blockers) {
+        // The trap they are standing in holds them, it does not wall off a
+        // side: it decides that they are pinned (below), while the openings
+        // are still the ones they would take on the way out.
+        if (b.holding) continue;
+        const sum = b.scale + selfScale;
+        const half = b.distance <= sum ? PI / 2 : Math.asin(Math.min(1, sum / b.distance));
+        const start = this._gapNormalize(b.angle - half);
+        const end = this._gapNormalize(b.angle + half);
+        if (start <= end) {
+          spans.push([ start, end ]);
+        } else {
+          spans.push([ start, PI ]);
+          spans.push([ -PI, end ]);
+        }
+      }
+      spans.sort((a, b) => a[0] - b[0]);
+      const merged = [];
+      for (const span of spans) {
+        const last = merged[merged.length - 1];
+        if (last && span[0] <= last[1]) {
+          if (span[1] > last[1]) last[1] = span[1];
+        } else {
+          merged.push([ span[0], span[1] ]);
+        }
+      }
+      let blocked = 0;
+      for (const span of merged) blocked += span[1] - span[0];
+      const gaps = [];
+      if (merged.length === 0) {
+        gaps.push({
+          start: -PI,
+          end: PI,
+          span: PI2,
+          mid: 0,
+          left: null,
+          right: null,
+          passable: true
+        });
+      } else {
+        for (let i = 0; i < merged.length; i++) {
+          const start = merged[i][1];
+          let end = merged[(i + 1) % merged.length][0];
+          if (merged.length === 1) {
+            end = merged[0][0] + PI2;
+          } else if (end < start) {
+            end += PI2;
+          }
+          const span = end - start;
+          if (span <= .001) continue;
+          gaps.push({
+            start: start,
+            end: end,
+            span: span,
+            mid: this._gapNormalize(start + span / 2),
+            left: null,
+            right: null,
+            passable: true
+          });
+        }
+      }
+      for (const gap of gaps) {
+        let left = null, right = null, leftDist = Infinity, rightDist = Infinity;
+        for (const b of blockers) {
+          const toStart = getAngleDist(b.angle, gap.start);
+          if (toStart < leftDist) {
+            leftDist = toStart;
+            left = b;
+          }
+          const toEnd = getAngleDist(b.angle, gap.end);
+          if (toEnd < rightDist) {
+            rightDist = toEnd;
+            right = b;
+          }
+        }
+        gap.left = left;
+        gap.right = right;
+        gap.passable = gap.span >= 1.2 || this._gapFits(left, right, selfScale);
+      }
+      const passable = gaps.filter(g => g.passable);
+      const held = blockers.some(b => b.holding);
+      const ratio = blocked / PI2;
+      const floor = held ? this._GAP_TRAPPED_ENCLOSURE : this._GAP_MIN_ENCLOSURE;
+      return {
+        blockers: blockers,
+        gaps: gaps,
+        passable: passable,
+        blockedRatio: ratio,
+        held: held,
+        sealed: blockers.length > 0 && passable.length === 0,
+        enclosed: blockers.length >= 2 && ratio >= floor && passable.length > 0 && passable.length <= 3
+      };
+    }
+    // Does the target still fit out between these two blockers? Same chord test
+    // SiegeAnalysis.isEscapable uses, so an opening this layer calls closed is
+    // the one the placer's own seals-exit rule calls closed.
+    _gapFits(left, right, selfScale) {
+      if (!left || !right || left === right) return true;
+      const between = getAngleDist(left.angle, right.angle);
+      const width2 = left.distance * left.distance + right.distance * right.distance - 2 * left.distance * right.distance * Math.cos(between);
+      const need = selfScale * 2 + left.scale + right.scale + 10;
+      return width2 > need * need;
+    }
+    // How much of one opening a spike at (x, y) takes away, and whether what is
+    // left on either side of it is still walkable.
+    _gapCover(x, y, scale, gap, target) {
+      const pos = target.pos.current;
+      const selfScale = target.collisionScale;
+      const dx = x - pos.x, dy = y - pos.y;
+      const distance = Math.hypot(dx, dy);
+      const sum = scale + selfScale;
+      const half = distance <= sum ? PI / 2 : Math.asin(Math.min(1, sum / distance));
+      let center = this._gapNormalize(Math.atan2(dy, dx));
+      while (center < gap.start - PI) center += PI2;
+      while (center > gap.start + PI) center -= PI2;
+      const overlap = Math.max(0, Math.min(gap.end, center + half) - Math.max(gap.start, center - half));
+      const asBlocker = {
+        angle: center,
+        distance: distance,
+        scale: scale
+      };
+      return {
+        overlap: overlap,
+        ratio: gap.span > 0 ? overlap / gap.span : 0,
+        distance: distance,
+        angle: center,
+        seals: !this._gapFits(gap.left, asBlocker, selfScale) && !this._gapFits(asBlocker, gap.right, selfScale)
+      };
+    }
+    // One grid read and one analysis per tick per target; the break check
+    // re-runs _gapAnalyse over the same blocker list minus one to ask what the
+    // layout would look like without it.
+    _gapAnalysis(ctx) {
+      const state = this._gapFill;
+      if (state.tick === ctx.tick && state.analysis) return state.analysis;
+      state.tick = ctx.tick;
+      state.analysis = this._gapAnalyse(ctx.target, this._gapBlockers(ctx));
+      return state.analysis;
+    }
+    // Which way they are leaving. Movement direction when they are actually
+    // moving, away from us when they are not, and the opening that best matches
+    // it is the one worth sealing.
+    _gapEscape(ctx, analysis) {
+      const {target: target, myPos: myPos, pingTicks: pingTicks} = ctx;
+      const pos = target.pos.current;
+      const speed = target.speed || 0;
+      const moving = speed > 1.2;
+      const away = Math.atan2(pos.y - myPos.y, pos.x - myPos.x);
+      // Where they are actually going while they are moving; away from us when
+      // they are not, which is where a cornered player goes first.
+      const dir = moving && target.move_dir != null ? target.move_dir : away;
+      const lookahead = Math.min(speed * (1 + pingTicks), 150);
+      const predicted = {
+        x: pos.x + Math.cos(dir) * lookahead,
+        y: pos.y + Math.sin(dir) * lookahead
+      };
+      let primary = null, bestScore = -Infinity;
+      for (const gap of analysis.passable) {
+        let score = Math.cos(getAngleDist(gap.mid, dir)) * (moving ? 100 : 55);
+        score += Math.cos(getAngleDist(gap.mid, away)) * 25;
+        score -= gap.span * 8;
+        const edge = target.collisionScale + 40;
+        const gx = pos.x + Math.cos(gap.mid) * edge;
+        const gy = pos.y + Math.sin(gap.mid) * edge;
+        score -= Math.hypot(gx - myPos.x, gy - myPos.y) * .05;
+        if (score > bestScore) {
+          bestScore = score;
+          primary = gap;
+        }
+      }
+      return {
+        dir: dir,
+        away: away,
+        moving: moving,
+        speed: speed,
+        predicted: predicted,
+        primary: primary
+      };
+    }
+    // Candidates come out of the placer's own 72-angle set, already cached for
+    // this tick and already collision- and range-checked, so this is a scoring
+    // pass over a handful of points rather than a search. Narrow first (the
+    // predicted opening, tight band); the caller widens only if nothing lands.
+    // exclude re-runs the set as if one object were already gone, which is how
+    // the break check prices a swing.
+    _gapRank(ctx, analysis, escape, wide, exclude) {
+      const {target: target, myPos: myPos, myFut: myFut, myPlayer: myPlayer, ObjectManager2: ObjectManager2, spikeId: spikeId} = ctx;
+      const gaps = wide ? analysis.passable : escape.primary ? [ escape.primary ] : [];
+      if (!gaps.length) return [];
+      const pos = target.pos.current;
+      const selfScale = target.collisionScale;
+      const spikeScale = Items[spikeId].scale;
+      const reach = selfScale + spikeScale + (wide ? this._GAP_BAND : this._GAP_BAND * .72);
+      const placeLength = myPlayer.getItemPlaceScale(spikeId);
+      const pending = this._gapFill.pendingBreak;
+      const angles = this._getPrePlaceAngles(spikeId, myPos, myPlayer, ObjectManager2, exclude || null);
+      const out = [];
+      for (const cfg of angles) {
+        if (!cfg || !cfg.placeable) continue;
+        const distance = Math.hypot(cfg.x - pos.x, cfg.y - pos.y);
+        if (distance > reach) continue;
+        // How crowded the spot already is — same for every opening, so it is
+        // counted once per candidate.
+        let density = 0;
+        for (const b of analysis.blockers) {
+          if (Math.hypot(cfg.x - b.x, cfg.y - b.y) < b.scale + spikeScale + 40) density += 1;
+        }
+        let best = null;
+        for (const gap of gaps) {
+          const cover = this._gapCover(cfg.x, cfg.y, spikeScale, gap, target);
+          if (cover.ratio <= .12) continue;
+          // Ticks until they reach it. Standing still counts as already there:
+          // there is nothing to pre-place for, the spike wants to land now.
+          const arrival = escape.moving ? Math.max(0, distance - selfScale - spikeScale) / escape.speed : 0;
+          // Blocking the route they are actually taking outweighs being close,
+          // so a slightly farther spike that seals the opening beats a nearer
+          // one that only clips it.
+          let score = cover.ratio * 100;
+          if (cover.seals) score += 60;
+          score += Math.max(0, Math.cos(getAngleDist(cover.angle, escape.dir))) * (escape.moving ? 45 : 20);
+          if (gap === escape.primary) score += 25;
+          score += Math.max(0, 1 - distance / reach) * 30;
+          score += cover.overlap / PI2 * 40;
+          if (distance < selfScale + spikeScale + 6) score += 15;
+          score -= Math.abs(Math.hypot(cfg.x - myFut.x, cfg.y - myFut.y) - placeLength) * .12;
+          score -= density * 4;
+          if (escape.moving) {
+            // Ping decides what we can still get down in time: too early and
+            // they walk past it, about right and it lands as they arrive.
+            const need = ctx.pingTicks + 1;
+            if (arrival < need - .5) {
+              score -= 30;
+            } else if (arrival <= need + 2) {
+              score += 22;
+            }
+          }
+          if (pending && ctx.tick - pending.tick <= 6 && getAngleDist(cover.angle, pending.angle) < .6) score += 30;
+          if (this._bannedAngles.has(cfg.angle)) score -= 25;
+          if (!best || score > best.score) {
+            best = {
+              angle: cfg.angle,
+              x: cfg.x,
+              y: cfg.y,
+              score: score,
+              gap: gap,
+              cover: cover,
+              distance: distance,
+              arrival: arrival,
+              seals: cover.seals
+            };
+          }
+        }
+        if (best) out.push(best);
+      }
+      out.sort((a, b) => b.score - a.score);
+      return out.slice(0, 8);
+    }
+    // Last-moment check, run immediately before the candidate is handed over:
+    // the target still has to be the ActiveTarget, the spot still has to be
+    // placeable, and nothing else may already have claimed it.
+    _gapValidate(ctx, candidate) {
+      const {ModuleHandler: ModuleHandler, EnemyManager2: EnemyManager2, ObjectManager2: ObjectManager2, myPlayer: myPlayer, myPos: myPos, spikeId: spikeId, target: target} = ctx;
+      if (EnemyManager2.nearestEnemy !== target) return false;
+      if (this._isItemLimit(spikeId, myPlayer)) return false;
+      if (!this._canPlace(spikeId, candidate.angle, myPos, ObjectManager2, null)) return false;
+      if (this._bannedAngles.has(candidate.angle) && !Settings_default._replacer) return false;
+      for (const angle of this._placedAngles) {
+        if (getAngleDist(angle, candidate.angle) < .01) return false;
+      }
+      // Anything already placed this tick, by any module.
+      const placed = ModuleHandler.placeAngles && ModuleHandler.placeAngles[1];
+      if (placed) {
+        for (const angle of placed) {
+          if (getAngleDist(angle, candidate.angle) < .02) return false;
+        }
+      }
+      // Spike Tick's own reservation — attemptSpikePlacement will use these.
+      const reserved = EnemyManager2.nearestSpikePlacerAngle;
+      if (reserved) {
+        for (const angle of reserved) {
+          if (getAngleDist(angle, candidate.angle) < .02) return false;
+        }
+      }
+      const spikeScale = Items[spikeId].scale;
+      for (const object of this._predictObjects) {
+        if (Math.hypot(candidate.x - object.x, candidate.y - object.y) < spikeScale + object.scale) return false;
+      }
+      return true;
+    }
+    // Breaking one of our own traps, only when it demonstrably buys a better
+    // spike than anything currently placeable — a trap denies a spike the 50
+    // units of placement scale around it, so the one sitting on the opening is
+    // often the reason nothing can be placed there. Never the trap that is
+    // holding the target — letting them out is not an improvement — and never
+    // while another module owns the tick.
+    _gapBreak(ctx, analysis, escape) {
+      if (!Settings_default._trapGapFillBreak) return false;
+      const {ModuleHandler: ModuleHandler, myPlayer: myPlayer, target: target, myPos: myPos} = ctx;
+      const state = this._gapFill;
+      if (ModuleHandler.moduleActive || ModuleHandler.placedOnce) return false;
+      if (ctx.tick - state.breakTick < this._GAP_BREAK_COOLDOWN) return false;
+      const reloading = ModuleHandler.staticModules.reloading;
+      const ownsTank = ModuleHandler.canBuy(0, 40);
+      const held = target.trappedIn;
+      const walls = analysis.blockers.filter(b => b.mine && b.trap && b.object.isDestroyable && b.object !== held && !b.holding);
+      if (!walls.length) return false;
+      walls.sort((a, b) => getAngleDist(a.angle, escape.dir) - getAngleDist(b.angle, escape.dir));
+      const secondary = myPlayer.getItemByType(1);
+      const primary = myPlayer.getItemByType(0);
+      const type = secondary === 10 ? 1 : primary !== null ? 0 : null;
+      if (type === null || !reloading.isReloaded(type)) return false;
+      const weapon = myPlayer.getItemByType(type);
+      // Melee only, the same rule Autobreak uses for reaching a building.
+      if (weapon === null || !DataHandler_default.isMelee(weapon)) return false;
+      const weaponData = DataHandler_default.getWeapon(weapon);
+      if (!weaponData) return false;
+      const damage = myPlayer.getBuildingDamage(weapon, ownsTank);
+      for (let i = 0; i < Math.min(2, walls.length); i++) {
+        const wall = walls[i];
+        // It has to be the wall on the side they are leaving from...
+        if (getAngleDist(wall.angle, escape.dir) > PI / 3) continue;
+        // ...and it has to come down in one swing, from where we are standing.
+        if (wall.object.health > damage) continue;
+        if (Math.hypot(wall.x - myPos.x, wall.y - myPos.y) > (weaponData.range || 0) + wall.object.hitScale) continue;
+        const after = this._gapAnalyse(target, analysis.blockers.filter(b => b !== wall));
+        // They have to actually be heading for the opening it would leave.
+        const opening = after.passable.find(g => getAngleDist(g.mid, escape.dir) < 1);
+        if (!opening) continue;
+        const ranked = this._gapRank(ctx, after, {
+          dir: escape.dir,
+          away: escape.away,
+          moving: escape.moving,
+          speed: escape.speed,
+          predicted: escape.predicted,
+          primary: opening
+        }, true, wall.object);
+        if (!ranked.length || ranked[0].score < this._GAP_BREAK_GAIN) continue;
+        ModuleHandler.moduleActive = true;
+        ModuleHandler.forceWeapon = type;
+        ModuleHandler.useAngle = Math.atan2(wall.y - myPos.y, wall.x - myPos.x);
+        ModuleHandler.shouldAttack = true;
+        state.breakTick = ctx.tick;
+        // Remembered so the next tick prepares the spike for the opening this
+        // swing is about to create, rather than rediscovering it cold.
+        state.pendingBreak = {
+          id: wall.object.id,
+          angle: opening.mid,
+          tick: ctx.tick
+        };
+        return true;
+      }
+      return false;
+    }
+    _gapFillTick(ctx) {
+      const {ModuleHandler: ModuleHandler, myPlayer: myPlayer, myPos: myPos, target: target, spikeId: spikeId} = ctx;
+      const state = this._gapFill;
+      // Target lock: this layer never selects anything, it follows the placer's
+      // ActiveTarget — and the moment that changes, every cached gap goes with it.
+      if (state.targetId !== target.id) {
+        state.targetId = target.id;
+        state.committed = null;
+        state.analysis = null;
+        state.pendingBreak = null;
+        state.tick = -1;
+      }
+      // Spike Tick decides first and owns its multi-tick sequences.
+      if (ModuleHandler.activeModule === "spikeTick") return;
+      const spikeTick = ModuleHandler.staticModules.spikeTick;
+      if (spikeTick && (spikeTick.useBreakTrapPlace || spikeTick.useBreakTrapFollowup || spikeTick.useTurret)) return;
+      if (!spikeId || this._isItemLimit(spikeId, myPlayer)) return;
+      const pos = target.pos.current;
+      if (Math.hypot(pos.x - myPos.x, pos.y - myPos.y) > this._GAP_RANGE) {
+        state.committed = null;
+        return;
+      }
+      const analysis = this._gapAnalysis(ctx);
+      // Not boxed in, or boxed in with nothing left to fill: hand the target
+      // straight back to the normal preplace/replace pass.
+      if (!analysis.enclosed) {
+        state.committed = null;
+        return;
+      }
+      const escape = this._gapEscape(ctx, analysis);
+      let ranked = this._gapRank(ctx, analysis, escape, false);
+      if (!ranked.length) ranked = this._gapRank(ctx, analysis, escape, true);
+      // Replace: stay on the position already being prepared unless a new one
+      // beats it by a real margin, and only when Re Placer is on.
+      const committed = state.committed;
+      if (committed && committed.targetId === target.id && ctx.tick - committed.tick <= 4) {
+        const keep = ranked.find(c => getAngleDist(c.angle, committed.angle) < .01);
+        if (keep) {
+          const upgrade = ranked[0] !== keep && ranked[0].score > keep.score + this._GAP_REPLACE_MARGIN;
+          if (!upgrade || !Settings_default._replacer) {
+            ranked = [ keep ].concat(ranked.filter(c => c !== keep));
+          }
+        }
+      }
+      let chosen = null;
+      for (const candidate of ranked) {
+        if (this._gapValidate(ctx, candidate)) {
+          chosen = candidate;
+          break;
+        }
+      }
+      if (!chosen) {
+        this._gapBreak(ctx, analysis, escape);
+        return;
+      }
+      // Preplace while they still have to travel to the opening — that is the
+      // ping-synced path at the end of postTick — immediate once they are there.
+      this._addPredictObject(spikeId, chosen.angle, Settings_default._preplacer && chosen.arrival > .75, myPos);
+      state.committed = {
+        targetId: target.id,
+        angle: chosen.angle,
+        score: chosen.score,
+        tick: ctx.tick
+      };
+      state.pendingBreak = null;
+    }`
+);
+
+edit(
+  "autoplacer: run the gap-fill layer before execution",
+  `      const autoObjects = this._predictObjects.filter(o => !o.preplace);
+      const preObjects = this._predictObjects.filter(o => o.preplace);
+      for (const obj of autoObjects) {
+        if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;`,
+  `      // Trap enclosure gap fill: one more candidate on the same list, chosen
+      // from the same angle set, drained by the same two paths below. A throw
+      // in here parks the layer for a while instead of taking the placer down
+      // with it.
+      if (Settings_default._trapGapFill && this._tick >= this._gapFill.errorUntil) {
+        try {
+          this._gapFillTick({
+            tick: this._tick,
+            ModuleHandler: ModuleHandler,
+            EnemyManager2: EnemyManager2,
+            ObjectManager2: ObjectManager2,
+            PlayerManager2: PlayerManager2,
+            myPlayer: myPlayer,
+            myPos: myPos,
+            myFut: myFut,
+            target: enemy,
+            spikeId: spikeId,
+            pingTicks: Math.min(2, (pingTime || 0) / 111)
+          });
+        } catch (e) {
+          this._gapFill.committed = null;
+          this._gapFill.errorUntil = this._tick + 60;
+          Logger.error("Trap gap fill skipped for 60 ticks: " + e);
+        }
+      }
+      const autoObjects = this._predictObjects.filter(o => !o.preplace);
+      const preObjects = this._predictObjects.filter(o => o.preplace);
+      for (const obj of autoObjects) {
+        if (ModuleHandler.packetCount + 5 > ModuleHandler.packetLimit) break;`
+);
+
+/* ------------------------------------------------------------------ *
  * 6. Object spin hook (Luna: "spike rotation" / "mill rotation")
  *
  * Luna gates `this.dir += this.turnSpeed * delta` in the object update on a
@@ -412,6 +1010,30 @@ ${themeButtons}\r
         </div>\r
     </div>\r
 `
+);
+
+/* The two gap-fill switches sit with the rest of the placement options, right
+ * above Auto Retrap. */
+patchPage(
+  "Combat_default",
+  '<div class="content-option">\r\n                <label class="option-title" for="_autoRetrap">Auto Retrap</label>',
+  `<div class="content-option">\r
+                <label class="option-title" for="_trapGapFill">Trap Gap Fill</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_trapGapFill" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">When the locked target is boxed in by traps, spikes or terrain, works out which opening they are leaving through and prepares the closest spike that seals it. Places through Pre Placer / Re Placer, never on top of Spike Tick.</span>\r
+            </div>\r
+            <div class="content-option">\r
+                <label class="option-title" for="_trapGapFillBreak">Gap Fill Trap Break</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_trapGapFillBreak" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Lets the gap filler break one of your own walls when that opens a better spike than anything placeable right now. Never the trap holding the target, and never while another module owns the tick.</span>\r
+            </div>\r
+            `
 );
 
 /* Styles for the theme swatch row. */
