@@ -135,16 +135,6 @@ const velocity = fs.readFileSync(path.join(ROOT, "src/deltek/velocitytick.js"), 
   .split("\r\n").join("\n").replace(/\n+$/, "");
 
 /* The armed target, beside the other combo state. */
-edit(
-  "velocity: state",
-  `        let autoMills = false;
-        let autoVelocityTickToggled = false;`,
-  `        let autoMills = false;
-        let autoVelocityTickToggled = false;
-        // Set on the tick the turret goes out, spent on the next one.
-        let velocityTarget = null;`
-);
-
 /* The combo itself, in place of toptop() and its caller. */
 edit(
   "velocity: replace toptop with the two-tick combo",
@@ -327,6 +317,53 @@ edit(
   `        replace: true,`,
   `        replace: true,
         trapEscapeRing: true,`
+);
+
+/* ------------------------------------------------------------------ *
+ * Retrap rush. While the enemy is held in one of my traps, get the next one
+ * down before the first breaks.
+ * ------------------------------------------------------------------ */
+const retraprush = fs.readFileSync(path.join(ROOT, "src/deltek/retraprush.js"), "utf8")
+  .split("\r\n").join("\n").replace(/\n+$/, "");
+
+edit(
+  "retrap rush: the feature",
+  `${trapring}`,
+  `${trapring}
+
+${retraprush}`
+);
+
+/* Ahead of Replace and the escape ring: while they are held, this is the
+ * placement that matters most, so it gets the packet budget first. */
+edit(
+  "retrap rush: run it first in the tick",
+  `                    // REPLACE
+                    replaceVacated();`,
+  `                    // RETRAP RUSH
+                    retrapRush();
+
+                    // REPLACE
+                    replaceVacated();`
+);
+
+edit(
+  "retrap rush: menu toggle",
+  `                    { type: 'toggle', name: "Hold The Four Ways In", id: "trapEscapeRing" }`,
+  `                    { type: 'toggle', name: "Hold The Four Ways In", id: "trapEscapeRing" }
+                ]
+            },
+            {
+                title: "Retrap",
+                items: [
+                    { type: 'toggle', name: "Rush The Next Trap", id: "retrapRush" }`
+);
+
+edit(
+  "retrap rush: default on",
+  `        trapEscapeRing: true,`,
+  `        trapEscapeRing: true,
+        retrapRush: true,`
 );
 
 fs.writeFileSync(OUT, src.split("\n").join(EOL));

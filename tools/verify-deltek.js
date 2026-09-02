@@ -40,8 +40,8 @@ check("removedObjects still gets the sid, so its own consumers keep working",
   /removedObjects\.push\(sid\);/.test(built) &&
   (built.match(/removedObjects\.some/g) || []).length ===
   (SRC.match(/removedObjects\.some/g) || []).length);
-check("it runs in the tick, after the auto placer",
-  /placedAngles\.push\(object\.angle\);\n\s*\n\s*\}\n\s*\n\s*\/\/ REPLACE\n\s*replaceVacated\(\);/.test(built));
+check("it runs in the tick, after the auto placer and the retrap rush",
+  /\/\/ RETRAP RUSH\n\s*retrapRush\(\);\n\s*\n\s*\/\/ REPLACE\n\s*replaceVacated\(\);/.test(built));
 check("the toggle is in the Placers menu",
   /\{ type: 'toggle', name: "Enable Replace", id: "replace" \}/.test(built));
 check("and has a default", /\n\s*replace: true,/.test(built));
@@ -275,40 +275,33 @@ console.log("\n5. the dead object, and the ceiling\n");
 /* ------------------------------------------------------------------ *
  * Velocity Tick.
  * ------------------------------------------------------------------ */
-console.log("\n6. velocity tick — wiring\n");
+console.log("\n6. velocity tick\n");
 
 check("deltek's setTimeout version is gone",
   !/function toptop\(\)/.test(built) && !/}, 93\);/.test(built));
-check("the T key and the menu are the same switch",
-  /window\.vars\.velocityTick = !window\.vars\.velocityTick;/.test(built) &&
-  !/autoVelocityTickToggled = !autoVelocityTickToggled/.test(built));
-check("the toggle is in the menu", /name: "Enable Velocity Tick", id: "velocityTick"/.test(built));
-check("and defaults off", /\n\s*velocityTick: false,/.test(built));
+check("it speaks deltek's own combo vocabulary",
+  /instaKill = \["turret", "primary", "stop"\];/.test(built));
+check("and never equips hats itself — deltek's hat stage does that from `insta`",
+  !/hat\(53, 0\);[\s\S]{0,400}instaKill = \["turret"/.test(built) &&
+  /if \(insta\.primary && isBoughtHat\(7, 0\)\)/.test(built) &&
+  /\(insta\.primaryturret \|\| insta\.turret\) && isBoughtHat\(53, 0\)/.test(built));
+check("it does not touch movement at all",
+  !/predictMoveAngle = armAngle|predictMoveAngle = fireAngle/.test(built));
+check("it yields to a combo already running",
+  /nearestEnemy && !instaKill\.length/.test(built));
 check("the band is RYN's 220-245, not 222-262",
-  /VELOCITY_MIN_KB = 220;/.test(built) && /VELOCITY_MAX_KB = 245;/.test(built) &&
-  !/minimumOTRange/.test(built));
-check("it arms against the enemy's future position",
-  /const futureX = nearestEnemy\.xVel;/.test(built));
-check("turret gear on the arm tick, bull on the fire tick",
-  /hat\(53, 0\);/.test(built) && /hat\(7, 0\);/.test(built));
-check("it is a real keybind, not a hardcoded key",
+  /vtDist >= 220 && vtDist <= 245/.test(built) && !/minimumOTRange/.test(built));
+check("it measures the enemy's future position",
+  /nearestEnemy\.xVel, nearestEnemy\.yVel\n\s*\);/.test(built));
+check("it is a real keybind with an on-screen notice",
   /keyStr === window\.vars\.keyVelocityTick/.test(built) &&
   /keyVelocityTick: "T",/.test(built) &&
-  /name: "Velocity Tick", id: "keyVelocityTick"/.test(built));
-check("and announces itself on screen, not in chat",
-  /showSettingText\(900, window\.vars\.velocityTick[\s\S]{0,80}"Velocity Tick: ON" : "Velocity Tick: OFF"\)/.test(built) &&
+  /name: "Velocity Tick", id: "keyVelocityTick"/.test(built) &&
   !/velotick:/.test(built));
-check("the swing uses deltek's own attack path",
-  /sendAtck\(1, fireAngle\);\n\s*sendAtck\(0, fireAngle\);/.test(built) &&
-  !/io\.send\("F", fireAngle\)/.test(built));
-check("movement is only taken when the player is not moving",
-  (built.match(/if \(predictMoveAngle === null\) \{/g) || []).length === 2);
-check("the trap branch is not present",
-  !/velocityTickTrap/i.test(built) && !/_pinnedInMyTrap/.test(built));
+check("the trap branch is not present", !/velocityTickTrap/i.test(built));
 
-/* ---- run the combo ---------------------------------------------- */
 const vStart = built.indexOf("                    // ==================== VELOCITY TICK ====================");
-const vEndMark = "                        velocityTarget = null;\n                    }";
+const vEndMark = 'instaKill = ["turret", "primary", "stop"];\n                            }\n                        }\n                    }';
 const vEnd = built.indexOf(vEndMark, vStart);
 check("the combo can be extracted", vStart > 0 && vEnd > vStart);
 
@@ -318,116 +311,179 @@ function velocityWorld(o) {
     Math, console,
     window: { vars: { velocityTick: o.on !== false } },
     game: { tickRate: 111 },
+    instaKill: o.busy ? ["secondary", "stop"] : [],
     myPlayer: { alive: o.alive !== false, sid: 1, x2: 0, y2: 0,
       weapons: [o.primary === undefined ? 5 : o.primary, 15] },
     nearestEnemy: o.enemy === null ? null : Object.assign({
-      sid: 2, x2: 230, y2: 0, xVel: 230, yVel: 0, skinIndex: 0, weapons: [7, 10]
+      sid: 2, x2: 230, y2: 0, xVel: 230, yVel: 0, skinIndex: 0, weapons: [7, 10], scale: 35
     }, o.enemy || {}),
     items: { weapons: { 5: { speed: 300 }, 7: { speed: 100 }, 15: { speed: 1500 } } },
     primaryReload: { 1: o.myPrimary === undefined ? 1 : o.myPrimary,
                      2: o.theirPrimary === undefined ? 0 : o.theirPrimary },
     turretReload: { 1: o.myTurret === undefined ? 1 : o.myTurret },
-    velocityTarget: o.armed === undefined ? null : o.armed,
     UTILS: { getDistance: (x1,y1,x2,y2) => Math.hypot(x2-x1, y2-y1) },
-    getPlayerInfo: (p, k) => k === "primaryVariant" ? (o.variant === undefined ? 2 : o.variant) : null,
-    hats: [], weaponSel: [], sent: [],
-    autoaim: false, autoaimAngle: null,
-    /* null = the player is pressing nothing this tick. A held key puts an
-     * angle here before the combo runs. */
-    predictMoveAngle: o.playerMoving === undefined ? null : o.playerMoving,
-    shouldntPathfind: false, keyCodeWeapon: null,
-    hat(id) { env.hats.push(id); },
-    selectWeapon(w) { env.weaponSel.push(w); },
-    sendAtck(state, angle) { env.sent.push({ state, angle }); },
-    io: { send: (t, a) => env.sent.push({ t, a }) }
+    getPlayerInfo: (p, k) => k === "primaryVariant" ? (o.variant === undefined ? 2 : o.variant) : null
   };
   env.globalThis = env;
   vm.createContext(env);
-  vm.runInContext(built.slice(vStart, vEnd + vEndMark.length) +
-    "\nglobalThis.armed = () => velocityTarget;", env, { filename: "velocity.js" });
+  vm.runInContext(built.slice(vStart, vEnd + vEndMark.length), env, { filename: "velocity.js" });
   return env;
 }
 
 console.log("\n7. velocity tick — the combo\n");
 {
-  const arm = velocityWorld({});
-  check("arms in the window", arm.armed() !== null);
-  check("with turret gear", arm.hats.indexOf(53) !== -1, JSON.stringify(arm.hats));
-  check("and walks at them", typeof arm.predictMoveAngle === "number" && arm.shouldntPathfind);
-  check("without swinging yet", arm.sent.length === 0);
+  const fire = velocityWorld({});
+  check("in the window, it queues the whole combo",
+    fire.instaKill.join(",") === "turret,primary,stop", JSON.stringify(fire.instaKill));
+  check("turret first, so the shot goes out before the swing",
+    fire.instaKill[0] === "turret");
+  check("then the polearm, which is where hat 7 comes from",
+    fire.instaKill[1] === "primary");
+  check("and a stop, so it does not hold the attack down",
+    fire.instaKill[2] === "stop");
 
-  const fire = velocityWorld({ armed: { x2: 200, y2: 0 } });
-  check("fires on the next tick", fire.hats.indexOf(7) !== -1, JSON.stringify(fire.hats));
-  check("swinging at where they are now, start and stop",
-    fire.sent.length === 2 && fire.sent[0].state === 1 && fire.sent[1].state === 0 &&
-    fire.sent[0].angle === 0, JSON.stringify(fire.sent));
-  check("and disarms", fire.armed() === null);
-  check("without latching deltek's autoaim on", fire.autoaim === false);
+  const busy = velocityWorld({ busy: true });
+  check("a combo already running is not stomped",
+    busy.instaKill.join(",") === "secondary,stop");
 }
 
-console.log("\n8. velocity tick — movement, the bug that made you stuck\n");
+console.log("\n8. velocity tick — the gates\n");
 {
-  /* predictMoveAngle goes straight out as the move direction (io.send("9", ...)).
-   * Writing over it every tick meant the mod steered and the keys did nothing. */
-  const held = velocityWorld({ playerMoving: 1.234 });
-  check("a moving player keeps their own direction while arming",
-    held.predictMoveAngle === 1.234, String(held.predictMoveAngle));
-  check("and the combo still arms", held.armed() !== null);
-  check("without seizing the pathfinder", held.shouldntPathfind === false);
-
-  const heldFire = velocityWorld({ playerMoving: 1.234, armed: { x2: 200, y2: 0 } });
-  check("a moving player keeps their direction while firing too",
-    heldFire.predictMoveAngle === 1.234);
-  check("and the swing still goes out", heldFire.sent.length === 2);
-
-  const idle = velocityWorld({});
-  check("an idle player is walked at the target", typeof idle.predictMoveAngle === "number");
-  check("and that does claim the pathfinder", idle.shouldntPathfind === true);
-}
-
-console.log("\n9. velocity tick — the gates\n");
-{
-  const near = velocityWorld({ enemy: { xVel: 150, yVel: 0 } });
-  check("too close to need the combo: no arm", near.armed() === null);
-  const far = velocityWorld({ enemy: { xVel: 300, yVel: 0 } });
-  check("too far for the knockback to reach: no arm", far.armed() === null);
-  const edgeLo = velocityWorld({ enemy: { xVel: 220, yVel: 0 } });
-  const edgeHi = velocityWorld({ enemy: { xVel: 245, yVel: 0 } });
+  const armed = o => velocityWorld(o).instaKill.length > 0;
+  check("too close to need the combo", !armed({ enemy: { xVel: 150 } }));
+  check("too far for the knockback to reach", !armed({ enemy: { xVel: 300 } }));
   check("both edges of the window are inside it",
-    edgeLo.armed() !== null && edgeHi.armed() !== null);
+    armed({ enemy: { xVel: 220 } }) && armed({ enemy: { xVel: 245 } }));
+  check("no polearm, no combo", !armed({ primary: 1 }));
+  check("below diamond, no combo", !armed({ variant: 1 }));
+  check("primary not reloaded, no combo", !armed({ myPrimary: 0.5 }));
+  check("turret not reloaded, no combo", !armed({ myTurret: 0 }));
+  check("no enemy, no combo", !armed({ enemy: null }));
+  check("toggled off, no combo", !armed({ on: false }));
+  check("dead, no combo", !armed({ alive: false }));
 
-  check("no polearm, no combo", velocityWorld({ primary: 1 }).armed() === null);
-  check("below diamond, no combo", velocityWorld({ variant: 1 }).armed() === null);
-  check("primary not reloaded, no combo", velocityWorld({ myPrimary: 0.5 }).armed() === null);
-  check("turret not reloaded, no combo", velocityWorld({ myTurret: 0 }).armed() === null);
-  check("no enemy, no combo", velocityWorld({ enemy: null }).armed() === null);
-  check("toggled off, no combo", velocityWorld({ on: false }).armed() === null);
-
-  /* Hats the combo cannot beat. The enemy needs a weapon slower than one tick
-   * for the hat to be the deciding term at all — a dagger reloads in 100ms, so
-   * its holder is always about to swing and the shot is always worth taking.
-   * Polearm at 300ms is the honest case. */
+  /* The hat term only decides when their weapon is slower than a tick. */
   const slow = { weapons: [5, 10] };
-  const soldier = velocityWorld({ enemy: Object.assign({ skinIndex: 6 }, slow), theirPrimary: 0 });
-  check("a soldier hat is not worth the turret", soldier.armed() === null);
-  const absorber = velocityWorld({ enemy: Object.assign({ skinIndex: 22 }, slow), theirPrimary: 0 });
-  check("hat 22 eats the knockback, so it is not worth it", absorber.armed() === null);
-  const plain = velocityWorld({ enemy: Object.assign({ skinIndex: 0 }, slow), theirPrimary: 0 });
-  check("an ordinary hat is", plain.armed() !== null);
+  check("a soldier hat is not worth the turret",
+    !armed({ enemy: Object.assign({ skinIndex: 6 }, slow), theirPrimary: 0 }));
+  check("hat 22 eats the knockback, so it is not worth it",
+    !armed({ enemy: Object.assign({ skinIndex: 22 }, slow), theirPrimary: 0 }));
+  check("an ordinary hat is",
+    armed({ enemy: Object.assign({ skinIndex: 0 }, slow), theirPrimary: 0 }));
+  check("a swing about to land is worth it whatever they wear",
+    armed({ enemy: Object.assign({ skinIndex: 6 }, slow), theirPrimary: 0.9 }));
+  check("and a dagger holder is always about to swing",
+    armed({ enemy: { skinIndex: 6 }, theirPrimary: 0 }));
+}
 
-  /* ...and a swing about to land justifies it whatever they are wearing. */
-  const swinging = velocityWorld({ enemy: Object.assign({ skinIndex: 6 }, slow), theirPrimary: 0.9 });
-  check("a swing about to land is worth it regardless of the hat",
-    swinging.armed() !== null);
-  const dagger = velocityWorld({ enemy: { skinIndex: 6 }, theirPrimary: 0 });
-  check("and a dagger holder is always about to swing", dagger.armed() !== null);
+/* ------------------------------------------------------------------ *
+ * Retrap rush.
+ * ------------------------------------------------------------------ */
+console.log("\n9. retrap rush\n");
 
-  /* Half-fired combo must not survive being switched off or dying. */
-  const dropped = velocityWorld({ on: false, armed: { x2: 200, y2: 0 } });
-  check("toggling off mid-combo drops the armed target", dropped.armed() === null);
-  check("and does not swing", dropped.sent.length === 0);
-  const dead = velocityWorld({ alive: false, armed: { x2: 200, y2: 0 } });
-  check("dying mid-combo drops it too", dead.armed() === null);
+check("it runs before Replace and the escape ring",
+  /\/\/ RETRAP RUSH\n\s*retrapRush\(\);\n\s*\n\s*\/\/ REPLACE/.test(built));
+check("the toggle is in the menu and defaults on",
+  /name: "Rush The Next Trap", id: "retrapRush"/.test(built) &&
+  /\n\s*retrapRush: true,/.test(built));
+check("it uses deltek's own angle sweep",
+  /getPrePlaceAngles\(id, objects\)/.test(built));
+
+const qStart = built.indexOf("        // ==================== RETRAP RUSH ====================");
+const qEndMark = "            placedAngles.push(best.angle);\n        }";
+const qEnd = built.indexOf(qEndMark, qStart);
+check("the feature can be extracted", qStart > 0 && qEnd > qStart);
+
+function rushWorld(o) {
+  o = o || {};
+  const heldTrap = o.held === null ? null
+    : Object.assign({ sid: 900, x: 0, y: 0, scale: 32 }, o.held || {});
+  const env = {
+    Math, console,
+    window: { vars: { retrapRush: o.on !== false }, packets: o.packets || 0 },
+    myPlayer: { alive: o.alive !== false, sid: 1, x2: 0, y2: 0, items: [0, 3, 6, null, 15] },
+    nearestEnemy: o.enemy === null ? null
+      : Object.assign({ sid: 2, x2: 0, y2: 0, xVel: 0, yVel: 0, scale: 35 }, o.enemy || {}),
+    traps_our: heldTrap ? [heldTrap] : [],
+    visibleObjects: [heldTrap, { sid: 901 }].filter(Boolean),
+    placedAngles: [],
+    placed: [],
+    limitReached: o.limitReached || [],
+    UTILS: { getDistance: (x1,y1,x2,y2) => Math.hypot(x2-x1, y2-y1) },
+    isItemLimit(id) { return env.limitReached.indexOf(id) !== -1; },
+    /* deltek's sweep: 72 angles on the placement ring, scale 32, all legal
+     * unless the scenario says otherwise. */
+    getPrePlaceAngles(id, objects) {
+      env.lastObjects = objects;
+      const out = [];
+      for (let i = 0; i < 72; i++) {
+        const angle = i * (Math.PI * 2 / 72);
+        const r = o.ring === undefined ? 67 : o.ring;
+        out.push({
+          angle, scale: 32,
+          x: Math.cos(angle) * r, y: Math.sin(angle) * r,
+          placeable: (o.unplaceable || []).indexOf(i) === -1
+        });
+      }
+      return out;
+    },
+    place(id, angle) { env.placed.push({ id, angle }); env.window.packets += 5; }
+  };
+  env.globalThis = env;
+  vm.createContext(env);
+  vm.runInContext(built.slice(qStart, qEnd + qEndMark.length), env, { filename: "retraprush.js" });
+  return env;
+}
+
+{
+  const w = rushWorld({});
+  w.retrapRush();
+  check("an enemy held in my trap gets the next one placed",
+    w.placed.length === 1 && w.placed[0].id === 15, JSON.stringify(w.placed));
+  check("the trap already holding them is not counted as competition",
+    Array.isArray(w.lastObjects) && !w.lastObjects.some(o => o && o.sid === 900) &&
+    w.lastObjects.some(o => o && o.sid === 901));
+
+  const free = rushWorld({ held: null });
+  free.retrapRush();
+  check("an enemy who is not held gets nothing", free.placed.length === 0);
+
+  const off = rushWorld({ on: false });
+  off.retrapRush();
+  check("nor when the toggle is off", off.placed.length === 0);
+
+  const none = rushWorld({ enemy: null });
+  none.retrapRush();
+  check("nor with no enemy", none.placed.length === 0);
+
+  const dead = rushWorld({ alive: false });
+  dead.retrapRush();
+  check("nor while dead", dead.placed.length === 0);
+
+  const capped = rushWorld({ limitReached: [15] });
+  capped.retrapRush();
+  check("traps at their cap send nothing", capped.placed.length === 0);
+
+  const broke = rushWorld({ packets: 116 });
+  broke.retrapRush();
+  check("and neither does an empty packet budget", broke.placed.length === 0);
+
+  /* Out of reach of the target: a trap on the floor is not a retrap. */
+  const farRing = rushWorld({ ring: 400 });
+  farRing.retrapRush();
+  check("a placement that cannot reach them is not made", farRing.placed.length === 0);
+
+  /* Every angle refused. */
+  const blocked = rushWorld({ unplaceable: Array.from({ length: 72 }, (_, i) => i) });
+  blocked.retrapRush();
+  check("nothing legal, nothing sent", blocked.placed.length === 0);
+
+  /* It aims at where they will be, not where they are. */
+  const moving = rushWorld({ enemy: { x2: 0, y2: 0, xVel: 60, yVel: 0 } });
+  moving.retrapRush();
+  check("it aims at where they will be",
+    moving.placed.length === 1 &&
+    Math.abs(moving.placed[0].angle) < 0.5, JSON.stringify(moving.placed));
 }
 
 /* ------------------------------------------------------------------ *
@@ -655,7 +711,7 @@ console.log("\n12. nothing else moved\n");
   check("the only lines removed are deltek's old velocity tick",
     unexpected.length === 0, unexpected.slice(0, 3).map(s => s.trim()).join(" | "));
   check("the additions are the two features and their hooks",
-    added > 150 && added < 450, `${added} lines added`);
+    added > 150 && added < 520, `${added} lines added`);
 }
 
 console.log(failed

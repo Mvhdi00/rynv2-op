@@ -10979,8 +10979,6 @@ for (let tree of trees) {
 
         let autoMills = false;
         let autoVelocityTickToggled = false;
-        // Set on the tick the turret goes out, spent on the next one.
-        let velocityTarget = null;
         let autoBreak = false;
         let autoBreakAngle;
         let breakObject;
@@ -11967,6 +11965,75 @@ for (let tree of trees) {
                 placedAngles.push(angle);
             }
             escapeRingAngles = left;
+        }
+
+        // ==================== RETRAP RUSH ====================
+        //
+        // The enemy is standing in one of my traps. That is a countdown, not a
+        // win: the moment it breaks they walk, and the only thing that keeps
+        // them there is a second trap already waiting on the ground they will
+        // step onto.
+        //
+        // deltek does place traps at a held enemy — getPerfectAngles has a
+        // "Retrap colliding enemy" branch — but it is one priority among many
+        // in the preplacer, and it only fires when the preplacer happens to be
+        // running for a suitable object. This is the case where that is not
+        // enough: while they are held, every tick that can afford it puts the
+        // next trap down, and it does so first.
+
+        function retrapRush() {
+            if (!window.vars.retrapRush) return;
+            if (!myPlayer || !myPlayer.alive || !nearestEnemy) return;
+
+            // Held in a trap of mine or an ally's — the same test the rest of
+            // deltek uses for "enemy is trapped".
+            const held = traps_our.find(trap =>
+                UTILS.getDistance(trap.x, trap.y, nearestEnemy.x2, nearestEnemy.y2) < trap.scale
+            );
+            if (!held) return;
+
+            const id = myPlayer.items[4] || 15;
+            if (id === null || id === undefined) return;
+            if (isItemLimit(id)) return;
+            if (window.packets + 5 > 119) return;
+
+            // The trap they are already in is not competition for the ground —
+            // it is about to be gone. Everything else still is.
+            const objects = visibleObjects.filter(o => o !== held);
+
+            // Where they will be, not where they are: they are held now, but
+            // the placement lands next tick and they leave the moment it
+            // breaks. deltek's xVel/yVel is that next-tick position.
+            const targetX = nearestEnemy.xVel;
+            const targetY = nearestEnemy.yVel;
+
+            // deltek's own angle sweep, scored the way its preplacer scores:
+            // the placeable angle that lands closest to the target.
+            let best = null;
+            let bestDist = Infinity;
+            for (const candidate of getPrePlaceAngles(id, objects)) {
+                if (!candidate.placeable) continue;
+
+                // It has to actually reach them, or it is just a trap on the
+                // floor. Touching counts: a trap catches on contact.
+                const dist = UTILS.getDistance(candidate.x, candidate.y, targetX, targetY);
+                if (dist > nearestEnemy.scale + candidate.scale) continue;
+
+                // And it must not land on top of the one already holding them,
+                // which would spend a trap to hold ground that is already held.
+                if (UTILS.getDistance(candidate.x, candidate.y, held.x, held.y) <
+                    held.scale + candidate.scale) continue;
+
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = candidate;
+                }
+            }
+
+            if (!best) return;
+
+            place(id, best.angle);
+            placedAngles.push(best.angle);
         }
 
         function updateAngles(id) {
@@ -14005,134 +14072,82 @@ for (let tree of trees) {
 
                     // ==================== VELOCITY TICK ====================
                     //
-                    // RYN's version, whole, in deltek's own terms. The combo is
-                    // two server ticks, not two setTimeouts:
+                    // RYN's combo, said in deltek's own words.
                     //
-                    //   ARM   turret gear on, walk at them. The turret shot goes
-                    //         out this tick and the walk closes the gap while it
-                    //         travels.
-                    //   FIRE  next tick, bull on and swing the polearm while the
-                    //         knockback still has them moving.
+                    // RYN never sends the frames itself. VelocityTick sets
+                    // ModuleHandler.forceHat / forceWeapon / shouldAttack and
+                    // lets ModuleHandler assemble one coherent action for the
+                    // tick. deltek has exactly that object and it is called
+                    // `insta`, driven by the `instaKill` step queue: one step is
+                    // consumed per tick, each step sets the intent, and the hat
+                    // stage at the bottom of the tick equips from it —
+                    // insta.turret means hat 53, insta.primary means hat 7.
                     //
-                    // deltek's old toptop() fired both halves off setTimeout(93)
-                    // and setTimeout(210) — wall clock, so it drifts against the
-                    // server tick and against ping. Ticks are what the server
-                    // counts, so ticks are what this counts.
+                    // That last part is why the earlier attempt could not work:
+                    // it called hat() up here, and deltek's own hat stage runs
+                    // several hundred lines further down and equips from
+                    // `insta` regardless, overwriting it every single tick.
+                    //
+                    // So the whole combo is one assignment. Turret gear and the
+                    // shot on the first tick, bull and the polearm on the
+                    // second, cleanup on the third:
+                    //
+                    //   ["turret", "primary", "stop"]
+                    //
+                    // Movement is not touched at all. RYN walks during the arm
+                    // tick, but it can only do that because ModuleHandler owns
+                    // moveTo and hands it back; writing over deltek's
+                    // predictMoveAngle is what took the player's keys away.
                     //
                     // The trap branch is deliberately not here.
 
-                    // Soldier eats the damage the combo is for; hat 22 eats the
-                    // knockback the whole window depends on. Either one makes the
-                    // shot worthless, so neither is worth spending it on.
-                    function velocityValidHat(skinIndex) {
-                        return skinIndex !== null && skinIndex !== undefined &&
-                            skinIndex !== 6 && skinIndex !== 22;
-                    }
+                    if (window.vars.velocityTick && myPlayer && myPlayer.alive &&
+                        nearestEnemy && !instaKill.length) {
 
-                    // 220-245 is not a range check. It is where the turret's
-                    // knockback leaves them once the shot lands, which is why the
-                    // window has a floor as well as a ceiling: nearer and the
-                    // polearm already reaches without the combo, further and the
-                    // knockback cannot bring them into it.
-                    const VELOCITY_MIN_KB = 220;
-                    const VELOCITY_MAX_KB = 245;
+                        // Every gate RYN checks, asked of deltek's own state.
+                        const vtPolearm = myPlayer.weapons[0] === 5;
+                        // Diamond or ruby. Below that the polearm does not hit
+                        // hard enough to be worth spending a turret on.
+                        const vtDiamond = getPlayerInfo(myPlayer, "primaryVariant") >= 2;
+                        const vtPrimaryReady = primaryReload[myPlayer.sid] >= 1;
+                        const vtTurretReady = turretReload[myPlayer.sid] >= 1;
 
-                    if (window.vars.velocityTick && myPlayer && myPlayer.alive) {
-                        // ── FIRE ────────────────────────────────────────────
-                        // Armed last tick, so the turret has gone out and the
-                        // walk has had a tick to close the gap. Aim at where they
-                        // are now, not where they were when we armed.
-                        if (velocityTarget !== null) {
-                            const fireAngle = Math.atan2(
-                                velocityTarget.y2 - myPlayer.y2,
-                                velocityTarget.x2 - myPlayer.x2
+                        if (vtPolearm && vtDiamond && vtPrimaryReady && vtTurretReady) {
+                            // Against where they will be, not where they are:
+                            // deltek's xVel/yVel is already next tick's position
+                            // (x2 * 2 - lastX), the same extrapolation RYN reads
+                            // off pos.future. The old version here measured
+                            // x2/y2 and was a tick behind.
+                            const vtDist = UTILS.getDistance(
+                                myPlayer.x2, myPlayer.y2,
+                                nearestEnemy.xVel, nearestEnemy.yVel
                             );
 
-                            hat(7, 0);
-                            keyCodeWeapon = myPlayer.weapons[0];
-                            selectWeapon(keyCodeWeapon);
-                            // One swing, the way place() swings: start and stop in
-                            // the same call, with the angle on the packet. The old
-                            // version latched deltek's autoaim on and left it on,
-                            // which took the player's aim away for good.
-                            sendAtck(1, fireAngle);
-                            sendAtck(0, fireAngle);
-                            // Only steer if the player is not steering themselves.
-                            if (predictMoveAngle === null) {
-                                predictMoveAngle = fireAngle;
-                                shouldntPathfind = true;
-                            }
+                            // 220-245 is not a range check. It is where the
+                            // turret's knockback leaves them once the shot
+                            // lands, which is why the window has a floor as well
+                            // as a ceiling: nearer and the polearm already
+                            // reaches without the combo, further and the
+                            // knockback cannot bring them into it.
+                            const vtInBand = vtDist >= 220 && vtDist <= 245;
 
-                            velocityTarget = null;
-                        } else if (nearestEnemy) {
-                            // ── ARM ─────────────────────────────────────────
-                            // Every gate RYN checks, asked of deltek's own state.
-                            const isPolearm = myPlayer.weapons[0] === 5;
-                            // Diamond or ruby. Below that the polearm does not hit
-                            // hard enough for the combo to be worth the turret.
-                            const isDiamond = getPlayerInfo(myPlayer, "primaryVariant") >= 2;
-                            const primaryReady = primaryReload[myPlayer.sid] >= 1;
-                            const turretReady = turretReload[myPlayer.sid] >= 1;
+                            // Worth spending the turret on: either their melee
+                            // comes up within the tick — so the shot lands as
+                            // they commit — or they are wearing a hat the
+                            // knockback still works on. Soldier eats the damage
+                            // and hat 22 eats the knockback the window depends
+                            // on, so neither is worth it on its own.
+                            const vtWeapon = items.weapons[nearestEnemy.weapons[0]];
+                            const vtReload = primaryReload[nearestEnemy.sid] || 0;
+                            const vtSwinging = !!vtWeapon &&
+                                vtReload + (game.tickRate / vtWeapon.speed) >= 1;
+                            const vtHat = nearestEnemy.skinIndex !== 6 &&
+                                nearestEnemy.skinIndex !== 22;
 
-                            if (isPolearm && isDiamond && primaryReady && turretReady) {
-                                // Against where they will be, not where they are:
-                                // deltek's xVel/yVel is already next tick's
-                                // position (x2 * 2 - lastX), which is the same
-                                // extrapolation RYN reads off pos.future.
-                                const futureX = nearestEnemy.xVel;
-                                const futureY = nearestEnemy.yVel;
-                                const dist = UTILS.getDistance(
-                                    myPlayer.x2, myPlayer.y2, futureX, futureY
-                                );
-                                const armAngle = Math.atan2(
-                                    futureY - myPlayer.y2, futureX - myPlayer.x2
-                                );
-
-                                // Worth spending the turret on: either their melee
-                                // comes up within the tick — so the shot lands as
-                                // they commit — or they are wearing a hat the
-                                // knockback still works on.
-                                const enemyWeapon = items.weapons[nearestEnemy.weapons[0]];
-                                const enemyReload = primaryReload[nearestEnemy.sid] || 0;
-                                const almostReloaded = !!enemyWeapon &&
-                                    enemyReload + (game.tickRate / enemyWeapon.speed) >= 1;
-                                // RYN reads the enemy's *next* hat here. deltek
-                                // keeps no hat prediction, so this is the hat they
-                                // are wearing now — the same question, one tick
-                                // less notice.
-                                const goodHat = velocityValidHat(nearestEnemy.skinIndex);
-
-                                if (dist >= VELOCITY_MIN_KB && dist <= VELOCITY_MAX_KB &&
-                                    (almostReloaded || goodHat)) {
-                                    hat(53, 0);
-                                    keyCodeWeapon = myPlayer.weapons[0];
-                                    selectWeapon(keyCodeWeapon);
-                                    // Walk into them while the shot travels — the
-                                    // half deltek's old version left out, and what
-                                    // actually closes the window.
-                                    //
-                                    // But only if the player is not already
-                                    // moving. predictMoveAngle is null here when
-                                    // no key is held, and writing over it
-                                    // regardless is what made the player unable to
-                                    // move: it goes straight out as the move
-                                    // direction, so the mod was steering every
-                                    // tick and the keys did nothing. RYN gates the
-                                    // whole module on moveTo !== "disable" for
-                                    // exactly this reason; this is deltek's
-                                    // version of that gate.
-                                    if (predictMoveAngle === null) {
-                                        predictMoveAngle = armAngle;
-                                        shouldntPathfind = true;
-                                    }
-                                    velocityTarget = nearestEnemy;
-                                }
+                            if (vtInBand && (vtSwinging || vtHat)) {
+                                instaKill = ["turret", "primary", "stop"];
                             }
                         }
-                    } else if (velocityTarget !== null) {
-                        // Toggled off, or died, with the combo half-fired. Drop it
-                        // rather than leaving a stale target to fire on later.
-                        velocityTarget = null;
                     }
                     // PREDICT WEAPON
                     predictWeapon = getPredictWeapon();
@@ -14863,6 +14878,9 @@ for (let tree of trees) {
                         placedAngles.push(object.angle);
 
                     }
+
+                    // RETRAP RUSH
+                    retrapRush();
 
                     // REPLACE
                     replaceVacated();
@@ -20115,6 +20133,7 @@ for (let tree of trees) {
         prePlace: true,
         replace: true,
         trapEscapeRing: true,
+        retrapRush: true,
         velocityTick: false,
 
         // Utilities
@@ -20232,6 +20251,12 @@ for (let tree of trees) {
                 title: "Trap Escape",
                 items: [
                     { type: 'toggle', name: "Hold The Four Ways In", id: "trapEscapeRing" }
+                ]
+            },
+            {
+                title: "Retrap",
+                items: [
+                    { type: 'toggle', name: "Rush The Next Trap", id: "retrapRush" }
                 ]
             },
             {
