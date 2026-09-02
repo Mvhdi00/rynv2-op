@@ -291,6 +291,18 @@ check("it arms against the enemy's future position",
   /const futureX = nearestEnemy\.xVel;/.test(built));
 check("turret gear on the arm tick, bull on the fire tick",
   /hat\(53, 0\);/.test(built) && /hat\(7, 0\);/.test(built));
+check("it is a real keybind, not a hardcoded key",
+  /keyStr === window\.vars\.keyVelocityTick/.test(built) &&
+  /keyVelocityTick: "T",/.test(built) &&
+  /name: "Velocity Tick", id: "keyVelocityTick"/.test(built));
+check("and announces itself on screen, not in chat",
+  /showSettingText\(900, window\.vars\.velocityTick[\s\S]{0,80}"Velocity Tick: ON" : "Velocity Tick: OFF"\)/.test(built) &&
+  !/velotick:/.test(built));
+check("the swing uses deltek's own attack path",
+  /sendAtck\(1, fireAngle\);\n\s*sendAtck\(0, fireAngle\);/.test(built) &&
+  !/io\.send\("F", fireAngle\)/.test(built));
+check("movement is only taken when the player is not moving",
+  (built.match(/if \(predictMoveAngle === null\) \{/g) || []).length === 2);
 check("the trap branch is not present",
   !/velocityTickTrap/i.test(built) && !/_pinnedInMyTrap/.test(built));
 
@@ -319,10 +331,14 @@ function velocityWorld(o) {
     UTILS: { getDistance: (x1,y1,x2,y2) => Math.hypot(x2-x1, y2-y1) },
     getPlayerInfo: (p, k) => k === "primaryVariant" ? (o.variant === undefined ? 2 : o.variant) : null,
     hats: [], weaponSel: [], sent: [],
-    autoaim: false, autoaimAngle: null, predictMoveAngle: null,
+    autoaim: false, autoaimAngle: null,
+    /* null = the player is pressing nothing this tick. A held key puts an
+     * angle here before the combo runs. */
+    predictMoveAngle: o.playerMoving === undefined ? null : o.playerMoving,
     shouldntPathfind: false, keyCodeWeapon: null,
     hat(id) { env.hats.push(id); },
     selectWeapon(w) { env.weaponSel.push(w); },
+    sendAtck(state, angle) { env.sent.push({ state, angle }); },
     io: { send: (t, a) => env.sent.push({ t, a }) }
   };
   env.globalThis = env;
@@ -342,12 +358,34 @@ console.log("\n7. velocity tick — the combo\n");
 
   const fire = velocityWorld({ armed: { x2: 200, y2: 0 } });
   check("fires on the next tick", fire.hats.indexOf(7) !== -1, JSON.stringify(fire.hats));
-  check("swinging at where they are now", fire.sent.length === 1 && fire.sent[0].t === "F");
+  check("swinging at where they are now, start and stop",
+    fire.sent.length === 2 && fire.sent[0].state === 1 && fire.sent[1].state === 0 &&
+    fire.sent[0].angle === 0, JSON.stringify(fire.sent));
   check("and disarms", fire.armed() === null);
-  check("with autoaim on the target", fire.autoaim === true && fire.autoaimAngle === 0);
+  check("without latching deltek's autoaim on", fire.autoaim === false);
 }
 
-console.log("\n8. velocity tick — the gates\n");
+console.log("\n8. velocity tick — movement, the bug that made you stuck\n");
+{
+  /* predictMoveAngle goes straight out as the move direction (io.send("9", ...)).
+   * Writing over it every tick meant the mod steered and the keys did nothing. */
+  const held = velocityWorld({ playerMoving: 1.234 });
+  check("a moving player keeps their own direction while arming",
+    held.predictMoveAngle === 1.234, String(held.predictMoveAngle));
+  check("and the combo still arms", held.armed() !== null);
+  check("without seizing the pathfinder", held.shouldntPathfind === false);
+
+  const heldFire = velocityWorld({ playerMoving: 1.234, armed: { x2: 200, y2: 0 } });
+  check("a moving player keeps their direction while firing too",
+    heldFire.predictMoveAngle === 1.234);
+  check("and the swing still goes out", heldFire.sent.length === 2);
+
+  const idle = velocityWorld({});
+  check("an idle player is walked at the target", typeof idle.predictMoveAngle === "number");
+  check("and that does claim the pathfinder", idle.shouldntPathfind === true);
+}
+
+console.log("\n9. velocity tick — the gates\n");
 {
   const near = velocityWorld({ enemy: { xVel: 150, yVel: 0 } });
   check("too close to need the combo: no arm", near.armed() === null);
@@ -396,7 +434,7 @@ console.log("\n8. velocity tick — the gates\n");
  * Naming. Labels only — the setting ids and the code behind them are the
  * things that must NOT have moved.
  * ------------------------------------------------------------------ */
-console.log("\n9. spike tick — naming\n");
+console.log("\n10. spike tick — naming\n");
 
 check("the spike tick is findable in the menu",
   /name: "Spike Tick", id: "shameTick"/.test(built) && !/Clown Aids/.test(built));
@@ -443,7 +481,7 @@ for (const fn of ["canTrapTick", "canTrapTick2", "advancedShameCombat",
 }
 
 /* ------------------------------------------------------------------ */
-console.log("\n10. nothing else moved\n");
+console.log("\n11. nothing else moved\n");
 {
   const a = SRC.split("\n");
   const b = built.split("\n");
@@ -478,13 +516,18 @@ console.log("\n10. nothing else moved\n");
     "{ type: 'toggle', name: \"LOL aids\", id: \"shameTick2\" },",
     "{ type: 'toggle', name: \"Giving Aids\", id: \"shameGrind\" },",
     "showSettingText(900, \"LOL Aids\")",
-    "showSettingText(900, \"LOL aids\")"
+    "showSettingText(900, \"LOL aids\")",
+    /* the old hardcoded T key and its chat announcement */
+    "} else if (event.key == \"T\") {",
+    "sendChat(`velotick: ${(oneFrameStatus)}`);",
+    /* gained a trailing comma when the velocity keybind was appended after it */
+    "{ type: 'keybind', name: \"Auto Clear\", id: \"keyPathBreak\" }"
   ];
   const unexpected = removed.filter(l => OLD_VELOCITY.indexOf(l.trim()) === -1);
   check("the only lines removed are deltek's old velocity tick",
     unexpected.length === 0, unexpected.slice(0, 3).map(s => s.trim()).join(" | "));
   check("the additions are the two features and their hooks",
-    added > 150 && added < 330, `${added} lines added`);
+    added > 150 && added < 360, `${added} lines added`);
 }
 
 console.log(failed

@@ -188,12 +188,33 @@ edit(
 
 /* The T key kept its own toggle; point it at the setting so the key and the
  * menu are the same switch instead of two. */
+/* The key was hardcoded to T and announced itself in chat, which every other
+ * player can read. It becomes a real keybind like the rest, with the same
+ * on-screen toast the spike tick uses. */
 edit(
-  "velocity: the T key drives the setting",
-  `                        autoVelocityTickToggled = !autoVelocityTickToggled;
-                        const oneFrameStatus = autoVelocityTickToggled ? "on" : "off";`,
-  `                        window.vars.velocityTick = !window.vars.velocityTick;
-                        const oneFrameStatus = window.vars.velocityTick ? "on" : "off";`
+  "velocity: a real keybind with an on-screen notice",
+  `                    } else if (event.key == "T") {
+                        autoVelocityTickToggled = !autoVelocityTickToggled;
+                        const oneFrameStatus = autoVelocityTickToggled ? "on" : "off";
+                        sendChat(\`velotick: \${(oneFrameStatus)}\`);`,
+  `                    } else if (keyStr === window.vars.keyVelocityTick) {
+                        window.vars.velocityTick = !window.vars.velocityTick;
+                        showSettingText(900, window.vars.velocityTick
+                            ? "Velocity Tick: ON" : "Velocity Tick: OFF");`
+);
+
+edit(
+  "velocity: the keybind's default",
+  `        keyPlaceTurret: "H",`,
+  `        keyPlaceTurret: "H",
+        keyVelocityTick: "T",`
+);
+
+edit(
+  "velocity: the keybind in the menu",
+  `                    { type: 'keybind', name: "Auto Clear", id: "keyPathBreak" }`,
+  `                    { type: 'keybind', name: "Auto Clear", id: "keyPathBreak" },
+                    { type: 'keybind', name: "Velocity Tick", id: "keyVelocityTick" }`
 );
 
 edit(

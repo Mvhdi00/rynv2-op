@@ -9269,10 +9269,10 @@ window.pps = 0;
                         qPress = true;
                     } else if (keyStr === window.vars.keyAutoGrind) {
                         gPressed = !gPressed;
-                    } else if (event.key == "T") {
+                    } else if (keyStr === window.vars.keyVelocityTick) {
                         window.vars.velocityTick = !window.vars.velocityTick;
-                        const oneFrameStatus = window.vars.velocityTick ? "on" : "off";
-                        sendChat(`velotick: ${(oneFrameStatus)}`);
+                        showSettingText(900, window.vars.velocityTick
+                            ? "Velocity Tick: ON" : "Velocity Tick: OFF");
                     } else if (keyStr === window.vars.keyPlaceSpike) {
                         spikePress = true;
                     } else if (keyStr === window.vars.keyPlaceTrap) {
@@ -13971,11 +13971,17 @@ for (let tree of trees) {
                             hat(7, 0);
                             keyCodeWeapon = myPlayer.weapons[0];
                             selectWeapon(keyCodeWeapon);
-                            autoaim = true;
-                            autoaimAngle = fireAngle;
-                            predictMoveAngle = fireAngle;
-                            shouldntPathfind = true;
-                            io.send("F", fireAngle);
+                            // One swing, the way place() swings: start and stop in
+                            // the same call, with the angle on the packet. The old
+                            // version latched deltek's autoaim on and left it on,
+                            // which took the player's aim away for good.
+                            sendAtck(1, fireAngle);
+                            sendAtck(0, fireAngle);
+                            // Only steer if the player is not steering themselves.
+                            if (predictMoveAngle === null) {
+                                predictMoveAngle = fireAngle;
+                                shouldntPathfind = true;
+                            }
 
                             velocityTarget = null;
                         } else if (nearestEnemy) {
@@ -14021,11 +14027,24 @@ for (let tree of trees) {
                                     hat(53, 0);
                                     keyCodeWeapon = myPlayer.weapons[0];
                                     selectWeapon(keyCodeWeapon);
-                                    // Walk into them while the shot travels. This
-                                    // is the half deltek's old version left out,
-                                    // and it is what makes the window close.
-                                    predictMoveAngle = armAngle;
-                                    shouldntPathfind = true;
+                                    // Walk into them while the shot travels — the
+                                    // half deltek's old version left out, and what
+                                    // actually closes the window.
+                                    //
+                                    // But only if the player is not already
+                                    // moving. predictMoveAngle is null here when
+                                    // no key is held, and writing over it
+                                    // regardless is what made the player unable to
+                                    // move: it goes straight out as the move
+                                    // direction, so the mod was steering every
+                                    // tick and the keys did nothing. RYN gates the
+                                    // whole module on moveTo !== "disable" for
+                                    // exactly this reason; this is deltek's
+                                    // version of that gate.
+                                    if (predictMoveAngle === null) {
+                                        predictMoveAngle = armAngle;
+                                        shouldntPathfind = true;
+                                    }
                                     velocityTarget = nearestEnemy;
                                 }
                             }
@@ -19991,6 +20010,7 @@ for (let tree of trees) {
         keyAutoGrind: "G",
         keyPathBreak: "Z",
         keyPlaceTurret: "H",
+        keyVelocityTick: "T",
 
         // Combat
         shameTick: true,
@@ -20065,7 +20085,8 @@ for (let tree of trees) {
                 title: "Automation Keys",
                 items: [
                     { type: 'keybind', name: "Grind 3 turrets", id: "keyAutoGrind" },
-                    { type: 'keybind', name: "Auto Clear", id: "keyPathBreak" }
+                    { type: 'keybind', name: "Auto Clear", id: "keyPathBreak" },
+                    { type: 'keybind', name: "Velocity Tick", id: "keyVelocityTick" }
                 ]
             }
         ],
