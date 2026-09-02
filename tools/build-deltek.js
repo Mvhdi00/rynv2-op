@@ -320,14 +320,14 @@ edit(
 );
 
 /* ------------------------------------------------------------------ *
- * Retrap rush. While the enemy is held in one of my traps, get the next one
- * down before the first breaks.
+ * Siege. RYN's answer to a trapped enemy: find the gaps in the ring of my own
+ * buildings around them and fill those, until there are none left.
  * ------------------------------------------------------------------ */
 const retraprush = fs.readFileSync(path.join(ROOT, "src/deltek/retraprush.js"), "utf8")
   .split("\r\n").join("\n").replace(/\n+$/, "");
 
 edit(
-  "retrap rush: the feature",
+  "siege: the feature",
   `${trapring}`,
   `${trapring}
 
@@ -337,33 +337,33 @@ ${retraprush}`
 /* Ahead of Replace and the escape ring: while they are held, this is the
  * placement that matters most, so it gets the packet budget first. */
 edit(
-  "retrap rush: run it first in the tick",
+  "siege: run it first in the tick",
   `                    // REPLACE
                     replaceVacated();`,
-  `                    // RETRAP RUSH
-                    retrapRush();
+  `                    // SIEGE
+                    siegeTrapped();
 
                     // REPLACE
                     replaceVacated();`
 );
 
 edit(
-  "retrap rush: menu toggle",
+  "siege: menu toggle",
   `                    { type: 'toggle', name: "Hold The Four Ways In", id: "trapEscapeRing" }`,
   `                    { type: 'toggle', name: "Hold The Four Ways In", id: "trapEscapeRing" }
                 ]
             },
             {
-                title: "Retrap",
+                title: "Siege",
                 items: [
-                    { type: 'toggle', name: "Rush The Next Trap", id: "retrapRush" }`
+                    { type: 'toggle', name: "Seal Them In", id: "siege" }`
 );
 
 edit(
-  "retrap rush: default on",
+  "siege: default on",
   `        trapEscapeRing: true,`,
   `        trapEscapeRing: true,
-        retrapRush: true,`
+        siege: true,`
 );
 
 /* ------------------------------------------------------------------ *

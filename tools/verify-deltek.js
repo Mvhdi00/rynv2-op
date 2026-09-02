@@ -40,8 +40,8 @@ check("removedObjects still gets the sid, so its own consumers keep working",
   /removedObjects\.push\(sid\);/.test(built) &&
   (built.match(/removedObjects\.some/g) || []).length ===
   (SRC.match(/removedObjects\.some/g) || []).length);
-check("it runs in the tick, after the auto placer and the retrap rush",
-  /\/\/ RETRAP RUSH\n\s*retrapRush\(\);\n\s*\n\s*\/\/ REPLACE\n\s*replaceVacated\(\);/.test(built));
+check("it runs in the tick, after the auto placer and the siege",
+  /\/\/ SIEGE\n\s*siegeTrapped\(\);\n\s*\n\s*\/\/ REPLACE\n\s*replaceVacated\(\);/.test(built));
 check("the toggle is in the Placers menu",
   /\{ type: 'toggle', name: "Enable Replace", id: "replace" \}/.test(built));
 check("and has a default", /\n\s*replace: true,/.test(built));
@@ -379,51 +379,158 @@ console.log("\n8. velocity tick — the gates\n");
 /* ------------------------------------------------------------------ *
  * Retrap rush.
  * ------------------------------------------------------------------ */
-console.log("\n9. retrap rush\n");
+console.log("\n9. siege — the gaps, against RYN's own isEscapable\n");
 
 check("it runs before Replace and the escape ring",
-  /\/\/ RETRAP RUSH\n\s*retrapRush\(\);\n\s*\n\s*\/\/ REPLACE/.test(built));
+  /\/\/ SIEGE\n\s*siegeTrapped\(\);\n\s*\n\s*\/\/ REPLACE/.test(built));
 check("the toggle is in the menu and defaults on",
-  /name: "Rush The Next Trap", id: "retrapRush"/.test(built) &&
-  /\n\s*retrapRush: true,/.test(built));
-check("it uses deltek's own angle sweep",
-  /getPrePlaceAngles\(id, objects\)/.test(built));
+  /name: "Seal Them In", id: "siege"/.test(built) && /\n\s*siege: true,/.test(built));
+check("it seals with spikes, as RYN does",
+  /const id = myPlayer\.items\[2\];/.test(
+    built.slice(built.indexOf("function siegeTrapped"),
+      built.indexOf("function siegeTrapped") + 700)));
+check("and uses RYN's 0.45 rad exit window", /if \(d < 0\.45\) \{ seals = true; break; \}/.test(built));
 
-const qStart = built.indexOf("        // ==================== RETRAP RUSH ====================");
-const qEndMark = "            placedAngles.push(best.angle);\n        }";
-const qEnd = built.indexOf(qEndMark, qStart);
-check("the feature can be extracted", qStart > 0 && qEnd > qStart);
+/* The reference: RYN's own isEscapable, evaluated out of the client. */
+const RYN = fs.readFileSync(path.join(ROOT, "src/RYN_Client_v5.4.user.js"), "utf8");
+const escStart = RYN.indexOf("isEscapable(cx, cy, selfRadius, objects) {");
+let escEnd = -1;
+{
+  let depth = 0, open = false;
+  for (let i = escStart; i < RYN.length; i++) {
+    const c = RYN[i];
+    if (c === "{") { depth++; open = true; }
+    else if (c === "}") { depth--; if (open && depth === 0) { escEnd = i + 1; break; } }
+  }
+}
+check("RYN's isEscapable can be extracted", escStart > 0 && escEnd > escStart);
+const refBox = { Math, module: { exports: {} } };
+vm.createContext(refBox);
+vm.runInContext("module.exports = function " + RYN.slice(escStart, escEnd) + ";",
+  refBox, { filename: "ryn-isescapable.js" });
+const rynEscapable = refBox.module.exports;
 
-function rushWorld(o) {
+const gStart = built.indexOf("        function siegeExits(cx, cy, selfRadius) {");
+const gEnd = built.indexOf("\n        }", built.indexOf("return exits;", gStart));
+const gapBox = { Math, console, spikes_our: [], traps_our: [], module: { exports: {} } };
+gapBox.globalThis = gapBox;
+vm.createContext(gapBox);
+vm.runInContext(built.slice(gStart, gEnd + 10) +
+  "\nglobalThis.siegeExits = siegeExits;", gapBox, { filename: "siege.js" });
+
+/* Same rings through both, compared on the exits they find.
+ *
+ * RYN splits the work: its caller filters my buildings down to the ones close
+ * enough to be part of the ring, then isEscapable measures the gaps. The port
+ * does both in one function, so the reference has to be given the same
+ * filtered list or the two are not being asked the same question. */
+const RING_REACH = (selfRadius, scale) => selfRadius + scale + 40;
+function ring(n, radius, scale, skip) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    if (skip && skip.indexOf(i) !== -1) continue;
+    const a = i * (Math.PI * 2 / n);
+    out.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius, scale: scale });
+  }
+  return out;
+}
+let mismatch = null;
+for (const [label, n, radius, scale, skip] of [
+  ["tight ring of 8", 8, 70, 35, null],
+  ["tight ring of 8, one missing", 8, 70, 35, [3]],
+  ["three at 120 degrees", 3, 100, 35, null],
+  ["four, one missing", 4, 100, 35, [1]],
+  ["five, two missing", 5, 95, 35, [1, 3]],
+  ["six at arm's length", 6, 100, 35, null],
+  ["six with a hole", 6, 100, 35, [2]],
+  ["mixed scales", 5, 90, 20, null],
+  ["small buildings, wide ring", 6, 105, 15, [0]],
+  ["two only", 2, 70, 35, null]
+]) {
+  const objs = ring(n, radius, scale, skip);
+  gapBox.spikes_our = objs;
+  gapBox.traps_our = [];
+  const mine = gapBox.siegeExits(0, 0, 35);
+  /* the same filter the port applies, applied to the reference's input */
+  const filtered = objs
+    .filter(o => Math.hypot(o.x, o.y) <= RING_REACH(35, o.scale))
+    .map(o => ({ x: o.x, y: o.y, escapeScale: o.scale }));
+  const theirs = rynEscapable(0, 0, 35, filtered);
+  if (mine.length !== theirs.exits.length) {
+    mismatch = `${label}: ${mine.length} exits vs RYN's ${theirs.exits.length}`;
+    break;
+  }
+  for (let i = 0; i < mine.length; i++) {
+    if (Math.abs(mine[i].angle - theirs.exits[i].angle) > 1e-9 ||
+        Math.abs(mine[i].width - theirs.exits[i].width) > 1e-9) {
+      mismatch = `${label}: exit ${i} differs`;
+      break;
+    }
+  }
+  if (mismatch) break;
+}
+check("the gap finder matches RYN's across ten rings", mismatch === null, mismatch || "");
+
+{
+  /* At close range a ring of eight cannot have a gap wide enough to walk
+   * through at all — 2*d*sin(g/2) never reaches the 150 a 35-scale target
+   * plus two 35-scale neighbours needs. That is the sealed end state. */
+  gapBox.spikes_our = ring(8, 70, 35, null);
+  gapBox.traps_our = [];
+  check("a tight ring of eight has no way out", gapBox.siegeExits(0, 0, 35).length === 0);
+  gapBox.spikes_our = ring(8, 70, 35, [3]);
+  check("and is still sealed with one missing, because the gap is too narrow",
+    gapBox.siegeExits(0, 0, 35).length === 0);
+
+  /* Spread further apart, the gaps become real. */
+  gapBox.spikes_our = ring(3, 100, 35, null);
+  const three = gapBox.siegeExits(0, 0, 35);
+  check("three buildings at arm's length leave three ways out",
+    three.length === 3, `${three.length}`);
+  gapBox.spikes_our = ring(6, 100, 35, [2]);
+  const holed = gapBox.siegeExits(0, 0, 35);
+  check("a six-ring with a hole leaves exactly that one",
+    holed.length === 1, `${holed.length}`);
+  if (holed.length === 1) {
+    const gapAngle = 2 * (Math.PI * 2 / 6);
+    let d = Math.abs(holed[0].angle - gapAngle);
+    if (d > Math.PI) d = Math.PI * 2 - d;
+    check("and it points at the hole", d < 0.01, `${d.toFixed(4)} rad`);
+  }
+  gapBox.spikes_our = ring(2, 70, 35, null);
+  check("two buildings are not a ring", gapBox.siegeExits(0, 0, 35).length === 0);
+}
+
+console.log("\n9b. siege — what it places\n");
+
+const sStart = built.indexOf("        function siegeTrapped() {");
+const sEndMark = "            placedAngles.push(best.angle);\n        }";
+const sEnd = built.indexOf(sEndMark, sStart);
+check("siegeTrapped can be extracted", sStart > 0 && sEnd > sStart);
+
+function siegeWorld(o) {
   o = o || {};
   const heldTrap = o.held === null ? null
-    : Object.assign({ sid: 900, x: 0, y: 0, scale: 32 }, o.held || {});
+    : { sid: 900, x: 0, y: 0, scale: 32 };
+  const around = o.around || [];
   const env = {
     Math, console,
-    window: { vars: { retrapRush: o.on !== false }, packets: o.packets || 0 },
+    window: { vars: { siege: o.on !== false }, packets: o.packets || 0 },
     myPlayer: { alive: o.alive !== false, sid: 1, x2: 0, y2: 0, items: [0, 3, 6, null, 15] },
-    nearestEnemy: o.enemy === null ? null
-      : Object.assign({ sid: 2, x2: 0, y2: 0, xVel: 0, yVel: 0, scale: 35 }, o.enemy || {}),
+    nearestEnemy: o.enemy === null ? null : { sid: 2, x2: 0, y2: 0, scale: 35 },
     traps_our: heldTrap ? [heldTrap] : [],
-    visibleObjects: [heldTrap, { sid: 901 }].filter(Boolean),
-    placedAngles: [],
-    placed: [],
+    spikes_our: around,
+    visibleObjects: [],
+    placedAngles: [], placed: [],
     limitReached: o.limitReached || [],
     UTILS: { getDistance: (x1,y1,x2,y2) => Math.hypot(x2-x1, y2-y1) },
     isItemLimit(id) { return env.limitReached.indexOf(id) !== -1; },
-    /* deltek's sweep: 72 angles on the placement ring, scale 32, all legal
-     * unless the scenario says otherwise. */
     getPrePlaceAngles(id, objects) {
-      env.lastObjects = objects;
       const out = [];
       for (let i = 0; i < 72; i++) {
-        const angle = i * (Math.PI * 2 / 72);
-        const r = o.ring === undefined ? 67 : o.ring;
-        out.push({
-          angle, scale: 32,
-          x: Math.cos(angle) * r, y: Math.sin(angle) * r,
-          placeable: (o.unplaceable || []).indexOf(i) === -1
-        });
+        const a = i * (Math.PI * 2 / 72);
+        out.push({ angle: a, scale: 35, x: Math.cos(a) * 70, y: Math.sin(a) * 70,
+          placeable: (o.unplaceable || []).indexOf(i) === -1 });
       }
       return out;
     },
@@ -431,59 +538,60 @@ function rushWorld(o) {
   };
   env.globalThis = env;
   vm.createContext(env);
-  vm.runInContext(built.slice(qStart, qEnd + qEndMark.length), env, { filename: "retraprush.js" });
+  vm.runInContext(built.slice(gStart, gEnd + 10) + "\n" +
+    built.slice(sStart, built.indexOf("\n        }", built.indexOf("return n;", sEnd)) + 10),
+    env, { filename: "siegefull.js" });
   return env;
 }
 
 {
-  const w = rushWorld({});
-  w.retrapRush();
-  check("an enemy held in my trap gets the next one placed",
-    w.placed.length === 1 && w.placed[0].id === 15, JSON.stringify(w.placed));
-  check("the trap already holding them is not counted as competition",
-    Array.isArray(w.lastObjects) && !w.lastObjects.some(o => o && o.sid === 900) &&
-    w.lastObjects.some(o => o && o.sid === 901));
+  /* No wall yet: build one, closest to them. */
+  const bare = siegeWorld({});
+  bare.siegeTrapped();
+  check("with no wall yet, it starts building one",
+    bare.placed.length === 1 && bare.placed[0].id === 6, JSON.stringify(bare.placed));
 
-  const free = rushWorld({ held: null });
-  free.retrapRush();
-  check("an enemy who is not held gets nothing", free.placed.length === 0);
+  /* A ring with a real hole — six at arm's length, one missing, which is
+   * wide enough to walk through. */
+  const holedRing = [];
+  for (let i = 0; i < 6; i++) {
+    if (i === 2) continue;
+    const a = i * (Math.PI * 2 / 6);
+    holedRing.push({ x: Math.cos(a) * 100, y: Math.sin(a) * 100, scale: 35 });
+  }
+  const sealing = siegeWorld({ around: holedRing });
+  sealing.siegeTrapped();
+  check("a ring with a hole gets the hole filled", sealing.placed.length === 1);
+  if (sealing.placed.length) {
+    const gapAngle = 2 * (Math.PI * 2 / 6);
+    let d = Math.abs(sealing.placed[0].angle - gapAngle);
+    if (d > Math.PI) d = Math.PI * 2 - d;
+    check("and the spike goes into the hole, not elsewhere", d < 0.45,
+      `${d.toFixed(2)} rad from the gap`);
+  }
 
-  const off = rushWorld({ on: false });
-  off.retrapRush();
-  check("nor when the toggle is off", off.placed.length === 0);
+  /* A closed ring: nothing to do, nothing spent. */
+  const closed = [];
+  for (let i = 0; i < 8; i++) {
+    const a = i * (Math.PI * 2 / 8);
+    closed.push({ x: Math.cos(a) * 70, y: Math.sin(a) * 70, scale: 35 });
+  }  /* tight enough that no gap is walkable */
+  const sealed = siegeWorld({ around: closed });
+  sealed.siegeTrapped();
+  check("a sealed ring spends nothing", sealed.placed.length === 0);
 
-  const none = rushWorld({ enemy: null });
-  none.retrapRush();
-  check("nor with no enemy", none.placed.length === 0);
-
-  const dead = rushWorld({ alive: false });
-  dead.retrapRush();
-  check("nor while dead", dead.placed.length === 0);
-
-  const capped = rushWorld({ limitReached: [15] });
-  capped.retrapRush();
-  check("traps at their cap send nothing", capped.placed.length === 0);
-
-  const broke = rushWorld({ packets: 116 });
-  broke.retrapRush();
-  check("and neither does an empty packet budget", broke.placed.length === 0);
-
-  /* Out of reach of the target: a trap on the floor is not a retrap. */
-  const farRing = rushWorld({ ring: 400 });
-  farRing.retrapRush();
-  check("a placement that cannot reach them is not made", farRing.placed.length === 0);
-
-  /* Every angle refused. */
-  const blocked = rushWorld({ unplaceable: Array.from({ length: 72 }, (_, i) => i) });
-  blocked.retrapRush();
-  check("nothing legal, nothing sent", blocked.placed.length === 0);
-
-  /* It aims at where they will be, not where they are. */
-  const moving = rushWorld({ enemy: { x2: 0, y2: 0, xVel: 60, yVel: 0 } });
-  moving.retrapRush();
-  check("it aims at where they will be",
-    moving.placed.length === 1 &&
-    Math.abs(moving.placed[0].angle) < 0.5, JSON.stringify(moving.placed));
+  check("an enemy who is not held gets nothing",
+    (() => { const w = siegeWorld({ held: null }); w.siegeTrapped(); return w.placed.length === 0; })());
+  check("nor when the toggle is off",
+    (() => { const w = siegeWorld({ on: false }); w.siegeTrapped(); return w.placed.length === 0; })());
+  check("nor with no enemy",
+    (() => { const w = siegeWorld({ enemy: null }); w.siegeTrapped(); return w.placed.length === 0; })());
+  check("nor while dead",
+    (() => { const w = siegeWorld({ alive: false }); w.siegeTrapped(); return w.placed.length === 0; })());
+  check("spikes at their cap send nothing",
+    (() => { const w = siegeWorld({ limitReached: [6] }); w.siegeTrapped(); return w.placed.length === 0; })());
+  check("and neither does an empty packet budget",
+    (() => { const w = siegeWorld({ packets: 116 }); w.siegeTrapped(); return w.placed.length === 0; })());
 }
 
 /* ------------------------------------------------------------------ *
@@ -775,6 +883,10 @@ console.log("\n13. nothing else moved\n");
    * Auto Break's priority-1 block, which broke the spike first while held.
    * Plus the labels and toasts that were renamed in place. Every line removed
    * from deltek must be one of these — anything else is collateral. */
+  /* Two rewrites take deltek code out: the old setTimeout velocity tick, and
+   * Auto Break's priority-1 block, which broke the spike first while held.
+   * Plus the labels and toasts that were renamed in place. Every line removed
+   * from deltek must be one of these — anything else is collateral. */
   const OLD_VELOCITY = [
     "} else if (event.key == \"T\") {",
     "autoVelocityTickToggled = !autoVelocityTickToggled;",
@@ -829,7 +941,7 @@ console.log("\n13. nothing else moved\n");
   check("the only lines removed are the two blocks that were rewritten",
     unexpected.length === 0, unexpected.slice(0, 3).map(s => s.trim()).join(" | "));
   check("the additions are the two features and their hooks",
-    added > 150 && added < 520, `${added} lines added`);
+    added > 150 && added < 600, `${added} lines added`);
 }
 
 console.log(failed
