@@ -1,3 +1,61 @@
+# RYN builds
+
+Two independent build lineages live here, sharing the same extracted game
+tables in `drivers/` and the same rule that every constant must be traceable to
+the shipped bundle.
+
+| Build | Input | Output | What it is |
+|---|---|---|---|
+| **Auto Heal** | `src/RYN_GapFill.user.js` | `RYN_AutoHeal.user.js` | RYN v5.4 with the Auto Heal Engine reworked — see below |
+| **ReUp Mix** | `src/RYN_Client_v4.js` | `ReUp_Mix.user.js` | RYN v4 with the Luna features ported onto it — see [ReUp Mix](#reup-mix-luna--ryn) |
+
+---
+
+## Auto Heal Engine v2
+
+A predictive survival engine: it owns every automatic food press, the defensive
+hat/gear decision, projectile micro-evasion, and the packet budget those three
+spend. Nothing else in the client is rebuilt — Auto Place, Preplace, Replace,
+Spike Tick, Combat, Auto Mills, Safe Soldier and Velocity Tick are read through
+an adapter and never written.
+
+The objective is **shame 0, held**. 7 is the state one press short of a
+thirty-second food lock, not an operating point. Everything above 0 is a debt
+and is repaid at the first opening, which is affordable because of what the
+game's own rule costs: a press more than 120ms after a hit is −2, and a press at
+full health spends no food at all (`changeHealth` refuses a heal at the cap, and
+`useRes` is gated on it). A `+1` press is a constraint rather than a price — it
+leaves only when waiting would drop the bar under the reserve, or when waiting
+would kill you.
+
+```
+src/autoheal/ryn-autoheal-engine.js   the engine (edit this, not the build)
+tools/build-autoheal.js               engine + base client -> RYN_AutoHeal.user.js
+tools/verify-autoheal.js              every constant, re-derived from the game
+tools/test-autoheal.js                43 scenarios against a stand-in client
+docs/AUTOHEAL_ENGINE.md               design notes and the full derivation
+```
+
+### Build and check
+
+```sh
+node tools/build-autoheal.js
+node tools/verify-autoheal.js RYN_AutoHeal.user.js
+node tools/test-autoheal.js
+node --check RYN_AutoHeal.user.js
+```
+
+Current state: **78/78 constants** verified against `src/game_index.js` and
+`drivers/game-drivers.json`, **43/43 scenarios** passing — every requested Anti,
+plus multiple simultaneous threats, high and unstable ping, a six-packet budget,
+sixty ticks of sustained pressure (peak shame 0), and the negative cases that
+catch false positives.
+
+Full detail, including the twelve defects found in v1 and why Bull Helmet is
+never equipped as defence, is in [docs/AUTOHEAL_ENGINE.md](docs/AUTOHEAL_ENGINE.md).
+
+---
+
 # ReUp Mix (Luna × Ryn)
 
 A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client
@@ -116,16 +174,23 @@ but nothing in the client needs it. It is stripped from the build.
 ## Layout
 
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
+ReUp_Mix.user.js          the ReUp Mix build output
+RYN_AutoHeal.user.js      the Auto Heal build output
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
-src/RYN_Client_v4.js      base client (input)
+src/RYN_Client_v4.js      ReUp Mix base client (input)
+src/RYN_GapFill.user.js   Auto Heal base client, RYN v5.4 (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
+src/autoheal/             the Auto Heal Engine source
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
-tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-reup.js       src/RYN_Client_v4.js  -> ReUp_Mix.user.js
+tools/build-autoheal.js   src/RYN_GapFill.user.js + the engine -> RYN_AutoHeal.user.js
+tools/verify-autoheal.js  engine constants vs. the shipped game
+tools/test-autoheal.js    engine scenarios
+docs/AUTOHEAL_ENGINE.md   Auto Heal design notes
 ```
 
 ## Build
