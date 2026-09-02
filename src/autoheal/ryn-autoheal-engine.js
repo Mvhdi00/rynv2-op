@@ -64,6 +64,18 @@ function createRynAutoHealEngine(deps) {
     FOOD_TYPE: 2,
     /* One press is select + attack + re-select weapon. */
     PACKETS_PER_PRESS: 3,
+    /* What a press actually puts on the wire, split from the estimate above.
+     * A press is two frames — select, then attack. The weapon restore is one
+     * more, paid once for the whole burst rather than per press, which is why
+     * a burst of N costs 2N + 1 instead of 3N.
+     *
+     * They are separate constants because the budget check needs both: deltek
+     * reserves an action's entire cost before it starts one (its placer asks
+     * `window.packets + 5 > 119`, the four frames of place() plus headroom),
+     * and that is the discipline that stops a burst beginning a press it
+     * cannot finish paying for. */
+    PACKET_PRESS_FRAMES: 2,
+    PACKET_BURST_RESTORE: 1,
     /* novastorm's cap on a single tick's predicted damage; the largest real
      * one-tick burst in the tables (katana 40*1.18 + spinning spikes 45 +
      * turret 25) sits just under it. */
@@ -3929,7 +3941,14 @@ function createRynAutoHealEngine(deps) {
            * that changes is what we ourselves have already sent, so this is what
            * that costs: packets spent, and health already bought. A press that
            * would land on a full bar is a wasted press and a wasted food. */
-          if (this.adapter.packetsLeft() < 2) break;
+          /* The whole action's cost, reserved before it starts — deltek's rule.
+           * Checking only the press's own two frames let a burst spend its last
+           * two on a press and then owe a restore frame it could not pay,
+           * putting the client one packet over its own limit with food still in
+           * hand. The restore is owed for the burst, not the press, so it is
+           * reserved on every press rather than only the last. */
+          if (this.adapter.packetsLeft() <
+              AH.PACKET_PRESS_FRAMES + AH.PACKET_BURST_RESTORE) break;
           if (expected >= snap.maxHealth && plan.urgency !== URGENCY.WASH) break;
           if (!this.adapter.pressFoodOnly()) break;
           sent += 1;

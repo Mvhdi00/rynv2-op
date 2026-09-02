@@ -229,6 +229,56 @@ for (const r of rows) {
     wasted > 2 ? `${wasted} wasted` : "");
 }
 
+/* deltek's budget rule: an action reserves its whole cost before it starts, so
+ * the client can never go over its own packet limit.
+ *
+ * The engine already could not: affordable() gates upstream on
+ * PACKETS_PER_PRESS (3), which is the conservative full cost of a press
+ * including the burst's restore, so a press is never even planned with fewer
+ * than 3 frames spare — and 3 is exactly what a one-press burst costs. What
+ * changed is that the reservation is now stated where the spending happens
+ * instead of being implied by a constant two stages upstream. These sweep the
+ * budget across the boundary and hold the invariant either way. */
+for (const r of rows) {
+  const limit = r.sim.client._ModuleHandler.packetLimit;
+  check(`${r.label}: never went over the packet limit`,
+    r.stats.packetPeak <= limit, `peak ${r.stats.packetPeak} / ${limit}`);
+}
+{
+  /* The sim bleeds 40 frames off the counter each tick, so the budget has to be
+   * forced in onTickStart — after the bleed, immediately before the engine
+   * runs — or the boundary is never actually reached. */
+  const worst = [];
+  for (const spare of [0, 1, 2, 3, 4, 5, 6, 7, 9, 12]) {
+    const sim = new Sim({ foodId: 1 });
+    const mh = sim.client._ModuleHandler;
+    let peak = 0;
+    for (const name of ["selectItem", "attack", "whichWeapon"]) {
+      const real = mh[name].bind(mh);
+      mh[name] = (...a) => { real(...a); if (mh.packetCount > peak) peak = mh.packetCount; };
+    }
+    sim.onTickStart = () => { mh.packetCount = mh.packetLimit - spare; };
+    for (let t = 1; t <= 40; t++) sim.step(t % 2 === 0 ? 30 : 0, 45);
+    if (peak > mh.packetLimit) worst.push(`spare ${spare} peaked ${peak}`);
+  }
+  check("no budget from 0 to 12 spare frames can be overrun",
+    worst.length === 0, worst.join(", "));
+}
+{
+  /* And the reservation is the whole action: at two spare — one frame short of
+   * a press plus its restore — nothing may leave at all. */
+  const sim = new Sim({ foodId: 1 });
+  const mh = sim.client._ModuleHandler;
+  let sentAnything = false;
+  for (const name of ["selectItem", "attack", "whichWeapon"]) {
+    const real = mh[name].bind(mh);
+    mh[name] = (...a) => { real(...a); sentAnything = true; };
+  }
+  sim.onTickStart = () => { mh.packetCount = mh.packetLimit - 2; };
+  for (let t = 1; t <= 40; t++) sim.step(t % 2 === 0 ? 30 : 0, 45);
+  check("two spare frames is not enough to start a burst", !sentAnything);
+}
+
 /* Stale caches: a cached prediction may only be served while nothing it was
  * built on has changed, so a still field should be almost all hits and a
  * moving one almost all misses. Both directions are a failure. */
