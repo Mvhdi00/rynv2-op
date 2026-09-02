@@ -279,6 +279,56 @@ edit(
   `                    showSettingText(900, "Spike Tick 2")`
 );
 
+/* ------------------------------------------------------------------ *
+ * Trap escape ring.
+ *
+ * Nothing in deltek stops placing while you are held in an enemy trap --
+ * Auto Place, Preplace and Replace all keep building, and that stays as it is.
+ * This adds the one thing that was missing: when the trap is a hit from
+ * breaking, take the four ways in so the ground cannot be re-trapped the moment
+ * you are out of it.
+ * ------------------------------------------------------------------ */
+const trapring = fs.readFileSync(path.join(ROOT, "src/deltek/trapring.js"), "utf8")
+  .split("\r\n").join("\n").replace(/\n+$/, "");
+
+edit(
+  "trap ring: the feature",
+  `${feature}`,
+  `${feature}
+
+${trapring}`
+);
+
+edit(
+  "trap ring: run it in the tick, after Replace",
+  `                    // REPLACE
+                    replaceVacated();`,
+  `                    // REPLACE
+                    replaceVacated();
+
+                    // TRAP ESCAPE RING
+                    trapEscapeRing();`
+);
+
+edit(
+  "trap ring: menu toggle",
+  `                    { type: 'toggle', name: "Enable Replace", id: "replace" }`,
+  `                    { type: 'toggle', name: "Enable Replace", id: "replace" }
+                ]
+            },
+            {
+                title: "Trap Escape",
+                items: [
+                    { type: 'toggle', name: "Hold The Four Ways In", id: "trapEscapeRing" }`
+);
+
+edit(
+  "trap ring: default on",
+  `        replace: true,`,
+  `        replace: true,
+        trapEscapeRing: true,`
+);
+
 fs.writeFileSync(OUT, src.split("\n").join(EOL));
 
 console.log(`\nbuild-deltek: wrote ${path.relative(ROOT, OUT)}`);

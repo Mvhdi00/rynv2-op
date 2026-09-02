@@ -41,7 +41,7 @@ check("removedObjects still gets the sid, so its own consumers keep working",
   (built.match(/removedObjects\.some/g) || []).length ===
   (SRC.match(/removedObjects\.some/g) || []).length);
 check("it runs in the tick, after the auto placer",
-  /\/\/ REPLACE\n\s*replaceVacated\(\);\n\s*\n\s*\/\/ PLAYER DIRECTION/.test(built));
+  /placedAngles\.push\(object\.angle\);\n\s*\n\s*\}\n\s*\n\s*\/\/ REPLACE\n\s*replaceVacated\(\);/.test(built));
 check("the toggle is in the Placers menu",
   /\{ type: 'toggle', name: "Enable Replace", id: "replace" \}/.test(built));
 check("and has a default", /\n\s*replace: true,/.test(built));
@@ -480,8 +480,136 @@ for (const fn of ["canTrapTick", "canTrapTick2", "advancedShameCombat",
     (renamedToast ? norm(before) === norm(after) : before === after));
 }
 
+/* ------------------------------------------------------------------ *
+ * Trap escape ring.
+ * ------------------------------------------------------------------ */
+console.log("\n11. trap escape ring\n");
+
+check("it runs in the tick, after Replace",
+  /\/\/ TRAP ESCAPE RING\n\s*trapEscapeRing\(\);/.test(built));
+check("the toggle is in the menu and defaults on",
+  /name: "Hold The Four Ways In", id: "trapEscapeRing"/.test(built) &&
+  /\n\s*trapEscapeRing: true,/.test(built));
+check("near-break uses deltek's own test, not a new one",
+  /trap\.health > breakDmg/.test(built) &&
+  /getPlayerInfo\(myPlayer, "secondaryStructureDmg"\)/.test(built));
+
+const rStart = built.indexOf("        // ==================== TRAP ESCAPE RING ====================");
+const rEndMark = "            escapeRingAngles = left;\n        }";
+const rEnd = built.indexOf(rEndMark, rStart);
+check("the ring can be extracted", rStart > 0 && rEnd > rStart);
+
+function ringWorld(o) {
+  o = o || {};
+  const trap = o.trap === null ? null
+    : Object.assign({ sid: 500, health: 10, scale: 32 }, o.trap || {});
+  const env = {
+    Math, console,
+    window: { vars: { trapEscapeRing: o.on !== false }, packets: o.packets || 0 },
+    myPlayer: { alive: o.alive !== false, sid: 1, x2: 0, y2: 0, items: [0, 3, 6, null, 15] },
+    imTrapped: o.trapped === false ? null : trap,
+    trap_where_im_in: trap,
+    visibleObjects: o.visibleObjects || [],
+    placedAngles: [],
+    placed: [],
+    blocked: o.blocked || [],
+    limitReached: o.limitReached || [],
+    /* primary 20, hammer 30 -> a 10hp trap dies to one hit */
+    getPlayerInfo: (p, k) => k === "primaryStructureDmg" ? 20
+      : k === "secondaryStructureDmg" ? 30 : 0,
+    isItemLimit(id) { return env.limitReached.indexOf(id) !== -1; },
+    canPlace(id, angle, objects) {
+      env.lastObjects = objects;
+      const deg = Math.round((angle * 180 / Math.PI + 360) % 360) % 360;
+      return env.blocked.indexOf(deg) === -1;
+    },
+    place(id, angle) {
+      env.placed.push({ id, deg: Math.round((angle * 180 / Math.PI + 360) % 360) % 360 });
+      env.window.packets += 5;
+    }
+  };
+  env.globalThis = env;
+  vm.createContext(env);
+  vm.runInContext(built.slice(rStart, rEnd + rEndMark.length) +
+    "\nglobalThis.pending = () => escapeRingAngles;", env, { filename: "trapring.js" });
+  return env;
+}
+
+{
+  const w = ringWorld({});
+  w.trapEscapeRing();
+  check("a trap one hit from breaking gets the ring",
+    w.placed.length === 4, JSON.stringify(w.placed.map(p => p.deg)));
+  check("right, left, up and down",
+    w.placed.map(p => p.deg).sort((a, b) => a - b).join(",") === "0,90,180,270");
+  check("spikes, which deny the ground rather than just block it",
+    w.placed.every(p => p.id === 6));
+  check("and it does not lay it twice", (w.trapEscapeRing(), w.placed.length === 4));
+
+  const healthy = ringWorld({ trap: { health: 200 } });
+  healthy.trapEscapeRing();
+  check("a trap that is not close to breaking is left alone", healthy.placed.length === 0);
+
+  const free = ringWorld({ trapped: false });
+  free.trapEscapeRing();
+  check("nothing happens when not trapped", free.placed.length === 0);
+
+  const off = ringWorld({ on: false });
+  off.trapEscapeRing();
+  check("nor when the toggle is off", off.placed.length === 0);
+
+  const dead = ringWorld({ alive: false });
+  dead.trapEscapeRing();
+  check("nor while dead", dead.placed.length === 0);
+
+  /* The trap must not be what refuses the ring — it is about to be gone. */
+  const corpse = ringWorld({ visibleObjects: [{ sid: 500 }, { sid: 501 }] });
+  corpse.trapEscapeRing();
+  check("the trap is excluded from the collision set",
+    Array.isArray(corpse.lastObjects) && !corpse.lastObjects.some(o => o.sid === 500) &&
+    corpse.lastObjects.some(o => o.sid === 501));
+
+  /* A way in that is already held is not asked about again. */
+  const partial = ringWorld({ blocked: [90, 270] });
+  partial.trapEscapeRing();
+  check("a way in something already holds is skipped",
+    partial.placed.length === 2 &&
+    partial.placed.map(p => p.deg).sort((a, b) => a - b).join(",") === "0,180");
+  check("and is not retried", (partial.trapEscapeRing(), partial.placed.length === 2));
+
+  /* Budget: only two fit, the rest carry to the next tick. */
+  const tight = ringWorld({ packets: 108 });
+  tight.trapEscapeRing();
+  check("what does not fit the packet budget waits",
+    tight.placed.length === 2 && tight.pending().length === 2,
+    `${tight.placed.length} placed, ${tight.pending().length} pending`);
+  tight.window.packets = 0;
+  tight.trapEscapeRing();
+  check("and goes down on the next tick", tight.placed.length === 4);
+
+  /* A different trap starts a fresh ring. */
+  const again = ringWorld({});
+  again.trapEscapeRing();
+  again.trap_where_im_in = { sid: 600, health: 10, scale: 32 };
+  again.imTrapped = again.trap_where_im_in;
+  again.trapEscapeRing();
+  check("being re-trapped lays a fresh ring", again.placed.length === 8);
+
+  /* Escaping clears the state so the next trap is not treated as the same one. */
+  const escaped = ringWorld({});
+  escaped.trapEscapeRing();
+  escaped.imTrapped = null;
+  escaped.trap_where_im_in = null;
+  escaped.trapEscapeRing();
+  check("escaping clears the ring's memory", escaped.pending().length === 0);
+
+  const capped = ringWorld({ limitReached: [6] });
+  capped.trapEscapeRing();
+  check("spikes at their cap send nothing", capped.placed.length === 0);
+}
+
 /* ------------------------------------------------------------------ */
-console.log("\n11. nothing else moved\n");
+console.log("\n12. nothing else moved\n");
 {
   const a = SRC.split("\n");
   const b = built.split("\n");
@@ -527,7 +655,7 @@ console.log("\n11. nothing else moved\n");
   check("the only lines removed are deltek's old velocity tick",
     unexpected.length === 0, unexpected.slice(0, 3).map(s => s.trim()).join(" | "));
   check("the additions are the two features and their hooks",
-    added > 150 && added < 360, `${added} lines added`);
+    added > 150 && added < 450, `${added} lines added`);
 }
 
 console.log(failed
