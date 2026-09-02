@@ -1,10 +1,17 @@
 # ReUp Mix (Luna × Ryn)
 
-A merged moomoo.io userscript: the RYN Client v4 core with the Luna Client
-features RYN never had, built against the game bundles in `src/` and verified
-against them.
+moomoo.io userscripts built from the clients in `src/` against the game bundles
+in `src/`, and verified against them.
 
-Build output: **`ReUp_Mix.user.js`**
+Two build targets:
+
+| Output | Base | What it adds |
+|---|---|---|
+| **`ReUp_Mix.user.js`** | `src/RYN_Client_v4.js` | the Luna Client features RYN v4 never had |
+| **`RYN_GapFill.user.js`** | `src/RYN_Client_v5.js` | trap enclosure gap fill on the Ryn Placement Engine |
+
+Most of this file is about the first. The second is at the end:
+[RYN v5 + trap enclosure gap fill](#ryn-v5--trap-enclosure-gap-fill).
 
 ---
 
@@ -83,70 +90,6 @@ only when actually in sandbox and falls back to `group.limit` otherwise, and
 `AutoRetrap._isItemLimit` is written against that. `AutoPlacer` now makes the
 same call, so all three agree.
 
-### Trap enclosure gap fill
-
-Two switches in Combat → Spikes & Traps, both off by default: **Trap Gap Fill**
-and **Gap Fill Trap Break**.
-
-When the placer's target is boxed in, this prepares the closest spike that seals
-the way out. It is a layer inside `AutoPlacer`, not a second placer: it picks no
-target, owns no scheduler, and sends no packet. Its whole output is one entry in
-`AutoPlacer._predictObjects` — the list the preplace and immediate paths at the
-end of `postTick` already drain — so it inherits the existing packet budget,
-ping-synced timing and anti-duplicate rules rather than repeating them.
-
-**Target.** `EnemyManager.nearestEnemy`, the same one the aim, the preplacer and
-the replacer follow. When it changes, every cached gap goes with it.
-
-**Enclosure.** One grid query two cells wide around the target collects what
-actually stops them moving, by `PlayerManager.canMoveOnTop`'s rules — resources
-always, an `ignoreCollision` building never, and a trap only for whoever its
-owner counts as an enemy, read off `PlayerManager.isEnemyByID` rather than
-guessed from position. Each blocker covers the arc it would stop them walking
-through; the complement of the merged arcs is the set of openings, and an
-opening counts as a way out by the same chord test `SiegeAnalysis.isEscapable`
-uses. Enclosed means 55% of the circle blocked with at most three ways out — 35%
-once a trap is actually holding them. A trap they are standing in decides that
-they are pinned but does not wall off a side; it is where they go on the way out
-that matters. So a ring with a hole reads as enclosed, and three traps off to
-one side does not.
-
-**Escape route.** Movement direction while they are moving, away from us when
-they are not, and the opening that best matches wins.
-
-**Candidates.** The placer's own 72-angle set, already cached for the tick and
-already collision- and range-checked, filtered to the ones that touch the
-opening — the predicted one and a tight band first, everything passable only if
-that finds nothing. Scoring weighs how much of the opening the spike takes away,
-whether it closes it outright, how well it sits on the predicted route, how
-close it is, how crowded the spot is, and whether the timing works at the
-current ping. A spike slightly farther out that seals the route beats a nearer
-one that only clips it.
-
-**Before it commits.** The target still has to be the ActiveTarget, the spot
-still placeable, and nothing else may have claimed it: not this tick's
-placements, not the placer's banned angles, not a position already reserved in
-`_predictObjects`, and not `EnemyManager.nearestSpikePlacerAngle` — Spike Tick's
-own reservation. The layer also stands down for the whole tick whenever Spike
-Tick claimed it or is mid-sequence.
-
-**Pre Placer** decides whether the spike is prepared for where they are going
-(the ping-synced path) or placed on the spot because they are already there.
-**Re Placer** decides whether a better position may replace the one already
-being prepared, and only past a real margin — otherwise the first choice stands.
-
-**Gap Fill Trap Break** is the one action that is not a placement. A trap denies
-a spike the 50 units of placement scale around it, so the trap sitting on the
-opening is often the reason nothing can go there. With the switch on, the layer
-may break one of its own traps — never the trap holding the target, never one
-away from the escape side, never while another module owns the tick, and only
-when it can prove a better spike opens up afterwards. It swings through the same
-`ModuleHandler` fields every other module uses, then remembers where to prepare
-the spike on the next tick.
-
-The layer sits inside the RYN placer path, so Glotus Placer Mode (which replaces
-that path wholesale) runs without it.
-
 ### Driver correction
 
 `ItemGroups[8]` — the platform group — carried `layer: -1` in RYN. The shipped
@@ -180,9 +123,11 @@ but nothing in the client needs it. It is stripped from the build.
 ## Layout
 
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
+ReUp_Mix.user.js          build output — the Luna x Ryn v4 mix
+RYN_GapFill.user.js       build output — RYN v5.4 + trap enclosure gap fill
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
-src/RYN_Client_v4.js      base client (input)
+src/RYN_Client_v4.js      base client for ReUp Mix (input)
+src/RYN_Client_v5.js      base client for the gap-fill build (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
@@ -191,6 +136,7 @@ tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/check-gapfill.js    the built gap-fill layer vs. synthetic trap layouts
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-gapfill.js    src/RYN_Client_v5.js -> RYN_GapFill.user.js
 ```
 
 ## Build
@@ -209,7 +155,6 @@ a newer RYN will surface as a build error rather than a half-merged script.
 ```sh
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
-node tools/check-gapfill.js ReUp_Mix.user.js
 node --check ReUp_Mix.user.js
 ```
 
@@ -222,10 +167,6 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
-- **Gap fill** — 45 checks over synthetic trap layouts: enclosure detection,
-  ownership, escape prediction, candidate scoring, the Spike Tick and
-  duplicate-placement rejections, target swaps, and every gate on the trap
-  break.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
@@ -247,3 +188,116 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# RYN v5 + trap enclosure gap fill
+
+Build output: **`RYN_GapFill.user.js`**, from `src/RYN_Client_v5.js` (RYN Client
+v5.4 + Auto Heal Engine) with one feature added.
+
+```sh
+node tools/build-gapfill.js        # produce RYN_GapFill.user.js
+```
+
+## The feature
+
+When the locked target is boxed in, the placement engine works out which way
+out they are leaving by and seals it.
+
+Two switches in Combat → Spikes & Traps: **Trap Gap Fill** (on) and **Gap Fill
+Trap Break** (off). Gap fill rides the Preplace pass, so it needs Preplace on.
+
+## Why it is not another placer
+
+v5 already has the Ryn Placement Engine, and the feature is a layer on it
+rather than a system beside it. Everything it needs was already there:
+
+| It needs | v5 already has |
+|---|---|
+| a target | `ThreatAnalyzer` → `frame.target`, i.e. `EnemyManager.nearestEnemy` — the one preplace, replace and the aim already follow |
+| geometry | `GeometrySolver.occlusion / merge / invert`, the solver the engine uses for its own placement ring |
+| prediction | `TargetMotion` — measured velocity, acceleration and confidence, not a second guess |
+| anti-duplicate | `PlacementLedger`, `PreplaceBook`, `PlacementMemory` — what already stops two placements taking one slot |
+| execution | `PlacementScheduler` → `PlacementPlanner` → validate → `PlacementExecutor`, with its packet budget and batching |
+
+So the layer adds three things and nothing else: it measures the target's
+escape ring, it proposes a few angles aimed at the opening, and it prices
+"closes that opening" as one more scoring term.
+
+**Enclosure.** The target's escape ring is one short step outside their body,
+measured with the same occlusion the engine measures its placement ring with:
+every blocker removes an arc, `merge` unions them, `invert` hands back the ways
+out. What blocks is the game's own rule (`PlayerManager.canMoveOnTop`):
+resources always, an `ignoreCollision` building never, and a trap only for
+whoever its owner counts as an enemy — ownership from
+`PlayerManager.isEnemyByID`, never guessed from position. So the target's own
+trap does not hold them, mine does, and a ring with a hole reads as enclosed
+while three traps on one side does not. Boxed in means 55% of the ring closed
+with at most three ways out, or 35% once something is actually holding them.
+The sweep is the blocker list the engine already built this tick, so it costs
+arithmetic over a list rather than a second query.
+
+**Escape route.** The measured heading while they are moving, away from us when
+they are not, which is where a cornered player goes. The opening that best
+matches — and is narrow enough to be worth sealing and near enough to reach —
+is the one the layer plays for.
+
+**Candidates.** Straight at the mouth of that opening snapped onto legal
+ground, the two angles where our footprint just touches it, and the edges of
+the aperture it falls in. They carry mode PREPLACE like everything else the
+tick generates, so they are booked, held, planned, validated, budgeted and sent
+by the pipeline that was already there.
+
+**Scoring.** One more weighted term — the share of the opening the build takes
+away, more again when nothing walkable is left, more still when it sits on the
+route they are actually taking. Because scoring is central, this prices gap
+sealing on *every* candidate the engine has, not only the ones the layer
+proposes; and because a seal is worth more than a clip, a spike slightly
+farther out that closes the way out beats a nearer one that only narrows it.
+
+**Spike ticks.** The layer proposes nothing on a tick a spike-tick module owns
+(`lunaSpikeTickBusy`), rather than competing for the same packets.
+
+**Gap Fill Trap Break** is the one action that is not a placement. A trap of
+mine denies a spike the fifty units of placement scale around it, so the trap
+parked on the opening is often the reason nothing can be placed there. The
+engine measures the best gap fill available with and without that trap; if
+removing it buys a materially better spike, **Autobreak** — which already owns
+breaking things, and already runs with the reload, range and one-hit checks a
+swing needs — takes it out. Never the trap holding the target, never one that
+is not on the side they are leaving by, never someone else's, and never a
+half-break: one swing or none.
+
+Switched off, the enclosure is not measured at all, so nothing downstream can
+price a gap the feature is not supposed to be looking at.
+
+## Verification
+
+```sh
+node tools/verify-drivers.js RYN_GapFill.user.js
+node tools/check-hooks.js RYN_GapFill.user.js   # needs: npm i --no-save terser
+node tools/check-gapfill.js RYN_GapFill.user.js
+node --check RYN_GapFill.user.js
+```
+
+Current state of that build:
+
+- **Drivers** — hats, accessories, weapons, items, item groups and 42 scalar
+  config keys all match `src/game_index.js`.
+- **Hooks** — 41/41 bundle-rewrite hooks bind.
+- **Gap fill** — 43 checks. `check-gapfill.js` lifts the real code out of the
+  built script — `GeometrySolver` with its two new arc helpers,
+  `rpeGapCoverage`, `rpeBuildProfile`, `PlacementMemory`, `CandidateGenerator`
+  and the engine's own gap-fill methods — and runs it against synthetic
+  layouts, so what is tested is what ships: arc arithmetic, enclosure
+  detection and its negative cases, ownership, pinning, escape direction,
+  coverage and sealing, candidate shape, the spike-tick and toggle gates, and
+  every gate on the trap break.
+
+## Note
+
+`src/RYN_Client_v5.js` is the client as it was handed over, feature aside. It
+still opens with RYN's first-run `fetch` to a `webhook.site` endpoint, gated by
+a `localStorage` flag — the ReUp build strips that, this one does not, because
+nothing was asked of the rest of the file.
