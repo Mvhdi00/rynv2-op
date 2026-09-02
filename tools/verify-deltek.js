@@ -272,8 +272,128 @@ console.log("\n5. the dead object, and the ceiling\n");
     flipped.placed.length === 0 && flipped.queue().length === 0);
 }
 
+/* ------------------------------------------------------------------ *
+ * Velocity Tick.
+ * ------------------------------------------------------------------ */
+console.log("\n6. velocity tick — wiring\n");
+
+check("deltek's setTimeout version is gone",
+  !/function toptop\(\)/.test(built) && !/}, 93\);/.test(built));
+check("the T key and the menu are the same switch",
+  /window\.vars\.velocityTick = !window\.vars\.velocityTick;/.test(built) &&
+  !/autoVelocityTickToggled = !autoVelocityTickToggled/.test(built));
+check("the toggle is in the menu", /name: "Enable Velocity Tick", id: "velocityTick"/.test(built));
+check("and defaults off", /\n\s*velocityTick: false,/.test(built));
+check("the band is RYN's 220-245, not 222-262",
+  /VELOCITY_MIN_KB = 220;/.test(built) && /VELOCITY_MAX_KB = 245;/.test(built) &&
+  !/minimumOTRange/.test(built));
+check("it arms against the enemy's future position",
+  /const futureX = nearestEnemy\.xVel;/.test(built));
+check("turret gear on the arm tick, bull on the fire tick",
+  /hat\(53, 0\);/.test(built) && /hat\(7, 0\);/.test(built));
+check("the trap branch is not present",
+  !/velocityTickTrap/i.test(built) && !/_pinnedInMyTrap/.test(built));
+
+/* ---- run the combo ---------------------------------------------- */
+const vStart = built.indexOf("                    // ==================== VELOCITY TICK ====================");
+const vEndMark = "                        velocityTarget = null;\n                    }";
+const vEnd = built.indexOf(vEndMark, vStart);
+check("the combo can be extracted", vStart > 0 && vEnd > vStart);
+
+function velocityWorld(o) {
+  o = o || {};
+  const env = {
+    Math, console,
+    window: { vars: { velocityTick: o.on !== false } },
+    game: { tickRate: 111 },
+    myPlayer: { alive: o.alive !== false, sid: 1, x2: 0, y2: 0,
+      weapons: [o.primary === undefined ? 5 : o.primary, 15] },
+    nearestEnemy: o.enemy === null ? null : Object.assign({
+      sid: 2, x2: 230, y2: 0, xVel: 230, yVel: 0, skinIndex: 0, weapons: [7, 10]
+    }, o.enemy || {}),
+    items: { weapons: { 5: { speed: 300 }, 7: { speed: 100 }, 15: { speed: 1500 } } },
+    primaryReload: { 1: o.myPrimary === undefined ? 1 : o.myPrimary,
+                     2: o.theirPrimary === undefined ? 0 : o.theirPrimary },
+    turretReload: { 1: o.myTurret === undefined ? 1 : o.myTurret },
+    velocityTarget: o.armed === undefined ? null : o.armed,
+    UTILS: { getDistance: (x1,y1,x2,y2) => Math.hypot(x2-x1, y2-y1) },
+    getPlayerInfo: (p, k) => k === "primaryVariant" ? (o.variant === undefined ? 2 : o.variant) : null,
+    hats: [], weaponSel: [], sent: [],
+    autoaim: false, autoaimAngle: null, predictMoveAngle: null,
+    shouldntPathfind: false, keyCodeWeapon: null,
+    hat(id) { env.hats.push(id); },
+    selectWeapon(w) { env.weaponSel.push(w); },
+    io: { send: (t, a) => env.sent.push({ t, a }) }
+  };
+  env.globalThis = env;
+  vm.createContext(env);
+  vm.runInContext(built.slice(vStart, vEnd + vEndMark.length) +
+    "\nglobalThis.armed = () => velocityTarget;", env, { filename: "velocity.js" });
+  return env;
+}
+
+console.log("\n7. velocity tick — the combo\n");
+{
+  const arm = velocityWorld({});
+  check("arms in the window", arm.armed() !== null);
+  check("with turret gear", arm.hats.indexOf(53) !== -1, JSON.stringify(arm.hats));
+  check("and walks at them", typeof arm.predictMoveAngle === "number" && arm.shouldntPathfind);
+  check("without swinging yet", arm.sent.length === 0);
+
+  const fire = velocityWorld({ armed: { x2: 200, y2: 0 } });
+  check("fires on the next tick", fire.hats.indexOf(7) !== -1, JSON.stringify(fire.hats));
+  check("swinging at where they are now", fire.sent.length === 1 && fire.sent[0].t === "F");
+  check("and disarms", fire.armed() === null);
+  check("with autoaim on the target", fire.autoaim === true && fire.autoaimAngle === 0);
+}
+
+console.log("\n8. velocity tick — the gates\n");
+{
+  const near = velocityWorld({ enemy: { xVel: 150, yVel: 0 } });
+  check("too close to need the combo: no arm", near.armed() === null);
+  const far = velocityWorld({ enemy: { xVel: 300, yVel: 0 } });
+  check("too far for the knockback to reach: no arm", far.armed() === null);
+  const edgeLo = velocityWorld({ enemy: { xVel: 220, yVel: 0 } });
+  const edgeHi = velocityWorld({ enemy: { xVel: 245, yVel: 0 } });
+  check("both edges of the window are inside it",
+    edgeLo.armed() !== null && edgeHi.armed() !== null);
+
+  check("no polearm, no combo", velocityWorld({ primary: 1 }).armed() === null);
+  check("below diamond, no combo", velocityWorld({ variant: 1 }).armed() === null);
+  check("primary not reloaded, no combo", velocityWorld({ myPrimary: 0.5 }).armed() === null);
+  check("turret not reloaded, no combo", velocityWorld({ myTurret: 0 }).armed() === null);
+  check("no enemy, no combo", velocityWorld({ enemy: null }).armed() === null);
+  check("toggled off, no combo", velocityWorld({ on: false }).armed() === null);
+
+  /* Hats the combo cannot beat. The enemy needs a weapon slower than one tick
+   * for the hat to be the deciding term at all — a dagger reloads in 100ms, so
+   * its holder is always about to swing and the shot is always worth taking.
+   * Polearm at 300ms is the honest case. */
+  const slow = { weapons: [5, 10] };
+  const soldier = velocityWorld({ enemy: Object.assign({ skinIndex: 6 }, slow), theirPrimary: 0 });
+  check("a soldier hat is not worth the turret", soldier.armed() === null);
+  const absorber = velocityWorld({ enemy: Object.assign({ skinIndex: 22 }, slow), theirPrimary: 0 });
+  check("hat 22 eats the knockback, so it is not worth it", absorber.armed() === null);
+  const plain = velocityWorld({ enemy: Object.assign({ skinIndex: 0 }, slow), theirPrimary: 0 });
+  check("an ordinary hat is", plain.armed() !== null);
+
+  /* ...and a swing about to land justifies it whatever they are wearing. */
+  const swinging = velocityWorld({ enemy: Object.assign({ skinIndex: 6 }, slow), theirPrimary: 0.9 });
+  check("a swing about to land is worth it regardless of the hat",
+    swinging.armed() !== null);
+  const dagger = velocityWorld({ enemy: { skinIndex: 6 }, theirPrimary: 0 });
+  check("and a dagger holder is always about to swing", dagger.armed() !== null);
+
+  /* Half-fired combo must not survive being switched off or dying. */
+  const dropped = velocityWorld({ on: false, armed: { x2: 200, y2: 0 } });
+  check("toggling off mid-combo drops the armed target", dropped.armed() === null);
+  check("and does not swing", dropped.sent.length === 0);
+  const dead = velocityWorld({ alive: false, armed: { x2: 200, y2: 0 } });
+  check("dying mid-combo drops it too", dead.armed() === null);
+}
+
 /* ------------------------------------------------------------------ */
-console.log("\n6. nothing else moved\n");
+console.log("\n9. nothing else moved\n");
 {
   const a = SRC.split("\n");
   const b = built.split("\n");
@@ -286,10 +406,29 @@ console.log("\n6. nothing else moved\n");
     if (a[i] !== undefined && b.indexOf(a[i], j) === -1) { removed.push(a[i]); i++; continue; }
     i++; j++;
   }
-  check("no line of deltek was removed", removed.length === 0,
-    removed.slice(0, 3).map(s => s.trim()).join(" | "));
-  check("the additions are the feature and its five hooks",
-    added > 120 && added < 220, `${added} lines added`);
+  /* Replace is purely additive. Velocity Tick is not: it takes deltek's own
+   * setTimeout version out. So the bar is that every removed line belongs to
+   * that old version and nothing else. */
+  const OLD_VELOCITY = [
+    "function toptop() {", "if (primaryReload[myPlayer.sid] == 1 && turretReload[myPlayer.sid] == 1) {",
+    "setTimeout(() => {", "autoaim = true;", "hat(53, 0);", "hat(7, 0);",
+    "io.send(\"F\", 1);", "autoaim = false;", "io.send(\"F\", 0);", "}, 210);", "}, 93);",
+    "if (autoVelocityTickToggled) {", "if (nearestEnemy && myPlayer && myPlayer.alive) {",
+    "// velocity range around 242", "let minimumOTRange = 222; // 242 - 20",
+    "let maximumOTRange = 262; // 242 + 20", "// simple velocity calculation",
+    "let distance = UTILS.getDistance(", "myPlayer.x2, myPlayer.y2,",
+    "nearestEnemy.x2, nearestEnemy.y2", ");",
+    "if (!nearestTrap && (distance < maximumOTRange && distance > minimumOTRange)) {",
+    "toptop(); // replace with your function", "}", "}", "}",
+    "keyCodeWeapon = myPlayer.weapons[0];", "selectWeapon(keyCodeWeapon);",
+    "autoVelocityTickToggled = !autoVelocityTickToggled;",
+    "const oneFrameStatus = autoVelocityTickToggled ? \"on\" : \"off\";"
+  ];
+  const unexpected = removed.filter(l => OLD_VELOCITY.indexOf(l.trim()) === -1);
+  check("the only lines removed are deltek's old velocity tick",
+    unexpected.length === 0, unexpected.slice(0, 3).map(s => s.trim()).join(" | "));
+  check("the additions are the two features and their hooks",
+    added > 150 && added < 330, `${added} lines added`);
 }
 
 console.log(failed

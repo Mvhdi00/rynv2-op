@@ -123,6 +123,100 @@ edit(
         replace: true,`
 );
 
+/* ------------------------------------------------------------------ *
+ * 6-9. Velocity Tick.
+ *
+ * deltek already ships a version of this: toptop(), fired off setTimeout(93)
+ * and setTimeout(210) behind a hardcoded T key. Wall-clock delays drift against
+ * the server tick and against ping, and it checks none of the things that make
+ * the shot worth taking. It is replaced, not extended.
+ * ------------------------------------------------------------------ */
+const velocity = fs.readFileSync(path.join(ROOT, "src/deltek/velocitytick.js"), "utf8")
+  .split("\r\n").join("\n").replace(/\n+$/, "");
+
+/* The armed target, beside the other combo state. */
+edit(
+  "velocity: state",
+  `        let autoMills = false;
+        let autoVelocityTickToggled = false;`,
+  `        let autoMills = false;
+        let autoVelocityTickToggled = false;
+        // Set on the tick the turret goes out, spent on the next one.
+        let velocityTarget = null;`
+);
+
+/* The combo itself, in place of toptop() and its caller. */
+edit(
+  "velocity: replace toptop with the two-tick combo",
+  `                    function toptop() {
+                        if (primaryReload[myPlayer.sid] == 1 && turretReload[myPlayer.sid] == 1) {
+                            hat(53, 0);
+                            keyCodeWeapon = myPlayer.weapons[0];
+                            selectWeapon(keyCodeWeapon);
+                            setTimeout(() => {
+                                autoaim = true;
+                                keyCodeWeapon = myPlayer.weapons[0];
+                                selectWeapon(keyCodeWeapon);
+                                hat(7, 0);
+                                io.send("F", 1);
+                                setTimeout(() => {
+                                    autoaim = false;
+                                    io.send("F", 0);
+                                }, 210);
+                            }, 93);
+                        }
+                    }
+                    if (autoVelocityTickToggled) {
+                        if (nearestEnemy && myPlayer && myPlayer.alive) {
+                            // velocity range around 242
+                            let minimumOTRange = 222; // 242 - 20
+                            let maximumOTRange = 262; // 242 + 20
+
+                            // simple velocity calculation
+                            let distance = UTILS.getDistance(
+                                myPlayer.x2, myPlayer.y2,
+                                nearestEnemy.x2, nearestEnemy.y2
+                            );
+
+                            if (!nearestTrap && (distance < maximumOTRange && distance > minimumOTRange)) {
+                                toptop(); // replace with your function
+                            }
+                        }
+                    }`,
+  velocity
+);
+
+/* The T key kept its own toggle; point it at the setting so the key and the
+ * menu are the same switch instead of two. */
+edit(
+  "velocity: the T key drives the setting",
+  `                        autoVelocityTickToggled = !autoVelocityTickToggled;
+                        const oneFrameStatus = autoVelocityTickToggled ? "on" : "off";`,
+  `                        window.vars.velocityTick = !window.vars.velocityTick;
+                        const oneFrameStatus = window.vars.velocityTick ? "on" : "off";`
+);
+
+edit(
+  "velocity: menu toggle",
+  `                    { type: 'toggle', name: "Enable Replace", id: "replace" }`,
+  `                    { type: 'toggle', name: "Enable Replace", id: "replace" }
+                ]
+            },
+            {
+                title: "Velocity Tick",
+                items: [
+                    { type: 'toggle', name: "Enable Velocity Tick", id: "velocityTick" }`
+);
+
+edit(
+  "velocity: default off",
+  `        prePlace: true,
+        replace: true,`,
+  `        prePlace: true,
+        replace: true,
+        velocityTick: false,`
+);
+
 fs.writeFileSync(OUT, src.split("\n").join(EOL));
 
 console.log(`\nbuild-deltek: wrote ${path.relative(ROOT, OUT)}`);
