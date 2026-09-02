@@ -11522,7 +11522,7 @@ for (let tree of trees) {
                 if (spike.placeable && enemyTrapped.health <= getPlayerInfo(myPlayer, "secondaryStructureDmg")
                     && UTILS.getDistance(enemyTrapped.x, enemyTrapped.y, myPlayer.x2, myPlayer.y2) < spike.scale + 75 &&
                     UTILS.getDistance(spike.x, spike.y, nearestEnemy.x2, nearestEnemy.y2) < spike.scale + 35) {
-                    showSettingText(900, "LOL Aids")
+                    showSettingText(900, "Spike Tick")
                     return true;
                     ;
                 }
@@ -11558,7 +11558,7 @@ for (let tree of trees) {
                 if (spike.placeable && enemyTrapped.health <= getPlayerInfo(myPlayer, "secondaryStructureDmg")
                     && UTILS.getDistance(enemyTrapped.x, enemyTrapped.y, myPlayer.x2, myPlayer.y2) < spike.scale + 75 &&
                     UTILS.getDistance(spike.x, spike.y, nearestEnemy.x2, nearestEnemy.y2) < spike.scale + 35) {
-                    showSettingText(900, "LOL aids")
+                    showSettingText(900, "Spike Tick 2")
                     return true;
                 }
             }
@@ -20073,9 +20073,9 @@ for (let tree of trees) {
             {
                 title: "Shame Combat",
                 items: [
-                    { type: 'toggle', name: "Clown Aids", id: "shameTick" },
-                    { type: 'toggle', name: "LOL aids", id: "shameTick2" },
-                    { type: 'toggle', name: "Giving Aids", id: "shameGrind" },
+                    { type: 'toggle', name: "Spike Tick", id: "shameTick" },
+                    { type: 'toggle', name: "Spike Tick 2", id: "shameTick2" },
+                    { type: 'toggle', name: "Shame Grinder", id: "shameGrind" },
                     { type: 'toggle', name: "Auto Shame", id: "autoShame" },
                     { type: 'slider', name: "Shame Limit", id: "autoShameLimit", min: 0, max: 8 }
                 ]

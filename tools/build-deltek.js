@@ -217,6 +217,47 @@ edit(
         velocityTick: false,`
 );
 
+/* ------------------------------------------------------------------ *
+ * 10-13. Naming.
+ *
+ * deltek's Shame Combat toggles are named after the joke, not the feature, so
+ * the spike tick is impossible to find in the menu. Every one of these is the
+ * same setting id as before -- only the label changes -- and the names are
+ * novastorm's, which is the same codebase with the same functions behind them:
+ *
+ *   shameTick   gates canTrapTick()        novastorm calls it "Spike Tick"
+ *   shameTick2  gates canTrapTick2()       a second variant, deltek-only
+ *   shameGrind  gates advancedShameCombat() novastorm calls it "Shame Grinder"
+ * ------------------------------------------------------------------ */
+edit(
+  "naming: Clown Aids -> Spike Tick",
+  `{ type: 'toggle', name: "Clown Aids", id: "shameTick" },`,
+  `{ type: 'toggle', name: "Spike Tick", id: "shameTick" },`
+);
+edit(
+  "naming: LOL aids -> Spike Tick 2",
+  `{ type: 'toggle', name: "LOL aids", id: "shameTick2" },`,
+  `{ type: 'toggle', name: "Spike Tick 2", id: "shameTick2" },`
+);
+edit(
+  "naming: Giving Aids -> Shame Grinder",
+  `{ type: 'toggle', name: "Giving Aids", id: "shameGrind" },`,
+  `{ type: 'toggle', name: "Shame Grinder", id: "shameGrind" },`
+);
+
+/* The on-screen toasts name the feature that fired. Both said "LOL aids",
+ * including the one inside canTrapTick, which is the spike tick. */
+edit(
+  "naming: the spike tick's own toast",
+  `                    showSettingText(900, "LOL Aids")`,
+  `                    showSettingText(900, "Spike Tick")`
+);
+edit(
+  "naming: the second variant's toast",
+  `                    showSettingText(900, "LOL aids")`,
+  `                    showSettingText(900, "Spike Tick 2")`
+);
+
 fs.writeFileSync(OUT, src.split("\n").join(EOL));
 
 console.log(`\nbuild-deltek: wrote ${path.relative(ROOT, OUT)}`);

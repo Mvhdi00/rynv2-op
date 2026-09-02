@@ -392,8 +392,58 @@ console.log("\n8. velocity tick — the gates\n");
   check("dying mid-combo drops it too", dead.armed() === null);
 }
 
+/* ------------------------------------------------------------------ *
+ * Naming. Labels only — the setting ids and the code behind them are the
+ * things that must NOT have moved.
+ * ------------------------------------------------------------------ */
+console.log("\n9. spike tick — naming\n");
+
+check("the spike tick is findable in the menu",
+  /name: "Spike Tick", id: "shameTick"/.test(built) && !/Clown Aids/.test(built));
+check("so is its second variant",
+  /name: "Spike Tick 2", id: "shameTick2"/.test(built) && !/LOL aids/i.test(built));
+check("and the shame grinder", 
+  /name: "Shame Grinder", id: "shameGrind"/.test(built) && !/Giving Aids/.test(built));
+check("the toasts name the feature that fired",
+  /showSettingText\(900, "Spike Tick"\)/.test(built) &&
+  /showSettingText\(900, "Spike Tick 2"\)/.test(built));
+
+/* The ids are the contract: rename the label, keep the setting. */
+for (const id of ["shameTick", "shameTick2", "shameGrind"]) {
+  const re = new RegExp(`window\\.vars\\.${id}\\b`, "g");
+  check(`window.vars.${id} is untouched`,
+    (built.match(re) || []).length === (SRC.match(re) || []).length,
+    `${(built.match(re) || []).length} vs ${(SRC.match(re) || []).length}`);
+}
+
+/* And the functions those settings gate are byte-identical to deltek's own. */
+function fnBody(src, name) {
+  const i = src.indexOf("function " + name + "(");
+  if (i < 0) return null;
+  let d = 0, o = false;
+  for (let j = i; j < src.length; j++) {
+    const c = src[j];
+    if (c === "{") { d++; o = true; }
+    else if (c === "}") { d--; if (o && d === 0) return src.slice(i, j + 1); }
+  }
+  return null;
+}
+for (const fn of ["canTrapTick", "canTrapTick2", "advancedShameCombat",
+                  "canVelocitySpikeTick", "doSmartTickAnti", "canSmartTick",
+                  "canShamePlus", "canAutoShame", "canShamePlace"]) {
+  const before = fnBody(SRC, fn);
+  const after = fnBody(built, fn);
+  /* canTrapTick and canTrapTick2 carry a toast string that was renamed; every
+   * other line of them, and all of the rest, must be identical. */
+  const renamedToast = fn === "canTrapTick" || fn === "canTrapTick2";
+  const norm = x => x && x.replace(/showSettingText\(900, "[^"]*"\)/g, "TOAST");
+  check(`${fn}() is unchanged${renamedToast ? " apart from its toast" : ""}`,
+    before !== null && after !== null &&
+    (renamedToast ? norm(before) === norm(after) : before === after));
+}
+
 /* ------------------------------------------------------------------ */
-console.log("\n9. nothing else moved\n");
+console.log("\n10. nothing else moved\n");
 {
   const a = SRC.split("\n");
   const b = built.split("\n");
@@ -422,7 +472,13 @@ console.log("\n9. nothing else moved\n");
     "toptop(); // replace with your function", "}", "}", "}",
     "keyCodeWeapon = myPlayer.weapons[0];", "selectWeapon(keyCodeWeapon);",
     "autoVelocityTickToggled = !autoVelocityTickToggled;",
-    "const oneFrameStatus = autoVelocityTickToggled ? \"on\" : \"off\";"
+    "const oneFrameStatus = autoVelocityTickToggled ? \"on\" : \"off\";",
+    /* labels and toasts, renamed in place */
+    "{ type: 'toggle', name: \"Clown Aids\", id: \"shameTick\" },",
+    "{ type: 'toggle', name: \"LOL aids\", id: \"shameTick2\" },",
+    "{ type: 'toggle', name: \"Giving Aids\", id: \"shameGrind\" },",
+    "showSettingText(900, \"LOL Aids\")",
+    "showSettingText(900, \"LOL aids\")"
   ];
   const unexpected = removed.filter(l => OLD_VELOCITY.indexOf(l.trim()) === -1);
   check("the only lines removed are deltek's old velocity tick",
