@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name           ! RYN Client v5 + Auto Heal Engine
+// @name           Ryn Type 2
 // @author          By : Raptor
 // @description     ! have fun — v5.4 plus a new Auto Heal Engine: shame control, predictive defense and threat priority, built from the game bundle
 // @match        *://*.moomoo.io/*
