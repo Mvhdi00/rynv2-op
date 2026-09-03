@@ -198,17 +198,21 @@ but nothing in the client needs it. It is stripped from the build.
 ## Layout
 
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
-drivers/game-drivers.json protocol + data tables extracted from the game bundle
-src/RYN_Client_v4.js      base client (input)
-src/Luna_Client_1.1.js    Luna client, kept for reference (input)
-src/game_index.js         game bundle: protocol, data tables, engine
-src/game_vendor.js        game bundle: msgpack codec, polyfills
-tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
-tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
-tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
-tools/test-target-lock.js behaviour tests for the target lock + gap fill
-tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+ReUp_Mix.user.js               build output — the RYN v4 / Luna mix
+Ryn_Type_2_TargetLock.user.js  build output — RYN Type 2 with the target lock
+drivers/game-drivers.json      protocol + data tables extracted from the bundle
+src/RYN_Client_v4.js           base client for the mix (input)
+src/Ryn_Type_2.js              RYN Type 2 v5.4 (input)
+src/Luna_Client_1.1.js         Luna client, kept for reference (input)
+src/game_index.js              game bundle: protocol, data tables, engine
+src/game_vendor.js             game bundle: msgpack codec, polyfills
+tools/extract-drivers.js       game bundle  -> drivers/game-drivers.json
+tools/verify-drivers.js        client tables vs. drivers/game-drivers.json
+tools/check-hooks.js           bundle-rewrite hooks vs. the game bundle
+tools/test-target-lock.js      behaviour tests, ReUp build
+tools/test-ryn-type2.js        behaviour tests, Type 2 build
+tools/build-reup.js            src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-ryn-type2.js       src/Ryn_Type_2.js -> Ryn_Type_2_TargetLock.user.js
 ```
 
 ## Build
@@ -216,6 +220,7 @@ tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```sh
 node tools/extract-drivers.js    # refresh drivers from src/game_*.js
 node tools/build-reup.js         # produce ReUp_Mix.user.js
+node tools/build-ryn-type2.js    # produce Ryn_Type_2_TargetLock.user.js
 ```
 
 Every edit in `build-reup.js` is anchored to an exact string in the base
@@ -274,3 +279,75 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+## RYN Type 2
+
+`src/Ryn_Type_2.js` is a different client from the v4 the mix is built on —
+v5.4, no `AutoRetrap`, no Glotus parity mode, and a full placement engine
+(`RynPlacementEngine`, with `CandidateGenerator`, `AngleSolver`,
+`PlacementScorer`, `PlacementPlanner`, `PreplaceBook` and a `TargetMotion`
+tracker) where v4 has a pair of hand-rolled placers. So the same two features
+were re-derived against its own structures rather than transplanted:
+`tools/build-ryn-type2.js` → `Ryn_Type_2_TargetLock.user.js`.
+
+**Single target lock.** Type 2 reads `EnemyManager.nearestEnemy` in two
+independent places: `ThreatAnalyzer.build()`, which is the frame every mode of
+the engine works from, and `AutoPlacer.postTick()`. Both now take the one
+`ActiveTarget`, so preplace, replace and the autoplacer cannot disagree about
+who they are working. Selection, the switch margin and the validity rule are
+the same as in the mix.
+
+Prediction is **not** reimplemented here. The engine already carries
+`TargetMotion` — velocity, acceleration, heading stability and a confidence,
+bounded by the game's own speed decay — which is strictly better than
+extrapolating `pos.future`, so `TargetLock` asks it for the predicted point at
+a ping-derived lead (`round(pong / TICK) + 1`, capped at the engine's own
+`RPE_PREPLACE_MAX_LEAD`) and falls back to `pos.future` only when the engine
+has not seen the target yet. `frame.targetNext` becomes that point, so every
+candidate the engine scores is scored against where the target is going.
+
+A target switch bumps the generation, which clears the plan, the replace plan
+and the preplace bookings — through `PreplaceBook.invalidateAll()`, the book's
+own retirement path, so the ledger tokens the bookings were holding go back
+rather than leaking.
+
+**Trap enclosure.** The engine already computed an exit list, but only from my
+own spikes and traps, and only as a flat "does this candidate stand in some
+exit" bonus. That analysis is widened in place rather than duplicated beside
+it, so the existing `sealExit` weight keeps working exactly as before:
+
+- The box is read with the game's own collision rule from `checkCollision` —
+  an `ignoreCollision` object does not push a player, with the one exception of
+  a trap, which locks the movement of anyone who is not its owner and not on
+  the owner's team. So *their* traps are not part of *their* box (they walk
+  straight through their own), while their spikes are walls whoever owns them.
+- The exit the target is actually running for is picked from `TargetMotion`'s
+  heading, and a new `escapeRoute` / `escapeRouteHeld` weight rides on top of
+  `sealExit` for candidates standing in it.
+- When the box is sealed shut, the trap of mine standing in the way the target
+  is going is identified and published on `RYN._myClient._gapFillBreak` —
+  alignment with the escape route decides, distance only breaks ties, so a ring
+  of traps at equal range cannot pick arbitrarily. It is reported, never acted
+  on: issuing the break would mean choosing a weapon and an attack angle, which
+  is a second scheduler and an override of the spike-tick modules' decisions.
+
+Two `nearestEnemy` reads survive on purpose — `AutoPlay` (circle-strafe
+movement) and `AntiTrapStar` (a defensive placement around me). Neither is the
+preplace/replace engine, and locking them would be modifying unrelated systems.
+
+```sh
+node tools/build-ryn-type2.js
+node tools/test-ryn-type2.js     # 68 passed
+node --check Ryn_Type_2_TargetLock.user.js
+```
+
+`tools/test-ryn-type2.js` slices `TargetLock` and the enclosure methods out of
+the built file and runs them against stand-ins, together with the client's own
+`SiegeAnalysis`, `GeometrySolver` and `TargetMotion`, so the prediction and
+geometry under test are the real ones.
+
+Type 2's first-run `webhook.site` beacon is **left in place** — this build adds
+the two features and changes nothing else. The mix strips it; if you want the
+same here, say so.
