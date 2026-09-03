@@ -8,6 +8,55 @@ Build output: **`ReUp_Mix.user.js`**
 
 ---
 
+## Ryn Type 2 — placement engine upgrade
+
+`Ryn_Type_2.user.js` is a separate, newer client (RYN v5.4). It is **not** built
+from `src/RYN_Client_v4.js` and is not part of the ReUp Mix build; it carries
+its own `RynPlacementEngine`, which the v4 core does not have.
+
+Its Preplace and Replace modes have been upgraded in place. Nothing else in the
+file is touched — no new settings, no new UI, no change to target acquisition
+(still `EnemyManager.nearestEnemy`), and no change to auto place, spike tick,
+combat, or the packet layer. Every edit falls inside the placement engine.
+
+What changed:
+
+| | Before | After |
+|---|---|---|
+| Preplace angles | one radial direction per lead tick, snapped to the nearest legal edge | the arc that *touches* the predicted position, intersected with the legal ground, resolved to the closest angle in the overlap |
+| Replace angle | direction of the dead object, snapped — could miss the freed slot, and skipped the duplicate check | the freed ground as a solver focus, so the build provably covers the slot it is taking back |
+| Angle resolution | 72 blind probes (auto place) / ~6 named angles | 144-slot lattice, walked outward in priority order, and only when the exact layers come up short |
+| Prediction | re-integrated per call — O(n²) per lead scan | integrated once per observation, read many times; velocity smoothed on a steady course, taken raw through a manoeuvre |
+| Ping | not used at all | `SocketManager.pong` sets the prediction lead and the firing lead, in ticks |
+| Invalidation | heading drift past a threshold | drift, plus immediate drop on a detected reverse or stop; records that do not depend on the course are exempt |
+
+Measured on this machine, same scenes, medians of 50 runs
+(`tools/verify-placement.js` covers correctness; the A/B figures below came from
+running both files' engines side by side):
+
+- full engine tick (90 objects, 4 aperture solves, 6-lead scan + 8 booked
+  records, 2 angle solves): **57 µs → 34 µs**, ~1.7× faster
+- prediction workload alone: ~1.8× faster, and bit-identical in output
+- occlusion inner loop: ~2× faster
+
+### Verification
+
+```sh
+node tools/verify-placement.js    # 32 property tests against brute-force references
+node --check Ryn_Type_2.user.js
+```
+
+The tests pull `GeometrySolver`, `AngleSolver`, `PlacementMemory` and
+`TargetMotion` straight out of the shipped file — nothing under test is
+reimplemented. They check that the 144 lattice angles are distinct and evenly
+spaced, that a contact arc contains exactly the directions that touch, that the
+chosen angle is the nearest legal one that does the job (against a 0.1° brute
+force), that a heavily blocked ring still finds its one gap, that the lattice
+sweep stays off the routine path, that the solver is deterministic, and that the
+motion path cache reproduces the original integration exactly.
+
+---
+
 ## Why RYN is the base
 
 The two clients are not the same kind of thing:
