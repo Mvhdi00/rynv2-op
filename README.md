@@ -201,7 +201,9 @@ Carried over whole, module and all the readings around it:
 | The overlay | The ring Glotus draws on the middle of the knockback band, so the window is visible rather than guessed at. |
 
 Toggle: **Combat → Instakills → Velocity Tick** (`_velocityTick`, on by
-default, as in Glotus). Counter on the Devtool stats panel.
+default, as in Glotus), plus a rebindable key in **Keybinds → Quick Actions**
+(**Velocity Tick**, `_velocityTickKey`, unbound by default) that flips it on and
+off mid-fight. Counter on the Devtool stats panel.
 
 ## Trap Instakill
 
@@ -219,8 +221,9 @@ nothing more.
 - Bull Helmet for the swing when it is owned; a bot never swings at its owner.
 
 Toggle: **Combat → Spikes & Traps → Trap Instakill** (`_trapInstakill`, off by
-default), plus a rebindable key on the Keybinds page (**Trap Instakill**,
-unbound by default). Counter on the Devtool stats panel.
+default), plus a rebindable key in **Keybinds → Quick Actions** (**Trap
+Instakill**, `_trapInstakillKey`, unbound by default). Counter on the Devtool
+stats panel.
 
 ## Checks
 
