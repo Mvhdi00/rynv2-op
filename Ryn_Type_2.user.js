@@ -3977,6 +3977,43 @@ window.grbtp = 35;
   const RYN_ROLE = "owner";
   const RYN_IS_OWNER_BUILD = RYN_ROLE === "owner";
   const RYN_RED_NAME = "#ff2d2d";
+  // player id -> squad number, rebuilt only when the roster changes. The
+  // renderer asks this for every player on screen on every frame, so the linear
+  // scan it replaces was forty hops per bot per frame before anything was drawn.
+  let _botIndexCache = null;
+  let _botIndexSize = -1;
+  function _botIndexByPlayerID(id) {
+    try {
+      if (_botIndexCache === null || _botIndexSize !== client.clients.size) {
+        _botIndexCache = new Map;
+        let i = 0;
+        for (const bot of client.clients) {
+          if (bot.myPlayer && bot.myPlayer.id != null) _botIndexCache.set(bot.myPlayer.id, i);
+          i += 1;
+        }
+        _botIndexSize = client.clients.size;
+      }
+      let index = _botIndexCache.get(id);
+      if (index === undefined) {
+        // The caller already established this id is one of ours, so a miss
+        // means the map is stale - a bot that spawned after the last rebuild,
+        // which does not change the roster size. Rebuild once and ask again.
+        _botIndexSize = -1;
+        _botIndexCache = new Map;
+        let i = 0;
+        for (const bot of client.clients) {
+          if (bot.myPlayer && bot.myPlayer.id != null) _botIndexCache.set(bot.myPlayer.id, i);
+          i += 1;
+        }
+        _botIndexSize = client.clients.size;
+        index = _botIndexCache.get(id);
+      }
+      return index === undefined ? -1 : index;
+    } catch (_) {
+      return -1;
+    }
+  }
+
   // How far under the health number the squad number sits, and its colour.
   const BOT_NUMBER_DROP = 21;
   const BOT_NUMBER_COLOR = "#c0a8ff";
@@ -4894,15 +4931,7 @@ window.grbtp = 35;
       if (!client.isBotByID(entity.sid)) {
         return;
       }
-      let index = -1;
-      try {
-        for (const bot of client.clients) {
-          if (bot.myPlayer && bot.myPlayer.id === entity.sid) {
-            index = client.getClientIndex(bot);
-            break;
-          }
-        }
-      } catch (_) {}
+      const index = _botIndexByPlayerID(entity.sid);
       if (index < 0) {
         return;
       }
@@ -15568,9 +15597,14 @@ window.grbtp = 35;
       // passes near one is off the list too.
       if (green && !_mayEngage(client, e)) continue;
       let blocking = false;
-      try {
-        blocking = PlayerManager2.lookingShield(e, myPlayer);
-      } catch (_) {}
+      // Only when that is actually the setting. Reaching this loop because a
+      // green mark exists must not turn shield avoidance on behind the setting's
+      // back.
+      if (Settings_default._botAvoidShield) {
+        try {
+          blocking = PlayerManager2.lookingShield(e, myPlayer);
+        } catch (_) {}
+      }
       if (blocking) {
         if (d < shieldedDist) {
           shieldedDist = d;

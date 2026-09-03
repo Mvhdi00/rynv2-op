@@ -386,6 +386,185 @@ old wander back.
 
 ---
 
+### Battle orders
+
+**War Split** (button + hotkey) cuts the squad in two: a shooting half and a
+closing half, both working in **pairs**. The pairing is the point rather than a
+detail — two muskets are 100 damage and one is 50, so a musket bot alone trades
+and a musket pair kills. Enemies are handed to pairs, never to individuals, and
+an odd bot out joins the last pair rather than being sent somewhere on its own.
+Which half a bot lands in comes from what it is carrying, not its number: a bot
+in the shooting half with no ranged weapon would be standing at range holding a
+sword. Other people's bots count as enemies like anything else.
+
+**Dodge & Fort** uses both answers to being shot at. A wall goes up between the
+bot and the shooter — a wall stops an arrow or a musket ball outright. Then,
+because a wall blocks the bot's own shot too, the moment the enemy's ranged
+weapon goes on cooldown the bot **breaks its own wall and answers through the
+gap**. `reload.current < max` on the enemy is the whole signal; there is nothing
+to guess. When there is no wall to be had — no resources, no room, on cooldown —
+it steps **perpendicular to the incoming projectile**, which is the shortest
+movement that leaves the line the shot is travelling along. Moving along that
+line is not a dodge. Firing is synced with any bot near enough to be shooting at
+the same person.
+
+**Bot Musket Bow Insta** is not a second implementation of the combo.
+`MusketBowInsta` already exists and already runs for every client, bots
+included; what it waits on is `InputHandler.instaToggle`, which for a bot is a
+flag nothing ever sets, because only the owner has a middle mouse button.
+`BotInstaArm` is the trigger that was missing, armed when a player enters the
+combo's own range band.
+
+**Right-click targets charge** — see the fix below. Off by default.
+
+### Ghost Shot
+
+Bots buy Assassin Gear (hat 56) and **stand still**, because standing still is
+what makes that hat invisible — it is the mechanic, not a side effect. Anything
+inside the radius gets shot out of nowhere; attacking does not break the
+invisibility, only moving does.
+
+Which means it has to hold the hat against everything else that wants to change
+it. `ModuleHandler.postTick` assigns `forceHat = 6` for soldier *directly*,
+after every module has run, so a module cannot win that by writing `forceHat`
+earlier — the soldier block asks Ghost Shot first instead. Auto Shot and ranged
+kiting stand aside through the coordinator flag, since a bot that walks to a
+kiting distance has just made itself visible.
+
+### Marks: green and red
+
+In the Find Enemy box:
+
+```
+!Team <id|name>    green — hold fire
+!Red  <id|name>    red — shoot on sight
+!Team clear        (or the Clear green button)
+```
+
+Green is a hold-fire order and it covers the **line of fire**, not just the
+player: an arrow aimed at somebody standing behind a green player is an arrow
+through the green player. So the check is not "is this the green one" but "does
+the shot pass near a green one" — a point-to-segment distance against every
+green player. It is enforced in `botPickTarget`, which is the single place every
+bot decides who it is shooting at, so auto shot, ranged kiting and the melee aim
+are all covered by one check.
+
+Red is shot on sight whatever else the squad is doing, so it runs on its own
+rather than inside War Split — the order was "every time they are seen". Two
+bots or more on the same red player fire together; a bot with nobody near enough
+to pair with cannot wait for a partner that is not coming, so it goes for the
+burst instead — the shot, then the melee follow-up as soon as it is in reach.
+
+### Solo Auto Play
+
+Right-click one of **your own** bots to put it on Auto Play on its own; it gets a
+red ring and a key clears them all. Right-clicking an enemy still marks them
+instead. Previously right-clicking your own bot added it to the enemy target
+list, which — with target charging on — pointed the rest of the squad at it.
+
+### Squad habits
+
+- **Random primary weapon** — each bot rolls its own once, never the stick.
+  Chosen once per bot rather than per spawn: a weapon that changed every death
+  would never finish an upgrade path.
+- **New random name on every death** — read inside `spawn()`, so it takes effect
+  on the packet that brings the bot back. It wins over the squad name when both
+  are on, because "change it every time it dies" is the more specific order.
+- **Build platforms in the river** — `canPlaceItem` refuses every item in the
+  river except the platform, so a bot crossing either swims it or builds its way
+  over. The platform goes down along the direction of travel, so a squad
+  crossing lays a bridge in front of itself.
+- **Bot numbers under HP** — the same roster index the Bots list shows, the clan
+  re-check reports, and the possession overlay puts next to the name. One
+  identity for a bot everywhere it appears.
+
+### !FF — a search with a fixed number of bots
+
+```
+!FF 12 4      four bots go looking for player 12
+!FF 4 12      the same
+```
+
+Both arguments are bare numbers, so which is which cannot be decided by
+position. It is decided by meaning: the token that resolves to a player the
+client can actually see is the id, the other is the count. Asking for more bots
+than exist says so and uses what there is, rather than silently doing something
+else.
+
+---
+
+## More fixes
+
+### Bots charging and attacking with no order given
+
+One right click put a player on the target list, and from then on **every bot
+charged it and swung inside 160px, nine times a second, forever**. There was a
+variable called `_ctTargetEnabled` that looked like the switch for it, but
+nothing anywhere read it. Charging is a real setting now and it is **off by
+default**, so the target list marks people without commanding anybody.
+
+### Bots that never joined the clan
+
+Two independent causes.
+
+`AutoAccept`'s loop gate was `_autoaccept || pendingJoins.size !== 0` — a
+property of the *queue* rather than of the request being looked at. Two bots
+asking in the same tick was enough to wedge it: the first accept deletes the
+only pending id, size drops to zero, and the loop breaks with the second bot's
+request still sitting at the head, where it blocks every request behind it until
+the clan changes. It asks whether the request is one of ours now, which
+`clientIDList` answers directly.
+
+`ClanJoiner` returned early on `!clanExist(ownerClan)`. That is the *bot's* view
+of what clans exist, built from whichever team packets its own connection
+happened to receive — a bot that connected while the clan already existed, or
+that missed the packet, answered false there forever and never even reached the
+rotation, so no amount of re-checking would move it. It is a 2.5 second grace
+now, then the join is attempted anyway; a join for a clan that does not exist
+costs one packet and is refused.
+
+The rotation was also 1500ms per bot, which is half a minute for twenty bots.
+600ms now, which is safe because our own bots are accepted the moment they ask.
+
+**Re-check** audits every bot's `clanName` individually — the only real answer,
+since there is no join acknowledgement to listen for — and names the ones still
+out by squad number instead of only counting them.
+
+### The find ping was invisible
+
+The game's map ping is only drawn for people on your team, so a bot that had not
+managed to join the clan pinged into nothing. There is a client-side marker now
+that does not depend on the clan, the game, or the packet arriving anywhere.
+
+### Roaming bots zigzagging
+
+Two causes. The repel between bots was 0.22 of the heading — a 12 degree push —
+and two bots roaming near each other pushed each other every pass in opposite
+directions, so both weaved. It applies only when another bot is genuinely in the
+way now, and is small enough to sidestep with rather than steer by. And
+re-deciding on a 600ms timer meant a bot walking a perfectly good line re-solved
+it constantly and took a slightly different one each time; it holds its line now
+and only re-aims on arrival, on drift past 0.35 radians, or when stopped.
+
+### An empty screen when possessing a bot
+
+The camera hook was working. **The game bundle can only draw what its own
+connection was sent, and the server only sends what is near the player that
+connection owns** — so pointing the camera at a bot across the map points it at
+a region this client has no data for at all: no terrain, no players, no animals.
+
+The bot's own connection *does* have that data, but it lives in RYN's object
+model rather than the bundle's private entity arrays, so drawing from it would
+mean writing a second renderer for the whole game.
+
+So the owner is walked to the bot instead. Following is no longer optional — it
+is what makes possession show anything — and the "acts as a bot" toggle now only
+decides whether the owner also *fights* while it is over there. The overlay
+reports the gap while it closes, so a blank screen is legible rather than
+looking broken.
+
+---
+
 ## Settings added
 
 | Key | Control | Default |
@@ -406,7 +585,17 @@ old wander back.
 | `_findHunt` | Hunt mode | off |
 | `_remoteControlKey` | Switch / next bot | `O` |
 | `_remoteReleaseKey` | Let go | `L` |
-| `_remoteOwnerAsBot` | My character acts as a bot | off |
+| `_remoteOwnerAsBot` | My character also fights | off |
+| `_showBotNumbers` | Show bot numbers under HP | on |
+| `_botChargeTargets` | Right-click targets charge | off |
+| `_botWarSplit` / `_botWarSplitKey` | War Split | off / `Y` |
+| `_botDodgeFort` | Dodge & Fort | off |
+| `_botMusketBowInsta` | Bot Musket Bow Insta | off |
+| `_botGhostShot` / `_botGhostShotKey` / `_botGhostShotRange` | Ghost Shot | off / `M` / 700 |
+| `_botAutoPlayClearKey` | Clear solo Auto Play | `;` |
+| `_botRandomWeapon` | Random primary weapon | off |
+| `_botRandomNameOnDeath` | New random name on every death | off |
+| `_botRiverPlatform` | Build platforms in the river | off |
 
 `_shieldGuard` and `_autoJoinGuard` were already being read by the code; the
 rest are new.
