@@ -6,6 +6,11 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+> **Working on the bots?** That is a different script. `Ryn_Type_2.user.js`
+> (`! Ryn Type 2` v5.4) is the base with the bot squad in it, and the bot fixes
+> and features are documented in [BOTS.md](BOTS.md). Nothing in this README
+> applies to it.
+
 ---
 
 ## Why RYN is the base
@@ -117,6 +122,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        separate base carrying the bot squad — see BOTS.md
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
