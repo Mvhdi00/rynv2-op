@@ -468,10 +468,50 @@ sequence, a spike push still closing.
 `_survivalEngine` off restores the previous Auto Heal path exactly, including
 its own in-flight accounting.
 
+### Projectile sidestep
+
+`_microEvasion`. One sideways walk out of an incoming arrow, bullet or turret
+shot — every projectile type, not a list of weapons.
+
+**The shape is the whole thing.** `game_index.js:3106` tests a projectile
+against a player with
+
+```js
+lineInRect(l.x - l.scale, l.y - l.scale, l.x + l.scale, l.y + l.scale,
+           this.x, this.y, this.x + g*cos(dir), this.y + g*sin(dir))
+```
+
+— an axis-aligned **square** of half-side 35 swept against the shot's segment,
+not a circle. The corner of that square is 35√2 ≈ 49.5 from the centre, so a
+shot passing 40 units off-centre still hits. A dodge computed against a circle
+calls that a miss and stands still. `GeometrySolver.boxCrossesSegment` is the
+client's own model of the same test, already written for the placement path.
+
+**A dodge is a walk, not a step.** A player is 70 across and one tick of
+walking covers about 36 units, so a single sidestep out of a shot aimed at your
+centre ends up still inside the box. What makes it work is flight time: at 1.6
+units/ms a 500-unit arrow is three ticks away, and the walk is projected over
+the ticks that remain after the round trip is deducted.
+
+A candidate direction is taken only when all of this holds:
+
+- ground covered **in the direction asked for** clears a floor — a wall does
+  not merely stop the walk, it pushes back along its own normal, which is
+  displacement without progress and would otherwise read as success;
+- the client's own `MovementSimulation` reports no spike contact and no trap
+  `lockMove` over the whole walk;
+- the end position clears **every** shot in the air, not the one aimed at;
+- it does not enter melee reach we are currently outside of.
+
+Otherwise nothing moves and the healing and gear layers handle it. Shots a wall
+will eat (`game_index.js:3113`) are not dodged at all. Movement is published on
+`ModuleHandler.moveTo` — the channel `AutoPush` already writes and `SafeWalk`
+already acts on — and handed back to the player the moment nothing is incoming.
+
 ```sh
 node tools/build-ryn-type2.js
 node tools/test-ryn-type2.js     # 123 passed
-node tools/test-survival.js      # 132 passed
+node tools/test-survival.js      # 172 passed
 node --check Ryn_Type_2_TargetLock.user.js
 ```
 

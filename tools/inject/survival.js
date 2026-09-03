@@ -533,6 +533,261 @@
    * shame it is clearing. */
   const SV_BULL_MIN_HP = 55;
 
+  // ── Evasion ───────────────────────────────────────────────────────────────
+  //
+  // The smallest sidestep that takes every incoming shot off us, and nothing
+  // when there is no such step.
+  //
+  // The shape matters more than anything else here. game_index.js:3106 tests a
+  // projectile against a player with
+  //
+  //     lineInRect(l.x - l.scale, l.y - l.scale, l.x + l.scale, l.y + l.scale,
+  //                this.x, this.y, this.x + g*cos(dir), this.y + g*sin(dir))
+  //
+  // — an axis-aligned SQUARE of half-side player.scale swept against the
+  // projectile's segment, not a circle. A dodge computed against a circle
+  // steps out of a shape the server is not using: it clears the circle and
+  // stays inside the corner of the square. GeometrySolver.boxCrossesSegment is
+  // the client's own model of that same test, already written for the placement
+  // path, so the evasion asks the question in the shape the server answers it
+  // in.
+  //
+  // Everything else follows from three limits the brief sets: the step is small
+  // (one tick, perpendicular), it is reversible (movement goes back the moment
+  // nothing is incoming), and it does not happen at all when the ground is not
+  // clear.
+  const SV_EVADE_COST = 2;
+  /* One tick of walking from a standing start is about 20 units
+   * (playerSpeed 0.0016/ms over a 111ms tick, twice). Anything under a third of
+   * that means the simulation put us straight back where we started, which is
+   * what a wall does. */
+  const SV_EVADE_MIN_STEP = 7;
+  /* How far past the last shot the sidestep is held, so a volley arriving one
+   * tick apart is not answered with a move, a release and another move. */
+  const SV_EVADE_HOLD = 2;
+  /* Steady walking speed, from the game's own numbers: playerSpeed 0.0016 per
+   * ms accelerates the player each tick and playerDecel 0.993 per ms takes it
+   * back, so velocity settles at accel / (1 - decay^tick). About 0.33 units per
+   * ms, or 36 a tick. */
+  const SV_WALK_VEL = Config_default.playerSpeed * RPE_TICK_MS / (1 - Math.pow(Config_default.playerDecel, RPE_TICK_MS));
+  /* A shot further out than this is not worth projecting a walk over — the
+   * enemy will have moved and re-aimed long before it lands. */
+  const SV_EVADE_MAX_TICKS = 5;
+
+  class ProjectileEvasion {
+    client;
+    active = false;
+    angle = null;
+    holdUntil = -1;
+    reason = "idle";
+    incoming = [];
+    _sim = null;
+    _tick = -1;
+    constructor(client2) {
+      this.client = client2;
+    }
+    scale() {
+      const p = this.client.myPlayer;
+      return p && p.collisionScale ? p.collisionScale : 35;
+    }
+    /* The segment the shot will travel over what is left of its range. */
+    _segment(proj) {
+      const from = proj.pos.current;
+      const reach = Number.isFinite(proj.range) && proj.range > 0 ? proj.range : proj.maxRange || 1200;
+      return [ from.x, from.y, from.x + reach * Math.cos(proj.angle), from.y + reach * Math.sin(proj.angle) ];
+    }
+    /* Would this shot cross a player standing at (px, py)? The game's shape,
+     * not a circle. */
+    wouldHit(proj, px, py) {
+      const s = this._segment(proj);
+      return GeometrySolver.boxCrossesSegment(px, py, this.scale(), s[0], s[1], s[2], s[3]);
+    }
+    /* Cover between us and the shot. game_index.js:3113 stops a projectile on
+     * the first object with `layer >= projectile layer` that is not
+     * ignoreCollision, and it uses the same box test. A shot a wall is going to
+     * eat is not a threat, and dodging it is the false positive §31 forbids.
+     *
+     * Only the ground immediately around us is checked — one grid cell — which
+     * is the case that actually comes up, cover you are standing behind. A wall
+     * halfway down a 1000-unit flight is not searched for, and the shot is
+     * treated as live. */
+    shielded(proj) {
+      const {ObjectManager: ObjectManager2, myPlayer: myPlayer} = this.client;
+      if (!ObjectManager2 || !ObjectManager2.grid2D) return false;
+      const s = this._segment(proj);
+      const me = myPlayer.pos.current;
+      const layer = Projectiles[proj.type] ? Projectiles[proj.type].layer : 0;
+      let blocked = false;
+      ObjectManager2.grid2D.query(me.x, me.y, 1, id => {
+        if (blocked) return true;
+        const obj = ObjectManager2.objects.get(id);
+        if (!obj || !obj.pos || !obj.pos.current) return false;
+        if (obj.canMoveOnTop && obj.canMoveOnTop()) return false;
+        if (layer > (obj.layer === undefined ? 0 : obj.layer)) return false;
+        const p = obj.pos.current;
+        const r = obj.collisionScale === undefined ? obj.scale : obj.collisionScale;
+        /* It only shields us if it is hit BEFORE we are. */
+        if (!GeometrySolver.boxCrossesSegment(p.x, p.y, r, s[0], s[1], s[2], s[3])) return false;
+        const dObj = Math.hypot(p.x - s[0], p.y - s[1]);
+        const dMe = Math.hypot(me.x - s[0], me.y - s[1]);
+        if (dObj < dMe) blocked = true;
+        return blocked;
+      });
+      return blocked;
+    }
+    msToImpact(proj) {
+      const me = this.client.myPlayer.pos.current;
+      const from = proj.pos.current;
+      const d = Math.hypot(me.x - from.x, me.y - from.y) - this.scale();
+      const speed = proj.speed > 0 ? proj.speed : 1.5;
+      return d <= 0 ? 0 : d / speed;
+    }
+    /* Where walking in this direction for `ticks` ticks actually puts us, with
+     * the client's own collision model deciding each one.
+     *
+     * One tick is not a dodge. A player is 35 across, so the box the server
+     * sweeps is 70 wide, and a single tick of walking moves about 36 units —
+     * a sidestep aimed at the centre of that box ends up still inside it. What
+     * makes a dodge work is that the arrow takes time to arrive: at 1.6 units
+     * per ms a 500-unit flight is three ticks, and three ticks of walking is
+     * clear. So the step is projected over the flight, not over one tick.
+     *
+     * The simulation accelerates from ModuleHandler.move_dir rather than from an
+     * argument, so the candidate direction is seeded as velocity at the speed
+     * steady walking actually reaches — acceleration per tick against the
+     * game's own decay — and each tick is run without further acceleration.
+     * That also makes the answer independent of whether we happened to be
+     * moving already, which matters: a standing player has myPlayer.speed 0 and
+     * would otherwise be judged unable to move at all. */
+    walk(dir, ticks) {
+      const {myPlayer: myPlayer} = this.client;
+      if (this._sim === null) this._sim = new MovementSimulation;
+      const sim = this._sim;
+      sim.reset(this.client, null);
+      const from = myPlayer.pos.current;
+      const startX = from.x, startY = from.y;
+      const cos = Math.cos(dir), sin = Math.sin(dir);
+      let spike = false, trapped = false;
+      const n = ticks < 1 ? 1 : ticks > SV_EVADE_MAX_TICKS ? SV_EVADE_MAX_TICKS : ticks;
+      for (let i = 0; i < n; i++) {
+        sim.xVel = cos * SV_WALK_VEL;
+        sim.yVel = sin * SV_WALK_VEL;
+        sim.update(this.client, true);
+        if (sim.spikeCollision) spike = true;
+        if (sim.lockMove) trapped = true;
+      }
+      const dx = sim.x - startX, dy = sim.y - startY;
+      return {
+        x: sim.x,
+        y: sim.y,
+        moved: Math.hypot(dx, dy),
+        /* Ground covered in the direction actually asked for. Distance alone is
+         * not the test: a wall we walk into pushes us back out along its own
+         * normal, which is displacement without progress, and would read as a
+         * successful step. The projection reads it as what it is. */
+        along: dx * cos + dy * sin,
+        spike: spike,
+        trapped: trapped
+      };
+    }
+    /* One decision a tick. Returns the heading to sidestep on, or null. */
+    decide(tick, budget, reactionMs) {
+      if (this._tick === tick) return this.active ? this.angle : null;
+      this._tick = tick;
+      const {myPlayer: myPlayer, ProjectileManager: PM, EnemyManager: EnemyManager2} = this.client;
+      this.incoming.length = 0;
+      if (!Settings_default._microEvasion || !myPlayer || !myPlayer.inGame || !PM) {
+        return this._release("off");
+      }
+      const me = myPlayer.pos.current;
+      /* ProjectileManager already keeps the enemy shots pointed our way; this
+       * narrows that cone filter to the game's actual box test, and drops the
+       * ones cover is going to eat. */
+      for (const proj of PM.dangerProjectiles) {
+        if (!proj || !proj.pos || !proj.pos.current) continue;
+        if (!this.wouldHit(proj, me.x, me.y)) continue;
+        if (this.shielded(proj)) continue;
+        this.incoming.push(proj);
+      }
+      if (this.incoming.length === 0) {
+        /* Held briefly so a volley one tick apart is not answered with a move,
+         * a release and another move. */
+        if (this.active && tick <= this.holdUntil) return this.angle;
+        return this._release("nothing incoming");
+      }
+      /* Can a step even land before the first one arrives? Under the round trip
+       * it cannot, and moving then only makes us a moving target for the next
+       * shot. §33 — when the answer is no, do nothing rather than something. */
+      let soonest = Infinity;
+      for (const proj of this.incoming) soonest = Math.min(soonest, this.msToImpact(proj));
+      if (soonest < reactionMs) return this._release("no time to move");
+      if (!budget.canAfford(SV_EVADE_COST, SV_THREAT.PROJECTILE)) return this._release("no packet budget");
+
+      /* Two candidates, both perpendicular to the shot. Perpendicular is the
+       * shortest way out of a line, which is the whole of "smallest practical
+       * movement". */
+      const lead = this.incoming[0].angle;
+      const options = [ lead + Math.PI / 2, lead - Math.PI / 2 ];
+      /* Walk for as long as the shot takes to arrive, less the round trip we
+       * have already lost. That is the ground we actually get to cover. */
+      const ticks = Math.max(1, Math.floor((soonest - reactionMs) / RPE_TICK_MS));
+      let best = null;
+      for (const dir of options) {
+        const to = this.walk(dir, ticks);
+        /* The ground has to be clear. A wall stops the step dead — and worse,
+         * pushes back along its own normal, which is movement without progress
+         * — so the test is ground covered in the direction asked for. */
+        if (to.along < SV_EVADE_MIN_STEP) continue;
+        /* Never into a spike or an enemy trap — the two things that make a
+         * dodge worse than the shot. */
+        if (to.spike || to.trapped) continue;
+        /* And it has to actually work, against every shot in the air rather
+         * than the one we aimed at. */
+        let clear = true;
+        for (const proj of this.incoming) {
+          if (this.wouldHit(proj, to.x, to.y)) {
+            clear = false;
+            break;
+          }
+        }
+        if (!clear) continue;
+        /* Not into melee reach we are currently outside of. */
+        const enemy = EnemyManager2 ? EnemyManager2.nearestEnemy : null;
+        if (enemy && enemy.pos && enemy.pos.current) {
+          const ep = enemy.pos.current;
+          const now = Math.hypot(me.x - ep.x, me.y - ep.y);
+          const after = Math.hypot(to.x - ep.x, to.y - ep.y);
+          if (after < SV_MELEE_KEEPOUT && after < now) continue;
+        }
+        /* Of the ones that work, the one that gets furthest out of the line. */
+        const margin = to.along;
+        if (best === null || margin > best.margin) best = { dir: dir, margin: margin };
+      }
+      if (best === null) {
+        /* §10 — if it cannot be dodged safely, protection and healing are the
+         * answer, and those are already running. */
+        return this._release("no safe step");
+      }
+      this.active = true;
+      this.angle = best.dir;
+      this.holdUntil = tick + SV_EVADE_HOLD;
+      this.reason = this.incoming.length + " incoming, stepping " + (best.dir === options[0] ? "left" : "right");
+      return this.angle;
+    }
+    _release(why) {
+      if (this.active) {
+        this.active = false;
+        this.angle = null;
+        this.holdUntil = -1;
+      }
+      this.reason = why;
+      return null;
+    }
+  }
+  /* Longest melee reach in the game is the polearm's; stepping inside it to
+   * dodge an arrow trades one threat for a worse one. */
+  const SV_MELEE_KEEPOUT = 160;
+
   // ── The layer ─────────────────────────────────────────────────────────────
   class SurvivalEngine {
     moduleName = "survival";
@@ -541,6 +796,7 @@
     budget;
     threats;
     defence;
+    evasion;
     /* Read by the client's own Safe Soldier resolution after the module loop.
      * A request, not a write: that block owns the hat. */
     wantSoldier = false;
@@ -551,6 +807,7 @@
      * ModuleHandler.heal, so counting here counts all of them, not just the
      * ones AntiInsta asked for. */
     _sent = null;
+    _wasDodging = false;
     /* What the heal path is allowed to do this tick, decided once here and
      * read by AntiInsta and by ModuleHandler.heal rather than re-derived. */
     plan = {
@@ -566,6 +823,7 @@
       this.budget = new PacketBudget(client2);
       this.threats = new ThreatEngine(client2);
       this.defence = new DefenceState(client2);
+      this.evasion = new ProjectileEvasion(client2);
     }
     reset() {
       this.budget.reservations.length = 0;
@@ -630,6 +888,20 @@
         ModuleHandler.moduleActive = true;
         ModuleHandler.forceHat = SV_BULL;
       }
+
+      /* The sidestep. moveTo is the client's existing "a module wants to move
+       * me" channel — AutoPush already uses it and SafeWalk already acts on the
+       * transition — so this adds a writer, not a movement system. Handing it
+       * back to "disable" is what makes the step reversible: the player's own
+       * input takes over again on the tick after the last shot. */
+      const dodge = this.evasion.decide(tick, this.budget, this.threats.reactionMs());
+      if (dodge !== null) {
+        ModuleHandler.moduleActive = true;
+        ModuleHandler.moveTo = dodge;
+      } else if (this._wasDodging) {
+        ModuleHandler.moveTo = "disable";
+      }
+      this._wasDodging = dodge !== null;
 
       const foodID = myPlayer.getItemByType(2);
       const food = foodID === null || foodID === undefined ? null : Items[foodID];

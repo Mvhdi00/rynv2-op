@@ -1105,6 +1105,14 @@ patchPage(
                 <span class="option-description">Lets the threat layer ask for Soldier against things Safe Soldier cannot see - a turret stack, a ranged sequence, a spike push still closing. Safe Soldier keeps the proximity case.</span>\r
             </div>\r
             <div class="content-option">\r
+                <label class="option-title" for="_microEvasion">Projectile Sidestep</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_microEvasion" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">One tick sideways out of an incoming arrow, bullet or turret shot, using the square hitbox the server actually tests. Only when the step is clear of buildings, spikes and traps, clears every shot in the air, and there is time to make it. Movement returns to you the moment nothing is incoming.</span>\r
+            </div>\r
+            <div class="content-option">\r
                 <label class="option-title" for="_trapGapFill">Trap Gap Fill</label>\r
                 <label class="switch-checkbox">\r
                     <input id="_trapGapFill" type="checkbox"></input>\r
@@ -1139,6 +1147,7 @@ edit(
   `    _targetLock: true,`,
   `    _survivalEngine: true,
     _survivalSoldier: true,
+    _microEvasion: true,
     _targetLock: true,`
 );
 

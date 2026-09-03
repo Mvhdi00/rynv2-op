@@ -27,6 +27,14 @@ function slice(from, to, label) {
 }
 
 const survivalSrc = slice("  // SURVIVAL LAYER", "  class AntiInsta {", "survival layer");
+/* The evasion leans on three things the client already had. They are sliced in
+ * rather than re-implemented, because a stub of MovementSimulation would make
+ * "a wall stops the step" a test of the stub. */
+const vectorSrc = slice("class Vector {", "  const Vector_default = Vector;", "Vector");
+const geometrySrc = slice("  const GeometrySolver = {", "\n  class PlacementLedger {", "GeometrySolver");
+const rpeConstSrc = slice("  const RPE_TICK_MS", "  const RPE_PRIORITY = {", "RPE constants");
+const simSrc = slice("  class MovementSimulation {", "  class ClientPlayer", "MovementSimulation");
+const projTableSrc = slice("  const Projectiles = [ {", "\n  class Vector {", "Projectiles");
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => {
@@ -37,27 +45,55 @@ const ok = (name, cond, extra) => {
 console.log("client : " + path.relative(ROOT, CLIENT));
 
 /* ---------------------------------------------------------------- scaffold */
-const Settings_default = { _autoheal: true, _survivalEngine: true, _survivalSoldier: true };
+const Settings_default = { _autoheal: true, _survivalEngine: true, _survivalSoldier: true, _microEvasion: true, _safeWalk: false };
 /* Only the fields the layer reads. Values are the shipped ones:
  * game_index.js:2756 soldier dmgMult .75, :2794 bull healthRegen -5. */
-const Hats = { 6: { dmgMult: 0.75, spdMult: 0.94 }, 7: { healthRegen: -5, dmgMultO: 1.5 } };
+const Hats = { 0: {}, 6: { dmgMult: 0.75, spdMult: 0.94 }, 7: { healthRegen: -5, dmgMultO: 1.5 } };
 const Items = [];
 Items[0] = { restore: 20 };            // apple, game_index.js item 0
 const ANTI_INSTA_DMG_CAP = 140;
 const ANTI_INSTA_SCUBA_BIAS = 5;
 const RPE_TICK_MS = 1000 / 9;
 
+/* Environment MovementSimulation reads. Values are the shipped ones:
+ * game_index.js:130-208 for the config scalars. */
+const Config_default = {
+  playerSpeed: 0.0016, playerDecel: 0.993, mapScale: 14400, riverWidth: 724,
+  snowBiomeTop: 2400, snowSpeed: 0.75, waterCurrent: 0.0011
+};
+const Accessories = { 0: {} };
+const DataHandler_default = { getWeapon: () => ({ spdMult: 1, range: 70 }) };
+class Player_default {}
+class Resource {}
+class PlayerObject {}
+
 const build = new Function(
-  "Settings_default", "Hats", "Items", "ANTI_INSTA_DMG_CAP", "ANTI_INSTA_SCUBA_BIAS", "RPE_TICK_MS",
-  `${survivalSrc}
-   return { ShameEngine, PacketBudget, ThreatEngine, DefenceState, SurvivalEngine,
+  "Settings_default", "Hats", "Items", "Accessories", "Config_default", "DataHandler_default",
+  "Player_default", "Resource", "PlayerObject",
+  "ANTI_INSTA_DMG_CAP", "ANTI_INSTA_SCUBA_BIAS",
+  `${vectorSrc}
+   const Vector_default = Vector;
+   const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+   const getDistance = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+   const getAngle = (x1, y1, x2, y2) => Math.atan2(y2 - y1, x2 - x1);
+   ${rpeConstSrc}
+   ${geometrySrc}
+   ${simSrc}
+   ${projTableSrc}
+   ${survivalSrc}
+   return { ShameEngine, PacketBudget, ThreatEngine, DefenceState, ProjectileEvasion, SurvivalEngine,
+            MovementSimulation, GeometrySolver, Projectiles,
             SV_SHAME_WINDOW, SV_SHAME_BAN_AT, SV_SHAME_PAD, SV_HEAL_COST,
-            SV_SOLDIER, SV_BULL, SV_TURRET_TYPE, SV_TURRET_RANGE, SV_TURRET_DMG, SV_THREAT };`
+            SV_SOLDIER, SV_BULL, SV_TURRET_TYPE, SV_TURRET_RANGE, SV_TURRET_DMG,
+            SV_EVADE_COST, SV_EVADE_MIN_STEP, SV_MELEE_KEEPOUT, SV_THREAT, RPE_TICK_MS };`
 );
-const S = build(Settings_default, Hats, Items, ANTI_INSTA_DMG_CAP, ANTI_INSTA_SCUBA_BIAS, RPE_TICK_MS);
-const { ShameEngine, PacketBudget, ThreatEngine, DefenceState, SurvivalEngine,
+const S = build(Settings_default, Hats, Items, Accessories, Config_default, DataHandler_default,
+                Player_default, Resource, PlayerObject,
+                ANTI_INSTA_DMG_CAP, ANTI_INSTA_SCUBA_BIAS);
+const { ShameEngine, PacketBudget, ThreatEngine, DefenceState, ProjectileEvasion, SurvivalEngine,
+        GeometrySolver, Projectiles,
         SV_SHAME_WINDOW, SV_SHAME_BAN_AT, SV_SHAME_PAD, SV_HEAL_COST,
-        SV_SOLDIER, SV_BULL, SV_TURRET_DMG, SV_THREAT } = S;
+        SV_SOLDIER, SV_BULL, SV_TURRET_DMG, SV_EVADE_MIN_STEP, SV_MELEE_KEEPOUT, SV_THREAT } = S;
 
 function mkWorld(opts = {}) {
   const objects = opts.objects || [];
@@ -119,6 +155,84 @@ const turret = (id, x, y, ownerID) => ({
   id, type: 17, ownerID,
   pos: { current: { x, y, distance(v) { return Math.hypot(this.x - v.x, this.y - v.y); } } }
 });
+
+/* ----------------------------------------------------- evasion scaffolding */
+/* Fixtures are written around a local origin and placed in open ground. At the
+ * literal map origin MovementSimulation clamps every step to the corner
+ * (game_index.js:2375-2376), so a dodge there is untestable and unrealistic. */
+/* Away from the map edges, above the snow biome (snowBiomeTop 2400) and clear
+ * of the river band (mapScale/2 +- riverWidth/2, so 6838..7562) — none of which
+ * is what these tests are about. */
+const O = 4000;
+const abs = (x, y) => ({
+  x, y,
+  distance(v) { return Math.hypot(this.x - v.x, this.y - v.y); },
+  copy() { return abs(this.x, this.y); }
+});
+const vec = (x, y) => abs(x + O, y + O);
+/* A shot on the wire: position, heading, remaining range, speed, type.
+ * Projectiles[type] supplies scale and layer, from the client's own table. */
+const mkArrow = ({ x, y, angle, type = 0, range = 1000, speed = 1.6 }) => ({
+  id: mkArrow.n = (mkArrow.n || 0) + 1,
+  pos: { current: vec(x, y) },
+  angle, range, speed, type,
+  maxRange: range,
+  scale: Projectiles[type].scale,
+  damage: Projectiles[type].damage,
+  ownerClient: { id: 2 }
+});
+const mirror = (o, x, y) => {
+  const c = Object.assign(Object.create(Object.getPrototypeOf(o)), o);
+  c.id = o.id + 100;
+  c.pos = { current: vec(x, y) };
+  return c;
+};
+/* The player sits at the origin; objects are placed around them. Instances of
+ * the stub PlayerObject so MovementSimulation's instanceof checks behave. */
+function mkProj(opts = {}) {
+  const objects = (opts.objects || []).map(o => Object.assign(new PlayerObject(), o));
+  const projectiles = opts.projectiles || [];
+  const myPlayer = {
+    inGame: true, isSandbox: false, tempHealth: 100, maxHealth: 100, hatID: 0,
+    shameCount: 0, shameActive: false, poisonCount: 0, isTrapped: false,
+    receivedDamage: null, collisionScale: 35, scale: 35, speed: 0, onPlatform: false,
+    pos: { current: vec(0, 0) },
+    getItemByType: t => (t === 2 ? 0 : 1),
+    isBullTickTime: () => true,
+    isEnemyByID: () => true
+  };
+  const enemy = opts.enemyAt
+    ? Object.assign(new Player_default(), { pos: { current: vec(opts.enemyAt.x, opts.enemyAt.y) }, collisionScale: 35, scale: 35 })
+    : null;
+  const ModuleHandler = {
+    tickCount: opts.tick || 0,
+    packetLimit: opts.limit === undefined ? 119 : opts.limit,
+    packetCount: opts.used || 0,
+    forceHat: null, activeModule: null, moduleActive: false,
+    move_dir: null, moveTo: "disable",
+    canBuy: () => true,
+    staticModules: { autoHat: { getNextHat: () => 0, getNextAcc: () => 0, getNextWeaponID: () => 0, getNextItemID: () => -1 } }
+  };
+  const client = {
+    myPlayer, ModuleHandler, _ModuleHandler: ModuleHandler,
+    SocketManager: { pong: opts.pong || 0, TICK: 1000 / 9 },
+    PlayerManager: { isEnemyByID: ownerID => ownerID !== 1 },
+    ProjectileManager: { dangerProjectiles: new Set(projectiles) },
+    ObjectManager: {
+      objects: new Map(objects.map(o => [o.id, o])),
+      grid2D: { cellSize: 100, query: (x, y, r, cb) => { for (const o of objects) if (cb(o.id) === true) return true; return false; } }
+    },
+    EnemyManager: Object.assign({
+      potentialDamage: 0, potentialSpikeDamage: 0, potentialSpikeKnockbackDamage: 0,
+      possibleToKnockback: false, reverseInsta: false, toolHammerInsta: false,
+      rangedBowInsta: false, spikeSyncThreat: false, collidingSpike: false,
+      willCollideSpike: false, enemyCanPlaceSpike: false, nearestEnemy: enemy
+    }, opts.enemy || {})
+  };
+  const survival = new SurvivalEngine(client);
+  ModuleHandler.staticModules.survival = survival;
+  return { client, myPlayer, ModuleHandler, survival };
+}
 
 /* =============================================================== the rule */
 console.log("\nShame rule — the window is measured on the server, so ping is added");
@@ -567,6 +681,190 @@ console.log("\nPlan — food already on the wire is not paid for twice");
   lost.ModuleHandler.tickCount = 1;
   ok("still counted one tick later", lost.survival.inFlight(1, 40) === 1);
   ok("but given up on past the round trip", lost.survival.inFlight(9, 40) === 0);
+}
+
+/* ================================================================ evasion */
+console.log("\nEvasion — the hitbox is the square the server tests, not a circle");
+{
+  const w = mkProj({});
+  const ev = w.survival.evasion;
+  /* game_index.js:3106 sweeps the projectile segment against
+   * lineInRect(l.x - l.scale, ..., l.x + l.scale, ...) — an axis-aligned square
+   * of half-side 35, not a circle of radius 35. The corner of that square is
+   * 35*sqrt(2) ≈ 49.5 from the centre, so a shot passing 40 units to the side
+   * still hits, and a dodge computed against a circle would stop short. */
+  /* A diagonal shot whose closest approach to the player's centre is 40 units:
+   * outside a circle of radius 35, but it clips the corner of the square, which
+   * reaches 35*sqrt(2) ~ 49.5. A dodge computed against a circle would call
+   * this a miss and stand still. */
+  const off = 40, k = Math.SQRT1_2;
+  const through = { x: -off * k, y: off * k };          // 40 along the normal
+  const diag = mkArrow({ x: through.x - 500 * k, y: through.y - 500 * k, angle: Math.PI / 4, range: 1000 });
+  const perp = Math.abs((O - diag.pos.current.x) * Math.sin(diag.angle) - (O - diag.pos.current.y) * Math.cos(diag.angle));
+  ok("the fixture really does pass 40 units from centre", Math.abs(perp - 40) < 1e-6, perp.toFixed(3));
+  ok("40 is outside a circle of the player's radius", 40 > 35);
+  ok("but it clips the corner of the square the server tests",
+     ev.wouldHit(diag, O, O) === true);
+
+  const shot = mkArrow({ x: -500, y: 20, angle: 0 });
+  ok("a straight shot 20 units off-centre hits", ev.wouldHit(shot, O, O) === true);
+  ok("one 80 units off does not", ev.wouldHit(mkArrow({ x: -500, y: 80, angle: 0 }), O, O) === false);
+  ok("dead centre hits", ev.wouldHit(mkArrow({ x: -500, y: 0, angle: 0 }), O, O) === true);
+  ok("a shot already past us does not", ev.wouldHit(mkArrow({ x: 500, y: 0, angle: 0 }), O, O) === false);
+  ok("nor one aimed elsewhere", ev.wouldHit(mkArrow({ x: -500, y: 0, angle: Math.PI / 2 }), O, O) === false);
+  ok("and moving out of the square clears it", ev.wouldHit(shot, O, O + 200) === false);
+}
+
+console.log("\nEvasion — it steps, and only perpendicular");
+{
+  const w = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ] });
+  const dir = w.survival.evasion.decide(1, w.survival.budget, 120);
+  ok("an incoming arrow gets a sidestep", dir !== null, w.survival.evasion.reason);
+  ok("perpendicular to the shot, not away from it",
+     dir !== null && Math.abs(Math.abs(dir) - Math.PI / 2) < 1e-9, String(dir));
+  ok("and it says why", w.survival.evasion.reason.indexOf("incoming") !== -1, w.survival.evasion.reason);
+  ok("the step actually clears the shot",
+     (() => {
+       const to = w.survival.evasion.walk(dir, 3);
+       return !w.survival.evasion.wouldHit(w.survival.evasion.incoming[0], to.x, to.y);
+     })());
+}
+
+console.log("\nEvasion — every shot type the brief names");
+{
+  /* Projectiles[0] bow, [2] crossbow, [3] repeater, [5] musket, [1] and [4]
+   * the turret ones. All are dodged; none is special-cased. */
+  for (const [label, type] of [["hunting bow", 0], ["crossbow", 2], ["repeater crossbow", 3], ["musket", 5], ["turret", 1], ["turret gear", 4]]) {
+    const w = mkProj({ projectiles: [ mkArrow({ x: -600, y: 0, angle: 0, type }) ] });
+    ok(label + " is dodged", w.survival.evasion.decide(1, w.survival.budget, 120) !== null,
+       w.survival.evasion.reason);
+  }
+}
+
+console.log("\nEvasion — nothing around, or nothing happens");
+{
+  /* The user's condition: only when the ground is clear. The step is judged by
+   * the client's own MovementSimulation, so a wall is not a special case — it
+   * simply stops the step, and a step that did not move is refused. */
+  const wall = { id: 9, type: 3, ownerID: 2, layer: 0, scale: 50, collisionScale: 50,
+                 canMoveOnTop: () => false, isSpike: false,
+                 pos: { current: vec(0, 70) } };
+
+  const blocked = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ], objects: [wall, mirror(wall, 0, -70)] });
+  ok("walls on both sides mean no step is taken at all",
+     blocked.survival.evasion.decide(1, blocked.survival.budget, 120) === null,
+     blocked.survival.evasion.reason);
+  ok("and it says the ground was not clear",
+     blocked.survival.evasion.reason === "no safe step", blocked.survival.evasion.reason);
+
+  const oneSide = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ], objects: [wall] });
+  const dir = oneSide.survival.evasion.decide(1, oneSide.survival.budget, 120);
+  ok("a wall on one side leaves the other", dir !== null, oneSide.survival.evasion.reason);
+  ok("and the step goes away from the wall", dir !== null && Math.sin(dir) < 0, String(dir));
+}
+
+console.log("\nEvasion — never into something worse");
+{
+  const spike = { id: 8, type: 6, ownerID: 2, layer: 0, scale: 50, collisionScale: 50, isSpike: true,
+                  canMoveOnTop: () => false,
+                  pos: { current: vec(0, 60) } };
+  const w = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ], objects: [spike, mirror(spike, 0, -60)] });
+  ok("spikes on both sides mean the shot is taken instead",
+     w.survival.evasion.decide(1, w.survival.budget, 120) === null, w.survival.evasion.reason);
+
+  const trap = { id: 7, type: 15, ownerID: 2, layer: -1, scale: 45, collisionScale: 45, isSpike: false,
+                 canMoveOnTop: () => true,
+                 pos: { current: vec(0, 55) } };
+  const t = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ], objects: [trap, mirror(trap, 0, -55)] });
+  ok("enemy traps on both sides likewise",
+     t.survival.evasion.decide(1, t.survival.budget, 120) === null, t.survival.evasion.reason);
+
+  /* Stepping inside a polearm's reach to dodge an arrow trades one threat for
+   * a worse one. */
+  const melee = mkProj({
+    projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ],
+    enemyAt: { x: 0, y: 120 }
+  });
+  const d = melee.survival.evasion.decide(1, melee.survival.budget, 120);
+  ok("and it never steps into melee reach it was outside of",
+     d === null || Math.sin(d) < 0, String(d));
+}
+
+console.log("\nEvasion — no false positives");
+{
+  const none = mkProj({ projectiles: [] });
+  ok("no shots, no movement", none.survival.evasion.decide(1, none.survival.budget, 120) === null);
+  ok("and it says so", none.survival.evasion.reason === "nothing incoming");
+
+  const miss = mkProj({ projectiles: [ mkArrow({ x: -500, y: 300, angle: 0 }) ] });
+  ok("a shot that will miss is not dodged",
+     miss.survival.evasion.decide(1, miss.survival.budget, 120) === null, miss.survival.evasion.reason);
+
+  /* Cover between us and the shot: game_index.js:3113 stops the projectile on
+   * the first blocking object, so the shot was never going to land. */
+  const cover = { id: 6, type: 4, ownerID: 1, layer: 0, scale: 50, collisionScale: 50, isSpike: false,
+                  canMoveOnTop: () => false,
+                  pos: { current: vec(-60, 0) } };
+  const behind = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ], objects: [cover] });
+  ok("a shot a wall will eat is not dodged",
+     behind.survival.evasion.decide(1, behind.survival.budget, 120) === null, behind.survival.evasion.reason);
+
+  const late = mkProj({ projectiles: [ mkArrow({ x: -60, y: 0, angle: 0 }) ] });
+  ok("a shot arriving sooner than we can move is not chased",
+     late.survival.evasion.decide(1, late.survival.budget, 400) === null, late.survival.evasion.reason);
+  ok("and it says there was no time", late.survival.evasion.reason === "no time to move");
+
+  const off = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ] });
+  Settings_default._microEvasion = false;
+  ok("the toggle turns it off", off.survival.evasion.decide(1, off.survival.budget, 120) === null);
+  Settings_default._microEvasion = true;
+}
+
+console.log("\nEvasion — reversible, budgeted, and it clears every shot at once");
+{
+  /* Two shots crossing: a step that clears one and walks into the other is not
+   * a dodge. */
+  const cross = mkProj({ projectiles: [
+    mkArrow({ x: -500, y: 0, angle: 0 }),
+    mkArrow({ x: 0, y: -500, angle: Math.PI / 2 })
+  ] });
+  const d = cross.survival.evasion.decide(1, cross.survival.budget, 120);
+  ok("a step is only taken if it clears both",
+     d === null || cross.survival.evasion.incoming.every(p => {
+       const to = cross.survival.evasion.walk(d, 3);
+       return !cross.survival.evasion.wouldHit(p, to.x, to.y);
+     }), String(d));
+
+  const w = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ] });
+  w.survival.evasion.decide(1, w.survival.budget, 120);
+  ok("it is active while the shot is in the air", w.survival.evasion.active === true);
+  w.client.ProjectileManager.dangerProjectiles = new Set();
+  w.survival.evasion.decide(5, w.survival.budget, 120);
+  ok("and released once nothing is incoming", w.survival.evasion.active === false);
+  ok("held for a tick or two first, so a volley is one move not three",
+     (() => {
+       const v = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ] });
+       v.survival.evasion.decide(1, v.survival.budget, 120);
+       v.client.ProjectileManager.dangerProjectiles = new Set();
+       return v.survival.evasion.decide(2, v.survival.budget, 120) !== null;
+     })());
+
+  const broke = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ], limit: 10, used: 9 });
+  ok("no packets, no step",
+     broke.survival.evasion.decide(1, broke.survival.budget, 120) === null, broke.survival.evasion.reason);
+}
+
+console.log("\nEvasion — it drives the client's own movement channel");
+{
+  const w = mkProj({ projectiles: [ mkArrow({ x: -500, y: 0, angle: 0 }) ] });
+  w.survival.postTick();
+  ok("the step is published on moveTo, the channel AutoPush already uses",
+     typeof w.ModuleHandler.moveTo === "number", String(w.ModuleHandler.moveTo));
+  w.client.ProjectileManager.dangerProjectiles = new Set();
+  w.ModuleHandler.tickCount = 6;
+  w.survival.postTick();
+  ok("and handed back to the player when it is over",
+     w.ModuleHandler.moveTo === "disable", String(w.ModuleHandler.moveTo));
 }
 
 /* ============================================================== scenarios */
