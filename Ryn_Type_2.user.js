@@ -1673,7 +1673,7 @@ window.grbtp = 35;
   const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it — you do not have to hit the switch.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick\">Spike Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"sub-options\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickBreak\">Spike Tick (break)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickNear\">Spike Tick (near)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickNear\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickTrap\">Spike Tick (trap)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikeTick\">Anti Spike Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSmartTick\">Anti Smart Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSmartTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoplacer radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_prePlace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_replace\">Replace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_replace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeSoldier\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\r\n    <div class=\"page-title\">Visuals</div>\r\n    <p class=\"page-description\">Choose what gets drawn on screen. Turn off anything you do not need for a cleaner view.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Names</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Name</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_myNameColor\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Mark RYN Players</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_markRynPlayers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Player ID</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_showPlayerID\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Player HUD</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Turret Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_playerTurretReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Render HP</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_renderHP\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Position Prediction</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_positionPrediction\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">World Tint</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Purple Tint</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_objectTint\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Tint Transparency</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Weather<span class=\"sec-sub\">Rain over the map, turning to snow in the snow biome.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weather\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Intensity</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Structures</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Mine/Clan)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Enemy)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarEnemyColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBarEnemy\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">myPlayer</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Display player angle</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_displayPlayerAngle\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Interface</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Hide game HUD</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_hideHUD\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Low Quality Mode</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lowQuality\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Hitboxes</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Collision hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_collisionHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Possible placement</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_possiblePlacement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\r\n    <div class=\"page-title\">Misc</div>\r\n    <p class=\"page-description\">Customize misc settings, add autochat messages, reset settings</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Legit Mode</h2>\r\n        <div class=\"section-content\">\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Other</h2>\r\n\r\n        <div class=\"section-content\">\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kill Message</span>\r\n                <div class=\"option-content\">\r\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_killMessage\" type=\"checkbox\">\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Provoke on Kill</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_deathProvoke\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autospawn</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autospawn\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoaccept</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoaccept\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Interval</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\">\r\n                </label>\r\n            </div>\r\n            <div id=\"autoChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoChatMsg\" class=\"option-button\">+ Add Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Bot Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable Player Chat</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoBotChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div id=\"autoBotChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">+ Add Player Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\r\n    <div class=\"page-title\">Bots</div>\r\n    <p class=\"page-description\">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Controller</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Follow cursor</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_followCursor\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Auto Break</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Ranged Kiting</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRangedKite\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_clanRecheck\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Re-check clan joins</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Volley Fire</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botVolley\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">First wave size</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Avoid Shield Bots</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAvoidShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Be Angel</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botBeAngel\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kite distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Stop movement radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"flex-direction:column;align-items:flex-start;gap:8px;\">\r\n                <span class=\"option-title\" style=\"margin-bottom:2px;\">Formation</span>\r\n                <div id=\"_formationGrid\" style=\"display:flex;flex-wrap:wrap;gap:6px;width:100%;\"></div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_circleRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bots own clan</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botIndividualClans\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto random bot names</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRandomBotNames\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">New name on every death</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRandomNameOnDeath\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Random weapon (no stick)</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRandomWeapon\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto platform in water</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoPlatformWater\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Number the bots</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botNumbers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id=\"bot-container\" class=\"section-content\"></div>\r\n        <div id=\"dynamic-bot-list\" style=\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\"></div>\r\n        <div class=\"content-option\" style=\"margin-top:10px;justify-content:center;\">\r\n            <button id=\"add-bot-dynamic\" class=\"option-button\" style=\"display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;\">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Remote Control</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Take over a bot and play as it. The camera moves to it, WASD and the mouse drive it, everything you place and swing is its, and anything you type in the chat is sent from it. Your own character is not involved, so it can die without interrupting anything.</p>\r\n            <div id=\"_remoteStatus\" style=\"padding:6px 10px;margin-bottom:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Not controlling anything</div>\r\n            <div class=\"content-option\" style=\"gap:8px;\">\r\n                <button id=\"_remoteNext\" class=\"option-button\" style=\"flex:1;padding:8px 14px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Control next bot</button>\r\n                <button id=\"_remoteRelease\" class=\"option-button\" style=\"flex:1;padding:8px 14px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Back to me</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Switch / next bot</span>\r\n                <button id=\"_remoteControlKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Let go</span>\r\n                <button id=\"_remoteReleaseKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Next bot (→)</span>\r\n                <button id=\"_remoteNextKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Previous bot (←)</span>\r\n                <button id=\"_remotePrevKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Back to me (↑)</span>\r\n                <button id=\"_remoteOwnerKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_remoteOwnerAsBot\">My character acts as a bot</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_remoteOwnerAsBot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:8px 0 0;\">Off, your character stands where you left it. On, it trails the bot you are driving the way a squad member would. Either way it keeps healing and defending itself, and the squad keeps following whoever you are controlling.</p>\r\n        </div>\r\n    </div>\r\n\r\n  <div class=\"section\">\r\n        <div class=\"section-title\">Squad Name</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">One name for every bot. It is applied when a bot connects and again every time one respawns, so a bot that dies comes back with the name that is in this box now. Leave it empty to keep the per-bot names.</p>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Squad name</span>\r\n                <input id=\"_botSquadName\" type=\"text\" class=\"input\" maxlength=\"15\" placeholder=\"e.g. Ryn\" style=\"width:150px;\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botSquadNumbers\">Add numbers</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botSquadNumbers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_botSquadNameApply\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Apply to connected bots</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">War Split<span class=\"sec-sub\">Half the squad shoots, half charges, and they work in pairs - two bots on every enemy so the damage lands as one number.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_warSplit\">War Split</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_warSplit\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Toggle key</span>\r\n                <button id=\"_warSplitKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Engage within</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_warSplitRange\" type=\"range\" step=\"50\" min=\"300\" max=\"2000\">\r\n                </label>\r\n            </div>\r\n            <div id=\"_warSplitStatus\" style=\"padding:6px 10px;margin-top:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Off</div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Ghost Shot<span class=\"sec-sub\">Bots buy Assassin Gear, hold still so it keeps them invisible, and open fire the moment anyone crosses the radius. No other hat is allowed on while this is running.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_ghostShot\">Ghost Shot</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_ghostShot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Toggle key</span>\r\n                <button id=\"_ghostShotKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Fire within</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_ghostShotRange\" type=\"range\" step=\"50\" min=\"200\" max=\"1400\">\r\n                </label>\r\n            </div>\r\n            <div id=\"_ghostShotStatus\" style=\"padding:6px 10px;margin-top:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Off</div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Squad Roster<span class=\"sec-sub\">Every bot by its number, with what it is actually doing. Right-click a bot in game to put it on Auto Play.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\" style=\"justify-content:center;gap:8px;\">\r\n                <button id=\"_rosterRecheck\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Re-check clan joins</button>\r\n                <button id=\"_rosterClearAutoPlay\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Clear Auto Play</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Clear Auto Play key</span>\r\n                <button id=\"_clearBotAutoPlayKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div id=\"_rosterSummary\" style=\"padding:6px 10px;margin:8px 0;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">No bots connected</div>\r\n            <div id=\"_rosterList\" style=\"display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto;padding:8px 10px;background:rgba(0,0,0,0.25);border:1px solid rgba(122,66,244,0.18);border-radius:8px;font-size:0.8em;color:rgba(200,195,220,0.75);line-height:1.45;\"></div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Find Enemy</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Type <b>!F &lt;player id&gt;</b> and every bot sweeps the whole map. Several at once works too - <b>!F 12 34 56</b> - and the squad is split evenly between them. <b>!F</b> on its own repeats the last search.</p>\r\n            <div class=\"content-option\" style=\"gap:8px;margin:0 0 8px;\">\r\n                <label class=\"option-title\" for=\"_findHunt\" style=\"flex:1;\">Hunt mode (kill instead of watch)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_findHunt\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Watching: the bot that finds them pings the map and holds the shadow distance, the rest come home. Hunting: the whole group forms a ring on the target and waits until every bot is in place and reloaded, then they all attack in the same instant. Musket groups hold the shadow distance and shoot; everything else closes in and stacks.</p>\r\n            <div id=\"_findStatus\" style=\"padding:6px 10px;margin-bottom:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Idle</div>\r\n            <div id=\"_findLog\" style=\"display:flex;flex-direction:column;gap:4px;max-height:132px;overflow-y:auto;padding:8px 10px;background:rgba(0,0,0,0.25);border:1px solid rgba(122,66,244,0.18);border-radius:8px;font-size:0.8em;color:rgba(200,195,220,0.75);line-height:1.45;\"></div>\r\n            <div class=\"content-option\" style=\"gap:8px;margin-top:8px;\">\r\n                <input class=\"input ryn-find-input\" type=\"text\" maxlength=\"40\" placeholder=\"!F 12\" style=\"flex:1;min-width:0;\">\r\n                <button id=\"_findSend\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Send</button>\r\n                <button id=\"_findCancel\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Cancel</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Shadow distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_findHoldDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"900\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Auto Shot</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Anything that walks inside the radius gets shot the moment the weapon is ready, whether or not you are attacking. Only bots holding a bow, crossbow, repeater or musket in the secondary slot take part.</p>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botAutoShot\">Auto Shot</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoShot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Shoot within</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botAutoShotRange\" type=\"range\" step=\"50\" min=\"100\" max=\"1200\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Smart Shield</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">The first bots in the roster carry shields and stand between the threat and whatever they are guarding. The wall swings to the side an enemy appears on as soon as it appears, and each guard turns its own shield at the nearest one.</p>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shieldGuard\">Shield Guards</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shieldGuard\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_guardMouseControl\">Mouse control</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_guardMouseControl\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_guardProtectBots\">Guards protect the bots</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_guardProtectBots\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoJoinGuard\">Only age 6+ bots guard</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoJoinGuard\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Guards</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_guardCount\" type=\"range\" step=\"1\" min=\"1\" max=\"5\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Front distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_guardFrontDist\" type=\"range\" step=\"10\" min=\"50\" max=\"300\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Roaming &amp; Performance</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botRoamFullMap\">Roam the whole map</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRoamFullMap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botPerfMode\">Spread bot analysis</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botPerfMode\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:8px 0 0;\">Roaming sends wandering bots on a tour of the map instead of a random walk around where they spawned. Spreading the analysis deals the bots into four groups and lets one group run the placement solver per tick - this is the setting that gets the framerate back when a lot of bots can see an enemy.</p>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Packets</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Sends a burst of up to 300 packets down every bot's own connection. The server's allowance is about 120 a second, so expect the bots to be kicked for spam - that is what the button does. One burst per press, with a five second cooldown.</p>\r\n            <div class=\"content-option\" style=\"justify-content:center;\">\r\n                <button id=\"_botSpamPacket\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Spam Packet (300)</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n  <div class=\"section\">\r\n        <div class=\"section-title\">Bot Weapons</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:'';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid=\"-1\"],.bot-sec-weapon-btn[data-swid=\"-1\"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Primary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\"><span class=\"wpn-name\">Tool Hammer</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\"><span class=\"wpn-name\">Hand Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\"><span class=\"wpn-name\">Great Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\"><span class=\"wpn-name\">Short Sword</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\"><span class=\"wpn-name\">Katana</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\"><span class=\"wpn-name\">Polearm</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\"><span class=\"wpn-name\">Bat</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\"><span class=\"wpn-name\">Daggers</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\"><span class=\"wpn-name\">Stick</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Secondary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\"><span class=\"wpn-name\">Hunting Bow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\"><span class=\"wpn-name\">Great Hammer</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\"><span class=\"wpn-name\">Wooden Shield</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\"><span class=\"wpn-name\">Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\"><span class=\"wpn-name\">Repeater Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\"><span class=\"wpn-name\">Mc Grabby</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\"><span class=\"wpn-name\">Musket</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class=\"content-option\" style=\"margin-top:2px;\">\r\n                <span class=\"option-title\">Platform w/ Musket</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_platformMusket\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Age 4 Building</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n            <div>\r\n                <div class=\"wpn-label\">Age 4 Building</div>\r\n                <div class=\"wpn-grid\" id=\"bot-age4-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\"><span class=\"wpn-name\">Trap</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\"><span class=\"wpn-name\">Boost Pad</span></div>\r\n                </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section\" style=\"margin-top:6px;\">\r\n        <div class=\"section\" style=\"margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;\">\r\n        <div class=\"section-title\" style=\"font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;\">Auto Farm</div>\r\n\r\n        <div style=\"display:flex;flex-direction:column;gap:10px;\">\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Farm Mode</span>\r\n                <p style=\"font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;\">Bots automatically gather resources. In <b style=\"color:rgba(200,195,220,0.85);\">Single</b> mode they target one resource type. In <b style=\"color:rgba(200,195,220,0.85);\">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style=\"display:flex;gap:8px;margin-top:2px;\">\r\n                    <button id=\"_farmModeSingle\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Single</button>\r\n                    <button id=\"_farmModeNearest\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            <div id=\"_farmTypeRow\" style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Resource Type</span>\r\n                <div style=\"display:flex;gap:8px;\">\r\n                    <button data-farm-type=\"0\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Wood</button>\r\n                    <button data-farm-type=\"1\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Food</button>\r\n                    <button data-farm-type=\"2\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Stone</button>\r\n                    <button data-farm-type=\"3\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Gold</button>\r\n                </div>\r\n                <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\r\n            </div>\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Limit</span>\r\n                <div style=\"display:flex;align-items:center;gap:12px;\">\r\n                    <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\" style=\"width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;\">\r\n                    <span style=\"font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;\">Bots stop and return to you when they reach this amount. Set to <b style=\"color:rgba(200,195,220,0.7);\">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>";
+  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\r\n    <div class=\"page-title\">Bots</div>\r\n    <p class=\"page-description\">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Controller</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Follow cursor</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_followCursor\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Auto Break</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Ranged Kiting</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRangedKite\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_clanRecheck\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Re-check clan joins</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Volley Fire</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botVolley\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">First wave size</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Avoid Shield Bots</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAvoidShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Be Angel</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botBeAngel\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kite distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Stop movement radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"flex-direction:column;align-items:flex-start;gap:8px;\">\r\n                <span class=\"option-title\" style=\"margin-bottom:2px;\">Formation</span>\r\n                <div id=\"_formationGrid\" style=\"display:flex;flex-wrap:wrap;gap:6px;width:100%;\"></div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_circleRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bots own clan</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botIndividualClans\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto random bot names</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRandomBotNames\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">New name on every death</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRandomNameOnDeath\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Random weapon (no stick)</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRandomWeapon\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto platform in water</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoPlatformWater\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Number the bots</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botNumbers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id=\"bot-container\" class=\"section-content\"></div>\r\n        <div id=\"dynamic-bot-list\" style=\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\"></div>\r\n        <div class=\"content-option\" style=\"margin-top:10px;justify-content:center;\">\r\n            <button id=\"add-bot-dynamic\" class=\"option-button\" style=\"display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;\">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Remote Control</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Take over a bot and play as it. The camera moves to it, WASD and the mouse drive it, everything you place and swing is its, and anything you type in the chat is sent from it. Your own character is not involved, so it can die without interrupting anything.</p>\r\n            <div id=\"_remoteStatus\" style=\"padding:6px 10px;margin-bottom:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Not controlling anything</div>\r\n            <div class=\"content-option\" style=\"gap:8px;\">\r\n                <button id=\"_remoteNext\" class=\"option-button\" style=\"flex:1;padding:8px 14px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Control next bot</button>\r\n                <button id=\"_remoteRelease\" class=\"option-button\" style=\"flex:1;padding:8px 14px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Back to me</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Switch / next bot</span>\r\n                <button id=\"_remoteControlKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Let go</span>\r\n                <button id=\"_remoteReleaseKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Next bot (→)</span>\r\n                <button id=\"_remoteNextKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Previous bot (←)</span>\r\n                <button id=\"_remotePrevKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Back to me (↑)</span>\r\n                <button id=\"_remoteOwnerKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_remoteOwnerAsBot\">My character acts as a bot</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_remoteOwnerAsBot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:8px 0 0;\">Off, your character stands where you left it. On, it trails the bot you are driving the way a squad member would. Either way it keeps healing and defending itself, and the squad keeps following whoever you are controlling.</p>\r\n        </div>\r\n    </div>\r\n\r\n  <div class=\"section\">\r\n        <div class=\"section-title\">Squad Name</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">One name for every bot. It is applied when a bot connects and again every time one respawns, so a bot that dies comes back with the name that is in this box now. Leave it empty to keep the per-bot names.</p>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Squad name</span>\r\n                <input id=\"_botSquadName\" type=\"text\" class=\"input\" maxlength=\"15\" placeholder=\"e.g. Ryn\" style=\"width:150px;\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botSquadNumbers\">Add numbers</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botSquadNumbers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_botSquadNameApply\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Apply to connected bots</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">War Split<span class=\"sec-sub\">Half the squad shoots, half charges, and they work in pairs - two bots on every enemy so the damage lands as one number.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_warSplit\">War Split</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_warSplit\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Toggle key</span>\r\n                <button id=\"_warSplitKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Engage within</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_warSplitRange\" type=\"range\" step=\"50\" min=\"300\" max=\"2000\">\r\n                </label>\r\n            </div>\r\n            <div id=\"_warSplitStatus\" style=\"padding:6px 10px;margin-top:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Off</div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Ghost Shot<span class=\"sec-sub\">Bots buy Assassin Gear, hold still so it keeps them invisible, and open fire the moment anyone crosses the radius. No other hat is allowed on while this is running.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_ghostShot\">Ghost Shot</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_ghostShot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Toggle key</span>\r\n                <button id=\"_ghostShotKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Fire within</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_ghostShotRange\" type=\"range\" step=\"50\" min=\"200\" max=\"1400\">\r\n                </label>\r\n            </div>\r\n            <div id=\"_ghostShotStatus\" style=\"padding:6px 10px;margin-top:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Off</div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Wall Guard &amp; Dodge<span class=\"sec-sub\">A wall dropped on the line a musket is coming down, held until their shot is spent, then broken and answered by the whole squad in one pass. Dodge is the same job when a wall is not possible - a step out of the line instead of a wall across it.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botWallGuard\">Wall Guard</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botWallGuard\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Wall Guard key</span>\r\n                <button id=\"_botWallGuardKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Shooters before walling</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botWallGuardMin\" type=\"range\" step=\"1\" min=\"1\" max=\"10\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botDodge\">Dodge</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botDodge\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Dodge key</span>\r\n                <button id=\"_botDodgeKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div id=\"_wallGuardStatus\" style=\"padding:6px 10px;margin-top:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Off</div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Musket Bow Insta<span class=\"sec-sub\">The combo you run by hand, run by the bots on their own. While it is armed they hold the secondary at the plain bow - that is what banks the upgrade points the combo spends - and they walk to a firing angle no building blocks before they take it.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botMusketBowInsta\">Bot Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botMusketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Toggle key</span>\r\n                <button id=\"_botMusketBowInstaKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div id=\"_botInstaStatus\" style=\"padding:6px 10px;margin-top:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Off</div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Green &amp; Red<span class=\"sec-sub\">In the bots' chat: <b>!Team &lt;id&gt;</b> turns a player green and the squad stops treating them as an enemy - and holds ranged fire rather than shooting past them. <b>!Red &lt;id&gt;</b> turns a player red and the squad shoots them on sight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\" style=\"justify-content:center;gap:8px;\">\r\n                <button id=\"_clearGreen\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(66,244,120,0.1);border:1.5px solid rgba(66,244,120,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Clear green</button>\r\n                <button id=\"_clearRed\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Clear red</button>\r\n            </div>\r\n            <div id=\"_teamList\" style=\"display:flex;flex-direction:column;gap:3px;max-height:180px;overflow-y:auto;padding:8px 10px;margin-top:8px;background:rgba(0,0,0,0.25);border:1px solid rgba(122,66,244,0.18);border-radius:8px;font-size:0.8em;color:rgba(200,195,220,0.75);line-height:1.45;\">Nobody marked</div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Squad Roster<span class=\"sec-sub\">Every bot by its number, with what it is actually doing. Right-click a bot in game to put it on Auto Play.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\" style=\"justify-content:center;gap:8px;\">\r\n                <button id=\"_rosterRecheck\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Re-check clan joins</button>\r\n                <button id=\"_rosterClearAutoPlay\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Clear Auto Play</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Clear Auto Play key</span>\r\n                <button id=\"_clearBotAutoPlayKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div id=\"_rosterSummary\" style=\"padding:6px 10px;margin:8px 0;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">No bots connected</div>\r\n            <div id=\"_rosterList\" style=\"display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto;padding:8px 10px;background:rgba(0,0,0,0.25);border:1px solid rgba(122,66,244,0.18);border-radius:8px;font-size:0.8em;color:rgba(200,195,220,0.75);line-height:1.45;\"></div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Find Enemy</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Type <b>!F &lt;player id&gt;</b> and every bot sweeps the whole map. Several at once works too - <b>!F 12 34 56</b> - and the squad is split evenly between them. <b>!F</b> on its own repeats the last search.</p>\r\n            <div class=\"content-option\" style=\"gap:8px;margin:0 0 8px;\">\r\n                <label class=\"option-title\" for=\"_findHunt\" style=\"flex:1;\">Hunt mode (kill instead of watch)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_findHunt\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Watching: the bot that finds them pings the map and holds the shadow distance, the rest come home. Hunting: the whole group forms a ring on the target and waits until every bot is in place and reloaded, then they all attack in the same instant. Musket groups hold the shadow distance and shoot; everything else closes in and stacks.</p>\r\n            <div id=\"_findStatus\" style=\"padding:6px 10px;margin-bottom:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Idle</div>\r\n            <div id=\"_findLog\" style=\"display:flex;flex-direction:column;gap:4px;max-height:132px;overflow-y:auto;padding:8px 10px;background:rgba(0,0,0,0.25);border:1px solid rgba(122,66,244,0.18);border-radius:8px;font-size:0.8em;color:rgba(200,195,220,0.75);line-height:1.45;\"></div>\r\n            <div class=\"content-option\" style=\"gap:8px;margin-top:8px;\">\r\n                <input class=\"input ryn-find-input\" type=\"text\" maxlength=\"40\" placeholder=\"!F 12\" style=\"flex:1;min-width:0;\">\r\n                <button id=\"_findSend\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Send</button>\r\n                <button id=\"_findCancel\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Cancel</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Shadow distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_findHoldDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"900\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Auto Shot</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Anything that walks inside the radius gets shot the moment the weapon is ready, whether or not you are attacking. Only bots holding a bow, crossbow, repeater or musket in the secondary slot take part.</p>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botAutoShot\">Auto Shot</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoShot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Shoot within</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botAutoShotRange\" type=\"range\" step=\"50\" min=\"100\" max=\"1200\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Smart Shield</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">The first bots in the roster carry shields and stand between the threat and whatever they are guarding. The wall swings to the side an enemy appears on as soon as it appears, and each guard turns its own shield at the nearest one.</p>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shieldGuard\">Shield Guards</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shieldGuard\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_guardMouseControl\">Mouse control</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_guardMouseControl\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_guardProtectBots\">Guards protect the bots</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_guardProtectBots\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoJoinGuard\">Only age 6+ bots guard</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoJoinGuard\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Guards</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_guardCount\" type=\"range\" step=\"1\" min=\"1\" max=\"5\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Front distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_guardFrontDist\" type=\"range\" step=\"10\" min=\"50\" max=\"300\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Roaming &amp; Performance</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botRoamFullMap\">Roam the whole map</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRoamFullMap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botPerfMode\">Spread bot analysis</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botPerfMode\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:8px 0 0;\">Roaming sends wandering bots on a tour of the map instead of a random walk around where they spawned. Spreading the analysis deals the bots into four groups and lets one group run the placement solver per tick - this is the setting that gets the framerate back when a lot of bots can see an enemy.</p>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Packets</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Sends a burst of up to 300 packets down every bot's own connection. The server's allowance is about 120 a second, so expect the bots to be kicked for spam - that is what the button does. One burst per press, with a five second cooldown.</p>\r\n            <div class=\"content-option\" style=\"justify-content:center;\">\r\n                <button id=\"_botSpamPacket\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Spam Packet (300)</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n  <div class=\"section\">\r\n        <div class=\"section-title\">Bot Weapons</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:'';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid=\"-1\"],.bot-sec-weapon-btn[data-swid=\"-1\"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Primary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\"><span class=\"wpn-name\">Tool Hammer</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\"><span class=\"wpn-name\">Hand Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\"><span class=\"wpn-name\">Great Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\"><span class=\"wpn-name\">Short Sword</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\"><span class=\"wpn-name\">Katana</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\"><span class=\"wpn-name\">Polearm</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\"><span class=\"wpn-name\">Bat</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\"><span class=\"wpn-name\">Daggers</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\"><span class=\"wpn-name\">Stick</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Secondary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\"><span class=\"wpn-name\">Hunting Bow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\"><span class=\"wpn-name\">Great Hammer</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\"><span class=\"wpn-name\">Wooden Shield</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\"><span class=\"wpn-name\">Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\"><span class=\"wpn-name\">Repeater Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\"><span class=\"wpn-name\">Mc Grabby</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\"><span class=\"wpn-name\">Musket</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class=\"content-option\" style=\"margin-top:2px;\">\r\n                <span class=\"option-title\">Platform w/ Musket</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_platformMusket\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Age 4 Building</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n            <div>\r\n                <div class=\"wpn-label\">Age 4 Building</div>\r\n                <div class=\"wpn-grid\" id=\"bot-age4-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\"><span class=\"wpn-name\">Trap</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\"><span class=\"wpn-name\">Boost Pad</span></div>\r\n                </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section\" style=\"margin-top:6px;\">\r\n        <div class=\"section\" style=\"margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;\">\r\n        <div class=\"section-title\" style=\"font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;\">Auto Farm</div>\r\n\r\n        <div style=\"display:flex;flex-direction:column;gap:10px;\">\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Farm Mode</span>\r\n                <p style=\"font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;\">Bots automatically gather resources. In <b style=\"color:rgba(200,195,220,0.85);\">Single</b> mode they target one resource type. In <b style=\"color:rgba(200,195,220,0.85);\">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style=\"display:flex;gap:8px;margin-top:2px;\">\r\n                    <button id=\"_farmModeSingle\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Single</button>\r\n                    <button id=\"_farmModeNearest\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            <div id=\"_farmTypeRow\" style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Resource Type</span>\r\n                <div style=\"display:flex;gap:8px;\">\r\n                    <button data-farm-type=\"0\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Wood</button>\r\n                    <button data-farm-type=\"1\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Food</button>\r\n                    <button data-farm-type=\"2\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Stone</button>\r\n                    <button data-farm-type=\"3\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Gold</button>\r\n                </div>\r\n                <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\r\n            </div>\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Limit</span>\r\n                <div style=\"display:flex;align-items:center;gap:12px;\">\r\n                    <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\" style=\"width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;\">\r\n                    <span style=\"font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;\">Bots stop and return to you when they reach this amount. Set to <b style=\"color:rgba(200,195,220,0.7);\">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>";
   const Music_default = "<div class=\"menu-page\" data-id=\"7\">\r\n<style>\r\n@keyframes ryn-eq{0%,100%{height:3px;}50%{height:15px;}}\r\n@keyframes ryn-like-pop{0%{transform:scale(1);}45%{transform:scale(1.45);}100%{transform:scale(1);}}\r\n@keyframes rm-fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}\r\n\r\n.rm-root{\r\n  --rm-bg:#0B0B10;\r\n  --rm-panel:#141420;\r\n  --rm-panel-hi:#1B1B2B;\r\n  --rm-line:rgba(255,255,255,0.07);\r\n  --rm-accent:#7A42F4;\r\n  --rm-accent2:#3A86FF;\r\n  --rm-text:#FFFFFF;\r\n  --rm-mute:rgba(255,255,255,0.62);\r\n  --rm-dim:rgba(255,255,255,0.34);\r\n  display:flex;flex-direction:column;gap:14px;\r\n  font-family:'Inter','Poppins',sans-serif;\r\n  animation:rm-fade 240ms ease;\r\n}\r\n\r\n.rm-player{\r\n  position:relative;overflow:hidden;\r\n  padding:18px 18px 14px;border-radius:14px;\r\n  background:\r\n    radial-gradient(120% 130% at 0% 0%,rgba(122,66,244,.28),transparent 58%),\r\n    linear-gradient(160deg,#1E1830 0%,#12111E 55%,#0B0B10 100%);\r\n  border:1px solid var(--rm-line);\r\n  box-shadow:0 12px 34px -16px rgba(0,0,0,.9);\r\n}\r\n.rm-player::before{\r\n  content:'';position:absolute;inset:0;pointer-events:none;\r\n  background:linear-gradient(180deg,rgba(255,255,255,.05),transparent 40%);\r\n}\r\n.rm-np-row{display:flex;align-items:center;gap:15px;margin-bottom:14px;position:relative;}\r\n\r\n.rm-art{\r\n  width:74px;height:74px;flex-shrink:0;position:relative;overflow:hidden;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:1.7em;border-radius:8px;\r\n  background:linear-gradient(140deg,#2A2140,#141323);\r\n  border:none;\r\n  box-shadow:0 8px 22px -8px rgba(0,0,0,.85);\r\n  transition:box-shadow 300ms ease;\r\n}\r\n.rm-art.playing{box-shadow:0 10px 26px -8px rgba(122,66,244,.6);}\r\n.rm-eq{display:none;gap:3px;align-items:flex-end;height:18px;}\r\n.rm-art.playing .rm-eq{display:flex;}\r\n.rm-eq-bar{\r\n  width:3px;border-radius:2px;\r\n  background:linear-gradient(180deg,var(--rm-accent),var(--rm-accent2));\r\n  animation:ryn-eq .9s ease-in-out infinite;\r\n}\r\n.rm-eq-bar:nth-child(2){animation-delay:.15s;}\r\n.rm-eq-bar:nth-child(3){animation-delay:.3s;}\r\n.rm-eq-bar:nth-child(4){animation-delay:.45s;}\r\n\r\n.rm-meta{flex:1;min-width:0;}\r\n.rm-title{\r\n  font-size:1.16em;font-weight:700;letter-spacing:-.015em;line-height:1.25;\r\n  color:var(--rm-text);\r\n  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;\r\n  overflow:hidden;word-break:break-word;\r\n}\r\n.rm-artist{\r\n  margin-top:4px;font-size:.78em;font-weight:400;color:var(--rm-mute);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-badge{\r\n  display:inline-block;margin-top:6px;padding:2px 9px;\r\n  font-size:.64em;font-weight:600;letter-spacing:.05em;text-transform:uppercase;\r\n  color:var(--rm-mute);background:rgba(255,255,255,.08);border-radius:999px;\r\n  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-actions{display:flex;gap:4px;align-items:center;flex-shrink:0;}\r\n.rm-like-btn,.rm-save-now-btn{\r\n  width:36px;height:36px;display:flex;align-items:center;justify-content:center;\r\n  font-size:1.15em;cursor:pointer;border-radius:50%;\r\n  color:var(--rm-dim);background:transparent;border:none;\r\n  transition:color 170ms,background 170ms,transform 170ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-like-btn:hover,.rm-save-now-btn:hover{\r\n  color:var(--rm-text);background:rgba(255,255,255,.11);transform:scale(1.1);\r\n}\r\n.rm-like-btn.on{\r\n  color:#ff4d6d;animation:ryn-like-pop 340ms cubic-bezier(.34,1.5,.5,1);\r\n  text-shadow:0 0 12px rgba(255,77,109,.55);\r\n}\r\n.rm-save-now-btn.on{color:var(--rm-accent2);text-shadow:0 0 12px rgba(58,134,255,.5);}\r\n\r\n.rm-prog-wrap{margin-bottom:10px;position:relative;}\r\n.rm-prog-rail{\r\n  height:4px;border-radius:4px;cursor:pointer;\r\n  background:rgba(255,255,255,.13);position:relative;\r\n  transition:height 140ms ease;\r\n}\r\n.rm-prog-wrap:hover .rm-prog-rail{height:6px;}\r\n.rm-prog-fill{\r\n  height:100%;border-radius:4px;position:relative;\r\n  background:linear-gradient(90deg,var(--rm-accent),var(--rm-accent2));\r\n}\r\n.rm-prog-fill::after{\r\n  content:'';position:absolute;right:-5px;top:50%;\r\n  width:11px;height:11px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%) scale(0);\r\n  transition:transform 160ms ease;\r\n  box-shadow:0 2px 6px rgba(0,0,0,.5);\r\n}\r\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\r\n.rm-times{display:flex;justify-content:space-between;margin-top:5px;}\r\n.rm-time{font-size:.66em;font-weight:500;color:var(--rm-dim);font-variant-numeric:tabular-nums;}\r\n\r\n.rm-ctrl{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:12px;position:relative;}\r\n.rm-btn{\r\n  width:32px;height:32px;display:flex;align-items:center;justify-content:center;\r\n  background:transparent;border:none;border-radius:50%;\r\n  color:var(--rm-mute);font-size:.86em;cursor:pointer;\r\n  transition:color 160ms,transform 160ms;\r\n}\r\n.rm-btn:hover{color:var(--rm-text);transform:scale(1.1);}\r\n.rm-btn.on{color:var(--rm-accent);}\r\n.rm-play-btn{\r\n  width:46px;height:46px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  background:#fff;border:none;border-radius:50%;\r\n  color:#0B0B10;font-size:1.05em;cursor:pointer;\r\n  box-shadow:0 6px 18px -6px rgba(0,0,0,.7);\r\n  transition:transform 170ms cubic-bezier(.34,1.5,.5,1),box-shadow 170ms;\r\n}\r\n.rm-play-btn:hover{transform:scale(1.07);box-shadow:0 8px 22px -6px rgba(122,66,244,.7);}\r\n.rm-play-btn:active{transform:scale(.97);}\r\n\r\n.rm-vol{display:flex;align-items:center;gap:9px;position:relative;}\r\n.rm-vol-icon{font-size:.82em;color:var(--rm-dim);flex-shrink:0;}\r\n.rm-vol-val{font-size:.66em;color:var(--rm-dim);min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}\r\n\r\n.rm-sec{\r\n  background:var(--rm-panel);\r\n  border:1px solid var(--rm-line);border-radius:12px;overflow:hidden;\r\n  transition:border-color 200ms;\r\n}\r\n.rm-sec:hover{border-color:rgba(255,255,255,.12);}\r\n.rm-sec-head{\r\n  display:flex;align-items:center;gap:9px;\r\n  padding:12px 15px;cursor:pointer;user-select:none;\r\n  transition:background 160ms;\r\n}\r\n.rm-sec-head:hover{background:rgba(255,255,255,.035);}\r\n.rm-sec-dot{\r\n  width:6px;height:6px;border-radius:50%;flex-shrink:0;\r\n  background:var(--rm-accent);box-shadow:0 0 8px rgba(122,66,244,.7);\r\n}\r\n.rm-sec-title{\r\n  flex:1;font-size:.74em;font-weight:700;\r\n  letter-spacing:.12em;text-transform:uppercase;color:var(--rm-mute);\r\n}\r\n.rm-sec-arrow{font-size:.62em;color:var(--rm-dim);transition:transform 220ms ease;}\r\n.rm-sec.open .rm-sec-arrow{transform:rotate(90deg);}\r\n.rm-sec-body{padding:0 12px 12px;display:none;flex-direction:column;gap:9px;}\r\n.rm-sec.open .rm-sec-body{display:flex;animation:rm-fade 200ms ease;}\r\n\r\n.rm-filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px;}\r\n.rm-filter-btn{\r\n  padding:5px 13px;border-radius:999px;cursor:pointer;\r\n  font-size:.7em;font-weight:600;\r\n  background:rgba(255,255,255,.07);border:none;color:var(--rm-mute);\r\n  transition:background 160ms,color 160ms;\r\n}\r\n.rm-filter-btn:hover{background:rgba(255,255,255,.13);color:var(--rm-text);}\r\n.rm-filter-btn.active{background:#fff;color:#0B0B10;}\r\n\r\n.rm-song-row{\r\n  display:flex;align-items:center;gap:13px;\r\n  padding:10px 12px;border-radius:8px;cursor:pointer;\r\n  border:none;position:relative;\r\n  transition:background 140ms;\r\n}\r\n.rm-song-row:hover{background:rgba(255,255,255,.07);}\r\n.rm-song-row.active{background:rgba(122,66,244,.13);}\r\n.rm-song-row.active .rm-stitle{color:var(--rm-accent);}\r\n.rm-song-row.active .rm-snum{color:var(--rm-accent);}\r\n\r\n.rm-snum{\r\n  width:20px;flex-shrink:0;text-align:center;\r\n  font-size:.78em;font-weight:500;color:var(--rm-dim);\r\n  font-variant-numeric:tabular-nums;\r\n  transition:color 140ms;\r\n}\r\n.rm-song-row:hover .rm-snum{font-size:0;color:transparent;}\r\n.rm-song-row:hover .rm-snum::after{\r\n  content:'\\25B6';font-size:11px;color:var(--rm-text);\r\n}\r\n.rm-stitle{\r\n  flex:1;min-width:0;\r\n  font-size:.92em;font-weight:600;color:var(--rm-text);\r\n  letter-spacing:-.005em;\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-sartist{\r\n  flex-shrink:1;min-width:0;max-width:32%;\r\n  font-size:.76em;font-weight:400;color:var(--rm-dim);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n\r\n.rm-s-icons{\r\n  display:flex;gap:4px;flex-shrink:0;align-items:center;\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-song-row:hover .rm-s-icons,\r\n.rm-song-row.active .rm-s-icons{opacity:1;}\r\n\r\n.rm-s-like,.rm-s-save,.rm-sdel{\r\n  width:26px;height:26px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.9em;cursor:pointer;line-height:1;border-radius:50%;\r\n  color:var(--rm-dim);\r\n  transition:color 150ms,background 150ms,transform 150ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-s-like:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-save:hover{color:var(--rm-accent2);background:rgba(58,134,255,.14);transform:scale(1.12);}\r\n.rm-sdel:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-like.on{color:#ff4d6d;opacity:1;}\r\n.rm-s-save.on{color:var(--rm-accent2);opacity:1;}\r\n\r\n.rm-song-row .rm-s-like.on,\r\n.rm-song-row .rm-s-save.on{opacity:1;}\r\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\r\n\r\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;}\r\n.rm-album-card{\r\n  position:relative;padding:11px;border-radius:9px;cursor:pointer;\r\n  background:var(--rm-panel-hi);border:none;\r\n  transition:background 180ms,transform 180ms;\r\n}\r\n.rm-album-card:hover{background:#25253A;transform:translateY(-2px);}\r\n.rm-album-icon{\r\n  width:100%;aspect-ratio:1;border-radius:6px;margin-bottom:8px;\r\n  display:flex;align-items:center;justify-content:center;font-size:1.5em;\r\n  background:linear-gradient(140deg,#2E2450,#171628);\r\n  box-shadow:0 5px 14px -6px rgba(0,0,0,.8);\r\n}\r\n.rm-album-name{\r\n  font-size:.76em;font-weight:600;color:var(--rm-text);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-count{margin-top:2px;font-size:.66em;color:var(--rm-dim);}\r\n.rm-album-del{\r\n  position:absolute;top:6px;right:6px;\r\n  width:19px;height:19px;border-radius:50%;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.62em;cursor:pointer;\r\n  background:rgba(0,0,0,.6);color:var(--rm-dim);\r\n  opacity:0;transition:opacity 150ms,color 150ms;\r\n}\r\n.rm-album-card:hover .rm-album-del{opacity:1;}\r\n.rm-album-del:hover{color:#ff4d6d;}\r\n\r\n.rm-inp,.rm-sel{\r\n  width:100%;padding:9px 12px;\r\n  background:var(--rm-panel-hi);border:1px solid transparent;border-radius:7px;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.78em;color:var(--rm-text);\r\n  outline:none;transition:border-color 160ms,background 160ms;\r\n}\r\n.rm-inp::placeholder{color:var(--rm-dim);}\r\n.rm-inp:focus,.rm-sel:focus{border-color:var(--rm-accent);background:#20203200;}\r\n\r\ntextarea.rm-inp{\r\n  min-height:74px;max-height:170px;resize:vertical;\r\n  line-height:1.55;white-space:pre-wrap;word-break:break-word;\r\n  font-family:'JetBrains Mono','Inter',monospace;font-size:.72em;\r\n}\r\n.rm-btn-full{\r\n  width:100%;padding:9px;border-radius:999px;cursor:pointer;\r\n  background:rgba(255,255,255,.09);border:none;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.75em;font-weight:600;color:var(--rm-text);\r\n  transition:background 160ms,transform 160ms;\r\n}\r\n.rm-btn-full:hover{background:rgba(255,255,255,.16);}\r\n.rm-btn-primary{\r\n  background:#fff;color:#0B0B10;\r\n}\r\n.rm-btn-primary:hover{background:#EDEDF5;transform:scale(1.015);}\r\n.rm-badge{\r\n  display:inline-block;padding:2px 8px;border-radius:999px;\r\n  font-size:.64em;font-weight:600;\r\n  background:rgba(122,66,244,.18);color:var(--rm-accent);\r\n}\r\n\r\n.rm-sync-row{\r\n  display:flex;align-items:center;justify-content:space-between;gap:11px;\r\n  padding:7px 10px;border-radius:7px;\r\n  transition:background 140ms;\r\n}\r\n.rm-sync-row:hover{background:rgba(255,255,255,.04);}\r\n.rm-sync-label{font-size:.76em;color:var(--rm-mute);flex:1;min-width:0;}\r\n\r\n.rm-toast{\r\n  position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(12px);\r\n  padding:9px 18px;border-radius:999px;z-index:99999;\r\n  background:#fff;color:#0B0B10;\r\n  font-size:.75em;font-weight:600;\r\n  box-shadow:0 10px 30px rgba(0,0,0,.6);\r\n  opacity:0;pointer-events:none;\r\n  transition:opacity 240ms ease,transform 240ms ease;\r\n}\r\n.rm-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}\r\n\r\n.rm-root .switch-checkbox{position:relative;width:38px;height:21px;flex-shrink:0;}\r\n.rm-root .switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n.rm-root .switch-checkbox span{\r\n  position:absolute;inset:0;cursor:pointer;border-radius:999px;\r\n  background:rgba(255,255,255,.16);\r\n  transition:background 220ms ease;\r\n}\r\n.rm-root .switch-checkbox span::before{\r\n  content:'';position:absolute;left:3px;top:50%;\r\n  width:15px;height:15px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%);\r\n  transition:left 240ms cubic-bezier(.34,1.4,.5,1);\r\n}\r\n.rm-root .switch-checkbox input:checked + span{background:var(--rm-accent);}\r\n.rm-root .switch-checkbox input:checked + span::before{left:calc(100% - 18px);}\r\n\r\n.rm-root .slider{display:flex;align-items:center;gap:9px;flex:1;}\r\n.rm-root .slider input[type=\"range\"]{\r\n  -webkit-appearance:none;flex:1;height:4px;border-radius:4px;\r\n  outline:none;border:none;cursor:pointer;\r\n  background:linear-gradient(90deg,#fff var(--val,50%),rgba(255,255,255,.16) var(--val,50%));\r\n}\r\n.rm-root .slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;width:12px;height:12px;border-radius:50%;\r\n  background:#fff;border:none;\r\n  box-shadow:0 1px 4px rgba(0,0,0,.5);\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-root .slider:hover input[type=\"range\"]::-webkit-slider-thumb{opacity:1;}\r\n.rm-root .slider-value{\r\n  font-size:.68em;font-weight:500;color:var(--rm-dim);\r\n  min-width:30px;text-align:right;font-variant-numeric:tabular-nums;\r\n}\r\n\r\n.rm-note{display:none;}\r\n.rm-btn.rm-on{color:var(--rm-accent);}\r\n\r\n.rm-guide{background:var(--rm-panel);border:1px solid var(--rm-line);border-radius:14px;padding:14px 16px;margin:0 0 12px;}\n.rm-guide summary{cursor:pointer;list-style:none;font-weight:700;font-size:13px;color:#cfc4ff;letter-spacing:.03em;display:flex;align-items:center;gap:8px;}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{content:\"?\";flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:rgba(160,120,255,.22);color:#d8ccff;font-size:11px;display:grid;place-items:center;}\n.rm-guide[open] summary{margin-bottom:10px;}\n.rm-guide ol{margin:0;padding-left:18px;color:#9b95ad;font-size:12px;line-height:2;}\n.rm-guide li{margin:0;}\n.rm-guide code{background:#0d0d1a;color:#cc88ff;padding:2px 7px;border-radius:4px;font-size:11.5px;}\n.rm-guide a{color:#b58cff;text-decoration:none;border-bottom:1px dotted rgba(181,140,255,.5);}\n.rm-guide a:hover{color:#fff;border-bottom-color:#fff;}\n.rm-guide .rm-guide-note{margin-top:10px;color:#6f6a80;font-size:11px;line-height:1.7;}\n</style>\r\n\r\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\r\n<div class=\"rm-root\">\n<details class=\"rm-guide\">\n  <summary>How to add a song with its lyrics</summary>\n  <ol>\n    <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n    <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n    <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n    <li>Open <b>Add Song</b> below, fill in the <b>Title</b>, and pick the <code>.mp3</code> in the file box (or paste a direct link in <b>URL</b>).</li>\n    <li>In the <b>LRC SYNC</b> box inside the same form, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area under it.</li>\n    <li>Press <b>Add Song</b>. It shows up in <b>Library</b> with its lyrics attached.</li>\n</ol>\n  <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n</details>\n\n<div class=\"rm-player\">\r\n  <div class=\"rm-np-row\">\r\n    <div class=\"rm-art\" id=\"rm-art\"><span class=\"rm-note\">&#9835;</span><div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div></div>\r\n    <div class=\"rm-meta\">\r\n      <div id=\"music-title\" class=\"rm-title\" data-i18n=\"rm_no_song\">No song selected</div>\r\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\r\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\r\n    </div>\r\n    <div class=\"rm-actions\">\r\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\" data-i18n-title=\"rm_t_like\">&#9825;</button>\r\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\" data-i18n-title=\"rm_t_save\">&#128190;</button>\r\n    </div>\r\n  </div>\r\n  <div class=\"rm-prog-wrap\">\r\n    <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\r\n    <div class=\"rm-times\"><span id=\"music-time-current\" class=\"rm-time\">0:00</span><span id=\"music-time-total\" class=\"rm-time\">0:00</span></div>\r\n  </div>\r\n  <div class=\"rm-ctrl\">\r\n    <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\" data-i18n-title=\"rm_t_prev\">&#9664;&#9664;</button>\r\n    <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play/Pause\" data-i18n-title=\"rm_t_play\">&#9654;</button>\r\n    <button id=\"music-next\" class=\"rm-btn\" title=\"Next\" data-i18n-title=\"rm_t_next\">&#9654;&#9654;</button>\r\n    <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\" data-i18n-title=\"rm_t_loop\">&#8635;</button>\r\n    <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" data-i18n=\"rm_shf\" style=\"font-size:0.7em;letter-spacing:0.1em;\">SHF</button>\r\n  </div>\r\n  <div class=\"rm-vol\"><span class=\"rm-vol-icon\">&#9834;</span><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\" style=\"flex:1;accent-color:#7A42F4;height:3px;cursor:pointer;\"><span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span></div>\r\n</div>\r\n\r\n<div class=\"rm-sec\" id=\"rm-sec-albums\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_albums\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\r\n    <div style=\"display:flex;gap:6px;\"><input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_new_album_ph\" placeholder=\"New album name...\" maxlength=\"30\" style=\"flex:1;\"><button id=\"add-album\" class=\"rm-btn\" data-i18n=\"rm_add_btn\" style=\"flex-shrink:0;padding:5px 12px;\">+ Add</button></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_library\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-filter-bar\" class=\"rm-filter-bar\"><button class=\"rm-filter-btn active\" data-filter=\"\" data-i18n=\"rm_all_songs\">All Songs</button><button class=\"rm-filter-btn\" data-filter=\"__liked\" data-i18n=\"rm_liked\">&#9829; Liked</button></div>\r\n    <div id=\"song-list\" style=\"display:flex;flex-direction:column;gap:1px;\"></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_add_song_title\">Add Song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:5px;\">\r\n      <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_title_ph\" placeholder=\"Title *\" maxlength=\"50\">\r\n      <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_artist_ph\" placeholder=\"Artist\" maxlength=\"30\">\r\n      <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_url_ph\" placeholder=\"URL (.mp3  .ogg  .wav)\">\r\n      <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;\">\r\n      <select id=\"song-album-select\" class=\"rm-sel\"><option value=\"\" data-i18n=\"rm_no_album\">No Album</option></select>\r\n      <div style=\"background:rgba(3,8,18,0.6);border-radius:7px;padding:8px;border:1px solid rgba(122,66,244,0.08);\">\r\n        <div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;\"><span style=\"font-family:Orbitron,monospace;font-size:0.66em;font-weight:700;color:rgba(122,66,244,0.5);letter-spacing:0.1em;\" data-i18n=\"rm_lrc_sync\">LRC SYNC</span><span id=\"lrc-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.6);\"></span></div>\r\n        <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;margin-bottom:5px;\">\r\n        <textarea id=\"song-lyrics-input\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\" style=\"width:100%;box-sizing:border-box;background:rgba(3,8,18,0.8);border:1px solid rgba(122,66,244,0.15);border-radius:4px;color:#bde0f0;padding:5px 7px;font-size:11px;outline:none;height:60px;resize:vertical;font-family:monospace;\"></textarea>\r\n        <label style=\"display:flex;align-items:center;gap:5px;cursor:pointer;font-size:0.78em;color:rgba(122,66,244,0.45);margin-top:5px;\"><input id=\"song-autosync\" type=\"checkbox\" style=\"accent-color:#7A42F4;\"> <span data-i18n=\"rm_autosync\">Auto-play &amp; sync when added</span></label>\r\n      </div>\r\n      <div style=\"display:flex;gap:6px;margin-top:2px;\"><button id=\"add-song\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_add_song_btn\">&#x2B22; Add Song</button><button id=\"save-song-btn\" class=\"rm-btn-primary\" data-i18n=\"rm_save_btn\">&#x2713; Save</button></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_chat_sync_title\">Chat Sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_enable_chat_sync\">Enable Chat Sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.1);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_mixed_sync\">Mixed Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_me_bots\">ME+BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_mixed_sync_example\">You: line &#8594; Bots: line &#8594; You ...</div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_bots_only_sync\">Bots Only Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_bots\">BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_bots_only_example\">Bot1: line 1 &bull; Bot2: line 2 &bull; Bot3: line 3 ...</div>\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_unified_sync\">Unified Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_all\">ALL</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_unified_example\">You + every bot post the same line at the same moment</div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.07);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_auto_delay\">Auto Delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_sync_bot\">Sync Bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" style=\"background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.7em;font-weight:700;padding:5px 18px;letter-spacing:0.1em;font-family:Orbitron,monospace;transition:all 0.2s;border-radius:4px;\">OFF</button></div>\r\n    <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span style=\"font-size:0.8em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_delay\">Delay</span><label class=\"slider\"><span class=\"slider-value\"></span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\" style=\"width:110px;\"></label></div>\r\n    <div style=\"display:flex;gap:6px;margin-top:6px;\"><button id=\"bm-test-chat\" style=\"flex:1;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:5px 10px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_test_chat\">&#9654; Test Chat</button><span id=\"bm-test-chat-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.45);align-self:center;\"></span></div>\r\n    <div style=\"margin-top:6px;\"><button id=\"bm-send-all-lyrics\" style=\"width:100%;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:6px 10px;font-family:Rajdhani,sans-serif;letter-spacing:0.05em;transition:all 0.15s;\">&#9836; Send All Lyrics: OFF</button><div id=\"bm-send-lyrics-status\" style=\"font-size:0.66em;color:rgba(122,66,244,0.45);text-align:center;margin-top:3px;\"></div></div>\r\n    <div id=\"bm-dbg-wrap\" style=\"display:none;margin-top:5px;\"><pre id=\"bm-dbg-box\" style=\"background:#13101e;border:1px solid rgba(122,66,244,0.15);border-radius:4px;padding:5px 7px;font-size:0.63em;color:rgba(122,66,244,0.45);font-family:monospace;white-space:pre-wrap;max-height:110px;overflow-y:auto;margin:0;\"></pre></div>\r\n    <button id=\"bm-dbg-toggle\" style=\"width:100%;margin-top:4px;background:rgba(122,66,244,0.03);border:1px solid rgba(122,66,244,0.08);border-radius:4px;color:rgba(122,66,244,0.38);cursor:pointer;font-size:0.66em;padding:3px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_show_debug\">Show Debug Log</button>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_backup_restore\">Backup &amp; Restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:6px;\">\r\n      <span style=\"font-size:0.77em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_backup_desc\">Export your library to JSON — restore anytime.</span>\r\n      <div style=\"display:flex;gap:6px;margin-top:4px;\"><button id=\"music-export-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_export\">&#x2B07; Export</button><button id=\"music-import-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_import\">&#x2B06; Import</button><input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\"></div>\r\n      <div id=\"music-backup-status\" style=\"font-size:0.73em;color:rgba(122,66,244,0.6);text-align:center;min-height:16px;\"></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n</div></div>";
   const styles_default = "@import \"https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700&family=Poppins:wght@400;500;600;700;800&display=swap\";\r\n\r\n*{user-select:none;box-sizing:border-box;}\r\n\r\n:root{\r\n  --bg:#1A1A24;\r\n  --bg-glass:rgba(26,26,36,0.82);\r\n  --accent:#7A42F4;\r\n  --accent2:#3A86FF;\r\n  --border:rgba(255,255,255,0.07);\r\n  --border-active:rgba(122,66,244,0.5);\r\n  --text:#FFFFFF;\r\n  --text-muted:rgba(200,200,215,0.75);\r\n  --text-dim:rgba(200,200,215,0.4);\r\n  --red:#ff4d6d;\r\n  --green:#00d68f;\r\n  --yellow:#ffd60a;\r\n  --font-head:'Poppins','Inter',sans-serif;\r\n  --font-body:'Inter','Poppins',sans-serif;\r\n}\r\n\r\n@keyframes slide-in-top{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}\r\n@keyframes toclose{from{opacity:1;transform:scale(1) translateY(0);}to{opacity:0;transform:scale(0.98) translateY(-4px);}}\r\n@keyframes toopen{from{opacity:0;transform:scale(0.98) translateY(-4px);}to{opacity:1;transform:scale(1) translateY(0);}}\r\n@keyframes dot-blink{0%,100%{opacity:1;}50%{opacity:0.2;}}\r\n@keyframes shimmer{0%{background-position:-200% 0;}100%{background-position:200% 0;}}\r\n@keyframes ripple{from{opacity:.4;transform:scale(0);}to{opacity:0;transform:scale(1.4);}}\r\n\r\nhtml,body{margin:0;padding:0;overflow:hidden;background:transparent;}\r\n*{font-family:var(--font-body);color:var(--text);opacity:1;}\r\nh1,h2{margin:0;font-family:var(--font-head);}\r\np{margin:0;color:var(--text-muted);}\r\nbutton{border:none;outline:none;cursor:pointer;}\r\n\r\n#menu-container{\r\n  position:absolute;top:50%;left:50%;\r\n  transform:translate(-50%,-50%);\r\n  width:1280px;height:720px;\r\n  display:flex;justify-content:center;align-items:center;\r\n}\r\n\r\n#menu-wrapper{\r\n  position:relative;\r\n  width:92%;height:90%;\r\n  background:rgba(25,25,25,0.45);\r\n  border:1px solid rgba(255,255,255,0.2);\r\n  border-radius:20px;\r\n  overflow:hidden;\r\n  backdrop-filter:blur(25px);\r\n  -webkit-backdrop-filter:blur(25px);\r\n  box-shadow:0 8px 32px 0 rgba(0,0,0,0.2),inset 0 1px 1px rgba(255,255,255,0.1);\r\n  display:flex;flex-direction:column;\r\n}\r\n\r\n#menu-wrapper::before{\r\n  content:'';position:absolute;top:0;left:0;right:0;\r\n  height:1px;\r\n  background:transparent;\r\n  z-index:10;pointer-events:none;display:none;\r\n}\r\n\r\n#menu-wrapper.toclose{animation:150ms ease-in toclose forwards;}\r\n#menu-wrapper.toopen{animation:200ms cubic-bezier(.34,1.4,.64,1) toopen forwards;}\r\n\r\nheader{\r\n  position:relative;z-index:5;\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  height:46px;min-height:46px;\r\n  padding:0 18px;\r\n  background:transparent;\r\n  border-bottom:1px solid var(--border);\r\n  flex-shrink:0;\r\n}\r\n\r\nheader .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.75em;\r\n  font-weight:700;\r\n  letter-spacing:0.22em;\r\n  text-transform:uppercase;\r\n  background:linear-gradient(90deg,#7A42F4,#3A86FF,#a07af4,#7A42F4);\r\n  background-size:200% auto;\r\n  -webkit-background-clip:text;-webkit-text-fill-color:transparent;\r\n  animation:shimmer 5s linear infinite;\r\n}\r\n\r\nheader #credits{display:flex;align-items:center;gap:10px;height:46px;}\r\nheader #logo{display:block;height:28px;width:auto;filter:drop-shadow(0 0 6px rgba(122,66,244,0.6));}\r\n\r\nheader #close-button{\r\n  display:flex;align-items:center;justify-content:center;\r\n  width:26px;height:26px;\r\n  fill:none;stroke:var(--text-dim);stroke-width:1.6;\r\n  cursor:pointer;\r\n  border-radius:5px;\r\n  border:1px solid transparent;\r\n  background:transparent;\r\n  transition:all 160ms;\r\n  padding:5px;\r\n}\r\nheader #close-button:hover{\r\n  stroke:var(--text);background:rgba(255,77,109,0.1);\r\n  border-color:rgba(255,77,109,0.35);\r\n}\r\n\r\nmain{\r\n  display:flex;flex-direction:row;\r\n  flex:1;min-height:0;\r\n  position:relative;z-index:2;\r\n}\r\n\r\n#navbar-container{\r\n  display:flex;flex-direction:column;\r\n  width:172px;min-width:172px;\r\n  background:rgba(15,15,15,0.3);backdrop-filter:blur(25px);-webkit-backdrop-filter:blur(25px);\r\n  border-right:1px solid rgba(255,255,255,0.1);\r\n  padding:0;\r\n  gap:0;\r\n  position:relative;flex-shrink:0;overflow:hidden;\r\n  justify-content:space-evenly;\r\n  }\r\n\r\n.open-menu{\r\n  position:relative;\r\n  display:flex;flex-direction:row;\r\n  align-items:center;justify-content:flex-start;\r\n  gap:10px;\r\n  width:100%;height:66px;\r\n  background:transparent;\r\n  border:none;\r\n  border-left:3px solid transparent;\r\n  border-bottom:1px solid rgba(255,255,255,0.05);\r\n  color:var(--text-dim);opacity:0.7;\r\n  transition:color 140ms,border-color 140ms,background 140ms,transform 100ms,opacity 100ms;\r\n  cursor:pointer;\r\n  padding:0 18px;\r\n  overflow:hidden;box-sizing:border-box;\r\n}\r\n\r\n.open-menu:hover{\r\n  color:rgba(255,255,255,0.85);opacity:1;\r\n  background:rgba(255,255,255,0.04);\r\n  border-left-color:rgba(122,66,244,0.5);\r\n}\r\n\r\n.open-menu:active{\r\n  transform:scale(0.96);\r\n  opacity:0.75;\r\n}\r\n\r\n.open-menu.active{\r\n  color:var(--text);\r\n  background:rgba(122,66,244,0.12);\r\n  border-left:3px solid var(--accent);\r\n  pointer-events:none;\r\n}\r\n\r\n.open-menu.active .nav-icon{\r\n  filter:drop-shadow(0 0 5px rgba(122,66,244,0.9));\r\n}\r\n\r\n.nav-icon{width:24px;height:24px;transition:all 140ms;flex-shrink:0;}\r\n\r\n.nav-label{\r\n  font-family:var(--font-head);\r\n  font-size:0.93em;\r\n  letter-spacing:0.04em;\r\n  font-weight:700;\r\n  text-transform:uppercase;\r\n  line-height:1;\r\n  transition:all 140ms;\r\n}\r\n\r\n.open-menu .ripple{\r\n  position:absolute;z-index:5;\r\n  background:rgba(122,66,244,0.15);\r\n  border-radius:50%;opacity:0;\r\n  animation:ripple 550ms;\r\n  pointer-events:none;\r\n}\r\n\r\n#page-container{\r\n  flex:1;min-width:0;\r\n  overflow-y:auto;overflow-x:hidden;\r\n  scroll-behavior:smooth;\r\n  padding:0;\r\n}\r\n\r\n#page-container::-webkit-scrollbar{width:2px;}\r\n#page-container::-webkit-scrollbar-track{background:transparent;}\r\n#page-container::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.25);border-radius:2px;}\r\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(122,66,244,0.45);}\r\n\r\n.menu-page{display:none;}\r\n.menu-page.opened{\r\n  display:block;\r\n  padding:16px 20px;\r\n  animation:slide-in-top 140ms ease-out;\r\n}\r\n\r\n.menu-page .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:1.05em;font-weight:700;\r\n  letter-spacing:0.05em;\r\n  color:var(--text);\r\n  text-transform:uppercase;\r\n  margin-bottom:2px;\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page .page-title::before{\r\n  content:'';display:inline-block;\r\n  width:2px;height:0.9em;\r\n  background:linear-gradient(180deg,var(--accent),var(--accent2));\r\n  border-radius:2px;flex-shrink:0;\r\n}\r\n\r\n.page-description{\r\n  font-size:0.75em;color:var(--text-dim);\r\n  margin-bottom:14px;\r\n  letter-spacing:0.01em;\r\n  padding-left:10px;\r\n  font-weight:400;\r\n}\r\n\r\n.menu-page>.section{\r\n  margin-bottom:10px;\r\n  background:transparent;\r\n  border:1px solid var(--border);\r\n  border-radius:7px;\r\n  overflow:visible;\r\n  transition:border-color 200ms;\r\n  position:relative;\r\n}\r\n.menu-page>.section:hover{border-color:rgba(122,66,244,0.22);}\r\n\r\n.section-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.68em;\r\n  font-weight:600;\r\n  letter-spacing:0.12em;\r\n  text-transform:uppercase;\r\n  color:rgba(122,66,244,0.6);\r\n  padding:6px 12px;\r\n  background:rgba(122,66,244,0.03);\r\n  border-bottom:1px solid var(--border);\r\n  display:flex;align-items:center;gap:6px;\r\n}\r\n.section-title::before{\r\n  content:'';width:3px;height:3px;\r\n  background:var(--accent);border-radius:50%;\r\n  box-shadow:0 0 5px var(--accent);flex-shrink:0;\r\n  opacity:0.7;\r\n}\r\n\r\n.section-content{display:flex;flex-direction:column;gap:0;}\r\n.small-section{font-size:0.85rem;}\r\n\r\n.section-content.split{flex-direction:row;gap:0;}\r\n.content-split{flex:1;display:flex;flex-direction:column;}\r\n.content-split:first-child{border-right:1px solid rgba(255,255,255,0.05);}\r\n\r\n.content-option{\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  min-height:42px;padding:6px 12px;\r\n  border-bottom:1px solid rgba(255,255,255,0.03);\r\n  transition:background 150ms;\r\n  position:relative;\r\n  overflow:visible;\r\n}\r\n.content-option:last-child{border-bottom:none;}\r\n.content-option:hover{background:rgba(122,66,244,0.04);}\r\n\r\n.content-option.centered{justify-content:center;}\r\n.content-option.left-flex{justify-content:flex-start;gap:12px;}\r\n.content-option.text{justify-content:flex-start;}\r\n\r\n.option-title{\r\n  font-size:1.06em;\r\n  font-weight:500;\r\n  color:rgba(215,215,230,0.8);\r\n  letter-spacing:0.01em;\r\n  transition:color 150ms;\r\n}\r\n.content-option:hover .option-title{color:#FFFFFF;}\r\n\r\n.option-content{display:flex;align-items:center;gap:7px;}\r\n\r\n.text-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.8em;color:var(--accent);\r\n  font-weight:600;\r\n}\r\n.simplified{\r\n  font-family:var(--font-body)!important;\r\n  font-size:0.78em!important;\r\n  color:var(--text-dim)!important;\r\n  font-weight:400!important;\r\n  line-height:1.6;\r\n}\r\n.highlight{color:var(--accent)!important;}\r\n\r\n\r\n.hotkeyInput{\r\n  min-width:48px;height:24px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;font-weight:600;\r\n  color:rgba(200,175,255,0.8);\r\n  letter-spacing:0.04em;\r\n  padding:0 7px;\r\n  transition:all 140ms;\r\n  display:flex;align-items:center;justify-content:center;\r\n}\r\n.hotkeyInput:hover{\r\n  background:rgba(122,66,244,0.12);\r\n  border-color:rgba(122,66,244,0.5);\r\n}\r\n.hotkeyInput.active{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:var(--accent);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.2);\r\n  animation:dot-blink 0.8s ease infinite;\r\n}\r\n.hotkeyInput.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n.switch-checkbox{\r\n  position:relative;width:52px;height:30px;flex-shrink:0;\r\n}\r\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n\r\n.switch-checkbox span{\r\n  position:absolute;inset:0;\r\n  background:rgba(255,255,255,0.05);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:10px;\r\n  cursor:pointer;\r\n  transition:all 220ms;\r\n}\r\n.switch-checkbox span::before{\r\n  content:'';position:absolute;\r\n  left:3px;top:50%;transform:translateY(-50%);\r\n  width:20px;height:20px;\r\n  background:rgba(255,255,255,0.25);\r\n  border-radius:50%;\r\n  transition:all 220ms cubic-bezier(.34,1.4,.64,1);\r\n}\r\n.switch-checkbox input:checked + span{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:rgba(122,66,244,0.55);\r\n}\r\n.switch-checkbox input:checked + span::before{\r\n  left:calc(100% - 23px);\r\n  background:#7A42F4;\r\n  box-shadow:0 0 7px rgba(122,66,244,0.7);\r\n}\r\n\r\n.option-button{\r\n  padding:5px 16px;\r\n  background:rgba(122,66,244,0.1);\r\n  border:1px solid rgba(122,66,244,0.35);\r\n  border-radius:5px;\r\n  font-family:var(--font-head);\r\n  font-size:0.66em;font-weight:600;\r\n  letter-spacing:0.06em;\r\n  color:#FFFFFF;\r\n  text-transform:uppercase;\r\n  transition:all 140ms;\r\n}\r\n.option-button:hover{\r\n  background:rgba(122,66,244,0.22);\r\n  border-color:rgba(122,66,244,0.65);\r\n  box-shadow:0 0 12px rgba(122,66,244,0.2);\r\n}\r\n\r\n.ryn-social-btn:hover{\r\n  background:rgba(122,66,244,0.22)!important;\r\n  border-color:rgba(122,66,244,0.7)!important;\r\n  box-shadow:0 0 12px rgba(122,66,244,0.25);\r\n  transform:translateY(-1px);\r\n}\r\n.ryn-social-btn svg{width:19px;height:19px;}\r\n.ryn-social-big:hover{\r\n  background:rgba(122,66,244,0.13)!important;\r\n  border-color:rgba(122,66,244,0.8)!important;\r\n  box-shadow:0 0 22px rgba(122,66,244,0.3);\r\n  transform:translateY(-3px);\r\n}\r\n.ryn-social-big svg{width:44px;height:44px;}\r\n\r\n.option-button.red{\r\n  background:rgba(255,77,109,0.08)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n.option-button.red:hover{\r\n  background:rgba(255,77,109,0.15)!important;\r\n  border-color:rgba(255,77,109,0.6)!important;\r\n  box-shadow:0 0 10px rgba(255,77,109,0.2)!important;\r\n}\r\n\r\n.input{\r\n  height:24px;width:175px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-body);\r\n  font-size:0.72em;font-weight:400;\r\n  color:var(--text);\r\n  text-align:center;\r\n  transition:all 140ms;\r\n  padding:0 7px;\r\n}\r\n.input:focus{\r\n  outline:none;\r\n  border-color:rgba(122,66,244,0.5);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.1);\r\n  background:rgba(122,66,244,0.05);\r\n}\r\n\r\ninput[id][type=\"color\"]{\r\n  width:46px;height:22px;\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  padding:1px;\r\n  background:transparent;\r\n  cursor:pointer;\r\n  transition:border-color 140ms;\r\n}\r\ninput[id][type=\"color\"]:hover{border-color:rgba(122,66,244,0.5);}\r\n\r\n.reset-color{\r\n  width:16px;height:9px;\r\n  background:var(--data-color,var(--accent));\r\n  border-radius:5px;\r\n  border:none;cursor:pointer;\r\n  box-shadow:0 0 4px currentColor;\r\n  flex-shrink:0;\r\n}\r\n\r\n.slider{display:flex;align-items:center;gap:7px;}\r\n.slider input[type=\"range\"]{\r\n  -webkit-appearance:none;\r\n  width:100px;height:2px;\r\n  background:linear-gradient(90deg,var(--accent2) var(--val,50%),rgba(255,255,255,0.07) var(--val,50%));\r\n  border-radius:2px;\r\n  border:none;outline:none;cursor:pointer;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;\r\n  width:11px;height:11px;\r\n  border-radius:50%;\r\n  background:var(--accent2);\r\n  box-shadow:0 0 5px rgba(58,134,255,0.5);\r\n  border:2px solid var(--bg);\r\n  transition:transform 120ms;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb:hover{transform:scale(1.25);}\r\n.slider-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;color:var(--accent2);\r\n  min-width:28px;text-align:right;font-weight:600;\r\n}\r\n\r\n.disconnect-button{\r\n  width:16px;height:16px;\r\n  fill:rgba(255,255,255,0.12);\r\n  cursor:pointer;transition:fill 180ms;flex-shrink:0;\r\n}\r\n.content-option:hover .disconnect-button{fill:rgba(255,77,109,0.45);}\r\n.disconnect-button:hover{fill:#cc4444!important;}\r\n\r\n.key-badge{\r\n  display:inline-flex;align-items:center;justify-content:center;\r\n  min-width:24px;height:18px;padding:0 4px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:3px;\r\n  font-family:var(--font-head);\r\n  font-size:0.6em;font-weight:600;\r\n  color:rgba(180,155,255,0.75);\r\n}\r\n\r\n#bot-container{padding:2px 0;}\r\n\r\n.icon{width:48px;height:48px;}\r\n.small-icon{width:16px;height:16px;}\r\n\r\n.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.3)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n#ryn-search-wrap{position:relative;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:0 10px;height:30px;transition:border-color 160ms,box-shadow 160ms;min-width:185px;}\r\n#ryn-search-wrap:focus-within{border-color:rgba(122,66,244,0.55);box-shadow:0 0 0 2px rgba(122,66,244,0.12);background:rgba(122,66,244,0.05);}\r\n#ryn-search-input{flex:1;background:transparent;border:none;outline:none;font-family:var(--font-body);font-size:0.75em;color:var(--text);min-width:0;}\r\n#ryn-search-input::placeholder{color:rgba(200,200,215,0.3);}\r\n#ryn-search-clear{font-size:0.65em;color:rgba(200,200,215,0.3);cursor:pointer;flex-shrink:0;display:none;transition:color 120ms;line-height:1;}\r\n#ryn-search-clear:hover{color:rgba(255,77,109,0.8);}\r\n#ryn-search-dropdown{display:none;position:absolute;top:calc(100% + 6px);right:0;width:280px;max-height:320px;overflow-y:auto;background:rgba(18,15,30,0.98);border:1px solid rgba(122,66,244,0.3);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.7);z-index:9999;padding:4px;}\r\n#ryn-search-dropdown::-webkit-scrollbar{width:2px;}\r\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.3);border-radius:2px;}\r\n.ryn-si{display:flex;flex-direction:column;gap:2px;padding:7px 10px;border-radius:5px;cursor:pointer;transition:background 120ms;border:1px solid transparent;}\r\n.ryn-si:hover,.ryn-si.ryn-fx{background:rgba(122,66,244,0.12);border-color:rgba(122,66,244,0.22);}\r\n.ryn-st{font-size:0.8em;font-weight:600;color:#FFFFFF;line-height:1.3;}\r\n.ryn-st mark{background:rgba(122,66,244,0.4);color:#FFFFFF;border-radius:2px;padding:0 1px;}\r\n.ryn-sp{font-size:0.68em;color:rgba(122,66,244,0.55);font-family:var(--font-head);letter-spacing:0.06em;text-transform:uppercase;}\r\n.ryn-se{text-align:center;padding:18px 12px;font-size:0.77em;color:rgba(200,200,215,0.3);font-style:italic;}\r\n.ryn-sl{font-size:0.62em;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(122,66,244,0.4);padding:5px 10px 2px;margin-top:2px;}\r\n\r\n.menu-page[data-id=\"3\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\n\r\n.menu-page[data-id=\"3\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"3\"] .option-title{\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n  transition:color 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .option-content{gap:9px;}\r\n\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]{\r\n  width:21px;height:21px;padding:0;\r\n  border:none;border-radius:50%;\r\n  background:transparent;cursor:pointer;overflow:hidden;\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.16),0 2px 5px rgba(0,0,0,0.4);\r\n  transition:transform 160ms ease,box-shadow 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch-wrapper{padding:0;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch{border:none;border-radius:50%;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]:hover{\r\n  transform:scale(1.14);\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.34),0 3px 9px rgba(0,0,0,0.55);\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) input[type=\"color\"]{\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.3),0 0 9px rgba(122,66,244,0.4);\r\n}\r\n\r\n.menu-page[data-id=\"3\"] .reset-color{\r\n  width:11px;height:11px;border-radius:50%;\r\n  opacity:0;\r\n  transition:opacity 160ms ease,transform 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover .reset-color{opacity:0.85;}\r\n.menu-page[data-id=\"3\"] .reset-color:hover{opacity:1;transform:scale(1.28);}\r\n\r\n.menu-page[data-id=\"3\"] .section-title{\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page[data-id=\"3\"] .section-title::before{\r\n  content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::before{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\nlabel.option-title{\r\n  cursor:pointer;user-select:none;\r\n  flex:1;min-width:0;\r\n  transition:color 150ms ease;\r\n}\r\nlabel.option-title:hover{color:var(--text);}\r\nlabel.option-title:active{opacity:0.7;}\r\n\r\n.menu-page[data-id=\"2\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"2\"] .section-title{\r\n  display:flex;flex-direction:column;align-items:flex-start;gap:3px;\r\n}\r\n.sec-sub{\r\n  font-family:var(--font-body);\r\n  font-size:0.78em;font-weight:400;letter-spacing:0;\r\n  text-transform:none;color:var(--text-dim);\r\n  line-height:1.45;\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .section-title::after{\r\n  content:'';position:absolute;top:14px;right:14px;\r\n  width:5px;height:5px;border-radius:50%;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .section{position:relative;}\r\n.menu-page[data-id=\"2\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::after{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\n.menu-page[data-id=\"1\"] .key-grid{\n  display:grid;\n  grid-template-columns:repeat(auto-fill,minmax(228px,1fr));\n  gap:8px;\n  padding:10px 12px;\n}\n.menu-page[data-id=\"1\"] .key-tile{\n  display:flex;align-items:center;justify-content:space-between;gap:10px;\n  min-height:38px;padding:7px 10px;\n  background:rgba(255,255,255,0.02);\n  border:1px solid rgba(255,255,255,0.06);\n  border-radius:8px;\n  transition:background 150ms,border-color 150ms,transform 150ms;\n}\n.menu-page[data-id=\"1\"] .key-tile:hover{\n  background:rgba(122,66,244,0.07);\n  border-color:rgba(122,66,244,0.4);\n  transform:translateY(-1px);\n}\n.menu-page[data-id=\"1\"] .key-tile .option-title{\n  font-size:0.86em;font-weight:500;\n  color:rgba(215,215,230,0.85);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.menu-page[data-id=\"1\"] .key-tile .hotkeyInput{\n  min-width:58px;height:26px;flex-shrink:0;\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.active){\n  border-color:var(--accent);\n  background:rgba(122,66,244,0.1);\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.red){\n  border-color:rgba(255,77,109,0.4);\n  background:rgba(255,77,109,0.05);\n}\n\n.sub-options{\n  border-left:2px solid rgba(122,66,244,0.35);\n  margin:0 0 0 12px;\n  transition:opacity 200ms;\n}\n.sub-options .content-option{\n  padding-left:16px;\n  min-height:38px;\n}\n.sub-options .option-title{\n  font-size:0.95em;\n  color:rgba(200,200,215,0.7);\n}\n.sub-options .content-option:last-child{border-bottom:none;}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:0.3;\n  pointer-events:none;\n}\n";
   const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    border: 2px solid rgba(80,30,160,0.45) !important;\r\n    border-radius: 4px !important;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
@@ -4190,7 +4190,14 @@ window.grbtp = 35;
       proto.fillText = function(text, x, y, maxWidth) {
         const myNick = client && client.myPlayer && client.myPlayer.nickname;
         let overrideColor = null;
-        if (Settings_default._myNameColor && self._matchesNickname(text, myNick)) {
+        // Green and red first: they are a live instruction to the squad, and
+        // seeing at a glance which name is which is the point of them. The
+        // match is on the drawn nickname, so two players sharing a name share
+        // the colour - the lists themselves are keyed on id and are exact.
+        const marked = _teamNameColour(text);
+        if (marked !== null) {
+          overrideColor = marked;
+        } else if (Settings_default._myNameColor && self._matchesNickname(text, myNick)) {
           overrideColor = Settings_default._myNameColorValue;
         } else if (RYN_IS_OWNER_BUILD && Settings_default._markRynPlayers && RYNPresence.hasName(text)) {
           overrideColor = RYN_RED_NAME;
@@ -5829,6 +5836,29 @@ window.grbtp = 35;
       this.send([ "6", message ]);
     }
     attack(angle) {
+      // Never shoot past somebody green. Every attack in the client reaches
+      // this line - the module chain, the synced volleys that write packets
+      // directly, the scatter swing - so holding it here is the only version
+      // that cannot be routed around.
+      //
+      // The test is skipped entirely for a weapon that does not fire anything:
+      // a melee swing stops at arm's length and cannot reach a target standing
+      // behind the person being protected, so blocking it would only be
+      // stopping the bot from defending itself.
+      //
+      // It is also skipped for your own character. Green is an order given to
+      // the squad, and swallowing a shot you aimed by hand - with no feedback,
+      // because there is nowhere here to give any - would read as the game
+      // being broken rather than as a rule being enforced.
+      if (_GREEN.size !== 0 && !this.client.isOwner) {
+        const mp = this.client.myPlayer;
+        if (mp && mp.pos && mp.inGame) {
+          const reach = _shotReach(this.client);
+          if (reach > 0 && _greenInLineOfFire(this.client, mp.pos.current, angle === null ? mp.angle : angle, reach)) {
+            return;
+          }
+        }
+      }
       this.send([ "F", 1, wireAngle(angle) ]);
     }
     stopAttack(angle = null) {
@@ -6139,6 +6169,12 @@ window.grbtp = 35;
         const ownerID = ownerClient && ownerClient.myPlayer && ownerClient.myPlayer.id;
         if (ownerID != null && id === ownerID) return false;
       }
+      // Green. This one line is the whole "will not attack them" guarantee:
+      // isEnemyByID is its negation, PlayerManager.enemies is filtered by that,
+      // EnemyManager is fed from there, and every targeting module in the
+      // client reads one of the three. Answering it here means there is no
+      // module that can be forgotten.
+      if (_isGreen(id)) return true;
       return this.teammates.has(id);
     }
     isEnemyByID(id) {
@@ -7734,6 +7770,21 @@ window.grbtp = 35;
         const cleared = _clearBotAutoPlay();
         if (window._rynBotToast) window._rynBotToast(cleared === 0 ? "No bots were on Auto Play" : "Auto Play cleared on " + cleared + " bot(s)");
       }
+      if (Settings_default._botWallGuardKey && Settings_default._botWallGuardKey !== "..." && event.code === Settings_default._botWallGuardKey) {
+        Settings_default._botWallGuard = !Settings_default._botWallGuard;
+        SaveSettings();
+        if (window._rynBotToast) window._rynBotToast("Wall Guard: " + (Settings_default._botWallGuard ? "ON — walls up at " + _wallGuardMin() + "+ shooters" : "OFF"));
+      }
+      if (Settings_default._botDodgeKey && Settings_default._botDodgeKey !== "..." && event.code === Settings_default._botDodgeKey) {
+        Settings_default._botDodge = !Settings_default._botDodge;
+        SaveSettings();
+        if (window._rynBotToast) window._rynBotToast("Dodge: " + (Settings_default._botDodge ? "ON" : "OFF"));
+      }
+      if (Settings_default._botMusketBowInstaKey && Settings_default._botMusketBowInstaKey !== "..." && event.code === Settings_default._botMusketBowInstaKey) {
+        Settings_default._botMusketBowInsta = !Settings_default._botMusketBowInsta;
+        SaveSettings();
+        if (window._rynBotToast) window._rynBotToast("Bot Musket Bow Insta: " + (Settings_default._botMusketBowInsta ? "ON — holding bow, banking points" : "OFF"));
+      }
       if (event.code === Settings_default._botAutoAttack) {
         Settings_default._botAutoAttackEnabled = !Settings_default._botAutoAttackEnabled;
         const {isOwner: isOwner2, clients: clients2} = this.client;
@@ -8490,6 +8541,12 @@ window.grbtp = 35;
       // can be seen. Both are the same kind of claim the line above makes.
       if (ModuleHandler._warDrive && Settings_default._warSplit) return;
       if (ModuleHandler._ghostHold) return;
+      // Behind a wall, stepping out of a line, or walking into a firing
+      // position: three more modules that have already decided where this bot
+      // is going this tick.
+      if (ModuleHandler._wallHold) return;
+      if (ModuleHandler._dodgeHold) return;
+      if (ModuleHandler._instaHold) return;
       if (ModuleHandler._autoFarmActive) return;
       // Ranged kiting already decided where this bot walks this tick.
       if (ModuleHandler.staticModules.botRangedAttack?.active) return;
@@ -17597,6 +17654,9 @@ window.grbtp = 35;
         botAutoShot: new BotAutoShot(client2),
         botGhostShot: new BotGhostShot(client2),
         botWaterPlatform: new BotWaterPlatform(client2),
+        botWallGuard: new BotWallGuard(client2),
+        botDodge: new BotDodge(client2),
+        botMusketBowInsta: new BotMusketBowInsta(client2),
         botWeaponWatchdog: new BotWeaponWatchdog(client2),
         autoPlacer: new AutoPlacer_default(client2),
         placementEngine: new RynPlacementEngine_default(client2),
@@ -17624,7 +17684,12 @@ window.grbtp = 35;
       // the tick already claimed. botWaterPlatform runs last, after movement,
       // because whether the bot is in the river is a fact about where movement
       // just put it.
-      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botGhostShot, this.staticModules.botAutoShot, this.staticModules.botRangedAttack, this.staticModules.movement, this.staticModules.botAutoBreak, this.staticModules.botWaterPlatform ];
+      // botMusketBowInsta, botWallGuard and botDodge run ahead of the shooting
+      // modules and in that order, because each is a stronger claim on the same
+      // tick than the one after it: a combo already begun finishes, cover
+      // beats standing in the open, and a step out of the line beats both when
+      // there is nothing left to hide behind.
+      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botMusketBowInsta, this.staticModules.botWallGuard, this.staticModules.botDodge, this.staticModules.botGhostShot, this.staticModules.botAutoShot, this.staticModules.botRangedAttack, this.staticModules.movement, this.staticModules.botAutoBreak, this.staticModules.botWaterPlatform ];
       this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.spikeTickController, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink, this.staticModules.botWeaponWatchdog ];
       this.reset();
     }
@@ -19259,6 +19324,22 @@ window.grbtp = 35;
             break;
           }
 
+         case "_clearGreen":
+         case "_clearRed":
+          {
+            const colour = button.id === "_clearGreen" ? "green" : "red";
+            const label = button.textContent;
+            button.onclick = () => {
+              const n = _teamClear(colour);
+              button.textContent = n === 0 ? "Nobody was " + colour : "Cleared " + n;
+              _renderTeamPanel();
+              setTimeout(() => {
+                button.textContent = label;
+              }, 2e3);
+            };
+            break;
+          }
+
          case "_botSquadNameApply":
           this.handleSquadNameApply(button);
           break;
@@ -20065,6 +20146,25 @@ window.grbtp = 35;
     _botRandomNameOnDeath: false,
     // The roster number drawn under each bot's health.
     _botNumbers: true,
+    // Wall Guard: drop a wall on the line a musket is coming down, hold behind
+    // it, then break it and answer the moment their shot is spent.
+    _botWallGuard: false,
+    _botWallGuardKey: "",
+    // How many enemies have to be aiming a loaded ranged weapon before it is
+    // worth spending a wall. One archer is not a volley.
+    _botWallGuardMin: 2,
+    // Dodge: the answer when a wall is not possible. A step out of the line
+    // rather than a wall across it.
+    _botDodge: false,
+    _botDodgeKey: "",
+    // Musket-bow insta, run by the bots themselves. Holding the secondary at
+    // the plain bow is what banks the upgrade points the combo spends.
+    _botMusketBowInsta: false,
+    _botMusketBowInstaKey: "",
+    // Green and red are lists of player ids, kept in settings so they survive
+    // a reload the way every other choice here does.
+    _teamGreen: [],
+    _teamRed: [],
     // Guards. These four were read by GuardModule and _applyBotWeaponPatch but
     // never declared here, and the settings loader deletes every key that is
     // not in defaults - so _shieldGuard was permanently undefined and the whole
@@ -22177,6 +22277,7 @@ window.grbtp = 35;
     try {
       if (!UI_default.isMenuOpened) return;
       _renderRoster();
+      _renderTeamPanel();
       // Numbers follow the roster, so a bot leaving renumbers the rows behind
       // it in the connected-bot list as well as in the panel above.
       UI_default.refreshBotOptions();
@@ -22200,6 +22301,997 @@ window.grbtp = 35;
       }
     } catch (_) {}
   }, 500);
+
+  // ==========================================================================
+  // Green and red.
+  //
+  //     !Team <id>   green - the squad stops treating them as an enemy
+  //     !Red <id>    red   - the squad shoots them on sight
+  //
+  // Green is not a target filter bolted onto each module. It is answered at
+  // ClientPlayer.isTeammateByID, which is the one question every other piece of
+  // targeting is built on: PlayerManager.enemies is filtered by it, EnemyManager
+  // is fed from that, and auto shot, kiting, War Split, Find Enemy and Ghost
+  // Shot all read those. Marking someone green at that level is what makes
+  // "will not attack them" true everywhere at once instead of true in the five
+  // places somebody remembered to check.
+  //
+  // Not shooting THROUGH a green player is a separate problem, because it is
+  // not about who the target is - the target is a legitimate enemy standing
+  // behind someone you are protecting. That is answered at PacketManager.attack,
+  // the single point every attack in the client goes through, and only for a
+  // weapon that actually fires something: a melee swing cannot reach past the
+  // person in front, so blocking it there would be stopping an attack that was
+  // never a risk.
+  //
+  // The lists live in Sets and are written back to settings as fresh arrays.
+  // Assigning the default array itself would alias defaultSettings, and a
+  // reset would then hand back a list somebody had already mutated.
+  // ==========================================================================
+  const _GREEN = new Set;
+  const _RED = new Set;
+  function _teamLoad() {
+    try {
+      for (const id of Settings_default._teamGreen || []) _GREEN.add(Number(id));
+      for (const id of Settings_default._teamRed || []) _RED.add(Number(id));
+    } catch (_) {}
+  }
+  function _teamSave() {
+    try {
+      Settings_default._teamGreen = [ ..._GREEN ];
+      Settings_default._teamRed = [ ..._RED ];
+      SaveSettings();
+    } catch (_) {}
+  }
+  function _isGreen(id) {
+    return _GREEN.size !== 0 && _GREEN.has(id);
+  }
+  function _isRed(id) {
+    return _RED.size !== 0 && _RED.has(id);
+  }
+  // A player is on one list or the other, never both - marking someone red who
+  // was green is a correction, not a contradiction to be stored.
+  function _teamMark(id, colour) {
+    const n = Number(id);
+    if (!Number.isFinite(n)) return false;
+    _GREEN.delete(n);
+    _RED.delete(n);
+    if (colour === "green") _GREEN.add(n); else if (colour === "red") _RED.add(n);
+    _teamSave();
+    return true;
+  }
+  function _teamClear(colour) {
+    const set = colour === "green" ? _GREEN : _RED;
+    const n = set.size;
+    set.clear();
+    _teamSave();
+    return n;
+  }
+  window._rynTeam = {
+    green: _GREEN,
+    red: _RED,
+    mark: _teamMark,
+    clear: _teamClear
+  };
+
+  // The colour a drawn name should come out in, or null.
+  //
+  // fillText is called for every label on screen every frame, so this has to be
+  // a map lookup and nothing else. The map goes from nickname to colour and is
+  // rebuilt only when the lists change or a marked player's name does - which
+  // is what the stamp is for, since a marked player who was out of sight when
+  // they were marked has no name to map until they walk back into view.
+  const TEAM_GREEN_COLOUR = "#4ce07a";
+  const TEAM_RED_COLOUR = "#ff4444";
+  let _teamNameMap = null;
+  let _teamNameStamp = "";
+  function _teamNames() {
+    if (_GREEN.size === 0 && _RED.size === 0) {
+      _teamNameMap = null;
+      _teamNameStamp = "";
+      return null;
+    }
+    let stamp = "";
+    const pairs = [];
+    try {
+      const pd = client.PlayerManager.playerData;
+      for (const [set, colour] of [ [ _GREEN, TEAM_GREEN_COLOUR ], [ _RED, TEAM_RED_COLOUR ] ]) {
+        for (const id of set) {
+          const p = pd.get(id);
+          const nick = p && p.nickname;
+          stamp += id + ":" + (nick || "") + ",";
+          if (nick) pairs.push([ nick, colour ]);
+        }
+      }
+    } catch (_) {
+      return _teamNameMap;
+    }
+    if (stamp !== _teamNameStamp || _teamNameMap === null) {
+      _teamNameStamp = stamp;
+      _teamNameMap = new Map(pairs);
+    }
+    return _teamNameMap;
+  }
+  function _teamNameColour(text) {
+    if (_GREEN.size === 0 && _RED.size === 0) return null;
+    if (typeof text !== "string" || text.length === 0) return null;
+    const map = _teamNames();
+    if (map === null) return null;
+    const hit = map.get(text);
+    return hit === undefined ? null : hit;
+  }
+  _teamLoad();
+
+  // Would this shot pass through somebody green?
+  //
+  // The same cone test the projectile tracker uses to decide an arrow is coming
+  // at you, run forwards: a green player closer than the shot's reach and
+  // inside the angular width they subtend at that distance is in the way. The
+  // margin widens the cone by the projectile's own size, because a shot that
+  // grazes the person you are protecting still hits them.
+  const _GREEN_SHOT_MARGIN = 22;
+  function _greenInLineOfFire(client2, fromPos, angle, reach) {
+    if (_GREEN.size === 0) return false;
+    try {
+      const pm = client2.PlayerManager;
+      if (!pm) return false;
+      const list = pm.players;
+      for (let i = 0; list && i < list.length; i++) {
+        const p = list[i];
+        if (!p || !p.pos || !_isGreen(p.id)) continue;
+        const pos = p.pos.current;
+        const dx = pos.x - fromPos.x;
+        const dy = pos.y - fromPos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 1 || dist > reach) continue;
+        const half = Math.asin(Math.min(1, ((p.scale || 35) + _GREEN_SHOT_MARGIN) / dist));
+        if (getAngleDist(Math.atan2(dy, dx), angle) <= half) return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+  // How far this client's shot can travel, so the cone above is not tested
+  // against a green player standing well beyond anything that could reach them.
+  function _shotReach(client2) {
+    try {
+      const mh = client2._ModuleHandler;
+      const id = client2.myPlayer.getItemByType(mh.weapon);
+      if (id === null || id === undefined) return 0;
+      if (!DataHandler_default.isShootable(id)) return 0;
+      const w = DataHandler_default.getWeapon(id);
+      return (w && w.range || 700) + 100;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  // ==========================================================================
+  // Wall Guard.
+  //
+  // Against one archer a wall is a waste of stone. Against five it is the only
+  // thing that works, because five muskets are five hundred damage arriving in
+  // the same frame and no amount of health or soldier helmet survives that.
+  //
+  // The cycle is the one a player runs by hand:
+  //
+  //   guard   a wall goes on the line between the bot and whoever is aiming,
+  //           and the bot stops walking - stepping out from behind it is the
+  //           only way to lose a fight it has already won.
+  //   break   their shot is spent on the wall. That is read off their own
+  //           reload going empty, not guessed from a timer, so it is true even
+  //           when the shot was fired at somebody else.
+  //   fire    every bot answers in the same pass. Breaking and firing cannot
+  //           happen on one tick - they are different weapons - so the break
+  //           is given its own window and the volley leaves after it.
+  //
+  // The whole squad shares the phase for the same reason the volley does: bots
+  // deciding for themselves would trickle out one at a time, which is the
+  // failure the wall was protecting them from in the first place.
+  // ==========================================================================
+  const _WALL_TICK_MS = 110;
+  const _WALL_BREAK_MS = 220;
+  const _WALL_FIRE_MS = 260;
+  const _WALL_THREAT_MIN_DIST = 180;
+  const _WALL_SLOT_WALL = 3;
+  const _WALL_SLOT_MILL = 5;
+  const _WALL = {
+    phase: "guard",
+    phaseAt: 0,
+    walling: 0,
+    dodging: 0
+  };
+  window._rynWall = _WALL;
+
+  function _wallGuardMin() {
+    const v = Settings_default._botWallGuardMin;
+    return Math.max(1, Math.min(10, typeof v === "number" ? v : 2));
+  }
+  // Enemies pointing a loaded, shootable weapon at this bot from far enough
+  // away that shooting is what they are doing. Someone standing on top of the
+  // bot with a musket is a melee problem and a wall between them helps nobody.
+  function _rangedThreat(botClient) {
+    const out = {
+      main: null,
+      count: 0,
+      dist: Infinity
+    };
+    try {
+      const {myPlayer: myPlayer, PlayerManager: pm} = botClient;
+      const enemies = pm && pm.enemies;
+      if (!enemies) return out;
+      const myPos = myPlayer.pos.current;
+      for (let i = 0; i < enemies.length; i++) {
+        const e = enemies[i];
+        if (!e || !e.pos) continue;
+        const sec = e.weapon && e.weapon.secondary;
+        const cur = e.weapon && e.weapon.current;
+        const shoots = DataHandler_default.isShootable(sec) || DataHandler_default.isShootable(cur);
+        if (!shoots) continue;
+        const pos = e.pos.current;
+        const dist = myPos.distance(pos);
+        if (dist < _WALL_THREAT_MIN_DIST) continue;
+        const toMe = pos.angle(myPos);
+        const half = Math.asin(Math.min(1, ((myPlayer.scale || 35) + 40) / Math.max(1, dist)));
+        if (getAngleDist(toMe, e.angle) > half) continue;
+        out.count += 1;
+        if (dist < out.dist) {
+          out.dist = dist;
+          out.main = e;
+        }
+      }
+    } catch (_) {}
+    return out;
+  }
+  // Has their shot been spent?
+  //
+  // The event itself is one tick wide: the server's attack broadcast resets
+  // that enemy's reload to zero and the next tick starts counting it back up,
+  // so "their reload is empty" is true for about 111ms and a driver running on
+  // its own timer will step straight over it. So the reading is done on the
+  // bot's own tick, where it cannot be missed, and latched here with a
+  // timestamp the driver can ask about whenever it happens to run.
+  //
+  // Two things count as evidence, and either is enough. The reload dropping is
+  // the direct signal. A projectile already in the air and aimed at this bot is
+  // the same fact arriving from the other side, and it survives the case where
+  // the drop was missed because the enemy was out of view on the tick it fired.
+  const _SHOT_SEEN = new WeakMap;
+  const _SHOT_WINDOW_MS = 700;
+  function _noteShot(botClient, enemy, now) {
+    if (!enemy) return;
+    let fired = false;
+    try {
+      const r = enemy.reload && enemy.reload[1];
+      if (r && typeof r.current === "number" && typeof r.previous === "number" && r.current < r.previous) fired = true;
+      const r0 = enemy.reload && enemy.reload[0];
+      if (!fired && r0 && typeof r0.current === "number" && typeof r0.previous === "number" && r0.current < r0.previous) fired = true;
+      if (!fired) {
+        const inbound = botClient.ProjectileManager && botClient.ProjectileManager.dangerProjectiles;
+        if (inbound && inbound.size > 0) fired = true;
+      }
+    } catch (_) {}
+    if (fired) _SHOT_SEEN.set(enemy, now);
+  }
+  function _threatSpent(enemy, now) {
+    if (!enemy) return false;
+    const at = _SHOT_SEEN.get(enemy);
+    return at !== undefined && now - at < _SHOT_WINDOW_MS;
+  }
+  // Can this bot's chosen slot actually reach that far?
+  //
+  // _findAttackSlot falls back to the fastest melee weapon when a bot has
+  // nothing that shoots, which is right inside a strike ring and wrong
+  // everywhere else: a counter-attack across a musket's range with a sword is
+  // a bot swinging at air and telling the squad it fired. Ranged slots are
+  // taken at face value; melee has to be within its own reach plus the
+  // target's hitbox, which is the same test the game uses to land the hit.
+  function _canReachWith(botClient, slot, dist, target) {
+    if (slot === null || slot === undefined) return false;
+    try {
+      const id = botClient.myPlayer.getItemByType(slot);
+      if (id === null || id === undefined) return false;
+      if (DataHandler_default.isShootable(id)) return true;
+      const w = DataHandler_default.getWeapon(id);
+      if (!w) return false;
+      return dist <= (w.range || 0) + (target && target.hitScale || 35);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // One of ours, standing between the bot and the shooter. This is what stops
+  // a second wall going up in front of the first one every tick.
+  function _wallOnLine(botClient, fromPos, toPos) {
+    try {
+      const om = botClient.ObjectManager;
+      const myId = botClient.myPlayer.id;
+      const dx = toPos.x - fromPos.x, dy = toPos.y - fromPos.y;
+      const span = Math.sqrt(dx * dx + dy * dy);
+      if (span < 1) return null;
+      const angle = Math.atan2(dy, dx);
+      const reach = Math.min(span, 260);
+      let found = null;
+      const steps = Math.max(3, Math.round(reach / 30));
+      for (let i = 1; i <= steps && found === null; i++) {
+        const t = i / steps * reach;
+        const px = fromPos.x + Math.cos(angle) * t;
+        const py = fromPos.y + Math.sin(angle) * t;
+        om.grid2D.query(px, py, 2, id => {
+          if (found) return;
+          const obj = om.objects.get(id);
+          if (!obj || !(obj instanceof PlayerObject) || !obj.pos) return;
+          if (obj.ownerID !== myId) return;
+          // Spikes and traps do not stop an arrow. Walls and mills do.
+          if (obj.itemGroup !== 1 && obj.itemGroup !== 3) return;
+          const op = obj.pos.current;
+          if (Math.hypot(op.x - px, op.y - py) < (obj.placementScale || obj.scale || 45)) found = obj;
+        });
+      }
+      return found;
+    } catch (_) {
+      return null;
+    }
+  }
+  class BotWallGuard {
+    moduleName="botWallGuard";
+    client;
+    active=false;
+    wall=null;
+    threat=null;
+    couldNotBuild=false;
+    _tick=0;
+    _lastPlaceTick=-999;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.active = false;
+      this.wall = null;
+      this.threat = null;
+      this.couldNotBuild = false;
+    }
+    _stand() {
+      this.active = false;
+      this.wall = null;
+      this.threat = null;
+      this.couldNotBuild = false;
+      const mh = this.client._ModuleHandler;
+      if (mh) mh._wallHold = false;
+    }
+    postTick() {
+      this._tick += 1;
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (!Settings_default._botWallGuard || !myPlayer || !myPlayer.inGame) {
+        this._stand();
+        return;
+      }
+      // Anything already driving this bot outranks holding a wall.
+      //
+      // Ghost Shot is on that list and it is the interesting one: a wall going
+      // up is a wall appearing out of nowhere at the exact spot the invisible
+      // bot is standing, which is a better position report than anything the
+      // shooter had before. A ghost that is being shot at blindly stays still
+      // and stays hidden; that is the trade the feature is.
+      if (_Remote.isPossessed(this.client) || Settings_default._ghostShot || ModuleHandler._findDrive && _FIND.active) {
+        this._stand();
+        return;
+      }
+      const threat = _rangedThreat(this.client);
+      if (threat.main === null || threat.count < _wallGuardMin()) {
+        this._stand();
+        return;
+      }
+      this.threat = threat.main;
+      this.active = true;
+      // Read on the bot's own tick, where the one-tick reload drop is visible.
+      _noteShot(this.client, threat.main, Date.now());
+      const myPos = myPlayer.pos.current;
+      const existing = _wallOnLine(this.client, myPos, threat.main.pos.current);
+      this.wall = existing;
+      // Behind cover, so stop walking. Without this, follow-the-cursor walks
+      // the bot straight back out into the line it just blocked.
+      ModuleHandler._wallHold = existing !== null;
+      if (existing !== null) {
+        this.couldNotBuild = false;
+        return;
+      }
+      if (this._tick - this._lastPlaceTick < 6) return;
+      // A mill has more health than a wall and blocks the same line, so it is
+      // the better wall when there is one to spend - the same choice
+      // PlacementDefense makes.
+      const slot = myPlayer.canPlace(_WALL_SLOT_MILL) ? _WALL_SLOT_MILL : _WALL_SLOT_WALL;
+      if (!myPlayer.canPlace(slot)) {
+        // Nothing to build with. Dodge is the answer instead, and it reads
+        // this flag rather than working the threat out a second time.
+        this.couldNotBuild = true;
+        return;
+      }
+      const id = myPlayer.getItemByType(slot);
+      const length = myPlayer.getItemPlaceScale(id);
+      const toThreat = myPos.angle(threat.main.pos.current);
+      const angles = this.client.ObjectManager.getBestPlacementAngles({
+        position: myPos,
+        id: id,
+        targetAngle: toThreat,
+        ignoreID: null,
+        preplace: false,
+        reduce: true,
+        fill: false
+      });
+      if (!angles || angles.length === 0) {
+        this.couldNotBuild = true;
+        return;
+      }
+      const enemyPos = threat.main.pos.current;
+      const placementScale = DataHandler_default.getItem(id).scale;
+      let placed = false;
+      for (const a of angles) {
+        const spot = myPos.addDirection(a, length);
+        const rectStart = spot.copy().sub(placementScale);
+        const rectEnd = spot.copy().add(placementScale);
+        // Only a placement that is actually between the two of us is cover.
+        if (spot.distance(enemyPos) >= myPos.distance(enemyPos)) continue;
+        if (!lineIntersectsRect(enemyPos, myPos, rectStart, rectEnd)) continue;
+        ModuleHandler.requestPlace(slot, a, "botWallGuard");
+        placed = true;
+        break;
+      }
+      this._lastPlaceTick = this._tick;
+      this.couldNotBuild = !placed;
+    }
+  }
+
+  // The squad's half of Wall Guard: the phase every bot shares, and the volley
+  // that comes out of it.
+  function _wallGuards() {
+    const out = [];
+    try {
+      for (const bot of client.clients) {
+        const m = bot._ModuleHandler && bot._ModuleHandler.staticModules.botWallGuard;
+        if (m && m.active && m.threat) out.push({
+          bot: bot,
+          mod: m
+        });
+      }
+    } catch (_) {}
+    return out;
+  }
+  setInterval(() => {
+    try {
+      if (!client || !client.isOwner || !Settings_default._botWallGuard) {
+        _WALL.walling = 0;
+        _WALL.phase = "guard";
+        return;
+      }
+      const guards = _wallGuards();
+      _WALL.walling = guards.length;
+      if (guards.length === 0) {
+        _WALL.phase = "guard";
+        return;
+      }
+      const now = Date.now();
+      if (_WALL.phase === "guard") {
+        // Wait for the shot. One shooter having spent theirs is enough: the
+        // wall is between us and them, so that is the one whose window this is.
+        const spent = guards.filter(g => _threatSpent(g.mod.threat, now)).length;
+        if (spent === 0) return;
+        _WALL.phase = "break";
+        _WALL.phaseAt = now;
+        return;
+      }
+      if (_WALL.phase === "break") {
+        // Everyone swings at their own wall. Their own, not the nearest: two
+        // bots breaking one wall leaves the other one still boxed in.
+        for (const g of guards) {
+          const wall = g.mod.wall;
+          if (!wall || !wall.pos) continue;
+          const myPos = g.bot.myPlayer.pos.current;
+          _scSwingAt(g.bot, g.bot._ModuleHandler, g.bot.myPlayer, myPos.angle(wall.pos.current), now);
+        }
+        if (now - _WALL.phaseAt < _WALL_BREAK_MS) return;
+        _WALL.phase = "fire";
+        _WALL.phaseAt = now;
+        return;
+      }
+      // fire: one pass, everyone, which is the whole point of sharing a phase.
+      for (const g of guards) {
+        const target = g.mod.threat;
+        if (!target || !target.pos) continue;
+        const mh = g.bot._ModuleHandler;
+        const myPos = g.bot.myPlayer.pos.current;
+        const aim = target.pos.future ?? target.pos.current;
+        const angle = Math.atan2(aim.y - myPos.y, aim.x - myPos.x);
+        const slot = _findAttackSlot(g.bot, true);
+        if (!_canReachWith(g.bot, slot, myPos.distance(target.pos.current), target)) continue;
+        if (!mh.staticModules.reloading.isReloaded(slot)) continue;
+        _findFireAt(g.bot, slot, angle, now);
+      }
+      if (now - _WALL.phaseAt >= _WALL_FIRE_MS) {
+        _WALL.phase = "guard";
+        _WALL.phaseAt = now;
+      }
+    } catch (_) {}
+  }, _WALL_TICK_MS);
+
+  // ==========================================================================
+  // Dodge.
+  //
+  // The other answer to the same volley, for the bot that has nothing left to
+  // build with. An arrow travels down a line, and the line is narrow: a step
+  // across it clears the shot completely, where a step away from it only makes
+  // the shot longer.
+  //
+  // So the move is always perpendicular, never backwards. Which of the two
+  // perpendicular directions is chosen is decided by what is walkable - a
+  // dodge into a wall is a bot standing still in the line it was dodging.
+  //
+  // Live projectiles come first because they are certain: dangerProjectiles is
+  // the tracker's list of shots already in the air and already aimed at this
+  // bot. Aim alone is the weaker signal and gets the gentler response, a strafe
+  // rather than a jump, because a bot that sprints sideways every time somebody
+  // looks at it never gets anything else done.
+  // ==========================================================================
+  const _DODGE_HOLD_MS = 420;
+  const _DODGE_LOOKAHEAD = 120;
+  class BotDodge {
+    moduleName="botDodge";
+    client;
+    active=false;
+    until=0;
+    angle=null;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.active = false;
+      this.until = 0;
+      this.angle = null;
+    }
+    // The direction shots are arriving from, or null. Averaged, because two
+    // archers on opposite sides have no single line to step out of and the
+    // mean of their angles is the direction that gets furthest from both.
+    _incoming() {
+      try {
+        const set = this.client.ProjectileManager.dangerProjectiles;
+        if (!set || set.size === 0) return null;
+        let sx = 0, sy = 0, n = 0;
+        for (const proj of set) {
+          sx += Math.cos(proj.angle);
+          sy += Math.sin(proj.angle);
+          n += 1;
+        }
+        if (n === 0) return null;
+        return Math.atan2(sy, sx);
+      } catch (_) {
+        return null;
+      }
+    }
+    postTick() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      this.active = false;
+      if (!Settings_default._botDodge || !myPlayer || !myPlayer.inGame) {
+        ModuleHandler._dodgeHold = false;
+        return;
+      }
+      // Same precedence as Wall Guard, and for the same reason: a dodge writes
+      // its move packet straight out rather than through Movement, so a ghost
+      // would be walked out of its own invisibility by a module that never
+      // asked Movement's permission.
+      if (_Remote.isPossessed(this.client) || Settings_default._ghostShot) {
+        ModuleHandler._dodgeHold = false;
+        return;
+      }
+      const now = Date.now();
+      // A dodge already under way runs to its end. Re-deciding every tick is
+      // how a bot ends up vibrating on the spot instead of leaving the line.
+      if (now < this.until && this.angle !== null) {
+        this._step(now);
+        return;
+      }
+      let line = this._incoming();
+      if (line === null) {
+        // No shot in the air. Step out of the line anyway if the bot is being
+        // aimed at and has no wall to hide behind.
+        const guard = ModuleHandler.staticModules.botWallGuard;
+        const walled = guard && guard.active && guard.wall !== null;
+        if (walled) {
+          ModuleHandler._dodgeHold = false;
+          return;
+        }
+        const threat = _rangedThreat(this.client);
+        if (threat.main === null) {
+          ModuleHandler._dodgeHold = false;
+          return;
+        }
+        line = threat.main.pos.current.angle(myPlayer.pos.current);
+      }
+      const side = this._pickSide(line);
+      if (side === null) {
+        ModuleHandler._dodgeHold = false;
+        return;
+      }
+      this.angle = side;
+      this.until = now + _DODGE_HOLD_MS;
+      this._step(now);
+    }
+    // Left or right of the incoming line, whichever the bot can actually walk.
+    _pickSide(line) {
+      const {myPlayer: myPlayer, ObjectManager: om} = this.client;
+      const pos = myPlayer.pos.current;
+      const a = line + Math.PI / 2;
+      const b = line - Math.PI / 2;
+      const aClear = _scPathClear(om, myPlayer, pos.x, pos.y, a, _DODGE_LOOKAHEAD);
+      const bClear = _scPathClear(om, myPlayer, pos.x, pos.y, b, _DODGE_LOOKAHEAD);
+      if (aClear && bClear) return Math.random() < .5 ? a : b;
+      if (aClear) return a;
+      if (bClear) return b;
+      // Boxed in on both sides: any clear direction beats standing in the line.
+      return _scFindClearAngle(om, myPlayer, pos, a, _DODGE_LOOKAHEAD);
+    }
+    _step(now) {
+      const mh = this.client._ModuleHandler;
+      this.active = true;
+      mh._dodgeHold = true;
+      _scSendMove(this.client, mh, this.angle, now);
+    }
+  }
+
+  // ==========================================================================
+  // Red.
+  //
+  // A standing order to kill one named player, which is a different thing from
+  // a target: a target is who the bot picks when it decides to fight, and this
+  // is the decision being taken away from it.
+  //
+  // Two bots or more in range fire together, because the reason to name
+  // somebody is that you want them dead in one exchange rather than worn down
+  // through their food. A lone bot cannot do that by shooting, so it does the
+  // other thing that kills in one exchange - the instakill combo - by arming
+  // its own toggle and letting the module that already knows how to do it run.
+  // That module works off its client's nearest enemy, so the arming is
+  // conditional on the red player actually being it; when they are not, the
+  // bot shoots them like anything else rather than running a combo at the
+  // wrong person.
+  // ==========================================================================
+  const _RED_TICK_MS = 130;
+  const _RED_RANGE = 900;
+  const _RED_SYNC_MS = 900;
+  const _REDSTATE = {
+    engaged: 0,
+    solo: 0
+  };
+  window._rynRed = _REDSTATE;
+  const _RED_WAIT = new WeakMap;
+  // Bots whose instakill toggle this feature turned on, so it can turn them
+  // back off. Instakill has no self-disarm - it stays armed until the toggle
+  // goes false - so a bot armed and forgotten would keep running the combo
+  // long after the red mark was cleared, on whoever happened to be nearest.
+  let _RED_ARMED = new Set;
+  function _redDisarm(keep) {
+    for (const bot of _RED_ARMED) {
+      if (keep && keep.has(bot)) continue;
+      try {
+        bot.InputHandler.instaToggle = false;
+        bot.InputHandler.instaReset();
+      } catch (_) {}
+    }
+    _RED_ARMED = keep || new Set;
+  }
+
+  // Which of our bots can see this red player right now, and how far off.
+  function _redSeers(id) {
+    const out = [];
+    try {
+      for (const bot of client.clients) {
+        const p = bot.myPlayer;
+        if (!p || !p.inGame || !bot._ModuleHandler) continue;
+        if (_Remote.isPossessed(bot)) continue;
+        const seen = _findSees(bot, id);
+        if (seen === null) continue;
+        const dist = p.pos.current.distance(seen.pos.current);
+        if (dist > _RED_RANGE) continue;
+        out.push({
+          bot: bot,
+          target: seen,
+          dist: dist
+        });
+      }
+    } catch (_) {}
+    out.sort((a, b) => a.dist - b.dist);
+    return out;
+  }
+  setInterval(() => {
+    try {
+      _REDSTATE.engaged = 0;
+      _REDSTATE.solo = 0;
+      if (!client || !client.isOwner || _RED.size === 0) {
+        // The list emptied, or this is not the owner's loop. Anything armed
+        // last pass has to be disarmed or it stays armed forever.
+        if (_RED_ARMED.size !== 0) _redDisarm(null);
+        return;
+      }
+      const now = Date.now();
+      const armed = new Set;
+      for (const id of _RED) {
+        const seers = _redSeers(id);
+        if (seers.length === 0) continue;
+        _REDSTATE.engaged += seers.length;
+        if (seers.length === 1) {
+          // Alone with them: arm the combo rather than trading single shots.
+          const only = seers[0];
+          _REDSTATE.solo += 1;
+          try {
+            const em = only.bot.EnemyManager;
+            const nearest = em && em.nearestEnemy;
+            if (nearest && nearest.id === id) {
+              only.bot.InputHandler.instaToggle = true;
+              only.bot.InputHandler.instakillTarget = nearest;
+              armed.add(only.bot);
+              continue;
+            }
+          } catch (_) {}
+        }
+        // Two or more: hold until they are all loaded, then one pass. Same
+        // deadline rule War Split uses, and for the same reason - one bot out
+        // of ammo must not silence the rest.
+        const lead = seers[0].bot;
+        let ready = 0;
+        const plan = [];
+        for (const s of seers) {
+          const mh = s.bot._ModuleHandler;
+          const slot = _findAttackSlot(s.bot, true);
+          // A bot that cannot reach them is not part of this volley, and is
+          // not counted as unready either - otherwise a melee bot standing
+          // eight hundred pixels away holds the shot of every bot that can.
+          if (!_canReachWith(s.bot, slot, s.dist, s.target)) continue;
+          const loaded = mh.staticModules.reloading.isReloaded(slot);
+          if (loaded) ready += 1;
+          plan.push({
+            s: s,
+            mh: mh,
+            slot: slot,
+            loaded: loaded
+          });
+        }
+        // Against the plan, not the seers: bots that cannot reach were dropped
+        // from it, and counting them would leave the volley permanently one
+        // short of ready.
+        if (plan.length === 0) {
+          _RED_WAIT.delete(lead);
+          continue;
+        }
+        const allReady = ready === plan.length;
+        if (allReady) {
+          _RED_WAIT.delete(lead);
+        } else if (!_RED_WAIT.has(lead)) {
+          _RED_WAIT.set(lead, now);
+        }
+        const waited = !allReady && now - _RED_WAIT.get(lead) > _RED_SYNC_MS;
+        if (!allReady && !waited) continue;
+        for (const p of plan) {
+          if (!p.loaded) continue;
+          const myPos = p.s.bot.myPlayer.pos.current;
+          const aim = p.s.target.pos.future ?? p.s.target.pos.current;
+          _findFireAt(p.s.bot, p.slot, Math.atan2(aim.y - myPos.y, aim.x - myPos.x), now);
+        }
+        _RED_WAIT.delete(lead);
+      }
+      // Everything armed this pass stays armed; everything armed last pass and
+      // not this one goes back to how it was.
+      _redDisarm(armed);
+    } catch (_) {}
+  }, _RED_TICK_MS);
+
+  // ==========================================================================
+  // Musket bow insta, run by the bots.
+  //
+  // The same three-tick combo MusketBowInsta runs for you - turret gear on,
+  // bow, platform, then upgrade the secondary through to the musket and fire
+  // each time - with the two things a bot needs that a person does not.
+  //
+  //   the points  the combo spends upgrade points on 9 -> 12 -> 15 as it runs,
+  //               so they have to still be there when it starts. That is what
+  //               holding the secondary at the plain bow is for, and it is done
+  //               in the upgrade patch rather than here: by the time this
+  //               module runs, the points are either banked or spent.
+  //   the angle   a person moves before starting the combo. A bot has to be
+  //               told to: if a building is on the line, the shot is spent on
+  //               the building, so it walks around until the line is clear and
+  //               only then commits.
+  //
+  // The distance window is the same 660-700 the hand version uses, and it is
+  // not negotiable - it is the range at which the platform trick puts the
+  // musket shot on the target.
+  // ==========================================================================
+  const _BINSTA_MIN = 660;
+  const _BINSTA_MAX = 700;
+  const _BINSTA_BOW = 9;
+  class BotMusketBowInsta {
+    moduleName="botMusketBowInsta";
+    client;
+    active=false;
+    target=null;
+    phase=0;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.active = false;
+      this.target = null;
+      this.phase = 0;
+    }
+    _clear() {
+      this.reset();
+      const mh = this.client._ModuleHandler;
+      if (mh) mh._instaHold = false;
+    }
+    postTick() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: em} = this.client;
+      if (!Settings_default._botMusketBowInsta || !myPlayer || !myPlayer.inGame) {
+        this._clear();
+        return;
+      }
+      // This module walks the bot to its firing position, so it yields to
+      // everything else that walks it: a hand on the keyboard, a pair holding
+      // its ring, a search under way, and a ghost whose whole job is to not
+      // move. Deciding this here rather than letting two modules both send a
+      // move packet is what keeps a bot from being pulled in two directions -
+      // both write straight to the socket, so neither would win cleanly.
+      if (_Remote.isPossessed(this.client) || Settings_default._ghostShot || ModuleHandler._warDrive && Settings_default._warSplit || ModuleHandler._findDrive && _FIND.active) {
+        this._clear();
+        return;
+      }
+      // Mid-combo. These two ticks are the combo and nothing may interrupt
+      // them, including the range check that started it.
+      if (this.target !== null) {
+        this._continue(ModuleHandler, myPlayer);
+        return;
+      }
+      if (myPlayer.upgradeAge !== 6 || myPlayer.age < 6) {
+        this._clear();
+        return;
+      }
+      const enemy = em && em.nearestEnemy;
+      if (!enemy || !enemy.pos) {
+        this._clear();
+        return;
+      }
+      const myPos = myPlayer.pos.current;
+      const enemyPos = enemy.pos.current;
+      const dist = myPos.distance(enemyPos);
+      const angle = myPos.angle(enemyPos);
+      if (dist > _BINSTA_MAX + 400) {
+        this._clear();
+        return;
+      }
+      this.active = true;
+      const {reloading: reloading} = ModuleHandler.staticModules;
+      if (!ModuleHandler.canBuy(0, 53) || !reloading.isReloaded(2)) {
+        ModuleHandler._instaHold = false;
+        return;
+      }
+      // Walk into the window, and walk out of anything blocking the line. Both
+      // are movement, so both take the movement claim.
+      const clear = _scPathClear(this.client.ObjectManager, myPlayer, myPos.x, myPos.y, angle, Math.min(dist, _BINSTA_MAX));
+      if (!inRange(dist, _BINSTA_MIN, _BINSTA_MAX) || !clear) {
+        this._reposition(ModuleHandler, myPos, angle, dist, clear);
+        return;
+      }
+      if (_greenInLineOfFire(this.client, myPos, angle, dist)) {
+        ModuleHandler._instaHold = false;
+        return;
+      }
+      // In the window, line is clear: commit.
+      ModuleHandler._instaHold = false;
+      ModuleHandler.moveTo = null;
+      ModuleHandler.moduleActive = true;
+      ModuleHandler.useAngle = angle;
+      ModuleHandler.forceHat = 53;
+      ModuleHandler.forceWeapon = 0;
+      ModuleHandler.shouldAttack = true;
+      ModuleHandler._upgradeItem(_BINSTA_BOW);
+      ModuleHandler._upgradeItem(18, true);
+      ModuleHandler.forceWeapon = 1;
+      ModuleHandler.shouldAttack = true;
+      this.phase = 1;
+      this.target = enemy;
+    }
+    _continue(ModuleHandler, myPlayer) {
+      const target = this.target;
+      if (!target || !target.pos) {
+        this._clear();
+        return;
+      }
+      this.active = true;
+      const angle = myPlayer.pos.current.angle(target.pos.current);
+      ModuleHandler.moduleActive = true;
+      ModuleHandler.useAngle = angle;
+      ModuleHandler.forceWeapon = 1;
+      ModuleHandler.shouldAttack = true;
+      ModuleHandler.moveTo = null;
+      if (this.phase === 1) {
+        ModuleHandler._upgradeItem(15);
+        this.phase = 2;
+        return;
+      }
+      this._clear();
+    }
+    // Too close, too far, or something in the way. One movement claim covers
+    // all three: close the gap, open it, or step around.
+    _reposition(ModuleHandler, myPos, angle, dist, clear) {
+      const now = Date.now();
+      ModuleHandler._instaHold = true;
+      let want;
+      if (!clear) {
+        // Sideways until the line opens, rather than walking into the building.
+        const side = _scFindClearAngle(this.client.ObjectManager, this.client.myPlayer, myPos, angle, Math.min(dist, 300));
+        want = side === null ? angle + Math.PI / 2 : side;
+      } else if (dist < _BINSTA_MIN) {
+        want = angle + Math.PI;
+      } else {
+        want = angle;
+      }
+      _scSendMove(this.client, ModuleHandler, want, now);
+    }
+  }
+
+  // Green, red and the two statuses, rendered into the Bots page.
+  function _renderTeamPanel() {
+    try {
+      const frame = UI_default.frame && UI_default.frame.target;
+      const doc = frame && frame.contentDocument;
+      const list = doc && doc.getElementById("_teamList");
+      if (list) {
+        const rows = [];
+        const name = id => {
+          try {
+            const p = client.PlayerManager.playerData.get(id);
+            return p && p.nickname ? _remoteEscape(p.nickname) : "(not in sight)";
+          } catch (_) {
+            return "(not in sight)";
+          }
+        };
+        for (const id of _GREEN) {
+          rows.push('<div><span style="color:#5ce07a;font-weight:700;">GREEN</span> &nbsp;' + name(id) + " [" + id + "]</div>");
+        }
+        for (const id of _RED) {
+          rows.push('<div><span style="color:#ff5555;font-weight:700;">RED</span> &nbsp;&nbsp;&nbsp;' + name(id) + " [" + id + "]</div>");
+        }
+        list.innerHTML = rows.length === 0 ? "Nobody marked" : rows.join("");
+      }
+      const wg = doc && doc.getElementById("_wallGuardStatus");
+      if (wg) {
+        if (!Settings_default._botWallGuard && !Settings_default._botDodge) {
+          wg.textContent = "Off";
+        } else {
+          let dodging = 0;
+          for (const bot of client.clients) {
+            const d = bot._ModuleHandler && bot._ModuleHandler.staticModules.botDodge;
+            if (d && d.active) dodging += 1;
+          }
+          const parts = [];
+          if (Settings_default._botWallGuard) parts.push(_WALL.walling + " behind cover (" + _WALL.phase + ")");
+          if (Settings_default._botDodge) parts.push(dodging + " dodging");
+          wg.textContent = parts.join(" · ");
+        }
+      }
+      const bi = doc && doc.getElementById("_botInstaStatus");
+      if (bi) {
+        if (!Settings_default._botMusketBowInsta) {
+          bi.textContent = "Off";
+        } else {
+          let armed = 0, running = 0;
+          for (const bot of client.clients) {
+            const m = bot._ModuleHandler && bot._ModuleHandler.staticModules.botMusketBowInsta;
+            if (!m || !m.active) continue;
+            armed += 1;
+            if (m.target !== null) running += 1;
+          }
+          bi.textContent = "On — " + armed + " armed, " + running + " mid-combo";
+        }
+      }
+    } catch (_) {}
+  }
 
   const isProd = true;
   const version = isProd ? "5.9.4" : "Dev";
@@ -22887,6 +23979,15 @@ window.grbtp = 35;
       // guard.
       if (Settings_default._botRandomWeapon && !Settings_default._shieldGuard) {
         chosen = _botRandomPrimary(botClient);
+      }
+      // Musket-bow insta is armed. The combo spends upgrade points walking the
+      // secondary 9 -> 12 -> 15 while it runs, so those points have to still be
+      // unspent when it starts - which means stopping at the plain bow and not
+      // taking the upgrades the moment they are offered. This is the "prepare
+      // the counter" half of the feature, and it belongs here rather than in
+      // the module: by the time the module runs, the points are already gone.
+      if (Settings_default._botMusketBowInsta && !Settings_default._shieldGuard) {
+        chosenSec = _BINSTA_BOW;
       }
       if (chosen === -1 && chosenSec === -1) {
         return _orig(points, age);
@@ -24694,10 +25795,11 @@ window.grbtp = 35;
   }, 2000);
   const _onChat = (senderID, msg, listenerBot) => {
     const lower = msg.toLowerCase().trim();
-    // !FF is answered first and stops here: it is an order, not something the
-    // chatter should also reply to.
+    // Orders are answered first and stop here: they are instructions, not
+    // something the chatter should also reply to.
     try {
       if (_ffCommand(msg, senderID, listenerBot)) return;
+      if (_teamCommand(msg, senderID, listenerBot)) return;
     } catch (_) {}
     const trigMatch = lower.match(/^nyx\s*(\d+)\s*$/);
     if (trigMatch) {
@@ -25895,6 +26997,54 @@ window.grbtp = 35;
   }
   window._rynFFCommand = _ffCommand;
 
+  // ==========================================================================
+  // !Team and !Red.
+  //
+  //     !Team <id>  green - stop treating them as an enemy, and stop shooting
+  //                 anywhere near them
+  //     !Red <id>   red   - kill them on sight
+  //     !Team clear / !Red clear   drop that list
+  //
+  // Same shape as !FF: the token may sit at either end, ids are the numbers
+  // left over, and only you and your own bots may give the order. That last
+  // part matters more here than it does for !FF - an enemy who could mark
+  // themselves green would have found a way to switch your squad off.
+  //
+  // Several ids at once is allowed because both of these are usually about a
+  // group: a team you are allied with, or a squad you want gone.
+  // ==========================================================================
+  function _teamCommand(text, senderID, viaBot) {
+    const raw = String(text || "").trim();
+    const isTeam = /(^|\s)!\s*team(\s|$)/i.test(raw);
+    const isRed = /(^|\s)!\s*red(\s|$)/i.test(raw);
+    if (!isTeam && !isRed) return false;
+    if (senderID !== undefined && !_ffAuthorised(senderID)) return true;
+    const colour = isTeam ? "green" : "red";
+    const rest = raw.replace(isTeam ? /(^|\s)!\s*team(?=\s|$)/i : /(^|\s)!\s*red(?=\s|$)/i, " ").trim();
+    if (/^(clear|off|none|reset)$/i.test(rest)) {
+      const n = _teamClear(colour);
+      _ffSay("!" + (isTeam ? "Team" : "Red") + " cleared (" + n + ")", viaBot);
+      _findLogLine((isTeam ? "Green" : "Red") + " list cleared — " + n + " removed.");
+      _renderTeamPanel();
+      return true;
+    }
+    const ids = rest.split(/[\s,]+/).filter(p => /^\d+$/.test(p)).map(Number);
+    if (ids.length === 0) {
+      _ffSay("!" + (isTeam ? "Team" : "Red") + " <id>", viaBot);
+      return true;
+    }
+    const marked = [];
+    for (const id of ids) {
+      if (_teamMark(id, colour)) marked.push(id);
+    }
+    if (marked.length === 0) return true;
+    _ffSay("!" + (isTeam ? "Team" : "Red") + " " + marked.join(" "), viaBot);
+    _findLogLine(marked.length + (isTeam ? " marked green — the squad will not attack or shoot past them." : " marked red — the squad will shoot them on sight."));
+    _renderTeamPanel();
+    return true;
+  }
+  window._rynTeamCommand = _teamCommand;
+
   function _findCommand(text) {
     const raw = (text || "").trim();
     if (!raw) return;
@@ -25902,6 +27052,7 @@ window.grbtp = 35;
     // because the !F pattern below would otherwise read "!FF 12 5" as an !F
     // for a player called "F 12 5".
     if (_ffCommand(raw)) return;
+    if (_teamCommand(raw)) return;
     const m = raw.match(/^!\s*f\s*(.*)$/i);
     if (!m) {
       _findLogLine("Unknown command. Use !F <player id>, !FF <id> <bots>, or !F stop.");
