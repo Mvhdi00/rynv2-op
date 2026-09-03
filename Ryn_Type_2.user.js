@@ -1673,7 +1673,7 @@ window.grbtp = 35;
   const Combat_default = "<div class=\"menu-page\" data-id=\"2\">\r\n    <div class=\"page-title\">Combat</div>\r\n    <p class=\"page-description\">Grouped by what each option actually does. Click a name to flip it — you do not have to hit the switch.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Instakills<span class=\"sec-sub\">Timed weapon and hat sequences that try to finish a kill.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTick\">Spike Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"sub-options\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickBreak\">Spike Tick (break)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickNear\">Spike Tick (near)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickNear\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeTickTrap\">Spike Tick (trap)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeTickTrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikeTick\">Anti Spike Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikeTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSmartTick\">Anti Smart Tick</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSmartTick\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_toolSpearInsta\">Tool Spear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_toolSpearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeGearInsta\">Spike Gear Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeGearInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_musketBowInsta\">Musket Bow Insta</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_musketBowInsta\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSync\">Auto sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSync\">Turret Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Spikes & Traps<span class=\"sec-sub\">Where things get placed and how enemies get pinned.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoplacer\">Autoplacer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoplacer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_placementDefense\">Placement Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoplacer radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoplacerRadius\" type=\"range\" step=\"25\" min=\"100\" max=\"450\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_prePlace\">Preplace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_prePlace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_replace\">Replace</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_replace\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSync\">Spike sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_spikeSyncHammer\">Spike sync hammer</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_spikeSyncHammer\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapKB\">Trap KB</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapKB\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Defense<span class=\"sec-sub\">Staying alive: healing, shielding and reading threats.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoheal\">Autoheal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoheal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoShield\">Auto Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_rangedShield\">Ranged Shield</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_rangedShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antienemy\">Anti enemy</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antienemy\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antianimal\">Anti animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antianimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antispike\">Anti spike</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antispike\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSpikePush\">Anti Spike Push</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSpikePush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_empDefense\">Emp Defense</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_empDefense\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoemp\">Auto emp</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoemp\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_soldierDefault\">Soldier default</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_soldierDefault\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeSoldier\">Safe Soldier</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeSoldier\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiRetrap\">Anti Retrap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiRetrap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiSync\">Anti Sync</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiSync\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapProtect\">Anti Trap Protect</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapProtect\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_antiTrapStar\">Anti Trap</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_antiTrapStar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_safeWalk\">Safe walk</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_safeWalk\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Gear<span class=\"sec-sub\">Which hat and accessory you are wearing, and when.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_biomehats\">Biome hats</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_biomehats\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_adaptiveGearSwitching\">Adaptive Gear</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_adaptiveGearSwitching\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_tailPriority\">Tail Priority</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_tailPriority\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_cowboyWhenSafe\">Cowboy When Safe</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_cowboyWhenSafe\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Movement<span class=\"sec-sub\">How the client moves you around a fight.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPush\">Autopush</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPush\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto Push Range</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoPushRange\" type=\"range\" step=\"25\" min=\"100\" max=\"500\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_dashMovement\">Dash Movement</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_dashMovement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Utility<span class=\"sec-sub\">Breaking, gathering and taking what is not yours.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autobreak\">Autobreak</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autobreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_automill\">Automill</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_automill\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoGrind\">Auto grind</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoGrind\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoPlay\">AutoPlay</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoPlay\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoSteal\">Autosteal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_turretSteal\">Turret steal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_turretSteal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_trapAnimal\">Trap Animal</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_trapAnimal\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Visuals_default = "<div class=\"menu-page\" data-id=\"3\">\r\n    <div class=\"page-title\">Visuals</div>\r\n    <p class=\"page-description\">Choose what gets drawn on screen. Turn off anything you do not need for a cleaner view.</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Names</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Name</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_myNameColorValue\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_myNameColor\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Mark RYN Players</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_markRynPlayers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Player ID</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_showPlayerID\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Player HUD</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">My Turret Reload Bar</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_playerTurretReloadBar\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Render HP</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_renderHP\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Position Prediction</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_positionPrediction\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">World Tint</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Purple Tint</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_objectTint\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Tint Transparency</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_objectTintOpacity\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Weather<span class=\"sec-sub\">Rain over the map, turning to snow in the snow biome.</span></div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_weather\">Rain &amp; Snow</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weather\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Intensity</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_weatherAmount\" type=\"range\" step=\"5\" min=\"0\" max=\"100\" data-suffix=\"%\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Structures</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Mine/Clan)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBar\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Item Health Bar (Enemy)</span>\r\n                <div class=\"option-content\">\r\n                    <button class=\"reset-color\" title=\"Reset Color\"></button>\r\n                    <input id=\"_itemHealthBarEnemyColor\" type=\"color\" title=\"Select Color\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_itemHealthBarEnemy\" type=\"checkbox\"></input>\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">myPlayer</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Display player angle</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_displayPlayerAngle\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Interface</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Hide game HUD</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_hideHUD\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Low Quality Mode</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_lowQuality\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Hitboxes</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Weapon hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_weaponHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Collision hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_collisionHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Placement hitbox</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_placementHitbox\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Possible placement</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_possiblePlacement\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
   const Misc_default = "<div class=\"menu-page\" data-id=\"4\">\r\n    <div class=\"page-title\">Misc</div>\r\n    <p class=\"page-description\">Customize misc settings, add autochat messages, reset settings</p>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Legit Mode</h2>\r\n        <div class=\"section-content\">\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Other</h2>\r\n\r\n        <div class=\"section-content\">\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kill Message</span>\r\n                <div class=\"option-content\">\r\n                    <input id=\"_killMessageText\" class=\"input\" type=\"text\" maxlength=\"30\">\r\n                    <label class=\"switch-checkbox\">\r\n                        <input id=\"_killMessage\" type=\"checkbox\">\r\n                        <span></span>\r\n                    </label>\r\n                </div>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Provoke on Kill</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_deathProvoke\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autospawn</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autospawn\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Autoaccept</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoaccept\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Interval</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_autoChatInterval\" type=\"range\" step=\"1\" min=\"1\" max=\"60\">\r\n                </label>\r\n            </div>\r\n            <div id=\"autoChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoChatMsg\" class=\"option-button\">+ Add Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <h2 class=\"section-title\">Bot Auto Chat</h2>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Enable Player Chat</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoBotChat\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div id=\"autoBotChatMsgList\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <button id=\"addAutoBotChatMsg\" class=\"option-button\">+ Add Player Message</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n</div>";
-  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\r\n    <div class=\"page-title\">Bots</div>\r\n    <p class=\"page-description\">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Controller</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Follow cursor</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_followCursor\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Auto Break</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Ranged Kiting</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRangedKite\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_clanRecheck\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Re-check clan joins</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Volley Fire</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botVolley\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">First wave size</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Avoid Shield Bots</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAvoidShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Be Angel</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botBeAngel\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kite distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Stop movement radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"flex-direction:column;align-items:flex-start;gap:8px;\">\r\n                <span class=\"option-title\" style=\"margin-bottom:2px;\">Formation</span>\r\n                <div id=\"_formationGrid\" style=\"display:flex;flex-wrap:wrap;gap:6px;width:100%;\"></div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_circleRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bots own clan</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botIndividualClans\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto random bot names</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRandomBotNames\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id=\"bot-container\" class=\"section-content\"></div>\r\n        <div id=\"dynamic-bot-list\" style=\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\"></div>\r\n        <div class=\"content-option\" style=\"margin-top:10px;justify-content:center;\">\r\n            <button id=\"add-bot-dynamic\" class=\"option-button\" style=\"display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;\">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Remote Control</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Take over a bot and play as it. The camera moves to it, WASD and the mouse drive it, everything you place and swing is its, and anything you type in the chat is sent from it. Your own character is not involved, so it can die without interrupting anything.</p>\r\n            <div id=\"_remoteStatus\" style=\"padding:6px 10px;margin-bottom:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Not controlling anything</div>\r\n            <div class=\"content-option\" style=\"gap:8px;\">\r\n                <button id=\"_remoteNext\" class=\"option-button\" style=\"flex:1;padding:8px 14px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Control next bot</button>\r\n                <button id=\"_remoteRelease\" class=\"option-button\" style=\"flex:1;padding:8px 14px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Back to me</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Switch / next bot</span>\r\n                <button id=\"_remoteControlKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Let go</span>\r\n                <button id=\"_remoteReleaseKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_remoteOwnerAsBot\">My character acts as a bot</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_remoteOwnerAsBot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:8px 0 0;\">Off, your character stands where you left it. On, it trails the bot you are driving the way a squad member would. Either way it keeps healing and defending itself, and the squad keeps following whoever you are controlling.</p>\r\n        </div>\r\n    </div>\r\n\r\n  <div class=\"section\">\r\n        <div class=\"section-title\">Squad Name</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">One name for every bot. It is applied when a bot connects and again every time one respawns, so a bot that dies comes back with the name that is in this box now. Leave it empty to keep the per-bot names.</p>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Squad name</span>\r\n                <input id=\"_botSquadName\" type=\"text\" class=\"input\" maxlength=\"15\" placeholder=\"e.g. Ryn\" style=\"width:150px;\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botSquadNumbers\">Add numbers</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botSquadNumbers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_botSquadNameApply\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Apply to connected bots</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Find Enemy</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Type <b>!F &lt;player id&gt;</b> and every bot sweeps the whole map. Several at once works too - <b>!F 12 34 56</b> - and the squad is split evenly between them. <b>!F</b> on its own repeats the last search.</p>\r\n            <div class=\"content-option\" style=\"gap:8px;margin:0 0 8px;\">\r\n                <label class=\"option-title\" for=\"_findHunt\" style=\"flex:1;\">Hunt mode (kill instead of watch)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_findHunt\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Watching: the bot that finds them pings the map and holds the shadow distance, the rest come home. Hunting: the whole group forms a ring on the target and waits until every bot is in place and reloaded, then they all attack in the same instant. Musket groups hold the shadow distance and shoot; everything else closes in and stacks.</p>\r\n            <div id=\"_findStatus\" style=\"padding:6px 10px;margin-bottom:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Idle</div>\r\n            <div id=\"_findLog\" style=\"display:flex;flex-direction:column;gap:4px;max-height:132px;overflow-y:auto;padding:8px 10px;background:rgba(0,0,0,0.25);border:1px solid rgba(122,66,244,0.18);border-radius:8px;font-size:0.8em;color:rgba(200,195,220,0.75);line-height:1.45;\"></div>\r\n            <div class=\"content-option\" style=\"gap:8px;margin-top:8px;\">\r\n                <input class=\"input ryn-find-input\" type=\"text\" maxlength=\"40\" placeholder=\"!F 12\" style=\"flex:1;min-width:0;\">\r\n                <button id=\"_findSend\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Send</button>\r\n                <button id=\"_findCancel\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Cancel</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Shadow distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_findHoldDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"900\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Auto Shot</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Anything that walks inside the radius gets shot the moment the weapon is ready, whether or not you are attacking. Only bots holding a bow, crossbow, repeater or musket in the secondary slot take part.</p>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botAutoShot\">Auto Shot</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoShot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Shoot within</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botAutoShotRange\" type=\"range\" step=\"50\" min=\"100\" max=\"1200\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Smart Shield</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">The first bots in the roster carry shields and stand between the threat and whatever they are guarding. The wall swings to the side an enemy appears on as soon as it appears, and each guard turns its own shield at the nearest one.</p>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shieldGuard\">Shield Guards</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shieldGuard\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_guardMouseControl\">Mouse control</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_guardMouseControl\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_guardProtectBots\">Guards protect the bots</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_guardProtectBots\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoJoinGuard\">Only age 6+ bots guard</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoJoinGuard\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Guards</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_guardCount\" type=\"range\" step=\"1\" min=\"1\" max=\"5\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Front distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_guardFrontDist\" type=\"range\" step=\"10\" min=\"50\" max=\"300\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Roaming &amp; Performance</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botRoamFullMap\">Roam the whole map</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRoamFullMap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botPerfMode\">Spread bot analysis</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botPerfMode\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:8px 0 0;\">Roaming sends wandering bots on a tour of the map instead of a random walk around where they spawned. Spreading the analysis deals the bots into four groups and lets one group run the placement solver per tick - this is the setting that gets the framerate back when a lot of bots can see an enemy.</p>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Packets</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Sends a burst of up to 300 packets down every bot's own connection. The server's allowance is about 120 a second, so expect the bots to be kicked for spam - that is what the button does. One burst per press, with a five second cooldown.</p>\r\n            <div class=\"content-option\" style=\"justify-content:center;\">\r\n                <button id=\"_botSpamPacket\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Spam Packet (300)</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n  <div class=\"section\">\r\n        <div class=\"section-title\">Bot Weapons</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:'';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid=\"-1\"],.bot-sec-weapon-btn[data-swid=\"-1\"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Primary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\"><span class=\"wpn-name\">Tool Hammer</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\"><span class=\"wpn-name\">Hand Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\"><span class=\"wpn-name\">Great Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\"><span class=\"wpn-name\">Short Sword</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\"><span class=\"wpn-name\">Katana</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\"><span class=\"wpn-name\">Polearm</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\"><span class=\"wpn-name\">Bat</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\"><span class=\"wpn-name\">Daggers</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\"><span class=\"wpn-name\">Stick</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Secondary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\"><span class=\"wpn-name\">Hunting Bow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\"><span class=\"wpn-name\">Great Hammer</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\"><span class=\"wpn-name\">Wooden Shield</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\"><span class=\"wpn-name\">Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\"><span class=\"wpn-name\">Repeater Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\"><span class=\"wpn-name\">Mc Grabby</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\"><span class=\"wpn-name\">Musket</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class=\"content-option\" style=\"margin-top:2px;\">\r\n                <span class=\"option-title\">Platform w/ Musket</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_platformMusket\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Age 4 Building</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n            <div>\r\n                <div class=\"wpn-label\">Age 4 Building</div>\r\n                <div class=\"wpn-grid\" id=\"bot-age4-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\"><span class=\"wpn-name\">Trap</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\"><span class=\"wpn-name\">Boost Pad</span></div>\r\n                </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section\" style=\"margin-top:6px;\">\r\n        <div class=\"section\" style=\"margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;\">\r\n        <div class=\"section-title\" style=\"font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;\">Auto Farm</div>\r\n\r\n        <div style=\"display:flex;flex-direction:column;gap:10px;\">\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Farm Mode</span>\r\n                <p style=\"font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;\">Bots automatically gather resources. In <b style=\"color:rgba(200,195,220,0.85);\">Single</b> mode they target one resource type. In <b style=\"color:rgba(200,195,220,0.85);\">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style=\"display:flex;gap:8px;margin-top:2px;\">\r\n                    <button id=\"_farmModeSingle\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Single</button>\r\n                    <button id=\"_farmModeNearest\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            <div id=\"_farmTypeRow\" style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Resource Type</span>\r\n                <div style=\"display:flex;gap:8px;\">\r\n                    <button data-farm-type=\"0\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Wood</button>\r\n                    <button data-farm-type=\"1\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Food</button>\r\n                    <button data-farm-type=\"2\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Stone</button>\r\n                    <button data-farm-type=\"3\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Gold</button>\r\n                </div>\r\n                <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\r\n            </div>\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Limit</span>\r\n                <div style=\"display:flex;align-items:center;gap:12px;\">\r\n                    <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\" style=\"width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;\">\r\n                    <span style=\"font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;\">Bots stop and return to you when they reach this amount. Set to <b style=\"color:rgba(200,195,220,0.7);\">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>";
+  const Bots_default = "<div class=\"menu-page\" data-id=\"5\">\r\n    <div class=\"page-title\">Bots</div>\r\n    <p class=\"page-description\">Create bots, control them and dominate the entire server</p>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Controller</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Follow cursor</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_followCursor\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Auto Break</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoBreak\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bot Ranged Kiting</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRangedKite\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_clanRecheck\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Re-check clan joins</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Volley Fire</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botVolley\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">First wave size</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botVolleyWave\" type=\"range\" step=\"1\" min=\"1\" max=\"20\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Avoid Shield Bots</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAvoidShield\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Be Angel</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botBeAngel\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Kite distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botKiteDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"1200\"></input>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Stop movement radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_movementRadius\" type=\"range\" step=\"25\" min=\"25\" max=\"250\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"flex-direction:column;align-items:flex-start;gap:8px;\">\r\n                <span class=\"option-title\" style=\"margin-bottom:2px;\">Formation</span>\r\n                <div id=\"_formationGrid\" style=\"display:flex;flex-wrap:wrap;gap:6px;width:100%;\"></div>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle rotation</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_circleRotation\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Circle radius</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_circleRadius\" type=\"range\" step=\"25\" min=\"50\" max=\"600\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Bots own clan</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botIndividualClans\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Auto random bot names</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoRandomBotNames\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n                                                        </div>\r\n        <div id=\"bot-container\" class=\"section-content\"></div>\r\n        <div id=\"dynamic-bot-list\" style=\"display:flex;flex-direction:column;gap:8px;margin-top:8px;\"></div>\r\n        <div class=\"content-option\" style=\"margin-top:10px;justify-content:center;\">\r\n            <button id=\"add-bot-dynamic\" class=\"option-button\" style=\"display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;\">\r\n                + Add Bots\r\n            </button>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Remote Control</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Take over a bot and play as it. The camera moves to it, WASD and the mouse drive it, everything you place and swing is its, and anything you type in the chat is sent from it. Your own character is not involved, so it can die without interrupting anything.</p>\r\n            <div id=\"_remoteStatus\" style=\"padding:6px 10px;margin-bottom:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Not controlling anything</div>\r\n            <div class=\"content-option\" style=\"gap:8px;\">\r\n                <button id=\"_remoteNext\" class=\"option-button\" style=\"flex:1;padding:8px 14px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Control next bot</button>\r\n                <button id=\"_remoteRelease\" class=\"option-button\" style=\"flex:1;padding:8px 14px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Back to me</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Switch / next bot</span>\r\n                <button id=\"_remoteControlKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Let go</span>\r\n                <button id=\"_remoteReleaseKey\" class=\"hotkeyInput\"></button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_remoteOwnerAsBot\">My character also fights</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_remoteOwnerAsBot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:8px 0 0;\"><b>Right arrow</b> next bot, <b>left arrow</b> previous bot, <b>up arrow</b> back to your own character. Your character always walks to the bot you are driving — the game only sends this client the world around your own player, so if it stayed behind you would be looking at an empty screen. The switch decides whether it also fights while it is over there. Either way it keeps healing and defending itself, and the squad follows whoever you are controlling.</p>\r\n        </div>\r\n    </div>\r\n\r\n  <div class=\"section\">\r\n        <div class=\"section-title\">Squad Name</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">One name for every bot. It is applied when a bot connects and again every time one respawns, so a bot that dies comes back with the name that is in this box now. Leave it empty to keep the per-bot names.</p>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Squad name</span>\r\n                <input id=\"_botSquadName\" type=\"text\" class=\"input\" maxlength=\"15\" placeholder=\"e.g. Ryn\" style=\"width:150px;\">\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botSquadNumbers\">Add numbers</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botSquadNumbers\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\" style=\"margin-top:6px;justify-content:center;\">\r\n                <button id=\"_botSquadNameApply\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Apply to connected bots</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Find Enemy</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Type <b>!F &lt;player id&gt;</b> and every bot sweeps the whole map. Several at once works too - <b>!F 12 34 56</b> - and the squad is split evenly between them. <b>!F</b> on its own repeats the last search.</p>\r\n            <div class=\"content-option\" style=\"gap:8px;margin:0 0 8px;\">\r\n                <label class=\"option-title\" for=\"_findHunt\" style=\"flex:1;\">Hunt mode (kill instead of watch)</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_findHunt\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Watching: the bot that finds them pings the map and holds the shadow distance, the rest come home. Hunting: the whole group forms a ring on the target and waits until every bot is in place and reloaded, then they all attack in the same instant. Musket groups hold the shadow distance and shoot; everything else closes in and stacks.</p>\r\n            <div id=\"_findStatus\" style=\"padding:6px 10px;margin-bottom:8px;background:rgba(122,66,244,0.08);border:1px solid rgba(122,66,244,0.22);border-radius:7px;font-size:0.78em;color:rgba(200,195,220,0.8);\">Idle</div>\r\n            <div id=\"_findLog\" style=\"display:flex;flex-direction:column;gap:4px;max-height:132px;overflow-y:auto;padding:8px 10px;background:rgba(0,0,0,0.25);border:1px solid rgba(122,66,244,0.18);border-radius:8px;font-size:0.8em;color:rgba(200,195,220,0.75);line-height:1.45;\"></div>\r\n            <div class=\"content-option\" style=\"gap:8px;margin-top:8px;\">\r\n                <input class=\"input ryn-find-input\" type=\"text\" maxlength=\"40\" placeholder=\"!F 12\" style=\"flex:1;min-width:0;\">\r\n                <button id=\"_findSend\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(122,66,244,0.1);border:1.5px solid rgba(122,66,244,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Send</button>\r\n                <button id=\"_findCancel\" class=\"option-button\" style=\"padding:8px 18px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;white-space:nowrap;\">Cancel</button>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Shadow distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_findHoldDistance\" type=\"range\" step=\"25\" min=\"150\" max=\"900\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Auto Shot</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Anything that walks inside the radius gets shot the moment the weapon is ready, whether or not you are attacking. Only bots holding a bow, crossbow, repeater or musket in the secondary slot take part.</p>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botAutoShot\">Auto Shot</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botAutoShot\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Shoot within</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_botAutoShotRange\" type=\"range\" step=\"50\" min=\"100\" max=\"1200\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Smart Shield</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">The first bots in the roster carry shields and stand between the threat and whatever they are guarding. The wall swings to the side an enemy appears on as soon as it appears, and each guard turns its own shield at the nearest one.</p>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_shieldGuard\">Shield Guards</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_shieldGuard\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_guardMouseControl\">Mouse control</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_guardMouseControl\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_guardProtectBots\">Guards protect the bots</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_guardProtectBots\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_autoJoinGuard\">Only age 6+ bots guard</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_autoJoinGuard\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Guards</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_guardCount\" type=\"range\" step=\"1\" min=\"1\" max=\"5\">\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <span class=\"option-title\">Front distance</span>\r\n                <label class=\"slider\">\r\n                    <span class=\"slider-value\"></span>\r\n                    <input id=\"_guardFrontDist\" type=\"range\" step=\"10\" min=\"50\" max=\"300\">\r\n                </label>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Roaming &amp; Performance</div>\r\n        <div class=\"section-content\">\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botRoamFullMap\">Roam the whole map</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botRoamFullMap\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <div class=\"content-option\">\r\n                <label class=\"option-title\" for=\"_botPerfMode\">Spread bot analysis</label>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_botPerfMode\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n            <p class=\"page-description\" style=\"margin:8px 0 0;\">Roaming sends wandering bots on a tour of the map instead of a random walk around where they spawned. Spreading the analysis deals the bots into four groups and lets one group run the placement solver per tick - this is the setting that gets the framerate back when a lot of bots can see an enemy.</p>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Packets</div>\r\n        <div class=\"section-content\">\r\n            <p class=\"page-description\" style=\"margin:0 0 8px;\">Sends a burst of up to 300 packets down every bot's own connection. The server's allowance is about 120 a second, so expect the bots to be kicked for spam - that is what the button does. One burst per press, with a five second cooldown.</p>\r\n            <div class=\"content-option\" style=\"justify-content:center;\">\r\n                <button id=\"_botSpamPacket\" class=\"option-button\" style=\"padding:8px 22px;background:rgba(244,66,66,0.1);border:1.5px solid rgba(244,66,66,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;\">Spam Packet (300)</button>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n  <div class=\"section\">\r\n        <div class=\"section-title\">Bot Weapons</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n\r\n            <style>\r\n                .wpn-label{font-size:0.68em;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(122,66,244,0.6);margin-bottom:8px;display:flex;align-items:center;gap:6px;}\r\n                .wpn-label::before{content:'';width:3px;height:3px;background:var(--accent);border-radius:50%;box-shadow:0 0 5px var(--accent);flex-shrink:0;}\r\n                .wpn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}\r\n                .bot-weapon-btn,.bot-sec-weapon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;height:82px;background:rgba(255,255,255,0.03);border:1.5px solid rgba(255,255,255,0.07);border-radius:10px;cursor:pointer;font-size:0.78em;font-weight:600;color:rgba(200,200,220,0.65);transition:all 180ms;text-align:center;gap:7px;padding:8px 4px;}\r\n                .bot-weapon-btn:hover,.bot-sec-weapon-btn:hover{background:rgba(122,66,244,0.1);border-color:rgba(122,66,244,0.4);color:#fff;}\r\n                .bot-weapon-btn.wpn-active,.bot-sec-weapon-btn.wpn-active{background:rgba(122,66,244,0.18);border-color:rgba(122,66,244,0.7);color:#fff;box-shadow:0 0 12px rgba(122,66,244,0.2);}\r\n                .bot-weapon-btn[data-wid=\"-1\"],.bot-sec-weapon-btn[data-swid=\"-1\"]{background:rgba(122,66,244,0.08);border-color:rgba(122,66,244,0.35);color:rgba(160,122,244,0.9);}\r\n                .wpn-name{line-height:1.25;font-size:0.95em;}\r\n                .wpn-selected-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:7px;margin-top:4px;}\r\n                .wpn-selected-dot{width:6px;height:6px;background:#7A42F4;border-radius:50%;box-shadow:0 0 6px rgba(122,66,244,0.7);flex-shrink:0;}\r\n                .wpn-selected-text{font-size:0.8em;color:rgba(200,200,220,0.75);font-weight:500;}\r\n            </style>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Primary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-weapon-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"0\" title=\"Tool Hammer\"><span class=\"wpn-name\">Tool Hammer</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"1\" title=\"Hand Axe\"><span class=\"wpn-name\">Hand Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"2\" title=\"Great Axe\"><span class=\"wpn-name\">Great Axe</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"3\" title=\"Short Sword\"><span class=\"wpn-name\">Short Sword</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"4\" title=\"Katana\"><span class=\"wpn-name\">Katana</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"5\" title=\"Polearm\"><span class=\"wpn-name\">Polearm</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"6\" title=\"Bat\"><span class=\"wpn-name\">Bat</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"7\" title=\"Daggers\"><span class=\"wpn-name\">Daggers</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-wid=\"8\" title=\"Stick\"><span class=\"wpn-name\">Stick</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div>\r\n                <div class=\"wpn-label\">Secondary Weapon</div>\r\n                <div class=\"wpn-grid\" id=\"bot-sec-weapon-selector\">\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"-1\" title=\"Copy from me\"><span class=\"wpn-name\">Copy from me</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"9\" title=\"Hunting Bow\"><span class=\"wpn-name\">Hunting Bow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"10\" title=\"Great Hammer\"><span class=\"wpn-name\">Great Hammer</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"11\" title=\"Wooden Shield\"><span class=\"wpn-name\">Wooden Shield</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"12\" title=\"Crossbow\"><span class=\"wpn-name\">Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"13\" title=\"Repeater Crossbow\"><span class=\"wpn-name\">Repeater Crossbow</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"14\" title=\"Mc Grabby\"><span class=\"wpn-name\">Mc Grabby</span></div>\r\n                    <div class=\"bot-sec-weapon-btn\" data-swid=\"15\" title=\"Musket\"><span class=\"wpn-name\">Musket</span></div>\r\n                    </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-sec-weapon-label\">Copy from me (default)</span></div>\r\n            </div>\r\n\r\n            <div class=\"content-option\" style=\"margin-top:2px;\">\r\n                <span class=\"option-title\">Platform w/ Musket</span>\r\n                <label class=\"switch-checkbox\">\r\n                    <input id=\"_platformMusket\" type=\"checkbox\"></input>\r\n                    <span></span>\r\n                </label>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section-title\">Age 4 Building</div>\r\n        <div class=\"section-content\" style=\"padding:14px 16px;gap:16px;display:flex;flex-direction:column;\">\r\n            <div>\r\n                <div class=\"wpn-label\">Age 4 Building</div>\r\n                <div class=\"wpn-grid\" id=\"bot-age4-selector\">\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"0\" title=\"Trap\"><span class=\"wpn-name\">Trap</span></div>\r\n                    <div class=\"bot-weapon-btn\" data-age4id=\"1\" title=\"Boost Pad\"><span class=\"wpn-name\">Boost Pad</span></div>\r\n                </div>\r\n                <div class=\"wpn-selected-bar\"><div class=\"wpn-selected-dot\"></div><span class=\"wpn-selected-text\" id=\"bot-age4-label\">Trap (default)</span></div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n\r\n    <div class=\"section\">\r\n        <div class=\"section\" style=\"margin-top:6px;\">\r\n        <div class=\"section\" style=\"margin-top:6px;background:rgba(0,0,0,0);border:none;padding:0;\">\r\n        <div class=\"section-title\" style=\"font-size:0.75em;letter-spacing:0.18em;color:rgba(160,122,244,0.75);text-transform:uppercase;margin-bottom:14px;\">Auto Farm</div>\r\n\r\n        <div style=\"display:flex;flex-direction:column;gap:10px;\">\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Farm Mode</span>\r\n                <p style=\"font-size:0.82em;color:rgba(200,195,220,0.6);margin:0;line-height:1.5;\">Bots automatically gather resources. In <b style=\"color:rgba(200,195,220,0.85);\">Single</b> mode they target one resource type. In <b style=\"color:rgba(200,195,220,0.85);\">Nearest</b> mode they pick the closest available resource.</p>\r\n                <div style=\"display:flex;gap:8px;margin-top:2px;\">\r\n                    <button id=\"_farmModeSingle\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(122,66,244,0.6);background:rgba(122,66,244,0.28);color:#fff;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Single</button>\r\n                    <button id=\"_farmModeNearest\" style=\"flex:1;padding:9px 0;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#888;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.9em;letter-spacing:0.04em;transition:all 0.15s;\">Nearest</button>\r\n                </div>\r\n            </div>\r\n\r\n            <div id=\"_farmTypeRow\" style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Resource Type</span>\r\n                <div style=\"display:flex;gap:8px;\">\r\n                    <button data-farm-type=\"0\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Wood</button>\r\n                    <button data-farm-type=\"1\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Food</button>\r\n                    <button data-farm-type=\"2\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Stone</button>\r\n                    <button data-farm-type=\"3\" class=\"farm-type-btn\" style=\"flex:1;padding:10px 4px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#666;cursor:pointer;font-family:inherit;font-weight:700;font-size:0.85em;letter-spacing:0.03em;transition:all 0.15s;\">Gold</button>\r\n                </div>\r\n                <input id=\"_botFarmType\" type=\"hidden\" value=\"0\">\r\n            </div>\r\n\r\n            <div style=\"background:rgba(122,66,244,0.06);border:1px solid rgba(122,66,244,0.18);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;\">\r\n                <span style=\"font-size:0.7em;letter-spacing:0.14em;color:rgba(160,122,244,0.6);text-transform:uppercase;\">Limit</span>\r\n                <div style=\"display:flex;align-items:center;gap:12px;\">\r\n                    <input id=\"_botFarmLimit\" class=\"input\" type=\"number\" min=\"0\" max=\"9999\" step=\"50\" value=\"0\" style=\"width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;\">\r\n                    <span style=\"font-size:0.83em;color:rgba(200,195,220,0.5);line-height:1.5;\">Bots stop and return to you when they reach this amount. Set to <b style=\"color:rgba(200,195,220,0.7);\">0</b> for no limit.</span>\r\n                </div>\r\n            </div>\r\n\r\n        </div>\r\n    </div>\r\n    </div>\r\n    </div>\r\n\r\n</div>";
   const Music_default = "<div class=\"menu-page\" data-id=\"7\">\r\n<style>\r\n@keyframes ryn-eq{0%,100%{height:3px;}50%{height:15px;}}\r\n@keyframes ryn-like-pop{0%{transform:scale(1);}45%{transform:scale(1.45);}100%{transform:scale(1);}}\r\n@keyframes rm-fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}\r\n\r\n.rm-root{\r\n  --rm-bg:#0B0B10;\r\n  --rm-panel:#141420;\r\n  --rm-panel-hi:#1B1B2B;\r\n  --rm-line:rgba(255,255,255,0.07);\r\n  --rm-accent:#7A42F4;\r\n  --rm-accent2:#3A86FF;\r\n  --rm-text:#FFFFFF;\r\n  --rm-mute:rgba(255,255,255,0.62);\r\n  --rm-dim:rgba(255,255,255,0.34);\r\n  display:flex;flex-direction:column;gap:14px;\r\n  font-family:'Inter','Poppins',sans-serif;\r\n  animation:rm-fade 240ms ease;\r\n}\r\n\r\n.rm-player{\r\n  position:relative;overflow:hidden;\r\n  padding:18px 18px 14px;border-radius:14px;\r\n  background:\r\n    radial-gradient(120% 130% at 0% 0%,rgba(122,66,244,.28),transparent 58%),\r\n    linear-gradient(160deg,#1E1830 0%,#12111E 55%,#0B0B10 100%);\r\n  border:1px solid var(--rm-line);\r\n  box-shadow:0 12px 34px -16px rgba(0,0,0,.9);\r\n}\r\n.rm-player::before{\r\n  content:'';position:absolute;inset:0;pointer-events:none;\r\n  background:linear-gradient(180deg,rgba(255,255,255,.05),transparent 40%);\r\n}\r\n.rm-np-row{display:flex;align-items:center;gap:15px;margin-bottom:14px;position:relative;}\r\n\r\n.rm-art{\r\n  width:74px;height:74px;flex-shrink:0;position:relative;overflow:hidden;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:1.7em;border-radius:8px;\r\n  background:linear-gradient(140deg,#2A2140,#141323);\r\n  border:none;\r\n  box-shadow:0 8px 22px -8px rgba(0,0,0,.85);\r\n  transition:box-shadow 300ms ease;\r\n}\r\n.rm-art.playing{box-shadow:0 10px 26px -8px rgba(122,66,244,.6);}\r\n.rm-eq{display:none;gap:3px;align-items:flex-end;height:18px;}\r\n.rm-art.playing .rm-eq{display:flex;}\r\n.rm-eq-bar{\r\n  width:3px;border-radius:2px;\r\n  background:linear-gradient(180deg,var(--rm-accent),var(--rm-accent2));\r\n  animation:ryn-eq .9s ease-in-out infinite;\r\n}\r\n.rm-eq-bar:nth-child(2){animation-delay:.15s;}\r\n.rm-eq-bar:nth-child(3){animation-delay:.3s;}\r\n.rm-eq-bar:nth-child(4){animation-delay:.45s;}\r\n\r\n.rm-meta{flex:1;min-width:0;}\r\n.rm-title{\r\n  font-size:1.16em;font-weight:700;letter-spacing:-.015em;line-height:1.25;\r\n  color:var(--rm-text);\r\n  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;\r\n  overflow:hidden;word-break:break-word;\r\n}\r\n.rm-artist{\r\n  margin-top:4px;font-size:.78em;font-weight:400;color:var(--rm-mute);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-badge{\r\n  display:inline-block;margin-top:6px;padding:2px 9px;\r\n  font-size:.64em;font-weight:600;letter-spacing:.05em;text-transform:uppercase;\r\n  color:var(--rm-mute);background:rgba(255,255,255,.08);border-radius:999px;\r\n  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-actions{display:flex;gap:4px;align-items:center;flex-shrink:0;}\r\n.rm-like-btn,.rm-save-now-btn{\r\n  width:36px;height:36px;display:flex;align-items:center;justify-content:center;\r\n  font-size:1.15em;cursor:pointer;border-radius:50%;\r\n  color:var(--rm-dim);background:transparent;border:none;\r\n  transition:color 170ms,background 170ms,transform 170ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-like-btn:hover,.rm-save-now-btn:hover{\r\n  color:var(--rm-text);background:rgba(255,255,255,.11);transform:scale(1.1);\r\n}\r\n.rm-like-btn.on{\r\n  color:#ff4d6d;animation:ryn-like-pop 340ms cubic-bezier(.34,1.5,.5,1);\r\n  text-shadow:0 0 12px rgba(255,77,109,.55);\r\n}\r\n.rm-save-now-btn.on{color:var(--rm-accent2);text-shadow:0 0 12px rgba(58,134,255,.5);}\r\n\r\n.rm-prog-wrap{margin-bottom:10px;position:relative;}\r\n.rm-prog-rail{\r\n  height:4px;border-radius:4px;cursor:pointer;\r\n  background:rgba(255,255,255,.13);position:relative;\r\n  transition:height 140ms ease;\r\n}\r\n.rm-prog-wrap:hover .rm-prog-rail{height:6px;}\r\n.rm-prog-fill{\r\n  height:100%;border-radius:4px;position:relative;\r\n  background:linear-gradient(90deg,var(--rm-accent),var(--rm-accent2));\r\n}\r\n.rm-prog-fill::after{\r\n  content:'';position:absolute;right:-5px;top:50%;\r\n  width:11px;height:11px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%) scale(0);\r\n  transition:transform 160ms ease;\r\n  box-shadow:0 2px 6px rgba(0,0,0,.5);\r\n}\r\n.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}\r\n.rm-times{display:flex;justify-content:space-between;margin-top:5px;}\r\n.rm-time{font-size:.66em;font-weight:500;color:var(--rm-dim);font-variant-numeric:tabular-nums;}\r\n\r\n.rm-ctrl{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:12px;position:relative;}\r\n.rm-btn{\r\n  width:32px;height:32px;display:flex;align-items:center;justify-content:center;\r\n  background:transparent;border:none;border-radius:50%;\r\n  color:var(--rm-mute);font-size:.86em;cursor:pointer;\r\n  transition:color 160ms,transform 160ms;\r\n}\r\n.rm-btn:hover{color:var(--rm-text);transform:scale(1.1);}\r\n.rm-btn.on{color:var(--rm-accent);}\r\n.rm-play-btn{\r\n  width:46px;height:46px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  background:#fff;border:none;border-radius:50%;\r\n  color:#0B0B10;font-size:1.05em;cursor:pointer;\r\n  box-shadow:0 6px 18px -6px rgba(0,0,0,.7);\r\n  transition:transform 170ms cubic-bezier(.34,1.5,.5,1),box-shadow 170ms;\r\n}\r\n.rm-play-btn:hover{transform:scale(1.07);box-shadow:0 8px 22px -6px rgba(122,66,244,.7);}\r\n.rm-play-btn:active{transform:scale(.97);}\r\n\r\n.rm-vol{display:flex;align-items:center;gap:9px;position:relative;}\r\n.rm-vol-icon{font-size:.82em;color:var(--rm-dim);flex-shrink:0;}\r\n.rm-vol-val{font-size:.66em;color:var(--rm-dim);min-width:30px;text-align:right;font-variant-numeric:tabular-nums;}\r\n\r\n.rm-sec{\r\n  background:var(--rm-panel);\r\n  border:1px solid var(--rm-line);border-radius:12px;overflow:hidden;\r\n  transition:border-color 200ms;\r\n}\r\n.rm-sec:hover{border-color:rgba(255,255,255,.12);}\r\n.rm-sec-head{\r\n  display:flex;align-items:center;gap:9px;\r\n  padding:12px 15px;cursor:pointer;user-select:none;\r\n  transition:background 160ms;\r\n}\r\n.rm-sec-head:hover{background:rgba(255,255,255,.035);}\r\n.rm-sec-dot{\r\n  width:6px;height:6px;border-radius:50%;flex-shrink:0;\r\n  background:var(--rm-accent);box-shadow:0 0 8px rgba(122,66,244,.7);\r\n}\r\n.rm-sec-title{\r\n  flex:1;font-size:.74em;font-weight:700;\r\n  letter-spacing:.12em;text-transform:uppercase;color:var(--rm-mute);\r\n}\r\n.rm-sec-arrow{font-size:.62em;color:var(--rm-dim);transition:transform 220ms ease;}\r\n.rm-sec.open .rm-sec-arrow{transform:rotate(90deg);}\r\n.rm-sec-body{padding:0 12px 12px;display:none;flex-direction:column;gap:9px;}\r\n.rm-sec.open .rm-sec-body{display:flex;animation:rm-fade 200ms ease;}\r\n\r\n.rm-filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px;}\r\n.rm-filter-btn{\r\n  padding:5px 13px;border-radius:999px;cursor:pointer;\r\n  font-size:.7em;font-weight:600;\r\n  background:rgba(255,255,255,.07);border:none;color:var(--rm-mute);\r\n  transition:background 160ms,color 160ms;\r\n}\r\n.rm-filter-btn:hover{background:rgba(255,255,255,.13);color:var(--rm-text);}\r\n.rm-filter-btn.active{background:#fff;color:#0B0B10;}\r\n\r\n.rm-song-row{\r\n  display:flex;align-items:center;gap:13px;\r\n  padding:10px 12px;border-radius:8px;cursor:pointer;\r\n  border:none;position:relative;\r\n  transition:background 140ms;\r\n}\r\n.rm-song-row:hover{background:rgba(255,255,255,.07);}\r\n.rm-song-row.active{background:rgba(122,66,244,.13);}\r\n.rm-song-row.active .rm-stitle{color:var(--rm-accent);}\r\n.rm-song-row.active .rm-snum{color:var(--rm-accent);}\r\n\r\n.rm-snum{\r\n  width:20px;flex-shrink:0;text-align:center;\r\n  font-size:.78em;font-weight:500;color:var(--rm-dim);\r\n  font-variant-numeric:tabular-nums;\r\n  transition:color 140ms;\r\n}\r\n.rm-song-row:hover .rm-snum{font-size:0;color:transparent;}\r\n.rm-song-row:hover .rm-snum::after{\r\n  content:'\\25B6';font-size:11px;color:var(--rm-text);\r\n}\r\n.rm-stitle{\r\n  flex:1;min-width:0;\r\n  font-size:.92em;font-weight:600;color:var(--rm-text);\r\n  letter-spacing:-.005em;\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-sartist{\r\n  flex-shrink:1;min-width:0;max-width:32%;\r\n  font-size:.76em;font-weight:400;color:var(--rm-dim);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n\r\n.rm-s-icons{\r\n  display:flex;gap:4px;flex-shrink:0;align-items:center;\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-song-row:hover .rm-s-icons,\r\n.rm-song-row.active .rm-s-icons{opacity:1;}\r\n\r\n.rm-s-like,.rm-s-save,.rm-sdel{\r\n  width:26px;height:26px;flex-shrink:0;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.9em;cursor:pointer;line-height:1;border-radius:50%;\r\n  color:var(--rm-dim);\r\n  transition:color 150ms,background 150ms,transform 150ms cubic-bezier(.34,1.5,.5,1);\r\n}\r\n.rm-s-like:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-save:hover{color:var(--rm-accent2);background:rgba(58,134,255,.14);transform:scale(1.12);}\r\n.rm-sdel:hover{color:#ff4d6d;background:rgba(255,77,109,.14);transform:scale(1.12);}\r\n.rm-s-like.on{color:#ff4d6d;opacity:1;}\r\n.rm-s-save.on{color:var(--rm-accent2);opacity:1;}\r\n\r\n.rm-song-row .rm-s-like.on,\r\n.rm-song-row .rm-s-save.on{opacity:1;}\r\n.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}\r\n\r\n.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;}\r\n.rm-album-card{\r\n  position:relative;padding:11px;border-radius:9px;cursor:pointer;\r\n  background:var(--rm-panel-hi);border:none;\r\n  transition:background 180ms,transform 180ms;\r\n}\r\n.rm-album-card:hover{background:#25253A;transform:translateY(-2px);}\r\n.rm-album-icon{\r\n  width:100%;aspect-ratio:1;border-radius:6px;margin-bottom:8px;\r\n  display:flex;align-items:center;justify-content:center;font-size:1.5em;\r\n  background:linear-gradient(140deg,#2E2450,#171628);\r\n  box-shadow:0 5px 14px -6px rgba(0,0,0,.8);\r\n}\r\n.rm-album-name{\r\n  font-size:.76em;font-weight:600;color:var(--rm-text);\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n}\r\n.rm-album-count{margin-top:2px;font-size:.66em;color:var(--rm-dim);}\r\n.rm-album-del{\r\n  position:absolute;top:6px;right:6px;\r\n  width:19px;height:19px;border-radius:50%;\r\n  display:flex;align-items:center;justify-content:center;\r\n  font-size:.62em;cursor:pointer;\r\n  background:rgba(0,0,0,.6);color:var(--rm-dim);\r\n  opacity:0;transition:opacity 150ms,color 150ms;\r\n}\r\n.rm-album-card:hover .rm-album-del{opacity:1;}\r\n.rm-album-del:hover{color:#ff4d6d;}\r\n\r\n.rm-inp,.rm-sel{\r\n  width:100%;padding:9px 12px;\r\n  background:var(--rm-panel-hi);border:1px solid transparent;border-radius:7px;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.78em;color:var(--rm-text);\r\n  outline:none;transition:border-color 160ms,background 160ms;\r\n}\r\n.rm-inp::placeholder{color:var(--rm-dim);}\r\n.rm-inp:focus,.rm-sel:focus{border-color:var(--rm-accent);background:#20203200;}\r\n\r\ntextarea.rm-inp{\r\n  min-height:74px;max-height:170px;resize:vertical;\r\n  line-height:1.55;white-space:pre-wrap;word-break:break-word;\r\n  font-family:'JetBrains Mono','Inter',monospace;font-size:.72em;\r\n}\r\n.rm-btn-full{\r\n  width:100%;padding:9px;border-radius:999px;cursor:pointer;\r\n  background:rgba(255,255,255,.09);border:none;\r\n  font-family:'Inter','Poppins',sans-serif;font-size:.75em;font-weight:600;color:var(--rm-text);\r\n  transition:background 160ms,transform 160ms;\r\n}\r\n.rm-btn-full:hover{background:rgba(255,255,255,.16);}\r\n.rm-btn-primary{\r\n  background:#fff;color:#0B0B10;\r\n}\r\n.rm-btn-primary:hover{background:#EDEDF5;transform:scale(1.015);}\r\n.rm-badge{\r\n  display:inline-block;padding:2px 8px;border-radius:999px;\r\n  font-size:.64em;font-weight:600;\r\n  background:rgba(122,66,244,.18);color:var(--rm-accent);\r\n}\r\n\r\n.rm-sync-row{\r\n  display:flex;align-items:center;justify-content:space-between;gap:11px;\r\n  padding:7px 10px;border-radius:7px;\r\n  transition:background 140ms;\r\n}\r\n.rm-sync-row:hover{background:rgba(255,255,255,.04);}\r\n.rm-sync-label{font-size:.76em;color:var(--rm-mute);flex:1;min-width:0;}\r\n\r\n.rm-toast{\r\n  position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(12px);\r\n  padding:9px 18px;border-radius:999px;z-index:99999;\r\n  background:#fff;color:#0B0B10;\r\n  font-size:.75em;font-weight:600;\r\n  box-shadow:0 10px 30px rgba(0,0,0,.6);\r\n  opacity:0;pointer-events:none;\r\n  transition:opacity 240ms ease,transform 240ms ease;\r\n}\r\n.rm-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}\r\n\r\n.rm-root .switch-checkbox{position:relative;width:38px;height:21px;flex-shrink:0;}\r\n.rm-root .switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n.rm-root .switch-checkbox span{\r\n  position:absolute;inset:0;cursor:pointer;border-radius:999px;\r\n  background:rgba(255,255,255,.16);\r\n  transition:background 220ms ease;\r\n}\r\n.rm-root .switch-checkbox span::before{\r\n  content:'';position:absolute;left:3px;top:50%;\r\n  width:15px;height:15px;border-radius:50%;background:#fff;\r\n  transform:translateY(-50%);\r\n  transition:left 240ms cubic-bezier(.34,1.4,.5,1);\r\n}\r\n.rm-root .switch-checkbox input:checked + span{background:var(--rm-accent);}\r\n.rm-root .switch-checkbox input:checked + span::before{left:calc(100% - 18px);}\r\n\r\n.rm-root .slider{display:flex;align-items:center;gap:9px;flex:1;}\r\n.rm-root .slider input[type=\"range\"]{\r\n  -webkit-appearance:none;flex:1;height:4px;border-radius:4px;\r\n  outline:none;border:none;cursor:pointer;\r\n  background:linear-gradient(90deg,#fff var(--val,50%),rgba(255,255,255,.16) var(--val,50%));\r\n}\r\n.rm-root .slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;width:12px;height:12px;border-radius:50%;\r\n  background:#fff;border:none;\r\n  box-shadow:0 1px 4px rgba(0,0,0,.5);\r\n  opacity:0;transition:opacity 150ms;\r\n}\r\n.rm-root .slider:hover input[type=\"range\"]::-webkit-slider-thumb{opacity:1;}\r\n.rm-root .slider-value{\r\n  font-size:.68em;font-weight:500;color:var(--rm-dim);\r\n  min-width:30px;text-align:right;font-variant-numeric:tabular-nums;\r\n}\r\n\r\n.rm-note{display:none;}\r\n.rm-btn.rm-on{color:var(--rm-accent);}\r\n\r\n.rm-guide{background:var(--rm-panel);border:1px solid var(--rm-line);border-radius:14px;padding:14px 16px;margin:0 0 12px;}\n.rm-guide summary{cursor:pointer;list-style:none;font-weight:700;font-size:13px;color:#cfc4ff;letter-spacing:.03em;display:flex;align-items:center;gap:8px;}\n.rm-guide summary::-webkit-details-marker{display:none;}\n.rm-guide summary::before{content:\"?\";flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:rgba(160,120,255,.22);color:#d8ccff;font-size:11px;display:grid;place-items:center;}\n.rm-guide[open] summary{margin-bottom:10px;}\n.rm-guide ol{margin:0;padding-left:18px;color:#9b95ad;font-size:12px;line-height:2;}\n.rm-guide li{margin:0;}\n.rm-guide code{background:#0d0d1a;color:#cc88ff;padding:2px 7px;border-radius:4px;font-size:11.5px;}\n.rm-guide a{color:#b58cff;text-decoration:none;border-bottom:1px dotted rgba(181,140,255,.5);}\n.rm-guide a:hover{color:#fff;border-bottom-color:#fff;}\n.rm-guide .rm-guide-note{margin-top:10px;color:#6f6a80;font-size:11px;line-height:1.7;}\n</style>\r\n\r\n<div id=\"rm-toast\" class=\"rm-toast\"></div>\r\n<div class=\"rm-root\">\n<details class=\"rm-guide\">\n  <summary>How to add a song with its lyrics</summary>\n  <ol>\n    <li>Find the song on <a href=\"https://www.youtube.com/\" target=\"_blank\" rel=\"noreferrer\">youtube.com</a> and copy its link.</li>\n    <li>Turn the link into a file on <a href=\"https://ytmp3.gl/\" target=\"_blank\" rel=\"noreferrer\">ytmp3.gl</a> and download the <code>.mp3</code>.</li>\n    <li>Search the same song on <a href=\"https://lrclib.net/\" target=\"_blank\" rel=\"noreferrer\">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>\n    <li>Open <b>Add Song</b> below, fill in the <b>Title</b>, and pick the <code>.mp3</code> in the file box (or paste a direct link in <b>URL</b>).</li>\n    <li>In the <b>LRC SYNC</b> box inside the same form, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area under it.</li>\n    <li>Press <b>Add Song</b>. It shows up in <b>Library</b> with its lyrics attached.</li>\n</ol>\n  <div class=\"rm-guide-note\">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>\n</details>\n\n<div class=\"rm-player\">\r\n  <div class=\"rm-np-row\">\r\n    <div class=\"rm-art\" id=\"rm-art\"><span class=\"rm-note\">&#9835;</span><div class=\"rm-eq\"><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div><div class=\"rm-eq-bar\"></div></div></div>\r\n    <div class=\"rm-meta\">\r\n      <div id=\"music-title\" class=\"rm-title\" data-i18n=\"rm_no_song\">No song selected</div>\r\n      <div id=\"music-artist\" class=\"rm-artist\">--</div>\r\n      <div id=\"music-album-badge\" class=\"rm-album-badge\"></div>\r\n    </div>\r\n    <div class=\"rm-actions\">\r\n      <button id=\"rm-like-now\" class=\"rm-like-btn\" title=\"Like\" data-i18n-title=\"rm_t_like\">&#9825;</button>\r\n      <button id=\"rm-save-now\" class=\"rm-save-now-btn\" title=\"Save\" data-i18n-title=\"rm_t_save\">&#128190;</button>\r\n    </div>\r\n  </div>\r\n  <div class=\"rm-prog-wrap\">\r\n    <div id=\"music-progress-bar\" class=\"rm-prog-rail\"><div id=\"music-progress-fill\" class=\"rm-prog-fill\"></div></div>\r\n    <div class=\"rm-times\"><span id=\"music-time-current\" class=\"rm-time\">0:00</span><span id=\"music-time-total\" class=\"rm-time\">0:00</span></div>\r\n  </div>\r\n  <div class=\"rm-ctrl\">\r\n    <button id=\"music-prev\" class=\"rm-btn\" title=\"Previous\" data-i18n-title=\"rm_t_prev\">&#9664;&#9664;</button>\r\n    <button id=\"music-play\" class=\"rm-btn rm-play-btn\" title=\"Play/Pause\" data-i18n-title=\"rm_t_play\">&#9654;</button>\r\n    <button id=\"music-next\" class=\"rm-btn\" title=\"Next\" data-i18n-title=\"rm_t_next\">&#9654;&#9654;</button>\r\n    <button id=\"music-loop\" class=\"rm-btn\" title=\"Loop\" data-i18n-title=\"rm_t_loop\">&#8635;</button>\r\n    <button id=\"music-shuffle\" class=\"rm-btn\" title=\"Shuffle\" data-i18n=\"rm_shf\" style=\"font-size:0.7em;letter-spacing:0.1em;\">SHF</button>\r\n  </div>\r\n  <div class=\"rm-vol\"><span class=\"rm-vol-icon\">&#9834;</span><input id=\"music-volume\" type=\"range\" min=\"0\" max=\"100\" value=\"70\" style=\"flex:1;accent-color:#7A42F4;height:3px;cursor:pointer;\"><span id=\"music-volume-label\" class=\"rm-vol-val\">70%</span></div>\r\n</div>\r\n\r\n<div class=\"rm-sec\" id=\"rm-sec-albums\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_albums\">Albums</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-album-grid\" class=\"rm-album-grid\"></div>\r\n    <div style=\"display:flex;gap:6px;\"><input id=\"album-name-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_new_album_ph\" placeholder=\"New album name...\" maxlength=\"30\" style=\"flex:1;\"><button id=\"add-album\" class=\"rm-btn\" data-i18n=\"rm_add_btn\" style=\"flex-shrink:0;padding:5px 12px;\">+ Add</button></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_library\">Library</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div id=\"rm-filter-bar\" class=\"rm-filter-bar\"><button class=\"rm-filter-btn active\" data-filter=\"\" data-i18n=\"rm_all_songs\">All Songs</button><button class=\"rm-filter-btn\" data-filter=\"__liked\" data-i18n=\"rm_liked\">&#9829; Liked</button></div>\r\n    <div id=\"song-list\" style=\"display:flex;flex-direction:column;gap:1px;\"></div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_add_song_title\">Add Song</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:5px;\">\r\n      <input id=\"song-title-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_title_ph\" placeholder=\"Title *\" maxlength=\"50\">\r\n      <input id=\"song-artist-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_artist_ph\" placeholder=\"Artist\" maxlength=\"30\">\r\n      <input id=\"song-url-input\" class=\"rm-inp\" type=\"text\" data-i18n-placeholder=\"rm_url_ph\" placeholder=\"URL (.mp3  .ogg  .wav)\">\r\n      <input id=\"song-file-input\" class=\"rm-inp\" type=\"file\" accept=\".mp3,.ogg,.wav,.flac,.aac,.m4a\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;\">\r\n      <select id=\"song-album-select\" class=\"rm-sel\"><option value=\"\" data-i18n=\"rm_no_album\">No Album</option></select>\r\n      <div style=\"background:rgba(3,8,18,0.6);border-radius:7px;padding:8px;border:1px solid rgba(122,66,244,0.08);\">\r\n        <div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;\"><span style=\"font-family:Orbitron,monospace;font-size:0.66em;font-weight:700;color:rgba(122,66,244,0.5);letter-spacing:0.1em;\" data-i18n=\"rm_lrc_sync\">LRC SYNC</span><span id=\"lrc-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.6);\"></span></div>\r\n        <input id=\"lrc-file-input\" class=\"rm-inp\" type=\"file\" accept=\".lrc,.txt\" style=\"padding:3px 6px;font-size:11px;cursor:pointer;margin-bottom:5px;\">\r\n        <textarea id=\"song-lyrics-input\" placeholder=\"[0:15] Line 1&#10;[0:30] Line 2\" style=\"width:100%;box-sizing:border-box;background:rgba(3,8,18,0.8);border:1px solid rgba(122,66,244,0.15);border-radius:4px;color:#bde0f0;padding:5px 7px;font-size:11px;outline:none;height:60px;resize:vertical;font-family:monospace;\"></textarea>\r\n        <label style=\"display:flex;align-items:center;gap:5px;cursor:pointer;font-size:0.78em;color:rgba(122,66,244,0.45);margin-top:5px;\"><input id=\"song-autosync\" type=\"checkbox\" style=\"accent-color:#7A42F4;\"> <span data-i18n=\"rm_autosync\">Auto-play &amp; sync when added</span></label>\r\n      </div>\r\n      <div style=\"display:flex;gap:6px;margin-top:2px;\"><button id=\"add-song\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_add_song_btn\">&#x2B22; Add Song</button><button id=\"save-song-btn\" class=\"rm-btn-primary\" data-i18n=\"rm_save_btn\">&#x2713; Save</button></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_chat_sync_title\">Chat Sync</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_enable_chat_sync\">Enable Chat Sync</span><label class=\"switch-checkbox\"><input id=\"music-chat-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.1);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_mixed_sync\">Mixed Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_me_bots\">ME+BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-mixed-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_mixed_sync_example\">You: line &#8594; Bots: line &#8594; You ...</div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_bots_only_sync\">Bots Only Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_bots\">BOTS</span></span><label class=\"switch-checkbox\"><input id=\"music-bots-only-sync\" type=\"checkbox\"><span></span></label></div>\r\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_bots_only_example\">Bot1: line 1 &bull; Bot2: line 2 &bull; Bot3: line 3 ...</div>\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_unified_sync\">Unified Sync <span class=\"rm-badge\" data-i18n=\"rm_badge_all\">ALL</span></span><label class=\"switch-checkbox\"><input id=\"music-unified-sync\" type=\"checkbox\"><span></span></label></div>\n    <div style=\"font-size:0.7em;color:rgba(122,66,244,0.38);padding:2px 4px 5px;line-height:1.5;\" data-i18n=\"rm_unified_example\">You + every bot post the same line at the same moment</div>\r\n    <div style=\"height:1px;background:rgba(122,66,244,0.07);margin:4px 0;\"></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_auto_delay\">Auto Delay<span id=\"bm-auto-delay-badge\" class=\"rm-badge\">off</span></span><label class=\"switch-checkbox\"><input id=\"music-auto-delay\" type=\"checkbox\" checked><span></span></label></div>\r\n    <div class=\"rm-sync-row\"><span class=\"rm-sync-label\" data-i18n=\"rm_sync_bot\">Sync Bot<span id=\"bm-sync-bot-badge\" class=\"rm-badge\">off</span></span><button id=\"music-sync-bot-btn\" style=\"background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.7em;font-weight:700;padding:5px 18px;letter-spacing:0.1em;font-family:Orbitron,monospace;transition:all 0.2s;border-radius:4px;\">OFF</button></div>\r\n    <div id=\"bm-manual-delay-row\" class=\"rm-sync-row\" style=\"display:none;\"><span style=\"font-size:0.8em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_delay\">Delay</span><label class=\"slider\"><span class=\"slider-value\"></span><input id=\"music-sync-delay\" type=\"range\" min=\"-3000\" max=\"3000\" step=\"50\" value=\"0\" style=\"width:110px;\"></label></div>\r\n    <div style=\"display:flex;gap:6px;margin-top:6px;\"><button id=\"bm-test-chat\" style=\"flex:1;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:5px 10px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_test_chat\">&#9654; Test Chat</button><span id=\"bm-test-chat-status\" style=\"font-size:0.7em;color:rgba(122,66,244,0.45);align-self:center;\"></span></div>\r\n    <div style=\"margin-top:6px;\"><button id=\"bm-send-all-lyrics\" style=\"width:100%;background:rgba(122,66,244,0.06);border:1.5px solid rgba(122,66,244,0.25);border-radius:6px;color:rgba(122,66,244,0.6);cursor:pointer;font-size:0.73em;font-weight:700;padding:6px 10px;font-family:Rajdhani,sans-serif;letter-spacing:0.05em;transition:all 0.15s;\">&#9836; Send All Lyrics: OFF</button><div id=\"bm-send-lyrics-status\" style=\"font-size:0.66em;color:rgba(122,66,244,0.45);text-align:center;margin-top:3px;\"></div></div>\r\n    <div id=\"bm-dbg-wrap\" style=\"display:none;margin-top:5px;\"><pre id=\"bm-dbg-box\" style=\"background:#13101e;border:1px solid rgba(122,66,244,0.15);border-radius:4px;padding:5px 7px;font-size:0.63em;color:rgba(122,66,244,0.45);font-family:monospace;white-space:pre-wrap;max-height:110px;overflow-y:auto;margin:0;\"></pre></div>\r\n    <button id=\"bm-dbg-toggle\" style=\"width:100%;margin-top:4px;background:rgba(122,66,244,0.03);border:1px solid rgba(122,66,244,0.08);border-radius:4px;color:rgba(122,66,244,0.38);cursor:pointer;font-size:0.66em;padding:3px;font-family:Rajdhani,sans-serif;\" data-i18n=\"rm_show_debug\">Show Debug Log</button>\r\n  </div>\r\n</div>\r\n\r\n<div class=\"rm-sec collapsed\">\r\n  <div class=\"rm-sec-head\" onclick=\"this.closest('.rm-sec').classList.toggle('open')\"><div class=\"rm-sec-dot\"></div><span class=\"rm-sec-title\" data-i18n=\"rm_backup_restore\">Backup &amp; Restore</span><span class=\"rm-sec-arrow\">&#9660;</span></div>\r\n  <div class=\"rm-sec-body\">\r\n    <div style=\"display:flex;flex-direction:column;gap:6px;\">\r\n      <span style=\"font-size:0.77em;color:rgba(122,66,244,0.45);\" data-i18n=\"rm_backup_desc\">Export your library to JSON — restore anytime.</span>\r\n      <div style=\"display:flex;gap:6px;margin-top:4px;\"><button id=\"music-export-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_export\">&#x2B07; Export</button><button id=\"music-import-btn\" class=\"rm-btn-full\" style=\"flex:1;\" data-i18n=\"rm_import\">&#x2B06; Import</button><input id=\"music-import-file\" type=\"file\" accept=\".json\" style=\"display:none;\"></div>\r\n      <div id=\"music-backup-status\" style=\"font-size:0.73em;color:rgba(122,66,244,0.6);text-align:center;min-height:16px;\"></div>\r\n    </div>\r\n  </div>\r\n</div>\r\n\r\n</div></div>";
   const styles_default = "@import \"https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700&family=Poppins:wght@400;500;600;700;800&display=swap\";\r\n\r\n*{user-select:none;box-sizing:border-box;}\r\n\r\n:root{\r\n  --bg:#1A1A24;\r\n  --bg-glass:rgba(26,26,36,0.82);\r\n  --accent:#7A42F4;\r\n  --accent2:#3A86FF;\r\n  --border:rgba(255,255,255,0.07);\r\n  --border-active:rgba(122,66,244,0.5);\r\n  --text:#FFFFFF;\r\n  --text-muted:rgba(200,200,215,0.75);\r\n  --text-dim:rgba(200,200,215,0.4);\r\n  --red:#ff4d6d;\r\n  --green:#00d68f;\r\n  --yellow:#ffd60a;\r\n  --font-head:'Poppins','Inter',sans-serif;\r\n  --font-body:'Inter','Poppins',sans-serif;\r\n}\r\n\r\n@keyframes slide-in-top{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:translateY(0);}}\r\n@keyframes toclose{from{opacity:1;transform:scale(1) translateY(0);}to{opacity:0;transform:scale(0.98) translateY(-4px);}}\r\n@keyframes toopen{from{opacity:0;transform:scale(0.98) translateY(-4px);}to{opacity:1;transform:scale(1) translateY(0);}}\r\n@keyframes dot-blink{0%,100%{opacity:1;}50%{opacity:0.2;}}\r\n@keyframes shimmer{0%{background-position:-200% 0;}100%{background-position:200% 0;}}\r\n@keyframes ripple{from{opacity:.4;transform:scale(0);}to{opacity:0;transform:scale(1.4);}}\r\n\r\nhtml,body{margin:0;padding:0;overflow:hidden;background:transparent;}\r\n*{font-family:var(--font-body);color:var(--text);opacity:1;}\r\nh1,h2{margin:0;font-family:var(--font-head);}\r\np{margin:0;color:var(--text-muted);}\r\nbutton{border:none;outline:none;cursor:pointer;}\r\n\r\n#menu-container{\r\n  position:absolute;top:50%;left:50%;\r\n  transform:translate(-50%,-50%);\r\n  width:1280px;height:720px;\r\n  display:flex;justify-content:center;align-items:center;\r\n}\r\n\r\n#menu-wrapper{\r\n  position:relative;\r\n  width:92%;height:90%;\r\n  background:rgba(25,25,25,0.45);\r\n  border:1px solid rgba(255,255,255,0.2);\r\n  border-radius:20px;\r\n  overflow:hidden;\r\n  backdrop-filter:blur(25px);\r\n  -webkit-backdrop-filter:blur(25px);\r\n  box-shadow:0 8px 32px 0 rgba(0,0,0,0.2),inset 0 1px 1px rgba(255,255,255,0.1);\r\n  display:flex;flex-direction:column;\r\n}\r\n\r\n#menu-wrapper::before{\r\n  content:'';position:absolute;top:0;left:0;right:0;\r\n  height:1px;\r\n  background:transparent;\r\n  z-index:10;pointer-events:none;display:none;\r\n}\r\n\r\n#menu-wrapper.toclose{animation:150ms ease-in toclose forwards;}\r\n#menu-wrapper.toopen{animation:200ms cubic-bezier(.34,1.4,.64,1) toopen forwards;}\r\n\r\nheader{\r\n  position:relative;z-index:5;\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  height:46px;min-height:46px;\r\n  padding:0 18px;\r\n  background:transparent;\r\n  border-bottom:1px solid var(--border);\r\n  flex-shrink:0;\r\n}\r\n\r\nheader .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.75em;\r\n  font-weight:700;\r\n  letter-spacing:0.22em;\r\n  text-transform:uppercase;\r\n  background:linear-gradient(90deg,#7A42F4,#3A86FF,#a07af4,#7A42F4);\r\n  background-size:200% auto;\r\n  -webkit-background-clip:text;-webkit-text-fill-color:transparent;\r\n  animation:shimmer 5s linear infinite;\r\n}\r\n\r\nheader #credits{display:flex;align-items:center;gap:10px;height:46px;}\r\nheader #logo{display:block;height:28px;width:auto;filter:drop-shadow(0 0 6px rgba(122,66,244,0.6));}\r\n\r\nheader #close-button{\r\n  display:flex;align-items:center;justify-content:center;\r\n  width:26px;height:26px;\r\n  fill:none;stroke:var(--text-dim);stroke-width:1.6;\r\n  cursor:pointer;\r\n  border-radius:5px;\r\n  border:1px solid transparent;\r\n  background:transparent;\r\n  transition:all 160ms;\r\n  padding:5px;\r\n}\r\nheader #close-button:hover{\r\n  stroke:var(--text);background:rgba(255,77,109,0.1);\r\n  border-color:rgba(255,77,109,0.35);\r\n}\r\n\r\nmain{\r\n  display:flex;flex-direction:row;\r\n  flex:1;min-height:0;\r\n  position:relative;z-index:2;\r\n}\r\n\r\n#navbar-container{\r\n  display:flex;flex-direction:column;\r\n  width:172px;min-width:172px;\r\n  background:rgba(15,15,15,0.3);backdrop-filter:blur(25px);-webkit-backdrop-filter:blur(25px);\r\n  border-right:1px solid rgba(255,255,255,0.1);\r\n  padding:0;\r\n  gap:0;\r\n  position:relative;flex-shrink:0;overflow:hidden;\r\n  justify-content:space-evenly;\r\n  }\r\n\r\n.open-menu{\r\n  position:relative;\r\n  display:flex;flex-direction:row;\r\n  align-items:center;justify-content:flex-start;\r\n  gap:10px;\r\n  width:100%;height:66px;\r\n  background:transparent;\r\n  border:none;\r\n  border-left:3px solid transparent;\r\n  border-bottom:1px solid rgba(255,255,255,0.05);\r\n  color:var(--text-dim);opacity:0.7;\r\n  transition:color 140ms,border-color 140ms,background 140ms,transform 100ms,opacity 100ms;\r\n  cursor:pointer;\r\n  padding:0 18px;\r\n  overflow:hidden;box-sizing:border-box;\r\n}\r\n\r\n.open-menu:hover{\r\n  color:rgba(255,255,255,0.85);opacity:1;\r\n  background:rgba(255,255,255,0.04);\r\n  border-left-color:rgba(122,66,244,0.5);\r\n}\r\n\r\n.open-menu:active{\r\n  transform:scale(0.96);\r\n  opacity:0.75;\r\n}\r\n\r\n.open-menu.active{\r\n  color:var(--text);\r\n  background:rgba(122,66,244,0.12);\r\n  border-left:3px solid var(--accent);\r\n  pointer-events:none;\r\n}\r\n\r\n.open-menu.active .nav-icon{\r\n  filter:drop-shadow(0 0 5px rgba(122,66,244,0.9));\r\n}\r\n\r\n.nav-icon{width:24px;height:24px;transition:all 140ms;flex-shrink:0;}\r\n\r\n.nav-label{\r\n  font-family:var(--font-head);\r\n  font-size:0.93em;\r\n  letter-spacing:0.04em;\r\n  font-weight:700;\r\n  text-transform:uppercase;\r\n  line-height:1;\r\n  transition:all 140ms;\r\n}\r\n\r\n.open-menu .ripple{\r\n  position:absolute;z-index:5;\r\n  background:rgba(122,66,244,0.15);\r\n  border-radius:50%;opacity:0;\r\n  animation:ripple 550ms;\r\n  pointer-events:none;\r\n}\r\n\r\n#page-container{\r\n  flex:1;min-width:0;\r\n  overflow-y:auto;overflow-x:hidden;\r\n  scroll-behavior:smooth;\r\n  padding:0;\r\n}\r\n\r\n#page-container::-webkit-scrollbar{width:2px;}\r\n#page-container::-webkit-scrollbar-track{background:transparent;}\r\n#page-container::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.25);border-radius:2px;}\r\n#page-container::-webkit-scrollbar-thumb:hover{background:rgba(122,66,244,0.45);}\r\n\r\n.menu-page{display:none;}\r\n.menu-page.opened{\r\n  display:block;\r\n  padding:16px 20px;\r\n  animation:slide-in-top 140ms ease-out;\r\n}\r\n\r\n.menu-page .page-title{\r\n  font-family:var(--font-head);\r\n  font-size:1.05em;font-weight:700;\r\n  letter-spacing:0.05em;\r\n  color:var(--text);\r\n  text-transform:uppercase;\r\n  margin-bottom:2px;\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page .page-title::before{\r\n  content:'';display:inline-block;\r\n  width:2px;height:0.9em;\r\n  background:linear-gradient(180deg,var(--accent),var(--accent2));\r\n  border-radius:2px;flex-shrink:0;\r\n}\r\n\r\n.page-description{\r\n  font-size:0.75em;color:var(--text-dim);\r\n  margin-bottom:14px;\r\n  letter-spacing:0.01em;\r\n  padding-left:10px;\r\n  font-weight:400;\r\n}\r\n\r\n.menu-page>.section{\r\n  margin-bottom:10px;\r\n  background:transparent;\r\n  border:1px solid var(--border);\r\n  border-radius:7px;\r\n  overflow:visible;\r\n  transition:border-color 200ms;\r\n  position:relative;\r\n}\r\n.menu-page>.section:hover{border-color:rgba(122,66,244,0.22);}\r\n\r\n.section-title{\r\n  font-family:var(--font-head);\r\n  font-size:0.68em;\r\n  font-weight:600;\r\n  letter-spacing:0.12em;\r\n  text-transform:uppercase;\r\n  color:rgba(122,66,244,0.6);\r\n  padding:6px 12px;\r\n  background:rgba(122,66,244,0.03);\r\n  border-bottom:1px solid var(--border);\r\n  display:flex;align-items:center;gap:6px;\r\n}\r\n.section-title::before{\r\n  content:'';width:3px;height:3px;\r\n  background:var(--accent);border-radius:50%;\r\n  box-shadow:0 0 5px var(--accent);flex-shrink:0;\r\n  opacity:0.7;\r\n}\r\n\r\n.section-content{display:flex;flex-direction:column;gap:0;}\r\n.small-section{font-size:0.85rem;}\r\n\r\n.section-content.split{flex-direction:row;gap:0;}\r\n.content-split{flex:1;display:flex;flex-direction:column;}\r\n.content-split:first-child{border-right:1px solid rgba(255,255,255,0.05);}\r\n\r\n.content-option{\r\n  display:flex;justify-content:space-between;align-items:center;\r\n  min-height:42px;padding:6px 12px;\r\n  border-bottom:1px solid rgba(255,255,255,0.03);\r\n  transition:background 150ms;\r\n  position:relative;\r\n  overflow:visible;\r\n}\r\n.content-option:last-child{border-bottom:none;}\r\n.content-option:hover{background:rgba(122,66,244,0.04);}\r\n\r\n.content-option.centered{justify-content:center;}\r\n.content-option.left-flex{justify-content:flex-start;gap:12px;}\r\n.content-option.text{justify-content:flex-start;}\r\n\r\n.option-title{\r\n  font-size:1.06em;\r\n  font-weight:500;\r\n  color:rgba(215,215,230,0.8);\r\n  letter-spacing:0.01em;\r\n  transition:color 150ms;\r\n}\r\n.content-option:hover .option-title{color:#FFFFFF;}\r\n\r\n.option-content{display:flex;align-items:center;gap:7px;}\r\n\r\n.text-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.8em;color:var(--accent);\r\n  font-weight:600;\r\n}\r\n.simplified{\r\n  font-family:var(--font-body)!important;\r\n  font-size:0.78em!important;\r\n  color:var(--text-dim)!important;\r\n  font-weight:400!important;\r\n  line-height:1.6;\r\n}\r\n.highlight{color:var(--accent)!important;}\r\n\r\n\r\n.hotkeyInput{\r\n  min-width:48px;height:24px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;font-weight:600;\r\n  color:rgba(200,175,255,0.8);\r\n  letter-spacing:0.04em;\r\n  padding:0 7px;\r\n  transition:all 140ms;\r\n  display:flex;align-items:center;justify-content:center;\r\n}\r\n.hotkeyInput:hover{\r\n  background:rgba(122,66,244,0.12);\r\n  border-color:rgba(122,66,244,0.5);\r\n}\r\n.hotkeyInput.active{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:var(--accent);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.2);\r\n  animation:dot-blink 0.8s ease infinite;\r\n}\r\n.hotkeyInput.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n.switch-checkbox{\r\n  position:relative;width:52px;height:30px;flex-shrink:0;\r\n}\r\n.switch-checkbox input{position:absolute;opacity:0;width:0;height:0;}\r\n\r\n.switch-checkbox span{\r\n  position:absolute;inset:0;\r\n  background:rgba(255,255,255,0.05);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:10px;\r\n  cursor:pointer;\r\n  transition:all 220ms;\r\n}\r\n.switch-checkbox span::before{\r\n  content:'';position:absolute;\r\n  left:3px;top:50%;transform:translateY(-50%);\r\n  width:20px;height:20px;\r\n  background:rgba(255,255,255,0.25);\r\n  border-radius:50%;\r\n  transition:all 220ms cubic-bezier(.34,1.4,.64,1);\r\n}\r\n.switch-checkbox input:checked + span{\r\n  background:rgba(122,66,244,0.18);\r\n  border-color:rgba(122,66,244,0.55);\r\n}\r\n.switch-checkbox input:checked + span::before{\r\n  left:calc(100% - 23px);\r\n  background:#7A42F4;\r\n  box-shadow:0 0 7px rgba(122,66,244,0.7);\r\n}\r\n\r\n.option-button{\r\n  padding:5px 16px;\r\n  background:rgba(122,66,244,0.1);\r\n  border:1px solid rgba(122,66,244,0.35);\r\n  border-radius:5px;\r\n  font-family:var(--font-head);\r\n  font-size:0.66em;font-weight:600;\r\n  letter-spacing:0.06em;\r\n  color:#FFFFFF;\r\n  text-transform:uppercase;\r\n  transition:all 140ms;\r\n}\r\n.option-button:hover{\r\n  background:rgba(122,66,244,0.22);\r\n  border-color:rgba(122,66,244,0.65);\r\n  box-shadow:0 0 12px rgba(122,66,244,0.2);\r\n}\r\n\r\n.ryn-social-btn:hover{\r\n  background:rgba(122,66,244,0.22)!important;\r\n  border-color:rgba(122,66,244,0.7)!important;\r\n  box-shadow:0 0 12px rgba(122,66,244,0.25);\r\n  transform:translateY(-1px);\r\n}\r\n.ryn-social-btn svg{width:19px;height:19px;}\r\n.ryn-social-big:hover{\r\n  background:rgba(122,66,244,0.13)!important;\r\n  border-color:rgba(122,66,244,0.8)!important;\r\n  box-shadow:0 0 22px rgba(122,66,244,0.3);\r\n  transform:translateY(-3px);\r\n}\r\n.ryn-social-big svg{width:44px;height:44px;}\r\n\r\n.option-button.red{\r\n  background:rgba(255,77,109,0.08)!important;\r\n  border-color:rgba(255,77,109,0.35)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n.option-button.red:hover{\r\n  background:rgba(255,77,109,0.15)!important;\r\n  border-color:rgba(255,77,109,0.6)!important;\r\n  box-shadow:0 0 10px rgba(255,77,109,0.2)!important;\r\n}\r\n\r\n.input{\r\n  height:24px;width:175px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  font-family:var(--font-body);\r\n  font-size:0.72em;font-weight:400;\r\n  color:var(--text);\r\n  text-align:center;\r\n  transition:all 140ms;\r\n  padding:0 7px;\r\n}\r\n.input:focus{\r\n  outline:none;\r\n  border-color:rgba(122,66,244,0.5);\r\n  box-shadow:0 0 0 2px rgba(122,66,244,0.1);\r\n  background:rgba(122,66,244,0.05);\r\n}\r\n\r\ninput[id][type=\"color\"]{\r\n  width:46px;height:22px;\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:4px;\r\n  padding:1px;\r\n  background:transparent;\r\n  cursor:pointer;\r\n  transition:border-color 140ms;\r\n}\r\ninput[id][type=\"color\"]:hover{border-color:rgba(122,66,244,0.5);}\r\n\r\n.reset-color{\r\n  width:16px;height:9px;\r\n  background:var(--data-color,var(--accent));\r\n  border-radius:5px;\r\n  border:none;cursor:pointer;\r\n  box-shadow:0 0 4px currentColor;\r\n  flex-shrink:0;\r\n}\r\n\r\n.slider{display:flex;align-items:center;gap:7px;}\r\n.slider input[type=\"range\"]{\r\n  -webkit-appearance:none;\r\n  width:100px;height:2px;\r\n  background:linear-gradient(90deg,var(--accent2) var(--val,50%),rgba(255,255,255,0.07) var(--val,50%));\r\n  border-radius:2px;\r\n  border:none;outline:none;cursor:pointer;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb{\r\n  -webkit-appearance:none;\r\n  width:11px;height:11px;\r\n  border-radius:50%;\r\n  background:var(--accent2);\r\n  box-shadow:0 0 5px rgba(58,134,255,0.5);\r\n  border:2px solid var(--bg);\r\n  transition:transform 120ms;\r\n}\r\n.slider input[type=\"range\"]::-webkit-slider-thumb:hover{transform:scale(1.25);}\r\n.slider-value{\r\n  font-family:var(--font-head);\r\n  font-size:0.63em;color:var(--accent2);\r\n  min-width:28px;text-align:right;font-weight:600;\r\n}\r\n\r\n.disconnect-button{\r\n  width:16px;height:16px;\r\n  fill:rgba(255,255,255,0.12);\r\n  cursor:pointer;transition:fill 180ms;flex-shrink:0;\r\n}\r\n.content-option:hover .disconnect-button{fill:rgba(255,77,109,0.45);}\r\n.disconnect-button:hover{fill:#cc4444!important;}\r\n\r\n.key-badge{\r\n  display:inline-flex;align-items:center;justify-content:center;\r\n  min-width:24px;height:18px;padding:0 4px;\r\n  background:rgba(255,255,255,0.04);\r\n  border:1px solid rgba(255,255,255,0.1);\r\n  border-radius:3px;\r\n  font-family:var(--font-head);\r\n  font-size:0.6em;font-weight:600;\r\n  color:rgba(180,155,255,0.75);\r\n}\r\n\r\n#bot-container{padding:2px 0;}\r\n\r\n.icon{width:48px;height:48px;}\r\n.small-icon{width:16px;height:16px;}\r\n\r\n.red{\r\n  background:rgba(255,77,109,0.06)!important;\r\n  border-color:rgba(255,77,109,0.3)!important;\r\n  color:#ff4d6d!important;\r\n}\r\n\r\n#ryn-search-wrap{position:relative;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:0 10px;height:30px;transition:border-color 160ms,box-shadow 160ms;min-width:185px;}\r\n#ryn-search-wrap:focus-within{border-color:rgba(122,66,244,0.55);box-shadow:0 0 0 2px rgba(122,66,244,0.12);background:rgba(122,66,244,0.05);}\r\n#ryn-search-input{flex:1;background:transparent;border:none;outline:none;font-family:var(--font-body);font-size:0.75em;color:var(--text);min-width:0;}\r\n#ryn-search-input::placeholder{color:rgba(200,200,215,0.3);}\r\n#ryn-search-clear{font-size:0.65em;color:rgba(200,200,215,0.3);cursor:pointer;flex-shrink:0;display:none;transition:color 120ms;line-height:1;}\r\n#ryn-search-clear:hover{color:rgba(255,77,109,0.8);}\r\n#ryn-search-dropdown{display:none;position:absolute;top:calc(100% + 6px);right:0;width:280px;max-height:320px;overflow-y:auto;background:rgba(18,15,30,0.98);border:1px solid rgba(122,66,244,0.3);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.7);z-index:9999;padding:4px;}\r\n#ryn-search-dropdown::-webkit-scrollbar{width:2px;}\r\n#ryn-search-dropdown::-webkit-scrollbar-thumb{background:rgba(122,66,244,0.3);border-radius:2px;}\r\n.ryn-si{display:flex;flex-direction:column;gap:2px;padding:7px 10px;border-radius:5px;cursor:pointer;transition:background 120ms;border:1px solid transparent;}\r\n.ryn-si:hover,.ryn-si.ryn-fx{background:rgba(122,66,244,0.12);border-color:rgba(122,66,244,0.22);}\r\n.ryn-st{font-size:0.8em;font-weight:600;color:#FFFFFF;line-height:1.3;}\r\n.ryn-st mark{background:rgba(122,66,244,0.4);color:#FFFFFF;border-radius:2px;padding:0 1px;}\r\n.ryn-sp{font-size:0.68em;color:rgba(122,66,244,0.55);font-family:var(--font-head);letter-spacing:0.06em;text-transform:uppercase;}\r\n.ryn-se{text-align:center;padding:18px 12px;font-size:0.77em;color:rgba(200,200,215,0.3);font-style:italic;}\r\n.ryn-sl{font-size:0.62em;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(122,66,244,0.4);padding:5px 10px 2px;margin-top:2px;}\r\n\r\n.menu-page[data-id=\"3\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\n\r\n.menu-page[data-id=\"3\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"3\"] .option-title{\r\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\r\n  transition:color 150ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .option-content{gap:9px;}\r\n\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]{\r\n  width:21px;height:21px;padding:0;\r\n  border:none;border-radius:50%;\r\n  background:transparent;cursor:pointer;overflow:hidden;\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.16),0 2px 5px rgba(0,0,0,0.4);\r\n  transition:transform 160ms ease,box-shadow 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch-wrapper{padding:0;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]::-webkit-color-swatch{border:none;border-radius:50%;}\r\n.menu-page[data-id=\"3\"] input[type=\"color\"]:hover{\r\n  transform:scale(1.14);\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.34),0 3px 9px rgba(0,0,0,0.55);\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:has(input[type=\"checkbox\"]:checked) input[type=\"color\"]{\r\n  box-shadow:0 0 0 1px rgba(255,255,255,0.3),0 0 9px rgba(122,66,244,0.4);\r\n}\r\n\r\n.menu-page[data-id=\"3\"] .reset-color{\r\n  width:11px;height:11px;border-radius:50%;\r\n  opacity:0;\r\n  transition:opacity 160ms ease,transform 160ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .content-option:hover .reset-color{opacity:0.85;}\r\n.menu-page[data-id=\"3\"] .reset-color:hover{opacity:1;transform:scale(1.28);}\r\n\r\n.menu-page[data-id=\"3\"] .section-title{\r\n  display:flex;align-items:center;gap:8px;\r\n}\r\n.menu-page[data-id=\"3\"] .section-title::before{\r\n  content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"3\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::before{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .content-option{\r\n  position:relative;\r\n  border-radius:7px;\r\n  padding-inline:10px;\r\n  transition:background 150ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:hover{background:rgba(122,66,244,0.05);}\r\nlabel.option-title{\r\n  cursor:pointer;user-select:none;\r\n  flex:1;min-width:0;\r\n  transition:color 150ms ease;\r\n}\r\nlabel.option-title:hover{color:var(--text);}\r\nlabel.option-title:active{opacity:0.7;}\r\n\r\n.menu-page[data-id=\"2\"] .content-option::before{\r\n  content:'';position:absolute;left:0;top:7px;bottom:7px;\r\n  width:2px;border-radius:0 2px 2px 0;\r\n  background:var(--accent);\r\n  opacity:0;transition:opacity 200ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked)::before{opacity:1;}\r\n.menu-page[data-id=\"2\"] .content-option:has(input[type=\"checkbox\"]:checked) .option-title{color:var(--text);}\r\n\r\n.menu-page[data-id=\"2\"] .section-title{\r\n  display:flex;flex-direction:column;align-items:flex-start;gap:3px;\r\n}\r\n.sec-sub{\r\n  font-family:var(--font-body);\r\n  font-size:0.78em;font-weight:400;letter-spacing:0;\r\n  text-transform:none;color:var(--text-dim);\r\n  line-height:1.45;\r\n}\r\n\r\n.menu-page[data-id=\"2\"] .section-title::after{\r\n  content:'';position:absolute;top:14px;right:14px;\r\n  width:5px;height:5px;border-radius:50%;\r\n  background:rgba(255,255,255,0.14);\r\n  transition:background 240ms ease,box-shadow 240ms ease;\r\n}\r\n.menu-page[data-id=\"2\"] .section{position:relative;}\r\n.menu-page[data-id=\"2\"] .section:has(input[type=\"checkbox\"]:checked) .section-title::after{\r\n  background:var(--accent);box-shadow:0 0 8px rgba(122,66,244,0.75);\r\n}\r\n\n.menu-page[data-id=\"1\"] .key-grid{\n  display:grid;\n  grid-template-columns:repeat(auto-fill,minmax(228px,1fr));\n  gap:8px;\n  padding:10px 12px;\n}\n.menu-page[data-id=\"1\"] .key-tile{\n  display:flex;align-items:center;justify-content:space-between;gap:10px;\n  min-height:38px;padding:7px 10px;\n  background:rgba(255,255,255,0.02);\n  border:1px solid rgba(255,255,255,0.06);\n  border-radius:8px;\n  transition:background 150ms,border-color 150ms,transform 150ms;\n}\n.menu-page[data-id=\"1\"] .key-tile:hover{\n  background:rgba(122,66,244,0.07);\n  border-color:rgba(122,66,244,0.4);\n  transform:translateY(-1px);\n}\n.menu-page[data-id=\"1\"] .key-tile .option-title{\n  font-size:0.86em;font-weight:500;\n  color:rgba(215,215,230,0.85);\n  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n}\n.menu-page[data-id=\"1\"] .key-tile .hotkeyInput{\n  min-width:58px;height:26px;flex-shrink:0;\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.active){\n  border-color:var(--accent);\n  background:rgba(122,66,244,0.1);\n}\n.menu-page[data-id=\"1\"] .key-tile:has(.hotkeyInput.red){\n  border-color:rgba(255,77,109,0.4);\n  background:rgba(255,77,109,0.05);\n}\n\n.sub-options{\n  border-left:2px solid rgba(122,66,244,0.35);\n  margin:0 0 0 12px;\n  transition:opacity 200ms;\n}\n.sub-options .content-option{\n  padding-left:16px;\n  min-height:38px;\n}\n.sub-options .option-title{\n  font-size:0.95em;\n  color:rgba(200,200,215,0.7);\n}\n.sub-options .content-option:last-child{border-bottom:none;}\n.content-option:has(> .switch-checkbox > input:not(:checked)) + .sub-options{\n  opacity:0.3;\n  pointer-events:none;\n}\n";
   const Game_default = "#ryn-menu-frame {\r\n    position: absolute;\r\n    top: 0;\r\n    left: 0;\r\n    bottom: 0;\r\n    right: 0;\r\n    width: 100%;\r\n    height: 100%;\r\n    border: none;\r\n    outline: none;\r\n    z-index: 10;\r\n}\r\n\r\n#promoImgHolder,\r\n.menuHeader,\r\n.menuText,\r\n#guideCard,\r\n#gameName,\r\n#pingDisplay,\r\n#partyButton,\r\n#onetrust-consent-sdk,\r\n.adMenuCard,\r\n#topInfoHolder > div:not([id]):not([class]),\r\n#touch-controls-fullscreen,\r\n#altcha,\r\n#joinPartyButton {\r\n    display: none!important;\r\n}\r\n\r\n.menuCard {\r\n    box-shadow: none;\r\n}\r\n\r\n#setupCard {\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 12px;\r\n    background: rgba(25,25,25,0.45);\r\n    backdrop-filter: blur(25px);\r\n    -webkit-backdrop-filter: blur(25px);\r\n    border: 1px solid rgba(255,255,255,0.2);\r\n    border-radius: 20px;\r\n    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.1);\r\n    max-height: auto;\r\n    width: 280px;\r\n}\r\n\r\n#setupCard > * {\r\n    margin: 0!important;\r\n}\r\n\r\n#linksContainer2 {\r\n    background: #6d6d6d77;\r\n}\r\n\r\n#bottomContainer {\r\n    bottom: 20px;\r\n}\r\n\r\n#topInfoHolder {\r\n    display: flex;\r\n    flex-direction: column;\r\n    justify-content: right;\r\n    align-items: flex-end;\r\n    gap: 10px;\r\n}\r\n\r\n#killCounter, #totalKillCounter {\r\n    position: static;\r\n    margin: 0;\r\n    background-image: url(../img/icons/skull.png);\r\n}\r\n\r\n.actionBarItem {\r\n    position: relative;\r\n    border: 2px solid rgba(80,30,160,0.45) !important;\r\n    border-radius: 4px !important;\r\n}\r\n\r\n.itemCounter {\r\n    position: absolute;\r\n    top: 3px;\r\n    right: 3px;\r\n    font-size: 0.95em;\r\n    color: white;\r\n    text-shadow: #3d3f42 2px 0px 0px, #3d3f42 1.75517px 0.958851px 0px, #3d3f42 1.0806px 1.68294px 0px, #3d3f42 0.141474px 1.99499px 0px, #3d3f42 -0.832294px 1.81859px 0px, #3d3f42 -1.60229px 1.19694px 0px, #3d3f42 -1.97998px 0.28224px 0px, #3d3f42 -1.87291px -0.701566px 0px, #3d3f42 -1.30729px -1.5136px 0px, #3d3f42 -0.421592px -1.95506px 0px, #3d3f42 0.567324px -1.91785px 0px, #3d3f42 1.41734px -1.41108px 0px, #3d3f42 1.92034px -0.558831px 0px;\r\n}\r\n\r\n.itemCounter.hidden {\r\n    display: none;\r\n}\r\n\r\n#ryn-topright-hud { position: fixed; top: 12px; right: 12px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; pointer-events: none; font-family: \"Hammersmith One\", Arial, sans-serif; }\r\n.ryn-hud-row { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 160px; }\r\n.ryn-hud-bar-bg { width: 160px; height: 8px; background: rgba(0,0,0,0.55); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }\r\n.ryn-hud-bar-fill { height: 100%; border-radius: 4px; transition: width 0.15s ease; }\r\n#ryn-hud-hp-fill { background: linear-gradient(90deg,#cc5151,#e05151); }\r\n#ryn-hud-r1-fill { background: linear-gradient(90deg,#f0b429,#f0c060); }\r\n#ryn-hud-r2-fill { background: linear-gradient(90deg,#51cc88,#60e0a0); }\r\n.ryn-hud-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); text-shadow: 0 1px 3px rgba(0,0,0,0.9); }\r\n.ryn-hud-val { font-size: 11px; color: rgba(255,255,255,0.9); text-shadow: 0 1px 4px rgba(0,0,0,0.9); letter-spacing: 0.05em; }\r\n\r\n#rynStats {\r\n    position: absolute;\r\n    color: rgb(225, 210, 255);\r\n    font: 13px \"Hammersmith One\";\r\n    bottom: 210px;\r\n    left: 20px;\r\n\r\n    display: flex;\r\n    flex-direction: column;\r\n    gap: 5px;\r\n}\r\n\r\n.hidden {\r\n    display: none!important;\r\n}";
@@ -3977,6 +3977,9 @@ window.grbtp = 35;
   const RYN_ROLE = "owner";
   const RYN_IS_OWNER_BUILD = RYN_ROLE === "owner";
   const RYN_RED_NAME = "#ff2d2d";
+  // How far under the health number the squad number sits, and its colour.
+  const BOT_NUMBER_DROP = 21;
+  const BOT_NUMBER_COLOR = "#c0a8ff";
   const SHAME_COUNTER_COLOR = "#2f8bff";
   const WEAPON_RELOAD_BAR_COLOR = "#f5cb42";
   const TURRET_RELOAD_BAR_COLOR = "#9aa0a6";
@@ -4878,6 +4881,51 @@ window.grbtp = 35;
       ctx.fillText(text, x, y);
       ctx.restore();
     }
+    // The squad number, drawn under the health number.
+    //
+    // The roster is the same one everything else counts from - getClientIndex -
+    // so the number here is the number the Bots list shows, the number the clan
+    // re-check reports as missing, and the number the remote-control overlay
+    // puts next to the name. One identity for a bot, in every place it appears.
+    renderBotNumber(ctx, entity) {
+      if (!Settings_default._renderHP || !Settings_default._showBotNumbers || !entity.isPlayer) {
+        return;
+      }
+      if (!client.isBotByID(entity.sid)) {
+        return;
+      }
+      let index = -1;
+      try {
+        for (const bot of client.clients) {
+          if (bot.myPlayer && bot.myPlayer.id === entity.sid) {
+            index = client.getClientIndex(bot);
+            break;
+          }
+        }
+      } catch (_) {}
+      if (index < 0) {
+        return;
+      }
+      const {barPad: barPad, nameY: nameY} = Config_default;
+      const containerHeight = this.getContainerHeight(entity);
+      const _offset = RYN._offset;
+      const x = entity.x - _offset.x;
+      // One line below renderHP, which draws at this offset with textBaseline
+      // "top" and a 19px font.
+      const y = entity.y - _offset.y + entity.scale + nameY + barPad + containerHeight + BOT_NUMBER_DROP;
+      ctx.save();
+      ctx.fillStyle = BOT_NUMBER_COLOR;
+      ctx.strokeStyle = "#22252b";
+      ctx.lineWidth = 7;
+      ctx.lineJoin = "round";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.font = "bold 15px Hammersmith One";
+      const text = "#" + (index + 1);
+      ctx.strokeText(text, x, y);
+      ctx.fillText(text, x, y);
+      ctx.restore();
+    }
     renderShame(ctx, entity) {
       if (!Settings_default._renderHP || !entity.isPlayer) {
         return;
@@ -5179,6 +5227,7 @@ window.grbtp = 35;
     drawEntityHP(ctx, entity) {
       Renderer_default.renderBar(ctx, entity);
       Renderer_default.renderHP(ctx, entity);
+      Renderer_default.renderBotNumber(ctx, entity);
       Renderer_default.renderShame(ctx, entity);
     }
     drawHitScale(ctx, entity) {
@@ -6462,7 +6511,11 @@ window.grbtp = 35;
       // again on every respawn. A bot that dies comes back with whatever the
       // field says now, and changing the field does not need to touch the bots
       // that are already connected.
-      const name = customName || _botSquadNameFor(this.client) || this.client._botCustomName || window.localStorage.getItem("moo_name") || "";
+      // A fresh random name on every spawn wins over the squad name when it is
+      // switched on: "change it every time it dies" and "one name for all of
+      // them" are opposite instructions, and this is the more specific one.
+      const randomName = !this.client.isOwner && Settings_default._botRandomNameOnDeath ? _randomBotName() : null;
+      const name = customName || randomName || _botSquadNameFor(this.client) || this.client._botCustomName || window.localStorage.getItem("moo_name") || "";
       const skin = this.client.isOwner ? Number(window.localStorage.getItem("skin_color")) || 0 : Math.floor(Math.random() * Config_default.skinColors.length);
       this.client.PacketManager.spawn(name, 1, skin === 10 ? "constructor" : skin);
     }
@@ -7560,6 +7613,31 @@ window.grbtp = 35;
         if (Settings_default._remoteReleaseKey && event.code === Settings_default._remoteReleaseKey) {
           _Remote.release();
         }
+        if (Settings_default._botWarSplitKey && event.code === Settings_default._botWarSplitKey) {
+          Settings_default._botWarSplit = !Settings_default._botWarSplit;
+          SaveSettings();
+          if (!Settings_default._botWarSplit) _warStandDown();
+        }
+        if (Settings_default._botGhostShotKey && event.code === Settings_default._botGhostShotKey) {
+          Settings_default._botGhostShot = !Settings_default._botGhostShot;
+          SaveSettings();
+        }
+        if (Settings_default._botAutoPlayClearKey && event.code === Settings_default._botAutoPlayClearKey) {
+          _clearSoloAutoPlay();
+        }
+        // Fixed keys rather than rebindable ones: the arrows are the shape of
+        // the thing - next along, back along, and out - and nothing else in the
+        // client uses them.
+        if (event.code === "ArrowRight") {
+          event.preventDefault();
+          _Remote.step(1);
+        } else if (event.code === "ArrowLeft") {
+          event.preventDefault();
+          _Remote.step(-1);
+        } else if (event.code === "ArrowUp") {
+          event.preventDefault();
+          _Remote.release();
+        }
       }
       if (!this.driven.myPlayer.inGame) {
         return;
@@ -8103,6 +8181,31 @@ window.grbtp = 35;
   // for the number instead of letting the server cut the digits off the end.
   // ==========================================================================
   const BOT_NAME_MAX = 15;
+  const BOT_NAME_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  function _randomBotName() {
+    const len = 1 + Math.floor(Math.random() * 7);
+    let out = "";
+    for (let i = 0; i < len; i++) {
+      out += BOT_NAME_CHARS[Math.floor(Math.random() * BOT_NAME_CHARS.length)];
+    }
+    return out;
+  }
+
+  // Primary weapons, minus the stick. Ids 0-7 are the primaries the upgrade
+  // tree can reach; 8 is the stick, which is excluded by request, and anything
+  // above that is a secondary.
+  const BOT_RANDOM_PRIMARIES = [ 0, 1, 2, 3, 4, 5, 6, 7 ];
+  // Chosen once per bot rather than per spawn: a bot whose weapon changed every
+  // time it died would never finish an upgrade path, and the point is a squad
+  // that is mixed, not one that is unstable.
+  function _botRandomPrimary(botClient) {
+    if (!Settings_default._botRandomWeapon) return -1;
+    if (botClient._randomPrimary === undefined) {
+      botClient._randomPrimary = BOT_RANDOM_PRIMARIES[Math.floor(Math.random() * BOT_RANDOM_PRIMARIES.length)];
+    }
+    return botClient._randomPrimary;
+  }
+
   function _botSquadNameFor(botClient) {
     if (!botClient || botClient.isOwner) return null;
     const base = (Settings_default._botSquadName || "").trim();
@@ -8401,11 +8504,11 @@ window.grbtp = 35;
       // movement model step aside for the one bot the keyboard is holding.
       if (_Remote.isPossessed(this.client)) return;
       if (ModuleHandler._scatterActive || ModuleHandler._scatterReturning) return;
-      // Find Enemy is walking this bot - shadowing a contact, or holding its
-      // slot in a strike group. Paired with the live search rather than the
-      // flag alone, so a stale flag on a bot that died mid-search can never
-      // leave it standing still.
-      if (ModuleHandler._findDrive && _FIND.active) return;
+      // A coordinator - Find Enemy, War Split, Ghost Shot - is driving this
+      // bot directly. _botExtDriven checks the flag against the system that
+      // claims to hold it, so a flag left behind by a bot that died mid-order
+      // can never leave it standing still.
+      if (_botExtDriven(ModuleHandler)) return;
       if (ModuleHandler._autoFarmActive) return;
       // Ranged kiting already decided where this bot walks this tick.
       if (ModuleHandler.staticModules.botRangedAttack?.active) return;
@@ -8490,7 +8593,15 @@ window.grbtp = 35;
   // is: the bots have to agree on whose turn it is.
   // ==========================================================================
   const CLAN_QUEUE = new WeakMap;
-  const CLAN_TURN_MS = 1500;
+  // Was 1500. That was sized for a rotation whose accepts depended on the
+  // owner's request queue draining, which it did not reliably do; with our own
+  // bots accepted the moment they ask, a slot only has to cover the round trip.
+  // At 1500ms a twenty-bot squad took half a minute to form up, which is most
+  // of why bots looked like they "never" joined.
+  const CLAN_TURN_MS = 600;
+  // How long a bot waits for the clan to show up in its own team table before
+  // it tries to join anyway. See ClanJoiner.postTick.
+  const CLAN_UNKNOWN_GRACE_MS = 2500;
 
   function clanQueue(owner) {
     let q = CLAN_QUEUE.get(owner);
@@ -8564,22 +8675,37 @@ window.grbtp = 35;
   }
 
   // Used by the Re-check button and by the bot counter in the HUD.
+  //
+  // This reads every bot's own clanName back off its own connection, which is
+  // the only real answer to "did it get in" - there is no join acknowledgement
+  // to listen for. `missing` names the ones that did not, by squad number, so
+  // the button can say which rather than only how many.
   function clanAudit(owner) {
     const q = clanQueue(owner);
     const ownerClan = owner.myPlayer ? owner.myPlayer.clanName : null;
     const bots = [ ...owner.clients ];
-    let joined = 0, alive = 0;
+    let joined = 0, alive = 0, dead = 0;
+    const missing = [];
     for (let i = 0; i < bots.length; i++) {
       const p = bots[i].myPlayer;
-      if (!p || !p.inGame) continue;
+      if (!p || !p.inGame) {
+        dead += 1;
+        continue;
+      }
       alive += 1;
-      if (ownerClan !== null && p.clanName === ownerClan) joined += 1;
+      if (ownerClan !== null && p.clanName === ownerClan) {
+        joined += 1;
+      } else {
+        missing.push(i + 1);
+      }
     }
     q.joined = joined;
     q.total = bots.length;
     return {
       joined: joined,
       alive: alive,
+      dead: dead,
+      missing: missing,
       total: bots.length,
       clan: ownerClan
     };
@@ -8587,6 +8713,10 @@ window.grbtp = 35;
 
   // Drop everything and start the rotation over from the top. Bots already in
   // the clan are skipped by the turn picker, so this costs nothing for them.
+  //
+  // The grace timer on every bot is cleared too: a bot that was sitting out
+  // because its own team table did not know the clan gets to try immediately
+  // rather than waiting the delay out again.
   function clanRecheck(owner) {
     const q = clanQueue(owner);
     q.current = null;
@@ -8594,6 +8724,12 @@ window.grbtp = 35;
     q.cursor = 0;
     q.nextAt = 0;
     q.failed = 0;
+    try {
+      for (const bot of owner.clients) {
+        const joiner = bot._ModuleHandler && bot._ModuleHandler.staticModules.clanJoiner;
+        if (joiner) joiner._clanUnknownSince = 0;
+      }
+    } catch (_) {}
     return clanAudit(owner);
   }
   class ClanJoiner {
@@ -8602,6 +8738,7 @@ window.grbtp = 35;
     joinCount=0;
     prevOwnerClan=null;
     _ownClanAttempts=0;
+    _clanUnknownSince=0;
     constructor(client2) {
       this.client = client2;
     }
@@ -8618,8 +8755,28 @@ window.grbtp = 35;
         this.joinCount = 0;
         owner.pendingJoins.delete(myPlayer.id);
       }
-      if (ownerClan === null || myClan === ownerClan || !PlayerManager2.clanExist(ownerClan)) {
+      if (ownerClan === null || myClan === ownerClan) {
+        this._clanUnknownSince = 0;
         return;
+      }
+      // clanExist is the *bot's own* view of what clans are in the world, built
+      // from the team packets its connection happened to receive. A bot that
+      // connected while the clan already existed, or that missed the packet,
+      // answers false here and then returns on this line forever - it never
+      // even reaches the rotation, so no amount of re-checking would move it.
+      //
+      // So it is a delay now, not a veto: unknown clans are given a couple of
+      // seconds for the packet to arrive, and after that the join is attempted
+      // anyway. A join for a clan that genuinely does not exist costs one
+      // packet and is refused by the server.
+      if (!PlayerManager2.clanExist(ownerClan)) {
+        const now = Date.now();
+        if (!this._clanUnknownSince) this._clanUnknownSince = now;
+        if (now - this._clanUnknownSince < CLAN_UNKNOWN_GRACE_MS) {
+          return;
+        }
+      } else {
+        this._clanUnknownSince = 0;
       }
       // Wait for this bot's slot in the rotation. Without this every bot counted
       // its own two ticks and they all sent inside the same ~200ms.
@@ -9083,9 +9240,11 @@ window.grbtp = 35;
       return blocked;
     }
     postTick() {
-      if (!Settings_default._autoPlay) return;
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      // Either the global switch, or this one bot having been clicked into it.
+      if (!Settings_default._autoPlay && !ModuleHandler._autoPlaySolo) return;
       if (!myPlayer || !myPlayer.inGame) return;
+      if (_botExtDriven(ModuleHandler)) return;
       const enemy = EnemyManager2.nearestEnemy;
       if (!enemy) return;
       if (ModuleHandler.moveTo !== "disable") return;
@@ -14890,17 +15049,29 @@ window.grbtp = 35;
       if (!myPlayer.isLeader || myPlayer.joinRequests.length === 0) {
         return;
       }
+      // The old gate was `_autoaccept || pendingJoins.size !== 0`, which is a
+      // property of the *queue* rather than of the request being looked at. Two
+      // bots asking in the same tick was enough to wedge it: the first accept
+      // deletes the only pending id, size drops to zero, and the loop breaks
+      // with the second bot's request still sitting at the head - where it
+      // blocks every request behind it until the clan changes. That is the
+      // "some of them never join" case, and it gets worse the more bots ask at
+      // once.
+      //
+      // The question that actually matters is whether the request in hand is
+      // one of ours, which clientIDList answers directly. Strangers still wait
+      // for the notification UI unless autoaccept is on.
       while (myPlayer.joinRequests.length > 0) {
         const id = myPlayer.joinRequests[0][0];
-        if (Settings_default._autoaccept || this.client.pendingJoins.size !== 0) {
-          PacketManager2.clanRequest(id, Settings_default._autoaccept || clientIDList.has(id));
-          myPlayer.joinRequests.shift();
-          this.client.pendingJoins.delete(id);
-          if (isOwner) {
-            GameUI_default.clearNotication();
-          }
-        } else {
+        const mine = clientIDList.has(id) || this.client.pendingJoins.has(id);
+        if (!Settings_default._autoaccept && !mine) {
           break;
+        }
+        PacketManager2.clanRequest(id, true);
+        myPlayer.joinRequests.shift();
+        this.client.pendingJoins.delete(id);
+        if (isOwner) {
+          GameUI_default.clearNotication();
         }
       }
       const nextID = myPlayer.joinRequests[0];
@@ -15158,6 +15329,20 @@ window.grbtp = 35;
   // Nothing here touches what a bot is allowed to do: movement, attacking,
   // reloading, healing and breaking all still run on every tick for every bot.
   // ==========================================================================
+  // True when one of the squad coordinators is driving this bot directly, so
+  // the per-bot movement and shooting modules stand aside for it. The flag
+  // carries the name of the system holding it and is checked against that
+  // system still being switched on, which is what stops a flag left behind on a
+  // bot that died mid-order from freezing it once it respawns.
+  function _botExtDriven(mh) {
+    const owner = mh && mh._extDrive;
+    if (!owner) return false;
+    if (owner === "find") return _FIND.active;
+    if (owner === "war") return Settings_default._botWarSplit;
+    if (owner === "ghost") return Settings_default._botGhostShot;
+    return false;
+  }
+
   const BOT_ANALYSIS_LANES = 4;
   function botAnalysisTurn(client) {
     if (client.isOwner) return true;
@@ -15352,7 +15537,11 @@ window.grbtp = 35;
   function botPickTarget(client) {
     const {myPlayer: myPlayer, PlayerManager: PlayerManager2, EnemyManager: EnemyManager2} = client;
     const nearest = EnemyManager2.nearestEnemy;
-    if (!Settings_default._botAvoidShield) {
+    // Green is a hold-fire order and this is the one place every bot decides
+    // who it is shooting at, so enforcing it here covers auto shot, ranged
+    // kiting and the melee aim in a single check rather than three.
+    const green = _MARK_GREEN.size > 0;
+    if (!Settings_default._botAvoidShield && !green) {
       return {
         target: nearest,
         shielded: null,
@@ -15362,7 +15551,7 @@ window.grbtp = 35;
     const enemies = PlayerManager2.enemies;
     if (!enemies || enemies.length === 0) {
       return {
-        target: nearest,
+        target: green && nearest !== null && !_mayEngage(client, nearest) ? null : nearest,
         shielded: null,
         blockedBy: null
       };
@@ -15375,6 +15564,9 @@ window.grbtp = 35;
       if (!e || !e.pos) continue;
       const d = myPos.distance(e.pos.current);
       if (d > BOT_TARGET_RANGE) continue;
+      // Not just "is this the green player" - anything whose line of fire
+      // passes near one is off the list too.
+      if (green && !_mayEngage(client, e)) continue;
       let blocking = false;
       try {
         blocking = PlayerManager2.lookingShield(e, myPlayer);
@@ -15643,9 +15835,9 @@ window.grbtp = 35;
       // A bot that has been sent somewhere is on that errand. Scatter and the
       // Find Enemy sweep drive movement directly and shoot on their own terms.
       if (ModuleHandler._scatterActive || ModuleHandler._scatterReturning) return;
-      // Find Enemy owns this bot's shooting too: shadowing is an observation
-      // job, and a strike group fires on the group's word, not its own.
-      if (ModuleHandler._findDrive && _FIND.active) return;
+      // A coordinator owns this bot's shooting too: shadowing is an
+      // observation job, and a strike group fires on the group's word.
+      if (_botExtDriven(ModuleHandler)) return;
 
       const pick = botPickTarget(this.client);
       const enemy = pick.target;
@@ -15663,6 +15855,179 @@ window.grbtp = 35;
       ModuleHandler.shouldAttack = true;
       ModuleHandler.moduleActive = true;
       this.active = true;
+    }
+  }
+
+  // ==========================================================================
+  // Platforms in the river.
+  //
+  // ObjectManager.canPlaceItem refuses every item in the river except id 18,
+  // the platform - so a bot crossing water either swims it slowly or builds
+  // its way over. This builds.
+  //
+  // The platform goes down along the direction of travel rather than under the
+  // bot, so a squad crossing lays a bridge in front of itself instead of a
+  // stack of tiles on the spot where each one entered the water.
+  // ==========================================================================
+  const BOT_RIVER_PLATFORM_TYPE = 8;
+  const BOT_RIVER_PLACE_TICKS = 4;
+  class BotRiverPlatform {
+    moduleName="botRiverPlatform";
+    client;
+    _lastTick=-999;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this._lastTick = -999;
+    }
+    postTick() {
+      if (!Settings_default._botRiverPlatform) return;
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      if (!myPlayer || !myPlayer.inGame) return;
+      // Already standing on one; nothing to build.
+      if (myPlayer.onPlatform) return;
+      if (ModuleHandler.placedOnce || ModuleHandler.moduleActive) return;
+      const current = myPlayer.pos.current;
+      const future = myPlayer.pos.future ?? current;
+      if (!pointInRiver(current) && !pointInRiver(future)) return;
+      if (!myPlayer.canPlace(BOT_RIVER_PLATFORM_TYPE)) return;
+      if (ModuleHandler.tickCount - this._lastTick < BOT_RIVER_PLACE_TICKS) return;
+      const angle = ModuleHandler.move_dir !== null ? ModuleHandler.move_dir : ModuleHandler._currentAngle;
+      ModuleHandler.requestPlace(BOT_RIVER_PLATFORM_TYPE, angle, "botRiverPlatform");
+      this._lastTick = ModuleHandler.tickCount;
+    }
+  }
+
+  // ==========================================================================
+  // Ghost Shot.
+  //
+  // Assassin Gear (hat 56) turns you invisible after a second of not moving.
+  // So the whole feature is: buy it, wear it, stand still, and shoot anything
+  // that walks inside the radius. Standing still is not a side effect - it is
+  // the mechanic, because moving is what breaks the invisibility.
+  //
+  // Which means this has to hold the bot's hat against everything else that
+  // wants to change it. ModuleHandler.postTick assigns `forceHat = 6` for
+  // soldier directly, after every module has run, so a module cannot win that
+  // by writing forceHat earlier; the soldier block asks _ghostShotActive first
+  // instead. Auto Shot and ranged kiting stand aside through the usual
+  // coordinator flag, since a bot that walks to a kiting distance has just
+  // made itself visible.
+  //
+  // Attacking does not break the invisibility, only moving does, so a
+  // stationary bot shoots out of nothing - which is the point.
+  // ==========================================================================
+  const GHOST_HAT_ID = 56;
+  const GHOST_HAT_PRICE = 2e4;
+  const GHOST_RANGE_MIN = 100;
+  const GHOST_RANGE_MAX = 1200;
+  class BotGhostShot {
+    moduleName="botGhostShot";
+    client;
+    active=false;
+    constructor(client2) {
+      this.client = client2;
+    }
+    reset() {
+      this.active = false;
+    }
+    // Buy it once, then keep it on. mh.bought is the client's own record of
+    // what it owns, which is what canBuy and _equip both read.
+    _wearHat(ModuleHandler, myPlayer) {
+      const bought = ModuleHandler.bought && ModuleHandler.bought[0];
+      const owned = bought && bought.has(GHOST_HAT_ID);
+      if (!owned && myPlayer.tempGold >= GHOST_HAT_PRICE) {
+        try {
+          this.client.PacketManager.buy(0, GHOST_HAT_ID);
+          myPlayer.tempGold -= GHOST_HAT_PRICE;
+          if (bought) bought.add(GHOST_HAT_ID);
+        } catch (_) {}
+        return false;
+      }
+      if (!owned) return false;
+      ModuleHandler.forceHat = GHOST_HAT_ID;
+      ModuleHandler.useHat = GHOST_HAT_ID;
+      const store = ModuleHandler.store && ModuleHandler.store[0];
+      if (store && (store.actual !== GHOST_HAT_ID || store.last !== GHOST_HAT_ID)) {
+        store.last = GHOST_HAT_ID;
+        store.actual = GHOST_HAT_ID;
+        try {
+          this.client.PacketManager.equip(0, GHOST_HAT_ID);
+        } catch (_) {}
+      }
+      return true;
+    }
+    // Anyone who is not me, not one of ours, and not in our clan.
+    _nearestVictim(myPos, range) {
+      const owner = this.client.ownerClient;
+      const pm = this.client.PlayerManager;
+      if (!pm) return null;
+      const ownerClan = owner && owner.myPlayer ? owner.myPlayer.clanName : null;
+      let best = null, bestDist = range;
+      for (let i = 0; i < pm.players.length; i++) {
+        const p = pm.players[i];
+        if (!p || !p.pos || !p.inGame) continue;
+        if (this.client.myPlayer.isMyPlayerByID(p.id)) continue;
+        if (owner && owner.isBotByID && owner.isBotByID(p.id)) continue;
+        if (owner && owner.myPlayer && p.id === owner.myPlayer.id) continue;
+        if (ownerClan !== null && p.clanName === ownerClan) continue;
+        const d = myPos.distance(p.pos.current);
+        if (d < bestDist) {
+          bestDist = d;
+          best = p;
+        }
+      }
+      return best;
+    }
+    postTick() {
+      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+      this.active = false;
+      ModuleHandler._ghostShotActive = false;
+      if (!Settings_default._botGhostShot) {
+        if (ModuleHandler._extDrive === "ghost") ModuleHandler._extDrive = null;
+        return;
+      }
+      if (!myPlayer || !myPlayer.inGame) return;
+      if (typeof _isControlled === "function" && !_isControlled(this.client)) return;
+      if (_Remote.isPossessed(this.client)) return;
+
+      ModuleHandler._ghostShotActive = true;
+      ModuleHandler._extDrive = "ghost";
+      this.active = true;
+      const wearing = this._wearHat(ModuleHandler, myPlayer);
+
+      // Stand still. This is the invisibility, not a consequence of it.
+      if (ModuleHandler.move_dir !== null) {
+        ModuleHandler.startMovement(null);
+      }
+
+      const range = Math.min(GHOST_RANGE_MAX, Math.max(GHOST_RANGE_MIN, Settings_default._botGhostShotRange ?? 700));
+      const victim = this._nearestVictim(myPlayer.pos.current, range);
+      if (victim === null) return;
+
+      // Whatever it can hit with: the ranged secondary if it has one, since
+      // that reaches without walking, otherwise the melee weapon.
+      const secondary = myPlayer.getItemByType(1);
+      const primary = myPlayer.getItemByType(0);
+      const myPos = myPlayer.pos.current;
+      const aim = myPos.angle(victim.pos.future ?? victim.pos.current);
+      let slot = null;
+      if (BOT_RANGED_SECONDARIES.has(secondary)) {
+        slot = 1;
+      } else if (primary !== null && primary !== undefined) {
+        const reach = DataHandler_default.getWeapon(primary).range + (victim.hitScale || 35);
+        if (myPos.distance(victim.pos.current) <= reach) slot = 0;
+      }
+      if (slot === null) return;
+      if (!ModuleHandler.staticModules.reloading.isReloaded(slot)) return;
+      ModuleHandler.useAngle = aim;
+      ModuleHandler.forceWeapon = slot;
+      ModuleHandler.shouldAttack = true;
+      ModuleHandler.moduleActive = true;
+      // Keep the hat even while swinging - the whole point is that the shot
+      // comes out of an invisible player.
+      if (wearing) ModuleHandler.forceHat = GHOST_HAT_ID;
     }
   }
 
@@ -17474,6 +17839,8 @@ window.grbtp = 35;
         botAutoBreak: new BotAutoBreak(client2),
         botRangedAttack: new BotRangedAttack(client2),
         botAutoShot: new BotAutoShot(client2),
+        botGhostShot: new BotGhostShot(client2),
+        botRiverPlatform: new BotRiverPlatform(client2),
         botWeaponWatchdog: new BotWeaponWatchdog(client2),
         autoPlacer: new AutoPlacer_default(client2),
         placementEngine: new RynPlacementEngine_default(client2),
@@ -17495,7 +17862,10 @@ window.grbtp = 35;
       // movement it just asked for did not happen.
       // botAutoShot runs before botRangedAttack: it is the standing order, and
       // when it has taken the tick the kiting has nothing left to decide.
-      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botAutoShot, this.staticModules.botRangedAttack, this.staticModules.movement, this.staticModules.botAutoBreak ];
+      // botGhostShot runs before everything: it is a standing order that holds
+      // the bot still, and anything that decides where to walk first would be
+      // deciding against it.
+      this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botGhostShot, this.staticModules.botAutoShot, this.staticModules.botRangedAttack, this.staticModules.movement, this.staticModules.botRiverPlatform, this.staticModules.botAutoBreak ];
       this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.spikeTickController, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink, this.staticModules.botWeaponWatchdog ];
       this.reset();
     }
@@ -17881,7 +18251,9 @@ window.grbtp = 35;
       // anti-enemy logic. Nesting it inside RYN's `_antienemy` block meant
       // turning that off silently disabled Safe Soldier too, which is not what
       // the switch says it does.
-      if (_canSoldier) {
+      // Ghost Shot owns the hat while it is on: swapping to soldier is exactly
+      // the thing that gives the bot away.
+      if (_canSoldier && !this._ghostShotActive) {
         const _nearest = _em.nearestEnemy;
         const _isDanger = _em.detectedDangerEnemy || _em.detectedEnemy || _em.dangerWithoutSoldier;
         const _primary2 = _mp.getItemByType(0);
@@ -18669,8 +19041,12 @@ window.grbtp = 35;
       const option = botOption(player.id);
       switch (type) {
        case "title":
-        option.title.textContent = `[${player.id}]: ${player.myPlayer.nickname}`;
-        break;
+        {
+          const index = client.getClientIndex(player);
+          const number = index < 0 ? "?" : index + 1;
+          option.title.textContent = `#${number}  [${player.id}]: ${player.myPlayer.nickname}`;
+          break;
+        }
       }
     }
     addBotConnecting() {
@@ -18747,6 +19123,10 @@ window.grbtp = 35;
                 const nameSpan = this.frame.document.createElement("span");
                 nameSpan.className = "option-title";
                 nameSpan.style.cssText = "flex:1;font-size:1.05em;color:#d8d8f8;font-weight:600;";
+                // Marked so refreshBotRows can keep the number and the live
+                // nickname up to date - the roster shifts as bots are kicked,
+                // and squad names change on respawn.
+                nameSpan.dataset.botName = "1";
                 nameSpan.textContent = botName;
                 const delBtn = this.frame.document.createElement("button");
                 delBtn.style.cssText = "background:transparent;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;";
@@ -18972,13 +19352,7 @@ window.grbtp = 35;
       };
     }
     _generateRandomBotName() {
-      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-      const len = 1 + Math.floor(Math.random() * 7);
-      let out = "";
-      for (let i = 0; i < len; i++) {
-        out += chars[Math.floor(Math.random() * chars.length)];
-      }
-      return out;
+      return _randomBotName();
     }
     attachDynamicBotUI() {
       const doc = this.frame.document;
@@ -19065,10 +19439,19 @@ window.grbtp = 35;
       button.onclick = () => {
         try {
           const a = clanRecheck(client);
-          button.textContent = a.clan === null ? "You are not in a clan" : a.joined + "/" + a.total + " joined — retrying the rest";
+          if (a.clan === null) {
+            button.textContent = "You are not in a clan";
+          } else if (a.missing.length === 0) {
+            button.textContent = "All " + a.joined + " in" + (a.dead > 0 ? " — " + a.dead + " dead" : "");
+          } else {
+            // Names the bots that are out, not just the count - the whole
+            // point of pressing this is to find out which ones.
+            const list = a.missing.slice(0, 8).join(", ") + (a.missing.length > 8 ? "…" : "");
+            button.textContent = a.joined + "/" + a.alive + " in — retrying #" + list;
+          }
           setTimeout(() => {
             button.textContent = "Re-check clan joins";
-          }, 2500);
+          }, 4e3);
         } catch (_) {}
       };
     }
@@ -19173,6 +19556,33 @@ window.grbtp = 35;
           send();
         });
       }
+    }
+    // Keeps every row in the Bots list showing "#n  nickname" against the live
+    // roster. The number is getClientIndex, the same one drawn under the bot in
+    // the world and reported by the clan re-check.
+    refreshBotRows() {
+      try {
+        const doc = this.frame.document;
+        const rows = doc.querySelectorAll("#dynamic-bot-list [data-bot-player-id]");
+        if (rows.length === 0) return;
+        const byId = new Map;
+        for (const bot of client.clients) {
+          byId.set(String(bot.id), bot);
+        }
+        for (const row of rows) {
+          const span = row.querySelector("[data-bot-name]");
+          if (!span) continue;
+          const bot = byId.get(row.dataset.botPlayerId);
+          if (bot === undefined) {
+            span.textContent = span.textContent.replace(/^#\d+\s+/, "");
+            continue;
+          }
+          const index = client.getClientIndex(bot);
+          const nick = bot.myPlayer && bot.myPlayer.nickname || bot._botCustomName || "bot";
+          const text = (index < 0 ? "" : "#" + (index + 1) + "  ") + nick;
+          if (span.textContent !== text) span.textContent = text;
+        }
+      } catch (_) {}
     }
     updateRemoteStatus() {
       try {
@@ -19855,6 +20265,26 @@ window.grbtp = 35;
     _findHoldDistance: 450,
     // Off: find them and watch. On: find them and kill them.
     _findHunt: false,
+    // Whether right-clicked targets are an order to the squad or just a mark.
+    _botChargeTargets: false,
+    // The "#n" under each bot's health number.
+    _showBotNumbers: true,
+    // Each bot rolls its own primary once, stick excluded.
+    _botRandomWeapon: false,
+    // A fresh random name on every respawn.
+    _botRandomNameOnDeath: false,
+    // Bots bridge the river with platforms instead of swimming it.
+    _botRiverPlatform: false,
+    // War split: half the squad shoots, half closes, two bots per enemy.
+    _botWarSplit: false,
+    _botWarSplitKey: "KeyY",
+    // Ghost Shot: buy Assassin Gear, hold still to stay invisible, shoot
+    // anything that comes inside the radius.
+    _botGhostShot: false,
+    _botGhostShotKey: "KeyM",
+    _botGhostShotRange: 700,
+    // Clears every bot that has been clicked into solo Auto Play.
+    _botAutoPlayClearKey: "Semicolon",
     // Remote control. One key walks the roster and then hands control back;
     // the other drops it immediately from wherever you are.
     _remoteControlKey: "KeyO",
@@ -21465,7 +21895,14 @@ window.grbtp = 35;
   // ==========================================================================
   const REMOTE_HUD_ID = "ryn-remote-hud";
   const REMOTE_SEND_MIN_MS = 110;
-  const REMOTE_OWNER_FOLLOW_PAD = 60;
+  // How close the owner is kept to the possessed bot. The game sends roughly a
+  // screen and a half of world around your own player, so inside this the bot's
+  // surroundings are data the client actually has; beyond it the view goes
+  // empty. Kept well inside that margin rather than at the edge of it.
+  const REMOTE_FOLLOW_RADIUS = 420;
+  // Past this the screen is blank and the overlay says so instead of leaving it
+  // looking like the feature is broken.
+  const REMOTE_BLIND_GAP = 900;
   const _Remote = new class {
     bot=null;
     camera={
@@ -21521,7 +21958,7 @@ window.grbtp = 35;
       const mh = bot._ModuleHandler;
       mh._scatterActive = false;
       mh._scatterReturning = false;
-      mh._findDrive = false;
+      mh._extDrive = null;
       mh.startMovement(null);
       this._syncHud();
       return true;
@@ -21556,6 +21993,21 @@ window.grbtp = 35;
         return false;
       }
       return this.possess(next);
+    }
+    // The arrow keys wrap instead of falling off either end, because they are a
+    // pair: right and left are "the next one" and "the one before", and running
+    // out at one end and being dumped back into your own body would make them
+    // behave differently from each other. Up is the way back.
+    step(direction) {
+      const bots = this._bots();
+      if (bots.length === 0) return false;
+      if (!this.active) {
+        return this.possess(direction >= 0 ? bots[0] : bots[bots.length - 1]);
+      }
+      const i = bots.indexOf(this.bot);
+      if (i < 0) return this.possess(bots[0]);
+      const next = (i + direction % bots.length + bots.length) % bots.length;
+      return this.possess(bots[next]);
     }
 
     // ── camera ──────────────────────────────────────────────────────────────
@@ -21604,27 +22056,46 @@ window.grbtp = 35;
       return true;
     }
 
+    // How far the possessed bot is from the owner. This is the number that
+    // decides whether there is anything to look at - see _driveOwner.
+    _ownerGap() {
+      const me = client.myPlayer;
+      const p = this.bot && this.bot.myPlayer;
+      if (!me || !me.pos || !p || !p.pos) return 0;
+      return me.pos.current.distance(p.pos.current);
+    }
+
     // ── the owner's own character ───────────────────────────────────────────
+    //
+    // This is also the fix for "I take over a bot and the screen is empty".
+    //
+    // The game bundle can only draw what its own connection was sent, and the
+    // server only sends what is near the player that connection owns - your
+    // character. Moving the camera to a bot on the other side of the map points
+    // it at a region this client has no data for at all: no terrain objects, no
+    // players, no animals. The camera hook is working; there is simply nothing
+    // there to render.
+    //
+    // The bot's own connection does have that data, but it lives in RYN's
+    // object model, not in the bundle's private entity arrays - drawing from it
+    // would mean writing a second renderer for the whole game.
+    //
+    // So the owner is walked to the bot instead. Following is not optional any
+    // more, it is what makes possession show anything; the toggle now only
+    // decides whether the owner also fights while it is over there. The overlay
+    // reports the gap so a blank screen is legible while it closes rather than
+    // looking broken.
     _driveOwner(now) {
       const myPlayer = client.myPlayer;
       if (!myPlayer || !myPlayer.inGame) return;
       const mh = client._ModuleHandler;
-      if (!Settings_default._remoteOwnerAsBot) {
-        if (this._ownerSentAngle !== null) {
-          this._ownerSentAngle = null;
-          try {
-            mh.startMovement(null);
-          } catch (_) {}
-        }
-        return;
-      }
-      // "Act as a bot" means the same thing it means for a bot: walk to the
-      // player you are following and stop inside the movement radius.
       const p = this.bot.myPlayer && this.bot.myPlayer.pos && this.bot.myPlayer.pos.current;
       const me = myPlayer.pos.current;
       if (!p) return;
       const dist = Math.hypot(p.x - me.x, p.y - me.y);
-      const radius = (Settings_default._movementRadius || 150) + REMOTE_OWNER_FOLLOW_PAD;
+      // Close enough that the bot is inside the owner's own view, so the world
+      // around it is being sent and drawn.
+      const radius = REMOTE_FOLLOW_RADIUS;
       const angle = dist > radius ? Math.atan2(p.y - me.y, p.x - me.x) : null;
       const changed = angle === null !== (this._ownerSentAngle === null) || angle !== null && this._ownerSentAngle !== null && getAngleDist(angle, this._ownerSentAngle) > .15;
       if (!changed && now - this._ownerSentAt < REMOTE_SEND_MIN_MS) return;
@@ -21633,6 +22104,15 @@ window.grbtp = 35;
       try {
         mh.startMovement(angle);
       } catch (_) {}
+      // "Acts as a bot" is now about fighting rather than following, since the
+      // following is no longer optional: on, the owner swings at whatever comes
+      // into reach while it trails you; off, it only defends itself, which the
+      // heal and anti-insta modules do without being asked.
+      const wantAttack = Settings_default._remoteOwnerAsBot ? 1 : 0;
+      if (mh.attacking !== wantAttack && !mh.autoattack) {
+        mh.attacking = wantAttack;
+        mh.attackingState = wantAttack;
+      }
     }
 
     // ── overlay ─────────────────────────────────────────────────────────────
@@ -21672,7 +22152,9 @@ window.grbtp = 35;
       const alive = p && p.inGame;
       // Only complain once the hook has had a second of frames to prove itself.
       const camNote = this.cameraSeen || now - this._possessedAt < 1e3 ? "" : "  ·  camera hook did not bind";
-      el.innerHTML = '<span style="color:#c0a8ff;">CONTROLLING</span> ' + _remoteEscape(name) + " <span style=\"opacity:0.6;\">#" + (index + 1) + "</span>" + (alive ? "" : '  <span style="color:#ff8fa3;">(dead)</span>') + '<br><span style="font-size:11px;opacity:0.85;">HP ' + (p ? Math.round(p.currentHealth) : 0) + "  ·  Age " + (p ? p.age : 1) + "  ·  Kills " + (res.kills || 0) + "  ·  " + (res.food || 0) + "f " + (res.wood || 0) + "w " + (res.stone || 0) + "s " + (res.gold || 0) + "g</span>" + '<br><span style="font-size:10px;opacity:0.55;">' + formatCode(Settings_default._remoteControlKey) + " to switch  ·  " + formatCode(Settings_default._remoteReleaseKey) + " to let go" + camNote + "</span>";
+      const gap = Math.round(this._ownerGap());
+      const gapNote = gap > REMOTE_BLIND_GAP ? '<br><span style="font-size:11px;color:#ffcf6b;">your character is ' + gap + "px away — the world only draws around it, walking over…</span>" : "";
+      el.innerHTML = gapNote + '<span style="color:#c0a8ff;">CONTROLLING</span> ' + _remoteEscape(name) + " <span style=\"opacity:0.6;\">#" + (index + 1) + "</span>" + (alive ? "" : '  <span style="color:#ff8fa3;">(dead)</span>') + '<br><span style="font-size:11px;opacity:0.85;">HP ' + (p ? Math.round(p.currentHealth) : 0) + "  ·  Age " + (p ? p.age : 1) + "  ·  Kills " + (res.kills || 0) + "  ·  " + (res.food || 0) + "f " + (res.wood || 0) + "w " + (res.stone || 0) + "s " + (res.gold || 0) + "g</span>" + '<br><span style="font-size:10px;opacity:0.55;">← →  switch bot  ·  ↑  back to me  ·  ' + formatCode(Settings_default._remoteControlKey) + " cycle" + camNote + "</span>";
     }
 
     // Called once a frame from the render loop.
@@ -21859,7 +22341,8 @@ window.grbtp = 35;
           chosenSec = window._botSecWeaponOverride;
         }
       } else {
-        chosen = window._botWeaponOverride;
+        const random = _botRandomPrimary(botClient);
+        chosen = random === -1 ? window._botWeaponOverride : random;
         chosenSec = window._botSecWeaponOverride;
       }
       if (chosen === -1 && chosenSec === -1) {
@@ -23770,6 +24253,48 @@ window.grbtp = 35;
   };
   const _clearAllTargets = () => _targets.clear();
   const _isReady = t => Date.now() - t.addedAt >= t.cooldownMs;
+  // Right-clicking one of your own bots is a different gesture from
+  // right-clicking an enemy: enemies go on the target list, your own bots get
+  // solo Auto Play toggled. Same button, decided by whose player it is - which
+  // is also a fix in itself, since a bot could previously be added to the
+  // enemy target list and then be hunted by the rest of the squad.
+  function _botClientByPlayerID(id) {
+    try {
+      for (const bot of client.clients) {
+        if (bot.myPlayer && bot.myPlayer.id === id) return bot;
+      }
+    } catch (_) {}
+    return null;
+  }
+  function _toggleSoloAutoPlay(bot) {
+    const mh = bot._ModuleHandler;
+    if (!mh) return false;
+    mh._autoPlaySolo = !mh._autoPlaySolo;
+    if (!mh._autoPlaySolo) {
+      try {
+        mh.startMovement(null);
+      } catch (_) {}
+    }
+    return mh._autoPlaySolo;
+  }
+  function _clearSoloAutoPlay() {
+    let n = 0;
+    try {
+      for (const bot of client.clients) {
+        const mh = bot._ModuleHandler;
+        if (mh && mh._autoPlaySolo) {
+          mh._autoPlaySolo = false;
+          n += 1;
+          try {
+            mh.startMovement(null);
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return n;
+  }
+  window._rynClearSoloAutoPlay = _clearSoloAutoPlay;
+
   document.addEventListener("contextmenu", e => {
     const canvas = document.querySelector("#gameCanvas");
     if (!canvas) return;
@@ -23780,7 +24305,12 @@ window.grbtp = 35;
     if (player) {
       e.preventDefault();
       e.stopPropagation();
-      _addTarget(player);
+      const mine = client.isBotByID(player.id) ? _botClientByPlayerID(player.id) : null;
+      if (mine !== null) {
+        _toggleSoloAutoPlay(mine);
+      } else {
+        _addTarget(player);
+      }
     }
   }, true);
   setInterval(() => {
@@ -23799,12 +24329,24 @@ window.grbtp = 35;
         _targets.delete(id);
       }
     }
+    // This is why bots walked at people and swung on their own with nothing
+    // asked of them: one right click put a player on the target list, and from
+    // then on every bot in the squad charged it and attacked inside 160px,
+    // forever, nine times a second. `_ctTargetEnabled` looked like the switch
+    // for it but was never read anywhere. It is a real setting now and it is
+    // off by default, so the target list marks people without commanding
+    // anybody.
+    if (!Settings_default._botChargeTargets) return;
     const readyTargets = [ ..._targets.values() ].filter(_isReady);
     if (readyTargets.length === 0) return;
     const bots = [ ...client.clients ];
     bots.forEach((bot, i) => {
       const inDuel = _1v1.get(bot);
       if (inDuel && inDuel.active) return;
+      // Anything already under orders keeps them.
+      if (_botExtDriven(bot._ModuleHandler)) return;
+      if (_Remote.isPossessed(bot)) return;
+      if (bot._ModuleHandler._autoPlaySolo) return;
       const t = readyTargets[i % readyTargets.length];
       if (!t || !t.player || !t.player.pos) return;
       try {
@@ -23830,6 +24372,39 @@ window.grbtp = 35;
   _resizeTargetCanvas();
   window.addEventListener("resize", _resizeTargetCanvas);
   const _exclamAnims = new Map;
+  // A red ring on every bot that has been right-clicked into solo Auto Play, so
+  // "which of these is running on its own" is answerable at a glance rather
+  // than by opening the menu.
+  const _drawSoloAutoPlay = (ctx, now) => {
+    try {
+      for (const bot of client.clients) {
+        const mh = bot._ModuleHandler;
+        if (!mh || !mh._autoPlaySolo) continue;
+        const p = bot.myPlayer;
+        if (!p || !p.inGame || !p.pos) continue;
+        const s = _worldToScreen(p.pos.current.x, p.pos.current.y);
+        const pulse = .6 + Math.sin(now * .005) * .25;
+        ctx.save();
+        ctx.globalAlpha = pulse;
+        ctx.strokeStyle = "#ff2222";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([ 10, 6 ]);
+        ctx.lineDashOffset = -now * .02;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 44, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = .95;
+        ctx.fillStyle = "#ff5555";
+        ctx.font = "bold 11px Orbitron, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("AUTO", s.x, s.y - 56);
+        ctx.restore();
+      }
+    } catch (_) {}
+  };
+
   const _drawTargets = () => {
     const cv = _targetCanvas;
     const ctx = cv.getContext("2d");
@@ -23918,6 +24493,7 @@ window.grbtp = 35;
       ctx.restore();
       ctx.restore();
     }
+    _drawSoloAutoPlay(ctx, now);
     for (const id of _exclamAnims.keys()) {
       if (!_targets.has(id)) _exclamAnims.delete(id);
     }
@@ -24262,7 +24838,7 @@ window.grbtp = 35;
           // The Find Enemy shadow is exempt: it has a target to hold station
           // on, and the toggle would put it straight back into the wander.
           if (_Remote.isPossessed(_sc_bot)) continue;
-          if (Settings_default._botsScattered && !_sc_mh._scatterActive && !_sc_mh._findDrive) {
+          if (Settings_default._botsScattered && !_sc_mh._scatterActive && !_botExtDriven(_sc_mh)) {
             _sc_mh._scatterActive = true;
             _sc_mh._scatterReturning = false;
             _sc_mh._scatterBreaking = false;
@@ -24493,6 +25069,8 @@ window.grbtp = 35;
   const _FIND_MUSKET = 15;
   const _FIND = {
     active: false,
+    // 0 means the whole squad; !FF sets it to a smaller number.
+    limit: 0,
     targets: [],
     lastQuery: "",
     groups: new Map,
@@ -24572,7 +25150,7 @@ window.grbtp = 35;
 
   function _findSweepBot(bot) {
     const mh = bot._ModuleHandler;
-    mh._findDrive = false;
+    mh._extDrive = null;
     mh._scatterActive = true;
     mh._scatterReturning = false;
     mh._scatterBreaking = false;
@@ -24590,7 +25168,7 @@ window.grbtp = 35;
 
   function _findRecallBot(bot) {
     const mh = bot._ModuleHandler;
-    mh._findDrive = false;
+    if (mh._extDrive === "find") mh._extDrive = null;
     if (Settings_default._botsScattered) {
       // Random movement is the standing order - going "home" would fight it.
       return;
@@ -24609,7 +25187,8 @@ window.grbtp = 35;
   function _findClearDrive() {
     try {
       for (const bot of client.clients) {
-        if (bot._ModuleHandler) bot._ModuleHandler._findDrive = false;
+        const mh = bot._ModuleHandler;
+        if (mh && mh._extDrive === "find") mh._extDrive = null;
       }
     } catch (_) {}
   }
@@ -24650,12 +25229,81 @@ window.grbtp = 35;
     _findUpdateStatus();
   }
 
+  // !FF <id> <count>, in either order.
+  //
+  // Both arguments are bare numbers, so which is which cannot be decided by
+  // position - the request was explicitly that it should not matter. It is
+  // decided by meaning instead: the token that matches a player the client can
+  // actually see is the id, and the other one is the count. When both look like
+  // players the first is taken as the id, which is the reading that matches how
+  // people write it.
+  function _findCommandLimited(rest) {
+    const parts = rest.split(/[\s,]+/).filter(Boolean);
+    const available = _findBots().length;
+    if (parts.length === 0) {
+      _findLogLine("Give a player and a bot count: !FF 12 4");
+      return;
+    }
+    let idPart = null, countPart = null;
+    if (parts.length === 1) {
+      idPart = parts[0];
+    } else {
+      const resolved = parts.map(part => _findResolveTarget(part) !== null);
+      const first = resolved.indexOf(true);
+      if (first === -1) {
+        idPart = parts[0];
+        countPart = parts[1];
+      } else {
+        idPart = parts[first];
+        countPart = parts[first === 0 ? 1 : 0];
+      }
+    }
+    const target = _findResolveTarget(idPart);
+    if (target === null) {
+      _findLogLine('No player matching "' + idPart + '".');
+      return;
+    }
+    let count = countPart === null || countPart === undefined ? available : parseInt(countPart, 10);
+    if (!isFinite(count) || count <= 0) {
+      _findLogLine("error: \"" + countPart + "\" is not a bot count.");
+      return;
+    }
+    if (available === 0) {
+      _findLogLine("error: no bots in game.");
+      return;
+    }
+    if (count > available) {
+      // Asked for more than exist: say so, and go with what there is rather
+      // than silently doing something different or nothing at all.
+      _findLogLine("error: asked for " + count + " bots, only " + available + " in game — using " + available + ".");
+      count = available;
+    }
+    _FIND.limit = count;
+    _FIND.lastQuery = idPart;
+    _findStart([ target ]);
+  }
+
   function _findCommand(text) {
     const raw = (text || "").trim();
     if (!raw) return;
+    const ff = raw.match(/^!\s*ff\s*(.*)$/i);
+    if (ff) {
+      _findCommandLimited(ff[1].trim());
+      return;
+    }
+    const team = raw.match(/^!\s*(team|green)\s*(.*)$/i);
+    if (team) {
+      _markCommand(team[2].trim(), "green");
+      return;
+    }
+    const red = raw.match(/^!\s*red\s*(.*)$/i);
+    if (red) {
+      _markCommand(red[1].trim(), "red");
+      return;
+    }
     const m = raw.match(/^!\s*f\s*(.*)$/i);
     if (!m) {
-      _findLogLine("Unknown command. Use !F <player id>, or !F stop.");
+      _findLogLine("Unknown command. !F <id> · !FF <id> <bots> · !Team <id> · !Red <id> · !F stop");
       return;
     }
     const arg = m[1].trim();
@@ -24683,9 +25331,41 @@ window.grbtp = 35;
     if (missed.length > 0) _findLogLine("No player matching: " + missed.join(", "));
     if (targets.length === 0) return;
     _FIND.lastQuery = query;
+    _FIND.limit = 0;
     _findStart(targets);
   }
   window._rynFindCommand = _findCommand;
+
+  // !Team / !Red. Both take a player and both accept "clear".
+  function _markCommand(arg, colour) {
+    const list = colour === "green" ? _MARK_GREEN : _MARK_RED;
+    const label = colour === "green" ? "green" : "red";
+    if (arg === "" || /^(clear|off|none)$/i.test(arg)) {
+      const n = colour === "green" ? _markGreenClear() : _markRedClear();
+      _findLogLine(n === 0 ? "Nothing was marked " + label + "." : "Cleared " + n + " " + label + " mark" + (n === 1 ? "" : "s") + ".");
+      return;
+    }
+    const parts = arg.split(/[\s,]+/).filter(Boolean);
+    for (const part of parts) {
+      const target = _markResolve(part);
+      if (target === null) {
+        _findLogLine('No player matching "' + part + '".');
+        continue;
+      }
+      if (list.has(target.id)) {
+        list.delete(target.id);
+        _findLogLine(target.label + " is no longer " + label + ".");
+        continue;
+      }
+      // A player cannot be both: the last order given wins.
+      if (colour === "green") _MARK_RED.delete(target.id); else _MARK_GREEN.delete(target.id);
+      list.set(target.id, {
+        label: target.label,
+        at: Date.now()
+      });
+      _findLogLine(target.label + " marked " + label + (colour === "green" ? " — hold fire" : " — shoot on sight") + ".");
+    }
+  }
 
   // Can this bot see the target right now? players is this tick's visible list.
   function _findSees(bot, id) {
@@ -24714,9 +25394,10 @@ window.grbtp = 35;
         lastPingAt: existing ? existing.lastPingAt : 0
       });
     }
-    for (let i = 0; i < bots.length; i++) {
+    const used = _FIND.limit > 0 ? bots.slice(0, _FIND.limit) : bots;
+    for (let i = 0; i < used.length; i++) {
       const t = _FIND.targets[i % _FIND.targets.length];
-      groups.get(t.id).bots.push(bots[i]);
+      groups.get(t.id).bots.push(used[i]);
     }
     _FIND.groups = groups;
     return groups;
@@ -24850,10 +25531,10 @@ window.grbtp = 35;
       for (const bot of alive) {
         const mh = bot._ModuleHandler;
         if (bot !== seer) {
-          if (mh._findDrive || mh._scatterActive) _findRecallBot(bot);
+          if (mh._extDrive === "find" || mh._scatterActive) _findRecallBot(bot);
           continue;
         }
-        mh._findDrive = true;
+        mh._extDrive = "find";
         mh._scatterActive = false;
         mh._scatterReturning = false;
         mh.attacking = 0;
@@ -24898,7 +25579,7 @@ window.grbtp = 35;
     for (let i = 0; i < alive.length; i++) {
       const bot = alive[i];
       const mh = bot._ModuleHandler;
-      mh._findDrive = true;
+      mh._extDrive = "find";
       mh._scatterActive = false;
       mh._scatterReturning = false;
       // Hold the bot's own trigger. UseAttacking swings the moment anything is
@@ -25013,6 +25694,423 @@ window.grbtp = 35;
       _findUpdateStatus();
     } catch (_) {}
   }, 120);
+
+  // ==========================================================================
+  // Marked players: the green list and the red list.
+  //
+  //     !Team <id|name>   green - the squad will not attack them, and will not
+  //                       attack anything standing behind them either
+  //     !Red  <id|name>   red - shot on sight, always, in pairs
+  //
+  // Green is a hold-fire order, and it has to cover the line of fire as well as
+  // the player: an arrow aimed at somebody standing behind a green player is an
+  // arrow through the green player. So the check is not "is this the green one"
+  // but "does the shot pass near a green one", which is a point-to-segment
+  // distance against every green player in range.
+  //
+  // Both lists are keyed by player id and survive respawns of the bots, not of
+  // the marked player - a player who leaves and comes back gets a new id, which
+  // is the correct behaviour for an order aimed at a person in this fight.
+  // ==========================================================================
+  const _MARK_GREEN = new Map;
+  const _MARK_RED = new Map;
+  // How close a shot may pass to a green player before it is held.
+  const MARK_GREEN_LANE = 90;
+
+  function _markResolve(text) {
+    return _findResolveTarget(text);
+  }
+  function _markGreenClear() {
+    const n = _MARK_GREEN.size;
+    _MARK_GREEN.clear();
+    return n;
+  }
+  function _markRedClear() {
+    const n = _MARK_RED.size;
+    _MARK_RED.clear();
+    return n;
+  }
+  function _isGreen(id) {
+    return _MARK_GREEN.has(id);
+  }
+  function _isRed(id) {
+    return _MARK_RED.has(id);
+  }
+
+  // True when firing from `from` at `target` would send the shot past a player
+  // on the green list. Distance from the green player to the segment, which is
+  // the same test whether they are in front of, beside or behind the target.
+  function _shotCrossesGreen(client2, from, target) {
+    if (_MARK_GREEN.size === 0) return false;
+    const pm = client2.PlayerManager;
+    if (!pm) return false;
+    const tx = target.pos.current.x - from.x;
+    const ty = target.pos.current.y - from.y;
+    const len2 = tx * tx + ty * ty;
+    for (const [id] of _MARK_GREEN) {
+      if (target.id === id) return true;
+      const p = pm.playerData.get(id);
+      if (!p || !p.pos || !p.inGame) continue;
+      const gx = p.pos.current.x - from.x;
+      const gy = p.pos.current.y - from.y;
+      // Project the green player onto the shot line, clamped to the segment.
+      const t = len2 <= 0 ? 0 : Math.max(0, Math.min(1, (gx * tx + gy * ty) / len2));
+      const dx = gx - tx * t;
+      const dy = gy - ty * t;
+      if (Math.hypot(dx, dy) <= MARK_GREEN_LANE + (p.collisionScale || 35)) return true;
+    }
+    return false;
+  }
+
+  // The one question every attacking path asks before it commits: may this bot
+  // shoot this player, from where it is standing?
+  function _mayEngage(client2, target) {
+    if (!target || !target.pos) return false;
+    if (_isGreen(target.id)) return false;
+    const myPlayer = client2.myPlayer;
+    if (!myPlayer || !myPlayer.pos) return false;
+    return !_shotCrossesGreen(client2, myPlayer.pos.current, target);
+  }
+
+  // ==========================================================================
+  // War Split.
+  //
+  // Half the squad shoots, half closes, and both halves work in pairs.
+  //
+  // The pairing is the point rather than a detail. Two muskets are 100 damage
+  // and one is 50, so a musket bot alone trades and a musket pair kills; the
+  // same is true of the melee half against anything that heals. So the roster
+  // is cut into pairs first and enemies are handed to pairs, never to
+  // individuals - an odd bot out joins the last pair rather than being sent
+  // somewhere on its own.
+  //
+  // Which half a bot lands in is decided by what it is carrying, not by its
+  // index: a bot in the shooting half with no ranged weapon would be standing
+  // at range holding a sword. Bots with a bow or musket shoot, the rest close,
+  // and if that leaves the split badly lopsided the surplus is moved over.
+  //
+  // Enemies are taken nearest-first from the owner, and other people's bots
+  // count as enemies like anything else - which is the case this was asked for.
+  // ==========================================================================
+  const WAR_PAIR = 2;
+  const WAR_SHOOT_RING = 520;
+  const WAR_SHOOT_BAND = 70;
+  const WAR_MELEE_TOL = 60;
+  const WAR_TICK_MS = 120;
+
+  function _warEnemies() {
+    const out = [];
+    try {
+      const pm = client.PlayerManager;
+      const ownerPos = client.myPlayer && client.myPlayer.pos && client.myPlayer.pos.current;
+      if (!pm || !ownerPos) return out;
+      const clan = client.myPlayer.clanName;
+      for (let i = 0; i < pm.players.length; i++) {
+        const p = pm.players[i];
+        if (!p || !p.pos || !p.inGame) continue;
+        if (client.myPlayer.isMyPlayerByID(p.id)) continue;
+        if (client.isBotByID(p.id)) continue;
+        if (clan !== null && p.clanName === clan) continue;
+        if (_isGreen(p.id)) continue;
+        out.push({
+          player: p,
+          dist: ownerPos.distance(p.pos.current)
+        });
+      }
+      // Red first, then nearest: a marked player is the reason the order was
+      // given, so it does not wait behind whoever happens to be closer.
+      out.sort((a, b) => {
+        const ra = _isRed(a.player.id) ? 0 : 1;
+        const rb = _isRed(b.player.id) ? 0 : 1;
+        return ra !== rb ? ra - rb : a.dist - b.dist;
+      });
+    } catch (_) {}
+    return out;
+  }
+
+  function _warHasRanged(bot) {
+    const p = bot.myPlayer;
+    if (!p) return false;
+    return BOT_RANGED_SECONDARIES.has(p.getItemByType(1));
+  }
+
+  // Cut a list into pairs, with any odd one joining the last pair.
+  function _warPairs(list) {
+    const pairs = [];
+    for (let i = 0; i < list.length; i += WAR_PAIR) {
+      pairs.push(list.slice(i, i + WAR_PAIR));
+    }
+    if (pairs.length > 1 && pairs[pairs.length - 1].length < WAR_PAIR) {
+      const odd = pairs.pop();
+      pairs[pairs.length - 1] = pairs[pairs.length - 1].concat(odd);
+    }
+    return pairs;
+  }
+
+  function _warRelease(bot) {
+    const mh = bot._ModuleHandler;
+    if (!mh) return;
+    if (mh._extDrive === "war") mh._extDrive = null;
+  }
+  function _warStandDown() {
+    try {
+      for (const bot of client.clients) {
+        _warRelease(bot);
+        if (bot._ModuleHandler) bot._ModuleHandler.startMovement(null);
+      }
+    } catch (_) {}
+  }
+  window._rynWarStandDown = _warStandDown;
+
+  // One pair against one enemy.
+  function _warRunPair(pair, enemy, ranged, now) {
+    const target = enemy.player;
+    const tp = target.pos.current;
+    const slots = [];
+    let ready = 0;
+    for (let i = 0; i < pair.length; i++) {
+      const bot = pair[i];
+      const mh = bot._ModuleHandler;
+      mh._extDrive = "war";
+      mh._scatterActive = false;
+      mh._scatterReturning = false;
+      // The pair fires together, so the bots' own triggers stay down.
+      mh.attacking = 0;
+      mh.attackingState = 0;
+      const myPos = bot.myPlayer.pos.current;
+      const toTarget = Math.atan2(tp.y - myPos.y, tp.x - myPos.x);
+      const dist = Math.hypot(tp.x - myPos.x, tp.y - myPos.y);
+      const slot = _findAttackSlot(bot, ranged);
+      const reloaded = slot === null ? false : mh.staticModules.reloading.isReloaded(slot);
+      if (reloaded) ready += 1;
+      mh._currentAngle = toTarget;
+      slots.push({
+        bot: bot,
+        mh: mh,
+        toTarget: toTarget,
+        dist: dist,
+        slot: slot,
+        reloaded: reloaded,
+        myPos: myPos
+      });
+    }
+
+    // Hold the ring (shooters) or close (attackers). Two bots on one enemy sit
+    // either side of it rather than on top of each other.
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      if (ranged) {
+        const side = s.toTarget + (i % 2 === 0 ? .5 : -.5);
+        if (s.dist < WAR_SHOOT_RING - WAR_SHOOT_BAND) {
+          _scSendMove(s.bot, s.mh, side + Math.PI, now);
+        } else if (s.dist > WAR_SHOOT_RING + WAR_SHOOT_BAND) {
+          _scSendMove(s.bot, s.mh, side, now);
+        } else if (s.mh._scatterMoveSentAngle !== null) {
+          s.mh._scatterMoveSentAngle = null;
+          s.mh.move_dir = null;
+          s.mh.reverse_move_dir = null;
+          try {
+            s.bot.PacketManager.resetMoveDir();
+          } catch (_) {}
+        }
+      } else {
+        const reach = s.slot === null ? 0 : DataHandler_default.getWeapon(s.bot.myPlayer.getItemByType(s.slot)).range + (target.hitScale || 35);
+        if (s.dist > Math.max(WAR_MELEE_TOL, reach - 20)) {
+          _scSendMove(s.bot, s.mh, s.toTarget + (i % 2 === 0 ? .25 : -.25), now);
+        } else if (s.mh._scatterMoveSentAngle !== null) {
+          s.mh._scatterMoveSentAngle = null;
+          s.mh.move_dir = null;
+          s.mh.reverse_move_dir = null;
+          try {
+            s.bot.PacketManager.resetMoveDir();
+          } catch (_) {}
+        }
+      }
+    }
+
+    // Fire together. A pair whose partner is still reloading waits, unless it
+    // has been waiting long enough that the wait costs more than the sync.
+    const both = ready >= slots.length;
+    const key = "_warWaitAt";
+    if (both) {
+      for (const s of slots) {
+        if (s.slot === null || !s.reloaded) continue;
+        if (!_mayEngage(s.bot, target)) continue;
+        _findFireAt(s.bot, s.slot, s.toTarget, now);
+        s.mh[key] = 0;
+      }
+      return;
+    }
+    for (const s of slots) {
+      if (s.slot === null || !s.reloaded) continue;
+      if (!s.mh[key]) s.mh[key] = now;
+      if (now - s.mh[key] < WAR_SYNC_WAIT_MS) continue;
+      if (!_mayEngage(s.bot, target)) continue;
+      _findFireAt(s.bot, s.slot, s.toTarget, now);
+      s.mh[key] = 0;
+    }
+  }
+  const WAR_SYNC_WAIT_MS = 900;
+
+  setInterval(() => {
+    try {
+      if (!client || !client.isOwner) return;
+      if (!Settings_default._botWarSplit) return;
+      const now = Date.now();
+      const bots = [];
+      for (const bot of client.clients) {
+        if (!bot.myPlayer || !bot.myPlayer.inGame || !bot._ModuleHandler) continue;
+        if (_Remote.isPossessed(bot)) continue;
+        if (_FIND.active && bot._ModuleHandler._extDrive === "find") continue;
+        if (bot._ModuleHandler._extDrive === "ghost") continue;
+        bots.push(bot);
+      }
+      if (bots.length === 0) return;
+      const enemies = _warEnemies();
+      if (enemies.length === 0) {
+        for (const bot of bots) _warRelease(bot);
+        return;
+      }
+
+      // Split by what they are carrying, then even the halves out if that
+      // leaves one side with almost everybody.
+      const shooters = [], attackers = [];
+      for (const bot of bots) (_warHasRanged(bot) ? shooters : attackers).push(bot);
+      const half = Math.floor(bots.length / 2);
+      while (shooters.length > half + 1 && shooters.length > 1) attackers.push(shooters.pop());
+      while (attackers.length > half + 1 && attackers.length > 1 && shooters.length < half) shooters.push(attackers.pop());
+
+      const shooterPairs = _warPairs(shooters);
+      const attackerPairs = _warPairs(attackers);
+      for (let i = 0; i < shooterPairs.length; i++) {
+        _warRunPair(shooterPairs[i], enemies[i % enemies.length], true, now);
+      }
+      for (let i = 0; i < attackerPairs.length; i++) {
+        _warRunPair(attackerPairs[i], enemies[i % enemies.length], false, now);
+      }
+    } catch (_) {}
+  }, WAR_TICK_MS);
+
+
+  // ==========================================================================
+  // The red list.
+  //
+  // Marked players are shot on sight whatever else the squad is doing, so this
+  // runs on its own rather than inside War Split - the order was "every time
+  // they are seen", not "while a particular mode is on".
+  //
+  // Two bots or more on the same red player fire together, for the same reason
+  // War Split pairs everything: one musket trades, two kill. A bot with nobody
+  // near enough to pair with cannot wait for a partner that is not coming, so
+  // it goes for the burst instead - the shot, then the melee follow-up as soon
+  // as it is in reach - which is the insta pattern rather than a slow trade.
+  // ==========================================================================
+  const RED_RANGE = 900;
+  const RED_PAIR_RADIUS = 520;
+  const RED_SYNC_WAIT_MS = 700;
+  const RED_TICK_MS = 110;
+
+  function _redTargetFor(bot) {
+    const pm = bot.PlayerManager;
+    if (!pm || _MARK_RED.size === 0) return null;
+    const myPos = bot.myPlayer.pos.current;
+    let best = null, bestDist = RED_RANGE;
+    for (let i = 0; i < pm.players.length; i++) {
+      const p = pm.players[i];
+      if (!p || !p.pos || !p.inGame) continue;
+      if (!_isRed(p.id)) continue;
+      const d = myPos.distance(p.pos.current);
+      if (d < bestDist) {
+        bestDist = d;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  setInterval(() => {
+    try {
+      if (!client || !client.isOwner || _MARK_RED.size === 0) return;
+      const now = Date.now();
+      // Who is on which red player, so a bot can tell whether it has a partner.
+      const crews = new Map;
+      const rows = [];
+      for (const bot of client.clients) {
+        if (!bot.myPlayer || !bot.myPlayer.inGame || !bot._ModuleHandler) continue;
+        if (_Remote.isPossessed(bot)) continue;
+        if (_botExtDriven(bot._ModuleHandler)) continue;
+        const target = _redTargetFor(bot);
+        if (target === null) continue;
+        if (!_mayEngage(bot, target)) continue;
+        const crew = crews.get(target.id) || [];
+        crew.push(bot);
+        crews.set(target.id, crew);
+        rows.push({
+          bot: bot,
+          target: target
+        });
+      }
+      if (rows.length === 0) return;
+
+      for (const row of rows) {
+        const bot = row.bot;
+        const mh = bot._ModuleHandler;
+        const target = row.target;
+        const myPos = bot.myPlayer.pos.current;
+        const tp = target.pos.current;
+        const aim = Math.atan2(tp.y - myPos.y, tp.x - myPos.x);
+        const dist = Math.hypot(tp.x - myPos.x, tp.y - myPos.y);
+        mh._currentAngle = aim;
+
+        // A partner is a bot on the same red player and close enough that the
+        // two shots land in the same moment.
+        const crew = crews.get(target.id) || [];
+        let partners = 0;
+        for (const other of crew) {
+          if (other === bot) continue;
+          const op = other.myPlayer.pos.current;
+          if (Math.hypot(op.x - myPos.x, op.y - myPos.y) <= RED_PAIR_RADIUS) partners += 1;
+        }
+
+        const ranged = BOT_RANGED_SECONDARIES.has(bot.myPlayer.getItemByType(1));
+        const slot = _findAttackSlot(bot, ranged);
+        if (slot === null) continue;
+        const reloaded = mh.staticModules.reloading.isReloaded(slot);
+        const reach = DataHandler_default.getWeapon(bot.myPlayer.getItemByType(slot)).range + (target.hitScale || 35);
+        if (slot === 0 && dist > reach) continue;
+        if (!reloaded) continue;
+
+        if (partners > 0) {
+          // Wait for the crew, but not forever.
+          let ready = 1;
+          for (const other of crew) {
+            if (other === bot) continue;
+            const otherSlot = _findAttackSlot(other, BOT_RANGED_SECONDARIES.has(other.myPlayer.getItemByType(1)));
+            if (otherSlot !== null && other._ModuleHandler.staticModules.reloading.isReloaded(otherSlot)) ready += 1;
+          }
+          if (ready < crew.length) {
+            if (!mh._redWaitAt) mh._redWaitAt = now;
+            if (now - mh._redWaitAt < RED_SYNC_WAIT_MS) continue;
+          }
+          mh._redWaitAt = 0;
+          _findFireAt(bot, slot, aim, now);
+          continue;
+        }
+
+        // Alone: burst instead of trading. Shoot now, and the follow-up swing
+        // lands on the next pass as soon as the melee weapon is in reach.
+        _findFireAt(bot, slot, aim, now);
+        const primary = bot.myPlayer.getItemByType(0);
+        if (slot === 1 && primary !== null && primary !== undefined) {
+          const melee = DataHandler_default.getWeapon(primary).range + (target.hitScale || 35);
+          if (dist <= melee && mh.staticModules.reloading.isReloaded(0)) {
+            _findFireAt(bot, 0, aim, now);
+          }
+        }
+      }
+    } catch (_) {}
+  }, RED_TICK_MS);
+
   const _attachTargetSettings = doc => {
     const slider = doc.getElementById("_targetCooldown");
     const valEl = doc.getElementById("_targetCooldownVal");
@@ -25040,6 +26138,9 @@ window.grbtp = 35;
         page._targetAttached = true;
         _attachTargetSettings(frame.contentDocument);
       }
+      try {
+        UI_default.refreshBotRows();
+      } catch (_) {}
       const botsPage = frame.contentDocument.querySelector('.menu-page[data-id="5"]');
       if (botsPage && !botsPage._guardDistAttached) {
         botsPage._guardDistAttached = true;
