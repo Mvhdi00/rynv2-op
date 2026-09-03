@@ -38,6 +38,12 @@ const rpeConstSrc = slice("  const RPE_TICK_MS", "  const RPE_PRIORITY = {", "RP
  * front of — so anchoring on AutoPlacer by name would drag TargetLock in too. */
 const spikeTickSrc = slice("  const LUNA_SPIKE_TICK_MODULES", "\n  class ", "spike tick guard");
 const angleSolverSrc = slice("  class AngleSolver {", "  // ── Scoring", "AngleSolver");
+/* The anti-duplicate path, taken whole rather than described: the ledger that
+ * holds claimed ground, the memory that remembers what already went out this
+ * tick, and the resolver that asks both. */
+const ledgerSrc = slice("  class PlacementLedger {", "  // ── Memory", "PlacementLedger");
+const memorySrc = slice("  class PlacementMemory {", "  const RPE_ROLE_TYPES", "PlacementMemory");
+const conflictSrc = slice("  class ConflictResolver {", "  // ── Scheduling", "ConflictResolver");
 
 /* --- the injected code --------------------------------------------------- */
 const targetLockSrc = slice("  class TargetLock {", "  const TargetLock_default = TargetLock;", "TargetLock");
@@ -86,6 +92,9 @@ const build = new Function(
    ${motionSrc}
    ${spikeTickSrc}
    ${angleSolverSrc}
+   ${ledgerSrc}
+   ${memorySrc}
+   ${conflictSrc}
    ${targetLockSrc}
    /* The enclosure methods, on a stub carrying only what they touch. */
    class Engine {
@@ -93,10 +102,12 @@ const build = new Function(
      ${enclosureSrc}
    }
    return { Vector, TargetLock, Engine, SiegeAnalysis, GeometrySolver, TargetMotion,
-            AngleSolver, lunaSpikeTickBusy, RPE_ENCLOSURE_MIN_COVER, RPE_ENCLOSURE_HELD_COVER, RPE_GAP_CONE };`
+            AngleSolver, lunaSpikeTickBusy, RPE_ENCLOSURE_MIN_COVER, RPE_ENCLOSURE_HELD_COVER, RPE_GAP_CONE,
+            PlacementLedger, PlacementMemory, ConflictResolver, RPE_SOFT_DOMINANCE };`
 );
 const { Vector, TargetLock, Engine, SiegeAnalysis, GeometrySolver, TargetMotion,
-        AngleSolver, lunaSpikeTickBusy, RPE_ENCLOSURE_MIN_COVER, RPE_ENCLOSURE_HELD_COVER, RPE_GAP_CONE } =
+        AngleSolver, lunaSpikeTickBusy, RPE_ENCLOSURE_MIN_COVER, RPE_ENCLOSURE_HELD_COVER, RPE_GAP_CONE,
+        PlacementLedger, PlacementMemory, ConflictResolver, RPE_SOFT_DOMINANCE } =
   build(Settings_default, PlayerObject);
 
 const V = (x, y) => new Vector(x, y);
@@ -621,6 +632,67 @@ console.log("\nGap candidates — proposed only against a real opening");
   ok("at least one puts the footprint on the seal point", reaches);
 }
 
+/* Phase 4 asks for this by name. The claim that no new per-tick repeat guard
+ * was needed is only worth anything if the guard that is already there is shown
+ * to work, so the real ledger, memory and resolver are sliced out of the built
+ * client and driven directly. */
+console.log("\nAnti-duplicate — the ground a gap spike wants is refused twice over");
+{
+  const spike = { type: 2, ringR: 105, footR: 35 };
+  const cand = (x, y, priority, value) => ({ x, y, profile: spike, priority, value, angle: Math.atan2(y, x) });
+
+  const ledger = new PlacementLedger();
+  const memory = new PlacementMemory();
+  const book = { records: [], has(x, y, r) { return this.records.some(b => b.state === "pending" && Math.hypot(b.x - x, b.y - y) < r + b.footR); } };
+  const conflicts = new ConflictResolver(ledger, memory, book);
+
+  /* 1. Something already on the wire. A hard claim is ground that is gone. */
+  ledger.reserve(200, 0, 35, 5, "spikeTick", 0, 3);
+  ok("ground already committed to the wire is refused",
+     conflicts.availableGround(cand(210, 0, 9, 100)) === false);
+  ok("even to the highest priority there is — a hard claim never yields",
+     conflicts.availableGround(cand(200, 0, 99, 1e9)) === false);
+  ok("but only where it actually stands", conflicts.availableGround(cand(400, 0, 1, 1)) === true);
+
+  /* 2. Spike Tick's own reservation, held as an intention rather than a send.
+   * A soft claim yields to something that outranks it and is worth enough —
+   * which is the rule that keeps the gap layer from bulldozing it. */
+  const l2 = new PlacementLedger();
+  const c2 = new ConflictResolver(l2, memory, book);
+  l2.reserve(200, 0, 35, 5, "spikeTick", 0, 3, { soft: true, value: 100 });
+  ok("a lower-priority claim cannot take a soft reservation at any value",
+     c2.availableGround(cand(200, 0, 3, 1e6)) === false);
+  ok("nor can an equal-priority claim worth no more",
+     c2.availableGround(cand(200, 0, 5, 100)) === false);
+  /* At equal priority value is the tie-break, not the priority number — two
+   * claims that rank the same are separated by what they are worth. */
+  ok("an equal-priority claim worth more does take it",
+     c2.availableGround(cand(200, 0, 5, 101)) === true);
+  ok("a higher-priority claim worth clearly less still cannot",
+     c2.availableGround(cand(200, 0, 7, 100 / RPE_SOFT_DOMINANCE - 1)) === false);
+  ok("only a higher-priority claim worth more takes it",
+     c2.availableGround(cand(200, 0, 7, 100)) === true);
+
+  /* 3. The same angle twice in one tick. This is the case Aurora spends a
+   * per-tick counter on (tryPlaceAngle, refs/Aurora_Client_v5.5.js:15707);
+   * here it is the memory the engine already keeps. */
+  const angle = 0.4;
+  ok("an angle not yet sent is fresh", conflicts.freshGround(cand(105 * Math.cos(angle), 105 * Math.sin(angle), 9, 1), 7) === true);
+  memory.note(spike, angle, 7);
+  ok("the same angle in the same tick is not",
+     conflicts.freshGround({ profile: spike, angle, x: 0, y: 0 }, 7) === false);
+  ok("an angle inside the item's own width is not either — dedup is at the "
+     + "resolution the footprint needs, not an exact match",
+     conflicts.freshGround({ profile: spike, angle: angle + .01, x: 0, y: 0 }, 7) === false);
+  ok("and next tick it is fresh again",
+     conflicts.freshGround({ profile: spike, angle, x: 0, y: 0 }, 8) === true);
+
+  /* 4. Ground a preplace booking is already holding. */
+  book.records.push({ state: "pending", x: 200, y: 0, footR: 35 });
+  ok("ground a preplace already booked is refused", conflicts.unbooked(cand(210, 0, 9, 100)) === false);
+  ok("ground nothing booked is not", conflicts.unbooked(cand(400, 0, 9, 100)) === true);
+}
+
 console.log("\nEnclosure — layer off keeps the original narrower scan");
 {
   const me = mkPlayer(1, 0, 0);
@@ -674,6 +746,20 @@ console.log("\nWiring — static checks on the built client");
      (built.match(/class TargetLock/g) || []).length === 1);
   ok("the aim marker snaps on a switch instead of sliding between enemies",
      built.includes("if (lock._drawGen !== lock.generation || lock._drawX === null) {"));
+
+  /* The stand-down reads ModuleHandler.activeModule, so it is only meaningful
+   * if spike tick has already had its turn by the time the engine runs. It
+   * has: the whole spike-tick family sits ~30 slots ahead of it in the list. */
+  const order = built.slice(built.indexOf("this.modules = [ this.staticModules.targetLock,"));
+  const at = name => order.indexOf("this.staticModules." + name + ",");
+  ok("targetLock runs before every consumer of the ActiveTarget",
+     at("targetLock") === 0 || order.startsWith("this.modules = [ this.staticModules.targetLock,"));
+  const spikeTick = ["spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeTrap", "teammateSpikeTrap"];
+  ok("every spike tick module runs before the placement engine",
+     spikeTick.every(n => at(n) > 0 && at(n) < order.indexOf("this.staticModules.placementEngine")),
+     spikeTick.map(n => n + "@" + at(n)).join(" ") + " vs engine@" + order.indexOf("this.staticModules.placementEngine"));
+  ok("and the autoplacer does too, so neither can be surprised by the other",
+     order.indexOf("this.staticModules.autoPlacer,") < order.indexOf("this.staticModules.placementEngine"));
 }
 
 console.log("\nMenu — every input binds to a setting");

@@ -390,15 +390,29 @@ object gone, the exit the break analysis named becomes a real opening with a
 seal point, and the gap proposal aims at it on that same call.
 
 Not added, because the architecture already has it: a per-tick placement
-repeat guard (Aurora's `tryPlaceAngle`) — `PlacementLedger` plus
-`_validAt`'s accepted-candidate overlap test already refuse a duplicate; and a
-replace threshold (§14.9) — `RPE_SOFT_DOMINANCE` is that threshold. The gap
-layer stands down entirely while a spike-tick module holds the tick
-(`lunaSpikeTickBusy`), so it can never compete with one.
+repeat guard (Aurora's `tryPlaceAngle`) and a replace threshold (§14.9). Both
+claims are now pinned by tests driving the real `PlacementLedger`,
+`PlacementMemory` and `ConflictResolver` sliced out of the built client rather
+than argued for in prose:
+
+- ground already sent is refused to any priority at any value;
+- a soft reservation yields only to a claim that both outranks it and is worth
+  more than `RPE_SOFT_DOMINANCE ×` its value — which *is* §14.9's threshold;
+- the same angle twice in one tick is refused, and so is one within the item's
+  own angular width, because `PlacementMemory` quantises by footprint rather
+  than matching exactly;
+- ground a preplace has booked is refused.
+
+The gap layer also stands down entirely while a spike-tick module holds the
+tick (`lunaSpikeTickBusy`). That guard reads `ModuleHandler.activeModule`, so
+it is only meaningful if spike tick has already run when the engine does — it
+has: the six spike-tick modules sit at slots 10–15 of the 62-module list and
+`placementEngine` at slot 46. A test pins that ordering, since the stand-down
+silently becomes a no-op if it ever changes.
 
 ```sh
 node tools/build-ryn-type2.js
-node tools/test-ryn-type2.js     # 105 passed
+node tools/test-ryn-type2.js     # 122 passed
 node --check Ryn_Type_2_TargetLock.user.js
 ```
 
