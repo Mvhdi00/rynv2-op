@@ -15372,6 +15372,56 @@ window.grbtp = 35;
     return false;
   }
 
+  // ==========================================================================
+  // Where to aim.
+  //
+  // An arrow is not instant. The hunting bow's projectile travels 1.6px per
+  // millisecond, so a shot at 500px is in the air for over 300ms, and a player
+  // running across that line covers about 40px in the same time - more than a
+  // body width. Firing at where somebody is standing is therefore a miss
+  // against anybody who is moving, at exactly the ranges bots shoot from.
+  //
+  // pos.future is one server tick ahead, which is what the rest of the client
+  // aims with; at 111ms that is only about 14px of lead and still short at
+  // range. So the lead is solved properly instead: measure the target's
+  // velocity from the tick it just moved, work out how long the projectile
+  // needs to reach where it is going, and iterate - the distance depends on the
+  // lead and the lead depends on the distance, and three passes are more than
+  // enough to settle it.
+  //
+  // Melee has no travel time, so it keeps the one-tick lead.
+  // ==========================================================================
+  const BOT_TICK_MS = 1e3 / 9;
+  const BOT_AIM_PASSES = 3;
+  function _botAimAt(bot, target, slot) {
+    const myPlayer = bot.myPlayer;
+    if (!myPlayer || !target || !target.pos) return 0;
+    const myPos = myPlayer.pos.current;
+    const cur = target.pos.current;
+    const fut = target.pos.future || cur;
+    let speed = 0;
+    if (slot !== null && slot !== undefined) {
+      const id = myPlayer.getItemByType(slot);
+      if (id !== null && id !== undefined) {
+        const weapon = DataHandler_default.getWeapon(id);
+        const index = weapon ? weapon.projectile : undefined;
+        if (index !== undefined && index !== null && Projectiles[index]) {
+          speed = Projectiles[index].speed || 0;
+        }
+      }
+    }
+    if (speed <= 0) return myPos.angle(fut);
+    const vx = (fut.x - cur.x) / BOT_TICK_MS;
+    const vy = (fut.y - cur.y) / BOT_TICK_MS;
+    let px = cur.x, py = cur.y;
+    for (let i = 0; i < BOT_AIM_PASSES; i++) {
+      const flight = Math.hypot(px - myPos.x, py - myPos.y) / speed;
+      px = cur.x + vx * flight;
+      py = cur.y + vy * flight;
+    }
+    return Math.atan2(py - myPos.y, px - myPos.x);
+  }
+
   const BOT_ANALYSIS_LANES = 4;
   function botAnalysisTurn(client) {
     if (client.isOwner) return true;
@@ -15820,7 +15870,7 @@ window.grbtp = 35;
       }
 
       ModuleHandler.moduleActive = true;
-      ModuleHandler.useAngle = myPos.angle(aimPos);
+      ModuleHandler.useAngle = _botAimAt(this.client, enemy, 1);
       ModuleHandler.forceWeapon = 1;
       // Wave two is aimed and in position, it just does not loose yet.
       ModuleHandler.shouldAttack = turn.mayFire;
@@ -15884,7 +15934,7 @@ window.grbtp = 35;
       // back to whatever else wants it.
       if (!ModuleHandler.staticModules.reloading.isReloaded(1)) return;
 
-      ModuleHandler.useAngle = myPos.angle(enemy.pos.future ?? enemy.pos.current);
+      ModuleHandler.useAngle = _botAimAt(this.client, enemy, 1);
       ModuleHandler.forceWeapon = 1;
       ModuleHandler.shouldAttack = true;
       ModuleHandler.moduleActive = true;
@@ -16045,7 +16095,6 @@ window.grbtp = 35;
       const secondary = myPlayer.getItemByType(1);
       const primary = myPlayer.getItemByType(0);
       const myPos = myPlayer.pos.current;
-      const aim = myPos.angle(victim.pos.future ?? victim.pos.current);
       let slot = null;
       if (BOT_RANGED_SECONDARIES.has(secondary)) {
         slot = 1;
@@ -16055,7 +16104,9 @@ window.grbtp = 35;
       }
       if (slot === null) return;
       if (!ModuleHandler.staticModules.reloading.isReloaded(slot)) return;
-      ModuleHandler.useAngle = aim;
+      // Solved after the slot, because how far to lead depends on which
+      // projectile is being fired.
+      ModuleHandler.useAngle = _botAimAt(this.client, victim, slot);
       ModuleHandler.forceWeapon = slot;
       ModuleHandler.shouldAttack = true;
       ModuleHandler.moduleActive = true;
@@ -16215,7 +16266,7 @@ window.grbtp = 35;
         // useAngle points at the enemy either way: the wall sits along that
         // line, so the same swing takes the wall down and the next one lands on
         // the player.
-        ModuleHandler.useAngle = toEnemy;
+        ModuleHandler.useAngle = _botAimAt(this.client, shooter, slot);
         ModuleHandler.forceWeapon = slot;
         ModuleHandler.shouldAttack = true;
         ModuleHandler.moduleActive = true;
@@ -25843,10 +25894,14 @@ window.grbtp = 35;
     return best;
   }
 
-  function _findFireAt(bot, slot, angle, now) {
+  // `angle` is the direction the caller is using for movement; `target`, when
+  // given, is what the shot is actually aimed at, and the lead is solved here so
+  // no caller has to remember to do it.
+  function _findFireAt(bot, slot, angle, now, target) {
     const mh = bot._ModuleHandler;
     const id = bot.myPlayer.getItemByType(slot);
     if (id === null || id === undefined) return;
+    if (target) angle = _botAimAt(bot, target, slot);
     try {
       bot.PacketManager.selectItemByID(id, slot === 1);
       mh.currentHolding = slot;
@@ -26025,7 +26080,7 @@ window.grbtp = 35;
         _scSendMove(s.bot, s.mh, s.toTarget, now);
       }
       if (holdForReady || !s.reloaded || s.attackSlot === null) continue;
-      _findFireAt(s.bot, s.attackSlot, s.toTarget, now);
+      _findFireAt(s.bot, s.attackSlot, s.toTarget, now, seen);
     }
   }
 
@@ -26319,7 +26374,7 @@ window.grbtp = 35;
       for (const s of slots) {
         if (s.slot === null || !s.reloaded) continue;
         if (!_mayEngage(s.bot, target)) continue;
-        _findFireAt(s.bot, s.slot, s.toTarget, now);
+        _findFireAt(s.bot, s.slot, s.toTarget, now, target);
         s.mh[key] = 0;
       }
       return;
@@ -26329,7 +26384,7 @@ window.grbtp = 35;
       if (!s.mh[key]) s.mh[key] = now;
       if (now - s.mh[key] < WAR_SYNC_WAIT_MS) continue;
       if (!_mayEngage(s.bot, target)) continue;
-      _findFireAt(s.bot, s.slot, s.toTarget, now);
+      _findFireAt(s.bot, s.slot, s.toTarget, now, target);
       s.mh[key] = 0;
     }
   }
@@ -26476,18 +26531,18 @@ window.grbtp = 35;
             if (now - mh._redWaitAt < RED_SYNC_WAIT_MS) continue;
           }
           mh._redWaitAt = 0;
-          _findFireAt(bot, slot, aim, now);
+          _findFireAt(bot, slot, aim, now, target);
           continue;
         }
 
         // Alone: burst instead of trading. Shoot now, and the follow-up swing
         // lands on the next pass as soon as the melee weapon is in reach.
-        _findFireAt(bot, slot, aim, now);
+        _findFireAt(bot, slot, aim, now, target);
         const primary = bot.myPlayer.getItemByType(0);
         if (slot === 1 && primary !== null && primary !== undefined) {
           const melee = DataHandler_default.getWeapon(primary).range + (target.hitScale || 35);
           if (dist <= melee && mh.staticModules.reloading.isReloaded(0)) {
-            _findFireAt(bot, 0, aim, now);
+            _findFireAt(bot, 0, aim, now, target);
           }
         }
       }
