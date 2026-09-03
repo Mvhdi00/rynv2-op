@@ -23,21 +23,44 @@ What changed:
 
 | | Before | After |
 |---|---|---|
-| Preplace angles | one radial direction per lead tick, snapped to the nearest legal edge | the arc that *touches* the predicted position, intersected with the legal ground, resolved to the closest angle in the overlap |
-| Replace angle | direction of the dead object, snapped — could miss the freed slot, and skipped the duplicate check | the freed ground as a solver focus, so the build provably covers the slot it is taking back |
-| Angle resolution | 72 blind probes (auto place) / ~6 named angles | 144-slot lattice, walked outward in priority order, and only when the exact layers come up short |
-| Prediction | re-integrated per call — O(n²) per lead scan | integrated once per observation, read many times; velocity smoothed on a steady course, taken raw through a manoeuvre |
+| Preplace angles | one radial direction per lead tick, snapped to the nearest legal edge | the arc that *touches* the predicted position, intersected with the legal ground, resolved to the closest angle in the overlap; plus a full layered solve at the lead the link imposes |
+| Candidates per lead | 1, with no duplicate guard — a slow target booked six records for one slot | deduplicated by the item's own angular width, so each is a distinct placement |
+| Replace angle | direction of the dead object, snapped — could miss the freed slot, and was appended behind the solver so it skipped the duplicate check | the freed ground as a solver focus, so the build provably covers the slot it is taking back, deduplicated with everything else |
+| Angle resolution | ~6 named angles, no fallback when they were all poor | 144-slot lattice, walked outward in priority order, and only when the exact layers come up short |
+| Prediction | re-integrated per call — a 6-lead scan integrated 21 steps instead of 6 | integrated once per observation, read many times |
+| Acceleration | second difference, taken raw, and carried through manoeuvres | smoothed, and zeroed through a manoeuvre rather than extrapolated into a curve |
 | Ping | not used at all | `SocketManager.pong` sets the prediction lead and the firing lead, in ticks |
+| Last-moment check | geometry only | geometry, plus target identity and a re-confirmed interception |
 | Invalidation | heading drift past a threshold | drift, plus immediate drop on a detected reverse or stop; records that do not depend on the course are exempt |
 
-Measured on this machine, same scenes, medians of 50 runs
-(`tools/verify-placement.js` covers correctness; the A/B figures below came from
-running both files' engines side by side):
+### Measured
 
-- full engine tick (90 objects, 4 aperture solves, 6-lead scan + 8 booked
-  records, 2 angle solves): **57 µs → 34 µs**, ~1.7× faster
-- prediction workload alone: ~1.8× faster, and bit-identical in output
-- occlusion inner loop: ~2× faster
+Both engines run side by side on identical inputs, medians of repeated runs on
+this machine. `tools/verify-placement.js` covers correctness separately.
+
+**Speed** — full engine tick (90 objects, 4 aperture solves, 6-lead scan + 8
+booked records, 2 angle solves): **55 µs → 33 µs, ~1.7× faster**. Prediction
+alone ~1.8× faster with bit-identical output; occlusion inner loop ~2× faster.
+
+**Prediction error**, mean world units against ground truth, 400 runs × 60 ticks
+per movement style:
+
+| style | lead 1 | lead 2 | lead 3 |
+|---|---|---|---|
+| holding a line | 0.09 → 0.09 | 0.33 → 0.29 (−13%) | 0.72 → 0.59 (−18%) |
+| constant small turns | 0.75 → 0.75 | 2.89 → 2.56 (−11%) | 6.09 → 5.26 (−14%) |
+| sharp about-turns | 4.22 → 4.22 | 12.91 → 12.67 (−2%) | 25.85 → 25.37 (−2%) |
+| stopping and starting | 2.12 → 2.12 | 7.52 → 6.33 (−16%) | 15.13 → 12.64 (−17%) |
+
+Lead 1 is deliberately unchanged: an earlier version smoothed velocity as well
+and that lagged, making lead 1 worse on every style. Velocity is now taken raw
+and only the acceleration is smoothed.
+
+**Angle choice** — over 172k random scenes, a legal touching spike existed in
+42%. The old radial-snap found one in 99.5% of those; the contact-arc method
+finds one in 100%, and where they differ the gain is about a unit. The angle
+change is a correctness guarantee, not a large tactical win — the substantive
+gains are the speed, the deeper leads, the ping lead, and the fallback layers.
 
 ### Verification
 

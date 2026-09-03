@@ -11028,11 +11028,17 @@ window.grbtp = 35;
   // How far ahead a cached path is integrated. One entry past the longest lead
   // anything asks for, so no caller ever falls off the end of it.
   const RPE_PATH_DEPTH = 9;
-  // A raw tick-to-tick velocity is one differenced pair of positions and
-  // carries every bit of that noise. Blending it into a running estimate keeps
-  // a steady run steady; the blend is deliberately fast, because a placement
-  // that reacts a tick late is worth nothing.
-  const RPE_VEL_SMOOTH = .55;
+  // Velocity itself is never smoothed. Blending it into a running estimate was
+  // tried and measured: it lags, and at one tick of lead - the lead a normal
+  // connection actually uses - it made the prediction worse on every movement
+  // style tested. The last pair of positions is simply the best statement of
+  // where the target is going right now.
+  //
+  // Acceleration is the term worth smoothing. It is a second difference, so it
+  // carries roughly twice the position noise, and it is what the two- and
+  // three-tick leads are built on. Smoothing it there costs the one-tick lead
+  // nothing, because at one tick of lead acceleration barely enters.
+  const RPE_ACC_SMOOTH = .25;
   // What counts as the target doing something new. Below these it is the same
   // course with noise on it, and the prediction should not be disturbed.
   const RPE_TURN_TRIGGER = Math.PI / 5;
@@ -11113,19 +11119,19 @@ window.grbtp = 35;
         if (event !== RPE_MOTION_EVENT.STEADY) track.eventTick = tick;
         track.event = event;
 
-        // A course the target has abandoned is not evidence about the one they
-        // are on now, so a real change takes the raw reading whole instead of
-        // averaging it with history that no longer applies. Only a steady run
-        // gets smoothed, which is exactly the case where smoothing helps.
-        const blend = event === RPE_MOTION_EVENT.STEADY ? RPE_VEL_SMOOTH : 1;
-        const vx = track.vx + (rawVx - track.vx) * blend;
-        const vy = track.vy + (rawVy - track.vy) * blend;
+        const vx = rawVx, vy = rawVy;
 
         if (s.length >= 3 && event === RPE_MOTION_EVENT.STEADY) {
           const c = s[s.length - 3];
           const prevSpan = Math.max(1, a.tick - c.tick);
-          track.ax = vx - (a.x - c.x) / prevSpan;
-          track.ay = vy - (a.y - c.y) / prevSpan;
+          // A course the target has abandoned is not evidence about the one
+          // they are on now, so the running estimate is only carried forward
+          // while the course is steady - which is exactly the case where
+          // averaging helps and the only case it is used in.
+          const rawAx = vx - (a.x - c.x) / prevSpan;
+          const rawAy = vy - (a.y - c.y) / prevSpan;
+          track.ax += (rawAx - track.ax) * RPE_ACC_SMOOTH;
+          track.ay += (rawAy - track.ay) * RPE_ACC_SMOOTH;
         } else {
           // Mid-manoeuvre, the second difference is measuring the manoeuvre and
           // not a trend, and integrating it forward invents a curve.
