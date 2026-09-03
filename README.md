@@ -206,6 +206,7 @@ src/Ryn_Type_2.js              RYN Type 2 v5.4 (input)
 src/Luna_Client_1.1.js         Luna client, kept for reference (input)
 src/game_index.js              game bundle: protocol, data tables, engine
 src/game_vendor.js             game bundle: msgpack codec, polyfills
+refs/                          five reference clients read for prior art (inputs)
 tools/extract-drivers.js       game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js        client tables vs. drivers/game-drivers.json
 tools/check-hooks.js           bundle-rewrite hooks vs. the game bundle
@@ -337,9 +338,67 @@ Two `nearestEnemy` reads survive on purpose — `AutoPlay` (circle-strafe
 movement) and `AntiTrapStar` (a defensive placement around me). Neither is the
 preplace/replace engine, and locking them would be modifying unrelated systems.
 
+### What the reference clients changed
+
+`refs/` holds the five clients this work was supposed to be read against and
+originally was not: `x18k_Original_5.3.js`, `Aurora_Client_v5.5.js`,
+`13ms_laffer_v2.js`, `COOKIE_CaraMila.js`, `luminary_fixed_3.1.0.js`. They are
+inputs, not build sources — nothing is copied out of them. Reading them changed
+four things.
+
+| | Corpus | Was here | Now |
+|---|---|---|---|
+| Target selection | laffer re-sorts every enemy by distance every tick (`13ms_laffer_v2.js:14106`); nothing holds a target, nothing has hysteresis | one cached lock, switch margin, per-tick scan budget | unchanged — nothing in the corpus is better |
+| Free/blocked angles | Aurora holds them as merged angular intervals (`Aurora_Client_v5.5.js:15802` `mergeBlocked`, `:15832` `invertArcs`) | this client already does the same on the *placement ring* (`GeometrySolver.merge`/`invert`) — but the *enemy's* escape used a chord heuristic | escape arcs computed the same exact way |
+| Placement angles | laffer sweeps 200 headings and keeps the placeable/unplaceable boundaries (`13ms_laffer_v2.js:12806` `getPerfectAngles`); Aurora solves the same tangency in closed form (`:15717` `closestPossibleAngles`) | the gap only had a scoring bonus, so nothing ever proposed an angle in it | the mouth of the gap is proposed, via the closed-form `contactAngles` the client already had |
+| Aim indicator | Aurora eases a ring toward a predicted point at a frame-rate-independent rate (`Aurora_Client_v5.5.js:20636`) | a ring on the entity, no predicted mark | ring stays on the entity; a second, eased marker shows the predicted point the placer is actually aiming at |
+| Candidate scoring | x18k scores with a reasons trail — bounce +5, into a trap +2.5, target already trapped +2 (`x18k_Original_5.3.js:14771`) | weighted sum with every term kept on the candidate | unchanged — already the same shape, with more terms |
+| Enclosure geometry | nothing in any of the five computes where a boxed-in enemy can still get out | — | — |
+
+**Escape arcs instead of a chord.** `SiegeAnalysis.isEscapable` sorted the
+blockers by bearing, paired each with its angular neighbour and measured the
+centre-to-centre chord. That never accounts for how much of the circle a
+blocker actually covers: an object 300 units away counted as a wall, and one
+the target was already standing against counted for no more than a distant one.
+`SiegeAnalysis.exitArcs` cuts each blocker's denied cone exactly
+(`GeometrySolver.escapeCone` — `asin((selfR + blockR) / d)`, and the half plane
+when the target is already overlapping it, where `asin` is undefined), merges
+them and inverts. A free arc is then passable by construction. `isEscapable` is
+left in place; the non-gap-fill path still calls it.
+
+That makes **coverage** available, and coverage is what decides whether the
+target is enclosed — not a count of openings. Three traps in a line beside a
+player leave exactly one opening, and the opening is most of the circle; three
+around a corner leave one opening too. The old rule ("at most three exits")
+called both of them a box.
+
+**The gap is proposed, not just rewarded.** Each exit now carries its two
+doorposts, the mouth between them, and a seal point in the middle of it, so
+`AngleSolver` proposes the angles that put a spike's footprint on that seal
+point. Before, a candidate had to happen to land in the gap for the escape-route
+weight to apply to it. When an exit has no two identifiable doorposts it carries
+no seal point and proposes nothing — a widening pass that degrades into "any
+angle near the enemy" is exactly the spike spam this is meant to avoid.
+
+The weight is now scaled by how much of the mouth the footprint takes away, so
+the same spike is worth more in a 90-unit doorway than in a 300-unit one.
+Alignment alone scored those the same, and the second one closes nothing.
+
+**Where a spike goes after a break.** Nothing is prepared into ground that is
+still sealed. The deletion packet is the trigger: `onVacated` re-senses with the
+object gone, the exit the break analysis named becomes a real opening with a
+seal point, and the gap proposal aims at it on that same call.
+
+Not added, because the architecture already has it: a per-tick placement
+repeat guard (Aurora's `tryPlaceAngle`) — `PlacementLedger` plus
+`_validAt`'s accepted-candidate overlap test already refuse a duplicate; and a
+replace threshold (§14.9) — `RPE_SOFT_DOMINANCE` is that threshold. The gap
+layer stands down entirely while a spike-tick module holds the tick
+(`lunaSpikeTickBusy`), so it can never compete with one.
+
 ```sh
 node tools/build-ryn-type2.js
-node tools/test-ryn-type2.js     # 68 passed
+node tools/test-ryn-type2.js     # 105 passed
 node --check Ryn_Type_2_TargetLock.user.js
 ```
 

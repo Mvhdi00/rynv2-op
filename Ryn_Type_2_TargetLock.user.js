@@ -5195,10 +5195,48 @@ window.grbtp = 35;
       /* Eased in over ~200 ms so a switch reads as a move, not a pop. */
       const fade = Math.max(0, Math.min(1, (Date.now() - lock.lockedAt) / 200));
       const radius = entity.scale + 14;
+      /* The ring sits on the entity's interpolated render position, which the
+       * game already smooths, so it never lags behind the enemy on screen. */
       Renderer_default.circle(ctx, entity.x, entity.y, radius, color, .85 * fade, 2.5);
       Renderer_default.circle(ctx, player.x, player.y, lock.range, color, .12 * fade, 1.5);
-      if (!Settings_default._lowQuality) lock._spin = (lock._spin + .012) % 6.28;
       const offset = RYN._offset;
+      /* Where the placer is aiming, as opposed to who is locked — §6's two
+       * different things, drawn as two different marks. The predicted point is
+       * recomputed once per game tick and would strobe at 60 fps if it were
+       * drawn raw, so it is eased towards at a rate derived from the frame time
+       * rather than a fixed fraction: the same exponential Aurora uses for its
+       * velocity ring (refs/Aurora_Client_v5.5.js:20636).
+       *
+       * Aurora's own version keeps that state in a static that nothing resets,
+       * so on a target change its ring slides across the screen from the old
+       * enemy to the new one. Here the generation is the reset: on a switch the
+       * marker is placed, not eased. */
+      if (lock._drawGen !== lock.generation || lock._drawX === null) {
+        lock._drawX = lock.predicted.x;
+        lock._drawY = lock.predicted.y;
+        lock._drawGen = lock.generation;
+      } else {
+        const ease = Math.min(1, (this.step || 16) / 60);
+        lock._drawX += (lock.predicted.x - lock._drawX) * ease;
+        lock._drawY += (lock.predicted.y - lock._drawY) * ease;
+      }
+      Renderer_default.circle(ctx, lock._drawX, lock._drawY, 10, color, .5 * fade, 2);
+      /* The opening the gap-fill layer is working, drawn across the arc of the
+       * target's own ring that it spans. Absent whenever the layer has decided
+       * the target is not enclosed, which is the same moment it stops acting. */
+      const engine = ModuleHandler.staticModules.placementEngine;
+      const enc = Settings_default._trapGapFill && engine ? engine._enclosure : null;
+      if (enc && enc.escapeExit) {
+        ctx.save();
+        ctx.globalAlpha = .7 * fade;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(entity.x - offset.x, entity.y - offset.y, radius + 16, enc.escapeExit.edges[0], enc.escapeExit.edges[0] + enc.escapeExit.span);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (!Settings_default._lowQuality) lock._spin = (lock._spin + .012) % 6.28;
       ctx.save();
       ctx.globalAlpha = .9 * fade;
       ctx.strokeStyle = color;
@@ -9085,6 +9123,12 @@ window.grbtp = 35;
     lastSwitchTick=-1;
     _spin=0;
     _tick=-1;
+    /* Render-only easing state for the predicted-position marker. Kept on the
+     * lock rather than on the renderer so the generation that invalidates it is
+     * the same one everything else keys off. */
+    _drawX=null;
+    _drawY=null;
+    _drawGen=-1;
     constructor(client2) {
       this.client = client2;
     }
@@ -9804,6 +9848,84 @@ window.grbtp = 35;
         exits: exits
       };
     },
+    // Every direction the target can still walk out in, as free arcs, plus how
+    // much of the circle is closed. A free arc here is passable by construction
+    // — the cones are cut at selfRadius + blockR, so a heading outside all of
+    // them carries the whole body clear — which is why the count of arcs is not
+    // the useful number. Coverage is: three objects in a line leave one enormous
+    // opening and enclose nothing, three around a corner leave one small one and
+    // enclose a great deal.
+    exitArcs(cx, cy, selfRadius, objects) {
+      const cones = [];
+      for (const o of objects) {
+        const arc = GeometrySolver.escapeCone(cx, cy, selfRadius, o.x, o.y, o.escapeScale);
+        if (arc === null) continue;
+        if (arc === "full") return {
+          coverage: 1,
+          exits: [],
+          escapable: false
+        };
+        cones.push({
+          arc: arc,
+          obj: o,
+          s: GeometrySolver.norm(arc[0]),
+          e: GeometrySolver.norm(arc[1])
+        });
+      }
+      if (cones.length === 0) return {
+        coverage: 0,
+        exits: [],
+        escapable: true
+      };
+      const free = GeometrySolver.invert(GeometrySolver.merge(cones.map(c => c.arc)));
+      let open = 0;
+      for (const f of free) open += f[2];
+      const coverage = Math.max(0, Math.min(1, 1 - open / RPE_TAU));
+      const exits = [];
+      for (const f of free) {
+        // The two objects that form the mouth: the one whose cone ends where the
+        // opening starts, and the one whose cone starts where it ends. After a
+        // merge those edges are still exact cone edges, so this identifies the
+        // real doorposts rather than the nearest thing to them — and when it
+        // cannot, the exit carries no seal point and proposes no placement.
+        const left = this.edgeOwner(cones, f[0], true);
+        const right = this.edgeOwner(cones, f[1], false);
+        let width = Infinity;
+        let seal = null;
+        if (left && right && left !== right) {
+          width = Math.max(0, Math.hypot(right.obj.x - left.obj.x, right.obj.y - left.obj.y) - left.obj.escapeScale - right.obj.escapeScale);
+          seal = {
+            x: (left.obj.x + right.obj.x) / 2,
+            y: (left.obj.y + right.obj.y) / 2
+          };
+        }
+        exits.push({
+          angle: GeometrySolver.norm(f[0] + f[2] / 2),
+          edges: [ f[0], f[1] ],
+          span: f[2],
+          width: width,
+          seal: seal,
+          left: left ? left.obj : null,
+          right: right ? right.obj : null
+        });
+      }
+      return {
+        coverage: coverage,
+        exits: exits,
+        escapable: exits.length > 0
+      };
+    },
+    edgeOwner(cones, angle, wantEnd) {
+      let best = null, bestD = Infinity;
+      for (const c of cones) {
+        const d = GeometrySolver.angleDist(wantEnd ? c.e : c.s, angle);
+        if (d < bestD) {
+          bestD = d;
+          best = c;
+        }
+      }
+      return bestD <= .001 ? best : null;
+    },
     knockInto(spikeX, spikeY, objects, enemyX, enemyY, dir, playerHasPolearm) {
       let willHit = false, inEscapable = false, doubleSpike = false;
       let closest = Infinity;
@@ -9907,8 +10029,8 @@ window.grbtp = 35;
     reboundDouble: 7.2,
     reboundTrap: 3.4,
     sealExit: 3.6,
-    escapeRoute: 4.2,
-    escapeRouteHeld: 6.4,
+    escapeRoute: 5.2,
+    escapeRouteHeld: 8,
     capture: 3,
     aimAway: 1.1,
     // shape of the fight
@@ -9959,6 +10081,25 @@ window.grbtp = 35;
     angleDist(a, b) {
       const d = Math.abs(this.norm(a) - this.norm(b));
       return d > Math.PI ? RPE_TAU - d : d;
+    },
+
+    // The directions a body of radius selfR cannot leave (cx, cy) in, because
+    // a blocker of radius blockR stands in the way. Unlike occlusion this is a
+    // cone from a point rather than an arc of a fixed ring: the target walks
+    // outward, it does not travel along a circle around itself.
+    //
+    // A blocker it is already overlapping denies every heading with a component
+    // towards it, which is the half plane — asin is undefined there and
+    // clamping it to a full circle would seal a box that has an obvious way
+    // out.
+    escapeCone(cx, cy, selfR, bx, by, blockR) {
+      const dx = bx - cx, dy = by - cy;
+      const d = Math.hypot(dx, dy);
+      const reach = selfR + blockR;
+      if (d < RPE_EPS) return "full";
+      const centre = Math.atan2(dy, dx);
+      if (d <= reach) return [ centre - Math.PI / 2, centre + Math.PI / 2 ];
+      return [ centre - Math.asin(reach / d), centre + Math.asin(reach / d) ];
     },
 
     // The arc of the placement ring a blocker removes. Returns null when the
@@ -10517,6 +10658,17 @@ window.grbtp = 35;
       const toNext = Math.atan2(targetNext.y - myPos.y, targetNext.x - myPos.x);
       push(GeometrySolver.nearestFree(apertures, toTarget), "intent");
       push(GeometrySolver.nearestFree(apertures, toNext), "intent");
+      /* The two angles that put this footprint against the centre of the
+       * opening, plus the direct bearing snapped into legal ground. Three
+       * proposals, only while the target is actually enclosed. */
+      const enclosure = frame.enclosure;
+      if (enclosure && enclosure.escapeExit && enclosure.escapeExit.seal) {
+        const seal = enclosure.escapeExit.seal;
+        for (const a of GeometrySolver.contactAngles(myPos.x, myPos.y, profile.ringR, profile.footR, seal.x, seal.y, 0)) {
+          push(a, "gap");
+        }
+        push(GeometrySolver.nearestFree(apertures, Math.atan2(seal.y - myPos.y, seal.x - myPos.x)), "gap");
+      }
       if (frame.targetTrapped) {
         const t = frame.targetTrapped.pos.current;
         push(GeometrySolver.nearestFree(apertures, Math.atan2(t.y - myPos.y, t.x - myPos.x)), "intent");
@@ -10607,11 +10759,16 @@ window.grbtp = 35;
            * worth more, and worth more still when a trap of mine is already
            * holding them there. Scaled by how far into the gap the candidate
            * sits, so a spike squarely in the mouth beats one clipping its
-           * edge. */
+           * edge — and by how much of the mouth the footprint actually takes
+           * away, so the same spike is worth more in a 90-unit doorway than in
+           * a 300-unit one. Alignment on its own scores those two the same,
+           * and the second one does not close anything. */
           if (ctx.escapeExit) {
             const off = GeometrySolver.angleDist(toCand, ctx.escapeExit.angle);
             if (off < RPE_GAP_CONE) {
-              const aim = (1 - off / RPE_GAP_CONE) * (ctx.enclosureHeld ? w.escapeRouteHeld : w.escapeRoute);
+              const mouth = ctx.escapeExit.width;
+              const fill = isFinite(mouth) && mouth > 1 ? Math.min(1, p.footR * 2 / mouth) : .35;
+              const aim = (1 - off / RPE_GAP_CONE) * fill * (ctx.enclosureHeld ? w.escapeRouteHeld : w.escapeRoute);
               tactical += aim;
               reach += aim;
             }
@@ -11126,6 +11283,12 @@ window.grbtp = 35;
   /* Half-width of the mouth of a gap, in radians. A candidate outside this
    * arc is not standing in the opening. */
   const RPE_GAP_CONE = .85;
+  /* How much of the circle around the target has to be shut before the gap
+   * layer treats it as enclosed. The lower bar applies when one of my traps is
+   * physically holding them, because then they are not walking out of the
+   * remainder either. */
+  const RPE_ENCLOSURE_MIN_COVER = .6;
+  const RPE_ENCLOSURE_HELD_COVER = .4;
   const RPE_PREPLACE_FIRE_LEAD = 2;
   // Booking costs nothing, so the bar for writing a candidate down is low.
   // Sending costs packets and commits ground, so the bar for firing one is
@@ -11557,6 +11720,12 @@ window.grbtp = 35;
       // wants to know whether it closes a way out.
       this._enclosure = this._encloseAround(frame);
       this._exits = this._enclosure ? this._enclosure.exits : null;
+      /* On the frame as well as on the engine, because AngleSolver.propose is
+       * handed the frame and nothing else. Every path that reaches propose goes
+       * through sense() first — cycle() calls sense() then generate(), and
+       * onVacated() calls sense() before cycle() — so the field is always set
+       * by the time an angle is proposed. */
+      frame.enclosure = this._enclosure;
       return frame;
     }
 
@@ -11688,13 +11857,24 @@ window.grbtp = 35;
           breakCandidate: null
         } : null;
       }
+      /* Spike tick owns the tick while it is executing. The gap layer stands
+       * down for it rather than competing over the same placement: with no
+       * enclosure there is no gap candidate and no escape-route weight, and
+       * normal preplace and replace carry on untouched. */
+      if (lunaSpikeTickBusy(this.client._ModuleHandler)) return null;
       const blockers = this._blockersAroundTarget(frame);
-      /* Two objects beside an enemy is not a box. isEscapable says the same
-       * thing and returns early below three. */
+      /* Two objects beside an enemy is not a box. */
       if (blockers.length < 3) return null;
       const held = blockers.some(b => b.holdsTarget && b.dist <= frame.targetScale + b.escapeScale);
-      const esc = SiegeAnalysis.isEscapable(frame.targetPos.x, frame.targetPos.y, frame.targetScale, blockers);
-      const exits = esc.exits;
+      const survey = SiegeAnalysis.exitArcs(frame.targetPos.x, frame.targetPos.y, frame.targetScale, blockers);
+      /* How much of the circle is shut, not how many openings are left. Counting
+       * openings says a target with three traps in a line beside it is boxed in
+       * — it has one gap, and the gap is most of the map. Coverage says what
+       * "trapped or partially enclosed" actually means. One physically held in
+       * my trap is not walking anywhere, so a leakier box around it still
+       * counts. */
+      if (survey.coverage < (held ? RPE_ENCLOSURE_HELD_COVER : RPE_ENCLOSURE_MIN_COVER)) return null;
+      const exits = survey.exits;
       const heading = this._escapeHeading(frame);
       /* Sealed shut: nothing to fill, but this is exactly the case where one
        * of my own traps is the wall a spike belongs in. */
@@ -11702,27 +11882,31 @@ window.grbtp = 35;
         return {
           exits: [],
           escapeExit: null,
+          coverage: survey.coverage,
           blockers: blockers,
           held: held,
           breakCandidate: this._blockingTrap(frame, blockers, heading)
         };
       }
-      /* Too many ways out is a target standing in clutter, not an enclosure.
-       * One physically held in my trap is not going anywhere, so a leakier
-       * box around it is still worth sealing. */
-      if (exits.length > (held ? 4 : 3)) return null;
-      let escapeExit = exits[0];
-      let best = Infinity;
+      /* Which opening matters is decided by how close it is to the way the
+       * target is already going. Width only breaks ties, and breaks them
+       * towards the narrow one — that is the mouth a single spike can actually
+       * close. Ranking on width first would send the spike to the widest hole
+       * in the box, which is the one it cannot shut. */
+      let escapeExit = null;
+      let best = -Infinity;
       for (const exit of exits) {
-        const diff = GeometrySolver.angleDist(exit.angle, heading);
-        if (diff < best) {
-          best = diff;
+        const off = GeometrySolver.angleDist(exit.angle, heading);
+        const score = (Math.PI - off) * 100 - Math.min(exit.width, 400) * .05;
+        if (score > best) {
+          best = score;
           escapeExit = exit;
         }
       }
       return {
         exits: exits,
         escapeExit: escapeExit,
+        coverage: survey.coverage,
         blockers: blockers,
         held: held,
         breakCandidate: this._blockingTrap(frame, blockers, heading)
@@ -11742,7 +11926,7 @@ window.grbtp = 35;
         if (!blocker.isTrap || !blocker.mine || blocker.obj === null) continue;
         const without = blockers.filter(other => other !== blocker);
         if (without.length < 3) continue;
-        const opened = SiegeAnalysis.isEscapable(frame.targetPos.x, frame.targetPos.y, frame.targetScale, without).exits;
+        const opened = SiegeAnalysis.exitArcs(frame.targetPos.x, frame.targetPos.y, frame.targetScale, without).exits;
         if (opened.length === 0) continue;
         const toTrap = Math.atan2(blocker.y - frame.targetPos.y, blocker.x - frame.targetPos.x);
         for (const exit of opened) {

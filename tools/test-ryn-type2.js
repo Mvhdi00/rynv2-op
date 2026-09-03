@@ -34,9 +34,16 @@ const motionSrc = slice("  const RPE_TICK_DECAY", "  class PreplaceBook {", "Tar
 /* GeometrySolver reads RPE_TAU / RPE_EPS, which are declared ahead of it. */
 const rpeConstSrc = slice("  const RPE_TICK_MS", "  const RPE_PRIORITY = {", "RPE constants");
 
+/* Ends at whatever class follows it, which the build inserts TargetLock in
+ * front of — so anchoring on AutoPlacer by name would drag TargetLock in too. */
+const spikeTickSrc = slice("  const LUNA_SPIKE_TICK_MODULES", "\n  class ", "spike tick guard");
+const angleSolverSrc = slice("  class AngleSolver {", "  // ── Scoring", "AngleSolver");
+
 /* --- the injected code --------------------------------------------------- */
 const targetLockSrc = slice("  class TargetLock {", "  const TargetLock_default = TargetLock;", "TargetLock");
 const enclosureSrc = slice("    /* Everything near the target that constrains", "    _planIsStale(frame) {", "enclosure");
+/* RPE_ENCLOSURE_* and RPE_GAP_CONE are declared inside the motion slice's
+ * range, so they come in with it rather than separately. */
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => {
@@ -77,15 +84,19 @@ const build = new Function(
    ${rpeConstSrc}
    ${geometrySrc}
    ${motionSrc}
+   ${spikeTickSrc}
+   ${angleSolverSrc}
    ${targetLockSrc}
    /* The enclosure methods, on a stub carrying only what they touch. */
    class Engine {
      constructor(client) { this.client = client; this.motion = new TargetMotion; }
      ${enclosureSrc}
    }
-   return { Vector, TargetLock, Engine, SiegeAnalysis, GeometrySolver, TargetMotion };`
+   return { Vector, TargetLock, Engine, SiegeAnalysis, GeometrySolver, TargetMotion,
+            AngleSolver, lunaSpikeTickBusy, RPE_ENCLOSURE_MIN_COVER, RPE_ENCLOSURE_HELD_COVER, RPE_GAP_CONE };`
 );
-const { Vector, TargetLock, Engine, SiegeAnalysis, GeometrySolver, TargetMotion } =
+const { Vector, TargetLock, Engine, SiegeAnalysis, GeometrySolver, TargetMotion,
+        AngleSolver, lunaSpikeTickBusy, RPE_ENCLOSURE_MIN_COVER, RPE_ENCLOSURE_HELD_COVER, RPE_GAP_CONE } =
   build(Settings_default, PlayerObject);
 
 const V = (x, y) => new Vector(x, y);
@@ -109,7 +120,7 @@ function mkClient(myPlayer, enemies, objects = [], ping = 0) {
     SocketManager: { pong: ping, TICK: 1e3 / 9 },
     ObjectManager: OM,
     PlayerManager: { enemies, isEnemyByID: (ownerID, target) => ownerID !== target.id },
-    _ModuleHandler: { tickCount: 0, staticModules: {} }
+    _ModuleHandler: { tickCount: 0, staticModules: {}, activeModule: null }
   };
   client._ModuleHandler.staticModules.targetLock = new TargetLock(client);
   return { client, OM, lock: client._ModuleHandler.staticModules.targetLock };
@@ -316,6 +327,93 @@ console.log("\nEnclosure — test geometry sanity");
      esc.exits.length === 1 && GeometrySolver.angleDist(esc.exits[0].angle, Math.PI) < 0.3);
 }
 
+console.log("\nEscape geometry — the cone a blocker denies");
+{
+  /* A blocker at 200 with radius 32 against a body of 35: the denied half
+   * angle is asin(67/200), which is a narrow cone, not a wall. */
+  const far = GeometrySolver.escapeCone(0, 0, 35, 200, 0, 32);
+  ok("a distant blocker denies a narrow cone",
+     Math.abs((far[1] - far[0]) / 2 - Math.asin(67 / 200)) < 1e-9, String((far[1] - far[0]) / 2));
+  ok("centred on the bearing to it", Math.abs((far[0] + far[1]) / 2) < 1e-9);
+
+  /* Standing against it: asin is undefined, and the right answer is the half
+   * plane rather than a clamp to the whole circle. */
+  const touching = GeometrySolver.escapeCone(0, 0, 35, 50, 0, 32);
+  ok("a blocker being stood against denies the half plane, not the circle",
+     Math.abs((touching[1] - touching[0]) - Math.PI) < 1e-9, String(touching[1] - touching[0]));
+
+  ok("a blocker on top of the target denies everything",
+     GeometrySolver.escapeCone(0, 0, 35, 0, 0, 32) === "full");
+}
+
+console.log("\nEscape geometry — coverage, not a count of openings");
+{
+  const wall = a => ({ x: 160 + 90 * Math.cos(a), y: 90 * Math.sin(a), escapeScale: 32 });
+
+  /* Three objects in a line beside the target. One opening — and the opening
+   * is most of the circle. Counting openings calls this a box; coverage does
+   * not, which is what §14.1 asks for. */
+  const line = [ wall(-0.6), wall(0), wall(0.6) ];
+  const lineSurvey = SiegeAnalysis.exitArcs(160, 0, 35, line);
+  ok("three in a line leave exactly one opening", lineSurvey.exits.length === 1);
+  ok("but cover well under half the circle", lineSurvey.coverage < .5, lineSurvey.coverage.toFixed(3));
+  ok("so they are below the enclosure bar", lineSurvey.coverage < RPE_ENCLOSURE_MIN_COVER);
+
+  /* The same three objects spread around the target: same count of openings,
+   * far more of the circle shut. */
+  const around = [ wall(0), wall(2.1), wall(4.2) ];
+  const aroundSurvey = SiegeAnalysis.exitArcs(160, 0, 35, around);
+  ok("three spread around cover more than three in a line",
+     aroundSurvey.coverage > lineSurvey.coverage,
+     aroundSurvey.coverage.toFixed(3) + " vs " + lineSurvey.coverage.toFixed(3));
+
+  /* Nothing at all is not an enclosure and not a crash. */
+  const open = SiegeAnalysis.exitArcs(160, 0, 35, []);
+  ok("open field covers nothing and is escapable", open.coverage === 0 && open.escapable === true);
+}
+
+console.log("\nEscape geometry — the mouth of the opening");
+{
+  const ring = boxIn(160, 0, Math.PI).map(o => ({
+    x: o.pos.current.x, y: o.pos.current.y, escapeScale: o.collisionScale
+  }));
+  const survey = SiegeAnalysis.exitArcs(160, 0, 35, ring);
+  ok("a real box is mostly shut", survey.coverage > RPE_ENCLOSURE_MIN_COVER, survey.coverage.toFixed(3));
+  ok("with one way out", survey.exits.length === 1, "exits " + survey.exits.length);
+
+  const exit = survey.exits[0];
+  ok("facing the opening the fixture left", GeometrySolver.angleDist(exit.angle, Math.PI) < .2, exit.angle.toFixed(3));
+  ok("naming both doorposts", exit.left !== null && exit.right !== null && exit.left !== exit.right);
+
+  /* The doorposts are the two ring objects either side of the gap, so the
+   * mouth is their separation less their radii — a real distance, not a
+   * bearing difference. */
+  const expect = Math.hypot(exit.right.x - exit.left.x, exit.right.y - exit.left.y) - 64;
+  ok("with the mouth measured between them", Math.abs(exit.width - expect) < 1e-9, exit.width.toFixed(1));
+  ok("and a seal point in the middle of it",
+     exit.seal !== null &&
+     Math.abs(exit.seal.x - (exit.left.x + exit.right.x) / 2) < 1e-9 &&
+     Math.abs(exit.seal.y - (exit.left.y + exit.right.y) / 2) < 1e-9);
+
+  /* The arc edges are the tangency angles: exactly at the edge the body still
+   * clears both posts, a hair inside it does not. */
+  const clears = a => ring.every(o => {
+    const px = 160 + 400 * Math.cos(a), py = 400 * Math.sin(a);
+    return GeometrySolver.segmentDistance(o.x, o.y, 160, 0, px, py) >= 35 + o.escapeScale - 1e-6;
+  });
+  ok("every heading inside the opening actually clears the box",
+     clears(exit.edges[0] + .01) && clears(exit.angle) && clears(exit.edges[0] + exit.span - .01));
+  ok("and a heading just outside it does not", !clears(exit.edges[0] - .05));
+}
+
+console.log("\nEscape geometry — one blocker leaves no doorway to seal");
+{
+  const one = SiegeAnalysis.exitArcs(160, 0, 35, [ { x: 250, y: 0, escapeScale: 32 } ]);
+  ok("a single blocker still leaves one arc", one.exits.length === 1);
+  ok("but both edges are its own, so there is no mouth and no seal point",
+     one.exits[0].seal === null && one.exits[0].width === Infinity);
+}
+
 console.log("\nEnclosure — detection");
 {
   const me = mkPlayer(1, 0, 0);
@@ -437,9 +535,90 @@ console.log("\nEnclosure — sealed box names the trap in the way");
   /* Two ring traps also open an exit when removed, but sideways to where the
    * target is going, so the escape-route gate is what makes the answer one
    * trap rather than whichever tied on distance. */
-  const sideways = enc.blockers.filter(b => b.mine && b.obj !== plug && SiegeAnalysis.isEscapable(160, 0, 35, enc.blockers.filter(o => o !== b)).exits.length > 0);
+  const sideways = enc.blockers.filter(b => b.mine && b.obj !== plug && SiegeAnalysis.exitArcs(160, 0, 35, enc.blockers.filter(o => o !== b)).exits.length > 0);
   ok("other traps do open holes, they are just not the ones they want", sideways.length >= 1,
      sideways.length + " alternatives rejected");
+
+  /* §14.4 asks where the spike goes once the opening exists. It is not
+   * prepared into ground that is still sealed — the answer arrives on the
+   * deletion packet: onVacated re-senses with the object gone, and the same
+   * analysis that reported "sealed, this trap is in the way" now reports a
+   * real opening with a seal point for the gap proposal to aim at. This is
+   * that second call. */
+  const objsAfter = objs.filter(o => o !== plug);
+  const wAfter = mkClient(me, [t], objsAfter);
+  const eAfter = new Engine(wAfter.client);
+  for (let tick = 0; tick <= 4; tick++) {
+    t.pos.current._setXY(200 - tick * 10, 0);
+    eAfter.motion.observe(t, tick);
+  }
+  const opened = eAfter._encloseAround(mkFrame(me, t, objsAfter, 4));
+  ok("once the blocking trap is gone the opening is real",
+     opened !== null && opened.escapeExit !== null);
+  ok("and it is the one the break analysis named",
+     opened && GeometrySolver.angleDist(opened.escapeExit.angle, enc.breakCandidate.exit.angle) < .2);
+  ok("with a seal point for the gap proposal to place against",
+     opened && opened.escapeExit.seal !== null);
+}
+
+console.log("\nEnclosure — stands down for Spike Tick");
+{
+  const me = mkPlayer(1, 0, 0);
+  const t = mkPlayer(2, 160, 0);
+  const objs = boxIn(160, 0, Math.PI);
+  const w = mkClient(me, [t], objs);
+  const e = new Engine(w.client);
+  ok("the box is there to be found", e._encloseAround(mkFrame(me, t, objs)) !== null);
+
+  w.client._ModuleHandler.activeModule = "spikeTickTrap";
+  ok("the guard agrees that is a spike tick module", lunaSpikeTickBusy(w.client._ModuleHandler));
+  ok("no enclosure while spike tick is executing", e._encloseAround(mkFrame(me, t, objs)) === null);
+
+  w.client._ModuleHandler.activeModule = "autoPlacer";
+  ok("and it comes back the moment spike tick is done",
+     e._encloseAround(mkFrame(me, t, objs)) !== null);
+}
+
+console.log("\nGap candidates — proposed only against a real opening");
+{
+  const solver = new AngleSolver();
+  const memory = { key: (profile, angle) => profile.type + ":" + Math.round(angle * 100) };
+  const profile = { type: 2, ringR: 105, footR: 35 };
+  const apertures = GeometrySolver.invert(GeometrySolver.merge([]));   // whole ring free
+  const me = mkPlayer(1, 0, 0);
+  const t = mkPlayer(2, 160, 0);
+  const base = mkFrame(me, t, []);
+  base.targetNext = { x: 160, y: 0 };
+
+  const none = solver.propose(profile, apertures, base, memory);
+  ok("no enclosure proposes no gap angle", none.every(p => p.source !== "gap"));
+
+  const wide = Object.assign({}, base, {
+    enclosure: { escapeExit: { angle: Math.PI, seal: null, width: Infinity, span: 1, edges: [0, 1] } }
+  });
+  ok("an opening with no identified doorway proposes nothing either",
+     solver.propose(profile, apertures, wide, memory).every(p => p.source !== "gap"));
+
+  /* A seal point 105 out from me is exactly on this profile's ring, so the two
+   * contact angles bracket the bearing to it and both are legal. */
+  const seal = { x: 105 * Math.cos(.4), y: 105 * Math.sin(.4) };
+  const boxed = Object.assign({}, base, {
+    enclosure: { escapeExit: { angle: Math.PI, seal, width: 100, span: 1, edges: [0, 1] } }
+  });
+  const gaps = solver.propose(profile, apertures, boxed, memory).filter(p => p.source === "gap");
+  ok("a validated opening proposes the mouth", gaps.length > 0, gaps.length + " proposals");
+  ok("all of them are legal ground", gaps.every(p => GeometrySolver.inAperture(apertures, p.angle)));
+  ok("and they bracket the bearing to the seal point",
+     gaps.some(p => GeometrySolver.angleDist(p.angle, .4) < .9),
+     gaps.map(p => p.angle.toFixed(2)).join(" "));
+
+  /* The point of the proposal: the item lands within its own footprint of the
+   * doorway rather than merely somewhere on that side of the target. */
+  const reaches = gaps.some(p => {
+    const x = 105 * Math.cos(p.angle), y = 105 * Math.sin(p.angle);
+    return Math.hypot(x - seal.x, y - seal.y) <= profile.footR + 1e-6;
+  });
+  ok("at least one puts the footprint on the seal point", reaches);
 }
 
 console.log("\nEnclosure — layer off keeps the original narrower scan");
@@ -478,9 +657,23 @@ console.log("\nWiring — static checks on the built client");
   ok("bookings are retired through the book's own path, not a made-up clear()",
      built.includes('this.book.invalidateAll("target-switch", this);') && !built.includes("this.book.clear()"));
   ok("the escape route reaches the scorer", built.includes("escapeExit: this._enclosure ? this._enclosure.escapeExit : null,"));
-  ok("the scorer has a weight for it", built.includes("escapeRoute: 4.2,") && built.includes("escapeRouteHeld: 6.4,"));
+  ok("the scorer has a weight for it", built.includes("escapeRoute: 5.2,") && built.includes("escapeRouteHeld: 8,"));
+  ok("the escape-route weight is scaled by how much of the mouth is closed",
+     built.includes("const fill = isFinite(mouth) && mouth > 1 ? Math.min(1, p.footR * 2 / mouth) : .35;"));
   ok("the aim circle is drawn from the render loop",
      built.includes("this.drawAimLock(ctx, entity, player, isMyPlayer, ModuleHandler);"));
+  ok("the enclosure reaches the angle solver through the frame",
+     built.includes("frame.enclosure = this._enclosure;") &&
+     built.includes("const enclosure = frame.enclosure;"));
+  /* No second scheduler, no second selector, no invented per-tick guard: the
+   * gap layer contributes candidates and a weight to the pipeline that was
+   * already there. §14.16 */
+  ok("no second placement scheduler was added",
+     (built.match(/class PlacementScheduler/g) || []).length === 1);
+  ok("no second target selector was added",
+     (built.match(/class TargetLock/g) || []).length === 1);
+  ok("the aim marker snaps on a switch instead of sliding between enemies",
+     built.includes("if (lock._drawGen !== lock.generation || lock._drawX === null) {"));
 }
 
 console.log("\nMenu — every input binds to a setting");
