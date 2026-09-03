@@ -1090,6 +1090,21 @@ patchPage(
                 <span class="option-description">How much closer another enemy has to get before the lock moves to it. 0 switches on any tie.</span>\r
             </div>\r
             <div class="content-option">\r
+                <label class="option-title" for="_survivalEngine">Survival Engine</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_survivalEngine" type="checkbox"></input>\r
+                </label>\r
+                <span class="option-description">One layer decides healing, shame and defensive gear. Shame is held at 0 by never answering a hit inside the game's 120ms window unless the hit would kill you. Off returns Auto Heal to the old rule.</span>\r
+            </div>\r
+            <div class="content-option">\r
+                <label class="option-title" for="_survivalSoldier">Threat Soldier</label>\r
+                <label class="switch-checkbox">\r
+                    <input id="_survivalSoldier" type="checkbox"></input>\r
+                    <span></span>\r
+                </label>\r
+                <span class="option-description">Lets the threat layer ask for Soldier against things Safe Soldier cannot see - a turret stack, a ranged sequence, a spike push still closing. Safe Soldier keeps the proximity case.</span>\r
+            </div>\r
+            <div class="content-option">\r
                 <label class="option-title" for="_trapGapFill">Trap Gap Fill</label>\r
                 <label class="switch-checkbox">\r
                     <input id="_trapGapFill" type="checkbox"></input>\r
@@ -1100,8 +1115,310 @@ patchPage(
             `
 );
 
+/* ================================================================== *
+ * 9. SURVIVAL LAYER — auto heal, shame, threat, defence, packets
+ *
+ * The shame rule the whole rework turns on, from the shipped bundle
+ * (src/game_index.js:2454-2469, changeHealth at :2417-2431):
+ *
+ *   · changeHealth sets hitTime ONLY when the change is negative. Damage arms
+ *     it; healing does not.
+ *   · The first eat after a hit CONSUMES hitTime. Its timing decides the
+ *     verdict: <= 120ms adds one shame, > 120ms takes two off. Every further
+ *     eat before the next hit skips the block entirely and is free.
+ *   · Eight shame is a thirty-second refusal to eat at all.
+ *
+ * So shame is not a budget to spend down from 7. It is a penalty for
+ * answering a hit too fast, and it costs nothing to avoid: wait out the
+ * window, then eat as much as you like. That is what makes 0 the operating
+ * point rather than 7.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "settings: survival engine",
+  `    _targetLock: true,`,
+  `    _survivalEngine: true,
+    _survivalSoldier: true,
+    _targetLock: true,`
+);
+
+edit(
+  "module: survival layer",
+  `  class AntiInsta {`,
+  fs.readFileSync(path.join(__dirname, "inject/survival.js"), "utf8") + `  class AntiInsta {`
+);
+
+edit(
+  "modules: register survival",
+  `        targetLock: new TargetLock_default(client2),`,
+  `        survival: new SurvivalEngine_default(client2),
+        targetLock: new TargetLock_default(client2),`
+);
+
+/* Ahead of everything, targetLock included: the shame verdict, the threat list
+ * and the packet reservation have to be settled before any module asks whether
+ * it can afford to act. */
+edit(
+  "modules: run survival first",
+  `      this.modules = [ this.staticModules.targetLock,`,
+  `      this.modules = [ this.staticModules.survival, this.staticModules.targetLock,`
+);
+
+/* ---- the one heal path ------------------------------------------------- *
+ * What was here queued every heal that fell inside a 130ms post-damage window
+ * and flushed the queue at the top of a later tick. Three things were wrong
+ * with it, and the first one kills:
+ *
+ *   1. The emergency heal went through the same queue. AntiInsta's own comment
+ *      said "the emergency branch deliberately does not wait: +1 shame is a
+ *      better outcome than dying" — and then called heal(), which waited. A
+ *      heal decided at +10ms did not reach the wire until the first tick
+ *      boundary at or after +130ms, so up to ~220ms later, with the follow-up
+ *      hit already landed.
+ *   2. The window was ping-blind here (`sinceHit <= 130`) and ping-aware in
+ *      AntiInsta.isSaveHealTime (`elapsed + pong >= 125`). At 100ms ping the
+ *      caller said safe and the callee queued anyway, for another 100ms.
+ *   3. It re-applied the window to every apple of a top-up, when the server
+ *      consumes hitTime on the first one and cannot judge the rest.
+ * ------------------------------------------------------------------------ */
+
+edit(
+  "handler: heal through the survival layer",
+  `    _SHAME_GUARD_MARGIN=130;
+    _shameHealQueue=0;
+    _shameHealDeadline=null;
+    _rawHeal() {
+      this.selectItem(2);
+      this.attack(null, 1);
+      this.whichWeapon(this._getPredictWeapon());
+    }
+    _healBudgetLeft() {
+      return this.packetLimit - this.packetCount;
+    }
+    heal() {
+      if (this._healBudgetLeft() < 3) return;
+      const myPlayer = this.client.myPlayer;
+      if (myPlayer && !myPlayer.isSandbox && myPlayer.receivedDamage) {
+        const sinceHit = Date.now() - myPlayer.receivedDamage;
+        if (sinceHit <= this._SHAME_GUARD_MARGIN) {
+          this._shameHealQueue = Math.min(this._shameHealQueue + 1, 12);
+          this._shameHealDeadline = myPlayer.receivedDamage + this._SHAME_GUARD_MARGIN;
+          return;
+        }
+      }
+      this._rawHeal();
+    }
+    _flushShameHealQueue() {
+      if (this._shameHealQueue <= 0 || this._shameHealDeadline === null) return;
+      if (Date.now() < this._shameHealDeadline) return;
+      const affordable = Math.max(0, Math.floor(this._healBudgetLeft() / 3));
+      const count = Math.min(this._shameHealQueue, affordable);
+      this._shameHealQueue -= count;
+      if (this._shameHealQueue <= 0) {
+        this._shameHealQueue = 0;
+        this._shameHealDeadline = null;
+      }
+      for (let i = 0; i < count; i++) {
+        this._rawHeal();
+      }
+    }`,
+  `    _rawHeal() {
+      this.selectItem(2);
+      this.attack(null, 1);
+      this.whichWeapon(this._getPredictWeapon());
+    }
+    _healBudgetLeft() {
+      return this.packetLimit - this.packetCount;
+    }
+    get _survival() {
+      return this.staticModules ? this.staticModules.survival : null;
+    }
+    /* The only way food reaches the wire. Returns whether it went, so a caller
+     * that wanted several can stop asking the moment one is refused instead of
+     * looping against a budget that is already spent.
+     *
+     * urgent means the damage on the table this tick is at or above our health.
+     * It buys exactly one thing: permission to eat inside the shame window,
+     * because one shame is cheaper than the round. It does not buy packets past
+     * the limit — nothing does. */
+    heal(urgent = false) {
+      const survival = this._survival;
+      if (!survival) {
+        if (this._healBudgetLeft() < SV_HEAL_COST) return false;
+        this._rawHeal();
+        return true;
+      }
+      const priority = urgent ? SV_THREAT.LETHAL : SV_THREAT.DAMAGE;
+      const owner = urgent ? "survival" : undefined;
+      if (!survival.budget.canAfford(SV_HEAL_COST, priority, owner)) return false;
+      const myPlayer = this.client.myPlayer;
+      if (myPlayer && myPlayer.shameActive) return false;
+      /* The centralised shame gate. One place decides, and the emergency is the
+       * only thing that passes it — which is what the old comment claimed and
+       * the old code did not do. Even the emergency stops short of the eat that
+       * would trip the thirty-second ban, because a ban is not survivable
+       * either. */
+      if (!urgent && !(myPlayer && myPlayer.isSandbox) && survival.shame.verdict() === "shameful") return false;
+      if (urgent && survival.shame.wouldBan()) return false;
+      this._rawHeal();
+      survival.shame.noteEat();
+      survival.noteHealSent(this.tickCount, myPlayer ? myPlayer.tempHealth : 0);
+      return true;
+    }`
+);
+
+edit(
+  "handler: drop the old heal queue flush",
+  `    postTick() {
+      this._flushShameHealQueue();
+      if (Settings_default._circleRotation && this.move_dir === null) {`,
+  `    postTick() {
+      if (Settings_default._circleRotation && this.move_dir === null) {`
+);
+
+/* ---- AntiInsta becomes the executor, not the decider -------------------- */
+
+edit(
+  "autoheal: execute the survival plan",
+  `      const quiet = this.isSaveHealTick() && this.isSaveHealTime();
+      if (!((healing && shameCount < 7) || quiet)) {
+        return;
+      }`,
+  `      /* The decision now belongs to the survival layer, which settled it at
+       * the top of this tick against the game's actual shame rule, the threat
+       * list and the packet reservation. What is left here is carrying it out.
+       *
+       * The old condition was \`(healing && shameCount < 7) || quiet\`: heal
+       * while shame is under seven, or when a tick passed quietly. That treats
+       * seven as the operating ceiling — it will happily run the count from 0
+       * to 6 and only then stop — and it cannot tell the difference between an
+       * eat that costs a shame and one the server cannot judge at all. */
+      const survival = ModuleHandler.staticModules.survival;
+      if (survival && Settings_default._survivalEngine) {
+        const plan = survival.plan;
+        if (!plan.allow || plan.count === 0) return;
+        this.forceHeal = plan.urgent;
+        if (plan.urgent) ModuleHandler.didAntiInsta = true;
+        ModuleHandler.healedOnce = true;
+        /* In-flight accounting lives in the survival layer now, because every
+         * apple goes through ModuleHandler.heal and AntiInsta is no longer the
+         * only thing that asks for one. */
+        for (let i = 0; i < plan.count; i++) {
+          if (!ModuleHandler.heal(plan.urgent)) break;
+        }
+        return;
+      }
+      const quiet = this.isSaveHealTick() && this.isSaveHealTime();
+      if (!((healing && shameCount < 7) || quiet)) {
+        return;
+      }`
+);
+
+/* ---- the second heal scheduler goes ------------------------------------- *
+ * AntiSync kept its own: _pendingHealDeadline / _pendingHealsNeeded /
+ * _SHAME_SAFE_DELAY = 139, a private copy of the same window on a private
+ * timer. §26 and §30 both say one. Its detection stays exactly as it was; only
+ * the deferral is handed over.
+ * ------------------------------------------------------------------------ */
+
+edit(
+  "antisync: one heal scheduler, not two",
+  `        const safeToEatInstantly = myPlayer.isSandbox || myPlayer.shameCount < 7;
+        if (safeToEatInstantly) {
+          for (let i = 0; i < healsNeeded; i++) {
+            ModuleHandler.heal();
+          }
+        } else {
+          this._pendingHealDeadline = Date.now() + this._SHAME_SAFE_DELAY;
+          this._pendingHealsNeeded = healsNeeded;
+        }`,
+  `        /* A detected sync kill is a lethal sequence by definition, so this is
+         * the urgent path: it eats through the window rather than deferring
+         * into the middle of it. The survival layer refuses the one eat that
+         * would trip the ban and nothing else. */
+        for (let i = 0; i < healsNeeded; i++) {
+          if (!ModuleHandler.heal(true)) break;
+        }`
+);
+
+/* The deferral queue itself, now that nothing fills it. Left in place it is
+ * dead code that still reads as a second scheduler. */
+edit(
+  "antisync: remove the orphaned deferral queue",
+  `      if (this._pendingHealDeadline !== null) {
+        if (Date.now() >= this._pendingHealDeadline) {
+          for (let i = 0; i < this._pendingHealsNeeded; i++) {
+            ModuleHandler.heal();
+          }
+          this._pendingHealDeadline = null;
+          this._pendingHealsNeeded = 0;
+        }
+        ModuleHandler.shouldAttack = false;
+        ModuleHandler.moduleActive = false;
+        return;
+      }
+`,
+  ``
+);
+
+edit(
+  "placer: shame verdict rather than a count of seven",
+  `        if (myPlayer.shameCount < 7) {
+          ModuleHandler.heal();
+          ModuleHandler.healedOnce = true;
+          ModuleHandler.didAntiInsta = true;
+        }`,
+  `        if (ModuleHandler.heal()) {
+          ModuleHandler.healedOnce = true;
+          ModuleHandler.didAntiInsta = true;
+        }`
+);
+
+/* ---- one hat manager ---------------------------------------------------- *
+ * ShameReset owned the Bull decision and AntiInsta's cascade owned Soldier,
+ * with nothing between them. The decision moves to DefenceState, which is the
+ * only thing that now writes forceHat for defensive reasons. ShameReset keeps
+ * its detection and defers.
+ * ------------------------------------------------------------------------ */
+
+edit(
+  "shamereset: defer the hat to the defence manager",
+  `    postTick() {
+      const {_ModuleHandler: ModuleHandler} = this.client;
+      if (Settings_default._autoheal && !this.notSave() && (this.shouldReset || this.tickToggle)) {
+        this.tickToggle = true;
+        ModuleHandler.moduleActive = true;
+        ModuleHandler.forceHat = 7;
+      }
+    }`,
+  `    postTick() {
+      const {_ModuleHandler: ModuleHandler} = this.client;
+      /* One defensive hat decision per tick, taken by DefenceState. Two
+       * managers writing forceHat is how a client ends up flicking between
+       * Bull and Soldier on alternating ticks under a threat that wants one of
+       * them held. */
+      if (Settings_default._survivalEngine && ModuleHandler.staticModules.survival) return;
+      if (Settings_default._autoheal && !this.notSave() && (this.shouldReset || this.tickToggle)) {
+        this.tickToggle = true;
+        ModuleHandler.moduleActive = true;
+        ModuleHandler.forceHat = 7;
+      }
+    }`
+);
+
+/* Minimal integration with Safe Soldier, which the brief says not to rebuild
+ * and which is not rebuilt: its own three conditions are untouched and its
+ * clear-down branch still runs. One more case is ORed in — the threats
+ * proximity cannot see, which is the whole reason a threat layer exists. */
+edit(
+  "safe soldier: accept a request from the defence manager",
+  `        if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier) {`,
+  `        const _survivalSoldier = !!(this.staticModules.survival && this.staticModules.survival.wantSoldier);
+        if (Settings_default._antienemy && _isDanger || _isClose || _safeSoldier || _survivalSoldier) {`
+);
+
 /* ------------------------------------------------------------------ *
- * 8. Console handle
+ * 10. Console handle
  * ------------------------------------------------------------------ */
 
 edit(

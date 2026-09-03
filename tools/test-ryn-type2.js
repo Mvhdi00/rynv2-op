@@ -724,8 +724,8 @@ console.log("\nWiring — static checks on the built client");
   ok("only the two non-placement modules still read nearestEnemy directly", rawReads === 2, String(rawReads));
   ok("AutoPlay is one of them", /_autoPlay[\s\S]{0,900}?const enemy = EnemyManager2\.nearestEnemy;/.test(built));
   ok("AntiTrapStar is the other", /_antiTrapStar[\s\S]{0,3000}?const enemy = EnemyManager2\.nearestEnemy;/.test(built));
-  ok("targetLock runs first in the module list",
-     built.includes("this.modules = [ this.staticModules.targetLock, this.staticModules.autoAccept,"));
+  ok("survival then targetLock lead the module list",
+     built.includes("this.modules = [ this.staticModules.survival, this.staticModules.targetLock, this.staticModules.autoAccept,"));
   ok("bookings are retired through the book's own path, not a made-up clear()",
      built.includes('this.book.invalidateAll("target-switch", this);') && !built.includes("this.book.clear()"));
   ok("the escape route reaches the scorer", built.includes("escapeExit: this._enclosure ? this._enclosure.escapeExit : null,"));
@@ -750,10 +750,15 @@ console.log("\nWiring — static checks on the built client");
   /* The stand-down reads ModuleHandler.activeModule, so it is only meaningful
    * if spike tick has already had its turn by the time the engine runs. It
    * has: the whole spike-tick family sits ~30 slots ahead of it in the list. */
-  const order = built.slice(built.indexOf("this.modules = [ this.staticModules.targetLock,"));
+  const order = built.slice(built.indexOf("this.modules = [ this.staticModules.survival,"));
   const at = name => order.indexOf("this.staticModules." + name + ",");
+  /* The survival layer settles shame, threats and the packet reservation
+   * before anything can spend; the target lock settles the ActiveTarget before
+   * anything can read it. Both have to lead. */
+  ok("survival runs before every module that can spend a packet",
+     at("survival") > 0 && at("survival") < at("targetLock"));
   ok("targetLock runs before every consumer of the ActiveTarget",
-     at("targetLock") === 0 || order.startsWith("this.modules = [ this.staticModules.targetLock,"));
+     at("targetLock") < at("autoPlacer") && at("targetLock") < at("placementEngine"));
   const spikeTick = ["spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeTrap", "teammateSpikeTrap"];
   ok("every spike tick module runs before the placement engine",
      spikeTick.every(n => at(n) > 0 && at(n) < order.indexOf("this.staticModules.placementEngine")),

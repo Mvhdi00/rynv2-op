@@ -410,9 +410,68 @@ has: the six spike-tick modules sit at slots 10–15 of the 62-module list and
 `placementEngine` at slot 46. A test pins that ordering, since the stand-down
 silently becomes a no-op if it ever changes.
 
+### The survival layer
+
+`tools/inject/survival.js` — shame, threats, defensive gear and the packet
+budget, injected ahead of `AntiInsta` and run first in the module list.
+
+**The shame rule, from the bundle.** `src/game_index.js:2454-2469`, with
+`changeHealth` at `:2417-2431`:
+
+```js
+if (this.hitTime) {                       // set ONLY by damage, :2422
+    const W = Date.now() - this.hitTime;
+    this.hitTime = 0;                     // CONSUMED by the first eat
+    W <= 120 ? (shameCount++, shameCount >= 8 && ban(30000))
+             : (shameCount -= 2, clamp0());
+}
+this.shameTimer <= 0 && (consumed = food.consume(this));
+```
+
+Three consequences, and the old code acted on none of them:
+
+1. **Exactly one eat per hit carries a verdict.** `hitTime` is zeroed by the
+   first eat, so apples two onward skip the block entirely. The old code
+   re-applied the window to every apple of a top-up, rationing sends against a
+   rule that could no longer apply to them.
+2. **Shame only falls when an eat lands more than 120 ms after a hit.** With no
+   `hitTime` an eat moves shame neither way. You cannot heal shame down at
+   will — which is why Bull Helmet matters: `healthRegen: -5`
+   (`game_index.js:2794`) is the only way to arm a `hitTime` on demand.
+3. **The 120 ms is measured on the server.** We learn of the damage one
+   downstream latency late and our eat lands one upstream latency late, so the
+   server always sees the whole round trip *more* elapsed than we do. The guard
+   therefore **adds** ping.
+
+So shame is not a budget to spend down from 7. It is the penalty for answering
+a hit too fast, and it costs nothing to avoid.
+
+**What was wrong.** Each of these is a line in the shipped client, not a
+suspicion:
+
+| | Was | Now |
+|---|---|---|
+| Emergency heal | `AntiInsta` commented "the emergency branch deliberately does not wait" and then called `heal()`, which queued it to the next tick boundary at or after +130 ms — up to ~220 ms after the decision | `heal(urgent)`; urgent is the one thing that eats inside the window |
+| The window | ping-aware in `isSaveHealTime` (`elapsed + pong >= 125`), ping-blind in `heal()` (`sinceHit <= 130`). At 100 ms ping the caller said safe and the callee queued for another 100 ms | one gate, one formula, ping added |
+| Shame target | `healing && shameCount < 7` in three places — 7 as the operating ceiling | verdict-based; 0 is the operating point |
+| The ban | the model clamped its own count at 7, so the 7→8 transition was unrepresentable and the 30-second ban was learned afterwards from the Shame! hat arriving | `wouldBan()` predicts it, and it is the only thing that outranks an emergency |
+| Schedulers | `ModuleHandler` had one queue, `AntiSync` had another (`_pendingHealDeadline`, `_SHAME_SAFE_DELAY = 139`) | one; `AntiSync` keeps its detection and defers |
+| Hat managers | `ShameReset` wrote `forceHat = 7`, the Safe Soldier block wrote `forceHat = 6`, nothing between them | `DefenceState` decides; `ShameReset` defers; Safe Soldier keeps proximity and gains one ORed case |
+| Packets | `heal()` dropped silently under 3 free packets; nothing could hold budget against the placers | one `PacketBudget` with priority reservation |
+
+**Not rebuilt.** Spike Tick, Auto Place, Preplace, Replace, Auto Mills,
+Velocity Tick and the placement engine are untouched. Safe Soldier keeps all
+three of its own conditions and its clear-down branch; one case is ORed in for
+the threats proximity cannot see — a turret stack at 600 units, a ranged
+sequence, a spike push still closing.
+
+`_survivalEngine` off restores the previous Auto Heal path exactly, including
+its own in-flight accounting.
+
 ```sh
 node tools/build-ryn-type2.js
-node tools/test-ryn-type2.js     # 122 passed
+node tools/test-ryn-type2.js     # 123 passed
+node tools/test-survival.js      # 132 passed
 node --check Ryn_Type_2_TargetLock.user.js
 ```
 
