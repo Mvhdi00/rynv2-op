@@ -117,6 +117,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        Ryn Type 2 (RYN v5.4), edited directly — see below
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -126,6 +127,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/test-ryn-type2-modules.js  Ryn Type 2's Velocity Tick / Trap Instakill
 ```
 
 ## Build
@@ -177,3 +179,57 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2
+
+`Ryn_Type_2.user.js` is a separate script from the mix above: RYN v5.4, edited
+in place rather than built from `src/`. It is not produced by `build-reup.js`
+and shares nothing with `ReUp_Mix.user.js` but its ancestry.
+
+## Velocity Tick (ported from Glotus Client 5.5.5)
+
+Carried over whole, module and all the readings around it:
+
+| Piece | What it is |
+|---|---|
+| `VelocityTick` module | The two-tick send. Turret Gear + walk in while the enemy stands in the 220–245px knockback band, then Bull Helmet + diamond polearm on the next tick, so the swing lands on a target the turret shot has dragged into reach. |
+| `Entity.velocityTicking` | Reading the same tick coming the other way: a diamond polearm in reach, the turret shot spent and the swing up. |
+| `EnemyManager.velocityTickThreat` | That reading rolled up over every enemy, and folded into `instaThreat()` — so every module that stands down for an insta threat now stands down for this one too. |
+| Auto Heal / anti-enemy soldier | Both consumers Glotus wires the threat into: the heal ladder's projectile rank and DefaultHat's anti-enemy Soldier. |
+| The overlay | The ring Glotus draws on the middle of the knockback band, so the window is visible rather than guessed at. |
+
+Toggle: **Combat → Instakills → Velocity Tick** (`_velocityTick`, on by
+default, as in Glotus). Counter on the Devtool stats panel.
+
+## Trap Instakill
+
+New. The moment an enemy is standing in a trap and the primary is in reach and
+loaded, take the free swing — **one swing per trap they walk into**, and
+nothing more.
+
+- A target that stays pinned is hit once; only leaving the trap, or being
+  pushed into a different one, re-arms the swing.
+- A trap they are pinned in while the weapon is still reloading keeps the entry
+  armed rather than spending it, so the swing lands the tick it comes up. Same
+  for a trap entered outside weapon range: it waits until you close in.
+- Stands down for an insta threat, and for any module that already owns the
+  tick, like every other combat module here.
+- Bull Helmet for the swing when it is owned; a bot never swings at its owner.
+
+Toggle: **Combat → Spikes & Traps → Trap Instakill** (`_trapInstakill`, off by
+default), plus a rebindable key on the Keybinds page (**Trap Instakill**,
+unbound by default). Counter on the Devtool stats panel.
+
+## Checks
+
+```sh
+node --check Ryn_Type_2.user.js
+node tools/test-ryn-type2-modules.js
+```
+
+The second one lifts both module classes out of the script and runs them
+against stubbed managers — the knockback band, the diamond-polearm gate, the
+two-tick send, and the one-swing-per-trap-entry ledger, including re-entry,
+expiry and the owner skip.
