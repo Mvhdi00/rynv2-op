@@ -70,6 +70,88 @@ is present and then some:
 placement to Luna's original conditions, **off** (the default) adds RYN's extra
 heuristics — seals-exit, double-spike, bounces-onto-spike, touches-enemy.
 
+### Single target lock
+
+RYN ships **two** copies of the preplace / replace engine — `AutoPlacer` and
+`AutoRetrap` — and each one opened its tick with its own
+`EnemyManager.nearestEnemy` read. Two independent selectors on the same frame,
+with no memory between ticks: with two enemies at roughly equal range the two
+modules could pick differently, and either could flip back and forth every
+tick, throwing away the candidate set it had just derived.
+
+`TargetLock` is now the one selector both go through. It runs first in the
+module list, so everything downstream sees the same `ActiveTarget`:
+
+```
+closest valid enemy inside _autoplacerRadius
+  -> ActiveTarget            (held through a switch margin)
+  -> predicted position      (one tick of travel + ping lead)
+  -> preplace / replace candidates
+  -> trap gap fill
+  -> aim circle
+```
+
+- **Validity** is the client's own definition, not a new one: the entry has to
+  be in `PlayerManager.enemies` for the current tick — which is what makes it
+  alive, visible, not a teammate and not one of our own bots — still an enemy
+  by clan, and carrying a position.
+- **Switching** needs the challenger to be `_targetSwitchMargin` units closer
+  (default 60) *and* at least two ticks since the last switch, so A → B → A
+  thrash cannot happen. Death, invalidity or leaving the hold range releases
+  the lock immediately.
+- **Cost**: one update per game tick, never per frame. The candidate loop is
+  skipped entirely when a target is held and only one enemy is visible; when it
+  does run it is one squared-distance pass over the visible enemy list.
+- **Staleness** is tracked by a generation counter that bumps on every acquire
+  and release. Both placers drop their candidates, bans and cached gap on a
+  bump, and the gap-fill candidate re-checks the generation again in the
+  preplace timers, milliseconds before the packet goes out.
+- **Prediction**: `pos.future` is exactly one tick of travel; the ping lead
+  stretches it by the trip the placement packet still has to make, capped at
+  two extra ticks. The placers work against that predicted point; the aim
+  circle stays on the current position.
+
+`_targetLock` off restores the old per-module `nearestEnemy` behaviour exactly.
+Glotus parity mode (`_glotusPlacer`) is a separate placer that replaces this
+one wholesale and is deliberately left on its own line-for-line target
+selection.
+
+The **aim circle** (`_aimCircle`) draws a ring on the locked enemy and a faint
+ring for the targeting radius around the local player. It reads `TargetLock`
+and draws; it never selects anything, and because it keys off the render
+entity's interpolated position it follows the target at frame rate with no
+smoothing of its own. `RYN._TargetLock` exposes the live lock from the console.
+
+### Trap enclosure gap fill
+
+A tactical layer on top of the placer, not a new placer. When the locked target
+is boxed in, `_trapGapFill` works out which openings are left, which one the
+target is running for, and fills that one with a single spike.
+
+- **Enclosure** uses the game's own collision rule from `checkCollision`: an
+  `ignoreCollision` object does not push a player, with the one exception of a
+  trap, which locks the movement of anyone who is not its owner and not on the
+  owner's team. Under three blockers is not an enclosure; the gaps come from
+  the placer's existing `SiegeAnalysis.isEscapable`.
+- **Candidates** are the spike angles the placer already computed and cached
+  this tick — no second scan — filtered to those standing in an opening. Every
+  search pass stays anchored to a real opening, so an unreachable gap produces
+  no placement rather than a spike dropped somewhere near the target.
+- **Scoring** weighs sealing the route and standing in it above raw closeness,
+  so a slightly farther spike that closes the escape beats a closer one that
+  does nothing.
+- **Execution** goes through `_addPredictObject` and the placer's existing
+  preplace timers. No new scheduler, no new packet path.
+- **Spike Tick is never touched.** The layer stands down while Spike Tick is
+  the active module and on the tick before a committed Spike Tick placement,
+  and rejects any angle already reserved in `ModuleHandler.placeAngles`.
+- **Breaking a trap** is analysed, not performed. When one of my own traps is
+  the wall a spike belongs in, the layer names it and works out where the spike
+  goes once it is gone (`RYN._myClient._gapFillBreak`), then places nothing —
+  issuing the break would mean choosing a weapon and an attack angle, which is
+  a second scheduler and an override of Spike Tick's decisions. The prepared
+  spike goes in by itself on the first tick that angle frees up.
+
 **Bug fixed in the placer.** `AutoPlacer._isItemLimit` read
 `group.sandboxLimit || 99` and never looked at `group.limit`. Outside sandbox
 that made the cap 99 for everything without a `sandboxLimit` — spikes (real
@@ -125,6 +207,7 @@ src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
+tools/test-target-lock.js behaviour tests for the target lock + gap fill
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 
@@ -144,6 +227,7 @@ a newer RYN will surface as a build error rather than a half-merged script.
 ```sh
 node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
+node tools/test-target-lock.js ReUp_Mix.user.js
 node --check ReUp_Mix.user.js
 ```
 
@@ -156,6 +240,17 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
+- **Behaviour** — 67/67 target-lock and gap-fill tests pass, and all 128 menu
+  inputs across the four pages resolve to a real setting.
+
+`test-target-lock.js` slices the classes under test straight out of the built
+`ReUp_Mix.user.js` and runs them against stand-ins for the game objects, so it
+tests the shipped code rather than a copy of the logic. It covers selection,
+the switch margin, validity, the ping-compensated prediction and the per-tick
+scan budget; and for the gap fill: enclosure detection, escape-route choice,
+the Spike Tick stand-downs, anti-duplicate, the replace threshold, trap
+ownership, and the full sealed-box → identify the blocking trap → place once it
+is gone cycle.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
@@ -172,8 +267,10 @@ understood.
 
 ## Notes
 
-- `_spikeRotation`, `_millRotation` and `_usernameCycler` are excluded from
-  Legit Mode — they are cosmetic and naming options, not combat automation.
+- `_spikeRotation`, `_millRotation`, `_usernameCycler` and `_aimCircle` are
+  excluded from Legit Mode — they are cosmetic and naming options, not combat
+  automation. `_targetLock` and `_trapGapFill` are placement behaviour and stay
+  inside it.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
