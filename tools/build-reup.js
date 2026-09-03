@@ -131,6 +131,7 @@ edit(
     _usernameList: "Luna1, Luna2, Luna3",
     _usernameIndex: 0,
     _menuTheme: "ryn",
+    _botAiBudget: 8,
     _lunaMigration: 0,`
 );
 
@@ -403,6 +404,15 @@ patchPage(
             </div>\r
 \r
             <div class="content-option">\r
+                <span class="option-title">Bot AI Budget</span>\r
+                <label class="slider">\r
+                    <span class="slider-value"></span>\r
+                    <input id="_botAiBudget" type="range" step="1" min="0" max="20">\r
+                </label>\r
+                <span class="option-description">Milliseconds per tick the bots may spend on threat analysis. Past the budget a bot reuses its last read and takes its turn in a 3 tick rotation, so none ever waits long and the cost stays flat; a bot in a fight is never held back, and it still moves, attacks and takes orders either way. Lower it if many bots cost you frames, 0 turns the budget off.</span>\r
+            </div>\r
+\r
+            <div class="content-option">\r
                 <span class="option-title">Menu Theme</span>\r
                 <div class="option-content reup-theme-row">\r
 ${themeButtons}\r
@@ -444,8 +454,546 @@ ${themeButtons}\r
   applied.push("menu: theme swatch styles");
 }
 
+/* ================================================================== *
+ * 10. Bot performance
+ *
+ * A bot is a whole client. It keeps its own copy of the world, runs the same
+ * threat analysis and the same ~60 module pipeline as the owner, and does it
+ * on the owner's thread, every server tick. Two bots is fine. Twenty is not:
+ * one enemy walking into view multiplies several spatial-grid queries and a
+ * full instakill projection by twenty-one, inside the same 111 ms tick, and
+ * the render loop gets whatever is left over.
+ *
+ * The edits below attack that from three sides: bound work by range (a threat
+ * that cannot reach us is not computed), bound work by wall clock (an AI tick
+ * budget with fair round-robin so nothing starves), and stop paying for work
+ * whose result is discarded (owner-only panels, idle overlay canvases).
+ * ------------------------------------------------------------------ */
+
+edit(
+  "perf: threat analysis is bounded by range",
+  `      for (let i = 0, len = enemies.length; i < len; i++) {
+        const enemy = enemies[i];
+        if (ownerID !== undefined && enemy.id === ownerID) continue;
+        this.checkCollision(enemy);
+        this.handleDanger(enemy);
+        this.handleNearest(0, enemy);
+      }`,
+  `      /* checkCollision() runs a spatial-grid query per enemy and handleDanger()
+       * runs canPossiblyInstakill() -> detectSpikeInsta(), which is another grid
+       * query. Both are relative to myPlayer, and nothing either one can find
+       * reaches us from beyond THREAT_SCAN_RANGE: the widest ring in
+       * canPossiblyInstakill is the turret one (700 + 130) and the widest read
+       * is the ranged-bow tell, which is a musket projectile away (1400). 1600
+       * clears both with margin. Enemies past it still go through
+       * handleNearest, so nearestEnemy and every module keyed off it are
+       * unchanged; only the analysis nobody could act on is skipped. */
+      const THREAT_SCAN_RANGE = 1600;
+      const myPos = myPlayer.pos.current;
+      for (let i = 0, len = enemies.length; i < len; i++) {
+        const enemy = enemies[i];
+        if (ownerID !== undefined && enemy.id === ownerID) continue;
+        if (myPos.distance(enemy.pos.current) <= THREAT_SCAN_RANGE) {
+          this.checkCollision(enemy);
+          this.handleDanger(enemy);
+        } else {
+          /* checkCollision is also where per-enemy trap state is cleared each
+           * tick. Keep that part so a far enemy cannot stay marked trapped. */
+          enemy.isTrapped = false;
+          enemy.trappedInPrev = enemy.trappedIn;
+          enemy.trappedIn = null;
+        }
+        this.handleNearest(0, enemy);
+      }`
+);
+
+edit(
+  "perf: skip the spike placement search when it cannot reach",
+  `        const spikeID = myPlayer.getItemByType(itemType);
+        const placeLength = myPlayer.getItemPlaceScale(spikeID);
+        const angles = ObjectManager.getBestPlacementAngles({
+          position: pos1,
+          id: spikeID,
+          targetAngle: angleToEnemy,
+          ignoreID: null,
+          preplace: false,
+          reduce: false,
+          fill: false
+        });
+        const spikeScale = Items[spikeID].scale;
+        const possibleAngles = angles.filter(angle => {
+          const spikePos = pos1.addDirection(angle, placeLength);
+          const distance = pos2.distance(spikePos);
+          const range = nearest.collisionScale + spikeScale;
+          return distance <= range;
+        });
+        if (possibleAngles.length !== 0) {
+          this.nearestSpikePlacerAngle = possibleAngles;
+        }`,
+  `        const spikeID = myPlayer.getItemByType(itemType);
+        const placeLength = myPlayer.getItemPlaceScale(spikeID);
+        const spikeScale = Items[spikeID].scale;
+        /* A spike goes down at placeLength from us, so the closest it can ever
+         * land to the enemy is dist - placeLength. The filter below keeps an
+         * angle only when that lands inside collisionScale + spikeScale, which
+         * makes the whole search provably empty past this reach - and the
+         * search is a grid query plus a sort, run by every client every tick
+         * for any enemy merely in view. */
+        if (pos1.distance(pos2) <= placeLength + nearest.collisionScale + spikeScale) {
+          const angles = ObjectManager.getBestPlacementAngles({
+            position: pos1,
+            id: spikeID,
+            targetAngle: angleToEnemy,
+            ignoreID: null,
+            preplace: false,
+            reduce: false,
+            fill: false
+          });
+          const possibleAngles = angles.filter(angle => {
+            const spikePos = pos1.addDirection(angle, placeLength);
+            const distance = pos2.distance(spikePos);
+            const range = nearest.collisionScale + spikeScale;
+            return distance <= range;
+          });
+          if (possibleAngles.length !== 0) {
+            this.nearestSpikePlacerAngle = possibleAngles;
+          }
+        }`
+);
+
+edit(
+  "perf: bot AI tick budget",
+  `  class PlayerManager {
+    playerData=new Map;`,
+  `  /* Wall-clock budget for the bot threat-analysis stage.
+   *
+   * Bots are analysed freely until the budget for this tick is spent. Past
+   * that, a bot only gets a full read on its own turn of a "period" tick
+   * rotation - so no bot ever waits more than that many ticks, about 3 Hz at
+   * the default, and the guaranteed reads are staggered by slot so they spread
+   * across ticks instead of landing together as one spike. Missing a turn
+   * skips the analysis only: the module pipeline still runs, the bot still
+   * re-acquires its target, still moves, still attacks and still answers
+   * commands. A bot with an enemy inside combatRange is never held back at
+   * all, because that is where one stale tick is the difference between eating
+   * an insta and blocking it. The owner is never held back.
+   *
+   * Set the budget to 0 to turn this off and have every bot analysed every
+   * tick, the way it worked before. */
+  const ReUpBotAI = {
+    defaultBudgetMs: 8,
+    combatRange: 350,
+    period: 3,
+    windowStart: 0,
+    spent: 0,
+    tick: 0,
+    slots: new WeakMap,
+    nextSlot: 0,
+    get budgetMs() {
+      const value = Settings_default._botAiBudget;
+      return typeof value === "number" && value >= 0 ? value : this.defaultBudgetMs;
+    },
+    shouldAnalyse(client2, enemies) {
+      if (client2.isOwner) return true;
+      const budget = this.budgetMs;
+      if (budget === 0) return true;
+      const now = performance.now();
+      if (now - this.windowStart >= 111) {
+        this.windowStart = now;
+        this.spent = 0;
+        this.tick += 1;
+      }
+      if (this.spent < budget) return true;
+      let slot = this.slots.get(client2);
+      if (slot === undefined) {
+        slot = this.nextSlot++;
+        this.slots.set(client2, slot);
+      }
+      if ((this.tick + slot) % this.period === 0) return true;
+      return this.inCombat(client2, enemies);
+    },
+    inCombat(client2, enemies) {
+      const myPlayer = client2.myPlayer;
+      if (!myPlayer || !myPlayer.inGame) return false;
+      const pos = myPlayer.pos.current;
+      for (let i = 0, len = enemies.length; i < len; i++) {
+        if (pos.distance(enemies[i].pos.current) <= this.combatRange) return true;
+      }
+      return false;
+    },
+    charge(startedAt) {
+      this.spent += performance.now() - startedAt;
+    }
+  };
+  class PlayerManager {
+    playerData=new Map;`
+);
+
+edit(
+  "perf: run threat analysis through the budget",
+  `      ProjectileManager.postTick();
+      EnemyManager2.handleEnemies(this.enemies);`,
+  `      ProjectileManager.postTick();
+      if (ReUpBotAI.shouldAnalyse(this.client, this.enemies)) {
+        const analysisStart = performance.now();
+        EnemyManager2.handleEnemies(this.enemies);
+        ReUpBotAI.charge(analysisStart);
+      } else {
+        EnemyManager2.handleNearestOnly(this.enemies);
+      }`
+);
+
+edit(
+  "perf: nearest tracking survives a deferred tick",
+  `    handleEnemies(enemies) {
+      this.reset();`,
+  `    /* What a deferred tick still has to do. preReset() clears nearestEnemy at
+     * the top of every tick and handleEnemies is what fills it back in, so
+     * skipping the whole thing would blink a bot's target off and stop it
+     * mid-swing. Re-acquire the target - that is cheap - and leave the threat
+     * booleans on last tick's read, which is the whole point of deferring. */
+    handleNearestOnly(enemies) {
+      const ownerID = this.client.ownerClient?.myPlayer?.id;
+      for (let i = 0, len = enemies.length; i < len; i++) {
+        const enemy = enemies[i];
+        if (ownerID !== undefined && enemy.id === ownerID) continue;
+        this.handleNearest(0, enemy);
+      }
+    }
+    handleEnemies(enemies) {
+      this.reset();`
+);
+
+edit(
+  "perf: the chat log is the owner's panel",
+  `    add(kind, text, who) {
+      if (!Settings_default._chatLog) return;`,
+  `    add(kind, text, who) {
+      if (!Settings_default._chatLog) return;
+      /* Only the owner ever builds a panel (see postTick), but every bot client
+       * decodes the same join/leave/chat packets and was filling a row buffer
+       * nothing would ever render. In a twenty-bot lobby that is twenty-one
+       * copies of every row, timestamped and escaped, for one visible list. */
+      if (!this.client.isOwner) return;`
+);
+
 /* ------------------------------------------------------------------ *
- * 10. Driver manifest + runtime drift check
+ * Trap rebuild: per-client broken list, and only scan near a fight
+ *
+ * TrapRebuild kept the ids of destroyed objects on `window._rynBrokenSids` - a
+ * single array shared by every client, which each of them appended to and each
+ * of them cleared, so whose breakage a given client was reacting to came down
+ * to tick order. It also mapped our own traps out of a 9x9 grid sweep every
+ * tick, on every client, even though the rebuild it feeds needs an enemy
+ * inside 300 to do anything at all.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "fix: broken-object ids are per client",
+  `        if (window._rynBrokenSids) window._rynBrokenSids.push(temp[1]);`,
+  `        (this.client._brokenSids || (this.client._brokenSids = [])).push(temp[1]);`
+);
+
+edit(
+  "fix: trap rebuild reads its own client's broken ids",
+  `      if (!window._rynBrokenSids) window._rynBrokenSids = [];`,
+  `      if (!client2._brokenSids) client2._brokenSids = [];`
+);
+
+edit(
+  "fix: trap rebuild reads its own client's broken ids (postTick)",
+  `      const broken = window._rynBrokenSids || [];`,
+  `      const broken = this.client._brokenSids || [];`
+);
+
+edit(
+  "perf: map our traps only when a fight is close enough to need it",
+  `      broken.length = 0;
+      this._mine.clear();
+      OM.grid2D.query(myPos.x, myPos.y, 4, id => {`,
+  `      broken.length = 0;
+      this._mine.clear();
+      /* _mine exists to feed the rebuild above, which needs an enemy inside
+       * 300. 600 keeps the map warm well before that gate can open, and spares
+       * every idle bot a 9x9 grid sweep per tick. */
+      const rebuildEnemy = EM.nearestEnemy;
+      if (rebuildEnemy === null || myPos.distance(rebuildEnemy.pos.current) > 600) {
+        return;
+      }
+      OM.grid2D.query(myPos.x, myPos.y, 4, id => {`
+);
+
+/* ------------------------------------------------------------------ *
+ * Bot chat listener
+ *
+ * The listener re-read every bot socket with JSON.parse(ev.data). The frames
+ * are binary msgpack, so ev.data stringifies to "[object ArrayBuffer]" and the
+ * parse threw on literally every packet of every bot - a caught exception, so
+ * it was silent, but it also meant the feature had never once fired. The
+ * decoded chat packet is already in hand in SocketManager, so take it there.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "fix: bot chat listener off the raw packet path",
+  `  const _seen = new Set;
+  setInterval(() => {
+    try {
+      for (const bot of client.clients) {
+        const sm = bot.SocketManager;
+        if (!sm || !sm.socket || sm.socket._aiPatched) continue;
+        sm.socket._aiPatched = true;
+        const orig = sm.socket.onmessage;
+        sm.socket.onmessage = function(ev) {
+          try {
+            const d = JSON.parse(ev.data);
+            if (Array.isArray(d) && d[0] === "6") {
+              const sid = d[1], msg = d[2];
+              const key = sid + ":" + msg;
+              if (!_seen.has(key)) {
+                _seen.add(key);
+                if (_seen.size > 300) _seen.delete(_seen.values().next().value);
+                _onChat(sid, msg, bot);
+              }
+            }
+          } catch (e) {}
+          if (orig) orig.call(this, ev);
+        };
+      }
+    } catch (e) {}
+  }, 2000);`,
+  `  /* Called once per chat message, from the owner's already-decoded packet.
+   *
+   * Left switched off, because it has never actually run: with the parse
+   * throwing on every frame, the bot chat replies and the "nyx <n>" duel
+   * trigger below have been dead code for as long as the listener has existed.
+   * Fixing the plumbing should not silently start twenty bots talking in
+   * public chat, so turning it on stays a deliberate act:
+   *
+   *   RYN._botChat = true    (or window._reupBotChatEnabled = true) */
+  window._reupBotChatEnabled = false;
+  window._reupBotChat = (senderID, message) => {
+    if (!window._reupBotChatEnabled) return;
+    try {
+      _onChat(senderID, message, client);
+    } catch (e) {}
+  };`
+);
+
+edit(
+  "fix: feed the bot chat listener from the decoded packet",
+  `          if (player != null && player.isLeader && player.clanName !== null && myPlayer.isEnemyByID(player.id) && /owner/i.test(player.clanName) && /bee op then your hack/.test(message) && this.client.isOwner) {`,
+  `          if (this.client.isOwner && typeof window._reupBotChat === "function") {
+            window._reupBotChat(id, message);
+          }
+          if (player != null && player.isLeader && player.clanName !== null && myPlayer.isEnemyByID(player.id) && /owner/i.test(player.clanName) && /bee op then your hack/.test(message) && this.client.isOwner) {`
+);
+
+/* ------------------------------------------------------------------ *
+ * Overlay canvases
+ *
+ * Assigning canvas.width reallocates the backing store even when the value is
+ * unchanged, and the target overlay cleared a full-screen canvas on every
+ * animation frame whether or not it had a single target to draw.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "perf: halves overlay keeps its backing store",
+  `    cv.width = gameCanvas.width;
+    cv.height = gameCanvas.height;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const offset = RYN._offset;
+    const bots = _getOwnerBots();
+    for (const side of [ "left", "right" ]) {`,
+  `    if (cv.width !== gameCanvas.width || cv.height !== gameCanvas.height) {
+      cv.width = gameCanvas.width;
+      cv.height = gameCanvas.height;
+    }
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const offset = RYN._offset;
+    const bots = _getOwnerBots();
+    for (const side of [ "left", "right" ]) {`
+);
+
+edit(
+  "perf: squad overlay keeps its backing store",
+  `    cv.width = gameCanvas.width;
+    cv.height = gameCanvas.height;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const offset = RYN._offset;
+    const bots = _getOwnerBots();
+    const groups = new Map;`,
+  `    if (cv.width !== gameCanvas.width || cv.height !== gameCanvas.height) {
+      cv.width = gameCanvas.width;
+      cv.height = gameCanvas.height;
+    }
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const offset = RYN._offset;
+    const bots = _getOwnerBots();
+    const groups = new Map;`
+);
+
+edit(
+  "perf: target overlay idles instead of clearing every frame",
+  `  const _drawTargets = () => {
+    const cv = _targetCanvas;
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const now = Date.now();`,
+  `  let _targetsDrawn = false;
+  const _drawTargets = () => {
+    const cv = _targetCanvas;
+    if (_targets.size === 0 && !_targetsDrawn) {
+      requestAnimationFrame(_drawTargets);
+      return;
+    }
+    const ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    _targetsDrawn = _targets.size !== 0;
+    const now = Date.now();`
+);
+
+/* ================================================================== *
+ * 11. Bots frozen holding a bow, crossbow or musket
+ *
+ * The freeze was a reload counter that could stop advancing.
+ *
+ * UpdateAttack only lets a client change weapon once reloading.isReloaded() is
+ * true for the weapon in its hand, and PreAttack clamps shouldAttack the same
+ * way. Reloading mirrors those counters straight off myPlayer.reload, and
+ * Player.updateReloads() advanced only the reload of the weapon currently held
+ * and returned early whenever a placeable item was in hand. So a reload that
+ * started on the secondary and then lost its tick - the bot placed something,
+ * or switched - never finished, isReloaded stayed false forever, and the
+ * client could neither swing nor let go of what it was holding.
+ *
+ * Only the ranged secondaries have a reload window long enough for that race
+ * to land, which is exactly why it was always a bow, a crossbow or a musket.
+ *
+ * Three layers: make the counters advance the way real reloads do, refuse to
+ * store a max that can never be reached, and put a watchdog on the mirror so a
+ * lost packet cannot park a client again.
+ * ------------------------------------------------------------------ */
+
+edit(
+  "fix: reload timers advance for both weapons",
+  `    updateReloads() {
+      this.updateTurretReload();
+      if (this.currentItem !== -1) {
+        return;
+      }
+      const weapon = DataHandler_default.getWeapon(this.weapon.current);
+      const reload = this.reload[weapon.itemType];
+      this.increaseReload(reload);
+      if ("projectile" in weapon) {`,
+  `    updateReloads() {
+      this.updateTurretReload();
+      /* A reload runs on the weapon, not on the hand: switching weapons or
+       * holding a placeable does not pause it. The original advanced only the
+       * held weapon's counter and skipped the tick entirely while an item was
+       * in hand, which is what left ranged secondaries stuck mid-reload. */
+      this.increaseReload(this.reload[0]);
+      this.increaseReload(this.reload[1]);
+      if (this.currentItem !== -1) {
+        return;
+      }
+      const weapon = DataHandler_default.getWeapon(this.weapon.current);
+      const reload = this.reload[weapon.itemType];
+      if ("projectile" in weapon) {`
+);
+
+edit(
+  "fix: a reload max below zero can never be reached",
+  `      const speed = myPlayer.getWeaponSpeed(id, store2.last) - pingAccount;
+      reload.current = speed;
+      reload.max = speed;`,
+  `      /* getWeaponSpeed returns -1 for an empty slot, and a bad ping can drag a
+       * real speed under zero. Either way isReloaded() compares against a max
+       * no counter can reach, and answers false for the rest of the round. */
+      const speed = Math.max(0, myPlayer.getWeaponSpeed(id, store2.last) - pingAccount);
+      reload.current = speed;
+      reload.max = speed;`
+);
+
+edit(
+  "fix: watchdog on the mirrored reload counters",
+  `      this.clientReload[2].current = myPlayer.reload[2].current;
+    }
+  }
+  const Reloading_default = Reloading;`,
+  `      this.clientReload[2].current = myPlayer.reload[2].current;
+      this._watchdog();
+    }
+    _lastSeen=[ null, null, null ];
+    _stalled=[ 0, 0, 0 ];
+    /* Last resort. Everything above is mirrored from myPlayer.reload, which is
+     * driven by server packets, and a counter that stops receiving them parks
+     * below its max - which UpdateAttack reads as "still reloading" and refuses
+     * to switch weapon on, for good. A healthy reload gains exactly one per
+     * tick, so a counter that has not moved at all in two seconds is not a
+     * reload in progress. Top it up and let the pipeline move again. */
+    _watchdog() {
+      for (let type = 0; type < 2; type++) {
+        const reload = this.clientReload[type];
+        const stalled = reload.max > 0 && reload.current < reload.max && reload.current === this._lastSeen[type];
+        this._lastSeen[type] = reload.current;
+        this._stalled[type] = stalled ? this._stalled[type] + 1 : 0;
+        if (this._stalled[type] > 18) {
+          reload.current = reload.max;
+          this._stalled[type] = 0;
+        }
+      }
+    }
+  }
+  const Reloading_default = Reloading;`
+);
+
+edit(
+  "fix: let go of a weapon whose reload never finishes",
+  `      const nextWeapon = forceWeapon !== null ? forceWeapon : useWeapon;
+      if (nextWeapon !== null && (nextWeapon !== weapon || ModuleHandler.currentHolding !== nextWeapon || myPlayer.currentItem !== -1)) {
+        const isReloaded = reloading.isReloaded(weapon);
+        if (isReloaded || forceWeapon !== null) {
+          ModuleHandler.whichWeapon(nextWeapon);
+        }
+      }`,
+  `      const nextWeapon = forceWeapon !== null ? forceWeapon : useWeapon;
+      if (nextWeapon !== null && (nextWeapon !== weapon || ModuleHandler.currentHolding !== nextWeapon || myPlayer.currentItem !== -1)) {
+        /* Wanting a weapon we are not holding is normal for the tick or two the
+         * one in hand needs to finish reloading. Wanting it for two solid
+         * seconds is not a reload, it is a client that has stopped moving - the
+         * shape the bow, crossbow and musket freeze took. Switch anyway at that
+         * point: a swing the server refuses costs one packet, a bot that never
+         * lets go of its bow costs the whole bot. */
+        this.wantedTicks += 1;
+        const isReloaded = reloading.isReloaded(weapon);
+        if (isReloaded || forceWeapon !== null || this.wantedTicks > 18) {
+          ModuleHandler.whichWeapon(nextWeapon);
+          this.wantedTicks = 0;
+        }
+      } else {
+        this.wantedTicks = 0;
+      }`
+);
+
+edit(
+  "fix: weapon-switch stall counter",
+  `  class UpdateAttack {
+    moduleName="updateAttack";
+    client;
+    didReset=false;`,
+  `  class UpdateAttack {
+    moduleName="updateAttack";
+    client;
+    didReset=false;
+    wantedTicks=0;`
+);
+
+/* ------------------------------------------------------------------ *
+ * 12. Driver manifest + runtime drift check
  *
  * The tables the client carries were checked against the shipped bundle at
  * build time (tools/verify-drivers.js). This records what they were checked
@@ -503,6 +1051,19 @@ edit(
   const RYN = {
     _myClient: client,
     _drivers: ReUpDrivers,`
+);
+
+edit(
+  "bridge: RYN._botAI and RYN._botChat",
+  `    _drivers: ReUpDrivers,`,
+  `    _drivers: ReUpDrivers,
+    _botAI: ReUpBotAI,
+    get _botChat() {
+      return win._reupBotChatEnabled === true;
+    },
+    set _botChat(on) {
+      win._reupBotChatEnabled = on === true;
+    },`
 );
 
 edit(
