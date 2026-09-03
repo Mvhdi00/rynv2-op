@@ -205,14 +205,45 @@ visible-players list on every tick, so *this bot can see them* is membership of
 that list — no scanning, no extra packets, and it is per bot, which is the point
 of sending forty of them out.
 
-The first bot to see the target keeps it. It drops out of the sweep, pings the
-map from where it is standing (the ping packet is a position ping, so the marker
-lands on top of the target) and holds station at the **Shadow distance**,
-re-pinging every four seconds. Every other bot is put into scatter's existing
-return mode and walks home. The shadow does not open fire — that is what would
-lose the distance it was told to hold. If it loses the target for six seconds it
-rejoins the sweep and the search continues; after four minutes the search gives
-up on its own.
+Several targets work in one command — `!F 12 34 56`, ids or names mixed — and
+there are two buttons next to the box: **Cancel**, and **Hunt mode**.
+
+**Splitting.** The squad is dealt out round-robin over the live roster: bot *i*
+goes to target *i % targets*. Ten bots on two targets is 5/5; ten on three is
+4/3/3, the even split with the remainder handed to the first group. It is
+recomputed every pass, so a group does not empty out as its bots die.
+
+**Watching** (Hunt off) is the original behaviour. The first bot to see the
+target keeps it: it drops out of the sweep, pings the map from where it is
+standing (the ping packet is a position ping, so the marker lands on top of the
+target) and holds station at the **Shadow distance**, re-pinging every four
+seconds. The rest of its group walks home. The shadow does not open fire — that
+is what would lose the distance it was told to hold.
+
+**Hunting** (Hunt on) kills the target instead. Arriving one at a time is how a
+group of bots feeds itself to one player, so each group runs a two-state cycle:
+
+- **gather** — every bot walks to its own slot on a ring around the target and
+  waits there. Ranged groups take a wide ring; melee groups take a tight one.
+- **strike** — the group attacks only once it is *both* in position and every
+  bot's weapon is off cooldown. That is the sync: not "everyone attacks when
+  ready" but *nobody attacks until everyone is ready*, which is what makes the
+  damage land as one number instead of five the target can heal between. All of
+  them are fired in a single pass of the loop, so the shots leave within a
+  millisecond of each other.
+
+Both states have a deadline — six seconds to gather, three to wait on reloads —
+so one bot that cannot reach its slot cannot hold the group still.
+
+A group is **ranged** only if most of it is carrying a musket; those hold the
+shadow distance and shoot from it. Everything else, bows included, takes the
+tight ring and stacks, because a bow bot with a melee primary is worth more
+inside reach than it is standing off.
+
+While a group owns a bot its own trigger is held down (`attacking = 0`), so
+`UseAttacking` cannot swing the moment something wanders into reach and break
+the sync before it starts. If a group loses sight of its target for six seconds
+it goes back to sweeping; after four minutes the whole search gives up.
 
 ### Auto Shot
 
@@ -234,20 +265,93 @@ The guards, rebuilt on top of the module that was never reachable.
 - The wall points at the nearest enemy the tick it appears — an enemy on the
   right puts the shields on the right immediately, which is the point of the
   feature.
-- Guards **fan across an arc** centred on the threat instead of all walking to
-  the same point, where they shoved each other out of position and left the
-  flanks open.
-- **Facing is not position.** A guard stands in its slot on the arc but turns
+- Guards form a **straight line, shoulder to shoulder, square across the
+  threat**. The arc this replaced put every guard the same distance from the
+  anchor but at a different angle, so the gaps between them grew with the
+  distance and the two on the ends faced away from the middle — the shield arcs
+  splayed instead of overlapping. In a line every guard is the same distance in
+  front, spaced by two collision radii and a little (78px, so nothing fits
+  through the gap) and all square on to the same direction.
+- **Facing is not position.** A guard stands in its slot in the line but turns
   its shield at the nearest enemy, because a wooden shield only blocks the 60
   degrees it is pointed at.
+- **They hit back now.** The melee branch was gated on
+  `distToEnemy < 80 && !forceShield`, and `forceShield` was true whenever any
+  enemy was within 550 — so the condition could not be met in the one situation
+  it was written for, and the guards held the shield through every fight. The
+  question is now whether *this* guard can reach with what it is holding: in
+  reach it swings with its fastest melee weapon (lowest `speed` number, shield
+  never a candidate), out of reach it holds the shield.
+- Detection widened 550 → 750, because at 550 a player closing at full speed is
+  inside the line before it has finished forming.
 - **Mouse control** — with nothing in range, the wall points where your mouse
   does, so you can aim it by hand. An enemy still overrides it.
 - **Guards protect the bots** — the wall forms around the average position of
   the bots behind the guards instead of around you, so the shields screen the
   squad. With every bot a guard there is nothing behind them to screen and you
   are the anchor again.
-- **Guards** (1–8) and **Front distance** (50–300) sliders. The front distance
-  is a real saved setting now, not a `window` variable.
+- **Guards** (1–5) and **Front distance** (50–300) sliders. Five is where a
+  line stops being wider than the thing it is covering, and where the guards on
+  the ends stop arriving after the fight. The front distance is a real saved
+  setting now, not a `window` variable.
+
+### Remote control
+
+Take over a bot and play as it. It is three independent things:
+
+**The camera.** A bundle hook rewrites the two lines that turn the game's
+smoothed camera into the render offset, so they come from the remote module
+instead. Everything downstream of those two variables follows without knowing
+anything happened — the terrain, every entity, the minimap, and RYN's own
+overlays, because the pre-existing `offset` hook appends *after* those lines and
+therefore reads the values the new one produces. The ease is the game's own
+(1% of the remaining distance per millisecond of frame time), so a possessed
+camera feels like the normal one rather than floaty or snappy.
+
+The new hook has to run *after* the `offset` hook, not before: that one matches
+`d=oe-_/2` with `\w+-\w+`, which stops matching the moment a call is wrapped
+around the source variable.
+
+**The input.** `InputHandler` already writes through a client's `PacketManager`
+and `ModuleHandler`, and a bot is the same kind of object as the owner — so the
+handlers now ask `driven` which client they are for instead of assuming
+`this.client`. Movement, placement, attacking, aiming, the cursor anchor and the
+formation anchor all move to the bot, which is why the rest of the squad follows
+whoever you are driving.
+
+One line tied control to the owner being alive:
+
+```js
+if (!this.client.myPlayer.inGame) { return; }
+```
+
+It asks the driven client now. That is what makes your own character's death
+irrelevant, and the two hotkeys sit *above* that check so letting go still works
+if the bot you are driving dies.
+
+**The chat.** The bundle's chat sender is hooked; while possessing, what you
+type goes out on the bot's socket and the game's own send is skipped.
+
+What is deliberately *not* done: the game's own HUD. Its resource counters, age
+bar and health bar are driven by the owner's connection deep in the bundle, and
+rewriting all of it would be a dozen fragile hooks for a cosmetic result. The
+possessed bot's health, age, kills and resources go in an overlay across the top
+of the screen instead, which is honest about whose numbers they are. That
+overlay also reports if the camera hook ever stops binding — detected by whether
+the bundle actually calls through it, not by whether a regex matched at load.
+
+**Your own character** has the two modes asked for: stand where you left it, or
+trail the bot the way a squad member would (same movement radius the formation
+uses). Either way it keeps healing and defending itself, because those modules
+never depended on input.
+
+The possessed bot is exempted from everything that would otherwise walk off with
+it — formation movement, random movement, Find Enemy — and from the squad attack
+broadcast, since its trigger comes from your mouse.
+
+Controls: **Control next bot** walks the roster and then hands control back, so
+one key (default `O`) both takes over and lets go; **Back to me** / `L` drops it
+immediately.
 
 ### Spam Packet
 
@@ -299,6 +403,10 @@ old wander back.
 | `_guardFrontDist` | Front distance | 90 |
 | `_botRoamFullMap` | Roam the whole map | on |
 | `_botPerfMode` | Spread bot analysis | on |
+| `_findHunt` | Hunt mode | off |
+| `_remoteControlKey` | Switch / next bot | `O` |
+| `_remoteReleaseKey` | Let go | `L` |
+| `_remoteOwnerAsBot` | My character acts as a bot | off |
 
 `_shieldGuard` and `_autoJoinGuard` were already being read by the code; the
 rest are new.
@@ -309,7 +417,15 @@ rest are new.
 
 ```sh
 node --check Ryn_Type_2.user.js
+npm i --no-save terser
+node tools/check-hooks.js Ryn_Type_2.user.js    # 43/43 should bind
+node tools/verify-drivers.js Ryn_Type_2.user.js
 ```
+
+`check-hooks.js` matters more than it used to: remote control's camera and chat
+are bundle rewrites, so a game update that moves either line takes the feature
+with it. The camera one degrades visibly (the overlay says the hook did not
+bind); the chat one degrades silently back to sending as yourself.
 
 The Bots page markup is a JS string literal, so it is worth confirming it still
 parses and that every bound input resolves to a settings key — an id that is not
