@@ -177,3 +177,39 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2 — Auto Heal
+
+`Ryn_Type_2.user.js` is a separate target from the ReUp Mix build above: a
+different RYN branch (v5.4), carrying one system that was rebuilt against
+novastorm 1.4 and the shipped game bundle.
+
+**One Auto Heal system.** `AutoHealCore` replaces the previous `AntiInsta` +
+`ShameReset` pair. It owns the whole damage-potential model, the defensive hat
+that answers it, the shame budget, and every apple the client eats — `AntiSync`
+and Anti Smart Tick now heal through its ledger instead of looping on the wire
+primitive.
+
+**One hat ladder.** `ModuleHandler.forceHat` is an accessor backed by
+`requestHat(id, priority, reason)`. A plain `forceHat = id` write still works
+and lands at `HAT_PRIORITY.COMBAT`, so combat modules keep last-write-wins among
+themselves and none of them can displace a `CRITICAL` defensive request. The
+ranks are novastorm's `hatFc()` read back to front.
+
+**Packet budget.** Routine heals leave a reserve sized from the food actually
+carried (`ceil(maxHealth / restore) * 3` frames); an emergency may spend into
+it. Nothing sends past `packetLimit`.
+
+## Verification
+
+```sh
+node tools/verify-autoheal.js          # 42 scenarios
+node --check Ryn_Type_2.user.js
+```
+
+`verify-autoheal.js` slices the constants, `AutoHealCore` and ModuleHandler's
+`heal()` / `requestHat()` out of the userscript verbatim and runs them against
+stubbed wire primitives, so it fails when the client changes rather than when a
+copy of it does.
