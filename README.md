@@ -177,3 +177,62 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2 (`Ryn_Type_2.user.js`)
+
+A second, separate userscript in this repo — RYN Type 2 v5.4, not a build
+output of `tools/build-reup.js`. It is checked in with two bot fixes applied.
+
+## Bot frame-rate collapse with an enemy on screen
+
+With a lobby of bots, every bot is a full client: its own object manager,
+spatial grid, enemy manager and module pass. Work that costs *X* on the owner
+costs *21X* with twenty bots, so anything that only runs when an enemy is
+visible turns "I can see one player" into a frame-rate cliff. Four such paths
+did the damage, and all four are the same mistake — an expensive answer
+computed before the cheap test that discards it.
+
+| Path | Was | Now |
+|---|---|---|
+| `AutoPlacer.postTick` | Probed 144 placement angles, then asked whether the enemy was inside `_autoplacerRadius` | Asks the radius question first — the same test `isAutoPlaceAngle` already opened with |
+| `AutoPlacer._canPlace` | One grid query (81 cells, one `Set`) per probed angle — 144 per client per tick | One scan wide enough to contain all of them, shared by every angle |
+| `RynPlacementEngine.cycle` | `sense()` + `predict()` — two grid walks and the motion model — then the same radius check | Range checked before the frame is built |
+| `EnemyManager.handleEnemies` | Solved the whole spike ring for the nearest enemy at any distance | Skips it unless a spike could physically reach them |
+
+Alongside those: deletion-driven replans are capped per tick (a spike wall
+coming down is one situation, not one per spike, and used to fire a full replan
+per object per client inside one frame — the freeze when you opened fire),
+`SpatialHashGrid2D` pools its duplicate guard instead of allocating one per
+query, `getClientIndex` is a lookup rather than a rebuilt array per bot per
+tick, and the placement engine's blocker cache is keyed by origin as well as
+tick — it was answering `detectSpikeInsta`'s "what could the *enemy* build"
+with the neighbourhood around whoever asked first that tick.
+
+Measured on the probe path alone, in a base with ~300 builds in reach:
+**1.12 ms → 0.10 ms** per client per tick, i.e. ~212 ms → ~19 ms of CPU per
+second across 21 clients — and zero, rather than 212 ms, whenever the enemy is
+further away than the placer's own radius.
+
+## Bots holding the secondary and never firing
+
+A weapon slot's reload `max` is fixed at spawn, and `getWeaponSpeed` returns
+`-1` for an empty slot. Nobody spawns with a secondary, so slot 1 starts every
+life at `max = -1` — and `increaseReload` clamps `current` back down to `max`
+every tick, so once the slot is filled it is pinned at `-1` and can never
+report reloaded again. `PreAttack` cancels every shot on that, while
+`UpdateAttack` still puts the weapon in the bot's hands, because `forceWeapon`
+skips the reload test. Hence a bot standing there with a bow it will not fire.
+
+The same lock has a second route in: `Player.updateReloads` only advances the
+slot of the weapon actually held, and advances nothing at all on a tick spent
+holding a placeable, so a bot building through a fight can leave the secondary
+frozen mid-cooldown — and the client-side mirror copied that frozen number back
+over itself every tick.
+
+Fixed in three places: the slot's cooldown is re-derived when a weapon is
+upgraded into it, a slot whose `max` never described a real weapon repairs
+itself, and the mirror recognises a counter that has stopped moving for longer
+than the cooldown could possibly take and holds the slot ready until the source
+starts moving again.
