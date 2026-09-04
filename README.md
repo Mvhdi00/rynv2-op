@@ -113,10 +113,107 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+## RYN Type 2 — the Auto Heal
+
+`Ryn_Type_2.user.js` is a separate client from the mix above. Its Auto Heal was
+a port of novastorm 1.4's; it has been deleted and rebuilt from scratch around
+one rule: **shame is a resource, the ideal is 0, and it never passes 7.**
+
+### Why shame is the axis
+
+`Player.buildItem` in `src/game_index.js` is the whole mechanic:
+
+```js
+if (f.consume) {
+    if (this.hitTime) {
+        const W = Date.now() - this.hitTime;
+        this.hitTime = 0;
+        W <= 120 ? (this.shameCount++,
+                    this.shameCount >= 8 && (this.shameTimer = 3e4, this.shameCount = 0))
+                 : (this.shameCount -= 2, this.shameCount <= 0 && (this.shameCount = 0));
+    }
+    this.shameTimer <= 0 && (V = f.consume(this));
+}
+```
+
+Four things fall out of it, and the design is built on them:
+
+- **Shame moves on the first consume after a hit and on no other.** Five apples
+  in one burst cost what one costs, so healing always goes out in bursts.
+- **`hitTime` is set by any negative `changeHealth`, self-inflicted included.**
+  Bull Helmet is `healthRegen: -5` on the one-second regen tick, so wearing bull
+  manufactures a hit to spend — and the consume that answers it is worth −2.
+  That is the only reason bull is ever equipped here.
+- **The arithmetic runs before the consume, and whether it lands is irrelevant.**
+  At full health `changeHealth` refuses before `useRes`, so a scrub at 100 HP
+  costs three packets, no food, and still takes 2 off the counter.
+- **The server measures the gap, not us.** A hit landing while a consume is in
+  the air re-arms `hitTime` and the server measures *that* hit instead. No
+  consume is ever certain to be a decrement.
+
+Hitting 8 sets `shameTimer = 30000`: half a minute in which every apple is
+discarded. So the ceiling is not enforced by predicting each heal — it is
+enforced by not eating at 7 at all, with one exception: a scrub taken when
+nothing can reach us and, if bull is on, early enough in the drain's second
+that the consume cannot arrive after the next one. That exception is what keeps
+7 from being a dead end, since shame only moves on a consume.
+
+### Shape
+
+| | |
+|---|---|
+| `AhLedger` | what hit me, and what it was — hits and shots claimed against the damage ledger, the remainder is contact damage |
+| `AhShame` | the counter as an upper bound, the ceiling, the scrub window, the drain phase |
+| `AhThreat` | every Anti, folded into `now` and a three-tick `burst` |
+| `AhBudget` | the packet allowance, with a reserve that survives it |
+| `AhPlan` | hat, then heal, then the shame gate, then the budget |
+| `RynAutoHeal` | sense → predict → decide → execute, once a tick |
+
+The Antis are sensors, not actors: none of them sends a packet or picks a hat.
+`AhPlan` resolves all of them in one pass, which is what stops two of them
+fighting over the hat or spending the budget twice. Anti Insta Kill, Reverse
+Insta, Velocity Tick, Musket/Bow, Tool Hammer Insta, Spike Sync, Spike Push,
+Knockback Tick, Spike Tick (placement and contact), Turret, One Tick, Primary +
+Musket/Bow, Spam Daggers + Bull, Spam Bow, Poison, Smart Tick and Shame all
+feed the same picture.
+
+Only **Soldier (6)** and **Bull (7)** are ever equipped. Soldier's
+`dmgMult: 0.75` is the only incoming-damage reduction in the game — no accessory
+carries one — so a diamond polearm's 45 × 1.5 × 1.18 = 79.65 arrives as 59.74
+behind it. Bull is the pump above. DefaultHat, UtilityHat, the instakill modules
+and DefaultAcc keep everything else; the Auto Heal no longer picks accessories
+at all, and `ModuleHandler.forceAcc` — which existed only for the old cascade —
+is gone with it.
+
+The threat picture is read from what `EnemyManager`, `ProjectileManager` and the
+per-player predictions already compute once a tick rather than walked again, so
+the module owns one grid query (Anti Smart Tick, only while trapped with a great
+hammer) and one placement sweep, angle-bounded to about ten candidates instead
+of 36. No intervals, no timeouts, no per-frame work.
+
+### Verification
+
+```sh
+node --check Ryn_Type_2.user.js
+node tools/verify-drivers.js Ryn_Type_2.user.js
+node tools/autoheal-tests.js
+node tools/autoheal-stress.js
+```
+
+The two suites cut the module out of the built file, so they cannot be run
+against a stale copy. Current state: 99 scenario checks and 21 stress checks
+pass. The stress run drives 100,000 ticks against a server model that applies
+`buildItem` verbatim, with round trips from 30ms to 300ms and four combat
+shapes — **peak shame 7, zero lockouts**, at 2.5µs per tick with eight enemies
+and six bolts in the air (server ticks are 111,000µs apart).
+
+---
+
 ## Layout
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        RYN Type 2 v5.4, with the rebuilt Auto Heal
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -126,6 +223,9 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/autoheal-harness.js cuts the Auto Heal out of the build and stubs a client
+tools/autoheal-tests.js   Auto Heal scenarios, one behaviour at a time
+tools/autoheal-stress.js  the shame invariant against a server model, and cost
 ```
 
 ## Build
