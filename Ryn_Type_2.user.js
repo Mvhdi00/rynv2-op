@@ -5735,7 +5735,7 @@ window.grbtp = 35;
     renderDistance(ctx, entity, player) {
       const pos1 = new Vector_default(player.x, player.y);
       const pos2 = new Vector_default(entity.x, entity.y);
-      const entityTarget = client.PlayerManager.getEntity(entity.sid, !!entity.isPlayer);
+      const entityTarget = Possession.renderPlayers().getEntity(entity.sid, !!entity.isPlayer);
       if (entityTarget === null) {
         return;
       }
@@ -5772,7 +5772,7 @@ window.grbtp = 35;
       let height = barHeight;
       if (entity.isPlayer) {
         const smallBarHeight = barHeight - 4;
-        const player = client.PlayerManager.playerData.get(entity.sid);
+        const player = Possession.renderPlayers().playerData.get(entity.sid);
         if (player === void 0) {
           return height;
         }
@@ -5852,7 +5852,7 @@ window.grbtp = 35;
       if (!Settings_default._renderHP || !entity.isPlayer) {
         return;
       }
-      const player = client.PlayerManager.playerData.get(entity.sid);
+      const player = Possession.renderPlayers().playerData.get(entity.sid);
       if (player === void 0) {
         return;
       }
@@ -6155,7 +6155,7 @@ window.grbtp = 35;
       if (!Settings_default._weaponHitbox) {
         return;
       }
-      const {PlayerManager: PlayerManager} = client;
+      const PlayerManager = Possession.renderPlayers();
       const type = entity.isPlayer ? PlayerManager.playerData : PlayerManager.animalData;
       const target = type.get(entity.sid);
       if (target !== void 0) {
@@ -8027,10 +8027,173 @@ window.grbtp = 35;
     }
   };
   const StoreHandler_default = StoreHandler;
+  // ==========================================================================
+  // PER-CONNECTION WORLD SNAPSHOT
+  //
+  // Each connection — the main player's and every bot's — is told about a
+  // different slice of the world, because the server only sends each client
+  // what is near the player on that connection. Most of that arrives every
+  // tick and needs no remembering ("a" for players, "I" for animals). The rest
+  // arrives once, at the moment it changes: which objects exist, who is on
+  // screen, what you are carrying, what age you are, which clan you are in.
+  //
+  // This keeps the latest of each of those frames, exactly as the server sent
+  // them, so the possessed bot's world can be handed to the renderer the
+  // instant control moves to it instead of only from that point forwards.
+  // Nothing here is synthesised — every frame replayed out of this store is a
+  // frame the server really sent to that connection.
+  // ==========================================================================
+  class ClientWorldSnapshot {
+    players=new Map;
+    objects=new Map;
+    clans=new Map;
+    state=new Map;
+    selfID=null;
+
+    // Ordering for replay. Clans and the leaderboard first because the clan
+    // menu reads them, then the local player (which resets the inventory and
+    // age displays), then what those displays should say.
+    static RANK={
+      A: 0,
+      3: 1,
+      4: 1,
+      G: 1,
+      V: 2,
+      U: 3,
+      T: 4,
+      N: 5,
+      S: 6,
+      5: 7
+    };
+
+    capture(op, args) {
+      switch (op) {
+       case "D":
+        {
+          const data = args[0];
+          if (!Array.isArray(data)) break;
+          this.players.set(data[0], args);
+          if (args[1]) {
+            this.selfID = data[0];
+          }
+          break;
+        }
+
+       case "E":
+        this.players.delete(args[0]);
+        if (this.selfID === args[0]) {
+          this.selfID = null;
+        }
+        break;
+
+       case "H":
+        {
+          const buffer = args[0];
+          if (!Array.isArray(buffer)) break;
+          for (let i = 0; i + 7 < buffer.length; i += 8) {
+            this.objects.set(buffer[i], buffer.slice(i, i + 8));
+          }
+          break;
+        }
+
+       case "Q":
+        this.objects.delete(args[0]);
+        break;
+
+       case "R":
+        for (const [sid, object] of this.objects) {
+          if (object[7] === args[0]) {
+            this.objects.delete(sid);
+          }
+        }
+        break;
+
+       case "A":
+        {
+          this.clans.clear();
+          const teams = args[0] && args[0].teams;
+          if (Array.isArray(teams)) {
+            for (const team of teams) {
+              this.clans.set(team.sid, team);
+            }
+          }
+          break;
+        }
+
+       case "g":
+        if (args[0]) {
+          this.clans.set(args[0].sid, args[0]);
+        }
+        break;
+
+       case "1":
+        this.clans.delete(args[0]);
+        break;
+
+       case "N":
+        this.state.set("N:" + args[0], [ op, args ]);
+        break;
+
+       case "S":
+        this.state.set("S:" + args[0], [ op, args ]);
+        break;
+
+       case "V":
+        this.state.set("V:" + (args[1] ? 1 : 0), [ op, args ]);
+        break;
+
+       case "5":
+        this.state.set("5:" + args[2] + ":" + args[0], [ op, args ]);
+        break;
+
+       case "T":
+       case "U":
+       case "3":
+       case "4":
+       case "G":
+        this.state.set(op, [ op, args ]);
+        break;
+      }
+    }
+
+    // The clan list as one "A" frame, rebuilt from the initial list plus every
+    // create and delete since. The shape is the server's own.
+    clanFrame() {
+      return [ {
+        teams: [ ...this.clans.values() ]
+      } ];
+    }
+
+    objectFrame() {
+      const flat = [];
+      for (const object of this.objects.values()) {
+        for (let i = 0; i < 8; i++) {
+          flat.push(object[i]);
+        }
+      }
+      return [ flat ];
+    }
+
+    orderedState() {
+      const entries = [ ...this.state.values() ];
+      const rank = ClientWorldSnapshot.RANK;
+      entries.sort((a, b) => (rank[a[0]] ?? 9) - (rank[b[0]] ?? 9));
+      return entries;
+    }
+
+    reset() {
+      this.players.clear();
+      this.objects.clear();
+      this.clans.clear();
+      this.state.clear();
+      this.selfID = null;
+    }
+  }
   class SocketManager {
     client;
     socket=null;
     socketSend=null;
+    world=new ClientWorldSnapshot;
     PacketQueue=[];
     startPing=performance.now();
     pong=0;
@@ -8046,6 +8209,7 @@ window.grbtp = 35;
     init(socket) {
       this.socket = socket;
       this.socketSend = socket.send.bind(socket);
+      this.world.reset();
       socket.addEventListener("message", event => this.handleMessage(event));
       socket.addEventListener("close", event => {
         const {code: code, reason: reason, wasClean: wasClean} = event;
@@ -8093,7 +8257,19 @@ window.grbtp = 35;
         }
         msgType = translated;
       }
-      const temp = [ msgType, ...decoded[1] ];
+      const args = decoded[1];
+      // Remember the frames that are not resent every tick, and route the
+      // renderer's supply of world frames: while a bot is possessed the game's
+      // own world comes from that bot's connection, not this one.
+      try {
+        this.world.capture(msgType, args);
+        if (this.client.isOwner) {
+          WorldRelay.ownerMessage(msgType, event, this);
+        } else if (WorldRelay.isSource(this.client)) {
+          WorldRelay.relay(msgType, args);
+        }
+      } catch (e) {}
+      const temp = [ msgType, ...args ];
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler, PlayerManager: PlayerManager2, ObjectManager: ObjectManager2, ProjectileManager: ProjectileManager2, LeaderboardManager: LeaderboardManager2, PacketManager: PacketManager2} = this.client;
       switch (temp[0]) {
        case "0":
@@ -22133,6 +22309,18 @@ window.grbtp = 35;
     Hook.replace("captureTurnstile", /onGotTurnstileToken=function\((\w+)\)\{(\w+)=\1,/, "onGotTurnstileToken=function($1){$2=$1,RYN._myClient._turnstileToken=$1,");
     Hook.replace("exposeCryptoFns", /const (\w+)=new (\w+),(\w+)=new (\w+);let (\w+)=null/, "const $1=new $2,$3=new $4;RYN._enc={Eo:Eo,Hi:$1,jt:jt,Po:Po,Ro:Ro};let $5=null");
     Hook.replace("handleBuy", /\w+\.send\("\w+",1,(\w+),(\w+)\)/, "RYN._Possession.getActiveClient()._ModuleHandler._buy($2,$1,true)");
+    // Clan actions. Each of these is a one-line function in the bundle that
+    // sends on the main connection; routed through clanSend they go out over
+    // the possessed bot's connection instead, so the server records the bot as
+    // the one who created, joined, left, kicked or answered a request. clanSend
+    // returns false while the main player is active, and the original send then
+    // runs untouched. The clan list and request queue these read are already the
+    // bot's, because the world relay feeds them from the bot's connection.
+    Hook.replace("clanAnswer", /(\w+)\.send\(({QUOTE{P}}),(\w+)\[0\]\.sid,(\w+)\)/, "RYN._Possession.clanSend($2,$3[0].sid,$4)||$1.send($2,$3[0].sid,$4)");
+    Hook.replace("clanKick", /function (\w+)\((\w+)\)\{(\w+)\.send\(({QUOTE{Q}}),\2\)\}/, "function $1($2){RYN._Possession.clanSend($4,$2)||$3.send($4,$2)}");
+    Hook.replace("clanJoin", /(\w+)\.send\(({QUOTE{b}}),(\w+)\[(\w+)\]\.sid\)/, "RYN._Possession.clanSend($2,$3[$4].sid)||$1.send($2,$3[$4].sid)");
+    Hook.replace("clanCreate", /(\w+)\.send\(({QUOTE{L}}),(document\.getElementById\({QUOTE{allianceInput}}\)\.value)\)/, "RYN._Possession.clanSend($2,$3)||$1.send($2,$3)");
+    Hook.replace("clanLeave", /(\w+)=\[\],(\w+)\(\),(\w+)\.send\(({QUOTE{N}})\)/, "$1=[],$2(),RYN._Possession.clanSend($4)||$3.send($4)");
     // Number keys and the action bar pick a weapon or item. While a bot is
     // possessed the pick has to land on that bot; the guard returns false when
     // it is not, so the main player's path stays byte-for-byte the original.
@@ -22622,7 +22810,7 @@ window.grbtp = 35;
         return 0;
       }
       let isEnemyObj = false;
-      const _mp = client && client.myPlayer;
+      const _mp = Possession.getActivePlayer();
       const _owner = object.ownerID;
       if (_mp && _owner != null && !_mp.isMyPlayerByID(_owner) && !_mp.isTeammateByID(_owner)) {
         isEnemyObj = true;
@@ -22758,6 +22946,208 @@ window.grbtp = 35;
     }
   });
   // ==========================================================================
+  // WORLD RELAY — giving the renderer the possessed bot's world
+  //
+  // The root of the "I can only see around the bot once my main player walks
+  // there" problem: the game bundle keeps exactly one world — its players
+  // array, its animals, its object grid, its local player `v` — and that world
+  // is fed by one thing, the `onmessage` handler on the main connection's
+  // socket. The server sends each connection only what is near that
+  // connection's player, so the bundle could only ever know about the main
+  // player's surroundings, however far away the bot being driven was.
+  //
+  // The bot's own connection was already being told the truth about its own
+  // surroundings; RYN decoded those frames for its modules and stopped there.
+  // So the fix is not to move a camera or copy positions around — it is to let
+  // the bot's frames reach the renderer:
+  //
+  //   attach   take the bundle's own onmessage handler off the socket, so the
+  //            main connection stops feeding the world, then hand it the bot's
+  //            world (its players, its objects, its clan, its self state) out
+  //            of that bot's snapshot, oldest state first.
+  //   live     every world frame arriving on the bot's socket is re-encoded
+  //            with its plain opcode and passed to the same handler, so from
+  //            the bundle's point of view the bot IS the connection.
+  //   detach   put the handler back and replay the main player's own snapshot.
+  //
+  // Connection-level frames (io-init, disconnect, game setup, ping, server
+  // restart, death) are never relayed and never withheld: they belong to the
+  // main socket and keep working exactly as before.
+  //
+  // Nothing is fabricated. Every frame the renderer receives is a frame the
+  // server actually sent to one of these connections.
+  // ==========================================================================
+
+  // The frames that describe the world and the player they were addressed to.
+  // These follow possession. Everything outside this set stays with the main
+  // connection.
+  const WORLD_OPS = new Set([
+    "A", "D", "E", "a", "G", "H", "I", "J", "K", "L", "M", "N", "O",
+    "Q", "R", "S", "T", "U", "V", "X", "Y",
+    "g", "1", "2", "3", "4", "5", "6", "7", "8", "9"
+  ]);
+
+  // Withheld from the renderer while a bot is driven, but never relayed from
+  // the bot either. "P" is "you died": it belongs to the main connection, and
+  // the bundle's handler for it tears the game down — clears the in-game flag,
+  // raises the death screen, reads the local player's position for the marker.
+  // Letting the main player's death do that while you are mid-fight on a bot
+  // would end the session you are actually playing, and a bot's death is
+  // already handled by its own respawn, so it stays on the main connection and
+  // simply waits there.
+  const MUTED_OPS = new Set([ ...WORLD_OPS, "P" ]);
+
+  const WorldRelay = new class {
+    source = null;
+    _handler = null;
+    _socket = null;
+    _encoder = null;
+
+    get active() {
+      return this.source !== null;
+    }
+
+    isSource(target) {
+      return this.source === target;
+    }
+
+    _gameSocket() {
+      const net = client._gameNet;
+      return net && net.socket ? net.socket : null;
+    }
+
+    // msgpack, straight out of the bundle. Frames encoded with the plain
+    // opcode string skip the per-connection permutation table on the way in —
+    // the bundle only translates numeric opcodes — so a bot frame can be handed
+    // over without knowing anything about the main connection's key.
+    _encode(op, args) {
+      if (this._encoder === null) {
+        const enc = typeof RYN !== "undefined" && RYN._enc;
+        if (!enc || !enc.Hi) return null;
+        this._encoder = enc.Hi;
+      }
+      return this._encoder.encode([ op, args ]);
+    }
+
+    _feed(op, args) {
+      const handler = this._handler;
+      if (handler === null) return;
+      const bytes = this._encode(op, args);
+      if (bytes === null) return;
+      try {
+        handler.call(this._socket, {
+          data: bytes.buffer
+        });
+      } catch (e) {}
+    }
+
+    relay(op, args) {
+      if (this._handler === null || !WORLD_OPS.has(op)) return;
+      this._feed(op, args);
+    }
+
+    // Called for every frame on the main connection. While a relay is running
+    // the bundle's handler is off the socket, so anything that still belongs to
+    // the main connection has to be handed over here; world frames are simply
+    // dropped, because the bot is supplying those.
+    ownerMessage(op, event, manager) {
+      if (this._handler === null) return;
+      if (this._socket !== manager.socket) {
+        // The main socket was replaced underneath us; the handler we are
+        // holding belongs to a connection that no longer exists.
+        this.detach();
+        return;
+      }
+      if (MUTED_OPS.has(op)) return;
+      try {
+        this._handler.call(this._socket, event);
+      } catch (e) {}
+    }
+
+    attach(bot) {
+      if (bot == null || bot === client) return false;
+      const socket = this._gameSocket();
+      if (socket === null) return false;
+      const previous = this.source === null ? client : this.source;
+      if (this._handler === null) {
+        const handler = socket.onmessage;
+        const enc = typeof RYN !== "undefined" && RYN._enc;
+        if (typeof handler !== "function" || !enc || !enc.Hi) return false;
+        this._handler = handler;
+        this._socket = socket;
+        // Taking it off the socket is what stops the main connection feeding
+        // the world. Everything that should still reach it now goes through
+        // ownerMessage above.
+        socket.onmessage = null;
+      }
+      this.source = bot;
+      this._swap(previous, bot);
+      return true;
+    }
+
+    detach() {
+      const handler = this._handler;
+      if (handler === null) {
+        this.source = null;
+        return;
+      }
+      const previous = this.source;
+      const socket = this._socket;
+      this.source = null;
+      // Put the world back on the main player while the handler is still ours,
+      // so the first frame the bundle receives on its own again lands on a
+      // world that is already the right one.
+      try {
+        this._swap(previous, client);
+      } catch (e) {}
+      this._handler = null;
+      this._socket = null;
+      if (socket !== null) {
+        socket.onmessage = handler;
+      }
+    }
+
+    // Move the renderer from one connection's world to another's, using the
+    // protocol's own frames: remove what the old world had and the new one does
+    // not, then deliver the new one.
+    _swap(from, to) {
+      const before = from && from.SocketManager ? from.SocketManager.world : null;
+      const after = to && to.SocketManager ? to.SocketManager.world : null;
+      if (after === null) return;
+
+      if (before !== null && before !== after) {
+        for (const sid of before.objects.keys()) {
+          if (!after.objects.has(sid)) this._feed("Q", [ sid ]);
+        }
+        for (const id of before.players.keys()) {
+          if (!after.players.has(id)) this._feed("E", [ id ]);
+        }
+      }
+
+      this._feed("A", after.clanFrame());
+
+      // Everyone else first, then the local player last: the "you" frame is
+      // what sets the bundle's `v`, moves its camera and resets the inventory
+      // and age displays, so it wants to land on a populated world.
+      for (const [id, args] of after.players) {
+        if (id !== after.selfID) this._feed("D", args);
+      }
+      if (after.selfID !== null) {
+        const self = after.players.get(after.selfID);
+        if (self !== void 0) this._feed("D", self);
+      }
+
+      if (after.objects.size > 0) {
+        this._feed("H", after.objectFrame());
+      }
+      for (const [op, args] of after.orderedState()) {
+        if (op === "A") continue;
+        this._feed(op, args);
+      }
+    }
+  }();
+
+  // ==========================================================================
   // ACTIVE ENTITY / BOT POSSESSION
   //
   // Every bot here is already a complete PlayerClient — its own socket, its own
@@ -22812,6 +23202,7 @@ window.grbtp = 35;
       if (!this.isUsable(this._active)) {
         this._restore(this._active);
         this._active = client;
+        WorldRelay.detach();
         this._resetDelta();
       }
       return this._active;
@@ -22821,13 +23212,87 @@ window.grbtp = 35;
       return this.active !== client;
     }
 
-    // The two accessors the rest of the client uses.
+    // The accessors the rest of the client resolves "current player" through.
+    // Thin on purpose: each one is the existing architecture read off the
+    // active entity, not a new abstraction over it.
     getActivePlayer() {
       return this.active.myPlayer;
     }
 
     getActiveClient() {
       return this.active;
+    }
+
+    getActiveEntity() {
+      return this.active;
+    }
+
+    getActivePosition() {
+      return this.active.myPlayer.pos.current;
+    }
+
+    getActivePlayerId() {
+      return this.active.myPlayer.id;
+    }
+
+    getActiveInventory() {
+      return this.active.myPlayer.inventory;
+    }
+
+    getActiveClan() {
+      const player = this.active.myPlayer;
+      return {
+        name: player.clanName,
+        isLeader: player.isLeader,
+        members: player.teammates
+      };
+    }
+
+    getActiveCameraTarget() {
+      return this.active.myPlayer;
+    }
+
+    // The connection the renderer is currently being fed from. Anything drawing
+    // over a rendered entity has to look that entity up in the client that was
+    // told about it, which is this one — not necessarily the main player's.
+    renderClient() {
+      return WorldRelay.active ? WorldRelay.source : client;
+    }
+
+    renderPlayers() {
+      return this.renderClient().PlayerManager;
+    }
+
+    // The connection whose view of the world the renderer is currently being
+    // fed from, and the snapshot behind it.
+    getActiveWorldContext() {
+      const source = WorldRelay.active ? WorldRelay.source : client;
+      return {
+        client: source,
+        relayed: WorldRelay.active,
+        world: source.SocketManager.world,
+        objects: source.ObjectManager,
+        players: source.PlayerManager,
+        enemies: source.EnemyManager
+      };
+    }
+
+    // Clan actions belong to whoever is being driven. Returns false for the
+    // main player so the bundle keeps its own path untouched; for a bot the
+    // action goes out over that bot's connection, so the server records the bot
+    // as the one who created, joined or left.
+    clanSend(op, a, b) {
+      const target = this.active;
+      if (target === client) return false;
+      const player = target.myPlayer;
+      if (player == null || !player.inGame) return true;
+      try {
+        const frame = [ op ];
+        if (a !== void 0) frame.push(a);
+        if (b !== void 0) frame.push(b);
+        target.PacketManager.send(frame);
+      } catch (_) {}
+      return true;
     }
 
     index() {
@@ -22880,6 +23345,17 @@ window.grbtp = 35;
       this._restore(previous);
 
       this._active = target;
+
+      // Hand the renderer the new entity's world. When this succeeds the
+      // bundle's own local player becomes the bot, so its camera, its visible
+      // players, its objects, its clan menu and its HUD all follow natively and
+      // the offset below is left at zero. The offset is the fallback for when
+      // the relay cannot be established — before the bundle has connected, say.
+      if (target === client) {
+        WorldRelay.detach();
+      } else if (!WorldRelay.attach(target)) {
+        WorldRelay.detach();
+      }
 
       // Carry the residual camera offset so the view glides instead of
       // teleporting, then let it decay to zero — after that the camera tracks
@@ -23037,6 +23513,12 @@ window.grbtp = 35;
     // Where the camera wants to be, relative to the main player.
     _sampleTarget() {
       const target = this._active;
+      // With the relay running the bundle's own local player is the bot, so its
+      // camera is already on the bot and any offset here would double it.
+      if (WorldRelay.isSource(target)) {
+        this._tx = this._ty = 0;
+        return;
+      }
       if (target === client || !target.myPlayer || !target.myPlayer.inGame || !client.myPlayer.inGame) {
         this._tx = this._ty = 0;
         return;
@@ -23111,16 +23593,21 @@ window.grbtp = 35;
       const player = this.active.myPlayer;
       if (player == null || !player.inGame) return;
       this._hudOwned = possessing;
-
-      const res = player.resources || {};
-      this._set("foodDisplay", String(res.food ?? 0));
-      this._set("woodDisplay", String(res.wood ?? 0));
-      this._set("stoneDisplay", String(res.stone ?? 0));
-      this._set("scoreDisplay", String(res.gold ?? 0));
-      this._set("killCounter", String(res.kills ?? 0));
-
       const age = player.age || 1;
-      this._set("ageText", age >= Config_default.maxAge ? "MAX AGE" : "AGE " + age);
+
+      // With the relay running the bundle is already being fed this entity's
+      // own resource and age frames, and writes them itself. The mirror is what
+      // covers the fallback — a switch made before the game connected, say —
+      // and the hand-back to the main player.
+      if (!WorldRelay.isSource(this.active)) {
+        const res = player.resources || {};
+        this._set("foodDisplay", String(res.food ?? 0));
+        this._set("woodDisplay", String(res.wood ?? 0));
+        this._set("stoneDisplay", String(res.stone ?? 0));
+        this._set("scoreDisplay", String(res.gold ?? 0));
+        this._set("killCounter", String(res.kills ?? 0));
+        this._set("ageText", age >= Config_default.maxAge ? "MAX AGE" : "AGE " + age);
+      }
 
       const banner = this._banner();
       if (banner !== null) {
@@ -25407,7 +25894,9 @@ window.grbtp = 35;
   };
   const _getPlayerAtScreen = (mx, my, radius = 55) => {
     try {
-      const pm = client.PlayerManager;
+      // Screen coordinates belong to whatever world is on screen, so the lookup
+      // goes to the connection feeding it.
+      const pm = Possession.renderPlayers();
       if (!pm) return null;
       let best = null, bestD = radius;
       const selfID = Possession.getActivePlayer().id;
@@ -25456,7 +25945,9 @@ window.grbtp = 35;
     const now = Date.now();
     for (const [id, t] of _targets) {
       try {
-        const pm = client.PlayerManager;
+        // Targets are picked off the screen, so they are refreshed from the same
+        // world they were picked in.
+        const pm = Possession.renderPlayers();
         const live = pm && pm.playerData.get(id);
         if (!live || !live.pos) {
           _targets.delete(id);
