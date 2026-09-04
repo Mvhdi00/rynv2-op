@@ -18381,9 +18381,9 @@ window.grbtp = 35;
   // same numbers. It is a sandbox XP mill rather than a combat one: canAutomill
   // asks for `myPlayer.isSandbox`, `age < 20` and an autoBuy that has not
   // finished its buy list yet, so it runs in the opening minutes of a sandbox
-  // game and nowhere else. The spread is Glotus's own solve,
-  // `asin((2*scale + 9e-13) / (2*distance)) * 2`, and the trio is all-or-
-  // nothing: the centre and both sides have to be placeable or none go down.
+  // game and nowhere else. The trio is all-or-nothing: the centre and both
+  // sides have to be placeable or none go down. The one thing not kept is the
+  // spread -- see millOffset.
   class Automill {
     moduleName="autoMill";
     toggle=false;
@@ -18406,6 +18406,35 @@ window.grbtp = 35;
     }
     canPlaceWindmill(angle) {
       return this.client.myPlayer.canPlaceObject(5, angle);
+    }
+    // Glotus asks for `asin((2*scale + 9e-13) / (2*distance)) * 2`: two mills
+    // exactly tangent, to the last bit of a double. Nothing on the way out
+    // measures that gap -- place() goes straight to the wire -- but the wire
+    // itself moves it. Every angle is sent as fixTo(angle, 2), a 0.01 rad grid,
+    // so each of the three lands up to half a step off and the gap the server
+    // actually builds is the asked-for one give or take 0.01 rad. Tangency has
+    // no room for that, and buildItem refuses a mill whose centre is a hair
+    // inside `scale + scale`:
+    //
+    //   windmill,        45: wants 1.11529 rad, gets 1.11 or 1.12
+    //   faster/power mill 47: wants 1.14167 rad, gets 1.14 or 1.15
+    //
+    // Which of the two the heading rounds to is what decides whether a side
+    // mill goes up. Replayed over 36000 headings against the game's own rule,
+    // the windmill fan comes out as three mills on 10% of them and as two --
+    // one side missing, the side depending on the heading -- on 84%; after the
+    // upgrade it is never three, and it is a single mill on 47%.
+    //
+    // Taking the offset up to the next 0.01 step fixes it: a whole number of
+    // steps survives the rounding exactly, because it does not move the
+    // fractional part the grid rounds on. One further step is added for the
+    // wrap at +-PI, where atan2 re-bases the grid and the gap can still lose a
+    // step. Both mills then stand about a unit clear instead of 1e-12, and the
+    // fan is three mills at every heading and on every mill tier.
+    static WIRE_STEP=.01;
+    millOffset(item, distance) {
+      const tangent = Math.asin(2 * item.scale / (2 * distance)) * 2;
+      return (Math.ceil(tangent / Automill.WIRE_STEP) + 1) * Automill.WIRE_STEP;
     }
     placeWindmill(angle) {
       const {_ModuleHandler: ModuleHandler} = this.client;
@@ -18433,7 +18462,7 @@ window.grbtp = 35;
       }
       const item = Items[myPlayer.getItemByType(5)];
       const distance = myPlayer.getItemPlaceScale(item.id);
-      const offset = Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2;
+      const offset = this.millOffset(item, distance);
       const leftAngle = angle - offset;
       const rightAngle = angle + offset;
       if (this.canPlaceWindmill(angle) && this.canPlaceWindmill(leftAngle) && this.canPlaceWindmill(rightAngle)) {
