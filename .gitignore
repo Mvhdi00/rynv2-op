@@ -1,2 +1,4 @@
 node_modules/
 package-lock.json
+ui/preview.html
+ui/preview-game.html

@@ -6,6 +6,10 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+> Also in this repo: **`Ryn_Type_2.user.js`** — RYN Type 2 v5.4 with a rebuilt
+> UI (dark, black/red/purple, no web fonts, no blur). Sources in `ui/`, built by
+> `tools/build-ui.js`. See [UI_REDESIGN.md](UI_REDESIGN.md).
+
 ---
 
 ## Why RYN is the base

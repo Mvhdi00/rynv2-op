@@ -1,0 +1,154 @@
+/* ===========================================================================
+   RYN Type 2 — in-game layer (replaces Game_default)
+   Same palette as the menu: black structure, red action, purple accent.
+   ======================================================================== */
+
+#ryn-menu-frame{
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    width: 100%; height: 100%;
+    border: none; outline: none;
+    z-index: 10;
+}
+
+#promoImgHolder,
+.menuHeader,
+.menuText,
+#guideCard,
+#gameName,
+#pingDisplay,
+#partyButton,
+#onetrust-consent-sdk,
+.adMenuCard,
+#topInfoHolder > div:not([id]):not([class]),
+#touch-controls-fullscreen,
+#altcha,
+#joinPartyButton {
+    display: none !important;
+}
+
+.menuCard { box-shadow: none; }
+
+#setupCard > * { margin: 0 !important; }
+
+#linksContainer2 { background: rgba(10,10,14,.55); }
+
+#bottomContainer { bottom: 20px; }
+
+#topInfoHolder {
+    display: flex;
+    flex-direction: column;
+    justify-content: right;
+    align-items: flex-end;
+    gap: 10px;
+}
+
+#killCounter, #totalKillCounter {
+    position: static;
+    margin: 0;
+    background-image: url(../img/icons/skull.png);
+}
+
+/* --- action bar ------------------------------------------------------- */
+.actionBarItem {
+    position: relative;
+    border: 1px solid rgba(139,92,246,.34) !important;
+    border-radius: 6px !important;
+    transition: border-color 120ms cubic-bezier(.4,0,.2,1);
+}
+.actionBarItem:hover { border-color: rgba(229,56,74,.6) !important; }
+
+.itemCounter {
+    position: absolute;
+    top: 2px; right: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    letter-spacing: .02em;
+    color: rgba(255,255,255,.92);
+    text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,.95);
+}
+.itemCounter.hidden { display: none; }
+
+/* --- top-right vitals HUD --------------------------------------------- */
+#ryn-topright-hud{
+    position: fixed;
+    top: 12px; right: 12px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    pointer-events: none;
+    font-family: system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+.ryn-hud-row{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    background: rgba(8,8,11,.62);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 7px;
+}
+.ryn-hud-label{
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    color: rgba(238,238,245,.42);
+    min-width: 24px;
+}
+.ryn-hud-bar-bg{
+    width: 116px; height: 4px;
+    background: rgba(255,255,255,.08);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.ryn-hud-bar-fill{
+    height: 100%;
+    border-radius: 3px;
+    transform-origin: left center;
+    transition: transform 130ms cubic-bezier(.4,0,.2,1), background-color 200ms linear;
+}
+#ryn-hud-hp-fill { background-color: #E5384A; }
+#ryn-hud-hp-fill.mid { background-color: #E8A33D; }
+#ryn-hud-hp-fill.ok  { background-color: #8B5CF6; }
+#ryn-hud-r1-fill { background-color: #8B5CF6; }
+#ryn-hud-r2-fill { background-color: #8B5CF6; }
+.ryn-hud-val{
+    min-width: 30px;
+    text-align: right;
+    font-size: 10.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: rgba(238,238,245,.86);
+}
+
+/* --- bottom-left session stats ---------------------------------------- */
+#rynStats{
+    position: absolute;
+    bottom: 210px; left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 11px;
+    background: rgba(8,8,11,.55);
+    border: 1px solid rgba(255,255,255,.06);
+    border-left: 2px solid rgba(139,92,246,.55);
+    border-radius: 8px;
+    font-family: system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .02em;
+    color: rgba(238,238,245,.36);
+    pointer-events: none;
+}
+#rynStats > span{ display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
+#rynStats i{ font-style: normal; }
+#rynStats b{
+    font-weight: 600;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    color: #B9A2FF;
+}
+
+.hidden { display: none !important; }

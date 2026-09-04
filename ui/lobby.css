@@ -1,0 +1,246 @@
+/* ===========================================================================
+   RYN Type 2 — lobby / setup card restyle
+   Replaces the old glass-and-Orbitron card. No web fonts, no backdrop blur.
+   ======================================================================== */
+
+#setupCard{
+    position: relative !important;
+    width: 340px !important;
+    padding: 22px 22px 18px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    background: #08080B !important;
+    border: 1px solid rgba(255,255,255,.09) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 26px 70px -30px #000 !important;
+    max-height: none !important;
+    font-family: system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif !important;
+}
+/* one thin red hairline across the top — the only "brand" flourish */
+#setupCard::before{
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important; left: 26px !important; right: 26px !important;
+    height: 1px !important;
+    background: linear-gradient(90deg, transparent, rgba(229,56,74,.75), rgba(139,92,246,.6), transparent) !important;
+    pointer-events: none !important;
+}
+#setupCard > *{ position: relative !important; z-index: 1 !important; }
+#setupCard br{ display: none !important; }
+
+#nameInput, #serverSelect, #setupCard select{
+    background: #121218 !important;
+    border: 1px solid rgba(255,255,255,.08) !important;
+    border-radius: 8px !important;
+    color: #F2F2F6 !important;
+    font-family: inherit !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    text-align: center !important;
+    padding: 11px 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    outline: none !important;
+    transition: border-color 140ms cubic-bezier(.4,0,.2,1), background 140ms cubic-bezier(.4,0,.2,1) !important;
+}
+#nameInput:focus, #serverSelect:hover, #setupCard select:hover{
+    border-color: rgba(139,92,246,.5) !important;
+    background: #16161E !important;
+}
+#nameInput::placeholder{ color: rgba(238,238,245,.28) !important; }
+
+#serverSelect, #setupCard select{
+    cursor: pointer !important;
+    text-align-last: center !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    padding-right: 32px !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23B9A2FF' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 13px center !important;
+}
+#serverSelect option, #setupCard select option{ background: #0D0D12 !important; color: #F2F2F6 !important; }
+
+#serverBrowser{ width: 100% !important; }
+#setupCard select[size]:not([size="1"]){
+    height: auto !important;
+    max-height: 168px !important;
+    overflow-y: auto !important;
+    padding: 6px !important;
+    text-align: left !important;
+    text-align-last: left !important;
+    background-image: none !important;
+    cursor: default !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(139,92,246,.4) transparent !important;
+}
+#setupCard select[size]:not([size="1"]) option{
+    padding: 6px 10px !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    background: transparent !important;
+    color: rgba(238,238,245,.78) !important;
+}
+#setupCard select[size]:not([size="1"]) option:checked{
+    background: rgba(139,92,246,.24) !important;
+    color: #FFFFFF !important;
+}
+#setupCard select[size]:not([size="1"]) option[disabled]{
+    color: rgba(238,238,245,.3) !important;
+    font-size: 9.5px !important;
+    font-weight: 600 !important;
+    letter-spacing: .14em !important;
+    text-transform: uppercase !important;
+    padding: 8px 10px 2px !important;
+}
+#setupCard select[size]:not([size="1"])::-webkit-scrollbar{ width: 6px !important; }
+#setupCard select[size]:not([size="1"])::-webkit-scrollbar-track{ background: transparent !important; }
+#setupCard select[size]:not([size="1"])::-webkit-scrollbar-thumb{
+    background: rgba(139,92,246,.32) !important;
+    border-radius: 6px !important;
+}
+#setupCard select[size]:not([size="1"])::-webkit-scrollbar-thumb:hover{ background: rgba(139,92,246,.6) !important; }
+
+#enterGame{
+    background: #E5384A !important;
+    border: 1px solid rgba(255,255,255,.12) !important;
+    border-radius: 9px !important;
+    color: #FFFFFF !important;
+    font-family: inherit !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    letter-spacing: .1em !important;
+    padding: 13px 16px !important;
+    width: 100% !important;
+    cursor: pointer !important;
+    text-transform: uppercase !important;
+    transition: background 140ms cubic-bezier(.4,0,.2,1), transform 100ms cubic-bezier(.4,0,.2,1) !important;
+}
+#enterGame:hover{ background: #F04155 !important; }
+#enterGame:active{ transform: scale(.985) !important; }
+
+#ryn-skin-holder{
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    margin: 2px auto !important;
+    padding: 10px 8px !important;
+    max-width: 100% !important;
+    border-radius: 10px !important;
+    background: #0D0D12 !important;
+    border: 1px solid rgba(255,255,255,.06) !important;
+}
+#ryn-skin-holder .skinColorItem{
+    width: 22px !important;
+    height: 22px !important;
+    border-radius: 50% !important;
+    border: none !important;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.14) !important;
+    cursor: pointer !important;
+    flex: 0 0 auto !important;
+    transition: box-shadow 140ms cubic-bezier(.4,0,.2,1), transform 140ms cubic-bezier(.4,0,.2,1) !important;
+}
+#ryn-skin-holder .skinColorItem:hover{ transform: scale(1.14) !important; box-shadow: 0 0 0 1px rgba(255,255,255,.45) !important; }
+#ryn-skin-holder .skinColorItem.activeSkin{
+    box-shadow: 0 0 0 2px #08080B, 0 0 0 4px rgba(139,92,246,.85) !important;
+}
+
+#nativeCheckHolder{
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 9px !important;
+    background: #0D0D12 !important;
+    border: 1px solid rgba(255,255,255,.06) !important;
+    border-radius: 9px !important;
+    padding: 10px 14px !important;
+    cursor: pointer !important;
+    color: rgba(238,238,245,.6) !important;
+    font-family: inherit !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    transition: border-color 140ms cubic-bezier(.4,0,.2,1), color 140ms cubic-bezier(.4,0,.2,1), background 140ms cubic-bezier(.4,0,.2,1) !important;
+}
+#nativeCheckHolder:hover{ border-color: rgba(139,92,246,.4) !important; color: rgba(238,238,245,.85) !important; }
+#nativeCheckHolder:has(input:checked){
+    background: rgba(139,92,246,.12) !important;
+    border-color: rgba(139,92,246,.45) !important;
+    color: #FFFFFF !important;
+}
+#nativeCheckHolder input[type=checkbox]{
+    accent-color: #8B5CF6 !important;
+    width: 15px !important; height: 15px !important;
+    margin: 0 !important; cursor: pointer !important;
+}
+
+#setupCard a, #setupCard .menuText{
+    display: inline-block !important;
+    margin: 0 auto !important;
+    padding: 8px 16px !important;
+    background: transparent !important;
+    border: 1px solid rgba(255,255,255,.07) !important;
+    border-radius: 8px !important;
+    color: rgba(238,238,245,.45) !important;
+    font-family: inherit !important;
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    text-align: center !important;
+    transition: border-color 140ms cubic-bezier(.4,0,.2,1), color 140ms cubic-bezier(.4,0,.2,1) !important;
+}
+#setupCard a:hover, #setupCard .menuText:hover{
+    border-color: rgba(139,92,246,.5) !important;
+    color: #FFFFFF !important;
+}
+
+/* --- corner badge: click to open the client menu ----------------------- */
+.ryn-v2-wrapper{
+    position: fixed !important;
+    top: 14px !important;
+    left: 14px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 9px !important;
+    padding: 6px 12px 6px 6px !important;
+    border-radius: 999px !important;
+    background: rgba(8,8,11,.55) !important;
+    border: 1px solid rgba(255,255,255,.06) !important;
+    pointer-events: none !important;
+    user-select: none !important;
+    z-index: 99999 !important;
+    transition: border-color 180ms cubic-bezier(.4,0,.2,1), background 180ms cubic-bezier(.4,0,.2,1) !important;
+}
+.ryn-v2-wrapper:hover{
+    background: rgba(8,8,11,.85) !important;
+    border-color: rgba(139,92,246,.45) !important;
+}
+.ryn-v2-avatar{
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    object-position: center center !important;
+    display: block !important;
+    border: none !important;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.12) !important;
+    opacity: .5 !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    transition: opacity 180ms cubic-bezier(.4,0,.2,1), box-shadow 180ms cubic-bezier(.4,0,.2,1) !important;
+}
+.ryn-v2-avatar:hover{ opacity: 1 !important; box-shadow: 0 0 0 1px rgba(229,56,74,.7) !important; }
+.ryn-v2-badge{
+    font-family: system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    letter-spacing: .12em !important;
+    text-transform: uppercase !important;
+    color: rgba(238,238,245,.36) !important;
+    pointer-events: none !important;
+    white-space: nowrap !important;
+    transition: color 180ms cubic-bezier(.4,0,.2,1) !important;
+}
+.ryn-v2-wrapper:hover .ryn-v2-badge{ color: rgba(238,238,245,.9) !important; }

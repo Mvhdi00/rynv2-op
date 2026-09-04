@@ -1,0 +1,99 @@
+/* ===========================================================================
+   RYN Type 2 — in-game hat / accessory picker (replaces Store_default)
+   ======================================================================== */
+
+#ryn-store-container{
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    max-width: 320px;
+    font-family: system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+
+#ryn-store-toggle{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 32px;
+    background: rgba(8,8,11,.9);
+    border: 1px solid rgba(139,92,246,.32);
+    border-radius: 8px;
+    color: #B9A2FF;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    cursor: pointer;
+    pointer-events: all;
+    transition: background 120ms cubic-bezier(.4,0,.2,1), border-color 120ms cubic-bezier(.4,0,.2,1);
+}
+#ryn-store-toggle:hover{
+    background: rgba(139,92,246,.14);
+    border-color: rgba(139,92,246,.6);
+}
+
+#ryn-store-items{
+    max-height: 224px;
+    padding: 4px;
+    background: rgba(8,8,11,.9);
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 8px;
+    overflow-y: scroll;
+    pointer-events: all;
+    scrollbar-width: none;
+}
+#ryn-store-items::-webkit-scrollbar{ display: none; width: 0; height: 0; background: transparent; }
+
+.storeItemContainer{
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 42px;
+    padding: 0 8px;
+    border-radius: 6px;
+    box-sizing: border-box;
+    overflow: hidden;
+    transition: background 110ms cubic-bezier(.4,0,.2,1);
+}
+.storeItemContainer:hover{ background: rgba(255,255,255,.04); }
+
+.storeHat{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 34px; height: 34px;
+    flex-shrink: 0;
+    pointer-events: none;
+}
+
+.storeItemName{
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(238,238,245,.82);
+    font-size: 12.5px;
+    font-weight: 400;
+}
+
+.equipButton{
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 3px 10px;
+    border: 1px solid rgba(139,92,246,.34);
+    border-radius: 5px;
+    color: #B9A2FF;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 110ms cubic-bezier(.4,0,.2,1), border-color 110ms cubic-bezier(.4,0,.2,1), color 110ms cubic-bezier(.4,0,.2,1);
+}
+.equipButton:hover{
+    background: rgba(229,56,74,.14);
+    border-color: rgba(229,56,74,.5);
+    color: #E5384A;
+}
