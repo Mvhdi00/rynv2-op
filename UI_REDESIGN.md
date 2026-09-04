@@ -47,7 +47,7 @@ tints. Accents are used at 12–42 % alpha except where they mark state, so the
 panel reads as black with thin coloured signal rather than a coloured panel.
 
 Type is Inter (400/500/600) with a full system fallback, at four sizes: page
-title 17, section title 14 semibold, option 14 regular, meta 12–13. Sentence
+title 18, section title 15 semibold, option 15 regular, meta 13–13.5. Sentence
 case throughout; no shouting caps, no gradient text. The font is fetched with a
 `<link>` — parallel and non-blocking — not a render-blocking `@import`, and the
 menu is fully readable on the fallback if the request never lands.
@@ -58,18 +58,23 @@ on the window, none anywhere else.
 ## What changed structurally
 
 The menu was a 1178 × 648 dashboard with a 172 px icon rail down the left side
-and two `backdrop-filter: blur(25px)` surfaces. It is now a **940 × 650 window**
+and two `backdrop-filter: blur(25px)` surfaces. It is now a **740 × 520 window**
 with a title bar, a horizontal tab strip and a single scrolling body, and no
-blur.
+blur — a compact panel, but with the type and controls sized for a much larger
+one, so it stays readable without eating the screen.
 
 `handleResize()` capped the panel scale at `0.9`, so the menu was *always*
 downscaled: every glyph rasterised at a fractional size — visibly soft — and
 every authored px arrived ~11 % smaller than designed. The cap is now `1`, so
-the panel renders 1:1 at 940 × 650 on anything from 1280 × 720 up and only
-shrinks when the viewport genuinely cannot fit it. That also lines the
+the panel renders 1:1 at 740 × 520 on any ordinary desktop and only shrinks
+when the viewport genuinely cannot fit it. That also lines the
 formation popup up with its trigger: the popup is fixed to the unscaled
 viewport while its position came from a rect measured inside the scaled
 container, so the two only agreed at scale 1.
+
+The tab strip is measured against its content rather than assumed to fit: the
+six tabs need ~555 px of the 738 px available with the fallback face, and the
+strip scrolls rather than clipping a tab if a wider font ever pushes it over.
 
 Rebuilt from scratch: panels, tabs, buttons, toggles, sliders, colour pickers,
 key tiles, text inputs, dropdowns, section headers, status dots, the search
