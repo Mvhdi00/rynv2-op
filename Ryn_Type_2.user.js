@@ -4447,10 +4447,14 @@ window.grbtp = 35;
     bob: 1.1,
     wide: 1.34
   }, {
-    /* Two daggers, so two hands -- one on each blade, straddling the axis.
-     * A single hand on the centreline sits in the gap between the blades and
-     * holds neither. The leading hand is slightly ahead, and which side leads
-     * swaps between strokes. */
+    /* Two daggers, so two hands -- one on each blade, straddling the axis at
+     * the same +/-24.7 the bundle itself uses, which is where the sprite was
+     * drawn to be gripped. Pulled any closer to the centreline the blades run
+     * along the rim of the hand circles instead of through them, and a single
+     * hand on the centreline sits in the gap and holds neither. A dagger is
+     * held rather than fed through the fist, so the hands travel with the
+     * blades instead of letting them slide. The leading hand is slightly
+     * ahead, and which side leads swaps between strokes. */
     id: 7,
     name: "daggers",
     motion: "twin stab",
@@ -4458,8 +4462,8 @@ window.grbtp = 35;
     body: .12,
     grip: [ 32, 0 ],
     shaft: 0,
-    hand1: [ 2, 17 ],
-    hand2: [ -6, -17 ],
+    hand1: [ 0, 24 ],
+    hand2: [ -4, -24 ],
     free: [ 0, 0 ],
     freeSwing: 0,
     thrust: 1,
@@ -4470,7 +4474,7 @@ window.grbtp = 35;
     rot: [ -.06, .14, -.3, -.22 ],
     reach: [ 0, -5, 15, 10 ],
     lat: [ 0, 0, -2, -3 ],
-    slide: [ 0, -3, 10, 6 ],
+    slide: [ 0, 0, 3, 2 ],
     sep: [ 0, 0, 0, 0 ],
     ease: [ WA_OUT_QUAD, WA_OUT_QUINT, WA_OUT_CUBIC, WA_OUT_QUAD ],
     bob: .6,
