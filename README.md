@@ -113,10 +113,100 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+## Ryn Type 2: the Auto Heal upgrade
+
+`Ryn_Type_2.user.js` is Ryn Type 2 v5.4 with its existing Auto Heal extended.
+The module was not replaced — `AntiInsta.postTick` still opens with novastorm's
+rule (sum `potentialDamage + potentialSpikeDamage`, cap at 140, ×0.75 for
+soldier, +5 for bull, heal if it reaches your health), `ShameReset` still owns
+the bull-tick latch, and the placer, preplace, replace, spike tick and packet
+architecture are untouched.
+
+### The shame rule, as the server actually writes it
+
+`src/game_index.js`, inside `buildItem` for a consumable:
+
+```js
+if (this.hitTime) {
+    const W = Date.now() - this.hitTime;
+    this.hitTime = 0;                       // ← the eat clears it
+    W <= 120 ? (this.shameCount++, this.shameCount >= 8 && (this.shameTimer = 3e4, ...))
+             : (this.shameCount -= 2, ...)
+}
+this.shameTimer <= 0 && (V = f.consume(this))
+```
+
+Four consequences the client had not been modelling:
+
+- **The first eat of a batch is the only one that moves shame.** It clears
+  `hitTime`, so an emergency burst costs `+1`, not `+N`.
+- **Shame only falls if you eat more than 120 ms after taking damage.** With no
+  damage there is no stamp and eating does nothing, so recovery is rate-limited
+  by incoming hits, not by food.
+- **The bookkeeping runs before `consume`,** and `changeHealth` returns `false`
+  at full health, so `useRes` never fires. Eating at 100 HP with an aged stamp
+  is **−2 for no food and no wasted heal**.
+- **Bull Helmet manufactures the stamps.** `healthRegen: -5` once a second
+  (`serverUpdateRate` 9, so every ninth tick) is one stamp a second, −2 a
+  second: 7 → 0 in four seconds.
+
+### What was wrong
+
+- **Bull-hat shame recovery was unreachable.** `ShameReset` set `forceHat = 7`
+  at module index 35; the Safe Soldier block at the foot of
+  `ModuleHandler.postTick` stamped `forceHat = 6` whenever an enemy was inside
+  300 px. In a fight, shame only ever went up.
+- That same block runs **after** `autoHat` (index 55) has already sent the
+  equip, so what it wrote never reached the wire at all.
+- `tempHealth >= maxHealth` returned early, so the free full-health −2 was never
+  taken.
+- The Anti detectors — `velocityTickThreat`, `reverseInsta`, `toolHammerInsta`,
+  `rangedBowInsta`, `spikeSyncThreat` — only steered `DefaultHat`. The heal
+  decision never saw any of them.
+- `_healsInFlight` cleared its ledger on *any* health movement, so the bull
+  helmet's own −5 wiped it every second and the next tick paid twice.
+- `heal()` deferred every apple inside the shame window, including the one
+  `AntiInsta` raised *because* the damage was lethal.
+- Three heal paths (`AntiInsta`, `AntiSync`, `Placer`) plus two independent
+  deferral queues (130 ms and 139 ms), no shared budget, no emergency reserve.
+
+### What it does now
+
+- `Player.bookShameEat` / `canDrainShame` / `shameStampPending` mirror the
+  server's `hitTime` exactly, booked at send time so the full-health case is
+  visible. Bull/poison tick detection now also matches the ×0.75 values, so the
+  cycle is not lost when soldier goes on.
+- `AntiInsta._assessThreats` collects every named Anti into one mask, each
+  carrying the damage its sequence implies, and the heal takes the worse of that
+  and novastorm's sum — so several live threats resolve together. Covered: Insta,
+  Velocity Tick, Reverse Insta, Musket/Bow, Primary + Musket/Bow (novastorm's
+  400 px term, previously absent), Spike Push, Knockback Tick, Spike Tick, One
+  Tick (novastorm computes it and never reads it — here it is live), Spam
+  Daggers + Bull, Spam Bow, Turret, Shame.
+- `AntiInsta._assessShame` owns the shame budget and decides when Bull is safe;
+  `ShameReset` keeps the timing and the latch.
+- `ModuleHandler.requestDefenseHat` / `resolveDefenseHat` arbitrate Soldier vs
+  Bull by priority, resolved inside `autoHat` so the decision reaches the wire.
+  Authority is narrow: it displaces soldier freely, bull only for a threat-level
+  soldier call, and never touches tank, turret or spike gear.
+- Four heal modes — emergency (bounded at a full bar, spends the reserve),
+  proactive (Misery's pre-heal, but only while it is free), full-health shame
+  drain, and the routine top-up — over one packet ledger with a 12-packet
+  emergency reserve, a food cap and a per-tick cap.
+
+**Shame never intentionally exceeds 7.** `heal()` refuses the one eat that would
+cost a point once `shameCount` is at 7, so the rule holds from every call site
+rather than depending on each one remembering. Misery's `lethalSpikeHealOverride`
+— which heals through 7 when the predicted damage is lethal — is deliberately
+not taken.
+
+---
+
 ## Layout
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        Ryn Type 2 v5.4, with the upgraded Auto Heal
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -126,6 +216,9 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/source-slice.js     lifts classes, methods and constants out of a client
+tools/autoheal-harness.js runs Ryn Type 2's Auto Heal code in a stubbed world
+tools/test-autoheal.js    the Auto Heal test suite
 ```
 
 ## Build
@@ -146,6 +239,22 @@ node tools/verify-drivers.js ReUp_Mix.user.js
 node tools/check-hooks.js ReUp_Mix.user.js     # needs: npm i --no-save terser
 node --check ReUp_Mix.user.js
 ```
+
+For Ryn Type 2 and its Auto Heal:
+
+```sh
+node --check Ryn_Type_2.user.js
+node tools/verify-drivers.js Ryn_Type_2.user.js
+node tools/test-autoheal.js
+```
+
+`test-autoheal.js` does not restate the Auto Heal logic. `source-slice.js` lifts
+the real `AntiInsta` class, the `ModuleHandler` heal and hat methods and the
+`Player` shame methods straight out of `Ryn_Type_2.user.js` by signature, and
+the harness runs them against a stubbed EnemyManager, ProjectileManager and
+socket with a clock the tests drive. Edit the client and the suite is testing
+the edit; delete a method it slices and it fails loudly rather than silently
+passing against a stale copy.
 
 Current state of the build:
 
