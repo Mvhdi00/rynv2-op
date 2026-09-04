@@ -177,3 +177,67 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2 — Novastorm Auto Heal
+
+`Ryn_Type_2.user.js` is a second, separate build in this repo: RYN Type 2
+(v5.4) with its Auto Heal removed and **novastorm 1.4's Auto Heal ported into
+it whole**. Novastorm is the source of truth for the implementation; RYN Type 2
+is only the destination architecture.
+
+## What was removed
+
+| Gone | Was |
+|---|---|
+| `AntiInsta.postTick` | RYN's heal rule — `EnemyManager.potentialDamage + potentialSpikeDamage` against `tempHealth`, plus `_healsInFlight`, `isSaveHealTime`, `isSaveHealTick` |
+| `AntiInsta.antiSmartTick`'s heal branch | RYN turned novastorm's smart-tick anti into a "spam N apples" trigger; over there it is an instakill cue and an autobreak block, nothing more |
+| `class ShameReset` | RYN's separate bull-tick shame module, racing the hat pipeline |
+
+## What was ported
+
+`NovaAutoHeal` (registered in the `antiInsta` slot, so `blockBreak` consumers
+keep working) carries the whole system:
+
+- **Damage ledger** — `damages` filled from the health packet, split into
+  `damagesByHits` / `damagesByShoots` / `spikeDamages` by `distributionDamages`,
+  with `spikeDmgCount` / `spikeDmg` and `deathDamages`.
+- **Prediction** — the entire *ANTIS AND HEAL* block: poison tick, spike contact
+  while trapped, knockback collision (`lineInRect` on `x2,y2 → xVel,yVel`),
+  per-enemy hit and turret reads, velocity-tick anti, both knockback antis, the
+  anti-normal-instakill read, and the 36-angle anti-spike-tick sweep.
+- **`totalDmgPot`** — its 140 cap, the soldier ×0.75 and scuba +5 corrections,
+  and the `soldierAnti` emergency latch at 100.
+- **Shame** — `shameCount < 7` on the heal, and `shouldResetShame` → bull hat.
+- **`getPlayerInfo`** — whole, including `weapons[0] || 5` / `weapons[1] || 15`
+  and the `?? 2` variant default (which needed a per-weapon-id variant table,
+  since RYN keeps one variant per slot).
+- **`hatFc`** — the hat and accessory cascade, in order.
+- **`heal()`** — food spent against novastorm's `packets + 5 > 119` budget.
+- **`needAutoGather()`**'s `(!soldierAnti || canStillGather)` term.
+
+## Integration points touched in RYN
+
+`Player.updateHealth` (fills the ledger), `PlayerManager.attackPlayer` (`hits`),
+`ProjectileManager.postTick` (`removeShoots`), a `ModuleHandler.forceAcc`
+channel so `hatFc` can set the accessory without DefaultAcc overwriting it, and
+ModuleHandler's own Safe Soldier block standing down on ticks `hatFc` spoke.
+
+## Two deliberate deviations, both documented in the source
+
+- **Bounded ledgers.** Novastorm never clears `damages` or `damagesByShoots`.
+  The *behaviour* that leak produces is kept (the poison read stays pinned, the
+  knockback gate stays latched); the unbounded growth is not — the oldest
+  entries fall off a 64-deep ring, far past anything still matchable.
+- **`shameActive`.** RYN models moomoo's 30-second server-side shame lockout and
+  novastorm does not. Healing is skipped while it is up, rather than spending
+  food and packets into a server discarding both.
+
+## `Novastorm Gear`
+
+Combat → Gear. **On** (default) gives `hatFc` full authority over the owner's
+hat and accessory, as novastorm has it. **Off** keeps only the branches that are
+unambiguously the Auto Heal's — soldier for the anti, bull for the shame reset —
+and leaves RYN's `DefaultHat` / `DefaultAcc` to pick everything else. Bots are
+always on the second path, so their own gear rules (`_botBeAngel`) still apply.
