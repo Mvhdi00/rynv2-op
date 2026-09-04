@@ -18377,234 +18377,70 @@ window.grbtp = 35;
       this.active = true;
     }
   }
-  // ==========================================================================
-  // Auto Mills, from novastorm 1.4. Its whole automill is one block in the
-  // tick:
-  //
-  //     if (autoMills && lastMoveAngle != null && !nearestTrap) {
-  //         let angle = lastMoveAngle + UTILS.toRad(180);
-  //         if (canPlace(myPlayer.items[3], angle)) {
-  //             addPredictObject(myPlayer.items[3], angle, false);
-  //             addPredictObject(myPlayer.items[3], angle - toRad(scale + scale / 2), false);
-  //             addPredictObject(myPlayer.items[3], angle + toRad(scale + scale / 2), false);
-  //         }
-  //     }
-  //
-  // Three windmills dropped behind you as you move, on a keybind, at any age.
-  // `lastMoveAngle + 180deg` is ModuleHandler.reverse_move_dir here,
-  // `myPlayer.items[3]` is item type 5, `canPlace` is myPlayer.canPlaceObject,
-  // and the three addPredictObject calls become one requestPlaceMany so the fan
-  // goes out through the placement engine.
-  //
-  // What is NOT kept is novastorm's `toRad(scale + scale / 2)` spread. The game
-  // decides how close two mills may stand, and it says so exactly:
-  //
-  //     buildItem:          w = this.scale + f.scale + (f.placeOffset || 0)
-  //     checkItemLocation:  T = obj.getScale(0.6, obj.isItem)
-  //                         if (distance(x, y, obj.x, obj.y) < f.scale + T) reject
-  //     getScale(t, i):     scale * (isItem ? 1 : 0.6 * t) * (i ? 1 : colDiv)
-  //
-  // For a mill next to a mill both terms are the item's own scale, so centres
-  // need 2*scale between them, and every build lands on the ring
-  // `playerScale + scale + placeOffset`. The tightest legal fan is therefore
-  // 2*asin(scale / ringR) apart -- 63.9deg for a windmill, 65.0deg for a power
-  // mill. novastorm's constant is degrees fed to a radians helper: 67.5deg and
-  // 70.5deg, wider than the mills need and a different error per tier, which is
-  // why the gaps never came out even. millOffset solves the real thing.
-  // ==========================================================================
+  // Auto Mills, as it stands in Glotus Client 5.5.5 -- same gates, same names,
+  // same numbers. It is a sandbox XP mill rather than a combat one: canAutomill
+  // asks for `myPlayer.isSandbox`, `age < 20` and an autoBuy that has not
+  // finished its buy list yet, so it runs in the opening minutes of a sandbox
+  // game and nowhere else. The spread is Glotus's own solve,
+  // `asin((2*scale + 9e-13) / (2*distance)) * 2`, and the trio is all-or-
+  // nothing: the centre and both sides have to be placeable or none go down.
   class Automill {
     moduleName="autoMill";
-    // Three mills behind you, and three is the whole of it: the module tops the
-    // arc back up to FAN_SIZE and never goes past it.
-    static FAN_SIZE=3;
-    // Tangency solved to the last bit of a double is read as a collision by the
-    // game and by the engine's ledger alike -- at map coordinates one ulp is
-    // about 1.8e-12 -- so the solve asks for a whole unit of daylight instead.
-    static PLACE_CLEARANCE=1;
-    // How long a fan may sit unconfirmed before the module stops waiting on it.
-    // Nine ticks is a second: longer than any round trip, short enough that a
-    // build the server threw away does not wedge the module.
-    static FAN_TIMEOUT_TICKS=9;
     toggle=false;
-    fan=null;
+    active=true;
     client;
+    tickCount=0;
     constructor(client2) {
       this.client = client2;
     }
     get isActive() {
-      return this.toggle;
+      return this.toggle && this.active;
     }
     reset() {
-      this.toggle = false;
-      this.fan = null;
+      this.active = true;
     }
-    // novastorm's `!nearestTrap` -- milling while pinned walls you into your own
-    // trap -- plus what RYN's engine and the game's own packet order require.
-    //
-    // Placing is an attack: ["F", 1, angle] with the mill held, then
-    // ["F", 0, angle]. A weapon swing in the same tick reads as one of that
-    // pair, so the swing goes out at the mill's angle or the pair lands as a
-    // swing once the weapon is back in hand -- attacking while placing mills.
-    // The fan therefore never shares a tick with an attack, whether the attack
-    // is the mouse (attacking), the auto-attack toggle (which sets attacking
-    // too), one already sent this tick (attacked), or one a combat module has
-    // queued for the end of this tick (shouldAttack).
     get canAutomill() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler, isOwner: isOwner} = this.client;
-      if (!Settings_default._automill) return false;
-      if (ModuleHandler.placedOnce || ModuleHandler.moduleActive) return false;
-      if (ModuleHandler.attacked || ModuleHandler.shouldAttack) return false;
-      if (isOwner && ModuleHandler.attacking) return false;
-      if (myPlayer.isTrapped || EnemyManager2.nearestTrap !== null) return false;
-      return true;
+      const isOwner = this.client.isOwner;
+      const {attacking: attacking, placedOnce: placedOnce, staticModules: staticModules} = this.client._ModuleHandler;
+      return Settings_default._automill && this.client.myPlayer.isSandbox && !placedOnce && (!isOwner || !attacking) && this.active && !staticModules.autoBuy.boughtEverything() && this.client.myPlayer.age < 20;
     }
     canPlaceWindmill(angle) {
       return this.client.myPlayer.canPlaceObject(5, angle);
     }
-    // Two builds `offset` apart on the ring stand 2*ringR*sin(offset/2) from
-    // each other, so the offset that leaves exactly two footprints plus a unit
-    // of daylight between their centres is
-    //     offset = 2*asin((2*scale + clearance) / (2*ringR)).
-    millOffset(item, ringR) {
-      const sin = (2 * item.scale + Automill.PLACE_CLEARANCE) / (2 * ringR);
-      if (!(sin < 1)) return null;
-      return 2 * Math.asin(sin);
-    }
-    // How many mills this fan may ask for. Three, less what is already standing
-    // behind me, and never more than the resources and the group limit can
-    // actually carry.
-    //
-    // The resource half matters for more than tidiness: the executor tests
-    // canPlace once for the whole run, and canPlace answers for one mill, so a
-    // fan of three on 60 wood used to send three builds and have the server
-    // keep the first and drop two. A dropped build leaves the mill still in
-    // hand with an attack pair already on the wire, which is the other half of
-    // swinging while milling.
-    millBudget(angle, ringR, item) {
-      const myPlayer = this.client.myPlayer;
-      let budget = Automill.FAN_SIZE - this.millsBehind(angle, ringR, item);
-      if (budget <= 0) return 0;
-      const {count: count, limit: limit} = myPlayer.getItemCount(item.itemGroup);
-      budget = Math.min(budget, limit - count);
-      if (budget <= 0) return 0;
-      if (myPlayer.isSandbox) return budget;
-      const res = myPlayer.resources;
-      for (const key of [ "food", "wood", "stone", "gold" ]) {
-        const cost = item.cost[key];
-        if (!cost) continue;
-        budget = Math.min(budget, Math.floor(res[key] / cost));
-        if (budget <= 0) return 0;
-      }
-      return budget;
-    }
-    // My own mills already standing in the arc this fan would fill: within a
-    // mill's reach of the placement ring, and on the side of me the fan is
-    // aimed at. The farm I built somewhere else and the mills I have walked
-    // away from are not in it -- this counts what is behind me now, which is
-    // what keeps the trail at three instead of laying down a fresh three every
-    // time the ring clears the last set.
-    millsBehind(angle, ringR, item) {
-      const {myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
-      const pos = myPlayer.pos.current;
-      const reach = ringR + item.scale;
-      let count = 0;
-      for (const objID of ObjectManager2.grid2D.queryFull(pos.x, pos.y, 2)) {
-        const obj = ObjectManager2.objects.get(objID);
-        if (!obj || obj.ownerID !== myPlayer.id) continue;
-        const standing = Items[obj.type];
-        if (!standing || standing.itemType !== 5) continue;
-        const dx = obj.pos.current.x - pos.x;
-        const dy = obj.pos.current.y - pos.y;
-        if (Math.hypot(dx, dy) > reach) continue;
-        if (getAngleDist(Math.atan2(dy, dx), angle) > PI / 2) continue;
-        count++;
-      }
-      return count;
-    }
-    // A fan is not visible in the world until the server echoes its builds
-    // back, so for a tick or two after one goes out the ground it was aimed at
-    // still reads as empty and the mills are not in millsBehind yet. That is
-    // what put a second and a third fan on top of the first: same three angles,
-    // a few units along as the ring moved with me, three mills asked for and
-    // six or nine standing at angles nobody chose. A fan is held open until the
-    // builds land or the wait is a lost cause.
-    //
-    // itemCount is the server's own tally -- it moves on the "S" packet sent
-    // for every build and every loss -- so it is the one number that knows
-    // whether the fan actually went up.
-    fanPending() {
-      const fan = this.fan;
-      if (fan === null) return false;
-      const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      if (myPlayer.getItemCount(fan.group).count >= fan.expected) {
-        this.fan = null;
-        return false;
-      }
-      if (ModuleHandler.tickCount - fan.tick >= Automill.FAN_TIMEOUT_TICKS) {
-        this.fan = null;
-        return false;
-      }
-      return true;
+    placeWindmill(angle) {
+      const {_ModuleHandler: ModuleHandler} = this.client;
+      const type = 5;
+      ModuleHandler.place(type, angle);
+      ModuleHandler.placedOnce = true;
+      ModuleHandler.placeAngles[0] = type;
+      ModuleHandler.placeAngles[1].push(angle);
     }
     postTick() {
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
-      this.toggle = false;
+      this.toggle = true;
       if (!this.canAutomill) {
+        this.toggle = false;
         return;
       }
-      // novastorm re-tests canPlace every tick rather than latching off on the
-      // first refusal, which is what a mill you drop and lose continuously in a
-      // fight needs: hitting the windmill cap stops the module for as long as
-      // it is capped, and no longer.
       if (!myPlayer.canPlace(5)) {
+        this.toggle = false;
+        this.active = false;
         return;
       }
       const angle = ModuleHandler.reverse_move_dir;
       if (angle === null) {
         return;
       }
-      const id = myPlayer.getItemByType(5);
-      const item = Items[id];
-      if (!item) {
-        return;
+      const item = Items[myPlayer.getItemByType(5)];
+      const distance = myPlayer.getItemPlaceScale(item.id);
+      const offset = Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2;
+      const leftAngle = angle - offset;
+      const rightAngle = angle + offset;
+      if (this.canPlaceWindmill(angle) && this.canPlaceWindmill(leftAngle) && this.canPlaceWindmill(rightAngle)) {
+        this.placeWindmill(angle);
+        this.placeWindmill(leftAngle);
+        this.placeWindmill(rightAngle);
       }
-      if (this.fanPending()) {
-        return;
-      }
-      const ringR = myPlayer.getItemPlaceScale(id);
-      const offset = this.millOffset(item, ringR);
-      if (offset === null) {
-        return;
-      }
-      const budget = this.millBudget(angle, ringR, item);
-      if (budget <= 0) {
-        return;
-      }
-      // novastorm gates the trio on the centre mill, then tests each of the
-      // three on its own and places the ones that fit: one rock behind you
-      // costs a mill, not the whole fan.
-      if (!this.canPlaceWindmill(angle)) {
-        return;
-      }
-      const angles = [ angle, angle - offset, angle + offset ].filter(a => this.canPlaceWindmill(a)).slice(0, budget);
-      if (angles.length === 0) {
-        return;
-      }
-      // One request for the fan, not one per mill. Three separate requests each
-      // pay the full select and each is validated against the ledger claim the
-      // one before it just filed; batched, the run shares its select and the
-      // three are checked against each other in the same pass -- the only place
-      // the fan's own tangency is settled as a set.
-      const sent = ModuleHandler.requestPlaceMany(5, angles, "autoMill");
-      if (sent <= 0) {
-        return;
-      }
-      this.toggle = true;
-      this.fan = {
-        tick: ModuleHandler.tickCount,
-        group: item.itemGroup,
-        expected: myPlayer.getItemCount(item.itemGroup).count + sent
-      };
     }
   }
   const Automill_default = Automill;
@@ -22297,9 +22133,8 @@ window.grbtp = 35;
     _velocityTickKey: "",
     _trapInstakill: false,
     _trapInstakillKey: "",
-    // Off by default, like novastorm's `autoMills = false`: it drops windmills
-    // behind you from the first spawn once it is on.
-    _automill: false,
+    // On, as in Glotus.
+    _automill: true,
     _autoplacer: true,
     _prePlace: true,
     _replace: true,
