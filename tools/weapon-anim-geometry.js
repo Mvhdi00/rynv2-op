@@ -90,6 +90,10 @@ for (let id = 0; id < 16; id++) {
   const g = GEO[id];
   const tipD = (g.long ? g.cy + g.half : g.half) - (g.long ? p.gripY : 0);
   console.log(`\n== ${String(id).padStart(2)} ${g.name}  [${p.hands === 2 ? "two" : "one"}-hand, ${p.motion}]`);
+  if (p.plain) {
+    console.log("   left on the bundle's own draw: sprite at (" + g.cx + ", " + g.cy + "), vanilla hands, vanilla swing");
+    continue;
+  }
   console.log(`   shaft ${f(deg(Math.atan2(p.sha, p.cha)), 5)}deg in sprite frame, pivot (${p.gripX}, ${p.gripY}),` +
               ` grip at ${p.h1d}${p.hands === 2 ? " and " + p.h2d : ""} along it`);
   const angles = [];

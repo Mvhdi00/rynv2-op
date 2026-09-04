@@ -169,7 +169,15 @@ weapon's physical grip. Each profile names, in the sprite's own frame:
   recomputes the placement independently and asserts it to 1e-9.
 
 `hands: WA_ONE_HAND` puts the free hand on a resting pose that counter-swings
-against the grip; `WA_TWO_HAND` puts both hands on the shaft.
+against the grip; `WA_TWO_HAND` puts both hands on the shaft. Daggers are
+two-handed with the hands straddling the axis (`hand1: [2, 17]`,
+`hand2: [-6, -17]`), because the sprite is two blades — a single hand on the
+centreline sits in the gap and holds neither.
+
+A profile may also be marked `plain`, which sends the sprite, both hands and
+the body swing down the untouched vanilla path. The wooden shield uses it: it
+has no attack animation to redistribute, and a braced-across-the-body pose
+reads as a tilt rather than a guard.
 
 Two tracks animate the grip itself rather than the weapon:
 
@@ -204,10 +212,10 @@ Some of the resulting signatures:
 | katana | two | 115° + 18° | 20 | no wind-up, out-quint cut, longest follow-through |
 | short sword | one | 81° + 25° | 14 | compact; back on guard first |
 | stick | one | 37° + 13° | 6 | smallest arc, fastest recovery |
-| daggers | one | 25° + 11° | 20 | blade slides through the fist, alternates sides |
+| daggers | **two** | 25° + 11° | 20 | one hand per blade; the leading side alternates |
 | mc grabby | two | 22° + 9° | 36 | the only weapon whose fastest phase is the retraction |
 | hunting bow | two | 18° + 5° | 7 | string hand draws 18 units; the arrow rides it |
-| musket | two | 30° + 5° | 22 | stock drives back through both hands, muzzle climbs |
+| musket | two | 17° + 5° | 10 | short kick, muzzle climbs, stays in front of the body |
 
 ## It reads the combat clock, it never writes to it
 

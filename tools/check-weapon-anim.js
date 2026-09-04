@@ -428,11 +428,34 @@ console.log("13. every weapon is actually held: hands sit on its grip points");
    * the same place the sprite's corresponding point does. Recomputing that
    * here independently is the check. */
   const geom = [];
-  let worstOn = 0, minR = 1e9, maxR = 0, minSep = 1e9, worstFree = 0;
+  let worstOn = 0, minR = 1e9, maxR = 0, minSep = 1e9, worstFree = 0, vanillaCount = 0;
   for (const weapon of WEAPONS) {
     const p = WA._table[weapon.id];
     const player = newPlayer(2);
     player.weaponIndex = weapon.id;
+    if (p.plain) {
+      /* Left on the bundle's own draw: assert it really is vanilla. */
+      const arm = Math.PI / 4 * (weapon.armS || 1);
+      const hndS = weapon.hndS || 1, hndD = weapon.hndD || 1;
+      hands.length = 0;
+      WA.frame(0);
+      WA._drawHands(circle, player, arm, hndS, hndD);
+      const want = [[35 * Math.cos(arm), 35 * Math.sin(arm)],
+                    [35 * hndD * Math.cos(-arm * hndS), 35 * hndD * Math.sin(-arm * hndS)]];
+      for (let k = 0; k < 2; k++) {
+        if (Math.hypot(hands[k][0] - want[k][0], hands[k][1] - want[k][1]) > 1e-9) fail(weapon.name + ": plain profile moved a hand");
+      }
+      drawn.length = 0;
+      const ctx = makeCtx();
+      WA._drawWeapon(drawTool, weapon, "", 35, 0, ctx, player);
+      const d = drawn[drawn.length - 1];
+      if (d.x !== 35 || d.y !== 0 || ctx.tx !== 0 || ctx.ty !== 0 || ctx.rot !== 0) fail(weapon.name + ": plain profile transformed the sprite");
+      player.dirPlus = -1.234;
+      if (WA._bodyAngle(player) !== -1.234) fail(weapon.name + ": plain profile altered the body swing");
+      player.dirPlus = 0;
+      vanillaCount++;
+      continue;
+    }
     const rows = [];
     for (const didHit of [true, false]) {
       player.animTime = player.animSpeed = weapon.speed || 0;
@@ -474,13 +497,14 @@ console.log("13. every weapon is actually held: hands sit on its grip points");
   console.log("   hand distance from centre:   " + minR.toFixed(1) + " .. " + maxR.toFixed(1) + " (body radius 35)");
   console.log("   two-handed grip separation:  " + minSep.toFixed(1) + " units minimum");
   console.log("   free hand from its rest pose: " + worstFree.toFixed(1) + " units maximum");
+  console.log("   left on the vanilla draw:     " + vanillaCount + " (verified untouched)");
   if (worstOn > 1e-9) fail("a hand is not on its grip point (" + worstOn.toFixed(4) + " units off)");
   if (minR < 15) fail("a hand ends up inside the body (r=" + minR.toFixed(1) + ")");
   if (maxR > 62) fail("a hand detaches from the character (r=" + maxR.toFixed(1) + ")");
   if (minSep < 9) fail("a two-handed grip collapses to one point (" + minSep.toFixed(1) + " units)");
   for (let id = 0; id <= 15; id++) {
     const p = WA._table[id];
-    if (p.hands !== 2) continue;
+    if (p.hands !== 2 || p.plain) continue;
     const along = Math.abs(p.h2d - p.h1d), across = Math.abs(p.h2p - p.h1p);
     const rest = Math.hypot(along, across);
     if (rest < 14) fail(p.name + ": resting two-handed grip is only " + rest.toFixed(1) + " units wide");
