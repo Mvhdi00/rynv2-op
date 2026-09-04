@@ -175,30 +175,30 @@ recolourTemplate("Bots", page => {
   };
   /* section bodies */
   swap('style="padding:14px 16px;gap:16px;display:flex;flex-direction:column;"',
-       'style="padding:11px 12px;gap:13px;display:flex;flex-direction:column;"');
+       'style="padding:13px 14px;gap:15px;display:flex;flex-direction:column;"');
   /* the two call-to-action buttons: let .option-button style them */
   swap('style="padding:8px 22px;background:rgba(139,92,246,0.1);border:1.5px solid rgba(139,92,246,0.4);border-radius:7px;color:#FFFFFF;font-size:0.95em;font-weight:700;cursor:pointer;"',
-       'style="padding:6px 16px;"');
+       'style="padding:8px 20px;"');
   swap('style="display:flex;align-items:center;gap:8px;padding:10px 28px;background:rgba(139,92,246,0.1);border:1.5px solid rgba(139,92,246,0.4);border-radius:7px;color:#FFFFFF;font-size:1.1em;font-weight:800;letter-spacing:0.04em;transition:all 200ms;cursor:pointer;"',
-       'style="display:flex;align-items:center;gap:6px;padding:7px 18px;"');
+       'style="display:flex;align-items:center;gap:7px;padding:9px 22px;"');
   /* auto-farm heading + cards */
   swap('style="font-size:0.75em;letter-spacing:0.18em;color:rgba(160,132,250,0.75);text-transform:uppercase;margin-bottom:14px;"',
        'style="padding-left:11px;margin-bottom:10px;"');
   swap('background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.18);border-radius:10px;padding:14px 16px;',
-       'background:rgba(255,255,255,0.022);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:11px 12px;');
+       'background:rgba(255,255,255,0.022);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:13px 14px;');
   swap('style="font-size:0.7em;letter-spacing:0.14em;color:rgba(160,132,250,0.6);text-transform:uppercase;"',
-       'style="font-size:11px;font-weight:600;color:#F2F2F6;"');
+       'style="font-size:12.5px;font-weight:600;color:#F2F2F6;"');
   swap('style="font-size:0.82em;color:rgba(238,238,245,0.6);margin:0;line-height:1.5;"',
-       'style="font-size:11px;color:rgba(238,238,245,0.52);margin:0;line-height:1.55;"');
+       'style="font-size:12.5px;color:rgba(238,238,245,0.52);margin:0;line-height:1.55;"');
   swap('style="font-size:0.83em;color:rgba(238,238,245,0.5);line-height:1.5;"',
-       'style="font-size:11px;color:rgba(238,238,245,0.52);line-height:1.55;"');
+       'style="font-size:12.5px;color:rgba(238,238,245,0.52);line-height:1.55;"');
   /* mode + resource buttons: the class, not the attribute, carries the state */
   page = page.replace(/style="flex:1;padding:9px 0;border-radius:8px;border:1\.5px solid [^;]+;background:[^;]+;color:[^;]+;cursor:pointer;font-family:inherit;font-weight:700;font-size:0\.9em;letter-spacing:0\.04em;transition:all 0\.15s;"/g,
-    'class="mode-btn" style="flex:1;padding:7px 0;font-size:11.5px;font-weight:500;cursor:pointer;"');
+    'class="mode-btn" style="flex:1;padding:9px 0;font-size:12.5px;font-weight:500;cursor:pointer;"');
   page = page.replace(/class="farm-type-btn" style="flex:1;padding:10px 4px;border-radius:8px;border:1\.5px solid [^;]+;background:[^;]+;color:[^;]+;cursor:pointer;font-family:inherit;font-weight:700;font-size:0\.85em;letter-spacing:0\.03em;transition:all 0\.15s;"/g,
-    'class="farm-type-btn" style="flex:1;padding:8px 4px;font-size:11.5px;font-weight:500;cursor:pointer;"');
+    'class="farm-type-btn" style="flex:1;padding:10px 4px;font-size:12.5px;font-weight:500;cursor:pointer;"');
   swap('style="width:110px;height:40px;font-size:1em;padding:0 12px;border-radius:8px;flex-shrink:0;"',
-       'style="width:92px;flex-shrink:0;"');
+       'style="width:104px;flex-shrink:0;"');
   /* the mode buttons carry id + class now; _applyMode adds .mode-btn too */
   return page;
 });
@@ -206,7 +206,7 @@ recolourTemplate("Bots", page => {
 recolourTemplate("Music", page => {
   const overrides = `
 /* --- redesign overrides: align the music page with the client shell --- */
-.rm-root{--rm-accent2:#E5384A;font-size:13px;}
+.rm-root{--rm-accent2:#E5384A;font-size:14.5px;}
 .rm-player{border-radius:9px;box-shadow:none;background:linear-gradient(160deg,#141019 0%,#0C0C11 55%,#08080B 100%);}
 .rm-player::before{display:none;}
 .rm-art{border-radius:8px;box-shadow:none;}
@@ -218,11 +218,11 @@ recolourTemplate("Music", page => {
 .rm-save-now-btn.on{text-shadow:none;}
 .rm-prog-rail{height:4px;}
 .rm-prog-wrap:hover .rm-prog-rail{height:4px;}
-.rm-title{font-size:14px;font-weight:600;}
+.rm-title{font-size:16px;font-weight:600;}
 .rm-sec-head{padding:9px 13px;}
-.rm-sec-title{font-size:12px;font-weight:600;letter-spacing:.01em;text-transform:none;color:var(--rm-text);}
+.rm-sec-title{font-size:13.5px;font-weight:600;letter-spacing:.01em;text-transform:none;color:var(--rm-text);}
 .rm-sec-dot{width:5px;height:5px;box-shadow:none;}
-.rm-filter-btn{border-radius:6px;font-size:11px;font-weight:500;}
+.rm-filter-btn{border-radius:6px;font-size:12px;font-weight:500;}
 .rm-filter-btn.active{background:var(--rm-accent);color:#FFFFFF;}
 .rm-album-badge{text-transform:none;letter-spacing:.01em;border-radius:5px;font-size:10px;}
 .rm-song-row{border-radius:6px;}

@@ -46,8 +46,8 @@ Everything else is a hairline (`rgba(255,255,255,.07)`) or one of four text
 tints. Accents are used at 12–42 % alpha except where they mark state, so the
 panel reads as black with thin coloured signal rather than a coloured panel.
 
-Type is a single system stack (no web fonts) at four sizes: page title 14,
-section title 12 semibold, option 12 regular, meta 10.5–11. Sentence case
+Type is a single system stack (no web fonts) at four sizes: page title 16.5,
+section title 13.5 semibold, option 13.5 regular, meta 11.5–12.5. Sentence case
 throughout; no shouting caps, no gradient text.
 
 Shape: 14 px window, 9 px sections, 6 px controls, 4 px chips. One soft shadow
@@ -56,9 +56,11 @@ on the window, none anywhere else.
 ## What changed structurally
 
 The menu was a 1178 × 648 dashboard with a 172 px icon rail down the left side
-and two `backdrop-filter: blur(25px)` surfaces. It is now a **740 × 520 window**
+and two `backdrop-filter: blur(25px)` surfaces. It is now a **900 × 620 window**
 with a title bar, a horizontal tab strip and a single scrolling body — about
-40 % of the screen area it used to cover, and no blur.
+60 % of the screen area it used to cover, and no blur. It renders at 810 × 558
+on a 1080p screen (the client scales the panel by `min(.9, …)`), so it still
+fits a 1366 × 768 display with room to spare.
 
 Rebuilt from scratch: panels, tabs, buttons, toggles, sliders, colour pickers,
 key tiles, text inputs, dropdowns, section headers, status dots, the search
