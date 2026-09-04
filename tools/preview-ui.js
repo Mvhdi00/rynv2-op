@@ -31,6 +31,8 @@ if (formationLine) {
 
 const doc = `<!DOCTYPE html>
 <meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
 <style>${T.styles}</style>
 <style>${formation}</style>
 <div id="menu-container" class="transparent">
@@ -82,6 +84,15 @@ const doc = `<!DOCTYPE html>
   });
   var d = document.getElementById("script-description");
   if (d) d.textContent = "v5.4";
+
+  /* mirror UI.handleResize() so the preview is the size the user really sees */
+  var fit = function () {
+    var s = Math.min(1, Math.min(innerWidth / 1280, innerHeight / 720));
+    document.getElementById("menu-container").style.transform =
+      "translate(-50%,-50%) scale(" + s + ")";
+  };
+  addEventListener("resize", fit);
+  fit();
 
   /* formation picker, as _attachFormationSelector builds it */
   var grid = document.getElementById("_formationGrid");

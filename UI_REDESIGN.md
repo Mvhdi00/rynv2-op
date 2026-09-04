@@ -46,9 +46,11 @@ Everything else is a hairline (`rgba(255,255,255,.07)`) or one of four text
 tints. Accents are used at 12–42 % alpha except where they mark state, so the
 panel reads as black with thin coloured signal rather than a coloured panel.
 
-Type is a single system stack (no web fonts) at four sizes: page title 16.5,
-section title 13.5 semibold, option 13.5 regular, meta 11.5–12.5. Sentence case
-throughout; no shouting caps, no gradient text.
+Type is Inter (400/500/600) with a full system fallback, at four sizes: page
+title 17, section title 14 semibold, option 14 regular, meta 12–13. Sentence
+case throughout; no shouting caps, no gradient text. The font is fetched with a
+`<link>` — parallel and non-blocking — not a render-blocking `@import`, and the
+menu is fully readable on the fallback if the request never lands.
 
 Shape: 14 px window, 9 px sections, 6 px controls, 4 px chips. One soft shadow
 on the window, none anywhere else.
@@ -56,11 +58,18 @@ on the window, none anywhere else.
 ## What changed structurally
 
 The menu was a 1178 × 648 dashboard with a 172 px icon rail down the left side
-and two `backdrop-filter: blur(25px)` surfaces. It is now a **900 × 620 window**
-with a title bar, a horizontal tab strip and a single scrolling body — about
-60 % of the screen area it used to cover, and no blur. It renders at 810 × 558
-on a 1080p screen (the client scales the panel by `min(.9, …)`), so it still
-fits a 1366 × 768 display with room to spare.
+and two `backdrop-filter: blur(25px)` surfaces. It is now a **940 × 650 window**
+with a title bar, a horizontal tab strip and a single scrolling body, and no
+blur.
+
+`handleResize()` capped the panel scale at `0.9`, so the menu was *always*
+downscaled: every glyph rasterised at a fractional size — visibly soft — and
+every authored px arrived ~11 % smaller than designed. The cap is now `1`, so
+the panel renders 1:1 at 940 × 650 on anything from 1280 × 720 up and only
+shrinks when the viewport genuinely cannot fit it. That also lines the
+formation popup up with its trigger: the popup is fixed to the unscaled
+viewport while its position came from a rect measured inside the scaled
+container, so the two only agreed at scale 1.
 
 Rebuilt from scratch: panels, tabs, buttons, toggles, sliders, colour pickers,
 key tiles, text inputs, dropdowns, section headers, status dots, the search
@@ -76,8 +85,9 @@ already owns.
 
 The rules the redesign holds to, asserted by `tools/verify-ui.js`:
 
-- **No web fonts.** Three Google Fonts imports (Inter, Poppins, Orbitron,
-  Exo 2) removed; a system stack renders immediately with no network.
+- **One web font, non-blocking.** Four families across three render-blocking
+  `@import`s (Inter, Poppins, Orbitron, Exo 2) became a single `<link>` for
+  Inter at three weights, behind a `preconnect`, with a full system fallback.
 - **No `backdrop-filter`.** Three blurred surfaces (menu window, tab rail,
   lobby card) replaced with opaque panels. This was the single largest
   per-frame compositing cost while the game rendered behind the menu.

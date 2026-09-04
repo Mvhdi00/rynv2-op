@@ -141,9 +141,18 @@ const SURVEY = () => {
   const styleText = between(built, "const styles_default = ", "\n") +
                     between(built, "rynCSS.textContent = `", "`;") +
                     between(built, "const Game_default = ", "\n");
-  check(!/@import\s/.test(styleText), "a stylesheet still pulls a web font with @import");
+  /* The UI font is fetched with a <link> (parallel, non-blocking) and there is
+   * exactly one family; a render-blocking @import is what we do not want back. */
+  check(!/@import\s/.test(styleText), "a stylesheet pulls a font with a render-blocking @import");
+  const families = [...built.matchAll(/fonts\.googleapis\.com\/css2\?family=([A-Za-z+]+)/g)].map(m => m[1]);
+  check(new Set(families).size <= 1, `more than one web font family requested: ${[...new Set(families)]}`);
   check(!/backdrop-filter\s*:/.test(styleText), "a stylesheet still uses backdrop-filter");
   check(!/animation:\s*shimmer/.test(styleText), "the always-on shimmer animation is still present");
+
+  /* the panel must render 1:1 rather than at a fractional scale, or every
+   * glyph is rasterised off-pixel and the authored sizes arrive shrunk */
+  check(/const scale = Math\.min\(1, Math\.min\(window\.innerWidth/.test(built),
+    "handleResize still downscales the panel below 1:1");
 
   const uiBefore = uiRegion(base), uiAfter = uiRegion(built);
   const intervals = s => (s.match(/setInterval\(/g) || []).length;

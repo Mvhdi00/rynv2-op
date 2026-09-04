@@ -754,6 +754,44 @@ once("dead farm colour table",
 `, "");
 
 /* =======================================================================
+ * 10. Render the panel 1:1
+ * ==================================================================== */
+
+/* handleResize() capped the scale at 0.9, so the menu was ALWAYS downscaled —
+ * every glyph rasterised at a fractional size (soft edges) and every authored
+ * px arrived ~11% smaller. Cap at 1 instead: shrink only when the viewport is
+ * genuinely too small for the panel. This also lines the formation popup up
+ * with its trigger, since that popup is fixed to the unscaled viewport while
+ * its position came from a rect measured inside the scaled container. */
+once("render the panel 1:1",
+  "      const scale = Math.min(.9, Math.min(window.innerWidth / 1280, window.innerHeight / 720));",
+  "      const scale = Math.min(1, Math.min(window.innerWidth / 1280, window.innerHeight / 720));");
+
+/* One UI font, three weights, loaded as a <link> (parallel, non-blocking)
+ * rather than a render-blocking @import, with a full system fallback so the
+ * menu is readable before it lands. */
+const FONT_LINKS =
+  '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+  '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">';
+
+once("menu font link", "\\n<!DOCTYPE html>\\n<style>", "\\n<!DOCTYPE html>\\n" + FONT_LINKS + "\\n<style>");
+
+once("game page font link",
+`      const style = document.createElement("style");
+      style.innerHTML = Game_default + Store_default;
+      document.head.appendChild(style);`,
+`      const style = document.createElement("style");
+      style.innerHTML = Game_default + Store_default;
+      document.head.appendChild(style);
+      if (!document.getElementById("ryn-font")) {
+        const fontLink = document.createElement("link");
+        fontLink.id = "ryn-font";
+        fontLink.rel = "stylesheet";
+        fontLink.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap";
+        document.head.appendChild(fontLink);
+      }`);
+
+/* =======================================================================
  * write
  * ==================================================================== */
 
