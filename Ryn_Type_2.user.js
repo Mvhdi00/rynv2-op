@@ -4221,320 +4221,500 @@ window.grbtp = 35;
   const WA_OUT_QUINT = 7;
   const WA_INOUT_QUAD = 8;
 
+  /* Grip mode. One-handed weapons put the free hand on a resting pose that
+   * counter-swings; two-handed weapons put both hands on the shaft. */
+  const WA_ONE_HAND = 1;
+  const WA_TWO_HAND = 2;
+
   /* Idle sway: one breath every WA_SWAY_PERIOD ms. The clock wraps on an exact
    * multiple of that period so the phase is continuous across the wrap. */
   const WA_SWAY_PERIOD = 2420;
   const WA_SWAY_WRAP = WA_SWAY_PERIOD * 8;
   const WA_SWAY_RATE = Math.PI * 2 / WA_SWAY_PERIOD;
   const WA_SLOTS = 256;
+  const WA_DEG = Math.PI / 180;
 
-  /* Keyframe order for every profile is idle -> wind-up -> strike -> follow
-   * -> idle. `t` values are fractions of the weapon's own animation window, so
-   * a 100ms dagger and a 1500ms musket use the same staging vocabulary at
-   * wildly different speeds. */
+  /* ---------------------------------------------------------------------- *
+   * Weapon profiles.
+   *
+   * `shaft` is the weapon's base orientation: the direction of its handle in
+   * the sprite's own frame, before anything here rotates it. The bundle draws
+   * every sprite axis-aligned at (scale + xOff, yOff), so for the boxes that
+   * are taller than they are wide -- sword, katana, polearm, bat, mc grabby --
+   * the long axis is +Y, and the bundle's own attack, which rotates the player
+   * -90 degrees to bring the business end to the front, settles that the
+   * business end is the +Y extreme. The square boxes carry the handle
+   * direction that puts their head where the sprite offset points.
+   *
+   * `grip` is the pivot: a point on that handle, in sprite frame. Everything
+   * rotates about it, and it is where the hands hold.
+   *
+   * `hand1` / `hand2` place the hand circles as [along the shaft from the
+   * pivot, perpendicular to it]. They are the physical grip points, so a
+   * two-handed weapon's shaft visibly passes through both circles.
+   *
+   * Tracks are four keyframes -- idle, wind-up, strike, follow-through -- and
+   * then back to idle:
+   *   rot    rotation about the pivot
+   *   reach  travel along the attack direction, or along the shaft if `thrust`
+   *   lat    travel across it
+   *   slide  the shaft sliding back through both hands (thrusts, recoil)
+   *   sep    the secondary hand alone pulling back (a bow draw)
+   * `hold` freezes the strike keyframe for a beat: weight on impact.
+   * ---------------------------------------------------------------------- */
+
   const WeaponAnimationProfiles = [ {
+    /* Tool, not a weapon: the smallest committed arc of the choppers, a brief
+     * stick on the resource, and a distinct inward lateral dip. */
     id: 0,
     name: "tool hammer",
-    motion: "chop",
-    body: .3,
-    grip: [ 24, 22 ],
-    tW: .07,
-    tH: .25,
-    tF: .42,
-    rot: [ -.16, .42, -.95, -1.18 ],
-    reach: [ 1, -5, 12, 7 ],
-    lat: [ 0, 2, -3, -5 ],
-    ohx: [ 0, 0, 0, 0 ],
-    ease: [ WA_OUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
-    hand: .75,
-    offw: .25,
-    bob: .9,
-    wide: 1.22
+    motion: "tap chop",
+    hands: WA_ONE_HAND,
+    body: .24,
+    grip: [ 26, 20 ],
+    shaft: 50,
+    hand1: [ 0, 0 ],
+    hand2: [ 0, 0 ],
+    free: [ -46, 33 ],
+    freeSwing: .35,
+    thrust: 0,
+    tW: .05,
+    tH: .2,
+    hold: .04,
+    tF: .32,
+    rot: [ -.2, .1, -.78, -.86 ],
+    reach: [ 2, -2, 8, 5 ],
+    lat: [ 5, 7, -6, -8 ],
+    slide: [ 0, 0, 0, 0 ],
+    sep: [ 0, 0, 0, 0 ],
+    ease: [ WA_OUT_QUAD, WA_IN_QUAD, WA_OUT_QUAD, WA_OUT_QUAD ],
+    bob: .8,
+    wide: 1.18
   }, {
+    /* Hacking: a real wind-up, the head thrown forward on the shaft, and a
+     * downward-inward chop that the tool hammer does not have. */
     id: 1,
     name: "hand axe",
-    motion: "chop",
-    body: .3,
-    grip: [ 25, 23 ],
-    tW: .08,
-    tH: .25,
+    motion: "diagonal hack",
+    hands: WA_ONE_HAND,
+    body: .36,
+    grip: [ 27, 21 ],
+    shaft: 50,
+    hand1: [ 0, 0 ],
+    hand2: [ 0, 0 ],
+    free: [ -50, 33 ],
+    freeSwing: .4,
+    thrust: 0,
+    tW: .13,
+    tH: .29,
+    hold: .03,
     tF: .46,
-    rot: [ -.2, .5, -1.02, -1.3 ],
-    reach: [ 2, -7, 14, 9 ],
-    lat: [ 0, 3, -4, -7 ],
-    ohx: [ 0, 0, 0, 0 ],
-    ease: [ WA_OUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
-    hand: .78,
-    offw: .3,
+    rot: [ -.26, .52, -1.14, -1.42 ],
+    reach: [ 2, -8, 14, 8 ],
+    lat: [ 5, 12, -6, -12 ],
+    slide: [ 0, -3, 10, 6 ],
+    sep: [ 0, 0, 0, 0 ],
+    ease: [ WA_INOUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
     bob: 1,
-    wide: 1.22
+    wide: 1.24
   }, {
+    /* Two-handed, and the widest horizontal arc in the game: the lateral travel
+     * is what separates it from the great hammer's vertical slam. */
     id: 2,
     name: "great axe",
-    motion: "heavy chop",
-    body: .34,
-    grip: [ 24, 24 ],
-    tW: .1,
-    tH: .25,
+    motion: "wide committed arc",
+    hands: WA_TWO_HAND,
+    body: .42,
+    grip: [ 26, 22 ],
+    shaft: 50,
+    hand1: [ 6, 0 ],
+    hand2: [ -13, 0 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: 0,
+    tW: .14,
+    tH: .27,
+    hold: .02,
     tF: .5,
-    rot: [ -.26, .62, -1.05, -1.45 ],
-    reach: [ 0, -11, 17, 10 ],
-    lat: [ 2, 6, -5, -10 ],
-    ohx: [ 0, 0, 0, 0 ],
+    rot: [ -.36, .6, -1.36, -1.86 ],
+    reach: [ 0, -12, 18, 12 ],
+    lat: [ 4, 13, -7, -15 ],
+    slide: [ 0, -2, 6, 4 ],
+    sep: [ 0, 0, 0, 0 ],
     ease: [ WA_INOUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
-    hand: .85,
-    offw: .7,
-    bob: 1.2,
+    bob: 1.3,
     wide: 1.3
   }, {
+    /* One-handed and the quickest of the blades to recover -- it is back on
+     * guard while the katana is still following through. */
     id: 3,
     name: "short sword",
-    motion: "slash",
-    body: .3,
-    grip: [ 25, 24 ],
-    tW: .07,
-    tH: .25,
-    tF: .45,
-    rot: [ -.3, .3, -.98, -1.26 ],
-    reach: [ 3, -5, 14, 8 ],
-    lat: [ -2, 5, -6, -10 ],
-    ohx: [ 0, 0, 0, 0 ],
-    ease: [ WA_OUT_QUAD, WA_IN_CUBIC, WA_OUT_BACK, WA_INOUT_CUBIC ],
-    hand: .8,
-    offw: .22,
-    bob: 1,
-    wide: 1.28
+    motion: "compact slash",
+    hands: WA_ONE_HAND,
+    body: .28,
+    grip: [ 27, 25 ],
+    shaft: 90,
+    hand1: [ 0, 0 ],
+    hand2: [ 0, 0 ],
+    free: [ -52, 34 ],
+    freeSwing: .45,
+    thrust: 0,
+    tW: .06,
+    tH: .21,
+    hold: 0,
+    tF: .35,
+    rot: [ -.62, -.3, -1.52, -1.72 ],
+    reach: [ 2, -4, 10, 6 ],
+    lat: [ 6, 12, -6, -13 ],
+    slide: [ 0, 0, 0, 0 ],
+    sep: [ 0, 0, 0, 0 ],
+    ease: [ WA_OUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
+    bob: .9,
+    wide: 1.26
   }, {
+    /* Two-handed. Almost no wind-up, then an out-quint cut that is over before
+     * it starts, then the longest follow-through and a slow deliberate return. */
     id: 4,
     name: "katana",
     motion: "draw cut",
-    body: .24,
-    grip: [ 25, 25 ],
-    tW: .06,
-    tH: .22,
-    tF: .4,
-    rot: [ -.46, -.18, -1.22, -1.44 ],
-    reach: [ 4, -8, 18, 11 ],
-    lat: [ -4, 8, -7, -12 ],
-    ohx: [ 0, 0, 0, 0 ],
+    hands: WA_TWO_HAND,
+    body: .2,
+    grip: [ 27, 22 ],
+    shaft: 90,
+    hand1: [ 11, 0 ],
+    hand2: [ -13, 0 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: 0,
+    tW: .03,
+    tH: .18,
+    hold: 0,
+    tF: .58,
+    rot: [ -.24, -.06, -1.78, -2.06 ],
+    reach: [ 0, -6, 14, 8 ],
+    lat: [ 0, 7, -7, -14 ],
+    slide: [ 0, -2, 6, 3 ],
+    sep: [ 0, 0, 0, 0 ],
     ease: [ WA_IN_QUAD, WA_OUT_QUINT, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
-    hand: .88,
-    offw: .72,
     bob: .8,
-    wide: 1.2
-  }, {
-    id: 5,
-    name: "polearm",
-    motion: "thrust",
-    body: .06,
-    grip: [ 22, 20 ],
-    tW: .1,
-    tH: .25,
-    tF: .4,
-    rot: [ -1, -.9, -1.28, -1.22 ],
-    reach: [ 4, -13, 38, 30 ],
-    lat: [ -6, -4, -8, -7 ],
-    ohx: [ 0, 4, -6, -3 ],
-    ease: [ WA_INOUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
-    hand: .92,
-    offw: .85,
-    bob: 1.3,
-    wide: 1.12
-  }, {
-    id: 6,
-    name: "bat",
-    motion: "swing",
-    body: .36,
-    grip: [ 24, 25 ],
-    tW: .09,
-    tH: .25,
-    tF: .52,
-    rot: [ -.14, .55, -1.05, -1.5 ],
-    reach: [ 0, -9, 15, 6 ],
-    lat: [ 4, 9, -6, -12 ],
-    ohx: [ 0, 0, 0, 0 ],
-    ease: [ WA_INOUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
-    hand: .85,
-    offw: .68,
-    bob: 1.1,
-    wide: 1.35
-  }, {
-    id: 7,
-    name: "daggers",
-    motion: "stab",
-    body: .14,
-    grip: [ 26, 6 ],
-    tW: .12,
-    tH: .3,
-    tF: .52,
-    rot: [ -.1, .12, -.34, -.26 ],
-    reach: [ 2, -4, 16, 11 ],
-    lat: [ 0, 0, -2, -3 ],
-    ohx: [ 0, 0, 0, 0 ],
-    ease: [ WA_OUT_QUAD, WA_OUT_QUINT, WA_OUT_CUBIC, WA_OUT_QUAD ],
-    hand: .95,
-    offw: .5,
-    bob: .6,
-    wide: 1.1,
-    alt: true
-  }, {
-    id: 8,
-    name: "stick",
-    motion: "chop",
-    body: .26,
-    grip: [ 25, 23 ],
-    tW: .07,
-    tH: .22,
-    tF: .4,
-    rot: [ -.18, .4, -.88, -1.1 ],
-    reach: [ 2, -5, 12, 8 ],
-    lat: [ 0, 2, -3, -6 ],
-    ohx: [ 0, 0, 0, 0 ],
-    ease: [ WA_OUT_QUAD, WA_IN_QUAD, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
-    hand: .72,
-    offw: .2,
-    bob: .9,
     wide: 1.18
   }, {
+    /* Braced two-handed thrust. The shaft barely rotates; it drives forward and
+     * slides through both hands, which stay where they are. */
+    id: 5,
+    name: "polearm",
+    motion: "braced thrust",
+    hands: WA_TWO_HAND,
+    body: .05,
+    grip: [ 27, 25 ],
+    shaft: 90,
+    hand1: [ 13, 0 ],
+    hand2: [ -11, 0 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: 1,
+    tW: .11,
+    tH: .27,
+    hold: .05,
+    tF: .44,
+    rot: [ -1.54, -1.5, -1.6, -1.57 ],
+    reach: [ -13, -21, 16, 8 ],
+    lat: [ 3.5, 5, 1, 2 ],
+    slide: [ 0, -7, 26, 18 ],
+    sep: [ 0, 0, 0, 0 ],
+    ease: [ WA_INOUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
+    bob: 1.3,
+    wide: 1.1
+  }, {
+    /* The biggest load and the biggest follow-through: the bat travels all the
+     * way around, which no other weapon does. */
+    id: 6,
+    name: "bat",
+    motion: "loaded swing",
+    hands: WA_TWO_HAND,
+    body: .36,
+    grip: [ 27, 25 ],
+    shaft: 90,
+    hand1: [ 8, 0 ],
+    hand2: [ -10, 0 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: 0,
+    tW: .15,
+    tH: .27,
+    hold: 0,
+    tF: .68,
+    rot: [ .08, .6, -1.4, -2.05 ],
+    reach: [ 0, -4, 8, 0 ],
+    lat: [ 8, 18, -8, -17 ],
+    slide: [ 0, 0, 4, 2 ],
+    sep: [ 0, 0, 0, 0 ],
+    ease: [ WA_INOUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
+    bob: 1.1,
+    wide: 1.34
+  }, {
+    /* Close to the body, almost no rotation, and the blade slides forward
+     * through the fist. Alternates sides between strokes. */
+    id: 7,
+    name: "daggers",
+    motion: "twin stab",
+    hands: WA_ONE_HAND,
+    body: .12,
+    grip: [ 40, 4 ],
+    shaft: 0,
+    hand1: [ -8, 0 ],
+    hand2: [ 0, 0 ],
+    free: [ -40, 32 ],
+    freeSwing: .55,
+    thrust: 1,
+    tW: .1,
+    tH: .26,
+    hold: 0,
+    tF: .46,
+    rot: [ -.06, .14, -.3, -.22 ],
+    reach: [ 0, -5, 15, 10 ],
+    lat: [ 0, 0, -2, -3 ],
+    slide: [ 0, -3, 10, 6 ],
+    sep: [ 0, 0, 0, 0 ],
+    ease: [ WA_OUT_QUAD, WA_OUT_QUINT, WA_OUT_CUBIC, WA_OUT_QUAD ],
+    bob: .6,
+    wide: 1.08,
+    alt: true
+  }, {
+    /* The smallest arc and the fastest recovery of anything held: a flick. */
+    id: 8,
+    name: "stick",
+    motion: "light flick",
+    hands: WA_ONE_HAND,
+    body: .14,
+    grip: [ 27, 21 ],
+    shaft: 50,
+    hand1: [ 0, 0 ],
+    hand2: [ 0, 0 ],
+    free: [ -44, 32 ],
+    freeSwing: .3,
+    thrust: 0,
+    tW: .04,
+    tH: .16,
+    hold: 0,
+    tF: .26,
+    rot: [ -.14, .06, -.52, -.58 ],
+    reach: [ 1, -1, 5, 3 ],
+    lat: [ 2, 2, -1, -2 ],
+    slide: [ 0, 0, 0, 0 ],
+    sep: [ 0, 0, 0, 0 ],
+    ease: [ WA_OUT_QUAD, WA_OUT_QUINT, WA_OUT_QUAD, WA_OUT_QUAD ],
+    bob: .7,
+    wide: 1.14
+  }, {
+    /* Bow hand on the grip, string hand behind and to the side. The bow itself
+     * barely moves; the string hand travels, and the arrow travels with it. */
     id: 9,
     name: "hunting bow",
-    motion: "shoot",
+    motion: "draw and loose",
+    hands: WA_TWO_HAND,
     body: .05,
-    grip: [ 28, 0 ],
-    tW: .09,
-    tH: .38,
-    tF: .74,
-    rot: [ -.22, -.02, .16, -.3 ],
-    reach: [ 3, -6, -3, 6 ],
-    lat: [ -3, 1, 4, -5 ],
-    ohx: [ 0, -15, -6, -12 ],
+    grip: [ 30, 2 ],
+    shaft: 0,
+    hand1: [ 0, -6 ],
+    hand2: [ -26, 24 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: 0,
+    tW: .08,
+    tH: .4,
+    hold: 0,
+    tF: .76,
+    rot: [ -.1, .06, .18, -.14 ],
+    reach: [ 2, -4, -2, 3 ],
+    lat: [ -2, 1, 4, -3 ],
+    slide: [ 0, 0, 0, 0 ],
+    sep: [ 0, -14, -18, -4 ],
     ease: [ WA_OUT_QUINT, WA_OUT_CUBIC, WA_OUT_QUAD, WA_INOUT_CUBIC ],
-    hand: .55,
-    offw: .95,
     bob: 1,
     wide: 1,
-    ammo: [ .34, .78, 26 ]
+    ammoHide: .42
   }, {
+    /* Vertical: the longest wind-up in the game, a real hold on impact, the
+     * biggest reach lift and the biggest body commitment. */
     id: 10,
     name: "great hammer",
-    motion: "overhead",
-    body: .38,
-    grip: [ 23, 24 ],
-    tW: .12,
-    tH: .25,
-    tF: .48,
-    rot: [ -.3, .78, -1.1, -1.34 ],
-    reach: [ -1, -14, 20, 13 ],
-    lat: [ 5, 10, -6, -9 ],
-    ohx: [ 0, 0, 0, 0 ],
+    motion: "overhead slam",
+    hands: WA_TWO_HAND,
+    body: .46,
+    grip: [ 25, 22 ],
+    shaft: 55,
+    hand1: [ 6, 0 ],
+    hand2: [ -10, 0 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: 0,
+    tW: .2,
+    tH: .32,
+    hold: .1,
+    tF: .62,
+    rot: [ -.34, .7, -1.05, -1.2 ],
+    reach: [ -4, -22, 22, 14 ],
+    lat: [ 8, 20, -6, -10 ],
+    slide: [ 0, -6, 14, 9 ],
+    sep: [ 0, 0, 0, 0 ],
     ease: [ WA_INOUT_QUAD, WA_IN_CUBIC, WA_OUT_CUBIC, WA_INOUT_CUBIC ],
-    hand: .9,
-    offw: .8,
     bob: 1.4,
     wide: 1.32
   }, {
+    /* No attack animation exists for it; it holds a braced guard on the off
+     * side, with the free hand back on the weapon side. */
     id: 11,
     name: "wooden shield",
-    motion: "guard",
+    motion: "brace",
+    hands: WA_ONE_HAND,
     body: .1,
-    grip: [ 30, -6 ],
-    tW: .2,
+    grip: [ 34, -14 ],
+    shaft: 0,
+    hand1: [ 0, 0 ],
+    hand2: [ 0, 0 ],
+    free: [ 48, 33 ],
+    freeSwing: .15,
+    thrust: 0,
+    tW: .25,
     tH: .5,
-    tF: .8,
-    rot: [ .34, .34, .34, .34 ],
-    reach: [ 5, 5, 5, 5 ],
-    lat: [ -11, -11, -11, -11 ],
-    ohx: [ 0, 0, 0, 0 ],
+    hold: 0,
+    tF: .75,
+    rot: [ .3, .3, .3, .3 ],
+    reach: [ 2, 2, 2, 2 ],
+    lat: [ -6, -6, -6, -6 ],
+    slide: [ 0, 0, 0, 0 ],
+    sep: [ 0, 0, 0, 0 ],
     ease: [ WA_LINEAR, WA_LINEAR, WA_LINEAR, WA_LINEAR ],
-    hand: .3,
-    offw: .85,
-    bob: .7,
+    bob: .6,
     wide: 1
   }, {
+    /* Held level. A hard straight kick into the shoulder, then a long visible
+     * crank as the foregrip hand comes back to span the string. */
     id: 12,
     name: "crossbow",
-    motion: "shoot",
+    motion: "level and crank",
+    hands: WA_TWO_HAND,
     body: .05,
-    grip: [ 28, 0 ],
+    grip: [ 35, 9 ],
+    shaft: 0,
+    hand1: [ 10, -3 ],
+    hand2: [ -9, 14 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: .5,
     tW: .07,
     tH: .4,
+    hold: 0,
     tF: .78,
-    rot: [ -.1, .14, .3, -.16 ],
-    reach: [ 4, -8, -4, 5 ],
-    lat: [ 0, 0, 5, -1 ],
-    ohx: [ 0, -8, -3, -6 ],
+    rot: [ -.06, .24, .34, -.12 ],
+    reach: [ 3, -6, -4, 4 ],
+    lat: [ 0, 0, 4, -1 ],
+    slide: [ 0, 2, 1, -1 ],
+    sep: [ 0, 3, 7, 2 ],
     ease: [ WA_OUT_QUINT, WA_OUT_CUBIC, WA_OUT_QUAD, WA_INOUT_CUBIC ],
-    hand: .7,
-    offw: .6,
     bob: .9,
     wide: 1,
-    ammo: [ .3, .72, 22 ]
+    ammoHide: .38
   }, {
+    /* Same weapon family, opposite handling: it never settles between bolts, so
+     * everything is small and the cycle never fully returns. */
     id: 13,
     name: "repeater crossbow",
-    motion: "shoot",
+    motion: "rapid cycle",
+    hands: WA_TWO_HAND,
     body: .04,
-    grip: [ 28, 0 ],
-    tW: .1,
-    tH: .4,
-    tF: .76,
-    rot: [ -.08, .1, .14, -.12 ],
-    reach: [ 4, -6, -2, 5 ],
-    lat: [ 0, 0, 2, 0 ],
-    ohx: [ 0, -5, -2, -4 ],
+    grip: [ 35, 9 ],
+    shaft: 0,
+    hand1: [ 10, -3 ],
+    hand2: [ -9, 14 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: .5,
+    tW: .12,
+    tH: .34,
+    hold: 0,
+    tF: .7,
+    rot: [ -.05, .08, .09, -.06 ],
+    reach: [ 3, -4, -1, 3 ],
+    lat: [ 0, 0, 1, 0 ],
+    slide: [ 0, 2, 1, -1 ],
+    sep: [ 0, 2, 4, 1 ],
     ease: [ WA_OUT_QUINT, WA_OUT_CUBIC, WA_OUT_QUAD, WA_OUT_QUAD ],
-    hand: .6,
-    offw: .5,
     bob: .7,
     wide: 1,
-    ammo: [ .2, .6, 14 ]
+    ammoHide: .22
   }, {
+    /* Utility: the only weapon whose fastest phase is the retraction. It reaches
+     * out slowly and snaps back past its resting pose -- the steal. */
     id: 14,
     name: "mc grabby",
-    motion: "reach",
+    motion: "reach and yank",
+    hands: WA_TWO_HAND,
     body: .1,
-    grip: [ 23, 22 ],
+    grip: [ 27, 24 ],
+    shaft: 90,
+    hand1: [ 10, 0 ],
+    hand2: [ -10, 0 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: 1,
     tW: .1,
-    tH: .25,
-    tF: .48,
-    rot: [ -.6, -.48, -.96, -.7 ],
-    reach: [ 2, -8, 30, 6 ],
-    lat: [ -2, 2, -4, -8 ],
-    ohx: [ 0, 0, 0, 0 ],
+    tH: .26,
+    hold: .04,
+    tF: .44,
+    rot: [ -1.32, -1.24, -1.48, -1.1 ],
+    reach: [ -8, -14, 22, -12 ],
+    lat: [ 4, 6, 1, 8 ],
+    slide: [ 0, -4, 16, -6 ],
+    sep: [ 0, 0, 0, 0 ],
     ease: [ WA_OUT_QUAD, WA_IN_QUAD, WA_IN_CUBIC, WA_INOUT_CUBIC ],
-    hand: .9,
-    offw: .55,
     bob: 1.2,
-    wide: 1.05
+    wide: 1.06
   }, {
+    /* Shouldered rifle: trigger hand at the stock, support hand up the barrel.
+     * The stock drives back through both hands on firing, the muzzle climbs,
+     * then the support hand comes back to reload before re-shouldering. */
     id: 15,
     name: "musket",
-    motion: "fire",
+    motion: "shoulder and fire",
+    hands: WA_TWO_HAND,
     body: .06,
-    grip: [ 34, -2 ],
-    tW: .05,
-    tH: .34,
+    grip: [ 34, 10 ],
+    shaft: -45,
+    hand1: [ 0, 0 ],
+    hand2: [ 18, 0 ],
+    free: [ 0, 0 ],
+    freeSwing: 0,
+    thrust: .6,
+    tW: .04,
+    tH: .32,
+    hold: 0,
     tF: .74,
-    rot: [ .3, -.06, -.2, .34 ],
-    reach: [ 2, -18, -8, 4 ],
-    lat: [ -2, 1, 7, -3 ],
-    ohx: [ 0, -12, -5, -8 ],
+    rot: [ .3, -.04, -.16, .36 ],
+    reach: [ 0, -20, -10, 2 ],
+    lat: [ -2, 2, 8, -4 ],
+    slide: [ 0, 8, 4, -3 ],
+    sep: [ 0, 3, 8, -2 ],
     ease: [ WA_OUT_QUINT, WA_OUT_CUBIC, WA_INOUT_QUAD, WA_INOUT_CUBIC ],
-    hand: .8,
-    offw: .8,
     bob: 1.1,
     wide: 1
   } ];
-
   const WeaponAnimation = new class {
     _t=0;
     _frame=0;
+    /* Scratch for the pose resolved this frame. Every draw call for a player
+     * reads these, so the work is done once and shared. */
     _rot=0;
     _reach=0;
     _lat=0;
-    _sx=0;
-    _hand=0;
-    _offw=0;
+    _slide=0;
+    _sep=0;
+    _ax=0;
+    _ay=0;
+    _cr=1;
+    _sr=0;
+    _flip=1;
     _u=-1;
     _pf=null;
     _cacheP=null;
@@ -4553,44 +4733,68 @@ window.grbtp = 35;
         id: -1,
         name: "default",
         motion: "none",
+        hands: WA_ONE_HAND,
         body: 1,
         grip: [ 0, 0 ],
+        shaft: 0,
+        hand1: [ 0, 0 ],
+        hand2: [ 0, 0 ],
+        free: [ 0, 0 ],
+        freeSwing: 0,
+        thrust: 0,
         tW: .25,
         tH: .5,
+        hold: 0,
         tF: .75,
         rot: [ 0, 0, 0, 0 ],
         reach: [ 0, 0, 0, 0 ],
         lat: [ 0, 0, 0, 0 ],
-        ohx: [ 0, 0, 0, 0 ],
+        slide: [ 0, 0, 0, 0 ],
+        sep: [ 0, 0, 0, 0 ],
         ease: [ WA_LINEAR, WA_LINEAR, WA_LINEAR, WA_LINEAR ],
-        hand: 0,
-        offw: 0,
         bob: 0,
         wide: 1
-      });
+      }, true);
       for (let i = 0; i < WeaponAnimationProfiles.length; i++) {
-        const profile = this._build(WeaponAnimationProfiles[i]);
+        const profile = this._build(WeaponAnimationProfiles[i], false);
         this._table[profile.id] = profile;
       }
     }
     /* One fixed object shape for every profile, so the interpolator stays
-     * monomorphic. Stage times are ordered and kept inside (0,1) here rather
-     * than guarded per frame. */
-    _build(cfg) {
-      const tW = clamp(cfg.tW, 0, .9);
-      const tH = clamp(cfg.tH, tW + 1e-3, .95);
-      const tF = clamp(cfg.tF, tH + 1e-3, .99);
-      const ammo = cfg.ammo || null;
-      const hide = ammo ? clamp(ammo[0], 0, .9) : 0;
-      return {
+     * monomorphic. Stage times are ordered here rather than guarded per frame,
+     * and everything that can be precomputed -- the shaft's unit vector, the
+     * free hand's resting point, the resting anchor -- is. */
+    _build(cfg, plain) {
+      const tW = clamp(cfg.tW, 0, .82);
+      const tH = clamp(cfg.tH, tW + 1e-3, .88);
+      const tHold = clamp(cfg.tH + (cfg.hold || 0), tH, .93);
+      const tF = clamp(cfg.tF, tHold + 1e-3, .97);
+      const shaft = cfg.shaft * WA_DEG;
+      const cha = Math.cos(shaft);
+      const sha = Math.sin(shaft);
+      const freeAngle = cfg.free[0] * WA_DEG;
+      const p = {
         id: cfg.id,
         name: cfg.name,
         motion: cfg.motion,
+        plain: plain ? 1 : 0,
+        hands: cfg.hands,
         body: cfg.body,
         gripX: cfg.grip[0],
         gripY: cfg.grip[1],
+        cha: cha,
+        sha: sha,
+        h1d: cfg.hand1[0],
+        h1p: cfg.hand1[1],
+        h2d: cfg.hand2[0],
+        h2p: cfg.hand2[1],
+        freeX: cfg.free[1] * Math.cos(freeAngle),
+        freeY: cfg.free[1] * Math.sin(freeAngle),
+        freeSwing: cfg.freeSwing,
+        thrust: cfg.thrust,
         tW: tW,
         tH: tH,
+        tHold: tHold,
         tF: tF,
         r0: cfg.rot[0],
         r1: cfg.rot[1],
@@ -4604,23 +4808,35 @@ window.grbtp = 35;
         l1: cfg.lat[1],
         l2: cfg.lat[2],
         l3: cfg.lat[3],
-        s0: cfg.ohx[0],
-        s1: cfg.ohx[1],
-        s2: cfg.ohx[2],
-        s3: cfg.ohx[3],
+        g0: cfg.slide[0],
+        g1: cfg.slide[1],
+        g2: cfg.slide[2],
+        g3: cfg.slide[3],
+        s0: cfg.sep[0],
+        s1: cfg.sep[1],
+        s2: cfg.sep[2],
+        s3: cfg.sep[3],
         eW: cfg.ease[0],
         eH: cfg.ease[1],
         eF: cfg.ease[2],
         eB: cfg.ease[3],
-        hand: cfg.hand,
-        offw: cfg.offw,
         bob: cfg.bob,
         wide: cfg.wide,
         alt: cfg.alt ? 1 : 0,
-        ammoHide: hide,
-        ammoBack: ammo ? clamp(ammo[1], hide + 1e-3, .99) : 0,
-        ammoDist: ammo ? ammo[2] : 0
+        ammoHide: cfg.ammoHide || 0,
+        restAX: 0,
+        restAY: 0
       };
+      /* Where the pivot sits at rest -- the reference the free hand counter-
+       * swings against. */
+      const c = Math.cos(p.r0), s = Math.sin(p.r0);
+      const sfx = cha * c - sha * s;
+      const sfy = cha * s + sha * c;
+      const dx = 1 + (sfx - 1) * p.thrust;
+      const dy = sfy * p.thrust;
+      p.restAX = p.gripX + p.d0 * dx - p.l0 * dy;
+      p.restAY = p.gripY + p.d0 * dy + p.l0 * dx;
+      return p;
     }
     _ease(id, t) {
       if (t <= 0) return 0;
@@ -4680,9 +4896,18 @@ window.grbtp = 35;
       const u = 1 - time / span;
       return u < 0 ? 0 : u > 1 ? 1 : u;
     }
-    /* Resolves the weapon pose for this player this frame into the scratch
-     * fields. Single-slot cache: Dl() asks for the same player three or four
-     * times in a row (below-hand weapon, ammo, hands, above-hand weapon). */
+    /* Resolves this player's weapon pose for this frame into the scratch
+     * fields, in one fixed order:
+     *
+     *   1. base orientation  the weapon's own shaft direction (profile.cha/sha)
+     *   2. grip and pivot    profile.grip, and the hand offsets along the shaft
+     *   3. attack direction  +X of this frame already is it; the bundle rotates
+     *                        the frame by the player's aim outside this call
+     *   4. animation         the rot/reach/lat/slide/sep tracks
+     *   5. follow-through    the later keyframes of those same tracks
+     *
+     * Single-slot cache: Dl() asks for the same player three or four times in a
+     * row (below-hand weapon, ammo, hands, above-hand weapon). */
     _pose(player) {
       const time = player.animTime;
       /* Integer clock stamp: keeps the cache field a small integer, and still
@@ -4698,12 +4923,14 @@ window.grbtp = 35;
       this._pf = profile;
       const u = this._phase(player);
       this._u = u;
-      let rot, reach, lat, sx;
+      let flip = 1;
+      let rot, reach, lat, slide, sep;
       if (u < 0) {
         rot = profile.r0;
         reach = profile.d0;
         lat = profile.l0;
-        sx = profile.s0;
+        slide = profile.g0;
+        sep = profile.s0;
         if (profile.bob !== 0) {
           const sway = Math.sin(this._t * WA_SWAY_RATE + (player.sid & 7) * .8) * profile.bob;
           reach += sway;
@@ -4721,25 +4948,36 @@ window.grbtp = 35;
           rot = profile.r0 + (profile.r1 - profile.r0) * e;
           reach = profile.d0 + (profile.d1 - profile.d0) * e;
           lat = profile.l0 + (profile.l1 - profile.l0) * e;
-          sx = profile.s0 + (profile.s1 - profile.s0) * e;
+          slide = profile.g0 + (profile.g1 - profile.g0) * e;
+          sep = profile.s0 + (profile.s1 - profile.s0) * e;
         } else if (u < profile.tH) {
           e = this._ease(profile.eH, (u - profile.tW) / (profile.tH - profile.tW));
           rot = profile.r1 + (profile.r2 - profile.r1) * e;
           reach = profile.d1 + (profile.d2 - profile.d1) * e;
           lat = profile.l1 + (profile.l2 - profile.l1) * e;
-          sx = profile.s1 + (profile.s2 - profile.s1) * e;
+          slide = profile.g1 + (profile.g2 - profile.g1) * e;
+          sep = profile.s1 + (profile.s2 - profile.s1) * e;
+        } else if (u < profile.tHold) {
+          /* Weight on impact: the strike pose holds for a beat. */
+          rot = profile.r2;
+          reach = profile.d2;
+          lat = profile.l2;
+          slide = profile.g2;
+          sep = profile.s2;
         } else if (u < profile.tF) {
-          e = this._ease(profile.eF, (u - profile.tH) / (profile.tF - profile.tH));
+          e = this._ease(profile.eF, (u - profile.tHold) / (profile.tF - profile.tHold));
           rot = profile.r2 + (profile.r3 - profile.r2) * e;
           reach = profile.d2 + (profile.d3 - profile.d2) * e;
           lat = profile.l2 + (profile.l3 - profile.l2) * e;
-          sx = profile.s2 + (profile.s3 - profile.s2) * e;
+          slide = profile.g2 + (profile.g3 - profile.g2) * e;
+          sep = profile.s2 + (profile.s3 - profile.s2) * e;
         } else {
           e = this._ease(profile.eB, (u - profile.tF) / (1 - profile.tF));
           rot = profile.r3 + (profile.r0 - profile.r3) * e;
           reach = profile.d3 + (profile.d0 - profile.d3) * e;
           lat = profile.l3 + (profile.l0 - profile.l3) * e;
-          sx = profile.s3 + (profile.s0 - profile.s3) * e;
+          slide = profile.g3 + (profile.g0 - profile.g3) * e;
+          sep = profile.s3 + (profile.s0 - profile.s3) * e;
         }
         /* The bundle swings a whiff through 180 degrees and a connecting hit
          * through 90. Carry that distinction into the weapon's own travel
@@ -4748,23 +4986,34 @@ window.grbtp = 35;
           rot = profile.r0 + (rot - profile.r0) * profile.wide;
           reach = profile.d0 + (reach - profile.d0) * profile.wide;
           lat = profile.l0 + (lat - profile.l0) * profile.wide;
+          slide = profile.g0 + (slide - profile.g0) * profile.wide;
+        }
+        /* Daggers lead with the other hand on alternate strokes. */
+        if (profile.alt && this._strokeAlt[slot]) {
+          flip = -1;
+          lat = -lat;
+          rot = -rot * .6;
         }
       }
-      let hand = profile.hand;
-      let offw = profile.offw;
-      if (profile.alt && u >= 0 && this._strokeAlt[(player.sid | 0) & WA_SLOTS - 1]) {
-        lat = -lat;
-        rot = -rot * .6;
-        const swap = hand;
-        hand = offw;
-        offw = swap;
-      }
+      /* Base orientation carried through the animation rotation, then the
+       * pivot placed along the attack direction (or along the shaft, for a
+       * thrust) and across it. */
+      const c = Math.cos(rot);
+      const s = Math.sin(rot);
+      const sfx = profile.cha * c - profile.sha * s;
+      const sfy = profile.cha * s + profile.sha * c;
+      const dx = 1 + (sfx - 1) * profile.thrust;
+      const dy = sfy * profile.thrust;
       this._rot = rot;
       this._reach = reach;
       this._lat = lat;
-      this._sx = sx;
-      this._hand = hand;
-      this._offw = offw;
+      this._slide = slide;
+      this._sep = sep;
+      this._cr = c;
+      this._sr = s;
+      this._flip = flip;
+      this._ax = profile.gripX + reach * dx - lat * dy;
+      this._ay = profile.gripY + reach * dy + lat * dx;
       return profile;
     }
     /* Replaces `dir + dirPlus` in the player render loop. The body keeps a
@@ -4777,103 +5026,92 @@ window.grbtp = 35;
       const profile = this._table[player.weaponIndex];
       return profile ? swing * profile.body : swing;
     }
-    /* Wraps the bundle's renderTool. Identity transform when the profile asks
-     * for no offset, so the vanilla draw call is reached untouched. */
+    /* Wraps the bundle's renderTool: the sprite turns about its grip, and the
+     * grip is placed where the pose put it. An unprofiled weapon reaches the
+     * vanilla draw call untouched. */
     _drawWeapon(draw, weapon, variant, x, y, ctx, player) {
       const profile = this._pose(player);
-      const rot = this._rot;
-      const reach = this._reach;
-      const lat = this._lat;
-      if (rot === 0 && reach === 0 && lat === 0) {
+      if (profile.plain) {
         draw(weapon, variant, x, y, ctx);
         return;
       }
-      const gx = profile.gripX;
-      const gy = profile.gripY;
       ctx.save();
-      ctx.translate(gx + reach, gy + lat);
-      ctx.rotate(rot);
-      draw(weapon, variant, x - gx, y - gy, ctx);
+      ctx.translate(this._ax, this._ay);
+      ctx.rotate(this._rot);
+      draw(weapon, variant, x - profile.gripX, y - profile.gripY, ctx);
       ctx.restore();
     }
-    /* The arrow/bolt resting on a ranged weapon. Rides the weapon's grip
-     * transform, and for the shot cycle it disappears at release and slides
-     * back onto the string as the weapon is re-drawn. Projectiles in flight
-     * are a different call site and are not touched. */
+    /* The arrow or bolt sitting on a ranged weapon. It rides the string hand,
+     * so it slides back with the draw and is simply absent between the shot
+     * and the next nock. Projectiles in flight are a different call site and
+     * are not touched. */
     _drawAmmo(draw, x, y, projectile, ctx, player) {
       const profile = this._pose(player);
       const u = this._u;
-      let back = 0;
-      if (u >= 0 && profile.ammoDist !== 0) {
-        if (u < profile.ammoHide) return;
-        if (u < profile.ammoBack) {
-          const t = (u - profile.ammoHide) / (profile.ammoBack - profile.ammoHide);
-          back = -profile.ammoDist * (1 - this._ease(WA_OUT_CUBIC, t));
-        }
-      }
-      const rot = this._rot;
-      const reach = this._reach;
-      const lat = this._lat;
-      if (rot === 0 && reach === 0 && lat === 0 && back === 0) {
+      if (u >= 0 && u < profile.ammoHide) return;
+      if (profile.plain) {
         draw(x, y, projectile, ctx);
         return;
       }
-      const gx = profile.gripX;
-      const gy = profile.gripY;
+      const shift = profile.s0 - this._sep + (profile.g0 - this._slide);
       ctx.save();
-      ctx.translate(gx + reach + back, gy + lat);
-      ctx.rotate(rot);
-      draw(x - gx, y - gy, projectile, ctx);
+      ctx.translate(this._ax, this._ay);
+      ctx.rotate(this._rot);
+      draw(x - profile.gripX + shift * profile.cha, y - profile.gripY + shift * profile.sha, projectile, ctx);
       ctx.restore();
     }
-    /* Both hand circles. Each is carried toward the weapon's grip frame by its
-     * own weight, so a two-handed weapon takes both hands with it and a
-     * one-handed one leaves the off hand near its resting place. */
+    /* The two hand circles. They are the weapon's grip points, not decoration:
+     * each is placed at a fixed spot along the shaft and carried by the same
+     * transform as the sprite, so a two-handed weapon's shaft passes through
+     * both of them and a one-handed weapon hangs off the hand that holds it.
+     * The free hand of a one-handed weapon counter-swings against the grip. */
     _drawHands(circle, player, arm, hndS, hndD) {
-      const scale = player.scale;
-      const ax = scale * Math.cos(arm);
-      const ay = scale * Math.sin(arm);
-      const offArm = -arm * hndS;
-      const offRadius = scale * hndD;
-      const bx = offRadius * Math.cos(offArm);
-      const by = offRadius * Math.sin(offArm);
       if (player.buildIndex >= 0) {
-        circle(ax, ay, 14);
-        circle(bx, by, 14);
+        const scale = player.scale;
+        circle(scale * Math.cos(arm), scale * Math.sin(arm), 14);
+        const off = -arm * hndS;
+        const radius = scale * hndD;
+        circle(radius * Math.cos(off), radius * Math.sin(off), 14);
         return;
       }
       const profile = this._pose(player);
-      /* Hands follow the weapon's movement away from its resting pose, not the
-       * pose itself: the bundle's own hand placement already is the resting
-       * grip, so an idle stance leaves both hands exactly where they were. */
-      const rot = this._rot - profile.r0;
-      const reach = this._reach - profile.d0;
-      const lat = this._lat - profile.l0;
-      const sx = this._sx - profile.s0;
-      if (rot === 0 && reach === 0 && lat === 0 && sx === 0) {
-        circle(ax, ay, 14);
-        circle(bx, by, 14);
+      if (profile.plain) {
+        const scale = player.scale;
+        circle(scale * Math.cos(arm), scale * Math.sin(arm), 14);
+        const off = -arm * hndS;
+        const radius = scale * hndD;
+        circle(radius * Math.cos(off), radius * Math.sin(off), 14);
         return;
       }
-      const gx = profile.gripX;
-      const gy = profile.gripY;
-      const c = Math.cos(rot);
-      const s = Math.sin(rot);
-      const hand = this._hand;
-      const offw = this._offw;
-      let dx = ax - gx;
-      let dy = ay - gy;
-      const tax = gx + dx * c - dy * s + reach;
-      const tay = gy + dx * s + dy * c + lat;
-      dx = bx - gx;
-      dy = by - gy;
-      const tbx = gx + dx * c - dy * s + reach + sx;
-      const tby = gy + dx * s + dy * c + lat;
-      circle(ax + (tax - ax) * hand, ay + (tay - ay) * hand, 14);
-      circle(bx + (tbx - bx) * offw, by + (tby - by) * offw, 14);
+      const ax = this._ax;
+      const ay = this._ay;
+      const c = this._cr;
+      const s = this._sr;
+      const flip = this._flip;
+      /* Primary hand: on the shaft, carried back by whatever the shaft has
+       * slid through the grip. */
+      let along = profile.h1d - this._slide;
+      let across = profile.h1p * flip;
+      let lx = along * profile.cha - across * profile.sha;
+      let ly = along * profile.sha + across * profile.cha;
+      circle(ax + lx * c - ly * s, ay + lx * s + ly * c, 14);
+      if (profile.hands === WA_TWO_HAND) {
+        /* Secondary hand: further along the same shaft, plus whatever it has
+         * drawn back on its own. */
+        along = profile.h2d - this._slide - this._sep;
+        across = profile.h2p * flip;
+        lx = along * profile.cha - across * profile.sha;
+        ly = along * profile.sha + across * profile.cha;
+        circle(ax + lx * c - ly * s, ay + lx * s + ly * c, 14);
+      } else {
+        const swing = profile.freeSwing;
+        circle(profile.freeX + (profile.restAX - ax) * swing,
+               profile.freeY * flip + (profile.restAY - ay) * swing, 14);
+      }
     }
   };
   const WeaponAnimation_default = WeaponAnimation;
+
 
   const Renderer = new class {
     _renderObjects=[];

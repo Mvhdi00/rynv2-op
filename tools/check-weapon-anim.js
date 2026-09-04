@@ -13,7 +13,6 @@
  */
 const fs = require("fs");
 const path = require("path");
-const vm = require("vm");
 const { execFileSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -24,13 +23,10 @@ const end = client.indexOf("  const WeaponAnimation_default = WeaponAnimation;")
 if (start === -1 || end === -1) throw new Error("module markers not found");
 const moduleSrc = client.slice(start, end + "  const WeaponAnimation_default = WeaponAnimation;".length);
 
-/* The two helpers the module borrows from the surrounding client scope. */
-const prelude = "const clamp = (value, min, max) => Math.min(Math.max(value, min), max);\n";
-
-const sandbox = { performance, Math, console, Int32Array, Uint8Array };
-vm.createContext(sandbox);
-vm.runInContext(prelude + moduleSrc + "\nglobalThis.WA = WeaponAnimation_default;", sandbox);
-const WA = sandbox.WA;
+/* Loaded into this realm, not a vm context: the module reaches Math and
+ * performance the way the browser hands them to it. */
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const WA = new Function("clamp", moduleSrc + "\nreturn WeaponAnimation_default;")(clamp);
 
 /* ---- weapon table copied from src/game_index.js (ids, speeds, offsets) ---- */
 const WEAPONS = [
@@ -270,29 +266,45 @@ for (const id of [9, 12, 13]) {
 }
 
 /* ------------------------------------------------------------------ */
-console.log("8. spear leads with extension, not rotation");
+console.log("8. spear thrusts: the shaft drives forward and slides through the grip");
 {
+  const p = WA._table[5];
   const player = newPlayer(6);
   player.weaponIndex = 5;
   player.animTime = player.animSpeed = 700;
   player.targetAngle = -Math.PI / 2;
   const state = { c: 0, p: 0 };
-  let peakReach = -1e9, peakRot = 0, idleReach = 0, idleRot = 0;
-  WA.frame(performance.now()); WA._pose(player);
-  idleReach = WA._reach; idleRot = WA._rot;
-  for (let f = 0; f < 60; f++) {
+  WA.frame(0);
+  WA._pose(player);
+  const restAX = WA._ax, restAY = WA._ay, restRot = WA._rot;
+  hands.length = 0;
+  WA._drawHands(circle, player, Math.PI / 4, 1, 1);
+  const restH = [hands[0].slice(), hands[1].slice()];
+  let drive = 0, spin = 0, slid = 0, handMove = 0;
+  for (let f = 0; f < 120; f++) {
     WA.frame(f * 16.6);
-    animate(player, 700 / 60, state);
+    animate(player, 700 / 120, state);
     WA._pose(player);
-    if (WA._reach > peakReach) peakReach = WA._reach;
-    if (Math.abs(WA._rot - idleRot) > Math.abs(peakRot)) peakRot = WA._rot - idleRot;
+    drive = Math.max(drive, Math.hypot(WA._ax - restAX, WA._ay - restAY));
+    spin = Math.max(spin, Math.abs(WA._rot - restRot));
+    slid = Math.max(slid, Math.abs(WA._slide));
+    hands.length = 0;
+    WA._drawHands(circle, player, Math.PI / 4, 1, 1);
+    handMove = Math.max(handMove,
+      Math.hypot(hands[0][0] - restH[0][0], hands[0][1] - restH[0][1]),
+      Math.hypot(hands[1][0] - restH[1][0], hands[1][1] - restH[1][1]));
   }
-  const bodySwing = Math.abs(-Math.PI / 2 * WA._table[5].body);
-  console.log("   forward extension: " + (peakReach - 0).toFixed(1) + " units");
-  console.log("   shaft rotation:    " + (Math.abs(peakRot) * 180 / Math.PI).toFixed(1) + " deg");
-  console.log("   body rotation:     " + (bodySwing * 180 / Math.PI).toFixed(1) + " deg (vanilla: 90.0)");
-  if (peakReach < 25) fail("spear thrust extension too small");
-  if (bodySwing * 180 / Math.PI > 15) fail("spear still spins the body");
+  const bodySwing = Math.abs(-Math.PI / 2 * p.body) * 180 / Math.PI;
+  console.log("   shaft drives forward:        " + drive.toFixed(1) + " units");
+  console.log("   shaft slides through grip:   " + slid.toFixed(1) + " units");
+  console.log("   hands move:                  " + handMove.toFixed(1) + " units");
+  console.log("   shaft rotates:               " + (spin * 180 / Math.PI).toFixed(1) + " deg");
+  console.log("   body rotates:                " + bodySwing.toFixed(1) + " deg (vanilla: 90.0)");
+  if (drive < 25) fail("spear thrust is too short (" + drive.toFixed(1) + " units)");
+  if (spin * 180 / Math.PI > 15) fail("spear rotates like a swing (" + (spin * 180 / Math.PI).toFixed(1) + " deg)");
+  if (bodySwing > 15) fail("spear still spins the body (" + bodySwing.toFixed(1) + " deg)");
+  if (slid < 15) fail("shaft does not slide through the grip (" + slid.toFixed(1) + " units)");
+  if (handMove > 14) fail("hands are dragged along instead of the shaft sliding (" + handMove.toFixed(1) + " units)");
 }
 
 /* ------------------------------------------------------------------ */
@@ -363,22 +375,33 @@ console.log("10. pose cache serves the repeated calls Dl() makes per player");
 console.log("11. every profile is well formed");
 {
   const seenIds = new Set();
+  const TRACKS = ["r", "d", "l", "g", "s"];
   for (let id = 0; id <= 15; id++) {
     const p = WA._table[id];
     if (!p) { fail("no profile for weapon " + id); continue; }
     if (seenIds.has(p.id)) fail("duplicate profile id " + p.id);
     seenIds.add(p.id);
-    if (!(p.tW < p.tH && p.tH < p.tF && p.tF < 1)) fail(p.name + ": stage times out of order");
+    if (!(p.tW < p.tH && p.tH <= p.tHold && p.tHold < p.tF && p.tF < 1)) fail(p.name + ": stage times out of order");
     if (!(p.body >= 0 && p.body <= 1)) fail(p.name + ": body factor out of range " + p.body);
-    if (p.ammoDist !== 0 && !(p.ammoHide < p.ammoBack)) fail(p.name + ": ammo window out of order");
-    for (const k of ["r0","r1","r2","r3","d0","d1","d2","d3","l0","l1","l2","l3","s0","s1","s2","s3","gripX","gripY","hand","offw","bob","wide"]) {
+    if (p.hands !== 1 && p.hands !== 2) fail(p.name + ": grip mode is " + p.hands);
+    if (!(p.ammoHide >= 0 && p.ammoHide < 1)) fail(p.name + ": ammo window out of range");
+    if (Math.abs(p.cha * p.cha + p.sha * p.sha - 1) > 1e-9) fail(p.name + ": shaft vector is not a unit vector");
+    const fields = ["gripX", "gripY", "cha", "sha", "h1d", "h1p", "h2d", "h2p",
+                    "freeX", "freeY", "freeSwing", "thrust", "bob", "wide", "restAX", "restAY"];
+    for (const t of TRACKS) for (let k = 0; k <= 3; k++) fields.push(t + k);
+    for (const k of fields) {
       if (typeof p[k] !== "number" || !isFinite(p[k])) fail(p.name + ": field " + k + " is " + p[k]);
     }
   }
   const shape = Object.keys(WA._table[0]).join(",");
   for (let id = 1; id <= 15; id++) if (Object.keys(WA._table[id]).join(",") !== shape) fail("profile " + id + " has a different object shape");
   if (Object.keys(WA._neutral).join(",") !== shape) fail("neutral profile has a different object shape");
+  const twoHanded = [];
+  const oneHanded = [];
+  for (let id = 0; id <= 15; id++) (WA._table[id].hands === 2 ? twoHanded : oneHanded).push(WA._table[id].name);
   console.log("   16 profiles, one shared object shape, " + Object.keys(WA._table[0]).length + " fields");
+  console.log("   two-handed: " + twoHanded.join(", "));
+  console.log("   one-handed: " + oneHanded.join(", "));
 }
 
 /* ------------------------------------------------------------------ */
@@ -398,50 +421,97 @@ console.log("12. easing curves are monotone-bounded and anchored at 0/1");
 }
 
 /* ------------------------------------------------------------------ */
-console.log("13. hands stay on the grip: near vanilla at rest, bounded in motion");
+console.log("13. every weapon is actually held: hands sit on its grip points");
 {
-  let worstIdle = 0, worstReach = 0, worstWeapon = 0;
+  /* The pose puts the sprite's pivot at (_ax, _ay) and turns the sprite about
+   * it, so a hand at (along, across) in the weapon's own frame must land at
+   * the same place the sprite's corresponding point does. Recomputing that
+   * here independently is the check. */
+  const geom = [];
+  let worstOn = 0, minR = 1e9, maxR = 0, minSep = 1e9, worstFree = 0;
   for (const weapon of WEAPONS) {
-    const arm = Math.PI / 4 * (weapon.armS || 1);
-    const hndS = weapon.hndS || 1;
-    const hndD = weapon.hndD || 1;
-    const ax = 35 * Math.cos(arm), ay = 35 * Math.sin(arm);
-    const bx = 35 * hndD * Math.cos(-arm * hndS), by = 35 * hndD * Math.sin(-arm * hndS);
-
-    /* at rest: only the idle sway may move a hand */
-    const idle = newPlayer(2);
-    idle.weaponIndex = weapon.id;
-    for (let f = 0; f < 200; f++) {
-      WA.frame(f * 16.6);
-      hands.length = 0;
-      WA._drawHands(circle, idle, arm, hndS, hndD);
-      worstIdle = Math.max(worstIdle, Math.hypot(hands[0][0] - ax, hands[0][1] - ay), Math.hypot(hands[1][0] - bx, hands[1][1] - by));
-    }
-
-    /* mid-attack: hands and weapon must stay in front of the character, not fly off */
+    const p = WA._table[weapon.id];
+    const player = newPlayer(2);
+    player.weaponIndex = weapon.id;
+    const rows = [];
     for (const didHit of [true, false]) {
-      const p = newPlayer(2);
-      p.weaponIndex = weapon.id;
-      p.animTime = p.animSpeed = weapon.speed || 0;
-      p.targetAngle = didHit ? -Math.PI / 2 : -Math.PI;
+      player.animTime = player.animSpeed = weapon.speed || 0;
+      player.targetAngle = didHit ? -Math.PI / 2 : -Math.PI;
       const state = { c: 0, p: 0 };
-      const ctx = makeCtx();
       for (let f = 0; f < 200; f++) {
         WA.frame(f * 16.6);
-        animate(p, 8, state);
-        hands.length = 0; drawn.length = 0;
-        renderPlayer(p, ctx, weapon);
-        for (const h of hands) worstReach = Math.max(worstReach, Math.hypot(h[0], h[1]));
-        for (const d of drawn) if (d.kind === "tool") worstWeapon = Math.max(worstWeapon, Math.hypot(d.tx + d.x, d.ty + d.y));
+        animate(player, 8, state);
+        hands.length = 0;
+        WA._drawHands(circle, player, Math.PI / 4 * (weapon.armS || 1), weapon.hndS || 1, weapon.hndD || 1);
+        if (hands.length !== 2) { fail(weapon.name + ": drew " + hands.length + " hands"); break; }
+        const ax = WA._ax, ay = WA._ay, c = WA._cr, s = WA._sr;
+        const place = (along, across) => {
+          const lx = along * p.cha - across * p.sha;
+          const ly = along * p.sha + across * p.cha;
+          return [ax + lx * c - ly * s, ay + lx * s + ly * c];
+        };
+        /* primary hand is on its grip point, always */
+        const want1 = place(p.h1d - WA._slide, p.h1p * WA._flip);
+        worstOn = Math.max(worstOn, Math.hypot(hands[0][0] - want1[0], hands[0][1] - want1[1]));
+        if (p.hands === 2) {
+          const want2 = place(p.h2d - WA._slide - WA._sep, p.h2p * WA._flip);
+          worstOn = Math.max(worstOn, Math.hypot(hands[1][0] - want2[0], hands[1][1] - want2[1]));
+          minSep = Math.min(minSep, Math.hypot(hands[0][0] - hands[1][0], hands[0][1] - hands[1][1]));
+        } else {
+          worstFree = Math.max(worstFree, Math.hypot(hands[1][0] - p.freeX, hands[1][1] - p.freeY * WA._flip));
+        }
+        for (const h of hands) {
+          const rr = Math.hypot(h[0], h[1]);
+          minR = Math.min(minR, rr);
+          maxR = Math.max(maxR, rr);
+        }
+        rows.push(0);
       }
     }
+    geom.push(weapon.name);
   }
-  console.log("   hand drift at rest: " + worstIdle.toFixed(2) + " units (idle sway only)");
-  console.log("   max hand distance from body centre: " + worstReach.toFixed(1) + " units");
-  console.log("   max weapon anchor distance:         " + worstWeapon.toFixed(1) + " units");
-  if (worstIdle > 3) fail("hands drift at rest (" + worstIdle.toFixed(2) + " units)");
-  if (worstReach > 110) fail("a hand leaves the character (" + worstReach.toFixed(1) + " units)");
-  if (worstWeapon > 130) fail("the weapon anchor leaves the character (" + worstWeapon.toFixed(1) + " units)");
+  console.log("   hand vs. its grip point:     " + worstOn.toFixed(6) + " units apart (exact placement)");
+  console.log("   hand distance from centre:   " + minR.toFixed(1) + " .. " + maxR.toFixed(1) + " (body radius 35)");
+  console.log("   two-handed grip separation:  " + minSep.toFixed(1) + " units minimum");
+  console.log("   free hand from its rest pose: " + worstFree.toFixed(1) + " units maximum");
+  if (worstOn > 1e-9) fail("a hand is not on its grip point (" + worstOn.toFixed(4) + " units off)");
+  if (minR < 15) fail("a hand ends up inside the body (r=" + minR.toFixed(1) + ")");
+  if (maxR > 62) fail("a hand detaches from the character (r=" + maxR.toFixed(1) + ")");
+  if (minSep < 9) fail("a two-handed grip collapses to one point (" + minSep.toFixed(1) + " units)");
+  for (let id = 0; id <= 15; id++) {
+    const p = WA._table[id];
+    if (p.hands !== 2) continue;
+    const along = Math.abs(p.h2d - p.h1d), across = Math.abs(p.h2p - p.h1p);
+    const rest = Math.hypot(along, across);
+    if (rest < 14) fail(p.name + ": resting two-handed grip is only " + rest.toFixed(1) + " units wide");
+  }
+  if (worstFree > 26) fail("a free hand wanders (" + worstFree.toFixed(1) + " units)");
+}
+
+/* ------------------------------------------------------------------ */
+console.log("15. no two weapons move the same way");
+{
+  /* Hide the sprites and compare only how the character moves: stage timing,
+   * how far the shaft swings, how far it drives forward and across, how much
+   * the shaft slides through the grip, how far the off hand draws, and how
+   * much the body commits. */
+  const sig = p => {
+    const span = t => Math.max(p[t + "0"], p[t + "1"], p[t + "2"], p[t + "3"]) -
+                      Math.min(p[t + "0"], p[t + "1"], p[t + "2"], p[t + "3"]);
+    return [p.tW, p.tH, p.tF, p.tHold - p.tH, span("r") / Math.PI,
+            span("d") / 40, span("l") / 30, p.body, span("g") / 25, span("s") / 20, p.thrust];
+  };
+  const pairs = [];
+  for (let i = 0; i <= 15; i++)
+    for (let j = i + 1; j <= 15; j++) {
+      const a = sig(WA._table[i]), b = sig(WA._table[j]);
+      let d = 0;
+      for (let k = 0; k < a.length; k++) d += (a[k] - b[k]) * (a[k] - b[k]);
+      pairs.push([Math.sqrt(d), WA._table[i].name, WA._table[j].name]);
+    }
+  pairs.sort((x, y) => x[0] - y[0]);
+  for (const [d, a, b] of pairs.slice(0, 5)) console.log("   " + d.toFixed(3) + "  " + a + " / " + b);
+  if (pairs[0][0] < 0.25) fail("two weapons move too similarly: " + pairs[0][1] + " / " + pairs[0][2] + " (" + pairs[0][0].toFixed(3) + ")");
 }
 
 /* ------------------------------------------------------------------ */

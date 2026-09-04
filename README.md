@@ -139,23 +139,75 @@ a musket and a dagger all do the same thing: orbit the character. That is the
 
 That single rotation is redistributed. The body keeps a weapon-specific
 fraction of it as a lean; the weapon carries the rest as a rotation **about a
-grip point near the hand**, plus a reach along the attack direction and a
-lateral offset. Hands are re-placed so they stay on the grip.
+grip point on its own handle**, plus a drive along the attack direction and a
+travel across it.
 
 Four bundle hooks, all in the render path:
 
 | Hook | Site | Effect |
 |---|---|---|
 | `weaponAnimBody` | `dir + dirPlus` in the player loop | body keeps `dirPlus * profile.body` |
-| `weaponAnimPose` | both `renderTool` calls in `Dl` | grip pivot, reach, lateral offset |
-| `weaponAnimAmmo` | the nocked arrow/bolt in `Dl` | ammo rides the weapon and the string |
-| `weaponAnimHands` | the two hand circles in `Dl` | hands track the weapon's motion |
+| `weaponAnimPose` | both `renderTool` calls in `Dl` | grip pivot, drive, lateral travel |
+| `weaponAnimAmmo` | the nocked arrow/bolt in `Dl` | ammo rides the string hand |
+| `weaponAnimHands` | the two hand circles in `Dl` | hands **are** the weapon's grip points |
 
-Each of the 16 weapons has a profile of five keyframes — idle → wind-up →
-strike → follow-through → idle — with its own stage times, per-segment easing,
-grip point, body-lean factor and hand weights. Stage times are fractions of the
-weapon's own `speed`, so a 100 ms dagger and a 1500 ms musket share the
+## The grip system
+
+The hand circles are not decoration that follows the weapon — they are the
+weapon's physical grip. Each profile names, in the sprite's own frame:
+
+- **`shaft`**, the weapon's base orientation. The bundle draws every sprite
+  axis-aligned at `(scale + xOff, yOff)`, so the boxes that are taller than
+  they are wide — sword, katana, polearm, bat, mc grabby — have their long
+  axis on `+Y`; and the bundle's own attack, which rotates the player `-90°`
+  to bring the business end to the front, settles that the business end is the
+  `+Y` extreme. Orientation is derived from that, not guessed at.
+- **`grip`**, the pivot: a point on the handle. Everything turns about it.
+- **`hand1` / `hand2`**, each as *[distance along the shaft, distance across
+  it]*. Both are carried by the same transform as the sprite, so a two-handed
+  weapon's shaft demonstrably passes through both circles — `check-weapon-anim`
+  recomputes the placement independently and asserts it to 1e-9.
+
+`hands: WA_ONE_HAND` puts the free hand on a resting pose that counter-swings
+against the grip; `WA_TWO_HAND` puts both hands on the shaft.
+
+Two tracks animate the grip itself rather than the weapon:
+
+- **`slide`** moves both hands back along the shaft, so the shaft slides
+  *through* a stationary grip. This is what makes the polearm read as a thrust:
+  29 units of drive, 26 of slide, and the hands move 4.
+- **`sep`** pulls the secondary hand alone along the shaft — a bow draw, a
+  crossbow crank, a musket reload.
+
+Each of the 16 weapons has five keyframes — idle → wind-up → strike →
+follow-through → idle — with its own stage times, per-segment easing, optional
+`hold` on impact, grip geometry and body-lean factor. Stage times are fractions
+of the weapon's own `speed`, so a 100 ms dagger and a 1500 ms musket share the
 vocabulary at wildly different speeds.
+
+## Distinct movement, not distinct sprites
+
+`check-weapon-anim.js` hides the sprites and compares only how the character
+moves — stage timing, shaft arc, drive, lateral travel, slide, draw, body
+commitment — across all 120 weapon pairs, and fails if the closest pair is too
+similar. The closest today is crossbow / repeater crossbow, which are the same
+weapon family.
+
+Some of the resulting signatures:
+
+| Weapon | Hands | Shaft arc + body lean | Drive | Signature |
+|---|---|---|---|---|
+| polearm | two | 6° + 5° | 29 | braced thrust; the shaft slides through the grip |
+| bat | two | 152° + 32° | 8 | biggest load, travels all the way around |
+| great hammer | two | 109° + 41° | 44 | longest wind-up, holds on impact, slowest return |
+| great axe | two | 141° + 38° | 30 | widest horizontal arc |
+| katana | two | 115° + 18° | 20 | no wind-up, out-quint cut, longest follow-through |
+| short sword | one | 81° + 25° | 14 | compact; back on guard first |
+| stick | one | 37° + 13° | 6 | smallest arc, fastest recovery |
+| daggers | one | 25° + 11° | 20 | blade slides through the fist, alternates sides |
+| mc grabby | two | 22° + 9° | 36 | the only weapon whose fastest phase is the retraction |
+| hunting bow | two | 18° + 5° | 7 | string hand draws 18 units; the arrow rides it |
+| musket | two | 30° + 5° | 22 | stock drives back through both hands, muzzle climbs |
 
 ## It reads the combat clock, it never writes to it
 
@@ -187,6 +239,7 @@ tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/check-weapon-anim.js       weapon animation behaviour + invariants
 tools/check-weapon-anim-alloc.js weapon animation per-frame allocation
+tools/weapon-anim-geometry.js    where each weapon and hand actually lands
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 
@@ -221,11 +274,24 @@ node --expose-gc tools/check-weapon-anim.js
 `check-weapon-anim.js` runs the animation system against a stub canvas for
 every weapon, every attack direction, hits and whiffs, idle, building-in-hand,
 weapon switching and rapid re-attacks — 50k simulated player-frames — and
-asserts no NaN, balanced `save`/`restore`, hands that stay on the character,
-an unprofiled weapon reaching the vanilla draw untouched, and no state growth
-across 800k player-frames. It then shells out to `check-weapon-anim-alloc.js`,
-which needs its own process because `heapUsed` deltas stop meaning anything
-once the surrounding code has deoptimised the call sites.
+asserts no NaN, balanced `save`/`restore`, every hand exactly on its grip point,
+hands that stay on the character, two-handed grips that do not collapse, no two
+weapons moving alike, an unprofiled weapon reaching the vanilla draw untouched,
+and no state growth across 800k player-frames. It then shells out to
+`check-weapon-anim-alloc.js`, which needs its own process because `heapUsed`
+deltas stop meaning anything once the surrounding code has deoptimised the call
+sites.
+
+Both load the module into their own realm rather than a `vm` context. Inside a
+`vm` context `Math` belongs to the host realm, so V8 cannot inline `Math.cos` /
+`Math.sin` and every call boxes its result — about 7 bytes per pose evaluation
+that the browser, where the module and `Math` share a realm, never pays.
+
+`weapon-anim-geometry.js` prints the numbers behind those assertions: for every
+keyframe of every profile, where the pivot, both hands and the business end
+land, how wide the grip is, and the arc / drive / slide / draw totals. It is
+the tool the grip numbers were derived with — the sprite art is not readable
+from here, but the sprite boxes are.
 
 Current state of the build:
 
@@ -238,7 +304,7 @@ Current state of the build:
   resolves to the animal turn-rate site only.
 
 Ryn Type 2: driver tables match, 45/45 hooks bind (41 existing + the four
-weapon animation hooks), and all 14 animation checks pass.
+weapon animation hooks), and all 15 animation checks pass.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
@@ -265,5 +331,10 @@ understood.
   drawn. The one continuously-running part is the idle sway, a single `sin` per
   visible player per frame off a timestamp the renderer already samples.
 - The animation profiles are 16 blocks of plain numbers at the top of the
-  module. Retuning a weapon means editing its keyframes; nothing else in the
-  client needs to know.
+  module. Retuning a weapon means editing its keyframes and grip; nothing else
+  in the client needs to know. Run `weapon-anim-geometry.js` after, and
+  `check-weapon-anim.js` will refuse a grip that leaves the character or a
+  weapon that ends up moving like another one.
+- The refined grip pass made the render path *cheaper* than vanilla: the hands
+  are derived from the weapon's own transform, so the two `cos`/`sin` the pose
+  already computes replace the four the bundle spent placing them.

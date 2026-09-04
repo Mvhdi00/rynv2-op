@@ -11,7 +11,6 @@
  */
 const fs = require("fs");
 const path = require("path");
-const vm = require("vm");
 
 const ROOT = path.resolve(__dirname, "..");
 const CLIENT_PATH = process.argv[2] ? path.resolve(process.argv[2]) : path.join(ROOT, "Ryn_Type_2.user.js");
@@ -20,13 +19,12 @@ const START = "  const WA_LINEAR = 0;";
 const END = "  const WeaponAnimation_default = WeaponAnimation;";
 const src = client.slice(client.indexOf(START), client.indexOf(END) + END.length);
 
-const sandbox = { performance, Math, console, Int32Array, Uint8Array };
-vm.createContext(sandbox);
-vm.runInContext(
-  "const clamp = (v, a, b) => Math.min(Math.max(v, a), b);\n" + src + "\nglobalThis.WA = WeaponAnimation_default;",
-  sandbox
-);
-const WA = sandbox.WA;
+/* Loaded into this realm rather than a vm context. Inside a vm context `Math`
+ * belongs to the host realm, so V8 cannot inline Math.cos/Math.sin and every
+ * call boxes its result -- roughly 7 bytes per pose evaluation that the
+ * browser, where the module and Math share a realm, never pays. */
+const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+const WA = new Function("clamp", src + "\nreturn WeaponAnimation_default;")(clamp);
 
 const SPEAR = { id: 5, name: "polearm", speed: 700, armS: undefined };
 const BOW = { id: 9, name: "hunting bow", speed: 600, projectile: 0 };
@@ -38,19 +36,20 @@ const attacker = player(9, 5, 421.5, 700, -0.7);
 const idler = player(3, 5, 0, 0, 0);
 const archer = player(4, 9, 300, 600, -0.4);
 
+/* Integer sinks: a float accumulator would box and be measured as ours. */
 let sink = 0;
-const nopTool = (w, v, x, y, c) => { sink += x + y; };
-const nopAmmo = (x, y, p, c) => { sink += x + y; };
-const nopHand = (x, y, r) => { sink += x + y + r; };
-const nopCtx = { save() {}, restore() {}, translate(x, y) { sink += x + y; }, rotate(a) { sink += a; } };
+const nopTool = (w, v, x, y, c) => { sink = sink + x + y | 0; };
+const nopAmmo = (x, y, p, c) => { sink = sink + x + y | 0; };
+const nopHand = (x, y, r) => { sink = sink + x + y + r | 0; };
+const nopCtx = { save() {}, restore() {}, translate(x, y) { sink = sink + x + y | 0; }, rotate(a) { sink = sink + a | 0; } };
 
 /* Same call order as the rewritten Dl(). */
+const ARM = Math.PI / 4;
 function drawPass(p, weapon) {
-  const arm = Math.PI / 4 * (weapon.armS || 1);
   WA._bodyAngle(p);
   WA._drawWeapon(nopTool, weapon, "", 35, 0, nopCtx, p);
   if (weapon.projectile != null) WA._drawAmmo(nopAmmo, 35, 0, weapon, nopCtx, p);
-  WA._drawHands(nopHand, p, arm, 1, 1);
+  WA._drawHands(nopHand, p, ARM, 1, 1);
 }
 
 let failures = 0;
