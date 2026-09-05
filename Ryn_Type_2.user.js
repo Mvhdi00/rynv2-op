@@ -14848,6 +14848,14 @@ window.grbtp = 35;
         if (this._setupPhase > 0 && enemy === null) this.reset();
       }
       if (enemy === null) return;
+      // Every other insta module stands down when the health bar is the thing
+      // at risk; this one did not, and it runs at #23 — twelve modules ahead of
+      // the auto heal. Forcing turret or bull for a kill attempt puts a hat in
+      // forceHat that resolveDefenseHat() will not displace, so a lethal tick
+      // could be denied soldier by a combo that was never going to land in
+      // time. It arms itself off fight duration rather than a setting, so this
+      // is also the only brake the user has.
+      if (EM.shouldIgnoreModule()) return;
       if (!this._shouldArm(mp, enemy, MH)) return;
       if (MH.moduleActive) return;
       const pos0 = mp.pos.current;
@@ -15749,7 +15757,9 @@ window.grbtp = 35;
     moduleName="adaptiveGearSwitching";
     client;
     _lastGearSwitch=0;
-    _gearSwitchCooldown=50;
+    // Was 50, against a 111ms tick — one tick always clears it, so there was no
+    // cooldown at all and the hat could change every tick. Three ticks.
+    _gearSwitchCooldown=340;
     _closeCombatRange=60;
     constructor(client2) {
       this.client = client2;
@@ -15795,6 +15805,11 @@ window.grbtp = 35;
       }
       const nearestEnemy = EnemyManager2.nearestEnemy;
       if (!nearestEnemy) return;
+      // Picks a hat from distance and nearby traps alone, with no reading of
+      // incoming damage at all, so it had no business overriding a defensive
+      // choice. Stands down whenever the auto heal's own threat assessment has
+      // something to say.
+      if (EnemyManager2.shouldIgnoreModule()) return;
       if (!this._isCloseCombat(myPlayer, nearestEnemy)) return;
       const currentTime = Date.now();
       if (currentTime - this._lastGearSwitch < this._gearSwitchCooldown) {
@@ -15810,123 +15825,22 @@ window.grbtp = 35;
     }
   }
   const AdaptiveGearSwitching_default = AdaptiveGearSwitching;
-  class AntiSync {
-    moduleName="antiSync";
-    client;
-    _lastDamageTime=0;
-    _incomingAttacks=[];
-    _syncKillThreshold=15;
-    _dodgeActive=false;
-    _dodgeCooldown=500;
-    _lastDodgeTime=0;
-    constructor(client2) {
-      this.client = client2;
-    }
-    _detectIncomingAttack(nearestEnemy) {
-      if (!nearestEnemy) return false;
-      const primaryReloaded = this.client._ModuleHandler.staticModules.reloading.isReloaded(0);
-      const secondaryReloaded = this.client._ModuleHandler.staticModules.reloading.isReloaded(1);
-      if (primaryReloaded && secondaryReloaded) {
-        const dist = this.client.myPlayer.pos.current.distance(nearestEnemy.pos.current);
-        const enemyRange = (DataHandler_default.getWeapon(nearestEnemy.getItemByType(0) ?? 0)?.range ?? 35) + this.client.myPlayer.hitScale;
-        if (dist < enemyRange * 1.2) {
-          return true;
-        }
-      }
-      return false;
-    }
-    _predictSyncMoment(myPlayer, nearestEnemy) {
-      if (!nearestEnemy) return Infinity;
-      const healthPercent = myPlayer.tempHealth / myPlayer.maxHealth;
-      const enemyReady = this.client._ModuleHandler.staticModules.reloading.isEnemyReloaded?.(nearestEnemy, 0);
-      if (healthPercent < 0.3 && enemyReady && this._detectIncomingAttack(nearestEnemy)) {
-        return 0;
-      }
-      return Infinity;
-    }
-    _executeDodge(myPlayer, nearestEnemy) {
-      const ModuleHandler = this.client._ModuleHandler;
-      const angleToEnemy = myPlayer.pos.current.angle(nearestEnemy.pos.current);
-      const dodgeAngles = [ angleToEnemy + Math.PI / 2, angleToEnemy - Math.PI / 2, angleToEnemy + Math.PI ];
-      const randomDodge = dodgeAngles[Math.floor(Math.random() * dodgeAngles.length)];
-      ModuleHandler.startMovement({
-        x: Math.cos(randomDodge),
-        y: Math.sin(randomDodge)
-      });
-      ModuleHandler.forceHat = 7;
-      ModuleHandler.shouldAttack = false;
-      this._dodgeActive = true;
-      this._lastDodgeTime = Date.now();
-    }
-    _monitorDamage(myPlayer) {
-      const currentTime = Date.now();
-      const timeSinceLastDamage = currentTime - this._lastDamageTime;
-      if (myPlayer.tempHealth < (this._lastKnownHealth ?? myPlayer.maxHealth)) {
-        this._lastDamageTime = currentTime;
-        this._incomingAttacks.push({
-          timestamp: currentTime,
-          damageAmount: (this._lastKnownHealth ?? myPlayer.maxHealth) - myPlayer.tempHealth
-        });
-        if (this._incomingAttacks.length > 5) {
-          this._incomingAttacks.shift();
-        }
-        return true;
-      }
-      this._lastKnownHealth = myPlayer.tempHealth;
-      return false;
-    }
-    _isSyncKillDetected() {
-      if (this._incomingAttacks.length < 2) return false;
-      const recentAttacks = this._incomingAttacks.slice(-2);
-      const timeDiff = Math.abs(recentAttacks[1].timestamp - recentAttacks[0].timestamp);
-      return timeDiff < this._syncKillThreshold;
-    }
-    postTick() {
-      const {myPlayer: myPlayer, EnemyManager: EnemyManager2, _ModuleHandler: ModuleHandler} = this.client;
-      if (!Settings_default._antiSync || myPlayer.shameActive) {
-        return;
-      }
-      const nearestEnemy = EnemyManager2.nearestEnemy;
-      if (!nearestEnemy) return;
-      const damageTaken = this._monitorDamage(myPlayer);
-      if (this._isSyncKillDetected()) {
-        // Two hits inside 15ms is a sync, and a sync is an emergency: the food
-        // goes now, out of the reserve, without waiting the shame window out.
-        //
-        // What was here kept a second deferred-heal queue of its own —
-        // _pendingHealDeadline, 139ms — alongside ModuleHandler's 130ms one, so
-        // a sync that also tripped the auto heal queued the same apples twice
-        // and both batches landed. Its instant-eat test was `shameCount < 7`,
-        // which reads as "eating now is safe" but is about the wrong thing
-        // entirely: what makes an eat cost a point is being inside the window
-        // since the hit, not the count. Both are gone; ModuleHandler.heal()
-        // owns the window, the budget and the ceiling for every caller.
-        const foodID = myPlayer.getItemByType(2);
-        if (foodID !== null && foodID !== void 0 && Items[foodID]) {
-          const restore = Items[foodID].restore;
-          const healsNeeded = Math.ceil((myPlayer.maxHealth - myPlayer.tempHealth) / restore) + 2;
-          for (let i = 0; i < healsNeeded; i++) {
-            if (!ModuleHandler.heal(HEAL_EMERGENCY)) break;
-          }
-          ModuleHandler.healedOnce = true;
-        }
-        this._executeDodge(myPlayer, nearestEnemy);
-        ModuleHandler.shouldAttack = false;
-        ModuleHandler.moduleActive = false;
-        return;
-      }
-      const syncDanger = this._predictSyncMoment(myPlayer, nearestEnemy);
-      if (syncDanger === 0) {
-        if (Date.now() - this._lastDodgeTime > this._dodgeCooldown) {
-          this._executeDodge(myPlayer, nearestEnemy);
-          this.client.StatsManager.antiSyncDodges = (this.client.StatsManager.antiSyncDodges ?? 0) + 1;
-        }
-      }
-      const now = Date.now();
-      this._incomingAttacks = this._incomingAttacks.filter(attack => now - attack.timestamp < 1000);
-    }
-  }
-  const AntiSync_default = AntiSync;
+  // AntiSync was removed here.
+  //
+  // It was a second, independent auto heal: its own damage monitor, its own
+  // deferred-heal queue, its own dodge. Three separate defects meant it could
+  // never actually fire — reloading.isEnemyReloaded() does not exist, so the
+  // predictive branch was always undefined; _monitorDamage never refreshed
+  // _lastKnownHealth on the damage branch, so it re-reported the same hit every
+  // tick; and _isSyncKillDetected wanted two reports inside 15ms when reports
+  // are produced once per 111ms tick. Enabling the setting would have sent
+  // startMovement() an {x, y} object where an angle belongs, which reaches
+  // PacketManager.move as an object and reverseAngle as NaN.
+  //
+  // Novastorm has no equivalent, the auto heal above now covers the sync case
+  // through THREAT_INSTA and the damage sum, and a broken module behind a
+  // switch is worse than no module. The _antiSync setting is left in place so
+  // stored configs keep loading; nothing reads it.
   class ToolHammerSpearInsta {
     moduleName="toolHammerSpearInsta";
     client;
@@ -16650,10 +16564,6 @@ window.grbtp = 35;
   // Everything that means "a kill sequence is running", as opposed to chip
   // damage. These are the ones that justify spending shame to heal into.
   const THREAT_SEQUENCE = THREAT_INSTA | THREAT_VELOCITY_TICK | THREAT_REVERSE_INSTA | THREAT_MUSKET_BOW | THREAT_SPIKE_PUSH | THREAT_KNOCKBACK_TICK | THREAT_SPIKE_TICK | THREAT_ONE_TICK | THREAT_SPAM_DAGGER_BULL | THREAT_PRIMARY_RANGED;
-  // Health below which surviving the current tick is not the same as surviving
-  // the next one: roughly one primary swing plus a turret shot. A sequence that
-  // would leave us under it gets topped up now, while topping up is still free.
-  const PREHEAL_FLOOR = 40;
   // Allocated once. heal() takes an options object and this is the only shape
   // ever passed to it, so there is no reason to build a new one per apple.
   const HEAL_EMERGENCY = {
@@ -16664,7 +16574,6 @@ window.grbtp = 35;
     moduleName="antiInsta";
     client;
     blockBreak=false;
-    _healSent=null;
     toggleAnti=false;
     healingCount=0;
     forceHeal=false;
@@ -16674,34 +16583,16 @@ window.grbtp = 35;
     reset() {
       this.blockBreak = false;
       this.forceHeal = false;
-      this._healSent = null;
     }
 
-    // How many of the last batch of apples are still unacknowledged. The batch
-    // expires once the health it was sent against has moved, or once the round
-    // trip has had time to complete — whichever comes first.
-    _healsInFlight(ModuleHandler) {
-      const sent = this._healSent;
-      if (!sent) return 0;
-      const myPlayer = this.client.myPlayer;
-      // A rise means the batch has begun to land and the ledger is spent. A
-      // *drop* does not: it is the bull tick or a fresh hit, and the apples
-      // already on the wire are still on the wire. The old `!==` test treated
-      // both alike, so the bull helmet's own −5 wiped the ledger every second
-      // and the next tick paid for the same missing health twice.
-      if (myPlayer.tempHealth > sent.health) {
-        this._healSent = null;
-        return 0;
-      }
-      const socket = this.client.SocketManager;
-      const pong = socket && Number.isFinite(socket.pong) ? socket.pong : 0;
-      const waitTicks = Math.ceil(pong / 111) + 1;
-      if (ModuleHandler.tickCount - sent.tick > waitTicks) {
-        this._healSent = null;
-        return 0;
-      }
-      return sent.count;
-    }
+    // The in-flight ledger that used to live here is gone. It subtracted apples
+    // already on the wire from the next tick's batch, which is correct
+    // bookkeeping and wrong tactics: any batch the server did not honour — a
+    // dropped frame, an eat refused while the food count was stale — left the
+    // client under-healing for the whole round trip with nothing to notice it.
+    // Novastorm re-sends the deficit every tick until the health it asked for
+    // comes back, and that is what a health bar behaving correctly looks like.
+    // Over-sending costs packets; under-sending costs the round.
     isSaveHealTime() {
       const {myPlayer: myPlayer, SocketManager: SocketManager2} = this.client;
       const startHit = myPlayer.receivedDamage || 0;
@@ -16901,7 +16792,6 @@ window.grbtp = 35;
       budget: 0,
       critical: false,
       canDrain: false,
-      stampPending: false,
       bullOwned: false,
       wantBull: false
     };
@@ -16916,7 +16806,6 @@ window.grbtp = 35;
       s.budget = Math.max(0, SHAME_CEILING - count);
       s.critical = count >= SHAME_CEILING;
       s.canDrain = count > 0 && myPlayer.canDrainShame(now, pong);
-      s.stampPending = myPlayer.shameStampPending(now, pong);
       s.bullOwned = ModuleHandler.canBuy(0, 7);
       s.wantBull = false;
       if (count > 0 && s.bullOwned && !myPlayer.shameActive && !myPlayer.isDmgOverTime) {
@@ -16944,31 +16833,15 @@ window.grbtp = 35;
       return s;
     }
 
-    // How many apples can actually be paid for. Packets come from the shared
-    // ledger — routine healing budgets against the emergency reserve, an
-    // emergency sees past it — and food comes from the stockpile, because the
-    // server's canBuild() refuses an eat we cannot afford whatever we send.
-    // Sizing a batch without either check is how a busy tick used to spend its
-    // whole allowance on eats that were never going to be honoured.
-    _affordableHeals(myPlayer, ModuleHandler, foodID, emergency) {
-      let n = ModuleHandler.healBudget(emergency);
-      if (n <= 0) {
-        return 0;
-      }
-      if (!myPlayer.isSandbox) {
-        const cost = Items[foodID].cost.food;
-        if (cost > 0) {
-          const affordable = Math.floor(myPlayer.resources.food / cost);
-          if (affordable < n) {
-            n = affordable;
-          }
-        }
-      }
-      return n > 0 ? n : 0;
-    }
-    // Send a batch and record it. heal() returns false when it declined — no
-    // packets left, or a routine eat deferred out of the shame window — and
-    // there is no point pressing on through the rest of the batch when it does.
+    // Send a batch. heal() returns false once the socket allowance is actually
+    // spent, and there is no point pressing on through the rest of the batch
+    // when it does — that single check is all the budgeting left, and it is the
+    // same one novastorm has: `packets + 5 > 119`.
+    //
+    // The food-stockpile check that used to be here is gone with the rest. It
+    // read myPlayer.resources.food, which lags the server by a round trip, so
+    // it refused eats that would have been honoured — and an eat the server
+    // will not honour costs three packets and nothing else.
     _sendHeals(ModuleHandler, count, emergency, tempHealth) {
       let sent = 0;
       for (let i = 0; i < count; i++) {
@@ -16979,11 +16852,6 @@ window.grbtp = 35;
       }
       if (sent > 0) {
         ModuleHandler.healedOnce = true;
-        this._healSent = {
-          count: sent,
-          tick: ModuleHandler.tickCount,
-          health: tempHealth
-        };
       }
       return sent;
     }
@@ -17149,15 +17017,12 @@ window.grbtp = 35;
           ModuleHandler.didAntiInsta = true;
           ModuleHandler.shouldAttack = false;
           // Trapped, with the break about to throw us onto a spike: an
-          // emergency by any reading, so it spends from the reserve and does
-          // not wait out the shame window. It is capped by the ledger now
-          // rather than sending a flat three apples whatever the budget says,
-          // and heal()'s ceiling backstop still refuses the one eat that would
-          // make eight.
+          // emergency by any reading, so it does not wait out the shame window.
+          // _sendHeals stops on its own once the socket allowance is spent, and
+          // heal()'s ceiling backstop still refuses the one eat that would make
+          // eight.
           const needTimes = Math.max(1, Math.ceil((maxHealth - tempHealth) / restore));
-          const hits = Math.max(needTimes + 1, 3);
-          const budget = this._affordableHeals(myPlayer, ModuleHandler, foodID, true);
-          this._sendHeals(ModuleHandler, Math.min(hits, budget), true, tempHealth);
+          this._sendHeals(ModuleHandler, Math.max(needTimes + 1, 3), true, tempHealth);
           return;
         }
       }
@@ -17234,89 +17099,48 @@ window.grbtp = 35;
       // heal. One eat only: it clears the stamp, so a second cannot move shame
       // again until something hits us.
       if (tempHealth >= maxHealth) {
-        if (shame.canDrain && !ModuleHandler._shameMovedThisTick && this._affordableHeals(myPlayer, ModuleHandler, foodID, false) > 0) {
+        if (shame.canDrain && !ModuleHandler._shameMovedThisTick) {
           this._sendHeals(ModuleHandler, 1, false, tempHealth);
         }
         return;
       }
 
-      // Food already sent and not yet acknowledged. tempHealth only moves when
-      // the server echoes the new health back, so without this the same missing
-      // health is paid for once per tick for the whole round trip.
+      // ---- HEAL: novastorm's rule, and nothing on top of it -----------------
       //
-      // (The old note here said every apple past the first lands at full health
-      // and pushes shame up. It does not: the first eat clears the server's
-      // hitTime, so apples two onwards move shame by nothing at all. They waste
-      // food and packets, which is reason enough for the ledger, but the shame
-      // cost of a burst is exactly one point — which is what makes the
-      // emergency branch below affordable in the first place.)
-      const inFlight = this._healsInFlight(ModuleHandler);
+      //     if (((healing && shameCount < 7) || (tick - damageTick) > 0)
+      //         && myPlayer.health < 100) heal(100 - myPlayer.health);
+      //
+      // Two conditions, OR'd, and the amount is the deficit. That is the whole
+      // rule and it beat this client head to head, so this is now that rule.
+      //
+      // What was here was the same two conditions with five extra gates layered
+      // over the routine half — a shame-stamp wait, an in-flight ledger, a food
+      // check, a packet reserve, and heal()'s own 130ms defer. Each is
+      // defensible alone and each can only ever do one thing: refuse an apple
+      // novastorm would have sent. Stacked on the branch that runs most of the
+      // time, they are why the health bar was behind.
+      //
+      // Deliberately kept from before, because neither can suppress a heal:
+      //   · the threat mask folded into dmgPot above — it only ever raises the
+      //     number, so it heals earlier than novastorm, never later
+      //   · the full-health shame drain above — a free −2 with no food spent
       const missing = maxHealth - tempHealth;
-
-      // ---- HEAL: emergency -------------------------------------------------
-      // The bar comes off this tick unless food lands first. Cover the missing
-      // health *and* the hit that is coming, so the tick does not end one apple
-      // short of surviving — novastorm heals to 100 and stops, which is a hit
-      // behind whenever the incoming damage is larger than what is missing.
-      //
-      // Costs one point of shame. Refused at the ceiling, with no override:
-      // healing at 7 makes 8, and 8 is thirty seconds of no healing at all.
-      if (healing && shame.budget > 0) {
-        // Capped at a full bar's worth. An apple that arrives while already at
-        // full health is not consumed — changeHealth returns false before
-        // useRes — so over-sending costs packets rather than food, but there is
-        // no reading under which more than a whole bar of healing helps.
-        const coverage = Math.min(missing + Math.min(dmgPot, maxHealth), maxHealth);
-        const want = Math.ceil(coverage / restore) - inFlight;
-        if (want > 0) {
-          const budget = this._affordableHeals(myPlayer, ModuleHandler, foodID, true);
-          if (this._sendHeals(ModuleHandler, Math.min(want, budget), true, tempHealth) > 0) {
-            this.forceHeal = true;
-            ModuleHandler.didAntiInsta = true;
-            return;
-          }
-        }
-      }
-
-      // ---- HEAL: proactive -------------------------------------------------
-      // Not lethal this tick, but a named sequence is running and surviving it
-      // leaves too little health to survive its follow-up. Misery reaches the
-      // same place with survivalPreheal; the difference is that this only fires
-      // while it is free — no stamp pending means the apple cannot move shame —
-      // so being early never costs anything. If a stamp is pending we wait, and
-      // the emergency branch above is there for the tick it becomes lethal.
-      if (!shame.stampPending && threat.sequences !== 0 && tempHealth - dmgPot < PREHEAL_FLOOR) {
-        const want = Math.ceil(missing / restore) - inFlight;
-        if (want > 0) {
-          const budget = this._affordableHeals(myPlayer, ModuleHandler, foodID, false);
-          if (this._sendHeals(ModuleHandler, Math.min(want, budget), false, tempHealth) > 0) {
-            ModuleHandler.didAntiInsta = true;
-            return;
-          }
-        }
-      }
-
-      // ---- HEAL: routine top-up and shame recovery -------------------------
-      // Novastorm's second condition — `(tick - damageTick) > 0`, a tick went by
-      // without being hit — with RYN's shame correction, now stated against the
-      // server's rule instead of a wall-clock guess. Eating is shame-safe when
-      // there is no stamp for the server to spend, or when the stamp has aged
-      // past the 120ms window and is worth two points off.
-      //
-      // `canDrain` is what lets this run a tick earlier than novastorm's
-      // condition allows, and that tick is the whole difference between
-      // clearing two points per bull cycle and missing the window every time.
-      const shameSafe = !shame.stampPending;
-      if (!(shameSafe && (this.isSaveHealTick() || shame.canDrain))) {
+      const needTimes = Math.ceil(missing / restore);
+      if (needTimes <= 0) {
         return;
       }
-      const needTimes = Math.max(0, Math.ceil(missing / restore) - inFlight);
-      if (needTimes === 0) {
+      // shame.budget is `7 - shameCount`, so `> 0` is novastorm's
+      // `shameCount < 7`. At the ceiling only the second condition can fire,
+      // which is what novastorm does too.
+      const emergency = healing && shame.budget > 0;
+      if (!emergency && !this.isSaveHealTick()) {
         return;
       }
-      const budget = this._affordableHeals(myPlayer, ModuleHandler, foodID, false);
-      if (this._sendHeals(ModuleHandler, Math.min(needTimes, budget), false, tempHealth) > 0) {
+      if (this._sendHeals(ModuleHandler, needTimes, emergency, tempHealth) > 0) {
         this.forceHeal = healing;
+        if (emergency) {
+          ModuleHandler.didAntiInsta = true;
+        }
       }
     }
   }
@@ -18703,6 +18527,11 @@ window.grbtp = 35;
     postTick() {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler, ProjectileManager: ProjectileManager2, ObjectManager: ObjectManager2} = this.client;
       const nearestEnemy = EnemyManager2.nearestEnemy;
+      // Was the one placement module with no tick claim check, so it could
+      // spend four packets a wall inside a tick another module already owned.
+      if (ModuleHandler.moduleActive) {
+        return;
+      }
       if (nearestEnemy === null || !Settings_default._placementDefense) {
         return;
       }
@@ -19847,7 +19676,6 @@ window.grbtp = 35;
         defaultAcc: new DefaultAcc(client2),
         autoSync: new AutoSync(client2),
         adaptiveGearSwitching: new AdaptiveGearSwitching_default(client2),
-        antiSync: new AntiSync_default(client2),
         spikeSyncHammer: new SpikeSyncHammer(client2),
         spikeSync: new SpikeSync(client2),
         velocityTick: new VelocityTick_default(client2),
@@ -19910,7 +19738,7 @@ window.grbtp = 35;
       // where the bot walks; botAutoBreak runs after, and only fires when the
       // movement it just asked for did not happen.
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botRangedAttack, this.staticModules.movement, this.staticModules.botAutoBreak ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.antiSync, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.trapInstakill, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.spikeTickController, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.trapInstakill, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiTrapProtect, this.staticModules.antiTrapStar, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.spikeTickController, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
       this.reset();
     }
     movementReset() {
@@ -20193,30 +20021,35 @@ window.grbtp = 35;
     // ------------------------------------------------------------------------
     // The heal ledger.
     //
-    // Three modules queue food in the same tick — antiInsta, antiSync and the
-    // placer — and each used to decide on its own whether it could afford to.
-    // heal() refused under three packets while _flushShameHealQueue() sized its
-    // batch off `floor(budget/3)`, nothing held anything back for the tick that
-    // actually needs it, and two apples sent by two modules for the same
-    // missing health both went out. So every eat is booked here now: one packet
-    // budget, one emergency reserve, one shame delta per tick.
+    // Two modules queue food in the same tick — antiInsta and the placer — and
+    // each used to decide on its own whether it could afford to, so two apples
+    // sent for the same missing health both went out. Every eat is booked here
+    // instead: one packet budget, one shame delta per tick.
     //
-    // One shame delta per tick is not a policy, it is the game's rule. The eat
-    // clears the server's hitTime, so within a batch only the first apple can
-    // move shame at all — which is exactly why an emergency batch is safe to
-    // send whole, and why a recovery eat only ever needs to be one apple.
+    // What is deliberately *not* here any more is anything that refuses an eat
+    // for a reason novastorm does not have. The budget is the socket's real
+    // allowance and nothing is held back from it; there is no deferral window;
+    // there is no food-stockpile test. The only two refusals left are the
+    // allowance running out and the shame ceiling, and the second one is the
+    // game's rule rather than a policy.
+    //
+    // One shame delta per tick is likewise the game's rule, not a choice. The
+    // eat clears the server's hitTime, so within a batch only the first apple
+    // can move shame at all — which is exactly why an emergency batch is safe
+    // to send whole, and why a recovery eat only ever needs to be one apple.
     // ------------------------------------------------------------------------
     _HEAL_PACKET_COST=3;
-    // Four apples' worth of frames that routine healing may not touch, so a
-    // lethal tick arriving after a busy one still has something to spend.
-    _HEAL_EMERGENCY_RESERVE=12;
+    // Was twelve — four apples' worth of frames routine healing could not
+    // touch. The intent was to keep something back for a lethal tick; the
+    // effect was that the branch which runs most of the time gave up four
+    // apples early on any busy second. Novastorm reserves nothing and gates
+    // healing on nothing, and the only ceiling that survives here is the
+    // socket's real allowance.
+    _HEAL_EMERGENCY_RESERVE=0;
     // A whole bar of apples plus one. Nothing sane needs more in a single tick,
     // and it means no combination of modules can flood the socket with food
     // however they each size their own batch.
     _HEAL_MAX_PER_TICK=6;
-    _SHAME_GUARD_MARGIN=130;
-    _shameHealQueue=0;
-    _shameHealDeadline=null;
     _healsThisTick=0;
     _shameMovedThisTick=false;
     _rawHeal() {
@@ -20240,8 +20073,10 @@ window.grbtp = 35;
     _healBudgetLeft() {
       return this.packetLimit - this.packetCount;
     }
-    // How many apples are affordable right now. Routine healing budgets against
-    // the reserve; an emergency is what the reserve is for and sees past it.
+    // How many apples the socket allowance can still carry. The reserve term is
+    // kept as a dial rather than deleted — set it above zero and routine
+    // healing starts giving ground to emergencies again — but it is zero, which
+    // is novastorm's behaviour and the reason its bar kept up.
     healBudget(emergency = false) {
       const left = this._healBudgetLeft() - (emergency ? 0 : this._HEAL_EMERGENCY_RESERVE);
       return Math.max(0, Math.floor(left / this._HEAL_PACKET_COST));
@@ -20270,35 +20105,22 @@ window.grbtp = 35;
           return false;
         }
       }
-      if (myPlayer && !myPlayer.isSandbox && myPlayer.receivedDamage) {
-        const sinceHit = Date.now() - myPlayer.receivedDamage;
-        // Inside the 120ms window an apple adds shame instead of removing it,
-        // so a routine top-up waits the window out. An emergency does not:
-        // holding food back through the tick that kills you trades one point of
-        // shame for the whole run, and the old code deferred every heal alike —
-        // including the one antiInsta raised *because* the damage was lethal.
-        if (!emergency && sinceHit <= this._SHAME_GUARD_MARGIN) {
-          this._shameHealQueue = Math.min(this._shameHealQueue + 1, 12);
-          this._shameHealDeadline = myPlayer.receivedDamage + this._SHAME_GUARD_MARGIN;
-          return false;
-        }
-      }
+      // The 130ms defer queue that used to sit here is gone.
+      //
+      // It held a routine apple back until the server's shame window had
+      // closed, then released it on the next tick — so the earliest food could
+      // reach the server after a hit was about a tick and a half plus ping,
+      // against a window that closes after 120ms. It bought one point of shame
+      // and paid for it in the only currency that matters.
+      //
+      // Novastorm has no equivalent. It eats a tick after the hit, takes the
+      // point when it comes, and drains it back with the bull helmet. Shame is
+      // recoverable; the tick you spent not eating is not.
+      //
+      // The ceiling backstop above still stands, so this cannot walk into the
+      // thirty-second lockout — it just no longer waits when it is free not to.
       this._rawHeal();
       return true;
-    }
-    _flushShameHealQueue() {
-      if (this._shameHealQueue <= 0 || this._shameHealDeadline === null) return;
-      if (Date.now() < this._shameHealDeadline) return;
-      const affordable = this.healBudget(false);
-      const count = Math.min(this._shameHealQueue, affordable);
-      this._shameHealQueue -= count;
-      if (this._shameHealQueue <= 0) {
-        this._shameHealQueue = 0;
-        this._shameHealDeadline = null;
-      }
-      for (let i = 0; i < count; i++) {
-        this._rawHeal();
-      }
     }
     circleOffset=0;
     targetSpeed=65;
@@ -20386,7 +20208,6 @@ window.grbtp = 35;
       this._shameMovedThisTick = false;
       this._defenseHat = null;
       this._defenseHatPriority = -1;
-      this._flushShameHealQueue();
       if (Settings_default._circleRotation && this.move_dir === null) {
         const rotationSpeed = this.targetSpeed / Settings_default._circleRadius;
         this.circleOffset = (this.circleOffset + rotationSpeed) % (Math.PI * 2);
