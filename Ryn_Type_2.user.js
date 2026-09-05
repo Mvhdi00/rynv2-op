@@ -3061,8 +3061,32 @@ window.grbtp = 35;
         this.handleDanger(enemy);
         this.handleNearest(0, enemy);
       }
-      if (myPlayer.isBullTickTime()) {
-        this.potentialDamage += 5;
+      // Novastorm's poison term, which RYN had no equivalent of:
+      //
+      //     for (let damage of damages)
+      //       if (damage == 5 || damage == 5 * .75) damageByPoisonTick = tick;
+      //     if ((tick - damageByPoisonTick) % 9 == 8) poisonDmgPot = 5;
+      //
+      // bullTick is already set from exactly the same reading — a damage drop
+      // of 5, 2 or 4 is a damage-over-time tick — so isBullTickTime(-1) is that
+      // `% 9 == 8`: the tick before the next one lands. poisonCount is set when
+      // a ruby weapon or a plague mask connects and counts down on the same
+      // beat, so it is what says the poison is still running.
+      //
+      // Five health arriving on a known tick is the difference between eating
+      // now and eating one tick too late at low health, and the state to see it
+      // coming was already being tracked and thrown away: getDmgOverTime() had
+      // no callers at all.
+      //
+      // What was here instead was `if (isBullTickTime()) potentialDamage += 5`,
+      // not conditioned on wearing bull or on being poisoned, so it fired every
+      // nine ticks whatever was happening — and antiInsta adds its own +5 for
+      // the bull helmet further down, which is novastorm's
+      // `if (currentHat == 7) totalDmgPot += 5`. Wearing bull on the tick it
+      // ticked therefore counted ten. The bull half lives in antiInsta now,
+      // where novastorm keeps it; this slot is the poison half.
+      if (myPlayer.poisonCount > 0 && myPlayer.isBullTickTime(-1)) {
+        this.potentialDamage += POISON_TICK_DAMAGE;
       }
       this.potentialDamage += this.client.ProjectileManager.totalDamage;
       const actualSpikeDamage = Math.max(this.potentialSpikeDamage, this.potentialSpikeKnockbackDamage);
@@ -3238,6 +3262,10 @@ window.grbtp = 35;
   // second, so seven to zero takes four.
   const BULL_TICK_DAMAGE = 5;
   const BULL_TICK_PERIOD = 9;
+  // Poison ticks on the same one-second beat as the bull helmet's drain — both
+  // ride the server's `x = 1e3` loop — and both land 5. Named separately
+  // because they are different readings that happen to share a number.
+  const POISON_TICK_DAMAGE = 5;
   const scale_value = window.grbtp;
   delete window.grbtp;
   class Player extends Entity_default {
