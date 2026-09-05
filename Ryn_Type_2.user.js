@@ -16793,7 +16793,6 @@ window.grbtp = 35;
       count: 0,
       budget: 0,
       critical: false,
-      canDrain: false,
       bullOwned: false,
       wantBull: false
     };
@@ -16807,7 +16806,6 @@ window.grbtp = 35;
       // budget every branch below spends against, and it is never overdrawn.
       s.budget = Math.max(0, SHAME_CEILING - count);
       s.critical = count >= SHAME_CEILING;
-      s.canDrain = count > 0 && myPlayer.canDrainShame(now, pong);
       s.bullOwned = ModuleHandler.canBuy(0, 7);
       s.wantBull = false;
       if (count > 0 && s.bullOwned && !myPlayer.shameActive && !myPlayer.isDmgOverTime) {
@@ -16998,9 +16996,24 @@ window.grbtp = 35;
         return;
       }
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2} = this.client;
-      if (myPlayer.shameActive) {
-        return;
-      }
+      // The `if (myPlayer.shameActive) return;` that stood here is gone for
+      // parity. Novastorm has no equivalent and keeps eating through a shame
+      // lockout, so this now does too.
+      //
+      // Worth knowing what that costs, because it is the one removal on this
+      // pass that is not free. From the game's own consume path:
+      //
+      //     if (f.consume) {
+      //       if (this.hitTime) { ... shameCount++ ... >= 8 -> shameTimer = 3e4 }
+      //       this.shameTimer <= 0 && (V = f.consume(this));   // refused
+      //     }
+      //
+      // The shame accounting runs before the lockout check, so eating during a
+      // lockout still scores, and scoring back up to eight sets shameTimer to
+      // thirty seconds again. Eating through a lockout can extend it.
+      //
+      // Restoring the guard is the three lines above this comment if that turns
+      // out to matter in play.
       const foodID = myPlayer.getItemByType(2);
       if (foodID === null || foodID === void 0 || !Items[foodID]) {
         return;
@@ -17010,22 +17023,27 @@ window.grbtp = 35;
       const maxHealth = myPlayer.maxHealth;
       const nearestEnemy = EnemyManager2.nearestEnemy;
 
-      // Anti Smart Tick keeps its own branch ahead of the rule: it is not a heal
-      // decision, it is a refusal to break out of a trap into a spike, and the
-      // heal is what it does with the tick instead.
+      // Anti Smart Tick, as novastorm's doSmartTickAnti() has it: a refusal to
+      // break out of a trap into a spike, and nothing more.
+      //
+      //     autoBreak = false;
+      //     if (secondaryReload < 1)    predictWeapon = weapons[1];
+      //     else if (primaryReload < 1) predictWeapon = weapons[0];
+      //     else return true;
+      //
+      // The stall is the whole move — holding a weapon that cannot swing keeps
+      // the trap intact for another tick — and it happens inside antiSmartTick()
+      // itself, which sets blockBreak and forceWeapon exactly as above.
+      //
+      // What was here on top of that was an emergency batch of food. It is real
+      // healing and it is not novastorm's, so it is gone: the tick falls through
+      // to the ordinary rule below, which will still cover it as an emergency if
+      // the damage is genuinely lethal.
       if (Settings_default._antiSmartTick && myPlayer.isTrapped && nearestEnemy) {
         const {ObjectManager: ObjectManager2, PlayerManager: PlayerManager2} = this.client;
         if (this.antiSmartTick(myPlayer, nearestEnemy, ModuleHandler, ObjectManager2, PlayerManager2)) {
           ModuleHandler.didAntiInsta = true;
           ModuleHandler.shouldAttack = false;
-          // Trapped, with the break about to throw us onto a spike: an
-          // emergency by any reading, so it does not wait out the shame window.
-          // _sendHeals stops on its own once the socket allowance is spent, and
-          // heal()'s ceiling backstop still refuses the one eat that would make
-          // eight.
-          const needTimes = Math.max(1, Math.ceil((maxHealth - tempHealth) / restore));
-          this._sendHeals(ModuleHandler, Math.max(needTimes + 1, 3), true, tempHealth);
-          return;
         }
       }
 
@@ -17048,22 +17066,18 @@ window.grbtp = 35;
       if (hatID === 7) {
         dmgPot += ANTI_INSTA_SCUBA_BIAS;
       }
-      // The named sequences, through the same hat maths and the same cap. A
-      // sequence that has been positively identified is worth what it can land
-      // even when its terms have not made it into the sum yet — the enemy is
-      // mid weapon switch, or the projectile is still in the air — and taking
-      // the worse of the two is what makes several live threats resolve
-      // together instead of one at a time.
-      let seqPot = threat.damage;
-      if (seqPot > ANTI_INSTA_DMG_CAP) {
-        seqPot = ANTI_INSTA_DMG_CAP;
-      }
-      if (hatID === 6) {
-        seqPot *= Hats[6].dmgMult;
-      }
-      if (seqPot > dmgPot) {
-        dmgPot = seqPot;
-      }
+      // The threat mask no longer raises this number.
+      //
+      // It used to take max(sum, worst named sequence), which made the client
+      // heal for a sequence whose terms had not reached the sum yet — a musket
+      // mid-switch, an arrow still in the air. That is strictly more healing
+      // than novastorm does, and parity with novastorm is the requirement, so
+      // the sum stands on its own exactly as `totalDmgPot` does there.
+      //
+      // The mask is still computed. It costs a few dozen comparisons, it drives
+      // the soldier request below — which is novastorm's own `spikeTickAnti`
+      // and trapped-on-a-spike readings — and it is what the HUD prints. It
+      // just no longer touches the damage the heal decides on.
       const healing = tempHealth <= dmgPot;
 
       // ---- SURVIVAL / HAT --------------------------------------------------
@@ -17088,22 +17102,15 @@ window.grbtp = 35;
         ModuleHandler.requestDefenseHat(7, shame.critical ? DEF_HAT_SHAME_CRITICAL : DEF_HAT_SHAME_RECOVER);
       }
 
-      // ---- SHAME RECOVERY AT FULL HEALTH -----------------------------------
-      // The free one, and the reason the old `tempHealth >= maxHealth` return
-      // was costing so much. The server books the shame delta before it works
-      // out that the heal cannot land:
+      // ---- FULL HEALTH ------------------------------------------------------
+      // Novastorm's `&& myPlayer.health < 100`, and nothing else.
       //
-      //     if (this.hitTime) { ... shameCount -= 2 ... }     // booked here
-      //     this.shameTimer <= 0 && (V = f.consume(this));    // returns false
-      //     V && (this.useRes(f), ...);                       // so no apple
-      //
-      // At full health with an aged stamp that is −2 for no food and no wasted
-      // heal. One eat only: it clears the stamp, so a second cannot move shame
-      // again until something hits us.
+      // What was here also spent one apple at full health when an aged damage
+      // stamp was sitting unspent, because the server books the −2 before it
+      // works out the heal cannot land — a free two points off shame for no
+      // food. It works, it is confirmed in the game's own consume path, and it
+      // is not something novastorm does, so it is gone with the rest.
       if (tempHealth >= maxHealth) {
-        if (shame.canDrain && !ModuleHandler._shameMovedThisTick) {
-          this._sendHeals(ModuleHandler, 1, false, tempHealth);
-        }
         return;
       }
 
@@ -20045,7 +20052,6 @@ window.grbtp = 35;
     // healBudget() are gone with the packet gate they existed to compute.
     _HEAL_MAX_PER_TICK=6;
     _healsThisTick=0;
-    _shameMovedThisTick=false;
     _rawHeal() {
       // Book the shame delta at send time rather than waiting to infer it from
       // a health rise. At full health there is no rise to infer it from, and
@@ -20055,9 +20061,7 @@ window.grbtp = 35;
       if (myPlayer && !myPlayer.isSandbox) {
         const socket = this.client.SocketManager;
         const pong = socket && Number.isFinite(socket.pong) ? socket.pong : 0;
-        if (myPlayer.bookShameEat(Date.now(), pong) !== 0) {
-          this._shameMovedThisTick = true;
-        }
+        myPlayer.bookShameEat(Date.now(), pong);
       }
       this._healsThisTick += 1;
       this.selectItem(2);
@@ -20205,7 +20209,6 @@ window.grbtp = 35;
     }
     postTick() {
       this._healsThisTick = 0;
-      this._shameMovedThisTick = false;
       this._defenseHat = null;
       this._defenseHatPriority = -1;
       if (Settings_default._circleRotation && this.move_dir === null) {
