@@ -12945,10 +12945,27 @@ window.grbtp = 35;
   const RPE_PREPLACE_BOOK_CONFIDENCE = .12;
   const RPE_PREPLACE_MAX_AGE = 8;
   const RPE_REPLACE_RANGE = 300;
-  // Deletion-driven replans allowed in one tick. A whole wall coming down is
-  // one situation, not one situation per spike, and the packet budget caps
-  // what any of those cycles could send anyway.
-  const RPE_VACATED_CYCLES_PER_TICK = 2;
+  // Deletion-driven replans allowed in one tick.
+  //
+  // Was 2, on the reasoning that a whole wall coming down is one situation
+  // rather than one per spike. It is not: removeObject() hands each deletion
+  // over before erasing it from the map, so a cycle only ever sees the ground
+  // freed by the object it was called for. The third spike of a wall was not a
+  // repeat of the first — it was ground nothing had looked at, and it waited a
+  // full tick for the next postTick to notice.
+  //
+  // 111ms is the whole complaint about replace feeling slow, and it is the only
+  // part of the delay that is ours. The rest is the round trip: your swing has
+  // to reach the server and the "Q" has to come back before there is anything
+  // to replace at all, and no number here shortens that.
+  //
+  // Raising it is cheap because the expensive half is already shared. sense()
+  // holds its escape solve for the tick it was computed in, so cycles after the
+  // first re-derive only the blocker set, and three guards run before this
+  // counter is even reached: the packet budget must hold a full place, and both
+  // the object and the target must be inside RPE_REPLACE_RANGE. A tick that
+  // cannot afford to send stops replanning on its own.
+  const RPE_VACATED_CYCLES_PER_TICK = 6;
   // How much more a soft claim has to be worth to hold ground against a claim
   // of higher priority.
   const RPE_SOFT_DOMINANCE = 1.5;
