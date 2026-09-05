@@ -10547,6 +10547,12 @@ window.grbtp = 35;
   // resource bar for ground I cannot use until I am out of the trap; three is
   // enough to wall the side they are standing on.
   const LUNA_TRAPPED_MAX_BUILDS = 3;
+  // Scan heads. One head is the old behaviour: a single sweep starting at angle
+  // 0, which is straight right. Three splits the circle into right, centre and
+  // left of the enemy direction and takes them in turn, so the per-tick builds
+  // are spread across sides instead of clustered wherever the sweep began.
+  // Matches LUNA_TRAPPED_MAX_BUILDS so a pinned tick gets one build per side.
+  const LUNA_SCAN_HEADS = 3;
 
   // Modules that own a spike tick or a sync. They all run before the placer,
   // and whichever claims the tick puts its name in ModuleHandler.activeModule.
@@ -10695,6 +10701,55 @@ window.grbtp = 35;
     _isItemLimit(id, myPlayer) {
       const {count: count, limit: limit} = myPlayer.getItemCount(Items[id].itemGroup);
       return !!limit && count >= limit;
+    }
+
+    // ── Multi-head scan ─────────────────────────────────────────────────────
+    //
+    // The 72 probes are built in index order: index 0 is straight right and the
+    // sweep walks counter-clockwise from there. Every consumer then reads them
+    // in that same order, and the send loop stops the moment the packet budget
+    // runs out — so the builds land on whatever happened to sit early in the
+    // sweep, and open ground on the far side is reached late or not at all.
+    // Pinned in a trap with the only free slot behind and to the left, that is
+    // the tick spent walking to it from the right.
+    //
+    // One line becomes three heads: right, centre and left of a reference
+    // direction, taken in turn. The first three picks — which is exactly the
+    // per-tick build cap — are one from each side, so a free slot is claimed on
+    // the tick it is seen whichever way it lies. Within a head the entries are
+    // ordered by how central they are to that head, so a head hands back its
+    // most typical angle rather than one on its own edge.
+    _spreadByDirection(list, ref) {
+      if (list.length <= 1) {
+        return list.slice();
+      }
+      const span = Math.PI * 2 / LUNA_SCAN_HEADS;
+      const heads = [];
+      for (let i = 0; i < LUNA_SCAN_HEADS; i++) heads.push([]);
+      for (const entry of list) {
+        let d = entry.angle - ref;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        let idx = Math.floor((d + Math.PI) / span);
+        if (idx < 0) idx = 0; else if (idx >= LUNA_SCAN_HEADS) idx = LUNA_SCAN_HEADS - 1;
+        heads[idx].push({
+          entry: entry,
+          off: Math.abs(d - (-Math.PI + span * (idx + .5)))
+        });
+      }
+      for (const h of heads) h.sort((x, y) => x.off - y.off);
+      const out = [];
+      for (let round = 0; ; round++) {
+        let added = false;
+        for (const h of heads) {
+          if (round < h.length) {
+            out.push(h[round].entry);
+            added = true;
+          }
+        }
+        if (!added) break;
+      }
+      return out;
     }
 
     // Luna getPrePlaceAngles + getPerfectAngles: probe 72 evenly spaced
@@ -11030,11 +11085,17 @@ window.grbtp = 35;
           return false;
         };
 
-        // Perfect angles first — Luna's two passes, in order.
-        for (const obj of validAngles.filter(a => a.perfect)) {
+        // Perfect angles first — Luna's two passes, in order. What changed is
+        // the order *within* each pass: it was the raw probe order, which is a
+        // single sweep from straight right, so the packet budget went to the
+        // right-hand side of the circle and the left was reached last. Each
+        // pass now comes off three heads around the enemy direction, so the
+        // sides get an equal share of the tick.
+        const scanRef = Math.atan2(enemyFut.y - myPos.y, enemyFut.x - myPos.x);
+        for (const obj of this._spreadByDirection(validAngles.filter(a => a.perfect), scanRef)) {
           if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
         }
-        for (const obj of validAngles.filter(a => a.placeable && !a.perfect)) {
+        for (const obj of this._spreadByDirection(validAngles.filter(a => a.placeable && !a.perfect), scanRef)) {
           if (isAutoPlaceAngle(obj)) this._addPredictObject(obj.id, obj.angle, false, myPos);
         }
 
@@ -11054,15 +11115,22 @@ window.grbtp = 35;
         // up empty — a trap that pins them is worth more than a spike that
         // chips them, but a spike is worth more than standing still.
         if (imTrapped && this._predictObjects.length === 0 && myPos.distance(enemyPos) <= (Settings_default._autoplacerRadius ?? 350)) {
-          const nearestFirst = (a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y);
           // Only ground nothing is standing on: `placeable` is _canPlace,
           // which already rejects every angle a build — mine or anyone's — is
           // occupying, so a blocked angle is never scanned twice.
           const openAngles = list => {
             const free = list.filter(a => a.placeable && !this._bannedAngles.has(a.angle));
             // Same order the ladder above uses: packed against something
-            // first, then the rest, each of them nearest the enemy first.
-            return [ ...free.filter(a => a.perfect).sort(nearestFirst), ...free.filter(a => !a.perfect).sort(nearestFirst) ];
+            // first, then the rest — but off three heads rather than sorted
+            // nearest the enemy.
+            //
+            // Nearest-the-enemy was the wrong end to start from here. Pinned,
+            // the ground next to them is the ground their own builds are on,
+            // so the free slots are behind and to the sides — which that sort
+            // put last, and slice(0, 3) then cut off entirely. The open space
+            // this branch exists to claim was the one thing it could not
+            // reach. One build per side now, on the first tick.
+            return [ ...this._spreadByDirection(free.filter(a => a.perfect), scanRef), ...this._spreadByDirection(free.filter(a => !a.perfect), scanRef) ];
           };
           for (const [ itemId, itemType, scanned ] of [ [ trapId, LUNA_TRAP_TYPE, trapAngles ], [ spikeId, LUNA_SPIKE_TYPE, spikeAngles ] ]) {
             // A missing item, a full cap (`_getPrePlaceAngles` returns [] for
