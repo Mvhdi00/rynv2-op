@@ -189,20 +189,23 @@ that sat beside it here, not looser. The guard was never the binding condition.
   ceiling; a capped 7 was always one clean heal from healing again no matter
   how many early apples preceded it.
 
-**Antis deleted.** `AntiSync`, `AntiTrapProtect`, `AntiTrapStar` and
-`AntiRetrap` have no Novastorm counterpart, so they are gone — classes,
-registrations, settings and menu entries. 91 menu inputs still resolve against
-160 settings keys, and the Combat page's `<div>` nesting is balanced.
+**Antis deleted.** `AntiSync`, `AntiTrapProtect` and `AntiTrapStar` have no
+Novastorm counterpart, so they are gone — classes, registrations, settings and
+menu entries. 92 menu inputs resolve against 161 settings keys, and the Combat
+page's `<div>` nesting is balanced.
 
-`AntiSpikePush` stays: Novastorm has `antiPush`.
+**Kept by request: `AntiSpikePush` and `AntiRetrap`.** `AntiSpikePush` was
+never removed — Novastorm has `antiPush`. `AntiRetrap` was removed with the
+others and then restored byte-for-byte at the owner's request, with its
+registration, module-array slot, setting and Combat → Defense toggle back in
+their original places.
 
-One thing worth knowing about the `AntiRetrap` removal: the module was the
-*offensive* half (swing at the enemy to shove them off while you are trapped),
-which Novastorm does not have. Novastorm's anti-retrap is a `canRetrap` guard
-that stops autobreak from breaking you out into an instant re-trap — and RYN
-already has that, independently, as `Autobreak.enemyCanRetrapMe()`, a 36-angle
-scan that is live on the autobreak path. So the defensive half survives the
-deletion.
+Worth knowing about `AntiRetrap`: it is the *offensive* half — swing at the
+enemy to shove them off while you are trapped — which Novastorm does not have.
+Novastorm's anti-retrap is a `canRetrap` guard that stops autobreak from
+breaking you out into an instant re-trap, and RYN has that separately as
+`Autobreak.enemyCanRetrapMe()`, a 36-angle scan live on the autobreak path. The
+two do not overlap, so both now run.
 
 **The trade being accepted.** Novastorm re-sends the full heal deficit every
 tick of the round trip and its `heal()` has no packet ceiling, so a sustained
