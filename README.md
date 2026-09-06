@@ -153,51 +153,61 @@ It previously had no toggle of its own — the spike-tick counter read it behind
 `_antiSpikeTick` while the other two consumers ran unconditionally, so there
 was no way to turn the knockback anti off by itself.
 
-### Antis and autoheal vs Novastorm
+### Antis and autoheal rebuilt as Novastorm
 
-The v5.4 header already claims the autoheal, and the claim holds — this is an
-audit of what is left, not a second port.
+Requested as a full replacement: strip RYN's additions and leave Novastorm's
+behaviour exactly. The audit first, then what changed.
 
-**Autoheal is already Novastorm's, whole.** `AntiInsta.postTick()` runs
-Novastorm's rule verbatim: accumulate every damage source that can land this
-tick, cap at 140, `hat 6 ×0.75`, `hat 7 +5`, heal when `health <= dmgPot`,
-guarded by `shameCount < 7`. Two documented deviations, both because copying
-Novastorm exactly would do harm here:
+**Already identical, nothing to rebuild.**
 
-- Novastorm's second condition is `(tick - damageTick) > 0`. RYN models
-  moomoo's shame rule off the wall clock, where an apple inside 120ms of a hit
-  *raises* shame and the same apple after it lowers it by two. `isSaveHealTime()`
-  guards that window on the routine branch. The emergency branch deliberately
-  does not wait — `+1` shame beats dying.
-- `_healsInFlight()` tracks food already sent and unacknowledged. Novastorm has
-  no equivalent, so taken verbatim the same missing health is paid for once per
-  tick for a whole round trip.
+| | Novastorm | RYN |
+|---|---|---|
+| Packet budget | 119/s, `setInterval(1000)` reset, 5 per place | 119/s, `setInterval(1e3)` reset, 5 per place |
+| Shame prediction | `<=120ms ? +1 : max(0, -2)` | same rule |
+| Shame removal | Bull Helmet (hat 7) when safe | Bull Helmet (hat 7) when safe |
+| Damage terms | poison, spike, KB, weapon, turret, secondary | all present, plus projectiles |
 
-**The damage terms are all present.** Matching Novastorm's `totalDmgPot`
-component by component: poison → `isBullTickTime()` `+5`; spike contact →
-`collidingSpike`; spike knockback → the sweep above; moving into a spike →
-`colliding()` already samples `pos.future`; weapon, secondary and turret →
-`canPossiblyInstakill()`, and broader than Novastorm's, which gates those
-behind having just been hit; projectiles → `ProjectileManager`, which Novastorm
-has no real equivalent for.
+**A correction to what this file said before.** It claimed that taking
+Novastorm's `(tick - damageTick) > 0` verbatim "made shame climb instead of
+fall". That was wrong. Novastorm sets `damageTick = tick + 1`, so the test is
+true two ticks — about 222ms — after a hit, comfortably past the 120ms window
+in which an apple adds shame. It is *stricter* than the 125ms wall-clock guard
+that sat beside it here, not looser. The guard was never the binding condition.
 
-**One genuine gap, now filled: velocity tick anti.** A turret-gear enemy
-(hat 53) who has just fired — turret still cycling — with a primary ready,
-closing but not yet in melee. Melee `primaryRange` is weapon range + 130, so it
-tops out at 272 (polearm) and sits at 195–248 for most weapons, while this
-setup runs out to 350; the swing that lands as they arrive was not being
-counted. Ported into `canPossiblyInstakill()`, gated on `!collidingPrimary` so
-it can never double up with the branch that already owns melee range.
+**Removed, so the rule is Novastorm's alone:**
 
-Novastorm also adds a flat `+25` turret on that branch. RYN does not: the shot
-that turret fired is a live projectile and `ProjectileManager` has counted it
-since it spawned. The `+25` is how Novastorm pays for that shot at all, having
-nothing tracking it — adding it here would pay twice and heal into a threat
-already accounted for.
+- The 125ms `isSaveHealTime()` guard. `isSaveHealTick()` is Novastorm's second
+  half and now stands by itself.
+- `_healsInFlight()`. It subtracted apples already sent and unacknowledged, so
+  a tick inside the round trip healed nothing. Novastorm re-sends the whole
+  deficit every tick until the server's health echo arrives.
+- `heal()`'s 130ms shame queue and its `budget < 3` refusal. The queue delayed
+  the emergency heal — the one case where eating +1 shame is the right trade —
+  and the refusal dropped apples on exactly the busy ticks worth healing
+  through. Novastorm's heal is a bare send with neither.
+- The `clamp(shameCount, 0, 7)` ceiling. Novastorm floors at 0 and has no
+  ceiling; a capped 7 was always one clean heal from healing again no matter
+  how many early apples preceded it.
 
-**Four antis were left alone.** `AntiSync`, `AntiRetrap`, `AntiTrapProtect` and
-`AntiTrapStar` have no Novastorm counterpart, so "replace with Novastorm's"
-would delete them rather than swap them.
+**Antis deleted.** `AntiSync`, `AntiTrapProtect`, `AntiTrapStar` and
+`AntiRetrap` have no Novastorm counterpart, so they are gone — classes,
+registrations, settings and menu entries. 91 menu inputs still resolve against
+160 settings keys, and the Combat page's `<div>` nesting is balanced.
+
+`AntiSpikePush` stays: Novastorm has `antiPush`.
+
+One thing worth knowing about the `AntiRetrap` removal: the module was the
+*offensive* half (swing at the enemy to shove them off while you are trapped),
+which Novastorm does not have. Novastorm's anti-retrap is a `canRetrap` guard
+that stops autobreak from breaking you out into an instant re-trap — and RYN
+already has that, independently, as `Autobreak.enemyCanRetrapMe()`, a 36-angle
+scan that is live on the autobreak path. So the defensive half survives the
+deletion.
+
+**The trade being accepted.** Novastorm re-sends the full heal deficit every
+tick of the round trip and its `heal()` has no packet ceiling, so a sustained
+fight spends more apples and more packets than the version replaced here. That
+is Novastorm's behaviour, and it is what was asked for.
 
 ### Velocity Tick (from Glotus)
 
