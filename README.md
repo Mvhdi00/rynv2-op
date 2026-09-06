@@ -141,7 +141,17 @@ game's own test, and the one Novastorm uses, so this is faithful behaviour
 rather than a new approximation. For an anti the trade is the right way round:
 a false alarm costs an apple, a miss costs the round.
 
-No new toggle. It sharpens the existing `_antiSpikeTick` path.
+**Its own toggle: `_kbSpike`** — Combat → Defense → "KB Spike", on by default.
+
+The sweep in `checkCollision` is the only thing that raises
+`possibleToKnockback` or `potentialSpikeKnockbackDamage`, so gating that one
+block switches the whole feature from a single place. All three consumers go
+quiet together when it is off: the spike-tick counter, `instaThreat()`, and the
+knockback term in the autoheal damage.
+
+It previously had no toggle of its own — the spike-tick counter read it behind
+`_antiSpikeTick` while the other two consumers ran unconditionally, so there
+was no way to turn the knockback anti off by itself.
 
 ### Antis and autoheal vs Novastorm
 
