@@ -117,15 +117,20 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Nova_ChickenTick.user.js  second build: Nova with chicken's one tick (see below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
+src/Nova_Client_Recode.js Nova client, base of the second build (input)
+src/chicken_v4.6.2.js     chicken client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-nova-ot.js    src/Nova_Client_Recode.js -> Nova_ChickenTick.user.js
+tools/verify-nova-ot.js   runs the ported one tick against stub globals
 ```
 
 ## Build
@@ -177,3 +182,132 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Nova Client (chicken OT)
+
+A second, independent build: the **Nova Client (Recode)** with its entire one
+tick torn out and replaced by **chicken v4.6.2**'s.
+
+Build output: **`Nova_ChickenTick.user.js`**
+
+```sh
+node tools/build-nova-ot.js      # produce Nova_ChickenTick.user.js
+node tools/verify-nova-ot.js     # run the ported one tick against stub globals
+node --check Nova_ChickenTick.user.js
+```
+
+Nothing else in Nova is touched. This has no connection to the ReUp Mix build
+above; they share only the repo.
+
+## What came out
+
+Nova had the same combo written five times over, plus two ways of walking into
+it and a third that fired on its own:
+
+| Removed | What it was |
+|---|---|
+| `oneTick(insta, dontMove)` | the standalone combo, called by the auto path |
+| `instaC.oneTickType` / `threeOneTickType` / `zeroFrame` / `kmTickType` / `boostTickType` | five spellings of that same combo |
+| `instaC.tickMovement` / `boostTickMovement` / `kmTickMovement` / `BoostOneTick` | four `gotoGoal` walk-ins, on goals of 238 / 372 / 240 / 372 |
+| `doOneFrame()` / `autoOneFrame()` | the "AOT" auto one frame, on a ping-scaled 170–245 window |
+| the AVOT block | ~70 lines of hat prediction in front of `oneTick(1)` |
+
+`gotoGoal` itself stays, because `bowMovement` (middle click, bow insta) is its
+only other caller and that is not a one tick.
+
+Four things in there were already broken before this change, and are worth
+naming because they are why the old one tick behaved unevenly:
+
+- `oneTick()` opened with `if (traps.in) return;` — the `Traps` class has no
+  `in`, the field is `inTrap`, so the "don't one tick out of a trap" guard
+  never fired once.
+- the AOT distance gate read the same missing `traps.in`.
+- the AVOT block indexed `near.skinIndex` as an array (`skinArray.length`,
+  `skinArray[i]`). `skinIndex` is a number, so `arrayCount` was `undefined` and
+  every branch under it compared against `NaN`.
+- both auto paths logged through `loging.success(...)`, and `loging` is not
+  defined anywhere in Nova. That line would have thrown the moment
+  `configs.OneTickReactionMode` was ever set — it is not in `configs`, so it
+  never was.
+
+`noMove`, `noWep` and `onetick123modprov3asd` were written by `oneTick()` and
+read by nothing, and went with it.
+
+## What went in
+
+chicken keeps one one tick, and it is a controller rather than a combo:
+
+- **`instaManager.onQueue`** — a FIFO drained one entry per server tick, so the
+  combo keeps its shape when a tick packet is late. Nova nested
+  `game.tickBase(..., 1)` callbacks instead, which fire on an absolute tick
+  number and bunch up together after a stutter.
+- **`startInsta("ot" | "reverse")`** — the shot. Tick 0 turret gear + primary,
+  tick 1 bull helmet + aim + hit, tick 2 release.
+- **`oneTickMovement()`** — walks the player onto `game.perfectOTDistance`
+  (225) by picking the hat/accessory pair whose combined speed multiplier lands
+  inside the ±5 window, and fires the moment it is there:
+
+  | \|error\| | hat | accessory | net speed |
+  |---|---|---|---|
+  | > 35 | soldier ×0.94 | monkey tail ×1.35 | ×1.27 — close in |
+  | 20–35 | soldier ×0.94 | shadow wings ×1.10 | ×1.03 |
+  | 10–20 | tank gear ×0.30 | none ×1.00 | ×0.30 — crawl |
+  | ≤ 10 | tank gear ×0.30 | shadow wings ×1.10 | ×0.33 |
+  | ≤ 5 | **fire**, or hold with soldier + shadow wings |
+
+Translated into Nova's API: `hatSystem.storeEquip` → `buyEquip`,
+`chicken.selectToBuild` → `selectWeapon`, `io.send`/`chicken.sendAim` →
+`packet`, `game.enemies.nearest`/`.angle` → `near`/`near.aim2`, `player.vel` →
+Nova's `x3`/`y3` (both are `pos + (pos − lastPos)`, the same one-tick
+extrapolation), `healer.reloadPercent(p, i) == 1` → `player.reloads[i] == 0`.
+
+### Wiring
+
+- **Hold `T` or `;`** — chicken's hold mode, on the two keys that used to run
+  `tickMovement` and `boostTickMovement`. chicken binds this to
+  `scriptMenu.keyBinds.oneTickKey`, which Nova has no equivalent of. Nova
+  gated those keys on weapon and reload before it would even walk; chicken
+  only gates the shot, so the keys now just arm it.
+- **`P`** still toggles Nova's auto one frame (`configs.autoOneFrame`), and
+  `configs.safeTick` still keeps it off soldier and EMP targets — but it fires
+  on chicken's window now, through `instaManager.autoOneTick()`. That path
+  only takes a tick that is already there: no steering, no gear staging.
+- While hold mode is steering it sets `instaC.ticking`, which is how Nova's
+  own OT movement kept `hatChanger`, `accChanger` and `autoPush` off its gear.
+  The reloaded-weapon swap is also held off, which Nova never did — that swap
+  fought `gotoGoal` for the weapon slot on every approach tick.
+- `my.anti0Tick` (Nova holding soldier against a threat) overrides the
+  controller's hat, the same way `hatSystem.checkOnlySoldier()` does in
+  chicken.
+
+### Two deliberate changes to chicken's code
+
+- chicken's fire gate reads `e.skinindex != 6` — lowercase `i`, so that half of
+  it always passed and chicken would one tick into a soldier helmet. Ported as
+  `skinIndex`, which is what the line is for.
+- Turret gear and bull helmet ownership are checked before firing. chicken gets
+  this for free (`storeEquip` returns early on a hat you don't own); Nova's
+  `buyEquip` equips a fallback hat instead, which would have burned the combo.
+
+### One thing left as-is
+
+`oneTickMovement` opens with `if (n <= 25 && s < 0) n = 5;`, where `s` is the
+predicted distance minus the error you already have. A tick of movement is
+~40px, so `s` never goes negative and the shortcut cannot fire; the band table
+is what decides. It is ported verbatim rather than guessed at, and
+`verify-nova-ot.js` pins that it stays unreachable — if a future change makes
+it live, that check fails and says so.
+
+## Verification
+
+`node tools/verify-nova-ot.js` lifts `instaManager` straight out of the built
+script and runs it against stub globals — 35 checks covering the band table,
+the three-tick packet sequence, one queue step per tick, every fire gate
+(soldier, EMP, monkey tail, both reloads, both hats), the trap and death
+paths, hold-mode release, and the auto path's own gates. All 35 pass on the
+current build.
+
+That exercises the ported module, not the client around it: the rest of Nova
+is unchanged code that this repo does not run.
