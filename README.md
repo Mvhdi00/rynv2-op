@@ -83,6 +83,66 @@ only when actually in sandbox and falls back to `group.limit` otherwise, and
 `AutoRetrap._isItemLimit` is written against that. `AutoPlacer` now makes the
 same call, so all three agree.
 
+## KB spike (RYN v5.4)
+
+`src/RYN_Client_v5.4.js` is RYN v5.4 carried in on its own. It is **not** part
+of the `ReUp_Mix.user.js` build — that still builds from v4 — it is the v5.4
+client with its knockback-into-spike anti rebuilt to work the way Novastorm's
+does, in RYN's own idiom.
+
+**What it detects.** The enemy swings, you fly, you land on a spike. RYN
+already tracked this as `EnemyManager.possibleToKnockback` /
+`potentialSpikeKnockbackDamage`, which `AntiInsta` reads to decide whether to
+heal. The detection feeding it was the part that was wrong.
+
+**Before** — an angular cone measured from the enemy: is the spike inside
+`asin(reach / enemyToSpike)` of the enemy→you direction, and further from the
+enemy than you are. Two failures, both in the situations the anti exists for:
+
+- `Math.asin()` of a ratio above 1 is `NaN`, and every comparison against `NaN`
+  is false. Once a spike sat closer to the enemy than its own combined scale —
+  point blank — the test silently returned false. That is 5.4% of random
+  configurations, and they are the close-range ones.
+- The "further from the enemy than you" requirement threw away every spike you
+  get shoved *past* sideways, which is most of them once the enemy is not
+  lined up directly behind the spike.
+
+**After** — Novastorm's approach: sweep the actual knockback segment through
+the spike's box, from two origins, exactly as Novastorm runs it twice.
+
+| Novastorm | RYN v5.4 |
+|---|---|
+| `x2, y2` | `myPlayer.pos.current` |
+| `xVel, yVel` (`x2*2 - lastX`) | `myPlayer.pos.future` — `setFuturePosition()` is the same extrapolation |
+| `111 * (0.3 + primaryKnockback)` | `getActualMaxKnockback(target)` — already in those units |
+| `UTILS.lineInRect` | module-level `lineInRect`, the game's own routine |
+| `spikeDmgPot += spike.dmg` | `potentialSpikeKnockbackDamage`, kept as a `Math.max` |
+
+Two deliberate departures from a literal transcription, because RYN is built
+differently:
+
+- Novastorm adds the enemy's hit damage (`hitDmgPot`) inside the same block.
+  RYN already accumulates that separately in `ClientPlayer.potentialDamage`,
+  so adding it here would double-count it.
+- Novastorm's two sweeps each add damage. RYN resolves the spike term as
+  `max(potentialSpikeDamage, potentialSpikeKnockbackDamage)`, so the two
+  frames combine with `max` — same threat, counted once.
+
+**Measured**, against a swept-capsule ground truth over 200k random
+player/enemy/spike layouts:
+
+| | missed real threats | false alarms |
+|---|---|---|
+| cone (before) | 5651 (2.83%) | 953 |
+| sweep (after) | 0 (0.00%) | 4781 (2.39%) |
+
+The remaining false alarms are the box-vs-circle corners of `lineInRect` — the
+game's own test, and the one Novastorm uses, so this is faithful behaviour
+rather than a new approximation. For an anti the trade is the right way round:
+a false alarm costs an apple, a miss costs the round.
+
+No new toggle. It sharpens the existing `_antiSpikeTick` path.
+
 ### Driver correction
 
 `ItemGroups[8]` — the platform group — carried `layer: -1` in RYN. The shipped
@@ -119,6 +179,7 @@ but nothing in the client needs it. It is stripped from the build.
 ReUp_Mix.user.js          the build output — this is the script to install
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
+src/RYN_Client_v5.4.js    RYN v5.4, standalone — see "KB spike" below
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
