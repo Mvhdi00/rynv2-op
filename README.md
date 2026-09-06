@@ -119,6 +119,7 @@ but nothing in the client needs it. It is stripped from the build.
 ReUp_Mix.user.js          the build output — this is the script to install
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
+src/RYN_Client_v5.4.js    RYN v5.4, installed directly — not part of the build
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
@@ -169,6 +170,27 @@ against, and re-checks the observable parts ~15s after load — frame signature
 width, transport mode, live opcode table size. A server-side protocol change
 shows up as a console warning instead of as packets that quietly stop being
 understood.
+
+## RYN v5.4 — Autoheal off by default
+
+`src/RYN_Client_v5.4.js` is a separate, newer client that is installed as-is; it
+does not go through `build-reup.js`. One change is carried on top of it.
+
+`AntiInsta.postTick` — the Autoheal module — has an emergency branch that fires
+`ceil(missingHealth / restore)` apples in a single tick and deliberately skips
+the 125ms shame guard, on the reasoning that "+1 shame is a better outcome than
+dying". Moomoo charges +1 shame per apple that lands within 120ms of taking
+damage and removes 2 for one that waits, so an exchange that trips that branch
+walks shame to the cap of 7, at which point the server stops serving food for
+30 seconds. `_autoheal` now defaults to **false**, and `_healDefaultsRev`
+carries the flip once into profiles that already have `_autoheal: true` saved in
+`localStorage` — after that the Defense → Autoheal switch is authoritative
+again, so turning it back on sticks.
+
+Nothing else eats on its own with it off: `AntiSync`'s food burst is behind
+`_antiSync` (off by default), and `Placer`'s food branch only runs while you
+hold the food key yourself (`_food`, `KeyQ`). `ShameReset` is gated on
+`_autoheal` upstream, so it stops forcing its hat too.
 
 ## Notes
 
