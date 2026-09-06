@@ -189,6 +189,83 @@ already accounted for.
 `AntiTrapStar` have no Novastorm counterpart, so "replace with Novastorm's"
 would delete them rather than swap them.
 
+### Velocity Tick (from Glotus)
+
+Glotus's `VelocityTick` ported whole — turret plus diamond polearm landing in
+one tick. It runs over two ticks: the first equips turret gear and walks in,
+the second swings the polearm as the shot lands. The 220–245 band is the point
+of it — that is the gap where the walk-in reaches polearm range on exactly the
+tick the turret fires.
+
+The setup tick only commits when the enemy cannot answer: their melee is one
+tick off reloaded (`atExact`), or they are mid hat-swap into something that is
+not soldier or emp. Otherwise walking in just hands them a free hit.
+
+Ported with it: the enemy-side read. `Player.velocityTicking` is the same
+combination seen from the other end — in primary and turret range, turret just
+gone off, diamond polearm ready — which raises `EnemyManager.velocityTickThreat`
+and feeds `instaThreat()`, so the client defends against the tick as well as
+throwing it. Module order matches Glotus (after `spikeSync`, before
+`spikeTrap`).
+
+**Not ported:** the red circle Glotus paints on the target while the module is
+armed. The module is the behaviour, the circle is a debug overlay, and nothing
+else reads it.
+
+One thing needed adding that Glotus gets for free: `UI.updateStats` **throws**
+on a missing element, so the `_velocityTickTimes` stat row, its setting and its
+`StatsManager` accessors all had to land together — without the row, the first
+successful tick would have taken the client down.
+
+### Blood Wings idle re-equip
+
+`DefaultAcc.getBestCurrentAcc()` returned Blood Wings from its idle branch:
+
+```js
+if (!ModuleHandler.isMoving && myPlayer.speed <= 5) {
+  if (beAngel) return 13;
+  if (useBloodWings) return 18;   // removed
+}
+```
+
+That method runs every tick, so standing still re-equipped Blood Wings and kept
+re-equipping for as long as you stood there — taking them off by hand was
+impossible. Idle now falls through to the ordinary fallback (tail, else none).
+
+The two remaining Blood Wings branches are deliberate and stay: the bull-hat
+combat pairing, and the explicit Cowboy When Safe setting.
+
+### Automill angles
+
+The trio was spaced by solving for the exact placement bound:
+
+```js
+const offset = Math.asin((2 * item.scale + 9e-13) / (2 * distance)) * 2;
+```
+
+`canPlaceItem` rejects when centre distance is **below**
+`item.scale + neighbour.placementScale`, so a gap of exactly `2 * scale` puts
+the two outer mills on the reject line itself. The `9e-13` was meant to lift
+them off it, but a double keeps almost none of it at that magnitude — measured
+clearance was **8.8e-13 units**. Whether the outer two survived came down to
+rounding, which is why the trio kept coming out as one or two mills.
+
+Upgrading made it worse for a second reason: the ring radius is
+`playerScale + scale + placeOffset`, so it steps 85 → 87 when the mill goes
+45 → 47, and the new trio no longer sits on the circle the mills already on the
+ground were placed on.
+
+Now solved for a real gap, `2 * item.scale + 2`, with the ratio clamped so
+`asin` cannot go `NaN`. Mill upgrades are one-way and replace the inventory
+slot, so any mill already down is a tier at or below the one being placed, and
+2 units is the whole spread across the three tiers:
+
+| tier | ring | offset | trio gap | strictest neighbour | clearance |
+|---|---|---|---|---|---|
+| windmill (45) | 85 | 65.53° | 92.00 | 90 | 2.00 |
+| faster windmill (47) | 87 | 66.97° | 96.00 | 94 | 2.00 |
+| power mill (47) | 87 | 66.97° | 96.00 | 94 | 2.00 |
+
 ### Driver correction
 
 `ItemGroups[8]` — the platform group — carried `layer: -1` in RYN. The shipped
