@@ -3250,6 +3250,12 @@ window.grbtp = 35;
   const HatPredictor_default = HatPredictor;
   const scale_value = window.grbtp;
   delete window.grbtp;
+  // Novastorm's velocity tick anti reads the gap between the two extrapolated
+  // positions and only fires inside this band: past it the enemy is too far to
+  // arrive, inside it they are already close enough that the ordinary primary
+  // range check has them.
+  const VELOCITY_TICK_MIN_RANGE = 150;
+  const VELOCITY_TICK_MAX_RANGE = 350;
   class Player extends Entity_default {
     currentItem=-1;
     clanName=null;
@@ -3909,6 +3915,32 @@ window.grbtp = 35;
       }
       if (this.isReloaded(2, 1) && includeTurret && !lookingShield) {
         this.potentialDamage += 25;
+      }
+
+      // Velocity tick anti, from Novastorm. A turret-gear enemy who has just
+      // fired — turret still cycling — with a primary ready, closing on us but
+      // not yet in melee range. The swing lands as they arrive, and the branch
+      // above cannot see it: `collidingPrimary` only reaches weapon range + 130,
+      // roughly 270, while this setup starts at 350.
+      //
+      //     if (getDistance(enemy.xVel, enemy.yVel, myPlayer.xVel, myPlayer.yVel) > 150 && < 350)
+      //         if (turretReload[sid] < 1 && primaryReload[sid] == 1 && skinIndex == 53)
+      //
+      // Novastorm's xVel/yVel is the extrapolated position, so this is a gap
+      // between the two `pos.future`s, and its `turretReload < 1` is a turret
+      // mid-cycle, which is `!isReloaded(2, 1)` here.
+      //
+      // Novastorm also adds a flat +25 turret on this branch. RYN does not: the
+      // shot that turret already fired is a live projectile, and
+      // ProjectileManager has been counting it into potentialDamage since it
+      // spawned. Novastorm has no such tracking, so the +25 is how it pays for
+      // that shot at all — adding it here would pay for it twice and heal into
+      // a threat already accounted for.
+      if (!collidingPrimary && primaryReloaded && !lookingShield && this.hatID === 53 && !this.isReloaded(2, 1)) {
+        const closing = myPlayer.pos.future.distance(this.pos.future);
+        if (closing > VELOCITY_TICK_MIN_RANGE && closing < VELOCITY_TICK_MAX_RANGE) {
+          this.potentialDamage += primaryDamage;
+        }
       }
       if (collidingPrimary && collidingSecondary && collidingTurret && this.isEmptyReload(1) && this.isEmptyReload(2) && primaryReloaded) {
         this.reverseInsta = true;

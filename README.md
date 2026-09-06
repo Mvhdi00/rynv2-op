@@ -143,6 +143,52 @@ a false alarm costs an apple, a miss costs the round.
 
 No new toggle. It sharpens the existing `_antiSpikeTick` path.
 
+### Antis and autoheal vs Novastorm
+
+The v5.4 header already claims the autoheal, and the claim holds — this is an
+audit of what is left, not a second port.
+
+**Autoheal is already Novastorm's, whole.** `AntiInsta.postTick()` runs
+Novastorm's rule verbatim: accumulate every damage source that can land this
+tick, cap at 140, `hat 6 ×0.75`, `hat 7 +5`, heal when `health <= dmgPot`,
+guarded by `shameCount < 7`. Two documented deviations, both because copying
+Novastorm exactly would do harm here:
+
+- Novastorm's second condition is `(tick - damageTick) > 0`. RYN models
+  moomoo's shame rule off the wall clock, where an apple inside 120ms of a hit
+  *raises* shame and the same apple after it lowers it by two. `isSaveHealTime()`
+  guards that window on the routine branch. The emergency branch deliberately
+  does not wait — `+1` shame beats dying.
+- `_healsInFlight()` tracks food already sent and unacknowledged. Novastorm has
+  no equivalent, so taken verbatim the same missing health is paid for once per
+  tick for a whole round trip.
+
+**The damage terms are all present.** Matching Novastorm's `totalDmgPot`
+component by component: poison → `isBullTickTime()` `+5`; spike contact →
+`collidingSpike`; spike knockback → the sweep above; moving into a spike →
+`colliding()` already samples `pos.future`; weapon, secondary and turret →
+`canPossiblyInstakill()`, and broader than Novastorm's, which gates those
+behind having just been hit; projectiles → `ProjectileManager`, which Novastorm
+has no real equivalent for.
+
+**One genuine gap, now filled: velocity tick anti.** A turret-gear enemy
+(hat 53) who has just fired — turret still cycling — with a primary ready,
+closing but not yet in melee. Melee `primaryRange` is weapon range + 130, so it
+tops out at 272 (polearm) and sits at 195–248 for most weapons, while this
+setup runs out to 350; the swing that lands as they arrive was not being
+counted. Ported into `canPossiblyInstakill()`, gated on `!collidingPrimary` so
+it can never double up with the branch that already owns melee range.
+
+Novastorm also adds a flat `+25` turret on that branch. RYN does not: the shot
+that turret fired is a live projectile and `ProjectileManager` has counted it
+since it spawned. The `+25` is how Novastorm pays for that shot at all, having
+nothing tracking it — adding it here would pay twice and heal into a threat
+already accounted for.
+
+**Four antis were left alone.** `AntiSync`, `AntiRetrap`, `AntiTrapProtect` and
+`AntiTrapStar` have no Novastorm counterpart, so "replace with Novastorm's"
+would delete them rather than swap them.
+
 ### Driver correction
 
 `ItemGroups[8]` — the platform group — carried `layer: -1` in RYN. The shipped
