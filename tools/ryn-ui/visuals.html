@@ -1,0 +1,173 @@
+<div class="menu-page" data-id="3">
+    <div class="page-head">
+        <h1 class="page-title">Visual</h1>
+        <p class="page-description">Everything the client draws over the game. Turn off what you do not read during a fight — the fewer overlays are on, the less there is between you and the map.</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Names<span class="sec-sub">How players are labelled on the field.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">My Name</span>
+                    <span class="opt-desc">Draws your own nickname in a colour of your choosing.</span>
+                </div>
+                <div class="option-content">
+                    <button class="reset-color" title="Reset Color"></button>
+                    <input id="_myNameColorValue" type="color" title="Select Color">
+                    <label class="switch-checkbox"><input id="_myNameColor" type="checkbox"><span></span></label>
+                </div>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Mark RYN Players</span>
+                    <span class="opt-desc">Flags other players running this client.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_markRynPlayers" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Player ID</span></div>
+                <label class="switch-checkbox"><input id="_showPlayerID" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Player HUD<span class="sec-sub">Readouts drawn on and around players.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Weapon Reload Bar</span>
+                    <span class="opt-desc">Shows how far every weapon is through its cooldown.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_weaponReloadBar" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Render HP</span>
+                    <span class="opt-desc">Draws a health value on players instead of a bar alone.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_renderHP" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Position Prediction</span>
+                    <span class="opt-desc">Marks where a moving player is expected to be on the next tick.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_positionPrediction" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">My Turret Reload Bar</span></div>
+                <label class="switch-checkbox"><input id="_playerTurretReloadBar" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Display player angle</span></div>
+                <label class="switch-checkbox"><input id="_displayPlayerAngle" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">World<span class="sec-sub">Tint and weather drawn over the map itself.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Purple Tint</span>
+                    <span class="opt-desc">Recolours world objects so structures read faster.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_objectTint" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Tint Transparency</span></div>
+                <label class="slider">
+                    <span class="slider-value"></span>
+                    <input id="_objectTintOpacity" type="range" step="5" min="0" max="100" data-suffix="%">
+                </label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_weather">Rain &amp; Snow</label>
+                    <span class="opt-desc">Rain across the map, turning to snow inside the snow biome.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_weather" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Intensity</span></div>
+                <label class="slider">
+                    <span class="slider-value"></span>
+                    <input id="_weatherAmount" type="range" step="5" min="0" max="100" data-suffix="%">
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Structures<span class="sec-sub">Health bars over placed buildings.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Item Health Bar (Mine/Clan)</span>
+                    <span class="opt-desc">Bars over your own and your clan's structures.</span>
+                </div>
+                <div class="option-content">
+                    <button class="reset-color" title="Reset Color"></button>
+                    <input id="_itemHealthBarColor" type="color" title="Select Color">
+                    <label class="switch-checkbox"><input id="_itemHealthBar" type="checkbox"><span></span></label>
+                </div>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Item Health Bar (Enemy)</span>
+                    <span class="opt-desc">The same bars over everything that is not yours.</span>
+                </div>
+                <div class="option-content">
+                    <button class="reset-color" title="Reset Color"></button>
+                    <input id="_itemHealthBarEnemyColor" type="color" title="Select Color">
+                    <label class="switch-checkbox"><input id="_itemHealthBarEnemy" type="checkbox"><span></span></label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Hitboxes<span class="sec-sub">Debug outlines. Useful while learning a range, noisy otherwise.</span></div>
+        <div class="section-content">
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Weapon hitbox</span></div>
+                <label class="switch-checkbox"><input id="_weaponHitbox" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Collision hitbox</span></div>
+                <label class="switch-checkbox"><input id="_collisionHitbox" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Placement hitbox</span></div>
+                <label class="switch-checkbox"><input id="_placementHitbox" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Possible placement</span></div>
+                <label class="switch-checkbox"><input id="_possiblePlacement" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Interface<span class="sec-sub">The game's own interface and how much it draws.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Hide game HUD</span>
+                    <span class="opt-desc">Removes moomoo's own interface and leaves the map alone.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_hideHUD" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Low Quality Mode</span>
+                    <span class="opt-desc">Cuts rendering detail. Turn this on if the game drops frames.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_lowQuality" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+</div>

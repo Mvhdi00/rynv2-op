@@ -1,0 +1,225 @@
+<div class="menu-page" data-id="5">
+    <div class="page-head">
+        <h1 class="page-title">Bots</h1>
+        <p class="page-description">Connect alternate clients, name them, and decide how they follow, fight, build and farm. Everything below applies to every bot you have connected.</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Fleet<span class="sec-sub">Add a bot, give it a name, connect it. Connected bots appear underneath.</span></div>
+        <div class="section-content">
+            <div id="bot-container"></div>
+            <div id="dynamic-bot-list"></div>
+            <div class="content-option centered">
+                <button id="add-bot-dynamic" class="option-button primary tall">Add bot</button>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Clan joins</span>
+                    <span class="opt-desc">Restarts the join rotation for any bot that is still outside your clan. Bots already in it are skipped.</span>
+                </div>
+                <button id="_clanRecheck" class="option-button">Re-check clan joins</button>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Auto random bot names</span>
+                    <span class="opt-desc">Pre-fills each new row with a random 1&ndash;7 character name.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoRandomBotNames" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Bots own clan</span>
+                    <span class="opt-desc">Each bot creates its own clan instead of joining yours.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_botIndividualClans" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Behaviour<span class="sec-sub">What the bots do while they are following you.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Follow cursor</span>
+                    <span class="opt-desc">Bots move toward where you are pointing rather than to you.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_followCursor" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Stop movement radius</span>
+                    <span class="opt-desc">How close a bot gets to its target point before it stops.</span>
+                </div>
+                <label class="slider">
+                    <span class="slider-value"></span>
+                    <input id="_movementRadius" type="range" step="25" min="25" max="250">
+                </label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Bot Auto Break</span>
+                    <span class="opt-desc">Bots break structures standing in their way.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_botAutoBreak" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Bot Ranged Kiting</span>
+                    <span class="opt-desc">Bots holding a ranged weapon back off instead of closing.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_botRangedKite" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Kite distance</span></div>
+                <label class="slider">
+                    <span class="slider-value"></span>
+                    <input id="_botKiteDistance" type="range" step="25" min="150" max="1200">
+                </label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Volley Fire</span>
+                    <span class="opt-desc">Bots fire in waves rather than all at once.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_botVolley" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">First wave size</span></div>
+                <label class="slider">
+                    <span class="slider-value"></span>
+                    <input id="_botVolleyWave" type="range" step="1" min="1" max="20">
+                </label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Avoid Shield Bots</span>
+                    <span class="opt-desc">Bots steer away from a target that is holding a shield up.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_botAvoidShield" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Be Angel</span></div>
+                <label class="switch-checkbox"><input id="_botBeAngel" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Formation<span class="sec-sub">The shape the fleet holds around you.</span></div>
+        <div class="section-content">
+            <div class="content-option stacked">
+                <div class="opt-main">
+                    <span class="option-title">Shape</span>
+                    <span class="opt-desc">Pick a formation, and bind a key to any of them from inside the picker.</span>
+                </div>
+                <div id="_formationGrid"></div>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Circle rotation</span>
+                    <span class="opt-desc">Rotates the formation around you instead of holding it still.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_circleRotation" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Circle radius</span></div>
+                <label class="slider">
+                    <span class="slider-value"></span>
+                    <input id="_circleRadius" type="range" step="25" min="50" max="600">
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Loadout<span class="sec-sub">What each bot carries. &ldquo;Copy from me&rdquo; mirrors your own weapon.</span></div>
+        <div class="section-content">
+            <div class="stack">
+                <div class="field">
+                    <div class="wpn-label">Primary weapon</div>
+                    <div class="wpn-grid" id="bot-weapon-selector">
+                        <div class="bot-weapon-btn" data-wid="-1" title="Copy from me">Copy from me</div>
+                        <div class="bot-weapon-btn" data-wid="0" title="Tool Hammer">Tool Hammer</div>
+                        <div class="bot-weapon-btn" data-wid="1" title="Hand Axe">Hand Axe</div>
+                        <div class="bot-weapon-btn" data-wid="2" title="Great Axe">Great Axe</div>
+                        <div class="bot-weapon-btn" data-wid="3" title="Short Sword">Short Sword</div>
+                        <div class="bot-weapon-btn" data-wid="4" title="Katana">Katana</div>
+                        <div class="bot-weapon-btn" data-wid="5" title="Polearm">Polearm</div>
+                        <div class="bot-weapon-btn" data-wid="6" title="Bat">Bat</div>
+                        <div class="bot-weapon-btn" data-wid="7" title="Daggers">Daggers</div>
+                        <div class="bot-weapon-btn" data-wid="8" title="Stick">Stick</div>
+                    </div>
+                    <div class="wpn-selected-bar"><span class="wpn-selected-dot"></span><span class="wpn-selected-text" id="bot-weapon-label">Copy from me (default)</span></div>
+                </div>
+
+                <div class="field">
+                    <div class="wpn-label">Secondary weapon</div>
+                    <div class="wpn-grid" id="bot-sec-weapon-selector">
+                        <div class="bot-sec-weapon-btn" data-swid="-1" title="Copy from me">Copy from me</div>
+                        <div class="bot-sec-weapon-btn" data-swid="9" title="Hunting Bow">Hunting Bow</div>
+                        <div class="bot-sec-weapon-btn" data-swid="10" title="Great Hammer">Great Hammer</div>
+                        <div class="bot-sec-weapon-btn" data-swid="11" title="Wooden Shield">Wooden Shield</div>
+                        <div class="bot-sec-weapon-btn" data-swid="12" title="Crossbow">Crossbow</div>
+                        <div class="bot-sec-weapon-btn" data-swid="13" title="Repeater Crossbow">Repeater Crossbow</div>
+                        <div class="bot-sec-weapon-btn" data-swid="14" title="Mc Grabby">Mc Grabby</div>
+                        <div class="bot-sec-weapon-btn" data-swid="15" title="Musket">Musket</div>
+                    </div>
+                    <div class="wpn-selected-bar"><span class="wpn-selected-dot"></span><span class="wpn-selected-text" id="bot-sec-weapon-label">Copy from me (default)</span></div>
+                </div>
+
+                <div class="field">
+                    <div class="wpn-label">Age 4 building</div>
+                    <div class="wpn-grid" id="bot-age4-selector">
+                        <div class="bot-weapon-btn" data-age4id="0" title="Trap">Trap</div>
+                        <div class="bot-weapon-btn" data-age4id="1" title="Boost Pad">Boost Pad</div>
+                    </div>
+                    <div class="wpn-selected-bar"><span class="wpn-selected-dot"></span><span class="wpn-selected-text" id="bot-age4-label">Trap (default)</span></div>
+                </div>
+            </div>
+
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Platform w/ Musket</span>
+                    <span class="opt-desc">Bots carrying a musket build a platform to shoot from.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_platformMusket" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Auto Farm<span class="sec-sub">Bots gather on their own and come back when they are done.</span></div>
+        <div class="section-content">
+            <div class="stack">
+                <div class="field">
+                    <div class="field-head">Farm mode</div>
+                    <div class="seg">
+                        <button id="_farmModeSingle" class="seg-btn">Single</button>
+                        <button id="_farmModeNearest" class="seg-btn">Nearest</button>
+                    </div>
+                    <p class="field-note">In <b>Single</b> mode every bot goes for one resource type. In <b>Nearest</b> mode each bot takes whatever is closest to it.</p>
+                </div>
+
+                <div class="field" id="_farmTypeRow">
+                    <div class="field-head">Resource type</div>
+                    <div class="seg">
+                        <button data-farm-type="0" class="farm-type-btn">Wood</button>
+                        <button data-farm-type="1" class="farm-type-btn">Food</button>
+                        <button data-farm-type="2" class="farm-type-btn">Stone</button>
+                        <button data-farm-type="3" class="farm-type-btn">Gold</button>
+                    </div>
+                    <input id="_botFarmType" type="hidden" value="0">
+                </div>
+
+                <div class="field">
+                    <div class="field-head">Limit</div>
+                    <div class="inline">
+                        <input id="_botFarmLimit" class="input" type="number" min="0" max="9999" step="50" value="0">
+                        <p class="field-note" style="margin-top:0;">Bots stop and return to you at this amount. <b>0</b> means no limit.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

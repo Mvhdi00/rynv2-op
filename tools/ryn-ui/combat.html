@@ -1,0 +1,326 @@
+<div class="menu-page" data-id="2">
+    <div class="page-head">
+        <h1 class="page-title">Combat</h1>
+        <p class="page-description">Every automation the client runs during a fight, ordered by the moment it fires: the kill sequence first, then how it places, how it survives, and what it does with the rest of the map.</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Kill Sequences<span class="sec-sub">Timed weapon and hat chains that try to finish a target outright.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_spikeTick">Spike Tick</label>
+                    <span class="opt-desc">Drops a spike on the tick a target is knocked into it. The rows below refine when the chain is allowed to run.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_spikeTick" type="checkbox"><span></span></label>
+            </div>
+            <div class="sub-options">
+                <div class="content-option">
+                    <div class="opt-main"><label class="option-title" for="_spikeTickBreak">Spike Tick (break)</label></div>
+                    <label class="switch-checkbox"><input id="_spikeTickBreak" type="checkbox"><span></span></label>
+                </div>
+                <div class="content-option">
+                    <div class="opt-main"><label class="option-title" for="_spikeTickNear">Spike Tick (near)</label></div>
+                    <label class="switch-checkbox"><input id="_spikeTickNear" type="checkbox"><span></span></label>
+                </div>
+                <div class="content-option">
+                    <div class="opt-main"><label class="option-title" for="_spikeTickTrap">Spike Tick (trap)</label></div>
+                    <label class="switch-checkbox"><input id="_spikeTickTrap" type="checkbox"><span></span></label>
+                </div>
+                <div class="content-option">
+                    <div class="opt-main"><label class="option-title" for="_antiSpikeTick">Anti Spike Tick</label></div>
+                    <label class="switch-checkbox"><input id="_antiSpikeTick" type="checkbox"><span></span></label>
+                </div>
+                <div class="content-option">
+                    <div class="opt-main"><label class="option-title" for="_antiSmartTick">Anti Smart Tick</label></div>
+                    <label class="switch-checkbox"><input id="_antiSmartTick" type="checkbox"><span></span></label>
+                </div>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_toolSpearInsta">Tool Spear Insta</label>
+                    <span class="opt-desc">Tool hammer into polearm burst.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_toolSpearInsta" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_spikeGearInsta">Spike Gear Insta</label>
+                    <span class="opt-desc">Spike placement combined with a gear swap on the same tick.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_spikeGearInsta" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_musketBowInsta">Musket Bow Insta</label>
+                    <span class="opt-desc">Ranged finisher chaining musket and bow shots.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_musketBowInsta" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Sync<span class="sec-sub">Landing separate sources of damage on the same server tick.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_autoSync">Auto sync</label>
+                    <span class="opt-desc">Lines up your hits with whatever else is about to damage the target.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoSync" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_turretSync">Turret Sync</label>
+                    <span class="opt-desc">Times your swing to a turret shot landing.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_turretSync" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_velocityTick">Velocity Tick</label>
+                    <span class="opt-desc">Uses the target's movement to predict the tick worth hitting.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_velocityTick" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_spikeSync">Spike sync</label></div>
+                <label class="switch-checkbox"><input id="_spikeSync" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_spikeSyncHammer">Spike sync hammer</label></div>
+                <label class="switch-checkbox"><input id="_spikeSyncHammer" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Placement<span class="sec-sub">Where spikes and traps go, and how fast they get replaced.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_autoplacer">Autoplacer</label>
+                    <span class="opt-desc">Keeps spikes going down around you without holding the key.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoplacer" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Autoplacer radius</span>
+                    <span class="opt-desc">How far from you the autoplacer is allowed to build.</span>
+                </div>
+                <label class="slider">
+                    <span class="slider-value"></span>
+                    <input id="_autoplacerRadius" type="range" step="25" min="100" max="450">
+                </label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_prePlace">Preplace</label>
+                    <span class="opt-desc">Puts the next spike down before the target arrives at it.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_prePlace" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_replace">Replace</label>
+                    <span class="opt-desc">Rebuilds a broken spike the moment it goes down.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_replace" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_placementDefense">Placement Defense</label>
+                    <span class="opt-desc">Builds to block an incoming placement against you.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_placementDefense" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_trapKB">Trap KB</label></div>
+                <label class="switch-checkbox"><input id="_trapKB" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Defense<span class="sec-sub">Healing, shielding and the hats that keep you alive.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_autoheal">Autoheal</label>
+                    <span class="opt-desc">Eats food as soon as you take damage.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoheal" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_autoShield">Auto Shield</label>
+                    <span class="opt-desc">Raises the shield against incoming melee.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoShield" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_rangedShield">Ranged Shield</label>
+                    <span class="opt-desc">Also shields against projectiles.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_rangedShield" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_kbSpike">KB Spike</label></div>
+                <label class="switch-checkbox"><input id="_kbSpike" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_empDefense">Emp Defense</label></div>
+                <label class="switch-checkbox"><input id="_empDefense" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_autoemp">Auto emp</label></div>
+                <label class="switch-checkbox"><input id="_autoemp" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_soldierDefault">Soldier default</label></div>
+                <label class="switch-checkbox"><input id="_soldierDefault" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_safeSoldier">Safe Soldier</label></div>
+                <label class="switch-checkbox"><input id="_safeSoldier" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_safeWalk">Safe walk</label></div>
+                <label class="switch-checkbox"><input id="_safeWalk" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Anti Systems<span class="sec-sub">Reactions to what other players and the world do to you.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_antienemy">Anti enemy</label>
+                    <span class="opt-desc">Reacts to an enemy closing in on you.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_antienemy" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_antianimal">Anti animal</label></div>
+                <label class="switch-checkbox"><input id="_antianimal" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_antispike">Anti spike</label></div>
+                <label class="switch-checkbox"><input id="_antispike" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_antiSpikePush">Anti Spike Push</label></div>
+                <label class="switch-checkbox"><input id="_antiSpikePush" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_antiRetrap">Anti Retrap</label></div>
+                <label class="switch-checkbox"><input id="_antiRetrap" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Gear<span class="sec-sub">Which hat and accessory you wear, and when it changes.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_biomehats">Biome hats</label>
+                    <span class="opt-desc">Swaps to the hat that suits the biome you are standing in.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_biomehats" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_adaptiveGearSwitching">Adaptive Gear</label>
+                    <span class="opt-desc">Picks gear from the threat in front of you rather than a fixed set.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_adaptiveGearSwitching" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_tailPriority">Tail Priority</label></div>
+                <label class="switch-checkbox"><input id="_tailPriority" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_cowboyWhenSafe">Cowboy When Safe</label></div>
+                <label class="switch-checkbox"><input id="_cowboyWhenSafe" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Movement<span class="sec-sub">How the client moves you around a fight.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_autoPush">Autopush</label>
+                    <span class="opt-desc">Pushes a target toward your own spikes.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoPush" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Auto Push Range</span>
+                    <span class="opt-desc">How close a target has to be before autopush engages.</span>
+                </div>
+                <label class="slider">
+                    <span class="slider-value"></span>
+                    <input id="_autoPushRange" type="range" step="25" min="100" max="500">
+                </label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_dashMovement">Dash Movement</label>
+                    <span class="opt-desc">Short burst movement instead of a steady walk.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_dashMovement" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Utility<span class="sec-sub">Breaking, gathering and taking what is not yours.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_autobreak">Autobreak</label>
+                    <span class="opt-desc">Breaks the structures standing between you and a target.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autobreak" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_automill">Automill</label>
+                    <span class="opt-desc">Leaves windmills behind you while you move.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_automill" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <label class="option-title" for="_autoGrind">Auto grind</label>
+                    <span class="opt-desc">Gathers resources on its own when nothing is threatening you.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoGrind" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_autoPlay">AutoPlay</label></div>
+                <label class="switch-checkbox"><input id="_autoPlay" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_autoSteal">Autosteal</label></div>
+                <label class="switch-checkbox"><input id="_autoSteal" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_turretSteal">Turret steal</label></div>
+                <label class="switch-checkbox"><input id="_turretSteal" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><label class="option-title" for="_trapAnimal">Trap Animal</label></div>
+                <label class="switch-checkbox"><input id="_trapAnimal" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+</div>

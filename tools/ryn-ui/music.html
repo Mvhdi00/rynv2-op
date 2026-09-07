@@ -1,0 +1,487 @@
+<div class="menu-page" data-id="7">
+<style>
+@keyframes ryn-eq{0%,100%{height:4px;}50%{height:16px;}}
+
+.rm-root{display:flex;flex-direction:column;max-width:1180px;margin:0 auto;}
+
+/* ---------- now playing ---------- */
+.rm-player{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  grid-template-areas:"art meta actions" "art transport transport";
+  column-gap:26px;row-gap:22px;align-items:center;
+  padding:26px 0 30px;
+  border-bottom:1px solid var(--line);
+}
+.rm-art{
+  grid-area:art;
+  width:104px;height:104px;flex-shrink:0;
+  display:flex;align-items:flex-end;justify-content:center;gap:4px;
+  padding-bottom:22px;
+  border-radius:var(--r3);
+  background:linear-gradient(150deg,#221D33,#131320);
+  border:1px solid var(--line);
+  position:relative;
+  transition:border-color 260ms var(--ease);
+}
+.rm-art::after{
+  content:'\266B';
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:30px;color:var(--tx-4);
+  transition:opacity 220ms var(--ease);
+}
+.rm-art.playing{border-color:var(--sage-40);}
+.rm-art.playing::after{opacity:0;}
+.rm-eq{display:none;align-items:flex-end;gap:4px;height:18px;}
+.rm-art.playing .rm-eq{display:flex;}
+.rm-eq-bar{width:3px;border-radius:2px;background:var(--sage);animation:ryn-eq .95s ease-in-out infinite;}
+.rm-eq-bar:nth-child(2){animation-delay:.16s;}
+.rm-eq-bar:nth-child(3){animation-delay:.32s;}
+
+.rm-meta{grid-area:meta;min-width:0;}
+.rm-kicker{
+  font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--tx-4);
+  margin-bottom:9px;
+}
+.rm-title{
+  font-size:clamp(22px,2vw,30px);font-weight:800;line-height:1.12;
+  letter-spacing:-.028em;color:var(--tx-1);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rm-artist{
+  margin-top:7px;font-size:13.5px;font-weight:600;color:var(--tx-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.rm-album-badge{
+  display:inline-block;margin-top:10px;
+  font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--iris-hi);
+}
+.rm-album-badge:empty{display:none;}
+
+.rm-actions{grid-area:actions;display:flex;gap:8px;align-self:start;}
+.rm-like-btn,.rm-save-now-btn{
+  width:40px;height:40px;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:var(--r2);
+  background:rgba(255,255,255,.04);border:1px solid var(--line);
+  font-size:16px;line-height:1;color:var(--tx-3);cursor:pointer;
+  transition:background 150ms var(--ease),border-color 150ms var(--ease),color 150ms var(--ease);
+}
+.rm-like-btn:hover,.rm-save-now-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);border-color:var(--line-2);}
+.rm-like-btn.liked,.rm-like-btn.on{color:var(--rose);border-color:rgba(217,163,171,.4);background:var(--rose-12);}
+.rm-save-now-btn.on{color:var(--sky);border-color:var(--sky-45);background:var(--sky-12);}
+
+.rm-transport{grid-area:transport;display:flex;align-items:center;gap:24px;min-width:0;}
+.rm-ctrl{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.rm-btn{
+  width:38px;height:38px;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:var(--r2);
+  background:transparent;border:1px solid transparent;
+  color:var(--tx-3);font-size:12px;cursor:pointer;
+  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);
+}
+.rm-btn:hover{background:rgba(255,255,255,.06);color:var(--tx-1);}
+.rm-btn.rm-on,.rm-btn.on{color:var(--sage);border-color:var(--sage-40);background:var(--sage-14);}
+.rm-play-btn{
+  width:52px;height:52px;flex-shrink:0;
+  border-radius:16px;
+  background:var(--tx-1);border:none;color:#0A0A0D;
+  font-size:15px;
+  transition:transform 150ms var(--ease),background 150ms var(--ease);
+}
+.rm-play-btn:hover{background:#FFFFFF;transform:scale(1.04);}
+.rm-play-btn:active{transform:scale(.97);}
+
+.rm-prog-wrap{flex:1;min-width:0;display:flex;align-items:center;gap:14px;}
+.rm-prog-rail{
+  flex:1;min-width:0;height:5px;border-radius:999px;cursor:pointer;
+  background:rgba(255,255,255,.08);position:relative;
+}
+.rm-prog-fill{
+  height:100%;border-radius:999px;width:0;
+  background:var(--sky);position:relative;
+  transition:width 120ms linear;
+}
+.rm-prog-fill::after{
+  content:'';position:absolute;right:-5px;top:50%;
+  width:11px;height:11px;border-radius:50%;background:#EEF4FA;
+  transform:translateY(-50%) scale(0);
+  transition:transform 150ms var(--ease);
+  box-shadow:0 1px 4px rgba(0,0,0,.6);
+}
+.rm-prog-wrap:hover .rm-prog-fill::after{transform:translateY(-50%) scale(1);}
+.rm-time{
+  font-family:var(--mono);font-size:11.5px;font-weight:600;
+  font-variant-numeric:tabular-nums;color:var(--tx-4);flex-shrink:0;
+}
+.rm-vol{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.rm-vol-icon{font-size:13px;color:var(--tx-4);}
+#music-volume{
+  -webkit-appearance:none;appearance:none;
+  width:110px;height:18px;background:transparent;cursor:pointer;
+}
+#music-volume::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:rgba(255,255,255,.09);}
+#music-volume::-webkit-slider-thumb{
+  -webkit-appearance:none;width:12px;height:12px;margin-top:-4px;
+  border-radius:50%;background:#EEF4FA;border:1px solid rgba(0,0,0,.35);
+  transition:transform 130ms var(--ease);
+}
+#music-volume:hover::-webkit-slider-thumb{transform:scale(1.15);}
+.rm-vol-val{
+  font-family:var(--mono);font-size:11.5px;font-weight:600;
+  font-variant-numeric:tabular-nums;color:var(--tx-4);min-width:34px;text-align:right;
+}
+
+/* ---------- sections ---------- */
+.rm-sec{border-bottom:1px solid var(--line);}
+.rm-sec-head{
+  display:flex;align-items:center;gap:12px;
+  padding:22px 2px;cursor:pointer;user-select:none;
+}
+.rm-sec-dot{
+  width:5px;height:5px;border-radius:50%;flex-shrink:0;
+  background:var(--tx-4);transition:background 200ms var(--ease);
+}
+.rm-sec.open .rm-sec-dot{background:var(--iris-hi);}
+.rm-sec-title{
+  flex:1;font-family:var(--mono);font-size:11px;font-weight:700;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-2);
+}
+.rm-sec.open .rm-sec-title{color:var(--iris-hi);}
+.rm-sec-arrow{font-size:9px;color:var(--tx-4);transition:transform 200ms var(--ease);}
+.rm-sec.open .rm-sec-arrow{transform:rotate(180deg);}
+.rm-sec-body{display:none;flex-direction:column;gap:14px;padding:0 2px 26px;}
+.rm-sec.open .rm-sec-body{display:flex;animation:soft-in 180ms var(--ease);}
+
+/* ---------- library ---------- */
+.rm-filter-bar{display:flex;gap:7px;flex-wrap:wrap;}
+.rm-filter-btn{
+  height:32px;padding:0 15px;border-radius:999px;
+  background:rgba(255,255,255,.04);border:1px solid var(--line);
+  font-size:12px;font-weight:700;color:var(--tx-3);cursor:pointer;
+  transition:background 150ms var(--ease),color 150ms var(--ease),border-color 150ms var(--ease);
+}
+.rm-filter-btn:hover{background:rgba(255,255,255,.08);color:var(--tx-1);}
+.rm-filter-btn.active{background:var(--iris-18);border-color:var(--iris-45);color:#FFFFFF;}
+
+#song-list{display:flex;flex-direction:column;}
+.rm-song-row{
+  display:flex;align-items:center;gap:16px;
+  padding:11px 14px;border-radius:var(--r2);cursor:pointer;
+  position:relative;
+  transition:background 140ms var(--ease);
+}
+.rm-song-row:hover{background:rgba(255,255,255,.035);}
+.rm-song-row.active{background:var(--sage-14);}
+.rm-song-row.active::before{
+  content:'';position:absolute;left:0;top:10px;bottom:10px;
+  width:2px;border-radius:0 2px 2px 0;background:var(--sage);
+}
+.rm-snum{
+  width:22px;flex-shrink:0;text-align:center;
+  font-family:var(--mono);font-size:12px;font-weight:600;
+  font-variant-numeric:tabular-nums;color:var(--tx-4);
+}
+.rm-song-row.active .rm-snum{color:var(--sage);}
+.rm-stitle{
+  flex:1;min-width:0;font-size:14px;font-weight:700;color:var(--tx-1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.rm-sartist{
+  flex-shrink:1;min-width:0;max-width:30%;
+  font-size:12.5px;font-weight:500;color:var(--tx-4);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.rm-s-icons{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity 150ms var(--ease);}
+.rm-song-row:hover .rm-s-icons,.rm-song-row.active .rm-s-icons{opacity:1;}
+.rm-s-like,.rm-s-save,.rm-sdel{
+  width:28px;height:28px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:var(--r1);font-size:12px;line-height:1;
+  color:var(--tx-4);cursor:pointer;
+  transition:background 140ms var(--ease),color 140ms var(--ease);
+}
+.rm-s-like:hover,.rm-sdel:hover{background:var(--rose-12);color:var(--rose);}
+.rm-s-save:hover{background:var(--sky-12);color:var(--sky);}
+.rm-s-like.on{color:var(--rose);}
+.rm-s-save.on{color:var(--sky);}
+.rm-song-row:not(:hover) .rm-s-icons:has(.on){opacity:1;}
+.rm-empty{
+  padding:26px 0;text-align:center;
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);
+}
+
+/* ---------- albums ---------- */
+.rm-album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+.rm-album-card{
+  position:relative;padding:14px;border-radius:var(--r3);cursor:pointer;
+  background:rgba(255,255,255,.03);border:1px solid var(--line);
+  transition:background 160ms var(--ease),border-color 160ms var(--ease),transform 160ms var(--ease);
+}
+.rm-album-card:hover{background:rgba(255,255,255,.06);border-color:var(--line-2);transform:translateY(-2px);}
+.rm-album-card.active{background:var(--iris-12);border-color:var(--iris-45);}
+.rm-album-icon{
+  display:flex;align-items:center;justify-content:center;
+  width:100%;aspect-ratio:1.6;border-radius:var(--r2);margin-bottom:11px;
+  font-size:22px;
+  background:linear-gradient(150deg,#221D33,#131320);
+}
+.rm-album-name{font-size:13px;font-weight:700;color:var(--tx-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rm-album-count{margin-top:3px;font-size:11.5px;font-weight:500;color:var(--tx-4);}
+.rm-album-del{
+  position:absolute;top:8px;right:8px;
+  width:22px;height:22px;border-radius:var(--r1);
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.55);color:var(--tx-3);
+  font-size:10px;cursor:pointer;opacity:0;
+  transition:opacity 150ms var(--ease),color 150ms var(--ease);
+}
+.rm-album-card:hover .rm-album-del{opacity:1;}
+.rm-album-del:hover{color:var(--rose);}
+
+/* ---------- forms ---------- */
+.rm-form{display:flex;flex-direction:column;gap:9px;max-width:620px;}
+.rm-inp{
+  width:100%;height:40px;padding:0 14px;
+  border-radius:var(--r2);
+  background:rgba(255,255,255,.04);border:1px solid var(--line-2);
+  color:var(--tx-1);font-size:13.5px;font-weight:600;
+  outline:none;
+  transition:border-color 150ms var(--ease),background 150ms var(--ease);
+}
+.rm-inp::placeholder{color:var(--tx-4);font-weight:500;}
+.rm-inp:focus{border-color:var(--sky-45);background:var(--sky-12);}
+input[type="file"].rm-inp{padding:9px 12px;height:auto;font-size:12px;font-weight:500;cursor:pointer;}
+.rm-lrc{
+  padding:14px;border-radius:var(--r3);
+  background:rgba(255,255,255,.022);border:1px solid var(--line);
+}
+.rm-lrc-head{
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;
+  font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--tx-4);
+}
+#lrc-status{font-family:var(--mono);font-size:11px;letter-spacing:0;text-transform:none;color:var(--sky);}
+textarea.rm-inp{
+  height:96px;padding:11px 13px;resize:vertical;
+  font-family:var(--mono);font-size:12px;font-weight:500;line-height:1.6;
+}
+.rm-check{
+  display:flex;align-items:center;gap:9px;margin-top:10px;
+  font-size:12.5px;font-weight:600;color:var(--tx-3);cursor:pointer;
+}
+.rm-check input{accent-color:#A6D7B2;width:15px;height:15px;cursor:pointer;}
+.rm-row{display:flex;gap:9px;}
+
+/* ---------- sync ---------- */
+.rm-sync-row{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:12px 14px;border-radius:var(--r2);
+  transition:background 140ms var(--ease);
+}
+.rm-sync-row:hover{background:rgba(255,255,255,.028);}
+.rm-sync-label{flex:1;min-width:0;font-size:14px;font-weight:700;color:var(--tx-1);}
+.rm-sync-note{padding:0 14px 8px;font-size:12px;font-weight:500;line-height:1.5;color:var(--tx-4);}
+.rm-badge{
+  display:inline-block;margin-left:9px;padding:2px 8px;border-radius:999px;
+  background:var(--iris-12);color:var(--iris-hi);
+  font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+  vertical-align:middle;
+}
+.rm-divider{height:1px;background:var(--line);margin:6px 0;}
+.rm-status{
+  font-family:var(--mono);font-size:11.5px;font-weight:500;
+  color:var(--tx-4);min-height:16px;
+}
+#bm-dbg-box{
+  margin:0;padding:11px 13px;border-radius:var(--r2);
+  background:rgba(0,0,0,.4);border:1px solid var(--line);
+  font-family:var(--mono);font-size:11px;color:var(--tx-3);
+  white-space:pre-wrap;max-height:150px;overflow-y:auto;
+}
+
+/* ---------- toast + guide ---------- */
+.rm-toast{
+  display:none;position:fixed;left:50%;bottom:28px;
+  transform:translateX(-50%);
+  padding:11px 20px;border-radius:999px;z-index:99999;
+  background:var(--tx-1);color:#0A0A0D;
+  font-size:12.5px;font-weight:700;
+  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);
+}
+.rm-guide{
+  padding:18px 20px;margin-bottom:4px;
+  border-radius:var(--r3);
+  background:rgba(255,255,255,.022);border:1px solid var(--line);
+}
+.rm-guide summary{
+  cursor:pointer;list-style:none;
+  font-size:13px;font-weight:700;color:var(--tx-2);
+  display:flex;align-items:center;gap:10px;
+}
+.rm-guide summary::-webkit-details-marker{display:none;}
+.rm-guide summary::before{
+  content:'?';flex-shrink:0;width:20px;height:20px;border-radius:50%;
+  background:var(--iris-12);color:var(--iris-hi);
+  font-family:var(--mono);font-size:11px;font-weight:700;
+  display:grid;place-items:center;
+}
+.rm-guide[open] summary{margin-bottom:14px;color:var(--tx-1);}
+.rm-guide ol{margin:0;padding-left:20px;color:var(--tx-3);font-size:12.5px;line-height:2;}
+.rm-guide code{
+  background:rgba(255,255,255,.06);color:var(--sky);
+  padding:2px 7px;border-radius:5px;font-family:var(--mono);font-size:11.5px;
+}
+.rm-guide a{color:var(--sky);border-bottom:1px solid rgba(155,197,232,.35);}
+.rm-guide a:hover{color:var(--tx-1);border-bottom-color:var(--tx-1);}
+.rm-guide-note{margin-top:14px;color:var(--tx-4);font-size:11.5px;line-height:1.75;}
+</style>
+
+<div id="rm-toast" class="rm-toast"></div>
+
+<div class="page-head">
+    <h1 class="page-title">Music</h1>
+    <p class="page-description">A local library that plays inside the client and can type synced lyrics into chat for you, for your bots, or for both at once.</p>
+</div>
+
+<div class="rm-root">
+
+  <div class="rm-player">
+    <div class="rm-art" id="rm-art">
+      <div class="rm-eq"><div class="rm-eq-bar"></div><div class="rm-eq-bar"></div><div class="rm-eq-bar"></div></div>
+    </div>
+    <div class="rm-meta">
+      <div class="rm-kicker">Now playing</div>
+      <div id="music-title" class="rm-title">No song selected</div>
+      <div id="music-artist" class="rm-artist">--</div>
+      <div id="music-album-badge" class="rm-album-badge"></div>
+    </div>
+    <div class="rm-actions">
+      <button id="rm-like-now" class="rm-like-btn" title="Like">&#9825;</button>
+      <button id="rm-save-now" class="rm-save-now-btn" title="Save">&#9733;</button>
+    </div>
+    <div class="rm-transport">
+      <div class="rm-ctrl">
+        <button id="music-prev" class="rm-btn" title="Previous">&#9664;&#9664;</button>
+        <button id="music-play" class="rm-btn rm-play-btn" title="Play / pause">&#9654;</button>
+        <button id="music-next" class="rm-btn" title="Next">&#9654;&#9654;</button>
+        <button id="music-loop" class="rm-btn" title="Loop">&#8635;</button>
+        <button id="music-shuffle" class="rm-btn" title="Shuffle" style="font-size:10px;letter-spacing:.08em;font-weight:700;">SHF</button>
+      </div>
+      <div class="rm-prog-wrap">
+        <span id="music-time-current" class="rm-time">0:00</span>
+        <div id="music-progress-bar" class="rm-prog-rail"><div id="music-progress-fill" class="rm-prog-fill"></div></div>
+        <span id="music-time-total" class="rm-time">0:00</span>
+      </div>
+      <div class="rm-vol">
+        <span class="rm-vol-icon">&#9834;</span>
+        <input id="music-volume" type="range" min="0" max="100" value="70">
+        <span id="music-volume-label" class="rm-vol-val">70%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rm-sec open">
+    <div class="rm-sec-head" onclick="this.closest('.rm-sec').classList.toggle('open')"><div class="rm-sec-dot"></div><span class="rm-sec-title">Library</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <div id="rm-filter-bar" class="rm-filter-bar">
+        <button class="rm-filter-btn active" data-filter="">All songs</button>
+        <button class="rm-filter-btn" data-filter="__liked">&#9829; Liked</button>
+      </div>
+      <div id="song-list"></div>
+    </div>
+  </div>
+
+  <div class="rm-sec open">
+    <div class="rm-sec-head" onclick="this.closest('.rm-sec').classList.toggle('open')"><div class="rm-sec-dot"></div><span class="rm-sec-title">Albums</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <div id="rm-album-grid" class="rm-album-grid"></div>
+      <div class="rm-row" style="max-width:480px;">
+        <input id="album-name-input" class="rm-inp" type="text" placeholder="New album name" maxlength="30">
+        <button id="add-album" class="option-button">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="rm-sec">
+    <div class="rm-sec-head" onclick="this.closest('.rm-sec').classList.toggle('open')"><div class="rm-sec-dot"></div><span class="rm-sec-title">Add song</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <details class="rm-guide">
+        <summary>How to add a song with its lyrics</summary>
+        <ol>
+          <li>Find the song on <a href="https://www.youtube.com/" target="_blank" rel="noreferrer">youtube.com</a> and copy its link.</li>
+          <li>Turn the link into a file on <a href="https://ytmp3.gl/" target="_blank" rel="noreferrer">ytmp3.gl</a> and download the <code>.mp3</code>.</li>
+          <li>Search the same song on <a href="https://lrclib.net/" target="_blank" rel="noreferrer">lrclib.net</a> and download the <b>synced</b> lyrics as <code>.lrc</code>.</li>
+          <li>Fill in the <b>Title</b> below and pick the <code>.mp3</code> in the file box, or paste a direct link in <b>URL</b>.</li>
+          <li>In the <b>LRC sync</b> box, pick the <code>.lrc</code> file &mdash; or paste its lines into the text area.</li>
+          <li>Press <b>Add song</b>. It shows up in the library with its lyrics attached.</li>
+        </ol>
+        <div class="rm-guide-note">The <code>.lrc</code> has to be the synced kind &mdash; the one whose lines start with a timestamp like <code>[01:23.45]</code>. Plain lyrics still show up, but they will not follow the song. If the words drift, an <code>.lrc</code> from a different release of the track is usually the reason.</div>
+      </details>
+      <div class="rm-form">
+        <input id="song-title-input" class="rm-inp" type="text" placeholder="Title *" maxlength="50">
+        <input id="song-artist-input" class="rm-inp" type="text" placeholder="Artist" maxlength="30">
+        <input id="song-url-input" class="rm-inp" type="text" placeholder="URL (.mp3  .ogg  .wav)">
+        <input id="song-file-input" class="rm-inp" type="file" accept=".mp3,.ogg,.wav,.flac,.aac,.m4a">
+        <select id="song-album-select" class="rm-inp ryn-select"><option value="">No album</option></select>
+        <div class="rm-lrc">
+          <div class="rm-lrc-head"><span>LRC sync</span><span id="lrc-status"></span></div>
+          <input id="lrc-file-input" class="rm-inp" type="file" accept=".lrc,.txt" style="margin-bottom:9px;">
+          <textarea id="song-lyrics-input" class="rm-inp" placeholder="[0:15] Line 1&#10;[0:30] Line 2"></textarea>
+          <label class="rm-check"><input id="song-autosync" type="checkbox"> Auto-play and sync when added</label>
+        </div>
+        <div class="rm-row">
+          <button id="add-song" class="option-button primary wide">Add song</button>
+          <button id="save-song-btn" class="option-button">Save lyrics</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rm-sec">
+    <div class="rm-sec-head" onclick="this.closest('.rm-sec').classList.toggle('open')"><div class="rm-sec-dot"></div><span class="rm-sec-title">Chat sync</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <div class="rm-sync-row"><span class="rm-sync-label">Enable chat sync</span><label class="switch-checkbox"><input id="music-chat-sync" type="checkbox"><span></span></label></div>
+      <div class="rm-divider"></div>
+      <div class="rm-sync-row"><span class="rm-sync-label">Mixed sync<span class="rm-badge">Me + bots</span></span><label class="switch-checkbox"><input id="music-mixed-sync" type="checkbox"><span></span></label></div>
+      <div class="rm-sync-note">You: line &#8594; bots: line &#8594; you &hellip;</div>
+      <div class="rm-sync-row"><span class="rm-sync-label">Bots only sync<span class="rm-badge">Bots</span></span><label class="switch-checkbox"><input id="music-bots-only-sync" type="checkbox"><span></span></label></div>
+      <div class="rm-sync-note">Bot 1: line 1 &bull; bot 2: line 2 &bull; bot 3: line 3 &hellip;</div>
+      <div class="rm-sync-row"><span class="rm-sync-label">Unified sync<span class="rm-badge">All</span></span><label class="switch-checkbox"><input id="music-unified-sync" type="checkbox"><span></span></label></div>
+      <div class="rm-sync-note">You and every bot post the same line at the same moment.</div>
+      <div class="rm-divider"></div>
+      <div class="rm-sync-row"><span class="rm-sync-label">Auto delay<span id="bm-auto-delay-badge" class="rm-badge">off</span></span><label class="switch-checkbox"><input id="music-auto-delay" type="checkbox" checked><span></span></label></div>
+      <div class="rm-sync-row"><span class="rm-sync-label">Sync bot<span id="bm-sync-bot-badge" class="rm-badge">off</span></span><button id="music-sync-bot-btn" class="option-button">OFF</button></div>
+      <div id="bm-manual-delay-row" class="rm-sync-row" style="display:none;"><span class="rm-sync-label">Delay</span><label class="slider"><span class="slider-value">0ms</span><input id="music-sync-delay" type="range" min="-3000" max="3000" step="50" value="0"></label></div>
+      <div class="rm-divider"></div>
+      <div class="rm-row" style="align-items:center;">
+        <button id="bm-test-chat" class="option-button">Test chat</button>
+        <span id="bm-test-chat-status" class="rm-status" style="align-self:center;"></span>
+      </div>
+      <button id="bm-send-all-lyrics" class="option-button wide">&#9836; Send All Lyrics: OFF</button>
+      <div id="bm-send-lyrics-status" class="rm-status" style="text-align:center;"></div>
+      <div id="bm-dbg-wrap" style="display:none;"><pre id="bm-dbg-box"></pre></div>
+      <button id="bm-dbg-toggle" class="option-button wide">Show Debug Log</button>
+    </div>
+  </div>
+
+  <div class="rm-sec">
+    <div class="rm-sec-head" onclick="this.closest('.rm-sec').classList.toggle('open')"><div class="rm-sec-dot"></div><span class="rm-sec-title">Backup &amp; restore</span><span class="rm-sec-arrow">&#9660;</span></div>
+    <div class="rm-sec-body">
+      <p class="rm-sync-note" style="padding-left:0;">Export the whole library to a JSON file and bring it back on another machine.</p>
+      <div class="rm-row" style="max-width:420px;">
+        <button id="music-export-btn" class="option-button wide">Export</button>
+        <button id="music-import-btn" class="option-button wide">Import</button>
+        <input id="music-import-file" type="file" accept=".json" style="display:none;">
+      </div>
+      <div id="music-backup-status" class="rm-status"></div>
+    </div>
+  </div>
+
+</div>
+</div>

@@ -1,0 +1,148 @@
+<div class="menu-page" data-id="4">
+    <div class="page-head">
+        <h1 class="page-title">Misc</h1>
+        <p class="page-description">Everything around the fight: what happens on a kill, what gets typed into chat for you and for the bots, how this menu behaves, and the counters the client has kept since you installed it.</p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Match<span class="sec-sub">What the client does when a round starts or ends.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Kill Message</span>
+                    <span class="opt-desc">Sends this line in chat every time you get a kill.</span>
+                </div>
+                <div class="option-content">
+                    <input id="_killMessageText" class="input" type="text" maxlength="30" placeholder="Message">
+                    <label class="switch-checkbox"><input id="_killMessage" type="checkbox"><span></span></label>
+                </div>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Provoke on Kill</span>
+                    <span class="opt-desc">Reacts in chat when someone kills you instead.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_deathProvoke" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Autospawn</span>
+                    <span class="opt-desc">Respawns you as soon as the death screen appears.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autospawn" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Autoaccept</span>
+                    <span class="opt-desc">Accepts incoming clan requests without asking.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoaccept" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Auto Chat<span class="sec-sub">Lines you post on a timer. They cycle in the order listed.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Enable</span>
+                    <span class="opt-desc">Starts posting your messages while you are in game.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoChat" type="checkbox"><span></span></label>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Interval</span></div>
+                <label class="slider">
+                    <span class="slider-value"></span>
+                    <input id="_autoChatInterval" type="range" step="1" min="1" max="60" data-suffix="s">
+                </label>
+            </div>
+            <div id="autoChatMsgList"></div>
+            <div class="content-option centered">
+                <button id="addAutoChatMsg" class="option-button">Add message</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Bot Auto Chat<span class="sec-sub">The same thing, typed by every connected bot.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Enable Player Chat</span>
+                    <span class="opt-desc">Lets the bots post their own list of lines.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_autoBotChat" type="checkbox"><span></span></label>
+            </div>
+            <div id="autoBotChatMsgList"></div>
+            <div class="content-option centered">
+                <button id="addAutoBotChatMsg" class="option-button">Add player message</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Menu<span class="sec-sub">How this interface itself behaves.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">See through the menu</span>
+                    <span class="opt-desc">Lets the game show faintly behind this panel while it is open.</span>
+                </div>
+                <label class="switch-checkbox"><input id="_menuTransparency" type="checkbox"><span></span></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Session<span class="sec-sub">Counters kept by the client. They persist between games.</span></div>
+        <div class="section-content">
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Total kills</span></div>
+                <span id="_totalKills" class="text-value">0</span>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Global kills with bots</span></div>
+                <span id="_globalKills" class="text-value">0</span>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Deaths</span></div>
+                <span id="_deaths" class="text-value">0</span>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Autosync</span></div>
+                <span id="_autoSyncTimes" class="text-value">0</span>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Spike sync hammer</span></div>
+                <span id="_spikeSyncHammerTimes" class="text-value">0</span>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Spike sync</span></div>
+                <span id="_spikeSyncTimes" class="text-value">0</span>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Velocity tick</span></div>
+                <span id="_velocityTickTimes" class="text-value">0</span>
+            </div>
+            <div class="content-option quiet">
+                <div class="opt-main"><span class="option-title">Client</span></div>
+                <span id="author" class="text-value">Ryn Type 2</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Reset<span class="sec-sub">Puts every setting on every page back to its shipped value.</span></div>
+        <div class="section-content">
+            <div class="content-option">
+                <div class="opt-main">
+                    <span class="option-title">Reset all settings</span>
+                    <span class="opt-desc">Keybinds, combat, visual, misc and bot options all return to defaults. Your music library is not touched.</span>
+                </div>
+                <button id="resetSettings" class="option-button red">Reset settings</button>
+            </div>
+        </div>
+    </div>
+</div>
