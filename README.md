@@ -290,6 +290,189 @@ weapon              min grip r   min gap   hand px/f   weapon px/f
 
 ---
 
+---
+
+# Ryn Type 2 — structure visuals, frame driver, soldier wings
+
+A second pass over `Ryn_Type_2.user.js`, on top of the melee grip system above.
+Everything here is additive: no module was rewritten, no existing setting
+changed meaning, and every new option defaults to the behaviour described below.
+
+## Structure colours
+
+Spikes and traps are recoloured by who placed them — own, clan, enemy — with a
+separate colour for each of the six combinations and a strength slider.
+
+It rides the sprite-tint path the purple tint already used. The `buildingTint`
+hook now passes the game's item entity alongside its sprite, so `_objectTint`
+can resolve the object through `ObjectManager` and ask the client's own
+`isMyPlayerByID` / `isTeammateByID` pair who owns it — the same team detection
+every module and the health bars act on, not a second answer to the same
+question. The recolour is a `source-atop` fill, so the silhouette, outline and
+shading of the original sprite all survive it.
+
+The tint cache was a `WeakMap<sprite, canvas>`; it is now
+`WeakMap<sprite, Map<colour, canvas>>`. One sprite is shared by every object of
+the same item and scale, so a spike field costs one tinted canvas per colour in
+play — at most seven entries — and changing a colour adds an entry rather than
+throwing a frame's work away.
+
+Item groups 2 and 5 only. Walls, mills, turrets, boost pads and everything else
+are left alone, and so is every non-item draw: resources and animals reach
+`_objectTint` with one argument and take the path they always took.
+
+## One frame driver
+
+The client was running **eight** independent `requestAnimationFrame` loops:
+weather, the halves and squad overlays, the target markers, the scatter and
+auto-farm bot passes, and two post-kill cleanup passes. Each re-registered
+itself every frame, so the browser scheduled, invoked and unwound eight
+callbacks per frame to do work that belongs to one.
+
+They are one loop now. Ordering is preserved exactly — a self-registering rAF
+loop keeps its slot for the life of the page, so running the passes in
+registration order is the order they already ran in — and every pass keeps its
+own `try`/`catch`, so a pass that throws cannot take the others down. Two of the
+old loops had no guard at all and would have died permanently on one throw;
+under the driver they are retried next frame.
+
+Every drawing pass owns a separate overlay canvas layered over the game's, so
+none of this changes what is drawn over what.
+
+The lyric-sync loop is deliberately **not** folded in: it starts and stops on
+demand, and moving it onto an always-on driver would make it always-on.
+
+## Per-frame work removed
+
+| was | now |
+|---|---|
+| `document.querySelector("#gameCanvas")` + `getContext` every frame | looked up once, re-resolved only if the canvas is replaced |
+| `_targetCanvas.getContext("2d")` every frame | taken once |
+| FPS from a timestamp array scanned and `shift`ed every frame | a counter, read once a second |
+| frame-time average via `push`/`shift`/`reduce` (a closure per frame) | ring buffer with a running sum |
+| `imageSmoothingEnabled` written every frame | written when it changes |
+| object sort comparator re-allocated every frame it sorted | hoisted, reads two fields |
+| settings re-read once **per object** in the object pass | read once per pass |
+| `fillText` read the nickname and ran two string compares on every call | skipped entirely when both colouring options are off |
+
+`fillText` is the sharpest of these: the client patches
+`CanvasRenderingContext2D.prototype.fillText` globally, so every name, chat
+line, damage number and HUD string in the game went through a nickname lookup
+and a suffix comparison. With both colouring options off that is now one boolean
+test.
+
+Nothing here lowers an update rate. Every module still runs on the tick it ran
+on before, and the frame passes still run every frame.
+
+## Soldier wears Shadow Wings
+
+`getBestCurrentAcc` equipped Angel Wings (accessory 13, +3hp/s regen) the moment
+an enemy was detected — the same moment `ModuleHandler` forces hat 6 — so Angel
+Wings is what Soldier has always been paired with. It now takes Shadow Wings
+(accessory 19, +10% move speed) instead.
+
+This is a real gear change, not a sprite swap: what you see is what the server
+has you wearing, and other players see it too.
+
+The trigger is the union of three views of the same state — the hat the server
+confirmed, the hat being forced this tick, and the soldier latch — read the way
+the turret and bull checks in the same function read theirs. Taking the union
+rather than any one term makes it sticky, so a single-tick dropout cannot flip
+the accessory and the wings do not flicker at the edge of soldier's range.
+Soldier's own hat logic, Safe Soldier and its range test are untouched.
+
+## Auto Break — Break Position
+
+A new **Inside / Outside** control under Autobreak.
+
+- **Inside** — Auto Break only takes the trap the player is actually caught in.
+  That is `myPlayer.trappedIn` *by name*, not "the nearest trap", so two
+  overlapping traps cannot make it pick the wrong one.
+- **Outside** — every enemy trap except the one the player is standing in.
+
+`isTrapped` and `trappedIn` are set by `EnemyManager` each tick from collision
+against the objects' real positions, so this reads the player's actual
+relationship to the trap and not anything that was drawn.
+
+The filter sits at target selection: a trap the mode rules out is simply not
+offered, and the spike and enemy-first fallbacks below it run exactly as they do
+when there is no trap in reach. **Spikes break identically in both modes**, and
+`Settings_default._breakPosition` is read in exactly one place in the whole
+client.
+
+Note that both modes are narrower than the old unconditional behaviour — that is
+what the two modes are. The default is Inside, which is breaking out of a trap
+you are caught in.
+
+## Automatic Q Fast
+
+The only thing in the client named Q Fast was a debug-HUD readout, `rynFastQ`,
+showing the `didAntiInsta` flag. That flag was raised whenever Auto Heal fired —
+during a combo, while trapped, on the anti-smart-tick branch — and was read in
+exactly one place: to write that text. It had no gameplay effect at all.
+
+The readout, the updater and the flag with all its assignments are gone. Auto
+Heal itself is untouched: its `_autoheal` gate, its damage-potential estimate,
+its shame guards, `isSaveHealTick`, the heal-amount calculation and Anti Smart
+Tick all still work exactly as they did.
+
+## Settings
+
+All of it lands in the existing menu and the existing `Settings` /
+`SaveSettings` / `CustomStorage` persistence. One new binder was added —
+`attachSelects`, twelve lines mirroring `attachTextInputs` — because the client
+had no `<select>` control before and Break Position is an enum, not a switch.
+There is no second settings system.
+
+| page | section | control |
+|---|---|---|
+| Visual | Structure Colours | Structure Colours, Colour Strength, Own/Ally/Enemy Spike, Own/Ally/Enemy Trap |
+| Visual | Interface | Visual Smoothing, Rendering Optimization, Performance Optimization |
+| Combat | Defense | Shadow Wings |
+| Combat | Utility | Break Position (Inside / Outside), under Autobreak |
+
+Each of the three performance switches turns off a specific thing rather than
+labelling work already done: **Visual Smoothing** holds off Low Quality Mode's
+every-second-frame skipper, **Rendering Optimization** gates the context caching
+and the canvas-state write elimination, and **Performance Optimization** gates
+the per-object overlay skipping. All three default on.
+
+## Verification
+
+```sh
+node tools/verify-ryn.js Ryn_Type_2.user.js
+node tools/verify-melee.js Ryn_Type_2.user.js
+node tools/check-hooks.js Ryn_Type_2.user.js     # needs: npm i --no-save terser
+node tools/verify-drivers.js Ryn_Type_2.user.js
+node --check Ryn_Type_2.user.js
+```
+
+`verify-ryn.js` exists because the menu binds itself by id: `attachCheckboxes`
+and friends walk the rendered HTML, look each id up in `defaultSettings`, and
+log an error and skip the control when it is not there. A typo in either half is
+silent at build time and shows up as a switch that does nothing. It checks:
+
+- every one of the 110 settings-backed menu controls resolves to a real setting,
+  and its type matches what its binder assumes
+- every new setting is read by real code somewhere other than its own default
+  and control — a declared-but-unwired switch fails the run
+- the break-position decision function, on all eight combinations of mode,
+  trapped state and which trap is nearest
+- the structure-colour classifier, on all six owner/kind combinations plus
+  walls, mills, turrets, a missing entity, a missing sid and an unknown sid
+- automatic Q Fast is gone and Auto Heal's own logic is still present
+- eight passes on one driver, none of them registering before it is declared,
+  and the on-demand lyric loop still separate
+- the per-frame lookups above are actually gone
+- regression anchors for Auto Place, Replace, Preplace, Spike Tick, Auto Heal,
+  Safe Soldier, Anti Smart Tick, Auto Break, the packet budget and the melee
+  grip system
+
+Current state: **315 checks pass**, alongside 2664 from `verify-melee.js`, 44/44
+hooks bound and the driver tables matching the shipped bundle.
+
+---
+
 ## Layout
 
 ```
@@ -304,6 +487,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/verify-melee.js     Ryn Type 2's melee grip geometry and rewritten renderer
+tools/verify-ryn.js       Ryn Type 2's settings wiring and feature decision functions
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
 ```
 
