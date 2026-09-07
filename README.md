@@ -177,3 +177,80 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+## Ryn Type 2 (`Ryn_Type_2.user.js`)
+
+A separate client in this repo, built on the Ryn Type 2 base rather than on
+`src/RYN_Client_v4.js`. It is the base client plus one feature set — **Scan**,
+and **Bot Name** — added into the existing bot system rather than beside it.
+
+### Scan
+
+Bots sweep the whole map, register every player they see, and hand the decision
+back to you when one turns up.
+
+| Piece | What it reuses |
+|---|---|
+| Movement | `ModuleHandler.startMovement` / `move_dir`, behind a `_scanActive` gate in `Movement.postTick` — the same contract scatter and auto farm use |
+| Obstacle avoidance | `_scPathClear` / `_scFindClearAngle`, the scatter pathing |
+| Perception | the visible-player list `PlayerManager.updatePlayer` already builds |
+| Combat | `ModuleHandler.attacking` via `tempData.setAttacking` |
+| Map ping | `Renderer._mapPreRender`, the one minimap hook |
+| Toast | `window._rynBotToast` |
+
+New: the discovery database, the region coverage map, and the top-right alert.
+
+**Coverage.** The map is cut into a square grid whose side grows with the bot
+count (2×2 for one bot, 5×5 for twenty). One region belongs to one bot at a
+time, which is what stops two bots walking the same ground — an overlapping
+route cannot be handed out. Inside a region the bot walks a boustrophedon whose
+line spacing is set by the region's size, not by a fixed waypoint count, so
+"scanned" means the ground was actually crossed. A covered region goes stale
+after 90s and re-enters the rotation.
+
+**On a find.** The finder stops sweeping and anchors on the target; a marker
+goes on the minimap; a top-right prompt offers two commands.
+
+- **SEND BOTS** — all usable bots take a seat on a ring around the target and
+  converge. The coordinated finish needs **two or more** bots in range, held for
+  a settling window so they commit together. With fewer, they still close in but
+  the prompt says plainly that the objective cannot be completed.
+- **HOLD / WAIT** — the finder tracks at a fixed distance and does not attack;
+  everyone else waits on an outer ring. The target's position stays current
+  while you walk over.
+
+No command inside 20s, or a target lost for 6s, resumes the sweep with coverage
+intact.
+
+**Cost.** Move packets are only resent when the heading changes; the obstacle
+probe is throttled per bot and only runs when the straight line is blocked; the
+player list patches its rows rather than rebuilding them. One `setInterval` at
+10Hz drives the whole thing — 30 bots seeing 60 players cost ~0.3ms a tick.
+
+Scan owns bot movement while it runs, so switching it on switches off Random
+Movement and Auto Farm; it yields to Freeze Bots. With Scan off, no bot
+movement is claimed and no move packets are sent — the discovery list still
+fills, which costs nothing.
+
+### Bot Name
+
+`Bots → Bot Name`. A name every bot joins with, applied in
+`ClientPlayer.spawn` — the packet that actually carries the name — so it
+survives respawns. **Number Bots** appends the bot's slot (`555 1`, `555 2`, …).
+Slots are claimed lowest-free at connect and released on disconnect, so a bot
+keeps its number across a respawn and a departing bot's number is reused rather
+than everything shuffling. Names are trimmed to fit moomoo's 15-character limit
+with the number intact. An empty field means off: the per-row name typed in the
+bot list is used, exactly as before.
+
+### Checks
+
+```sh
+node --check Ryn_Type_2.user.js
+node tools/verify-drivers.js Ryn_Type_2.user.js
+```
+
+Driver tables match `src/game_index.js`, and all 36 bundle-rewrite hooks are
+byte-identical to the base client.
