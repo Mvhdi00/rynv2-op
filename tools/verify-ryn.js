@@ -146,6 +146,14 @@ check(/isSaveHealTick\(\)/.test(client), "AntiInsta's save-heal tick test is gon
 check(client.includes("_antiSmartTick"), "Anti Smart Tick is gone");
 console.log("  readout and flag removed; Auto Heal and Anti Smart Tick intact");
 
+/* ── attack animation ships as stock ───────────────────────────────────────── */
+
+console.log("\nattack animation");
+check(defaults._meleeAnimation === false,
+  "_meleeAnimation should default off, so the client ships with moomoo's own attack animation");
+check(/const MeleeAnim = new class/.test(client), "the grip system was removed rather than switched off");
+console.log("  stock by default; the grip system is present and off");
+
 /* ── one frame driver, not eight loops ─────────────────────────────────────── */
 
 console.log("\nframe loops");

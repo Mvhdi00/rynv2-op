@@ -237,6 +237,21 @@ size-one key of `(player, animTime, weaponIndex)` and written into two reused
 scratch objects. The three call sites hit the cache. No allocation, no library,
 about twenty flops and four trig calls per player.
 
+## Ships off by default
+
+`_meleeAnimation` defaults to **off**, so out of the box the client draws
+attacks exactly the way stock moomoo does — the whole player rotating by
+`dirPlus`. That is the same attack animation the v5.4 build has, which carries
+no melee hooks at all. Turn it on in Visual → Interface to get the grip system
+below.
+
+`verify-melee.js` proves the off path is not merely similar but identical: it
+renders every one of the 16 weapons at six points through the attack, hit and
+whiffed, and asserts no canvas transform is emitted anywhere, both hand circles
+land on the stock coordinates and are drawn with no context argument, the weapon
+draw receives the arguments the game passed it, and the body rotation is stock
+`dirPlus`.
+
 ## Verification
 
 ```sh

@@ -644,6 +644,46 @@ if (terser) {
       }
     }
   }
+  /* With the animation off the client has to draw exactly what stock moomoo
+   * draws -- which is what the uploaded v5.4 build does, since it carries no
+   * melee hooks at all. Same coordinates, same draw order, and above all no
+   * canvas transform anywhere. */
+  sandbox.Settings_default._meleeAnimation = false;
+  let vanillaRuns = 0;
+  for (const index of ALL) {
+    const g = geometry(index);
+    for (const u of [0, .2, .35, .5, .7, 1]) {
+      for (const whiff of [false, true]) {
+        ops.length = 0;
+        ctx.depth = 0;
+        const p = player(index, u, { whiff });
+        p.tailIndex = 0;
+        p.skinIndex = 0;
+        p.weaponVariant = 0;
+        p.skinColor = 0;
+        render(p, ctx);
+        vanillaRuns++;
+
+        check(!ops.some(o => o.op === "save" || o.op === "rotate" || o.op === "translate"),
+          `${WEAPONS[index].name}: a transform was applied with the animation off`);
+        const hands = ops.filter(o => o.op === "circle" && o.r === HAND_R);
+        const v1 = { x: SCALE * Math.cos(g.arm), y: SCALE * Math.sin(g.arm) };
+        const v2 = { x: SCALE * g.hndD * Math.cos(-g.arm * g.hndS), y: SCALE * g.hndD * Math.sin(-g.arm * g.hndS) };
+        check(hands.length === 2 && dist(hands[0], v1) < 1e-12 && dist(hands[1], v2) < 1e-12,
+          `${WEAPONS[index].name}: hands are not on stock coordinates with the animation off`);
+        /* stock draws the hands with no context argument at all */
+        check(hands[0].ctx === undefined && hands[1].ctx === undefined,
+          `${WEAPONS[index].name}: hands were drawn on a different context than stock`);
+        const weapon = ops.filter(o => o.op === "weapon");
+        check(weapon.length === 1 && weapon[0].x === SCALE && weapon[0].y === 0,
+          `${WEAPONS[index].name}: weapon draw arguments differ from stock`);
+        check(A._bodyRot(p) === p.dirPlus,
+          `${WEAPONS[index].name}: body rotation is not stock dirPlus with the animation off`);
+      }
+    }
+  }
+  sandbox.Settings_default._meleeAnimation = true;
+  console.log(`  ${vanillaRuns} renders with the animation off: byte-for-byte the stock moomoo draw`);
   console.log(`  ${ran} renders across all 16 weapons: transforms balanced, draw order preserved,`);
   console.log("  two whole hand circles and one body circle every time");
   console.log("  excluded weapons emitted no transform and vanilla hand coordinates");
