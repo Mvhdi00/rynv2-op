@@ -127,11 +127,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
-tools/verify-glotus-port.js  Ryn Type 2's ported Glotus modules vs. Glotus
 ```
-
-`Ryn_Type_2.user.js` is its own script with its own menu — it is not built
-from `src/` and `tools/build-reup.js` does not touch it.
 
 ## Build
 
@@ -179,120 +175,28 @@ understood.
 
 ## Ryn Type 2
 
-### The Glotus spike tick and anti retrap
-
-Two modules from Glotus Client 5.5.5 were carried into `Ryn_Type_2.user.js`
-whole — `SpikeTick` and `AntiRetrap`. Both classes are Glotus' code unchanged;
-what the port had to supply was everything around them.
-
-**Spike tick** (`_spikeTick`, Combat → Kill Sequences) asks a different
-question from the three spike ticks Ryn already had. Those ask *can I knock
-this target into a spike I am about to place*. This one asks *is the target
-already touching a spike on the extrapolated frame* — `enemySpikeCollider`,
-which `EnemyManager.checkCollision` was already computing every tick, exactly
-the way Glotus computes it — and swings the primary under a bull hat so the hit
-and the spike land together, then spends the turret reload on hat 53 the tick
-after. The toggle is the existing "Spike Tick" switch, and the sub-rows under
-it are still Ryn's own variants.
-
-That switch now defaults to **on**, which is what Glotus ships (`_spikeTick:
-true`) and what keeps the gating verbatim. It is the master for the whole spike
-tick family, so it starts four modules, not one: Glotus' tick plus Ryn's Break,
-Near and Trap, all three of which already defaulted to `true` individually and
-were only held back by the master being off.
-
-Saved settings win over defaults — `settings` is `{...defaultSettings,
-...CustomStorage.get("RYN")}` — so this reaches a fresh install only. An
-existing one keeps whatever it stored, and gets there through the menu switch
-or Misc → Reset settings.
-
-**Anti retrap** (`_antiRetrap`, Combat → Anti Systems) was already in the file
-and already byte-identical to Glotus, and could still never fire. It sat at the
-back of the run list, behind Autobreak.
-
-Module order is priority — the first module to set `moduleActive` owns the tick
-— and anti retrap only means anything *above* Autobreak. It is the module that
-says "swing at them first, break the trap after", and being trapped is exactly
-the moment Autobreak claims the tick. Both modules now sit where Glotus runs
-them: after `spikeSync`, ahead of `velocityTick`.
-
-**The spike goes through the controller, not straight out.** This is the one
-line of the two classes that is not Glotus'. Glotus sends the tick's spike
-itself via `EnemyManager.attemptSpikePlacement`, which picks angles with
-`ObjectManager.getBestPlacementAngles` and hands them to `requestPlace`. In
-this client that lands in `RynPlacementEngine.requestMany`, which re-validates
-every directed request against its *own* model — `_validAt`, its aperture
-solver, its ledger — and silently drops what it does not agree with. Nothing
-errors; the tick just swings with no spike behind it.
-
-Ryn's own three spike ticks never take that path. `spikeTickHit` gives the
-spike to `spikeTickController`, which takes an intent the engine has already
-reserved ground for and, failing that, asks the engine for an angle through the
-same solver it validates with — so it cannot be rejected for disagreeing with
-itself. The ported tick now does the same, with `attemptSpikePlacement` kept as
-the fallback for a client with no controller, exactly as `spikeTickHit` has it.
-
-The armed target is `nearestEnemy` rather than the `enemySpikeCollider` the
-tick swings at: `attemptSpikePlacement` builds its angles around the nearest
-enemy, so this keeps Glotus' choice of where the spike goes, and the
-controller's own validation stands down unless the armed target is still the
-nearest enemy.
-
-`verify-glotus-port.js` records this as a *substitution*, not an exemption — it
-rebuilds Glotus' class with the one replacement applied and compares the whole
-thing, so every other line still has to match.
-
-**The placer has to stand down for it.** Everything that builds shares one
-packet budget (`ModuleHandler.packetCount` against `packetLimit`), and the Luna
-auto placer keeps out of the way of a module spending that budget on its own
-tick by checking `ModuleHandler.activeModule` against
-`LUNA_SPIKE_TICK_MODULES`. That set matches on exact module name, so a module
-missing from it fails nowhere — the placer simply keeps building underneath it
-and the two split the budget, which is the auto place / preplace / replace
-collision this port shipped with. `spikeTick` places through
-`attemptSpikePlacement` while it owns the tick, so it is listed there now, and
-`verify-glotus-port.js` fails if it ever drops out.
-
-Preplace and replace need no equivalent guard: they run in `placementEngine`,
-which is budget-aware on its own and sees the tick's spike in the reservation
-ledger through `ModuleHandler._notePlacement`, so it never re-claims that
-ground.
-
-Three modules that predate this port — `toolHammerSpearInsta`,
-`reverseInstakill` and `swordKatanaInsta` — also call `attemptSpikePlacement`
-from their own tick without being in that set. Left as they are; whether an
-insta should hold the placer off is a behaviour question, not port drift.
-
-`_spikeTickTimes` was added to `StatsManager` and to the Misc → Session
-counters alongside it. That row is not decoration: `UI.updateStats` throws when
-the element is missing, so a counter written by a module with no row on the
-menu would take the tick down with it.
-
-One ordering difference from Glotus is deliberate and predates this: Ryn runs
-`defaultAcc` at the back of the list where Glotus runs it near the front, because
-it reads `forceHat` to pick the accessory matching whatever hat a tick module
-just forced. It sets `useAcc` and never `moduleActive`, so it takes no tick from
-anything — and it is why the bull and turret hats this port forces get the right
-accessory. `verify-glotus-port.js` records it as a known exception.
+`Ryn_Type_2.user.js` is its own script with its own menu — it is not built from
+`src/` and `tools/build-reup.js` does not touch it. It is checked in as it
+shipped, with one change.
 
 ### Auto grind stops where you tell it, per weapon
 
-Auto grind used to run to Ruby and nothing else — the variant it compared
-against was the literal `3` in two places. **Grind Until (primary)** and
-**Grind Until (secondary)** (Combat → Utility, under the Auto grind switch)
-set the tier each slot stops at: Gold, Diamond or Ruby, chosen independently,
-so the primary can go to Ruby while the hammer stops at Gold.
+Auto grind ran to Ruby and nothing else — the variant it compared against was
+the literal `3` in two places — and it locked itself out on arrival.
 
-`WeaponVariants` is `[normal, gold, diamond, ruby]`, so a tier is an index into
-it and "done" means the weapon is at or past that index. Overshooting counts as
-done — a weapon already at Diamond satisfies a Gold target rather than
-restarting anything. Ruby stays the default for both, so an install that never
-touches the settings grinds exactly as it did before.
+**Grind Until (primary)** and **Grind Until (secondary)** (Combat → Utility,
+under the Auto grind switch) set the tier each slot stops at: Gold, Diamond or
+Ruby, chosen independently, so the primary can go to Ruby while the hammer
+stops at Gold. `WeaponVariants` is `[normal, gold, diamond, ruby]`, so a tier
+is an index into it and "done" means the weapon is at or past that index.
+Overshooting counts as done — a weapon already at Diamond satisfies a Gold
+target rather than restarting anything. Ruby stays the default for both, so an
+install that never touches the settings grinds exactly as it did before.
 
 A stored value that is not one of the three falls back to Ruby on load, per
-slot, next to the same check `_breakPosition` gets. The earlier single
-`_autoGrindTarget` seeds both slots on first load after the split, so a saved
-choice survives instead of quietly reverting.
+slot, next to the same check `_breakPosition` gets. A single `_autoGrindTarget`
+from an earlier build seeds both slots on first load, so a saved choice
+survives instead of quietly reverting.
 
 **It no longer locks itself out.** Reaching the target used to switch
 `_autoGrind` off and untick the box, and the hotkey then refused to switch it
@@ -300,39 +204,18 @@ back on while `isFullyUpgraded()` was true — so the moment you raised a target
 to grind further, both the box and the key were dead, with nothing to say why.
 Now reaching the target just idles the module: the switch stays where you put
 it, the key always toggles, and raising a target or picking up a weapon that
-still needs grading resumes grinding on the next tick with no re-tick needed.
+still needs grading resumes grinding on the next tick.
 
-Being idle is cheap because `isFullyUpgraded()` returns before any of the work.
+Idling is cheap because `isFullyUpgraded()` returns before any of the work.
 That check also treats a slot it cannot grind as satisfied rather than blocking
 — the secondary only grinds with the great hammer, and the stick is the one
 primary the module refuses to swing. Carrying neither used to leave it
 permanently "unfinished", which kept it awake placing turrets it had no use
 for.
 
-### Verification
-
 ```sh
-node tools/verify-glotus-port.js Ryn_Type_2.user.js path/to/glotus.txt
 node --check Ryn_Type_2.user.js
 ```
-
-The Glotus source is a reference, not a build input; without it the structural
-checks still run and the comparisons skip. The tool checks that each ported
-class still matches Glotus bar the one recorded substitution, that both modules
-are constructed and present exactly once in the run list, that their priority
-relative to every shared module still matches Glotus, that `spikeTick` is in
-the placer's stand-down set and ordered so that guard and the controller handoff
-both work, that the settings/stats/menu rows they depend on exist, and that the
-client methods they call are still there. It then loads each class from both
-files into a stub world and asserts they reach the same decision across 24
-scenarios — firing, both halves of the turret chain, and every early-return
-branch — and finally that the tick hands its spike to the controller when there
-is one and falls back to `attemptSpikePlacement` when there is not.
-
-The `Reloading.isReloaded` check in that list is worth keeping. There are two
-`isReloaded` methods in the client: `Player`'s takes `(type, tick)` with no
-default and returns false for every single-argument call, and the `Reloading`
-module's takes `(ticks = 0)`. Both ported modules call the second one.
 
 ---
 
