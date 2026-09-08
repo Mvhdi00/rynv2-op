@@ -178,10 +178,12 @@ understood.
 `Ryn_Type_2.user.js` is a separate client from the mix above, and carries one
 addition: a kill leaves a body behind.
 
-Kill someone and a translucent copy of them stays at the spot they died,
+Kill someone and a translucent copy of them appears on the spot they died,
 wearing a **halo and angel wings** — or a **cowboy hat and a devil's tail** if
-they were the player carrying the game's skull marker. It holds for a beat,
-fades out, and is gone. Visual → World → **Death Corpses**, on by default.
+they were the player carrying the game's skull marker. It holds there long
+enough to read, then lifts off, turning and shrinking slightly as it goes,
+and fades out over the rest of its life. Visual → World → **Death Corpses**,
+on by default.
 
 It is a local effect and nothing more. It sends no packets, reads nothing the
 client was not already told, and does not touch combat, placement, movement,
@@ -216,24 +218,43 @@ spent, so a second kill in the window cannot raise a second corpse for it.
 
 The position is `pos.current` — the last position the server actually sent for
 them — not `pos.future`, which is the client's extrapolation of where they were
-headed. It is copied once, and a corpse is never repositioned afterwards.
+headed. It is copied once at spawn and never written to again.
+
+### The drift
+
+The body appears exactly where it died and stays there for the whole hold, so
+the death spot is what you see first. Once the fade starts it lifts, turns and
+shrinks — eased out, so it leaves quickly and keeps slowing, reading as a body
+floating up rather than one being thrown.
+
+All three are a pure function of the corpse's **age**, applied as an offset
+from the stored spawn state and never written back to it. Nothing is
+integrated frame to frame, which means the path is identical at 30fps and at
+240, a dropped frame cannot desync it, and no amount of drift can accumulate
+the body away from the position it was born on.
 
 ### Cost
 
 `MAX_ACTIVE_CORPSES` slots are built once, on the first death of the session,
 and reused for the rest of it. Active ones are kept compacted at the front of
 the array; expiring one is a swap and a decrement, and at the cap the oldest
-body is recycled rather than the pool growing. A corpse is nine numbers, and
-per frame the only arithmetic is its age and the alpha that age maps to.
+body is recycled rather than the pool growing. A corpse is a handful of
+numbers, and per frame the only arithmetic is its age and the four values that
+age maps to.
 
-Measured on the manager's own per-frame work, excluding the canvas draws (which
-cost what drawing that many players costs the game anyway):
+Measured on the manager's own per-frame work — median of nine timed runs
+against a frozen clock, excluding the canvas draws (which cost what drawing
+that many players costs the game anyway):
 
 | | |
 |---|---|
-| Idle frame, nothing dead | **1.0 ns** |
-| Frame with 10 bodies up | **79.4 ns** |
-| Heap growth over 200k spawn/expire cycles | **none**; pool stays at 10 slots |
+| Idle frame, nothing dead | **~3 ns** |
+| Frame with 10 bodies up | **85–250 ns** |
+| Heap growth over 200k spawn/drift/expire cycles | **none**; pool stays at 10 slots |
+
+The spread on the second row is JIT variance between runs, not a difference in
+the work done; the honest reading is that ten bodies cost well under a
+microsecond a frame, against a 16.7 ms budget.
 
 ### Tuning
 
@@ -241,9 +262,12 @@ All of it is at the top of the subsystem, nowhere else:
 
 ```js
 MAX_ACTIVE_CORPSES        = 10     // hard cap; oldest is recycled at the cap
-CORPSE_INITIAL_ALPHA      = 0.38
-CORPSE_HOLD_DURATION      = 650    // ms held before the fade starts
-CORPSE_FADE_DURATION      = 1650   // ms of smoothstep fade to invisible
+CORPSE_INITIAL_ALPHA      = 0.6
+CORPSE_HOLD_DURATION      = 500    // ms held still on the death spot
+CORPSE_FADE_DURATION      = 2600   // ms of drift and smoothstep fade
+CORPSE_RISE_DISTANCE      = 95     // world units it floats upward
+CORPSE_RISE_SPIN          = 0.45   // radians it turns while rising
+CORPSE_RISE_SHRINK        = 0.12   // fraction of size it loses
 CORPSE_HAT_NORMAL / _ACC_NORMAL    // halo, angel wings
 CORPSE_HAT_SKULL  / _ACC_SKULL     // cowboy hat, devil's tail
 CORPSE_SPAWN_RANGE        = 800    // past this, a disappearance is a view exit
@@ -251,7 +275,8 @@ CORPSE_DEATH_TICK_WINDOW  = 2
 ```
 
 The fade is a smoothstep, flat at both ends, so it neither jumps as it leaves
-the hold nor snaps as it reaches nothing.
+the hold nor snaps as it reaches nothing. Set the three `RISE` values to 0 for
+a body that stays put.
 
 ### Verified against this bundle
 
