@@ -6,6 +6,11 @@ against them.
 
 Build output: **`ReUp_Mix.user.js`**
 
+The repo also carries a second, unrelated build —
+[**LRC AI Lyrics**](#lrc-ai-lyrics-ryn-type-2), which adds automatic
+synchronised lyrics to Ryn Type 2's Music library. It shares nothing with the
+mix but this repository.
+
 ---
 
 ## Why RYN is the base
@@ -115,17 +120,24 @@ but nothing in the client needs it. It is stripped from the build.
 
 ## Layout
 
+Both builds, and everything they are built from:
+
 ```
-ReUp_Mix.user.js          the build output — this is the script to install
+ReUp_Mix.user.js          ReUp Mix build output
+Ryn_Type_2_LRC.user.js    Ryn Type 2 + LRC AI build output
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
+src/Ryn_Type_2.user.js    Ryn Type 2, unmodified (input)
+src/lrc/lrc-ai.js         the LRC AI module (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
 tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/build-lrc.js        src/Ryn_Type_2.user.js + src/lrc -> Ryn_Type_2_LRC.user.js
+tools/test-lrc.js         headless test suite for the LRC AI module
 ```
 
 ## Build
@@ -177,3 +189,205 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# LRC AI Lyrics (Ryn Type 2)
+
+A second, independent build in this repo: **`Ryn_Type_2_LRC.user.js`** — Ryn
+Type 2 with automatic synchronised lyrics for the Music library.
+
+Today the Music page asks the user to do four things by hand: find the song,
+find its `.lrc` on lrclib.net, download it, and paste it in. The guide in the
+"Add song" section spells all four out. This automates every one of them, and
+adds the step nobody could do by hand — translating the lyrics to English
+without moving a single timestamp.
+
+## What it does
+
+Every row in the library gets one extra button:
+
+| Button | Meaning |
+|---|---|
+| `LRC AI` | nothing cached yet — press to find lyrics |
+| `LRC AI: Loading...` | identifying the song, or fetching |
+| `LRC AI: Translating...` | translating, with an *n/total* count in the tooltip |
+| `✓ LRC` | ready — click for the details panel |
+| `LRC: no sync` | lyrics exist, but only unsynchronised ones |
+| `Retry LRC` | nothing found, or the file failed validation |
+
+Press it once. After that, playing the song loads the cached English lyrics
+and synchronises them against the audio, with no further network traffic and
+no further translation — through the player's **existing** chat-sync loop, so
+all four sync modes (me / bots / mixed / unified), the 30-character chunking
+and the 2200 ms spacing behave exactly as they always have.
+
+`✓ LRC` opens a panel with the song, artist, detected source language,
+translation provider, line count, sync status, cache state, lyrics source,
+and a per-song **offset** control (−250 / +250 / 0, or type a value). Lyrics
+arriving early? Raise the offset. Late? Lower it. The cached `.lrc` is never
+edited — the shift is applied to the runtime timeline and takes effect on the
+next line, without replaying anything.
+
+## How it integrates
+
+It wraps, it does not rewrite. The module hooks exactly four MusicPlayer
+methods — `play`, `seekTo`, `_renderSongList`, `_save` — each of which calls
+the original first and then adds lyric behaviour inside a guard. No existing
+method body is modified, the Music page's HTML and stylesheet are untouched,
+and the diff against the base client is two header lines plus one contiguous
+insertion.
+
+It reuses rather than duplicates:
+
+| Need | What it uses |
+|---|---|
+| sending to chat | `_tickSync` -> `_sendChat` / `_sendLyric*` -> `PacketManager`. There is no second chat path. |
+| the sync loop | the player's existing RAF tick. No new interval, no new RAF, no per-frame work added. |
+| chat-width reflow | `_reflowLRC`, so a downloaded line is split for the 30-char cap the same way a pasted one is. |
+| toasts | `_toast` |
+| storage | the same IndexedDB-with-localStorage-fallback pattern as `_openDB` |
+
+Components, each independent: `LRCManager`, `SongIdentifier`, `LRCFetcher`,
+`LRCParser`, `LanguageDetector`, `TranslationManager`, `LRCValidator`,
+`LRCCache`, `SyncEngine`, `ChatLyricsSender`, `LRCUI`.
+
+## The pipeline
+
+Identify -> cache check -> fetch -> parse -> validate -> detect language ->
+translate -> validate the translation -> cache -> ready.
+
+**Lyrics come from [LRCLIB](https://lrclib.net)** — public, key-less,
+CORS-enabled, and already the provider the Music page's own guide points at.
+Synchronised lyrics always win over plain; candidates are scored on title,
+artist and duration, and a weak best match is rejected rather than accepted.
+
+**Language detection is offline.** Script ranges settle Japanese, Korean,
+Chinese, Arabic, Russian, Hindi, Hebrew, Thai and Greek outright; Latin
+script falls through to stopword and diacritic scoring across English,
+Spanish, French, German, Portuguese, Italian, Turkish, Dutch, Polish,
+Indonesian and Vietnamese. Only when that is not confident does it spend one
+request asking a translation provider what it sees. **Lyrics already in
+English are never sent to a translator.**
+
+**Translation is one request per _unique_ line**, never a batch that could
+come back with a different number of lines than it went out with. Choruses
+repeat, so a 60-line lyric is usually 30-40 requests, run 4 at a time.
+Providers are tried in order (Google's `translate_a` gtx endpoint, then
+Lingva, then MyMemory) and the first that answers is kept for the song. A
+line no provider can translate keeps its original words — a timestamp is
+never dropped because a request failed.
+
+**Timestamps survive exactly.** Each parsed line keeps the literal bracket
+text it came from, and `english.lrc` is written back from that string rather
+than from a re-derived number, so `[00:24.999]` stays `[00:24.999]` and not
+`[00:24.99]`. Only the words change:
+
+```
+[00:12.50]君を忘れない        ->  [00:12.50]I won't forget you
+[00:15.20]いつまでも          ->  [00:15.20]Forever
+```
+
+## Cache
+
+The brief's `RynData/Lyrics/<SongID>/` layout maps onto IndexedDB, since a
+userscript has no filesystem:
+
+```
+RynData/Lyrics/<SongID>/metadata.json  ->  RynLRCDB.meta[songId]
+RynData/Lyrics/<SongID>/original.lrc   ->  RynLRCDB.lyrics[songId].originalLrc
+RynData/Lyrics/<SongID>/english.lrc    ->  RynLRCDB.lyrics[songId].englishLrc
+```
+
+`RynLRCDB` is deliberately a **separate database** from the player's
+`BeeMusicDB`. Adding a store to that one means opening it at a higher
+version, and a second connection doing that can knock the music library's own
+connection over — not a risk worth taking for a lyrics cache.
+
+Metadata lives in its own store so one small read paints every button in the
+list without pulling any `.lrc` bodies into memory.
+
+Requests happen **only** on `LRC AI` and `Retry LRC`. A failure is cached too,
+which is what stops the module retrying by itself: only the button asks again.
+
+## Song identity
+
+A filename is not an identity, so:
+
+```
+songId = SHA-256(title | artist | content-hash) truncated to 32 hex
+```
+
+The content hash covers a data URL's length plus its head and tail, so two
+different files called `song.mp3` cannot share a cache entry — and renaming a
+song does not throw its lyrics away.
+
+Duration is deliberately **not** part of the id. It arrives asynchronously
+from the audio element, so folding it in would give one song two different
+ids depending on whether metadata had loaded yet. It is stored in metadata
+instead, where it does the same job better: it is what LRCLIB is asked to
+match, what the validator checks the timeline against, and what invalidates a
+cache entry when it drifts by more than 5 seconds.
+
+## Validation
+
+Before anything is marked ready: at least one parseable timestamp, at least
+three lines carrying words, timestamps in order and non-negative, and the
+timeline compatible with the audio's actual length — lyrics running past the
+end by more than a scaled slack are rejected as a different release. The
+translation must return the same number of lyric events with the same
+timestamps; if it does not, the song is not marked ready. Failures surface as
+`LRC unavailable` or `No synchronised lyrics found`, with the reason recorded
+in the details panel.
+
+## Security
+
+Downloaded lyrics are treated as plain text and nothing else. Control
+characters, bidi overrides and zero-width formatting are stripped and lines
+are length-capped at parse time, before the text can reach either a chat
+packet or the DOM. Every element the module creates is built with
+`createElement` / `textContent` — the module never assigns lyric, metadata or
+provider text through `innerHTML`.
+
+## Things worth knowing
+
+- **Chat sync is not switched on for you.** Lyrics load and the engine arms
+  automatically, but sending them into the game's chat stays behind the
+  existing *Chat sync* toggles. The details panel says so when they are off.
+- **Unsynchronised lyrics are labelled, not faked.** If only plain lyrics
+  exist they are cached and the button reads `LRC: no sync`; nothing invents
+  timestamps for them. A synchronisation engine could be added later without
+  touching anything else.
+- **A large seek now cancels queued chat chunks.** Jumping more than 3
+  seconds bumps `_songSessionId`, which is the player's own guard on its
+  pending sends. This applies to hand-pasted lyrics too — previously those
+  chunks would arrive late over the new position.
+- **CORS is unverified against the live services.** The build sandbox's
+  network policy blocks lrclib.net and the translation endpoints, so the
+  request shapes are written from their documented APIs but have not been
+  exercised against the real hosts. Every failure path is covered and degrades
+  to `Retry LRC`, so a blocked provider is a dead button, not a broken client.
+
+## Build and test
+
+```sh
+node tools/build-lrc.js     # src/Ryn_Type_2.user.js + src/lrc/lrc-ai.js -> Ryn_Type_2_LRC.user.js
+node tools/test-lrc.js      # 125 checks
+node --check Ryn_Type_2_LRC.user.js
+```
+
+The build verifies all twelve hook sites in the base client before injecting
+anything, so dropping in a newer Ryn Type 2 that renamed one of them fails
+the build rather than shipping a button that does nothing.
+
+`test-lrc.js` runs the module headlessly against the **real** `_parseLRC`,
+`_reflowLRC`, `_wrapText`, `_splitLine`, `_tickSync` and `seekTo`, extracted
+verbatim from the base client — so the playback assertions are against the
+actual chat loop, not a stand-in for it. It covers the parser (multi-timestamp
+lines, metadata, malformed input, precision, round-tripping), language
+detection, validation, the binary search, a full Japanese prepare-to-playback
+run, seek in both directions, offset, song change, every failure path,
+storage with IndexedDB refused, and that the wrappers leave a song with
+hand-pasted lyrics behaving exactly as before.
+
+---
