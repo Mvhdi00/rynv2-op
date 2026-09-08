@@ -254,9 +254,9 @@ Components, each independent: `LRCManager`, `SongIdentifier`, `LRCFetcher`,
 
 ## The pipeline
 
-Identify -> cache check -> source (pasted `.lrc`, else LRCLIB) -> parse ->
-validate -> detect language -> translate -> validate the translation ->
-cache -> ready.
+Identify (including the file's own ID3 tags) -> cache check -> source
+(pasted `.lrc`, then LRCLIB, NetEase, Textyl in turn) -> parse -> validate ->
+detect language -> translate -> validate the translation -> cache -> ready.
 
 **A synced `.lrc` already pasted into the song is the first source tried** —
 it is on the machine, it costs no request, and the user chose it deliberately.
@@ -266,12 +266,34 @@ its timestamps untouched. Replacing that pasted file later invalidates the
 cache, so the button returns to `LRC AI` instead of serving the old
 translation.
 
-**Otherwise lyrics come from [LRCLIB](https://lrclib.net)** — public,
-key-less, CORS-enabled, and already the provider the Music page's own guide
-points at. LRCLIB is also the second chance when a pasted file turns out not
-to match the audio. Synchronised lyrics always win over plain; candidates are
-scored on title, artist and duration, and a weak best match is rejected
-rather than accepted.
+**Otherwise three providers are tried in order**, each validated on its own
+so one answering with the wrong release falls through to the next instead of
+ending the run:
+
+| | Provider | Why it is there |
+|---|---|---|
+| 1 | [LRCLIB](https://lrclib.net) | Public, key-less, CORS-enabled, and already the provider the Music page's own guide points at. |
+| 2 | NetEase Cloud Music | Its Japanese, Korean and Chinese catalogue is far deeper than LRCLIB's — which is exactly where LRCLIB comes up empty. Its own `tlyric` is a Chinese translation and is ignored; the original goes through this module instead, so the output is English rather than a translation of a translation. |
+| 3 | Textyl | One request, second-resolution timings. Coarser than a real `.lrc`, so it is last: only reached when the other two have nothing, where coarse beats nothing. |
+
+Synchronised lyrics always win over plain; candidates are scored on title,
+artist and duration, and a weak best match is rejected rather than accepted.
+
+**Each provider is asked up to three different ways.** One query is not
+enough: a downloaded file's library title is usually just the filename, its
+artist field is usually empty, and the artist is often buried in the title as
+`Artist - Track`. The query shapes are tried best-first and stop early on a
+strong hit.
+
+**The file's own ID3 tags lead that list.** A track ripped off YouTube is
+called `【MV】Lemon／米津玄師 (Official Video) [4K]`, which is a poor thing to
+search a lyrics database with — while its tags carry `Lemon` and `米津玄師`,
+which find it. ID3v2.2/2.3/2.4 and ID3v1 are all read, with the v2 encoding
+byte honoured and Shift-JIS attempted for v1 (Japanese taggers wrote it there
+for years). It costs no request: the bytes are already in the data URL, and
+only the first megabyte plus the last 128 bytes are decoded, so a 20 MB song
+is never base64-decoded in full. Tags are used for **searching only** — never
+folded into `songId`, which would re-key every song already cached.
 
 **Language detection is offline.** Script ranges settle Japanese, Korean,
 Chinese, Arabic, Russian, Hindi, Hebrew, Thai and Greek outright; Latin
@@ -376,17 +398,23 @@ provider text through `innerHTML`.
   seconds bumps `_songSessionId`, which is the player's own guard on its
   pending sends. This applies to hand-pasted lyrics too — previously those
   chunks would arrive late over the new position.
+- **Lyrics are found, never invented.** There is no speech-to-text and no
+  asking a model to write the words: both would produce a file that looks
+  right and does not match the audio, which the brief rules out. When no
+  provider has the song, it says so.
 - **CORS is unverified against the live services.** The build sandbox's
-  network policy blocks lrclib.net and the translation endpoints, so the
-  request shapes are written from their documented APIs but have not been
-  exercised against the real hosts. Every failure path is covered and degrades
-  to `Retry LRC`, so a blocked provider is a dead button, not a broken client.
+  network policy blocks every one of these hosts, so the request shapes are
+  written from their documented APIs but have not been exercised against the
+  real ones. Each provider fails independently and silently, so a host that
+  refuses browser origins costs one wasted request and the next provider
+  answers; if all of them are blocked the button reads `Retry LRC` rather
+  than the client breaking.
 
 ## Build and test
 
 ```sh
 node tools/build-lrc.js     # src/Ryn_Type_2.user.js + src/lrc/lrc-ai.js -> Ryn_Type_2_LRC.user.js
-node tools/test-lrc.js      # 140 checks
+node tools/test-lrc.js      # 171 checks
 node --check Ryn_Type_2_LRC.user.js
 ```
 
@@ -400,8 +428,9 @@ verbatim from the base client — so the playback assertions are against the
 actual chat loop, not a stand-in for it. It covers the parser (multi-timestamp
 lines, metadata, malformed input, precision, round-tripping), language
 detection, validation, the binary search, a full Japanese prepare-to-playback
-run, seek in both directions, offset, song change, every failure path, a
-pasted `.lrc` as the source (used, translated, invalidated when replaced, and
+run, seek in both directions, offset, song change, every failure path, ID3
+reading (v2.2/2.3/2.4 text encodings, v1 with Shift-JIS, and six kinds of
+malformed input), provider fall-through, a pasted `.lrc` as the source (used, translated, invalidated when replaced, and
 fallen through when it does not match), storage with IndexedDB refused, and that the wrappers leave a song with
 hand-pasted lyrics behaving exactly as before.
 

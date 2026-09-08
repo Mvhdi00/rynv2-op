@@ -265,7 +265,9 @@ function makeHost(opts) {
     Promise, Map, Set, Date, Math, JSON, String, Number, Array, Object,
     isFinite, parseInt, parseFloat, encodeURIComponent, RegExp, Error,
     URLSearchParams: require("url").URLSearchParams,
+    atob: (x) => Buffer.from(x, "base64").toString("binary"),
     TextEncoder: require("util").TextEncoder,
+    TextDecoder: require("util").TextDecoder,
     crypto: require("crypto").webcrypto,
     AbortController,
     indexedDB: makeIndexedDB(),
@@ -845,6 +847,219 @@ async function testFailures() {
 }
 
 /* ------------------------------------------------------------------ *
+ * Build a real ID3-tagged "audio" data URL
+ * ------------------------------------------------------------------ */
+
+function id3v2(frames, major, audioBytes) {
+  const parts = [];
+  for (const [id, enc, text] of frames) {
+    let body;
+    if (enc === 1) body = Buffer.concat([Buffer.from([0xFF, 0xFE]), Buffer.from(text, "utf16le")]);
+    else if (enc === 3) body = Buffer.from(text, "utf8");
+    else body = Buffer.from(text, "latin1");
+    /* ID3 text frames are NUL-terminated in the wild — two bytes for the
+     * UTF-16 encodings, one for the byte-oriented ones. */
+    const term = (enc === 1 || enc === 2) ? Buffer.from([0x00, 0x00]) : Buffer.from([0x00]);
+    const data = Buffer.concat([Buffer.from([enc]), body, term]);
+    const idLen = major <= 2 ? 3 : 4;
+    const head = Buffer.alloc(major <= 2 ? 6 : 10);
+    head.write(id.slice(0, idLen), 0, "latin1");
+    if (major <= 2) {
+      head[3] = (data.length >> 16) & 0xff; head[4] = (data.length >> 8) & 0xff; head[5] = data.length & 0xff;
+    } else if (major >= 4) {
+      /* syncsafe */
+      head[4] = (data.length >> 21) & 0x7f; head[5] = (data.length >> 14) & 0x7f;
+      head[6] = (data.length >> 7) & 0x7f;  head[7] = data.length & 0x7f;
+    } else {
+      head.writeUInt32BE(data.length, 4);
+    }
+    parts.push(head, data);
+  }
+  const body = Buffer.concat(parts);
+  const header = Buffer.alloc(10);
+  header.write("ID3", 0, "latin1");
+  header[3] = major; header[4] = 0; header[5] = 0;
+  header[6] = (body.length >> 21) & 0x7f; header[7] = (body.length >> 14) & 0x7f;
+  header[8] = (body.length >> 7) & 0x7f;  header[9] = body.length & 0x7f;
+  return "data:audio/mpeg;base64," +
+    Buffer.concat([header, body, audioBytes || Buffer.alloc(2048, 0x55)]).toString("base64");
+}
+
+function id3v1(title, artist, album) {
+  const pad = (t, n) => {
+    const b = Buffer.alloc(n, 0);
+    const src = Buffer.isBuffer(t) ? t : Buffer.from(String(t), "latin1");
+    src.copy(b, 0, 0, Math.min(n, src.length));
+    return b;
+  };
+  const tag = Buffer.concat([
+    Buffer.from("TAG", "latin1"), pad(title, 30), pad(artist, 30), pad(album, 30),
+    Buffer.alloc(4, 0x30), Buffer.alloc(30, 0), Buffer.from([0xff])
+  ]);
+  return "data:audio/mpeg;base64," +
+    Buffer.concat([Buffer.alloc(3000, 0x55), tag]).toString("base64");
+}
+
+/* ------------------------------------------------------------------ *
+ * 6b. Reading the file's own metadata
+ * ------------------------------------------------------------------ */
+
+async function testTags() {
+  const h = makeHost({ duration: 200, route: () => null });
+  const T = h.lrc.Tags;
+
+  const v23 = id3v2([["TIT2", 1, "Lemon"], ["TPE1", 1, "\u7C73\u6D25\u7384\u5E2B"], ["TALB", 1, "Lemon"]], 3);
+  eq("id3: v2.3 UTF-16 title", T.read(v23).title, "Lemon");
+  eq("id3: v2.3 UTF-16 japanese artist", T.read(v23).artist, "\u7C73\u6D25\u7384\u5E2B");
+  eq("id3: v2.3 album", T.read(v23).album, "Lemon");
+
+  const v24 = id3v2([["TIT2", 3, "\u788E\u3051\u3066\u3044\u304F"], ["TPE1", 3, "Aimer"]], 4);
+  eq("id3: v2.4 syncsafe + UTF-8 title", T.read(v24).title, "\u788E\u3051\u3066\u3044\u304F");
+  eq("id3: v2.4 artist", T.read(v24).artist, "Aimer");
+
+  const v22 = id3v2([["TT2", 0, "Old Tag"], ["TP1", 0, "Someone"]], 2);
+  eq("id3: v2.2 three-letter frames", T.read(v22).title, "Old Tag");
+
+  eq("id3: v1 fallback title", T.read(id3v1("Plastic Love", "Mariya", "Album")).title, "Plastic Love");
+  eq("id3: v1 fallback artist", T.read(id3v1("Plastic Love", "Mariya", "Album")).artist, "Mariya");
+  /* Real Shift-JIS bytes: ID3v1 has no encoding flag, and Japanese taggers
+     wrote Shift-JIS into it for years. */
+  const sjisRemon = Buffer.from([0x83, 0x8C, 0x83, 0x82, 0x83, 0x93]);          /* レモン */
+  const sjisYonezu = Buffer.from([0x95, 0xC4, 0x92, 0xC3, 0x8C, 0xBA, 0x8E, 0x74]); /* 米津玄師 */
+  eq("id3: v1 shift-jis title is decoded",
+     T.read(id3v1(sjisRemon, sjisYonezu, "")).title, "\u30EC\u30E2\u30F3");
+  eq("id3: v1 shift-jis artist is decoded",
+     T.read(id3v1(sjisRemon, sjisYonezu, "")).artist, "\u7C73\u6D25\u7384\u5E2B");
+
+  /* Nothing here may throw, whatever it is handed. */
+  eq("id3: no tags at all", T.read("data:audio/mpeg;base64," + Buffer.alloc(900, 0x55).toString("base64")).title, "");
+  eq("id3: remote url is not a data url", T.read("https://example.com/a.mp3").title, "");
+  eq("id3: empty", T.read("").title, "");
+  eq("id3: junk base64", T.read("data:audio/mpeg;base64,!!!!not base64!!!!").title, "");
+  eq("id3: truncated header", T.read("data:audio/mpeg;base64,SUQz").title, "");
+  eq("id3: claims a huge tag", T.read("data:audio/mpeg;base64," +
+     Buffer.concat([Buffer.from([0x49,0x44,0x33,3,0,0,0x7f,0x7f,0x7f,0x7f]), Buffer.alloc(200)])
+       .toString("base64")).title, "");
+
+  /* And the tags reach the search: the library title is junk, the tags are
+   * clean, and only the tag-shaped query matches what the provider has. */
+  const seen = [];
+  const h2 = makeHost({
+    duration: 200,
+    route: u => {
+      seen.push(u);
+      if (u.indexOf("https://lrclib.net/api/") !== 0) return null;
+      /* Only answers when asked with the real artist from the tags. */
+      if (u.indexOf(encodeURIComponent("\u7C73\u6D25\u7384\u5E2B")) < 0) return [];
+      return [ { id: 99, trackName: "Lemon", artistName: "\u7C73\u6D25\u7384\u5E2B",
+                 duration: 200, syncedLyrics: EN_LRC.replace("[00:20.00]", "[02:20.00]"),
+                 plainLyrics: "" } ];
+    }
+  });
+  h2.mp._songs.push({
+    title: "\u3010MV\u3011Lemon\uFF0F\u7C73\u6D25\u7384\u5E2B (Official Video) [4K]",
+    artist: "", url: v23, lyrics: ""
+  });
+  h2.songList.appendChild(h2.buildRow(0, h2.mp._songs[0]));
+  h2.lrc.UI.decorateRows();
+  await h2.lrc.Manager.prepare(0, {});
+  await settle(80);
+  const meta = h2.lrc.Cache.getMetaSync(h2.mp._songs[0].lrcId);
+  eq("id3: a junk filename still finds the song via its tags", meta && meta.status, "ready");
+  eq("id3: matched the right artist", meta && meta.matchedArtist, "\u7C73\u6D25\u7384\u5E2B");
+  ok("id3: tags cached on the song, not re-parsed",
+     h2.mp._songs[0].lrcTags && h2.mp._songs[0].lrcTags.title === "Lemon");
+}
+
+/* ------------------------------------------------------------------ *
+ * 6c. More providers behind LRCLIB
+ * ------------------------------------------------------------------ */
+
+async function testProviders() {
+  eq("providers: order is lrclib, netease, textyl",
+     makeHost({}).lrc.Fetcher.providers.map(p => p.id), ["lrclib", "netease", "textyl"]);
+
+  /* LRCLIB empty -> NetEase answers. */
+  {
+    const h = makeHost({
+      duration: 200,
+      route: u => {
+        if (u.indexOf("https://lrclib.net/") === 0) return [];
+        if (u.indexOf("https://music.163.com/api/search") === 0) {
+          return { code: 200, result: { songs: [ { id: 5, name: "Lemon",
+                   artists: [ { name: "Kenshi Yonezu" } ], duration: 200000 } ] } };
+        }
+        if (u.indexOf("https://music.163.com/api/song/lyric") === 0) {
+          return { lrc: { lyric: JA_LRC }, tlyric: { lyric: "[00:12.50]\u4E0D\u4F1A\u5FD8\u8BB0\u4F60" } };
+        }
+        return route(u);
+      }
+    });
+    h.mp._songs.push({ title: "Lemon", artist: "Kenshi Yonezu", url: "data:audio/mp3;base64,NNN1", lyrics: "" });
+    h.songList.appendChild(h.buildRow(0, h.mp._songs[0]));
+    h.lrc.UI.decorateRows();
+    await h.lrc.Manager.prepare(0, {});
+    await settle(90);
+    const meta = h.lrc.Cache.getMetaSync(h.mp._songs[0].lrcId);
+    eq("netease: used when lrclib has nothing", meta && meta.source, "netease");
+    eq("netease: ready", meta && meta.status, "ready");
+    eq("netease: song id recorded", meta && meta.sourceId, "5");
+    const rec = await h.lrc.Cache.getLrc(meta.songId);
+    ok("netease: original translated to english, not to chinese",
+       rec.englishLrc.indexOf("I won't forget you") >= 0 &&
+       !/[\u4E00-\u9FFF]/.test(rec.englishLrc), rec.englishLrc.slice(0, 120));
+  }
+
+  /* LRCLIB and NetEase empty -> Textyl's second-resolution timings. */
+  {
+    const h = makeHost({
+      duration: 200,
+      route: u => {
+        if (u.indexOf("https://api.textyl.co/") === 0) {
+          return [ { seconds: 5, lyrics: "I walk this empty road" },
+                   { seconds: 9, lyrics: "and the night is long" },
+                   { seconds: 14, lyrics: "nothing here but rain" },
+                   { seconds: 62, lyrics: "the morning comes again" },
+                   { seconds: 118, lyrics: "and I am still here waiting" },
+                   { seconds: 170, lyrics: "I will not forget you" } ];
+        }
+        return null;
+      }
+    });
+    h.mp._songs.push({ title: "Empty Road", artist: "Someone", url: "data:audio/mp3;base64,TTT1", lyrics: "" });
+    h.songList.appendChild(h.buildRow(0, h.mp._songs[0]));
+    h.lrc.UI.decorateRows();
+    await h.lrc.Manager.prepare(0, {});
+    await settle(90);
+    const meta = h.lrc.Cache.getMetaSync(h.mp._songs[0].lrcId);
+    eq("textyl: used as the last provider", meta && meta.source, "textyl");
+    eq("textyl: ready", meta && meta.status, "ready");
+    const rec = await h.lrc.Cache.getLrc(meta.songId);
+    const lines = h.lrc.Parser.parse(rec.englishLrc).lines;
+    eq("textyl: seconds converted to timestamps", lines[0].ts, "00:05.00");
+    eq("textyl: english is not re-translated", meta && meta.provider, "");
+  }
+
+  /* Every provider silent -> one clean failure, not a throw. */
+  {
+    const h = makeHost({ duration: 200, route: () => null });
+    h.mp._songs.push({ title: "Ghost", artist: "Nobody", url: "data:audio/mp3;base64,GGG1", lyrics: "" });
+    h.songList.appendChild(h.buildRow(0, h.mp._songs[0]));
+    h.lrc.UI.decorateRows();
+    let threw = false;
+    try { await h.lrc.Manager.prepare(0, {}); await settle(90); } catch (e) { threw = true; }
+    ok("providers: all silent does not throw", !threw);
+    eq("providers: all silent -> none",
+       (h.lrc.Cache.getMetaSync(h.mp._songs[0].lrcId) || {}).status, "none");
+    ok("providers: all three were asked",
+       h.net.calls.some(u => u.indexOf("lrclib") >= 0) &&
+       h.net.calls.some(u => u.indexOf("163.com") >= 0) &&
+       h.net.calls.some(u => u.indexOf("textyl") >= 0),
+       h.net.calls.join("\n      "));
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * 7a. A pasted .lrc is a source, not just a fallback
  * ------------------------------------------------------------------ */
 
@@ -1035,6 +1250,8 @@ async function testNonInterference() {
   try {
     await testPrepare();
     await testPlayback();
+    await testTags();
+    await testProviders();
     await testFailures();
     await testLocalSource();
     await testStorageFallback();

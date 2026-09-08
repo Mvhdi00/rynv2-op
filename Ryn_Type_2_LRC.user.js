@@ -25163,6 +25163,206 @@ const RynLRC = (function () {
   };
 
   /* ---------------------------------------------------------------------- *
+   * AudioTagReader
+   *
+   * Reads the title, artist and album out of the audio file itself.
+   *
+   * This is what makes the difference for a track ripped off YouTube. The
+   * library's title is whatever the filename was — "【MV】Lemon／米津玄師
+   * (Official Video) [4K]" — which is a poor thing to search a lyrics
+   * database with. The file's own ID3 tags usually carry the real values,
+   * "Lemon" and "米津玄師", and those find the song.
+   *
+   * Local and free: the bytes are already in the data URL, so this costs no
+   * request. Only the first ~1 MB is decoded (ID3v2 lives at the front) plus
+   * the last 128 bytes for an ID3v1 fallback, so a 20 MB song is not
+   * base64-decoded in full.
+   * ---------------------------------------------------------------------- */
+
+  const TEXT_FRAMES = {
+    TIT2: "title", TPE1: "artist", TALB: "album",   /* ID3v2.3 / v2.4 */
+    TT2:  "title", TP1:  "artist", TAL:  "album"    /* ID3v2.2         */
+  };
+
+  const AudioTagReader = {
+    /* Decode a byte range out of a base64 payload without decoding the rest.
+     * Slicing on 4-char boundaries keeps every chunk valid base64. */
+    _bytes: function (payload, byteOffset, byteCount) {
+      const startBlock = Math.floor(byteOffset / 3);
+      const endBlock = Math.min(Math.ceil(payload.length / 4),
+                                Math.ceil((byteOffset + byteCount) / 3));
+      if (endBlock <= startBlock) return null;
+      const chunk = payload.slice(startBlock * 4, endBlock * 4);
+      if (chunk.length < 4) return null;
+      let bin;
+      try { bin = atob(chunk); } catch (_) { return null; }
+      const skip = byteOffset - startBlock * 3;
+      const out = new Uint8Array(Math.max(0, Math.min(byteCount, bin.length - skip)));
+      for (let i = 0; i < out.length; i++) out[i] = bin.charCodeAt(skip + i) & 0xff;
+      return out;
+    },
+
+    _decode: function (bytes, encoding) {
+      if (!bytes || !bytes.length) return "";
+      const label = encoding === 1 ? "utf-16" : encoding === 2 ? "utf-16be"
+                  : encoding === 3 ? "utf-8" : "windows-1252";
+      try {
+        if (typeof TextDecoder !== "undefined") {
+          return new TextDecoder(label, { fatal: false }).decode(bytes);
+        }
+      } catch (_) {}
+
+      /* Without TextDecoder, a byte-per-char loop would turn UTF-16 into
+       * "ÿþL e m o n" and UTF-8 into mojibake, so both are decoded by hand
+       * rather than handed back wrong. */
+      if (encoding === 1 || encoding === 2) {
+        let be = encoding === 2;
+        let i = 0;
+        if (bytes.length >= 2) {
+          if (bytes[0] === 0xff && bytes[1] === 0xfe) { be = false; i = 2; }
+          else if (bytes[0] === 0xfe && bytes[1] === 0xff) { be = true; i = 2; }
+        }
+        let s = "";
+        for (; i + 1 < bytes.length; i += 2) {
+          const code = be ? (bytes[i] << 8) | bytes[i + 1] : (bytes[i + 1] << 8) | bytes[i];
+          if (code === 0) break;
+          s += String.fromCharCode(code);
+        }
+        return s;
+      }
+      if (encoding === 3) {
+        try { return decodeURIComponent(escape(this._latin1(bytes))); }
+        catch (_) { /* not valid UTF-8 after all */ }
+      }
+      return this._latin1(bytes);
+    },
+
+    _latin1: function (bytes) {
+      let s = "";
+      for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+      return s;
+    },
+
+    /* ID3v1 carries no encoding flag. Japanese taggers commonly wrote
+     * Shift-JIS there, so a byte run that is not valid UTF-8 gets a second
+     * reading before falling back to Latin-1. */
+    _decodeLegacy: function (bytes) {
+      const tryLabel = function (label) {
+        try {
+          if (typeof TextDecoder === "undefined") return null;
+          const s = new TextDecoder(label, { fatal: true }).decode(bytes);
+          return s;
+        } catch (_) { return null; }
+      };
+      let high = false;
+      for (let i = 0; i < bytes.length; i++) if (bytes[i] > 0x7f) { high = true; break; }
+      if (!high) return this._decode(bytes, 0);
+      return tryLabel("utf-8") || tryLabel("shift_jis") || this._decode(bytes, 0);
+    },
+
+    _clean: function (s) {
+      /* ID3 text frames are NUL-padded to the frame size, and a tag whose
+       * declared encoding does not match its bytes leaves U+FFFD behind.
+       * Both are stripped wherever they land, not just at the end — either
+       * one inside a search query poisons the query. */
+      return ChatLyricsSender.sanitize(
+        String(s || "").replace(/[\u0000\uFFFD]/g, "")).slice(0, 120);
+    },
+
+    _syncsafe: function (b, o) {
+      return ((b[o] & 0x7f) << 21) | ((b[o + 1] & 0x7f) << 14) |
+             ((b[o + 2] & 0x7f) << 7) | (b[o + 3] & 0x7f);
+    },
+
+    _u32: function (b, o) {
+      return (b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3];
+    },
+
+    /* Returns { title, artist, album } — any field may be "". Never throws. */
+    read: function (url) {
+      const empty = { title: "", artist: "", album: "" };
+      try {
+        const u = String(url || "");
+        const comma = u.indexOf(",");
+        if (u.slice(0, 5) !== "data:" || comma < 0) return empty;
+        if (!/;base64/i.test(u.slice(0, comma))) return empty;
+        const payload = u.slice(comma + 1);
+        if (payload.length < 64) return empty;
+
+        const head = this._bytes(payload, 0, 10);
+        if (head && head.length === 10 &&
+            head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {   /* "ID3" */
+          const major = head[3];
+          const size = this._syncsafe(head, 6);
+          if (size > 0 && size < 8 * 1024 * 1024) {
+            const body = this._bytes(payload, 10, Math.min(size, 1024 * 1024));
+            const got = this._readV2(body, major);
+            if (got.title || got.artist) return got;
+          }
+        }
+
+        /* ID3v1: the last 128 bytes of the file. The decoded length is not
+         * payload.length/4*3 — trailing "=" padding stands for bytes that
+         * are not there, and being one or two bytes out lands the read past
+         * the "TAG" magic and finds nothing. */
+        let total = Math.floor(payload.length / 4) * 3;
+        if (payload.slice(-2) === "==") total -= 2;
+        else if (payload.slice(-1) === "=") total -= 1;
+        const tail = this._bytes(payload, Math.max(0, total - 128), 128);
+        if (tail && tail.length >= 128 &&
+            tail[0] === 0x54 && tail[1] === 0x41 && tail[2] === 0x47) {   /* "TAG" */
+          return {
+            title: this._clean(this._decodeLegacy(tail.subarray(3, 33))),
+            artist: this._clean(this._decodeLegacy(tail.subarray(33, 63))),
+            album: this._clean(this._decodeLegacy(tail.subarray(63, 93)))
+          };
+        }
+      } catch (e) {
+        warn("readTags", e);
+      }
+      return empty;
+    },
+
+    _readV2: function (body, major) {
+      const out = { title: "", artist: "", album: "" };
+      if (!body) return out;
+      const idLen = major <= 2 ? 3 : 4;
+      const headLen = major <= 2 ? 6 : 10;
+      let p = 0;
+      let guard = 0;
+
+      while (p + headLen <= body.length && guard++ < 400) {
+        if (body[p] === 0) break;                       /* padding */
+        let id = "";
+        for (let i = 0; i < idLen; i++) id += String.fromCharCode(body[p + i]);
+
+        let size;
+        if (major <= 2) size = (body[p + 3] << 16) | (body[p + 4] << 8) | body[p + 5];
+        /* v2.4 sizes are syncsafe; v2.3 are plain. Some taggers get v2.4
+         * wrong, so a size that overruns the tag is retried the other way. */
+        else if (major >= 4) {
+          size = this._syncsafe(body, p + 4);
+          const plain = this._u32(body, p + 4);
+          if (p + headLen + size > body.length && p + headLen + plain <= body.length) size = plain;
+        } else size = this._u32(body, p + 4);
+
+        if (size <= 0 || p + headLen + size > body.length) break;
+
+        const field = TEXT_FRAMES[id];
+        if (field && !out[field]) {
+          const data = body.subarray(p + headLen, p + headLen + size);
+          if (data.length > 1) {
+            out[field] = this._clean(this._decode(data.subarray(1), data[0]));
+          }
+        }
+        p += headLen + size;
+        if (out.title && out.artist && out.album) break;
+      }
+      return out;
+    }
+  };
+
+  /* ---------------------------------------------------------------------- *
    * SongIdentifier
    *
    * A filename is not an identity. Two files called "song.mp3" must not share
@@ -25307,13 +25507,23 @@ const RynLRC = (function () {
         durationSec = this._durationCache.get(song.url) || 0;
       }
 
+      /* Tags are read once and kept on the song, so this costs nothing on a
+       * replay. They are used for searching only — never folded into songId,
+       * which would re-key every song already in the cache. */
+      if (song.lrcTags === undefined && opts.needTags) {
+        song.lrcTags = AudioTagReader.read(song.url);
+        try { mp && mp._save(); } catch (e) { warn("identify/saveTags", e); }
+      }
+      const tags = song.lrcTags || { title: "", artist: "", album: "" };
+
       return {
         songId: songId,
         hash: hash,
         title: split.title,
         artist: split.artist,
         album: song.album || "",
-        durationSec: durationSec
+        durationSec: durationSec,
+        tags: tags
       };
     }
   };
@@ -25366,75 +25576,219 @@ const RynLRC = (function () {
     },
 
     /*
-     * want = { title, artist, album, durationSec }
-     * Returns { synced, plain, source, sourceId, matchedTitle, matchedArtist,
-     *           matchedDuration, score } or null.
+     * The distinct ways this song is worth asking for, best first.
+     *
+     * One query is not enough. A downloaded file's library title is often
+     * the filename, its artist field is often empty, and the artist is often
+     * buried in the title as "Artist - Track". The file's own ID3 tags are
+     * usually the cleanest of the lot, so they lead.
      */
-    find: async function (want, token) {
-      const attempts = [];
-
-      /* Exact endpoint first — it is the one that gets the right release. */
-      if (want.artist && want.durationSec > 0) {
-        const p = new URLSearchParams({
-          artist_name: want.artist,
-          track_name: want.title,
-          duration: String(Math.round(want.durationSec))
-        });
-        if (want.album) p.set("album_name", want.album);
-        attempts.push({ url: LRCLIB + "/api/get?" + p.toString(), single: true });
-      }
-      if (want.artist) {
-        attempts.push({
-          url: LRCLIB + "/api/search?" + new URLSearchParams({
-            track_name: want.title, artist_name: want.artist
-          }).toString(),
-          single: false
-        });
-      }
-      attempts.push({
-        url: LRCLIB + "/api/search?" + new URLSearchParams({
-          q: (want.title + " " + (want.artist || "")).trim()
-        }).toString(),
-        single: false
-      });
-
-      let best = null;
-      let bestScore = -Infinity;
-
-      for (let i = 0; i < attempts.length; i++) {
-        if (token && token.cancelled) return null;
-        const r = await httpJson(attempts[i].url, NET_TIMEOUT_MS);
-        if (!r.ok || !r.data) continue;
-
-        const list = attempts[i].single ? [ r.data ] : (Array.isArray(r.data) ? r.data : []);
-        for (let c = 0; c < list.length && c < 20; c++) {
-          const cand = list[c];
-          if (!cand || typeof cand !== "object") continue;
-          if (!cand.syncedLyrics && !cand.plainLyrics) continue;
-          const s = attempts[i].single ? 1.5 : this.score(cand, want);
-          if (s > bestScore) { bestScore = s; best = cand; }
+    queries: function (want) {
+      const tags = want.tags || { title: "", artist: "", album: "" };
+      const out = [];
+      const push = function (title, artist) {
+        const t = String(title || "").trim();
+        const a = String(artist || "").trim();
+        if (!t || out.length >= 3) return;
+        const key = (t + "|" + a).toLowerCase();
+        for (let i = 0; i < out.length; i++) {
+          if ((out[i].title + "|" + out[i].artist).toLowerCase() === key) return;
         }
-
-        /* An exact hit with synced lyrics needs no fuzzy round. */
-        if (attempts[i].single && best && best.syncedLyrics) break;
-        if (best && best.syncedLyrics && bestScore >= 0.75) break;
-      }
-
-      if (!best) return null;
-      /* Below this the "match" is somebody else's song. */
-      if (bestScore < 0.35) return null;
-
-      return {
-        synced: typeof best.syncedLyrics === "string" ? best.syncedLyrics : "",
-        plain: typeof best.plainLyrics === "string" ? best.plainLyrics : "",
-        source: "lrclib",
-        sourceId: best.id != null ? String(best.id) : "",
-        matchedTitle: String(best.trackName || ""),
-        matchedArtist: String(best.artistName || ""),
-        matchedDuration: Number(best.duration) || 0,
-        score: bestScore
+        out.push({ title: t, artist: a, album: want.album || "", durationSec: want.durationSec });
       };
-    }
+      push(tags.title, tags.artist);        /* the file's own metadata */
+      push(want.title, want.artist);        /* what the library says   */
+      push(tags.title, want.artist);
+      push(want.title, tags.artist);
+      push(want.title, "");                 /* last resort: title only */
+      return out;
+    },
+
+    /*
+     * Providers, tried in order by the manager. Each returns
+     *   { synced, plain, source, sourceId, matchedTitle, matchedArtist,
+     *     matchedDuration, score }
+     * or null, and never throws — a provider that is unreachable, blocked by
+     * CORS or simply has nothing is just a provider that returned null.
+     */
+    providers: [
+      {
+        /* LRCLIB — public, key-less, CORS-enabled, and the provider the
+         * Music page's own guide already points at. */
+        id: "lrclib",
+        find: async function (want, token) {
+          const F = LRCFetcher;
+          const queries = F.queries(want);
+          let best = null;
+          let bestScore = -Infinity;
+
+          for (let q = 0; q < queries.length; q++) {
+            const want1 = queries[q];
+            const attempts = [];
+
+            /* The exact endpoint is the one that gets the right release. */
+            if (want1.artist && want1.durationSec > 0) {
+              const p = new URLSearchParams({
+                artist_name: want1.artist,
+                track_name: want1.title,
+                duration: String(Math.round(want1.durationSec))
+              });
+              if (want1.album) p.set("album_name", want1.album);
+              attempts.push({ url: LRCLIB + "/api/get?" + p.toString(), single: true });
+            }
+            attempts.push({
+              url: LRCLIB + "/api/search?" + new URLSearchParams(
+                want1.artist ? { track_name: want1.title, artist_name: want1.artist }
+                             : { q: want1.title }
+              ).toString(),
+              single: false
+            });
+
+            for (let i = 0; i < attempts.length; i++) {
+              if (token && token.cancelled) return null;
+              const r = await httpJson(attempts[i].url, NET_TIMEOUT_MS);
+              if (!r.ok || !r.data) continue;
+
+              const list = attempts[i].single ? [ r.data ] : (Array.isArray(r.data) ? r.data : []);
+              for (let c = 0; c < list.length && c < 20; c++) {
+                const cand = list[c];
+                if (!cand || typeof cand !== "object") continue;
+                if (!cand.syncedLyrics && !cand.plainLyrics) continue;
+                const s = attempts[i].single ? 1.5 : F.score(cand, want1);
+                if (s > bestScore) { bestScore = s; best = cand; }
+              }
+              if (attempts[i].single && best && best.syncedLyrics) break;
+            }
+            /* A strong synced hit means the later query shapes are wasted
+             * requests. */
+            if (best && best.syncedLyrics && bestScore >= 0.75) break;
+          }
+
+          if (!best) return null;
+          /* Below this the "match" is somebody else's song. */
+          if (bestScore < 0.35) return null;
+
+          return {
+            synced: typeof best.syncedLyrics === "string" ? best.syncedLyrics : "",
+            plain: typeof best.plainLyrics === "string" ? best.plainLyrics : "",
+            source: "lrclib",
+            sourceId: best.id != null ? String(best.id) : "",
+            matchedTitle: String(best.trackName || ""),
+            matchedArtist: String(best.artistName || ""),
+            matchedDuration: Number(best.duration) || 0,
+            score: bestScore
+          };
+        }
+      },
+
+      {
+        /* NetEase Cloud Music. Its catalogue of Japanese, Korean and Chinese
+         * tracks is far deeper than LRCLIB's, which is exactly where LRCLIB
+         * tends to come up empty. Two requests: search, then fetch the lrc
+         * for the best hit.
+         *
+         * `tlyric` on this API is a Chinese translation; it is ignored. The
+         * original goes through this module's own translation instead, so
+         * the output is English rather than a translation of a translation. */
+        id: "netease",
+        find: async function (want, token) {
+          const F = LRCFetcher;
+          const queries = F.queries(want).slice(0, 2);
+          let best = null;
+          let bestScore = -Infinity;
+
+          for (let q = 0; q < queries.length; q++) {
+            if (token && token.cancelled) return null;
+            const want1 = queries[q];
+            const r = await httpJson(
+              "https://music.163.com/api/search/get?" + new URLSearchParams({
+                s: (want1.title + " " + want1.artist).trim(),
+                type: "1", limit: "8", offset: "0"
+              }).toString(), NET_TIMEOUT_MS);
+            const songs = r.ok && r.data && r.data.result && Array.isArray(r.data.result.songs)
+              ? r.data.result.songs : [];
+
+            for (let i = 0; i < songs.length && i < 8; i++) {
+              const s = songs[i];
+              if (!s || s.id == null) continue;
+              const cand = {
+                id: s.id,
+                trackName: String(s.name || ""),
+                artistName: (Array.isArray(s.artists) ? s.artists : [])
+                  .map(function (a) { return a && a.name || ""; }).filter(Boolean).join(", "),
+                duration: Math.round(Number(s.duration || 0) / 1000),
+                /* NetEase lyrics are synced when they exist at all, so the
+                 * candidate is scored as if it carries them. */
+                syncedLyrics: "?"
+              };
+              const sc = F.score(cand, want1);
+              if (sc > bestScore) { bestScore = sc; best = cand; }
+            }
+            if (best && bestScore >= 0.75) break;
+          }
+
+          if (!best || bestScore < 0.4) return null;
+          if (token && token.cancelled) return null;
+
+          const l = await httpJson("https://music.163.com/api/song/lyric?" +
+            new URLSearchParams({ id: String(best.id), lv: "1", kv: "0", tv: "-1" }).toString(),
+            NET_TIMEOUT_MS);
+          const raw = l.ok && l.data && l.data.lrc && typeof l.data.lrc.lyric === "string"
+            ? l.data.lrc.lyric : "";
+          if (!raw.trim()) return null;
+
+          return {
+            synced: raw,
+            plain: "",
+            source: "netease",
+            sourceId: String(best.id),
+            matchedTitle: best.trackName,
+            matchedArtist: best.artistName,
+            matchedDuration: best.duration,
+            score: bestScore
+          };
+        }
+      },
+
+      {
+        /* Textyl — one request, second-resolution timings. Coarser than a
+         * real .lrc, so it is last: only reached when the other two have
+         * nothing, where coarse beats nothing. */
+        id: "textyl",
+        find: async function (want, token) {
+          const q = LRCFetcher.queries(want)[0];
+          if (!q) return null;
+          if (token && token.cancelled) return null;
+
+          const r = await httpJson("https://api.textyl.co/api/lyrics?q=" +
+            encodeURIComponent((q.artist + " " + q.title).trim()), NET_TIMEOUT_MS);
+          if (!r.ok || !Array.isArray(r.data) || !r.data.length) return null;
+
+          const lines = [];
+          for (let i = 0; i < r.data.length; i++) {
+            const row = r.data[i];
+            if (!row || typeof row.lyrics !== "string") continue;
+            const sec = Number(row.seconds);
+            if (!isFinite(sec) || sec < 0 || sec > 3 * 3600) continue;
+            const text = ChatLyricsSender.sanitize(row.lyrics);
+            if (!text) continue;
+            lines.push("[" + LRCParser.msToTs(sec * 1000) + "]" + text);
+          }
+          if (lines.length < 3) return null;
+
+          return {
+            synced: lines.join("\n"),
+            plain: "",
+            source: "textyl",
+            sourceId: "",
+            matchedTitle: q.title,
+            matchedArtist: q.artist,
+            matchedDuration: 0,
+            score: 0.5
+          };
+        }
+      }
+    ]
   };
 
   /* ---------------------------------------------------------------------- *
@@ -26015,7 +26369,7 @@ const RynLRC = (function () {
 
       /* 1-4. Identify: title, artist, metadata, duration, stable identity. */
       this._setState(song, index, "identifying");
-      const id = await SongIdentifier.identify(song, { needDuration: true });
+      const id = await SongIdentifier.identify(song, { needDuration: true, needTags: true });
       if (!id) { this._setState(song, index, null); return; }
       /* Re-key the run now that the id exists. */
       this._running.set(id.songId, token);
@@ -26072,16 +26426,21 @@ const RynLRC = (function () {
           }
         });
       }
-      sources.push({
-        busy: "fetching",
-        get: function () {
-          return LRCFetcher.find({
-            title: id.title,
-            artist: id.artist,
-            album: id.album,
-            durationSec: id.durationSec
-          }, token);
-        }
+      /* Then every lyrics provider, in order. Each is validated on its own,
+       * so a provider that answers with the wrong release falls through to
+       * the next instead of ending the run. */
+      const want = {
+        title: id.title,
+        artist: id.artist,
+        album: id.album,
+        durationSec: id.durationSec,
+        tags: id.tags || { title: "", artist: "", album: "" }
+      };
+      LRCFetcher.providers.forEach(function (prov) {
+        sources.push({
+          busy: "fetching",
+          get: function () { return prov.find(want, token); }
+        });
       });
 
       let found = null;       /* the source that validated */
@@ -26460,6 +26819,7 @@ const RynLRC = (function () {
     Translator: TranslationManager,
     Validator: LRCValidator,
     Identifier: SongIdentifier,
+    Tags: AudioTagReader,
     Fetcher: LRCFetcher,
     Sync: SyncEngine,
     UI: LRCUI,
