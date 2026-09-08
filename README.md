@@ -177,7 +177,9 @@ understood.
 
 ---
 
-## Ryn Type 2: the Glotus spike tick and anti retrap
+## Ryn Type 2
+
+### The Glotus spike tick and anti retrap
 
 Two modules from Glotus Client 5.5.5 were carried into `Ryn_Type_2.user.js`
 whole — `SpikeTick` and `AntiRetrap`. Both classes are Glotus' code unchanged;
@@ -214,6 +216,27 @@ it reads `forceHat` to pick the accessory matching whatever hat a tick module
 just forced. It sets `useAcc` and never `moduleActive`, so it takes no tick from
 anything — and it is why the bull and turret hats this port forces get the right
 accessory. `verify-glotus-port.js` records it as a known exception.
+
+### Auto grind stops where you tell it
+
+Auto grind used to run to Ruby and nothing else — the variant it compared
+against was the literal `3` in two places. **Grind Until** (Combat → Utility,
+under the Auto grind switch) picks the tier it stops at instead: Gold, Diamond
+or Ruby.
+
+`WeaponVariants` is `[normal, gold, diamond, ruby]`, so a tier is an index into
+it and "done" means the weapon is at or past that index. Both weapons have to
+reach it — auto grind still turns its own switch off once they do, which is
+what it always did at Ruby. Overshooting counts as done, so a weapon already at
+Diamond satisfies a Gold target rather than restarting anything.
+
+Ruby stays the default, so an install that never touches the setting grinds
+exactly as it did before. A stored value that is not one of the three falls
+back to Ruby on load, next to the same check `_breakPosition` gets.
+
+Raising the target after grinding has stopped means switching Auto grind back
+on: the module disabled it when it thought it was finished, and it has no
+reason to re-arm itself.
 
 ### Verification
 
