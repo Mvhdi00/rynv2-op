@@ -9391,7 +9391,12 @@ window.grbtp = 35;
   // If one of them owns the tick the placer stays out of its way rather than
   // spending the packets it needs. This guard is RYN's, not Luna's — Luna has
   // no module ordering to collide with.
-  const LUNA_SPIKE_TICK_MODULES = new Set([ "spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap" ]);
+  // Membership is by exact module name, so a module that places on its own tick
+  // and is missing here does not read as a bug — the placer simply keeps
+  // building underneath it and the two split one packet budget. "spikeTick" is
+  // Glotus' tick, which sends its spike through attemptSpikePlacement while it
+  // owns the tick and therefore belongs with the rest.
+  const LUNA_SPIKE_TICK_MODULES = new Set([ "spikeTick", "spikeTickBreak", "spikeTickNear", "spikeTickTrap", "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap" ]);
   function lunaSpikeTickBusy(ModuleHandler) {
     return LUNA_SPIKE_TICK_MODULES.has(ModuleHandler.activeModule);
   }

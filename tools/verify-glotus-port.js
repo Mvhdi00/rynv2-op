@@ -149,6 +149,36 @@ check("antiRetrap runs before autoBreak", at("antiRetrap") < at("autoBreak"),
   "otherwise autoBreak takes the tick every time you are trapped");
 check("spikeTick runs after spikeSync", at("spikeTick") > at("spikeSync"));
 
+/* ── 3b. the placer stands down for the ported tick ───────────────────────── */
+
+section("Placer stands down for spikeTick");
+
+/*
+ * Everything that builds shares one packet budget. LUNA_SPIKE_TICK_MODULES is
+ * how the Luna auto placer is told to keep out of the way of a module that is
+ * spending that budget on its own tick, and membership is by exact module name
+ * — so a module missing from it does not fail anywhere, it just quietly ends up
+ * building against the placer. spikeTick places through attemptSpikePlacement
+ * while it owns the tick, so it has to be listed.
+ */
+const guardSource = RYN.match(/const LUNA_SPIKE_TICK_MODULES = new Set\((\[[^\]]*\])\)/);
+check("the guard set is still there", !!guardSource);
+if (guardSource) {
+  const guarded = new Set(vm.runInNewContext(guardSource[1]));
+  check("spikeTick is in the guard set", guarded.has("spikeTick"),
+    "without it the auto placer keeps building through Glotus' tick");
+
+  // A name matching no module is a dead entry that guards nothing.
+  const declared = new Set([ ...RYN.matchAll(/moduleName="(\w+)"/g) ].map(m => m[1]));
+  const unknown = [ ...guarded ].filter(name => !declared.has(name));
+  check("every guarded name is a real module", unknown.length === 0, unknown.join(", "));
+
+  // activeModule is only set once a module claims the tick, so the guard can
+  // only be read by a placer that runs later.
+  const late = [ ...guarded ].filter(name => at(name) === -1 || at(name) > at("autoPlacer"));
+  check("every guarded module runs before autoPlacer", late.length === 0, late.join(", "));
+}
+
 /* ── 4. settings and stats exist ──────────────────────────────────────────── */
 
 section("Settings and stats are present");

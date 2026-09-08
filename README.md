@@ -216,6 +216,27 @@ says "swing at them first, break the trap after", and being trapped is exactly
 the moment Autobreak claims the tick. Both modules now sit where Glotus runs
 them: after `spikeSync`, ahead of `velocityTick`.
 
+**The placer has to stand down for it.** Everything that builds shares one
+packet budget (`ModuleHandler.packetCount` against `packetLimit`), and the Luna
+auto placer keeps out of the way of a module spending that budget on its own
+tick by checking `ModuleHandler.activeModule` against
+`LUNA_SPIKE_TICK_MODULES`. That set matches on exact module name, so a module
+missing from it fails nowhere — the placer simply keeps building underneath it
+and the two split the budget, which is the auto place / preplace / replace
+collision this port shipped with. `spikeTick` places through
+`attemptSpikePlacement` while it owns the tick, so it is listed there now, and
+`verify-glotus-port.js` fails if it ever drops out.
+
+Preplace and replace need no equivalent guard: they run in `placementEngine`,
+which is budget-aware on its own and sees the tick's spike in the reservation
+ledger through `ModuleHandler._notePlacement`, so it never re-claims that
+ground.
+
+Three modules that predate this port — `toolHammerSpearInsta`,
+`reverseInstakill` and `swordKatanaInsta` — also call `attemptSpikePlacement`
+from their own tick without being in that set. Left as they are; whether an
+insta should hold the placer off is a behaviour question, not port drift.
+
 `_spikeTickTimes` was added to `StatsManager` and to the Misc → Session
 counters alongside it. That row is not decoration: `UI.updateStats` throws when
 the element is missing, so a counter written by a module with no row on the
