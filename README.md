@@ -117,6 +117,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        the Ryn Type 2 client (see Death corpses, below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -169,6 +170,101 @@ against, and re-checks the observable parts ~15s after load — frame signature
 width, transport mode, live opcode table size. A server-side protocol change
 shows up as a console warning instead of as packets that quietly stop being
 understood.
+
+---
+
+# Ryn Type 2 — death corpses
+
+`Ryn_Type_2.user.js` is a separate client from the mix above, and carries one
+addition: a kill leaves a body behind.
+
+Kill someone and a translucent copy of them stays at the spot they died,
+wearing a **halo and angel wings** — or a **cowboy hat and a devil's tail** if
+they were the player carrying the game's skull marker. It holds for a beat,
+fades out, and is gone. Visual → World → **Death Corpses**, on by default.
+
+It is a local effect and nothing more. It sends no packets, reads nothing the
+client was not already told, and does not touch combat, placement, movement,
+targeting or the transport.
+
+### What it reuses
+
+Nothing here is new machinery; the pieces were all already in the client.
+
+| Needed | Already there |
+|---|---|
+| Who has the skull | `Player.update` is handed `hasSkull` — the protocol's `iconIndex`, the same field the bundle draws the skull sprite from. It was being discarded; it is now stored. |
+| A kill event | `ClientPlayer.killedSomeone`, raised in `tickUpdate` when the server's kill count rises. |
+| Drawing a player | `RYN._hooks._renderPlayer` — the bundle's own player renderer, which resolves hats and accessories straight from their sprite id. Same call `DeadPlayerHandler` already makes. |
+| Camera | `RYN._offset`. |
+| Transparency | `ctx.globalAlpha`. |
+| A frame hook | `ObjectRenderer._preRender`, which the bundle calls before it draws the grid, the objects and the living players — so bodies stay underfoot. |
+
+### Finding a death
+
+Other players do not get a death packet: the server simply stops listing them.
+So `PlayerManager.updatePlayer` stamps each player it was sent with the current
+tick — one integer store per visible player per tick — and on a kill the player
+table is walked **once** for enemies the server stopped reporting within the
+last two ticks and inside weapon range. No per-frame scan, no per-player loop,
+no timers.
+
+Two ticks rather than one because `SocketManager` holds resource packets in its
+queue until the next player update, so a kill sent after that update is applied
+a tick after the body stopped being listed. A body is claimed once and marked
+spent, so a second kill in the window cannot raise a second corpse for it.
+
+The position is `pos.current` — the last position the server actually sent for
+them — not `pos.future`, which is the client's extrapolation of where they were
+headed. It is copied once, and a corpse is never repositioned afterwards.
+
+### Cost
+
+`MAX_ACTIVE_CORPSES` slots are built once, on the first death of the session,
+and reused for the rest of it. Active ones are kept compacted at the front of
+the array; expiring one is a swap and a decrement, and at the cap the oldest
+body is recycled rather than the pool growing. A corpse is nine numbers, and
+per frame the only arithmetic is its age and the alpha that age maps to.
+
+Measured on the manager's own per-frame work, excluding the canvas draws (which
+cost what drawing that many players costs the game anyway):
+
+| | |
+|---|---|
+| Idle frame, nothing dead | **1.0 ns** |
+| Frame with 10 bodies up | **79.4 ns** |
+| Heap growth over 200k spawn/expire cycles | **none**; pool stays at 10 slots |
+
+### Tuning
+
+All of it is at the top of the subsystem, nowhere else:
+
+```js
+MAX_ACTIVE_CORPSES        = 10     // hard cap; oldest is recycled at the cap
+CORPSE_INITIAL_ALPHA      = 0.38
+CORPSE_HOLD_DURATION      = 650    // ms held before the fade starts
+CORPSE_FADE_DURATION      = 1650   // ms of smoothstep fade to invisible
+CORPSE_HAT_NORMAL / _ACC_NORMAL    // halo, angel wings
+CORPSE_HAT_SKULL  / _ACC_SKULL     // cowboy hat, devil's tail
+CORPSE_SPAWN_RANGE        = 800    // past this, a disappearance is a view exit
+CORPSE_DEATH_TICK_WINDOW  = 2
+```
+
+The fade is a smoothstep, flat at both ends, so it neither jumps as it leaves
+the hold nor snaps as it reaches nothing.
+
+### Verified against this bundle
+
+```sh
+node --check Ryn_Type_2.user.js
+node tools/verify-drivers.js Ryn_Type_2.user.js   # OK
+node tools/check-hooks.js Ryn_Type_2.user.js      # 44/44 hooks bind
+```
+
+Both hooks the effect rides on — `preRender` and `renderPlayer` — are among
+those that bind.
+
+---
 
 ## Notes
 
