@@ -64,6 +64,47 @@ const normalize = src => src
   .filter(line => line && !line.startsWith("//"))
   .join("\n");
 
+/*
+ * One line of these two classes could not stay Glotus'. Glotus sends the spike
+ * tick's spike itself, through attemptSpikePlacement; here that path picks its
+ * angles with ObjectManager's solver and then has them re-validated by the
+ * placement engine against a different model, which drops them — the tick
+ * swings with no spike behind it. Ryn's own spike ticks hand the spike to the
+ * controller instead, and this does the same.
+ *
+ * It is written as a substitution rather than an exemption on purpose: the
+ * expected Glotus text is rebuilt with this one replacement applied and then
+ * compared whole, so every other line still has to match and any further drift
+ * fails here.
+ */
+const KNOWN_DEVIATIONS = {
+  SpikeTick: [ {
+    why: "spike routed through spikeTickController, as Ryn's own ticks do",
+    from: [ "EnemyManager2.attemptSpikePlacement();" ],
+    to: [
+      "const controller = ModuleHandler.staticModules && ModuleHandler.staticModules.spikeTickController;",
+      "const placeTarget = EnemyManager2.nearestEnemy;",
+      "if (controller && placeTarget) {",
+      "controller.arm(placeTarget, \"spikeTick\");",
+      "} else {",
+      "EnemyManager2.attemptSpikePlacement();",
+      "}"
+    ]
+  } ]
+};
+
+/* Rebuild what Glotus' class should look like once the known changes land. */
+function applyDeviations(lines, deviations) {
+  let out = lines;
+  for (const dev of deviations) {
+    const at = out.findIndex((_, i) =>
+      dev.from.every((line, j) => out[i + j] === line));
+    if (at === -1) return { out: out, missing: dev };
+    out = [ ...out.slice(0, at), ...dev.to, ...out.slice(at + dev.from.length) ];
+  }
+  return { out: out, missing: null };
+}
+
 /* ── 1. the ported logic is still Glotus' logic ───────────────────────────── */
 
 section("Ported logic matches Glotus");
@@ -78,15 +119,24 @@ if (!GLOTUS) {
         !mine ? "missing from Ryn Type 2" : "missing from Glotus");
       continue;
     }
-    const same = normalize(mine) === normalize(theirs);
-    check(`${name} is unchanged`, same);
+    const deviations = KNOWN_DEVIATIONS[name] || [];
+    const { out: expected, missing } = applyDeviations(normalize(theirs).split("\n"), deviations);
+    if (missing) {
+      check(`${name}: the line "${missing.from[0]}" is still in Glotus`, false,
+        "the recorded deviation no longer applies — re-check it against this Glotus build");
+      continue;
+    }
+    const actual = normalize(mine).split("\n");
+    const same = expected.join("\n") === actual.join("\n");
+    const label = deviations.length
+      ? `${name} matches Glotus, bar ${deviations.length} recorded change`
+      : `${name} is unchanged`;
+    check(label, same, deviations.map(d => d.why).join("; ") || undefined);
     if (!same) {
-      const a = normalize(theirs).split("\n");
-      const b = normalize(mine).split("\n");
-      for (let i = 0; i < Math.max(a.length, b.length); i++) {
-        if (a[i] !== b[i]) {
-          console.log(`          glotus: ${a[i] ?? "(end)"}`);
-          console.log(`          ryn   : ${b[i] ?? "(end)"}`);
+      for (let i = 0; i < Math.max(expected.length, actual.length); i++) {
+        if (expected[i] !== actual[i]) {
+          console.log(`          expected: ${expected[i] ?? "(end)"}`);
+          console.log(`          found   : ${actual[i] ?? "(end)"}`);
         }
       }
     }
@@ -148,6 +198,14 @@ if (!GLOTUS) {
 check("antiRetrap runs before autoBreak", at("antiRetrap") < at("autoBreak"),
   "otherwise autoBreak takes the tick every time you are trapped");
 check("spikeTick runs after spikeSync", at("spikeTick") > at("spikeSync"));
+// The controller acts on the arm in the same tick it is given, so it has to be
+// scheduled after the module that arms it — and after the engine, whose intent
+// it consumes.
+check("spikeTick arms before spikeTickController runs",
+  at("spikeTick") < at("spikeTickController"),
+  "otherwise the arm sits until the next tick and the spike is a tick late");
+check("the engine plans before the controller consumes",
+  at("placementEngine") < at("spikeTickController"));
 
 /* ── 3b. the placer stands down for the ported tick ───────────────────────── */
 
@@ -254,6 +312,9 @@ function stubWorld(options) {
     secondaryReloaded: true, turretReloaded: true, ownsTurret: true,
     biggerThreat: false, enemyOnSpike: true, inRange: true, enemyNearby: true,
     trapped: true, trapHealth: 10, hammerDamage: 100,
+    // Off by default so the Glotus comparison below runs against the fallback
+    // path, which is the one that has to stay identical to Glotus.
+    hasController: false,
     ...options
   };
   const target = { hitScale: 35, pos: { current: vec(120, 0), future: vec(130, 0) } };
@@ -270,6 +331,14 @@ function stubWorld(options) {
       }
     }
   };
+  if (cfg.hasController) {
+    ModuleHandler.staticModules.spikeTickController = {
+      arm(armTarget, source) {
+        sideEffects.push(`armed ${armTarget === target ? "nearestEnemy" : "other"} from ${source}`);
+        return true;
+      }
+    };
+  }
   const client = {
     _ModuleHandler: ModuleHandler,
     EnemyManager: {
@@ -357,6 +426,37 @@ if (!GLOTUS) {
       }
     }
   }
+}
+
+/* ── 7. the spike actually leaves the tick ────────────────────────────────── */
+
+section("The tick hands its spike somewhere");
+
+/*
+ * The failure this guards against is silent and was shipped once already: the
+ * tick swings, the spike never appears, and nothing anywhere errors. So assert
+ * the handoff itself — with a controller present it arms that, without one it
+ * still falls through to attemptSpikePlacement, and either way the swing is
+ * unaffected.
+ */
+{
+  const mine = loadModule(RYN, "SpikeTick");
+  const fired = JSON.parse(decide(mine, { hasController: true }));
+  check("arms the controller when there is one",
+    fired.did.includes("armed nearestEnemy from spikeTick"), fired.did.join(", ") || "did nothing");
+  check("does not also place directly", !fired.did.includes("placed spike"));
+  check("still swings", fired.claimedTick === true && fired.attacked === true && fired.hat === 7);
+  check("still arms the turret half", fired.armedTurret === true);
+
+  const noController = JSON.parse(decide(mine, { hasController: false }));
+  check("falls back to attemptSpikePlacement with no controller",
+    noController.did.includes("placed spike"), noController.did.join(", ") || "did nothing");
+
+  // No enemy to aim the spike at means no handoff, but the swing is Glotus'
+  // and stands on its own.
+  const noEnemy = JSON.parse(decide(mine, { hasController: true, enemyNearby: false }));
+  check("no nearest enemy: no arm, and no crash",
+    !noEnemy.did.some(d => d.startsWith("armed")), noEnemy.did.join(", ") || "did nothing");
 }
 
 console.log(`\n${failures ? `${failures} check(s) failed` : "All checks passed"}`);

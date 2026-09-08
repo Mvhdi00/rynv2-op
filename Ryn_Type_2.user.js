@@ -13708,7 +13708,28 @@ window.grbtp = 35;
       ModuleHandler.forceHat = 7;
       ModuleHandler.forceWeapon = 0;
       ModuleHandler.shouldAttack = true;
-      EnemyManager2.attemptSpikePlacement();
+      // The swing above is Glotus' and untouched. The spike is the one place
+      // this cannot be: Glotus sends it straight out of attemptSpikePlacement,
+      // which picks angles with ObjectManager's solver and hands them to the
+      // engine, which re-checks them against its own model of what is legal
+      // and drops what it does not agree with — so the tick swings and no
+      // spike ever appears behind it. Ryn's own three spike ticks never take
+      // that path: spikeTickHit gives the spike to the controller, which takes
+      // an intent the engine has already reserved ground for and otherwise
+      // asks the engine for an angle through the same aperture solver it
+      // validates with. Same thing here, fallback included.
+      //
+      // nearestEnemy, not spikeCollider: attemptSpikePlacement builds its
+      // angles around the nearest enemy, so arming that keeps Glotus' choice
+      // of where the spike goes — and the controller's own validation stands
+      // the spike down unless the armed target is still the nearest enemy.
+      const controller = ModuleHandler.staticModules && ModuleHandler.staticModules.spikeTickController;
+      const placeTarget = EnemyManager2.nearestEnemy;
+      if (controller && placeTarget) {
+        controller.arm(placeTarget, "spikeTick");
+      } else {
+        EnemyManager2.attemptSpikePlacement();
+      }
       this.useTurret = true;
       this.client.StatsManager.spikeTickTimes = 1;
     }

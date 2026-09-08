@@ -216,6 +216,32 @@ says "swing at them first, break the trap after", and being trapped is exactly
 the moment Autobreak claims the tick. Both modules now sit where Glotus runs
 them: after `spikeSync`, ahead of `velocityTick`.
 
+**The spike goes through the controller, not straight out.** This is the one
+line of the two classes that is not Glotus'. Glotus sends the tick's spike
+itself via `EnemyManager.attemptSpikePlacement`, which picks angles with
+`ObjectManager.getBestPlacementAngles` and hands them to `requestPlace`. In
+this client that lands in `RynPlacementEngine.requestMany`, which re-validates
+every directed request against its *own* model — `_validAt`, its aperture
+solver, its ledger — and silently drops what it does not agree with. Nothing
+errors; the tick just swings with no spike behind it.
+
+Ryn's own three spike ticks never take that path. `spikeTickHit` gives the
+spike to `spikeTickController`, which takes an intent the engine has already
+reserved ground for and, failing that, asks the engine for an angle through the
+same solver it validates with — so it cannot be rejected for disagreeing with
+itself. The ported tick now does the same, with `attemptSpikePlacement` kept as
+the fallback for a client with no controller, exactly as `spikeTickHit` has it.
+
+The armed target is `nearestEnemy` rather than the `enemySpikeCollider` the
+tick swings at: `attemptSpikePlacement` builds its angles around the nearest
+enemy, so this keeps Glotus' choice of where the spike goes, and the
+controller's own validation stands down unless the armed target is still the
+nearest enemy.
+
+`verify-glotus-port.js` records this as a *substitution*, not an exemption — it
+rebuilds Glotus' class with the one replacement applied and compares the whole
+thing, so every other line still has to match.
+
 **The placer has to stand down for it.** Everything that builds shares one
 packet budget (`ModuleHandler.packetCount` against `packetLimit`), and the Luna
 auto placer keeps out of the way of a module spending that budget on its own
@@ -292,13 +318,16 @@ node --check Ryn_Type_2.user.js
 
 The Glotus source is a reference, not a build input; without it the structural
 checks still run and the comparisons skip. The tool checks that each ported
-class still diffs clean against Glotus, that both modules are constructed and
-present exactly once in the run list, that their priority relative to every
-shared module still matches Glotus, that the settings/stats/menu rows they
-depend on exist, and that the client methods they call are still there. It then
-loads each class from both files into a stub world and asserts they reach the
-same decision across 24 scenarios — firing, both halves of the turret chain,
-and every early-return branch.
+class still matches Glotus bar the one recorded substitution, that both modules
+are constructed and present exactly once in the run list, that their priority
+relative to every shared module still matches Glotus, that `spikeTick` is in
+the placer's stand-down set and ordered so that guard and the controller handoff
+both work, that the settings/stats/menu rows they depend on exist, and that the
+client methods they call are still there. It then loads each class from both
+files into a stub world and asserts they reach the same decision across 24
+scenarios — firing, both halves of the turret chain, and every early-return
+branch — and finally that the tick hands its spike to the controller when there
+is one and falls back to `attemptSpikePlacement` when there is not.
 
 The `Reloading.isReloaded` check in that list is worth keeping. There are two
 `isReloaded` methods in the client: `Player`'s takes `(type, tick)` with no
