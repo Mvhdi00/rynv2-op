@@ -174,7 +174,7 @@ switching modes always looked like the cure.
 and the `checkTrusted` hook strips the `isTrusted` guard, so the click can land
 before the token arrives without anyone touching the mouse.
 
-Two changes:
+Two changes there:
 
 - **The unconditional enable is gone.** The game's own gating decides when Play
   is live. A watcher reports a Turnstile that never arrives, so a blocked
@@ -192,6 +192,55 @@ Two changes:
   it — so a failure surfaced as an unhandled rejection at load; that is
   handled and resolves to `null`, which `startGame()` already treats as
   failure.
+
+### Autobreak: Break Position
+
+`inside` is meant to take the trap you are caught in and nothing else, but it
+was still breaking a neighbour's trap whenever one was close. Filtering
+`EnemyManager.nearestTrap` was not enough to hold the mode — a ruled-out trap
+came back through two other doors:
+
+- `getDestroyingObject` falls back to `nearestEnemyObject` /
+  `secondNearestEnemyObject` when it has no trap and no spike to work with, and
+  EnemyManager files traps (type 15) into both alongside spikes and walls. Any
+  trap that happened to be the closest enemy structure was taken.
+- `_beneficialBreakTarget` picks structures around a trapped enemy and scores
+  traps highest of all (`obj.type === 15` is worth +15), so it broke them even
+  while you stood free.
+
+Every object on its way to becoming a break target now clears the mode, through
+one `_trapAllowedByMode` predicate. Only traps are filtered; spikes and
+everything else pass untouched, as the menu already said.
+
+| mode | you are | trap you are in | other enemy trap | spike |
+|---|---|---|---|---|
+| `inside` | caught | **breaks** | no | breaks |
+| `inside` | free | no | no | breaks |
+| `outside` | caught | no | **breaks** | breaks |
+| `outside` | free | breaks | breaks | breaks |
+
+`outside` keeps the behaviour it had, with one correction that follows from the
+same predicate: the trap you are standing in can no longer slip through the
+fallback, which is what "only traps you are not in" always claimed.
+
+### Minimap legend
+
+The bundle hard-codes its minimap marker colours inline, each string unique in
+the file, so three are swapped by hook and the fourth is drawn by
+`_mapPreRender` — the game has no concept of bots, so it has no colour to
+swap. `MAP_COLORS` keeps the whole legend in one place.
+
+| marker | bundle | now |
+|---|---|---|
+| your own dot | `#fff` | `#9b5cf6` purple |
+| clan mates | `rgba(255,255,255,0.35)` (reads grey) | `#5ed46a` green |
+| bots joined through this client | — | `#4aa3ff` blue |
+| the `x` where you died | `#fc5553` | `#ff6ec7` pink |
+
+Bot dots are painted before the bundle draws its own markers, so a bot standing
+on top of you ends up under your dot rather than hiding it. `client.clients`
+holds every bot this tab opened, including ones still connecting; `inGame` is
+what says one has actually spawned and has a position worth drawing.
 
 ---
 
@@ -248,9 +297,10 @@ node tools/check-hooks.js Ryn_Type_2.user.js
 node --check Ryn_Type_2.user.js
 ```
 
-It passes the same driver check on the same 42 scalar keys, and **44/44** of
-its hooks bind — the nine extra render hooks listed above, minus
-`objectRotation`, which it does not have.
+It passes the same driver check on the same 42 scalar keys, and **47/47** of
+its hooks bind — 44 as supplied (the nine extra render hooks listed above,
+minus `objectRotation`, which it does not have) plus the three minimap colour
+hooks.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here

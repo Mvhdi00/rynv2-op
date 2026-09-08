@@ -4266,7 +4266,24 @@ window.grbtp = 35;
       }
     }
   };
+  // Minimap marker palette. The bundle hard-codes these four colours inline in
+  // its minimap draw, so three of them are swapped by hook (see mapSelfColor /
+  // mapTeamColor / mapDeathMarker) and the fourth is drawn by _mapPreRender,
+  // which the game has no equivalent for. Kept together here so the whole
+  // legend is one edit rather than four scattered ones.
+  //
+  //   self  — your own dot, "#fff" in the bundle
+  //   team  — clan mates, "rgba(255,255,255,0.35)", which read as grey
+  //   bot   — bots that joined through this client; RYN's own, no bundle colour
+  //   death — the "x" where you died, "#fc5553"
+  const MAP_COLORS = {
+    self: "#9b5cf6",
+    team: "#5ed46a",
+    bot: "#4aa3ff",
+    death: "#ff6ec7"
+  };
   const Renderer = new class {
+    _mapColors=MAP_COLORS;
     _renderObjects=[];
     lastLogTime=performance.now();
     _dtSamples=[];
@@ -4579,6 +4596,26 @@ window.grbtp = 35;
         ctx.arc(pos.x, pos.y, markSize, 0, 2 * Math.PI);
         ctx.fill();
       }
+      // Bots that joined through this client, drawn here rather than through a
+      // hook because the game has no concept of them. This runs before the
+      // bundle paints its own markers, so a bot standing on top of you ends up
+      // under your dot instead of hiding it.
+      //
+      // client.clients holds every PlayerClient this tab opened, including ones
+      // still connecting — inGame is what says a bot has actually spawned and
+      // has a position worth drawing.
+      try {
+        ctx.fillStyle = MAP_COLORS.bot;
+        client.clients.forEach(bot => {
+          const p = bot && bot.myPlayer;
+          if (!p || !p.inGame) return;
+          const at = p.pos.current;
+          if (!at) return;
+          ctx.beginPath();
+          ctx.arc(at.x / Config_default.mapScale * width, at.y / Config_default.mapScale * height, 7, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      } catch (e) {}
       ctx.restore();
     }
     drawNorthArrow(ctx, x, y, angle) {
@@ -8872,12 +8909,37 @@ window.grbtp = 35;
     // isTrapped and trappedIn are set by EnemyManager each tick from collision
     // against the objects' real positions, so this reads the player's actual
     // relationship to the trap rather than anything that was drawn.
-    _breakTrapTarget(myPlayer, nearestTrap) {
+    // Whether one specific trap clears the current mode. Only traps are ever
+    // filtered; every other structure is this setting's business not at all.
+    _trapAllowedByMode(myPlayer, trap) {
       const inTrap = myPlayer.isTrapped ? myPlayer.trappedIn : null;
       if (Settings_default._breakPosition === "outside") {
-        return nearestTrap !== null && nearestTrap !== inTrap ? nearestTrap : null;
+        return trap !== inTrap;
       }
-      return inTrap;
+      return inTrap !== null && trap === inTrap;
+    }
+    _breakTrapTarget(myPlayer, nearestTrap) {
+      if (Settings_default._breakPosition === "outside") {
+        return nearestTrap !== null && this._trapAllowedByMode(myPlayer, nearestTrap) ? nearestTrap : null;
+      }
+      return myPlayer.isTrapped ? myPlayer.trappedIn : null;
+    }
+    // Filtering EnemyManager.nearestTrap alone was not enough to hold the mode:
+    // a trap the mode rules out came straight back through the general
+    // fallbacks. EnemyManager files a trap (type 15) into nearestEnemyObject
+    // and secondNearestEnemyObject alongside spikes and walls, and
+    // getDestroyingObject falls back to those whenever it has no trap and no
+    // spike to work with — so `inside` still broke a neighbour's trap any time
+    // one happened to be the closest enemy structure, which is the single
+    // thing that mode exists to prevent.
+    //
+    // Every object on its way to becoming a break target clears the mode here.
+    // Non-traps pass through untouched, so spikes still break the same either
+    // way.
+    _allowedBreakTarget(myPlayer, obj) {
+      if (!obj) return null;
+      if (obj.type !== 15) return obj;
+      return this._trapAllowedByMode(myPlayer, obj) ? obj : null;
     }
     getDestroyingObject() {
       const {EnemyManager: EnemyManager2, myPlayer: myPlayer} = this.client;
@@ -8891,7 +8953,7 @@ window.grbtp = 35;
       // trap in reach at all.
       const nearestTrap = this._breakTrapTarget(myPlayer, EnemyManager2.nearestTrap);
       const nearestSpike = EnemyManager2.nearestSpike;
-      const fallback = EnemyManager2.nearestEnemyObject || EnemyManager2.secondNearestEnemyObject;
+      const fallback = this._allowedBreakTarget(myPlayer, EnemyManager2.nearestEnemyObject) || this._allowedBreakTarget(myPlayer, EnemyManager2.secondNearestEnemyObject);
       const reachable = t => t && this.getDestroyingWeapon(t) !== null;
       const enemyFirst = () => reachable(fallback) ? fallback : null;
       if (!nearestSpike && !nearestTrap) {
@@ -8966,6 +9028,10 @@ window.grbtp = 35;
         const obj = ObjectManager2.objects.get(id);
         if (!obj || !(obj instanceof PlayerObject)) return;
         if (!PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) return;
+        // The other door a ruled-out trap used to walk back through: this
+        // picks structures around a trapped enemy and scores traps highest of
+        // all, so `inside` broke them even while standing free.
+        if (obj.type === 15 && !this._trapAllowedByMode(myPlayer, obj)) return;
         if (obj.health > hammerDmg) return;
         const distToMe = myPos.distance(obj.pos.current);
         if (distToMe > (hammerWD?.range ?? 110) + obj.collisionScale) return;
@@ -20364,6 +20430,13 @@ window.grbtp = 35;
     Hook.append("preRenderLoop", /\)\}\}\(\);function \w+\(\)\{/, "RYN._Renderer._preRender();");
     Hook.append("postRenderLoop", /\w+,\w+\(\),requestAnimFrame\(\w+\)/, ";RYN._Renderer._postRender();");
     Hook.append("mapPreRender", /(\w+)\.lineWidth=NUM{4};/, "RYN._Renderer._mapPreRender($1);");
+    // The minimap legend. All three sit inline in the bundle's minimap draw as
+    // literal colour strings, each unique in the file, so they are swapped
+    // rather than redrawn over. The bot dots have no counterpart here — the
+    // game does not know the bots exist — and are painted by _mapPreRender.
+    Hook.replace("mapSelfColor", /globalAlpha=1,(\w+)\.fillStyle="#fff",(\w+)\(/, 'globalAlpha=1,$1.fillStyle=RYN._Renderer._mapColors.self,$2(');
+    Hook.replace("mapTeamColor", /fillStyle="rgba\(255,255,255,0\.35\)"/, "fillStyle=RYN._Renderer._mapColors.team");
+    Hook.replace("mapDeathMarker", /fillStyle="#fc5553"/, "fillStyle=RYN._Renderer._mapColors.death");
     Hook.prepend("gameInit", /function (\w+)\(\w+\)\{\w+\.\w+\(\w+,f/, "RYN._gameInit=function(a){$1(a);};");
     Hook.prepend("LockRotationClient", /return \w+\?\(\!/, "return RYN._myClient._ModuleHandler._currentAngle;");
     Hook.replace("DisableResetMoveDir", /\w+=\{\},\w+\.send\("\w+"\)/, "");
