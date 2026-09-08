@@ -10094,6 +10094,16 @@ window.grbtp = 35;
     // returns roughly 0..3.2, so this lands the term in the same band as
     // `rebound`, which is the same class of thing measured the other way up.
     primaryKb: 1.4,
+    // predictive building steal — see StealForecast below. Every one of these
+    // is multiplied by a measured destruction confidence, so a building that
+    // has merely been hit contributes nothing and only one that is genuinely
+    // about to fall reaches this band. `steal` is set just under `rebound`:
+    // taking an enemy's slot is worth about as much as a good knockback and
+    // deliberately not more, so a live opportunity still outranks a predicted
+    // one.
+    steal: 4.2,
+    stealDeny: 2.4,
+    stealChain: 1.2,
     // gates and search
     minValue: .9,
     maxPlacements: 3,
@@ -10723,6 +10733,185 @@ window.grbtp = 35;
     };
   }
 
+  // ── Predictive destruction ────────────────────────────────────────────────
+  // How close a building is to being destroyed, and how much that estimate is
+  // worth believing.
+  //
+  // The engine already forecast breaks: `attrition` divided an object's health
+  // by one actor's damage and called anything inside two hits doomed. That is
+  // enough to notice a slot opening. It is not enough to *steal* one. A wall is
+  // worked on by several weapons at once, some of them still reloading, and the
+  // difference between "was hit once" and "is about to die" is exactly what
+  // decides whether reserving the ground pays for itself.
+  //
+  // So the forecast is measured rather than assumed, from three readings:
+  //
+  //   potential   what every actor that can currently reach the object would
+  //               land on its next swing, summed. Two enemies hitting the same
+  //               wall kill it in half the swings, and the per-actor minimum
+  //               the old forecast took could not say that.
+  //   observed    health actually lost, tick by tick. The client already
+  //               decrements PlayerObject.health when it resolves an attack
+  //               packet, so a running delta costs one subtraction per tracked
+  //               object and needs no new packet handling.
+  //   cadence     how many separate hits have landed and how recently. One hit
+  //               is an event; two inside the window is a demolition.
+  //
+  // Confidence is their product against remaining health, so a single hit on a
+  // full wall scores near zero and a wall at 20% under two loaded weapons
+  // scores near one. The one case that needs no history is a loaded weapon in
+  // range that alone out-damages what is left: that is a statement about this
+  // swing, not about a trend.
+  //
+  // This is not a second prediction engine. It holds no positions, no targets
+  // and no schedule; it is a decaying number per object, read by `attrition`
+  // inside the engine's own PREDICT stage and by nothing else.
+  const RPE_STEAL_HISTORY_TICKS = 14;
+  // How far ahead a break is worth preparing for. Past this the reservation
+  // would be held through more course changes than it can survive, and the
+  // old forecast's own horizon — "inside two hits" — is the floor of it.
+  const RPE_STEAL_MAX_LEAD = 3;
+  // Below this a forecast is not worth writing down, let alone acting on.
+  // Booking is free and firing is not, so the bar to book is the same one the
+  // scheduler already applies before anything reaches the wire.
+  const RPE_STEAL_BOOK_CONFIDENCE = .3;
+  // Objects the forecaster will hold history for. A wall is five or six; this
+  // is several walls, and past it the least recently touched record is dropped
+  // to make room.
+  const RPE_STEAL_MAX_TRACKED = 32;
+  // Actors whose swings are counted. Me, the current target, and the two next
+  // nearest enemies covers every fight the placer is allowed to build in;
+  // beyond that the extra grid queries buy nothing the nearest few did not
+  // already say.
+  const RPE_STEAL_MAX_ACTORS = 4;
+  // Steal opportunities carried forward in one tick. A wall is five or six
+  // builds and only one of them is usually about to fall, but a demolition
+  // takes several at once and the chain has to be able to see past the first.
+  const RPE_STEAL_MAX_CANDIDATES = 3;
+  // How far an enemy may be from a slot before taking it stops denying them
+  // anything.
+  const RPE_STEAL_ENEMY_RANGE = 320;
+
+  class StealForecast {
+    tracks=new Map;
+    clear() {
+      this.tracks.clear();
+    }
+    forget(id) {
+      this.tracks.delete(id);
+    }
+    // History is kept as a decaying pair of numbers rather than a buffer of
+    // samples: one multiply and one compare per tracked object per tick, no
+    // allocation, and no array to shift.
+    _observe(object, tick) {
+      let rec = this.tracks.get(object.id);
+      if (!rec) {
+        if (this.tracks.size >= RPE_STEAL_MAX_TRACKED) this._evictStalest();
+        rec = {
+          id: object.id,
+          health: object.health,
+          hits: 0,
+          damage: 0,
+          lastHitTick: -1,
+          lastTick: tick
+        };
+        this.tracks.set(object.id, rec);
+        return rec;
+      }
+      if (rec.lastTick === tick) return rec;
+      const gap = Math.max(1, tick - rec.lastTick);
+      const keep = Math.pow(1 - 1 / RPE_STEAL_HISTORY_TICKS, gap);
+      rec.hits *= keep;
+      rec.damage *= keep;
+      const lost = rec.health - object.health;
+      if (lost > 0) {
+        rec.hits += 1;
+        rec.damage += lost;
+        rec.lastHitTick = tick;
+      } else if (object.health > rec.health) {
+        // Health going up means this is not the object the history describes —
+        // the id was reused, or the game corrected us. Start again rather than
+        // carry a story about something else.
+        rec.hits = 0;
+        rec.damage = 0;
+        rec.lastHitTick = -1;
+      }
+      rec.health = object.health;
+      rec.lastTick = tick;
+      return rec;
+    }
+
+    // `potential` is what would land on the object if every actor in reach
+    // swung; `ready` is the part of that which is off reload right now.
+    assess(object, tick, potential, ready) {
+      const rec = this._observe(object, tick);
+      const health = Math.max(0, object.health);
+      if (health <= 0) {
+        return {
+          ticks: 0,
+          confidence: 1
+        };
+      }
+      // Damage the object is actually losing per tick, from observation alone.
+      // This is what still says something while every weapon in reach is mid
+      // reload.
+      const rate = rec.damage / RPE_STEAL_HISTORY_TICKS;
+      // Two independent readings of how long it has left. The swing model is
+      // the one that matters when a weapon is loaded; the observed rate is the
+      // one that survives when none is.
+      const bySwing = ready > 0 ? Math.max(1, Math.ceil(health / ready)) : Infinity;
+      const byRate = rate > 0 ? Math.max(1, Math.ceil(health / rate)) : Infinity;
+      const ticks = Math.min(bySwing, byRate);
+      if (!isFinite(ticks)) {
+        return {
+          ticks: Infinity,
+          confidence: 0
+        };
+      }
+      // A break needs all three of these to be true, which is why they are
+      // multiplied rather than added: something has to be able to kill it, it
+      // has to happen soon, and there has to be a reason to think the swing is
+      // actually coming.
+      const pressure = potential <= 0 ? 0 : Math.min(1, potential / health);
+      const imminence = Math.max(0, 1 - (ticks - 1) / (RPE_STEAL_MAX_LEAD + 1));
+      const struck = Math.min(1, rec.hits / 2);
+      const recency = rec.lastHitTick < 0 ? 0 : Math.max(0, 1 - (tick - rec.lastHitTick) / RPE_STEAL_HISTORY_TICKS);
+      // One loaded weapon that out-damages what is left needs no history: it
+      // is a prediction about a single swing. Everything short of that is a
+      // prediction about a trend, and a trend has to have been observed.
+      const evidence = ready >= health ? 1 : struck * recency;
+      return {
+        ticks: ticks,
+        confidence: Math.min(1, pressure * imminence * evidence)
+      };
+    }
+
+    // Anything nobody has been able to reach for a window is not a break in
+    // progress, and its history describes a fight that has moved on. Called
+    // once per tick from the engine's PREDICT stage, which is what keeps the
+    // map the size of the current fight rather than the size of the session.
+    expire(tick) {
+      for (const [id, rec] of this.tracks) {
+        if (tick - rec.lastTick > RPE_STEAL_HISTORY_TICKS) this.tracks.delete(id);
+      }
+    }
+    // The cap is a safety valve, not a working limit — `expire` above keeps
+    // the map to what has been hit recently, and reaching this means several
+    // walls are coming down at once. One eviction makes room for one insert,
+    // and the least recently touched is the one least likely to be asked
+    // about again.
+    _evictStalest() {
+      let stalest = null, oldest = Infinity;
+      for (const [id, rec] of this.tracks) {
+        if (rec.lastTick < oldest) {
+          oldest = rec.lastTick;
+          stalest = id;
+        }
+      }
+      if (stalest !== null) this.tracks.delete(stalest);
+    }
+  }
+
   // ── World model ───────────────────────────────────────────────────────────
   // One sweep per tick, read by everything downstream. Replaces the several
   // separate scans the old placer ran.
@@ -11053,6 +11242,40 @@ window.grbtp = 35;
         }
       }
       terms.recovery = recovery;
+
+      // Building steal ------------------------------------------------------
+      // Ground an enemy build is standing on and is about to stop standing on.
+      // Every part of this is multiplied by the measured destruction
+      // confidence, so a wall that has merely been hit contributes nothing and
+      // only one genuinely about to fall competes with a live contact — which
+      // is what keeps this an addition to the existing score rather than an
+      // override of it. A candidate with no steal context scores exactly what
+      // it scored before.
+      let steal = 0;
+      if (cand.steal) {
+        const s = cand.steal;
+        // Coverage is how much of the vacated footprint this build actually
+        // occupies. Taking the slot is the point; standing next to it is a
+        // different and much smaller thing, and without this the nearest legal
+        // angle on the ring would score as a steal however far away it landed.
+        steal = w.steal * s.confidence * s.coverage;
+        // Denial: the value of being first is that they cannot rebuild here,
+        // which is only worth something while they are close enough to want to.
+        if (s.enemyDistance < w.distanceFalloff) {
+          steal += w.stealDeny * s.confidence * (1 - s.enemyDistance / w.distanceFalloff);
+        }
+        // A slot out of a run of builds is worth more than a lone one: that is
+        // what turns a breached wall into a trap, and it is why the chain keeps
+        // paying as the rest of the wall comes down.
+        if (s.cluster > 1) {
+          steal += w.stealChain * s.confidence * Math.min(1, (s.cluster - 1) / 3);
+        }
+        // Counted as reach so `_interacts` sees it: taking ground out from
+        // under an enemy is doing something to someone, which is the test that
+        // gate was written for.
+        cand.reach += steal;
+      }
+      terms.steal = steal;
 
       // Enclosure ---------------------------------------------------------
       // How much of the ring around a pinned target this build takes away.
@@ -11604,7 +11827,16 @@ window.grbtp = 35;
         let reason = null;
         if (tick >= rec.expiresTick || tick >= rec.hardExpiry) reason = "expired";
         else if (rec.targetId !== frame.targetId) reason = "targetChanged";
-        else if (rec.kind === "vacating" && !engine.client.ObjectManager.objects.has(rec.vacates)) reason = "vacated";
+        // A record waiting on a specific object has nothing left to wait for
+        // once that object is gone. The one moment it is allowed to survive its
+        // object is inside onVacated, which runs while the deletion is being
+        // handled and the object is still in the map — that is when the record
+        // fires. Reaching a sweep with the object already gone means it did
+        // not, so the opportunity is over rather than pending.
+        else if ((rec.kind === "vacating" || rec.kind === "steal") && !engine.client.ObjectManager.objects.has(rec.vacates)) reason = "vacated";
+        // Stealing a slot is only worth the ground while the enemy is still
+        // near enough to want it back.
+        else if (rec.steal && Math.hypot(frame.targetPos.x - rec.x, frame.targetPos.y - rec.y) > RPE_STEAL_ENEMY_RANGE) reason = "enemyLeft";
         else {
           // Still on our ring? We move, so a point that was reachable may not
           // be any more.
@@ -11700,24 +11932,32 @@ window.grbtp = 35;
   };
   // One scorer, three emphases. The terms are identical everywhere; what
   // changes is how much each mode cares about each of them.
+  //
+  // The steal emphasis is the one place the three modes disagree about it, and
+  // for one reason: preplace is betting on a break that has not happened, while
+  // replace is acting on the deletion packet that says it has. The same ground
+  // is worth more once it is certain.
   const RPE_MODE_WEIGHTS = {
     auto: {
       recovery: 0,
       timing: 1,
       followUp: 1,
-      staleness: 1
+      staleness: 1,
+      steal: 1
     },
     preplace: {
       recovery: 0,
       timing: 1.5,
       followUp: 1.2,
-      staleness: 1
+      staleness: 1,
+      steal: 1
     },
     replace: {
       recovery: 1,
       timing: 1.2,
       followUp: .8,
-      staleness: .6
+      staleness: .6,
+      steal: 1.25
     }
   };
 
@@ -11794,6 +12034,17 @@ window.grbtp = 35;
     due(cand, tick) {
       if (cand.mode !== RPE_MODE.PREPLACE) return true;
       if (cand.confidence < RPE_PREPLACE_MIN_CONFIDENCE) return false;
+      // A steal is due when the ground is actually free, never when the
+      // forecast said it would be. This is the whole reason the forecast is
+      // worth having: the prediction buys the *preparation* — position, item,
+      // angle, a held reservation — and the deletion packet buys the send. Fire
+      // early into a building still standing and the server refuses it, which
+      // costs five packets and leaves the item held, which is exactly the cost
+      // the preparation exists to avoid.
+      //
+      // `vacated` is stamped at promotion: true while onVacated is handling
+      // this record's object, or once the object has left the world.
+      if (cand.kind === "steal") return !!cand.vacated;
       if (cand.kind === "vacating") return tick >= cand.dueTick;
       return cand.interceptTick <= RPE_PREPLACE_FIRE_LEAD;
     }
@@ -11827,6 +12078,13 @@ window.grbtp = 35;
     memory=new PlacementMemory;
     motion=new TargetMotion;
     book=new PreplaceBook;
+    // The break forecast. Shares the engine's tick, its object handles and its
+    // reset; it owns no scan, no schedule and no packets of its own.
+    forecast=new StealForecast;
+    // The object whose deletion is being handled right now, if any. Set for the
+    // duration of onVacated so a booked steal can tell "the ground is opening
+    // this instant" from "the forecast thinks it will".
+    _vacatingId=null;
     stats={
       candidates: 0,
       viable: 0,
@@ -11838,6 +12096,7 @@ window.grbtp = 35;
       booked: 0,
       preplaced: 0,
       replaced: 0,
+      stolen: 0,
       dropped: 0,
       directed: 0
     };
@@ -11859,6 +12118,8 @@ window.grbtp = 35;
     _blockers=null;
     _blockersTick=-1;
     _exits=null;
+    _sweep=null;
+    _sweepTick=-1;
     constructor(client2) {
       this.client = client2;
       this._threat = new ThreatAnalyzer(client2);
@@ -11874,6 +12135,8 @@ window.grbtp = 35;
       this.memory.sends.clear();
       this.motion.tracks.clear();
       this.book.records.length = 0;
+      this.forecast.clear();
+      this._vacatingId = null;
       this._profiles.clear();
       this._profileTick = -1;
       this._plan = [];
@@ -11882,6 +12145,8 @@ window.grbtp = 35;
       this._planTargetPos = null;
       this._blockers = null;
       this._blockersTick = -1;
+      this._sweep = null;
+      this._sweepTick = -1;
       SpikeOpportunity.reset();
     }
 
@@ -11983,6 +12248,7 @@ window.grbtp = 35;
       const tick = frame.tick;
       this.memory.expire(tick, frame.myPos);
       this.motion.expire(tick);
+      this.forecast.expire(tick);
       frame.motion = this.motion.observe(frame.target, tick);
       this.stats.dropped = this.book.sweep(tick, frame, this);
       if (this._planIsStale(frame)) this._plan = [];
@@ -12001,41 +12267,106 @@ window.grbtp = 35;
       return shift > this.weights.staleTargetShift;
     }
 
-    // Every object either of us is about to destroy, and how many hits it has
-    // left. A slot about to open is worth building into before it does.
-    attrition(frame) {
-      const {ObjectManager: ObjectManager2, myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
+    // One weapon's swing, as the forecast sees it.
+    //
+    // Reload is a field rather than a filter. A weapon still reloading is not
+    // damage that can land now, but it is very much part of what the object in
+    // front of it is about to face, and dropping the actor entirely — which is
+    // what the original did — throws that away. Keeping it lets the forecast
+    // say "this cannot survive what is pointed at it" separately from "this
+    // dies on the next swing", which are different claims and are believed to
+    // different degrees.
+    //
+    // `legacy` marks an actor the original break forecast was allowed to
+    // count, so the reading it produced can still be produced unchanged. The
+    // caller narrows it to actors that are actually loaded, because that is
+    // the test the original applied before building the actor at all.
+    _actor(entity, pos, weaponID, slot, isTank, legacy, fallbackDmg) {
+      if (weaponID === null || weaponID === undefined || weaponID < 0) return null;
+      const wd = DataHandler_default?.getWeapon?.(weaponID);
+      if (!wd) return null;
+      const dmg = entity.getBuildingDamage?.(weaponID, isTank) ?? fallbackDmg ?? 0;
+      if (dmg <= 0) return null;
+      const reload = entity.reload?.[slot];
+      return {
+        x: pos.x,
+        y: pos.y,
+        range: wd.range ?? 0,
+        dmg: dmg,
+        ready: !!reload && reload.current >= reload.max,
+        legacy: !!legacy
+      };
+    }
+
+    // One sweep of who is hitting what, memoised for the tick. Both readings
+    // below are taken from it, so adding the second one costs no extra grid
+    // queries — and it costs fewer than before, because the sweep used to run
+    // once per build type and now runs once per tick.
+    //
+    //   legacy    the original forecast, unchanged: fewest hits to destruction
+    //             from my next swing or the current target's, and nothing else.
+    //             `attrition` reads this and only this.
+    //   damage    every actor in reach, summed. Two enemies working the same
+    //             wall kill it in half the swings, which a per-actor minimum
+    //             cannot say. The steal forecast reads this.
+    _attritionSweep(frame) {
+      if (this._sweepTick === frame.tick && this._sweep) return this._sweep;
+      const {ObjectManager: ObjectManager2, myPlayer: myPlayer, PlayerManager: PlayerManager2, _ModuleHandler: ModuleHandler} = this.client;
       const actors = [];
       const predictType = ModuleHandler._getPredictWeapon();
       const myWeapon = predictType === 0 || predictType === 1 ? myPlayer.getItemByType(predictType) : null;
-      if (myWeapon !== null && myWeapon !== undefined && myWeapon >= 0 && myPlayer.isReloaded && myPlayer.isReloaded(predictType, 1)) {
-        const wd = DataHandler_default?.getWeapon?.(myWeapon);
-        if (wd) actors.push({
-          x: frame.myPos.x,
-          y: frame.myPos.y,
-          range: wd.range ?? 0,
-          dmg: myPlayer.getBuildingDamage?.(myWeapon, ModuleHandler.canBuy(0, 40)) ?? 0
-        });
+      if (myWeapon !== null && myWeapon !== undefined && myWeapon >= 0) {
+        const mine = this._actor(myPlayer, frame.myPos, myWeapon, predictType, ModuleHandler.canBuy(0, 40), true);
+        if (mine) {
+          // My own reload is read through the client's own predictor rather
+          // than the raw counter, because that is what decides whether my next
+          // swing actually goes out. This is the test the original used.
+          mine.ready = !!(myPlayer.isReloaded && myPlayer.isReloaded(predictType, 1));
+          mine.legacy = mine.ready;
+          actors.push(mine);
+        }
       }
       const target = frame.target;
       for (const slot of [ 0, 1 ]) {
         const id = slot === 0 ? target.weapon?.primary : target.weapon?.secondary;
-        if (id === null || id === undefined) continue;
-        const reload = target.reload?.[slot];
-        if (!reload || reload.current < reload.max) continue;
-        const wd = DataHandler_default?.getWeapon?.(id);
-        if (!wd) continue;
-        actors.push({
-          x: frame.targetPos.x,
-          y: frame.targetPos.y,
-          range: wd.range ?? 0,
-          dmg: target.getBuildingDamage?.(id, true) ?? 50
-        });
+        // The 50 is the original's fallback for a target that cannot be asked
+        // what its weapon does to a building.
+        const actor = this._actor(target, frame.targetPos, id, slot, true, true, 50);
+        // The original required a fully reloaded weapon before the actor
+        // existed at all. Here the actor always exists and its readiness is a
+        // field, but only a ready one counts as legacy — so the legacy reading
+        // sees exactly the actors it always saw.
+        if (actor) {
+          actor.legacy = actor.ready;
+          actors.push(actor);
+        }
       }
-      if (actors.length === 0) return [];
-      const doomed = new Map;
+      // Everyone else in the fight. These are new, and they are deliberately
+      // not legacy: they widen what the steal forecast can see without
+      // widening what the original preplace path acts on.
+      const others = [];
+      for (const enemy of PlayerManager2.enemies) {
+        // By id, not by identity: the target already contributed above and
+        // counting its weapons twice would halve every deadline it appears in.
+        if (!enemy || enemy.id === myPlayer.id || enemy.id === frame.targetId) continue;
+        const d = frame.myPos.distance(enemy.pos.current);
+        if (d > RPE_STEAL_ENEMY_RANGE + 200) continue;
+        others.push([ d, enemy ]);
+      }
+      // Deterministically ordered and deterministically truncated, so the same
+      // board produces the same actor list every tick whatever order the
+      // player map happened to iterate in.
+      others.sort((a, b) => a[0] - b[0] || a[1].id - b[1].id);
+      for (const [, enemy] of others.slice(0, RPE_STEAL_MAX_ACTORS - 2)) {
+        for (const slot of [ 0, 1 ]) {
+          const id = slot === 0 ? enemy.weapon?.primary : enemy.weapon?.secondary;
+          const actor = this._actor(enemy, enemy.pos.current, id, slot, true, false);
+          if (actor) actors.push(actor);
+        }
+      }
+
+      const legacy = new Map, damage = new Map;
       for (const actor of actors) {
-        if (actor.dmg <= 0) continue;
         const cells = Math.ceil((actor.range + 120) / ObjectManager2.grid2D.cellSize) + 1;
         ObjectManager2.grid2D.query(actor.x, actor.y, cells, id => {
           const obj = ObjectManager2.objects.get(id);
@@ -12045,14 +12376,35 @@ window.grbtp = 35;
           if (Items[obj.type] && Items[obj.type].hideFromEnemy) return false;
           const pos = obj.pos.current;
           if (Math.hypot(actor.x - pos.x, actor.y - pos.y) - obj.scale > actor.range) return false;
-          const hits = Math.ceil(obj.health / actor.dmg);
-          const prev = doomed.get(obj);
-          if (prev === undefined || hits < prev) doomed.set(obj, hits);
+          if (actor.legacy) {
+            const hits = Math.ceil(obj.health / actor.dmg);
+            const prev = legacy.get(obj);
+            if (prev === undefined || hits < prev) legacy.set(obj, hits);
+          }
+          let entry = damage.get(obj);
+          if (entry === undefined) {
+            entry = { potential: 0, ready: 0 };
+            damage.set(obj, entry);
+          }
+          entry.potential += actor.dmg;
+          if (actor.ready) entry.ready += actor.dmg;
           return false;
         });
       }
+      this._sweep = { legacy: legacy, damage: damage };
+      this._sweepTick = frame.tick;
+      return this._sweep;
+    }
+
+    // Every object either of us is about to destroy, and how many hits it has
+    // left. A slot about to open is worth building into before it does.
+    //
+    // Unchanged: same actors, same arithmetic, same gate, same ordering, same
+    // three results. Only the grid sweep underneath is shared now.
+    attrition(frame) {
+      const {legacy: legacy} = this._attritionSweep(frame);
       const out = [];
-      for (const [obj, hits] of doomed) {
+      for (const [obj, hits] of legacy) {
         if (hits > 2) continue;
         out.push({
           object: obj,
@@ -12062,6 +12414,83 @@ window.grbtp = 35;
       }
       out.sort((a, b) => a.urgency - b.urgency);
       return out.slice(0, 3);
+    }
+
+    // The enemy builds worth stealing: about to fall, believably so, and near
+    // enough that taking the slot denies them something.
+    //
+    // This is the same sweep read the other way. Where `attrition` asks "how
+    // many swings until this is gone", it asks "how much of what is hitting
+    // this would kill it, is that actually landing, and is it about to" — the
+    // three readings StealForecast multiplies. A building hit once by a
+    // reloading weapon scores near zero here and produces no candidate at all.
+    stealTargets(frame) {
+      const {damage: damage} = this._attritionSweep(frame);
+      if (damage.size === 0) return [];
+      const {myPlayer: myPlayer, PlayerManager: PlayerManager2} = this.client;
+      const out = [];
+      for (const [obj, dealt] of damage) {
+        // The object whose deletion is being handled has already resolved into
+        // whatever was booked for it, and the sweep it appears in was taken
+        // before it died. Forecasting it again would book ground for a break
+        // that has already happened.
+        if (obj.id === this._vacatingId) continue;
+        if (!PlayerManager2.isEnemyByID(obj.ownerID, myPlayer)) continue;
+        // The same bound the book applies when it sweeps, applied before
+        // anything is booked: taking ground the enemy has already walked away
+        // from denies them nothing, and a record booked outside this would be
+        // dropped on the next sweep anyway.
+        const toEnemy = frame.targetPos.distance(obj.pos.current);
+        if (toEnemy > RPE_STEAL_ENEMY_RANGE) continue;
+        const verdict = this.forecast.assess(obj, frame.tick, dealt.potential, dealt.ready);
+        if (verdict.ticks > RPE_STEAL_MAX_LEAD) continue;
+        if (verdict.confidence < RPE_STEAL_BOOK_CONFIDENCE) continue;
+        out.push({
+          object: obj,
+          ticks: verdict.ticks,
+          confidence: verdict.confidence,
+          // Soonest first, and among equals the one we believe in most. Ties
+          // broken by id so two identical opportunities resolve the same way
+          // on every tick.
+          urgency: verdict.ticks - verdict.confidence + toEnemy * .002
+        });
+      }
+      out.sort((a, b) => a.urgency - b.urgency || a.object.id - b.object.id);
+      // A wall is five or six builds, and the chain only continues if more
+      // than the single most urgent one is ever offered.
+      return out.slice(0, RPE_STEAL_MAX_CANDIDATES);
+    }
+
+    // How many enemy builds stand around a point. Read off the frame's own
+    // sweep, so it costs a loop over a list that is already in hand rather
+    // than a grid query of its own.
+    _clusterAt(frame, x, y, exclude) {
+      let n = 0;
+      for (const obj of frame.enemyObjects) {
+        if (obj === exclude) continue;
+        if (Math.hypot(obj.pos.current.x - x, obj.pos.current.y - y) < 160) n++;
+      }
+      return n;
+    }
+
+    // The steal context a candidate carries into the scorer. Coverage is the
+    // measure that keeps "take the slot" apart from "build somewhere near the
+    // slot": it is how much of the vacated footprint this build actually lands
+    // on, and it is zero the moment the two do not touch.
+    _stealContext(frame, cand, x, y, radius, confidence, objectId, cluster) {
+      const reach = cand.profile.footR + radius;
+      const d = Math.hypot(cand.x - x, cand.y - y);
+      if (d >= reach) return null;
+      return {
+        objectId: objectId,
+        x: x,
+        y: y,
+        radius: radius,
+        confidence: confidence,
+        coverage: 1 - d / reach,
+        enemyDistance: Math.hypot(frame.targetPos.x - x, frame.targetPos.y - y),
+        cluster: cluster
+      };
     }
 
     // ── GENERATE ────────────────────────────────────────────────────────────
@@ -12169,6 +12598,81 @@ window.grbtp = 35;
           excludes: obj
         }));
       }
+      this._generateSteal(pool, profile, frame, open);
+    }
+
+    // ── Building steal ────────────────────────────────────────────────────
+    // An enemy build about to fall is a slot about to open under someone who
+    // wants it back. The loop above already handles a slot opening; what it
+    // will not do is hold ground it can already reach, because for our own
+    // builds that would be paying twice for the same geometry. For an enemy
+    // build the ground *is* the point: whoever occupies it first owns it, and
+    // waiting for the deletion packet before deciding where to build hands
+    // them the rebuild.
+    //
+    // So the decision is taken now and the send is not. What gets written down
+    // is the whole placement — position, item, angle, the ground held against
+    // everything else in the engine — and the deletion packet is the only thing
+    // still missing. That is the entire feature: `onVacated` promotes the
+    // record and the executor sends it, so the work between "the wall fell" and
+    // "the build is on the wire" is a validation, not a decision.
+    //
+    // Which mechanism ends up carrying it is not a mode this chooses, it is
+    // whichever occupies the ground earliest:
+    //
+    //   PREPLACE  booked here while the build still stands; fires the instant
+    //             its deletion is handled, using the prepared answer.
+    //   REPLACE   the same tick, for freed enemy ground nothing had booked —
+    //             `_generateReplace` scores it with the same steal terms.
+    //   AUTO      the existing placer, once the ground is simply open and
+    //             ordinary placement rules already cover it. Untouched.
+    //
+    // Nothing here is a separate engine: the candidates below are the engine's
+    // own candidates with a steal context attached, and they compete for the
+    // tick's packets against everything else through the same scorer, the same
+    // ledger, the same beam search and the same executor.
+    _generateSteal(pool, profile, frame, open) {
+      for (const entry of this.stealTargets(frame)) {
+        const obj = entry.object;
+        const objPos = obj.pos.current;
+        // The ring is the only place a build can land, so the perfect takeover
+        // is the ring angle whose footprint sits deepest inside the dying
+        // build's own. That is the radial direction, kept when it is legal and
+        // snapped to the nearest legal ground when it is not. There is no
+        // "nearest object" fallback: a candidate that does not actually reach
+        // the slot fails the coverage test below and is never created.
+        const freed = this._generator.apertures(profile, frame.myPos.x, frame.myPos.y, this._blockers, obj);
+        if (!freed.length) continue;
+        const want = Math.atan2(objPos.y - frame.myPos.y, objPos.x - frame.myPos.x);
+        const angle = GeometrySolver.nearestFree(freed, want);
+        if (angle === null) continue;
+        const x = frame.myPos.x + profile.ringR * Math.cos(angle);
+        const y = frame.myPos.y + profile.ringR * Math.sin(angle);
+        // Ground already spoken for, by the book or by anything on the wire,
+        // is not offered twice. This is what keeps a steal from colliding with
+        // the vacating candidate above, with the other build type, or with a
+        // steal booked on the previous tick.
+        if (this.book.has(x, y, profile.footR)) continue;
+        const steal = this._stealContext(frame, {
+          profile: profile,
+          x: x,
+          y: y
+        }, objPos.x, objPos.y, obj.scale, entry.confidence, obj.id, this._clusterAt(frame, objPos.x, objPos.y, obj));
+        if (!steal) continue;
+        const cand = this._candidate(profile, angle, freed, RPE_MODE.PREPLACE, {
+          source: "steal",
+          kind: "steal",
+          confidence: entry.confidence,
+          interceptTick: entry.ticks,
+          // The deadline is what the forecast is for; the scheduler still will
+          // not send until the ground is actually free.
+          dueTick: frame.tick + Math.max(1, entry.ticks),
+          vacates: obj.id,
+          excludes: obj
+        });
+        cand.steal = steal;
+        pool.push(cand);
+      }
     }
     _generateReplace(pool, profile, frame, trigger) {
       const object = trigger.vacated;
@@ -12183,13 +12687,27 @@ window.grbtp = 35;
         angle: snapped,
         source: "freed"
       });
+      // Ground that just came free under an enemy build is a steal that has
+      // already resolved: there is nothing left to predict, so the confidence
+      // is 1 and the only question the scorer still has to answer is how much
+      // of the freed footprint each candidate actually covers. This is the
+      // third of the three mechanisms, and it needs no decision of its own —
+      // it is simply what runs on the deletion packet for ground nothing had
+      // booked, or alongside the booked record when something had.
+      const stolen = !!trigger.replace.enemyOwned;
+      const cluster = stolen ? this._clusterAt(frame, trigger.replace.x, trigger.replace.y, object) : 0;
       for (const proposal of proposals) {
-        pool.push(this._candidate(profile, proposal.angle, apertures, RPE_MODE.REPLACE, {
+        const cand = this._candidate(profile, proposal.angle, apertures, RPE_MODE.REPLACE, {
           source: proposal.source,
           dueTick: frame.tick,
           vacates: object.id,
           excludes: object
-        }));
+        });
+        if (stolen) {
+          const steal = this._stealContext(frame, cand, trigger.replace.x, trigger.replace.y, trigger.replace.radius, 1, object.id, cluster);
+          if (steal) cand.steal = steal;
+        }
+        pool.push(cand);
       }
     }
 
@@ -12233,6 +12751,7 @@ window.grbtp = 35;
       for (const rec of this.book.pending()) {
         const profile = this.profileFor(rec.type);
         if (!profile) continue;
+        const excludes = rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null;
         const cand = {
           profile: profile,
           angle: Math.atan2(rec.y - frame.myPos.y, rec.x - frame.myPos.x),
@@ -12245,7 +12764,13 @@ window.grbtp = 35;
           dueTick: rec.deadlineTick,
           kind: rec.kind,
           vacates: rec.vacates,
-          excludes: rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null,
+          excludes: excludes,
+          // The ground is open when the object has left the world, or right
+          // now while its deletion is being handled — onVacated runs before the
+          // object is dropped from the map, so identity is the only way to tell
+          // that moment from any other tick the object is still standing.
+          vacated: rec.vacates !== null && (excludes === null || rec.vacates === this._vacatingId),
+          steal: rec.steal || null,
           x: rec.x,
           y: rec.y,
           value: rec.value,
@@ -12312,7 +12837,10 @@ window.grbtp = 35;
           ringR: cand.profile.ringR,
           targetId: frame.targetId,
           heading: frame.motion ? frame.motion.heading : null,
-          headingTolerance: cand.kind === "vacating" ? Math.PI : .7,
+          // A slot in a wall does not move when the target turns, so a record
+          // waiting on one is not invalidated by a course change the way an
+          // interception is.
+          headingTolerance: cand.kind === "vacating" || cand.kind === "steal" ? Math.PI : .7,
           createdTick: frame.tick,
           expiresTick: frame.tick + cand.interceptTick + 2,
           hardExpiry: frame.tick + RPE_PREPLACE_MAX_AGE,
@@ -12323,6 +12851,11 @@ window.grbtp = 35;
           expected: cand.expected,
           kind: cand.kind,
           vacates: cand.vacates,
+          // The whole reservation, and deliberately small: an id, a position, a
+          // radius, a confidence and a count. The object handle is not kept —
+          // it is looked up by id when the record is promoted, so a record can
+          // never hold a destroyed object alive.
+          steal: cand.steal || null,
           terms: cand.terms,
           token: token
         });
@@ -12479,6 +13012,7 @@ window.grbtp = 35;
       const profile = this.profileFor(rec.type);
       if (!profile) return null;
       const myPos = this.client.myPlayer.pos.current;
+      const excludes = rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null;
       const cand = {
         profile: profile,
         angle: Math.atan2(rec.y - myPos.y, rec.x - myPos.x),
@@ -12486,7 +13020,9 @@ window.grbtp = 35;
         kind: rec.kind, priority: RPE_PRIORITY.ANTICIPATION,
         confidence: rec.confidence, interceptTick: rec.interceptTick,
         dueTick: rec.deadlineTick, vacates: rec.vacates,
-        excludes: rec.vacates !== null ? this.client.ObjectManager.objects.get(rec.vacates) || null : null,
+        excludes: excludes,
+        vacated: rec.vacates !== null && (excludes === null || rec.vacates === this._vacatingId),
+        steal: rec.steal || null,
         x: rec.x, y: rec.y, value: rec.value, expected: rec.expected,
         terms: rec.terms || {}, reach: rec.value,
         bookRecord: rec, bookToken: rec.token,
@@ -12587,6 +13123,7 @@ window.grbtp = 35;
         }
         if (cand.mode === RPE_MODE.PREPLACE) this.stats.preplaced += 1;
         else if (cand.mode === RPE_MODE.REPLACE) this.stats.replaced += 1;
+        if (cand.steal) this.stats.stolen += 1;
       }
       return sent;
     }
@@ -12686,19 +13223,41 @@ window.grbtp = 35;
       // Anything that was waiting for exactly this object is due now. It does
       // not get a private path to the wire — it rejoins the pool and is
       // planned, validated and sent with everything else.
+      //
+      // This is where a prepared steal is cashed in. The record already holds
+      // the position, the item, the angle and the ground; the deletion packet
+      // is the last thing it was missing, so the work between "the wall fell"
+      // and "the build is on the wire" is a promotion and a validation, not a
+      // fresh decision. That is the whole margin the enemy has to rebuild in.
       for (const rec of this.book.pending()) {
-        if (rec.vacates === object.id) rec.deadlineTick = frame.tick;
+        if (rec.vacates !== object.id) continue;
+        rec.deadlineTick = frame.tick;
+        // The forecast has resolved. What it thought the odds were stops
+        // mattering the moment the ground is actually open.
+        rec.confidence = 1;
+        rec.expected = rec.value;
+        if (rec.steal) rec.steal.confidence = 1;
       }
+      // The history for this object describes something that no longer exists,
+      // and the chain continues from what is still standing: the remaining
+      // builds keep their own records, so the next forecast starts from what
+      // has already been observed about them rather than from nothing.
+      this.forecast.forget(object.id);
       const modes = [];
       if (Settings_default._prePlace) modes.push(RPE_MODE.PREPLACE);
       if (Settings_default._replace) modes.push(RPE_MODE.REPLACE);
       if (modes.length === 0) return;
       this.stats.substituted = 0;
-      this.cycle({
-        modes: modes,
-        vacated: object,
-        replace: this._replaceContext(object, frame)
-      });
+      this._vacatingId = object.id;
+      try {
+        this.cycle({
+          modes: modes,
+          vacated: object,
+          replace: this._replaceContext(object, frame)
+        });
+      } finally {
+        this._vacatingId = null;
+      }
     }
 
     // What the dead object was doing decides what its ground is worth. A trap
@@ -12717,6 +13276,11 @@ window.grbtp = 35;
         touchedTarget: toTarget < object.scale + frame.targetScale + 8,
         wasTrap: !!(item && item.trap),
         wasDamage: !!(item && item.dmg),
+        // Whose build died decides whether this is a recovery or a takeover.
+        // Getting our own ground back and taking theirs free the same geometry
+        // and are worth different things, which is a question for the scoring
+        // context rather than for a branch that picks an angle.
+        enemyOwned: object instanceof PlayerObject && this.client.PlayerManager.isEnemyByID(object.ownerID, this.client.myPlayer),
         distToTarget: toTarget
       };
     }
