@@ -6,7 +6,7 @@
  *
  * The host is not a paraphrase of MusicPlayer: _parseLRC, _reflowLRC,
  * _wrapText, _splitLine, _tickSync and seekTo are extracted verbatim from
- * src/Ryn_Type_2.user.js and run as-is, so the sync assertions below are
+ * src/Ryn_Type_2_base.user.js and run as-is, so the sync assertions below are
  * against the real chat loop rather than a stand-in for it. Only play() is
  * modelled, because the original is mostly HTMLAudioElement I/O; the parts
  * of it the module depends on (session bump, lyric reset, currentIndex) are
@@ -20,7 +20,7 @@ const path = require("path");
 const vm = require("vm");
 
 const ROOT = path.resolve(__dirname, "..");
-const BASE = fs.readFileSync(path.join(ROOT, "src/Ryn_Type_2.user.js"), "utf8");
+const BASE = fs.readFileSync(path.join(ROOT, "src/Ryn_Type_2_base.user.js"), "utf8");
 const MODULE = fs.readFileSync(path.join(ROOT, "src/lrc/lrc-ai.js"), "utf8");
 
 let passed = 0;

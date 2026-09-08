@@ -124,11 +124,11 @@ Both builds, and everything they are built from:
 
 ```
 ReUp_Mix.user.js          ReUp Mix build output
-Ryn_Type_2_LRC.user.js    Ryn Type 2 + LRC AI build output
+Ryn_Type_2.user.js        Ryn Type 2 + LRC AI — the script to install
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
-src/Ryn_Type_2.user.js    Ryn Type 2, unmodified (input)
+src/Ryn_Type_2_base.user.js  Ryn Type 2, unmodified (input)
 src/lrc/lrc-ai.js         the LRC AI module (input)
 src/game_index.js         game bundle: protocol, data tables, engine
 src/game_vendor.js        game bundle: msgpack codec, polyfills
@@ -136,7 +136,7 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
-tools/build-lrc.js        src/Ryn_Type_2.user.js + src/lrc -> Ryn_Type_2_LRC.user.js
+tools/build-lrc.js        src/Ryn_Type_2_base.user.js + src/lrc -> Ryn_Type_2.user.js
 tools/test-lrc.js         headless test suite for the LRC AI module
 ```
 
@@ -194,7 +194,7 @@ understood.
 
 # LRC AI Lyrics (Ryn Type 2)
 
-A second, independent build in this repo: **`Ryn_Type_2_LRC.user.js`** — Ryn
+A second, independent build in this repo: **`Ryn_Type_2.user.js`** — Ryn
 Type 2 with automatic synchronised lyrics for the Music library.
 
 Today the Music page asks the user to do four things by hand: find the song,
@@ -438,9 +438,9 @@ provider text through `innerHTML`.
 ## Build and test
 
 ```sh
-node tools/build-lrc.js     # src/Ryn_Type_2.user.js + src/lrc/lrc-ai.js -> Ryn_Type_2_LRC.user.js
+node tools/build-lrc.js     # src/Ryn_Type_2_base.user.js + src/lrc/lrc-ai.js -> Ryn_Type_2.user.js
 node tools/test-lrc.js      # 188 checks
-node --check Ryn_Type_2_LRC.user.js
+node --check Ryn_Type_2.user.js
 ```
 
 The build verifies all twelve hook sites in the base client before injecting

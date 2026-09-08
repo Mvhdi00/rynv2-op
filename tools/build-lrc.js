@@ -2,8 +2,8 @@
 /*
  * build-lrc.js
  *
- * Builds Ryn_Type_2_LRC.user.js by folding src/lrc/lrc-ai.js into
- * src/Ryn_Type_2.user.js.
+ * Builds Ryn_Type_2.user.js — the installable script — by folding
+ * src/lrc/lrc-ai.js into the untouched base in src/Ryn_Type_2_base.user.js.
  *
  * The module is injected, not merged: it goes in as one contiguous block
  * immediately after the MusicPlayer singleton is defined, inside the same
@@ -21,9 +21,9 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const BASE = path.join(ROOT, "src/Ryn_Type_2.user.js");
+const BASE = path.join(ROOT, "src/Ryn_Type_2_base.user.js");
 const MODULE = path.join(ROOT, "src/lrc/lrc-ai.js");
-const OUT = path.join(ROOT, "Ryn_Type_2_LRC.user.js");
+const OUT = path.join(ROOT, "Ryn_Type_2.user.js");
 
 let code = fs.readFileSync(BASE, "utf8");
 const module_ = fs.readFileSync(MODULE, "utf8");
