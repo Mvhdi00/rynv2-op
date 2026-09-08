@@ -192,8 +192,19 @@ already touching a spike on the extrapolated frame* — `enemySpikeCollider`,
 which `EnemyManager.checkCollision` was already computing every tick, exactly
 the way Glotus computes it — and swings the primary under a bull hat so the hit
 and the spike land together, then spends the turret reload on hat 53 the tick
-after. The toggle is the existing "Spike Tick" switch; it stays off by default,
-as it already was, and the sub-rows under it are still Ryn's own variants.
+after. The toggle is the existing "Spike Tick" switch, and the sub-rows under
+it are still Ryn's own variants.
+
+That switch now defaults to **on**, which is what Glotus ships (`_spikeTick:
+true`) and what keeps the gating verbatim. It is the master for the whole spike
+tick family, so it starts four modules, not one: Glotus' tick plus Ryn's Break,
+Near and Trap, all three of which already defaulted to `true` individually and
+were only held back by the master being off.
+
+Saved settings win over defaults — `settings` is `{...defaultSettings,
+...CustomStorage.get("RYN")}` — so this reaches a fresh install only. An
+existing one keeps whatever it stored, and gets there through the menu switch
+or Misc → Reset settings.
 
 **Anti retrap** (`_antiRetrap`, Combat → Anti Systems) was already in the file
 and already byte-identical to Glotus, and could still never fire. It sat at the

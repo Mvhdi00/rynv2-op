@@ -19729,7 +19729,7 @@ window.grbtp = 35;
     _kbSpike: true,
     _spikeSyncHammer: true,
     _spikeSync: true,
-    _spikeTick: false,
+    _spikeTick: true,
     _spikeTickBreak: true,
     _spikeTickNear: true,
     _spikeTickTrap: true,
