@@ -228,26 +228,39 @@ just forced. It sets `useAcc` and never `moduleActive`, so it takes no tick from
 anything — and it is why the bull and turret hats this port forces get the right
 accessory. `verify-glotus-port.js` records it as a known exception.
 
-### Auto grind stops where you tell it
+### Auto grind stops where you tell it, per weapon
 
 Auto grind used to run to Ruby and nothing else — the variant it compared
-against was the literal `3` in two places. **Grind Until** (Combat → Utility,
-under the Auto grind switch) picks the tier it stops at instead: Gold, Diamond
-or Ruby.
+against was the literal `3` in two places. **Grind Until (primary)** and
+**Grind Until (secondary)** (Combat → Utility, under the Auto grind switch)
+set the tier each slot stops at: Gold, Diamond or Ruby, chosen independently,
+so the primary can go to Ruby while the hammer stops at Gold.
 
 `WeaponVariants` is `[normal, gold, diamond, ruby]`, so a tier is an index into
-it and "done" means the weapon is at or past that index. Both weapons have to
-reach it — auto grind still turns its own switch off once they do, which is
-what it always did at Ruby. Overshooting counts as done, so a weapon already at
-Diamond satisfies a Gold target rather than restarting anything.
+it and "done" means the weapon is at or past that index. Overshooting counts as
+done — a weapon already at Diamond satisfies a Gold target rather than
+restarting anything. Ruby stays the default for both, so an install that never
+touches the settings grinds exactly as it did before.
 
-Ruby stays the default, so an install that never touches the setting grinds
-exactly as it did before. A stored value that is not one of the three falls
-back to Ruby on load, next to the same check `_breakPosition` gets.
+A stored value that is not one of the three falls back to Ruby on load, per
+slot, next to the same check `_breakPosition` gets. The earlier single
+`_autoGrindTarget` seeds both slots on first load after the split, so a saved
+choice survives instead of quietly reverting.
 
-Raising the target after grinding has stopped means switching Auto grind back
-on: the module disabled it when it thought it was finished, and it has no
-reason to re-arm itself.
+**It no longer locks itself out.** Reaching the target used to switch
+`_autoGrind` off and untick the box, and the hotkey then refused to switch it
+back on while `isFullyUpgraded()` was true — so the moment you raised a target
+to grind further, both the box and the key were dead, with nothing to say why.
+Now reaching the target just idles the module: the switch stays where you put
+it, the key always toggles, and raising a target or picking up a weapon that
+still needs grading resumes grinding on the next tick with no re-tick needed.
+
+Being idle is cheap because `isFullyUpgraded()` returns before any of the work.
+That check also treats a slot it cannot grind as satisfied rather than blocking
+— the secondary only grinds with the great hammer, and the stick is the one
+primary the module refuses to swing. Carrying neither used to leave it
+permanently "unfinished", which kept it awake placing turrets it had no use
+for.
 
 ### Verification
 
