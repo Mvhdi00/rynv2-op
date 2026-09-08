@@ -13220,6 +13220,13 @@ window.grbtp = 35;
   //   killObject():          objDist < items.weapons[primary].range + 70
   //   hasNearSpikes:         tmp.scale + min(primary.range, 75)
   const SPIKE_TICK_TRAP_GRACE = 3;
+  // How long the trap chain waits for its own hammer to land before giving up.
+  // The break is not ours to time: the swing goes out on one tick and the
+  // object deletion comes back from the server, which at any real ping is not
+  // reliably the very next tick. Three ticks is about a third of a second —
+  // long enough for a round trip, short enough that a swing that missed does
+  // not park the chain on a target it can no longer finish.
+  const SPIKE_TICK_TRAP_BREAK_WAIT = 3;
   const SPIKE_TICK_COUNTER_RANGE = 180;
   const SPIKE_TICK_COUNTER_GRACE = 2;
   const SPIKE_TICK_BREAK_REACH = 70;
@@ -13366,6 +13373,17 @@ window.grbtp = 35;
     ModuleHandler.forceHat = 7;
     ModuleHandler.forceWeapon = 0;
     ModuleHandler.shouldAttack = true;
+  };
+  // The trap chain has already spent its hammer on this target and is waiting
+  // for the break to come back. The spike and the primary swing are what that
+  // hammer was spent for, so nothing else may take the primary against the same
+  // target in the meantime: doing so put the swing out while they were still
+  // pinned — no knockback, both spent for nothing — and then left the primary
+  // cold on the tick the break finally landed. That is the whole of the "the
+  // spike goes down before the trap breaks" behaviour.
+  const spikeTickTrapPending = (client2, enemy) => {
+    const trap = client2._ModuleHandler.staticModules.spikeTickTrap;
+    return !!(trap && trap.target !== null && trap.target === enemy);
   };
   const spikeTickTurret = (client2, enemy) => {
     const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer} = client2;
@@ -13776,6 +13794,9 @@ window.grbtp = 35;
       if (nearest === null || ObjectManager2.deletedObjects.size === 0) {
         return;
       }
+      if (spikeTickTrapPending(this.client, nearest)) {
+        return;
+      }
       const pos1 = myPlayer.pos.current;
       const pos2 = nearest.pos.current;
       // Sakuna requires the break to be inside the primary's own reach as well
@@ -13847,6 +13868,9 @@ window.grbtp = 35;
       if (nearest === null) {
         return;
       }
+      if (spikeTickTrapPending(this.client, nearest)) {
+        return;
+      }
       // Sakuna guards its predictive branch with `!tmpObj.inTrap`, and it has
       // to: a trapped enemy does not move when you hit them, so the knockback
       // this branch is built on never happens. getActualMaxKnockback does not
@@ -13866,6 +13890,8 @@ window.grbtp = 35;
     moduleName="spikeTickTrap";
     client;
     target=null;
+    // The tick the hammer went out on, so the wait for the break is bounded.
+    hammerTick=-1;
     useTurret=false;
     turretTarget=null;
     constructor(client2) {
@@ -13889,6 +13915,29 @@ window.grbtp = 35;
       }
       if (this.target !== null) {
         const enemy = this.target;
+        // The hammer went out last tick; the break is the server's to confirm.
+        // This used to fire on the very next tick whatever had happened, which
+        // at any real ping meant the spike and the swing regularly landed while
+        // they were still pinned — and a pinned player does not move, so the
+        // knockback the whole chain is built on never happened.
+        //
+        // So hold, and fire on the tick the break is actually seen. isTrapped
+        // is rebuilt every tick from live collision, so it goes false in the
+        // same tick the trap leaves the world: this waits for the moment
+        // instead of guessing it, and stays same-tick when it arrives.
+        if (EnemyManager2.nearestEnemy === null) {
+          this.target = null;
+          return;
+        }
+        if (enemy.isTrapped) {
+          // Still pinned. Give the round trip a bounded number of ticks, then
+          // stand down rather than holding the primary against a break that is
+          // not coming.
+          if (ModuleHandler.tickCount - this.hammerTick > SPIKE_TICK_TRAP_BREAK_WAIT) {
+            this.target = null;
+          }
+          return;
+        }
         this.target = null;
         if (!ModuleHandler.moduleActive) {
           spikeTickHit(this.client, enemy);
@@ -13934,6 +13983,7 @@ window.grbtp = 35;
       ModuleHandler.forceWeapon = 1;
       ModuleHandler.shouldAttack = true;
       this.target = trapped;
+      this.hammerTick = ModuleHandler.tickCount;
     }
   }
   class SpikeSync {
@@ -17574,7 +17624,7 @@ window.grbtp = 35;
       // where the bot walks; botAutoBreak runs after, and only fires when the
       // movement it just asked for did not happen.
       this.botModules = [ this.staticModules.tempData, this.staticModules.clanJoiner, this.staticModules.botRangedAttack, this.staticModules.movement, this.staticModules.botAutoBreak ];
-      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeTickTrap, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.spikeTickController, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
+      this.modules = [ this.staticModules.autoAccept, this.staticModules.autoBuy, this.staticModules.defaultHat, this.staticModules.reloading, this.staticModules.autoSync, this.staticModules.spikeSyncHammer, this.staticModules.adaptiveGearSwitching, this.staticModules.spikeTickTrap, this.staticModules.spikeTickBreak, this.staticModules.spikeTickNear, this.staticModules.spikeSync, this.staticModules.velocityTick, this.staticModules.spikeTrap, this.staticModules.teammateSpikeTrap, this.staticModules.turretSync, this.staticModules.toolHammerSpearInsta, this.staticModules.swordKatanaInsta, this.staticModules.bowInsta, this.staticModules.musketBowInsta, this.staticModules.instakill, this.staticModules.smartInsta, this.staticModules.reverseInstakill, this.staticModules.antiSpikePush, this.staticModules.autoBreak, this.staticModules.autoSteal, this.staticModules.turretSteal, this.staticModules.spikeGearInsta, this.staticModules.useFastest, this.staticModules.useDestroying, this.staticModules.useAttacking, this.staticModules.platformMusket, this.staticModules.utilityHat, this.staticModules.antiInsta, this.staticModules.shameReset, this.staticModules.trapKB, this.staticModules.autoShield, this.staticModules.placementDefense, this.staticModules.trapAnimal, this.staticModules.antiRetrap, this.staticModules.autoPush, this.staticModules.autoPlay, this.staticModules.autoPlacer, this.staticModules.placementEngine, this.staticModules.spikeTickController, this.staticModules.trapTick, this.staticModules.dashMovement, this.staticModules.placer, this.staticModules.autoMill, this.staticModules.autoGrind, this.staticModules.preAttack, this.staticModules.defaultAcc, this.staticModules.autoHat, this.staticModules.updateAttack, this.staticModules.updateAngle, this.staticModules.killChat, this.staticModules.deathProvoke, this.staticModules.safeWalk, this.staticModules.guardModule, this.staticModules.rynLink ];
       this.reset();
     }
     movementReset() {
