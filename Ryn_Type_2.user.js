@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name           ! Ryn Type 2
 // @author          By : Raptor
-// @description     ! have fun — Type 2 teaches auto place, preplace and replace the primary-knockback spike chain from Novastorm, plus LRC AI: automatic synced lyrics, translated to English and cached per song
+// @description     ! have fun — Type 2 teaches auto place, preplace, replace and spike tick the primary-knockback spike chain, plus LRC AI: automatic synced lyrics, translated to English and cached per song
 // @match        *://*.moomoo.io/*
 // @icon            https://i.postimg.cc/d0mMvHYF/ryn5.webp
 // @version         2.1
@@ -2926,7 +2926,7 @@ window.grbtp = 35;
               }
             }
           }
-          // KB spike: they swing, we fly, we land on a spike. Novastorm sweeps
+          // KB spike: they swing, we fly, we land on a spike. The reference client sweeps
           // the knockback segment through the spike's box rather than testing
           // an angular cone, and it runs that sweep from two origins — where we
           // are now and where we are extrapolated to next tick.
@@ -2941,7 +2941,7 @@ window.grbtp = 35;
           // of them once the enemy is not lined up directly behind it.
           //
           // pos.future is RYN's own extrapolation and is the same quantity
-          // Novastorm calls xVel/yVel: current + (current - previous). Each
+          // The reference client calls xVel/yVel: current + (current - previous). Each
           // sweep pairs our origin with the enemy's from the same frame, so
           // the knockback direction is read consistently.
           //
@@ -3249,7 +3249,7 @@ window.grbtp = 35;
   const HatPredictor_default = HatPredictor;
   const scale_value = window.grbtp;
   delete window.grbtp;
-  // Novastorm's velocity tick anti reads the gap between the two extrapolated
+  // The reference client's velocity tick anti reads the gap between the two extrapolated
   // positions and only fires inside this band: past it the enemy is too far to
   // arrive, inside it they are already close enough that the ordinary primary
   // range check has them.
@@ -3503,7 +3503,7 @@ window.grbtp = 35;
       } else if (this.receivedDamage !== null) {
         const step = Date.now() - this.receivedDamage;
         this.receivedDamage = null;
-        // novastorm's shame model, exactly:
+        // The reference client's shame model, exactly:
         //
         //     if (o <= 120) tmpObj.shameCount = tmpObj.shameCount + 1;
         //     else tmpObj.shameCount = Math.max(0, tmpObj.shameCount - 2);
@@ -3940,7 +3940,7 @@ window.grbtp = 35;
         this.potentialDamage += 25;
       }
 
-      // Velocity tick anti, from Novastorm. A turret-gear enemy who has just
+      // Velocity tick anti, from the reference client. A turret-gear enemy who has just
       // fired — turret still cycling — with a primary ready, closing on us but
       // not yet in melee range. The swing lands as they arrive, and the branch
       // above cannot see it: `collidingPrimary` only reaches weapon range + 130,
@@ -3949,14 +3949,14 @@ window.grbtp = 35;
       //     if (getDistance(enemy.xVel, enemy.yVel, myPlayer.xVel, myPlayer.yVel) > 150 && < 350)
       //         if (turretReload[sid] < 1 && primaryReload[sid] == 1 && skinIndex == 53)
       //
-      // Novastorm's xVel/yVel is the extrapolated position, so this is a gap
+      // The reference client's xVel/yVel is the extrapolated position, so this is a gap
       // between the two `pos.future`s, and its `turretReload < 1` is a turret
       // mid-cycle, which is `!isReloaded(2, 1)` here.
       //
-      // Novastorm also adds a flat +25 turret on this branch. RYN does not: the
+      // The reference client also adds a flat +25 turret on this branch. RYN does not: the
       // shot that turret already fired is a live projectile, and
       // ProjectileManager has been counting it into potentialDamage since it
-      // spawned. Novastorm has no such tracking, so the +25 is how it pays for
+      // spawned. The reference client has no such tracking, so the +25 is how it pays for
       // that shot at all — adding it here would pay for it twice and heal into
       // a threat already accounted for.
       if (!collidingPrimary && primaryReloaded && !lookingShield && this.hatID === 53 && !this.isReloaded(2, 1)) {
@@ -5960,17 +5960,17 @@ window.grbtp = 35;
         this.packetCount = 0;
       }, 1e3);
     }
-    // Novastorm budgets against 119 packets a second, which is the real server
+    // The reference client budgets against 119 packets a second, which is the real server
     // allowance — but it is a fork of the whole bundle, so its counter sees
     // every frame that leaves. RYN only counts what its own modules send, and
     // the game's bundle still sends frames of its own through the same socket.
-    // Raising the limit to novastorm's number without closing that gap would be
+    // Raising the limit to the reference client's number without closing that gap would be
     // budgeting against a number that is too low.
     //
     // So the count is taken at the transport instead: socket.send is wrapped
     // once, and frames this class sent itself are skipped there because they
     // were already counted here. Every frame is counted exactly once, whoever
-    // sent it, and the 119 budget then means what it means in novastorm.
+    // sent it, and the 119 budget then means what it means in the reference client.
     _watchSocket(socket) {
       if (!socket || typeof socket.send !== "function" || socket._rynCounted) return;
       const original = socket.send;
@@ -9306,55 +9306,11 @@ window.grbtp = 35;
     }
   }
   const AutoPlay_default = AutoPlay;
-  // ==========================================================================
-  // SPIKE TICK
-  //
-  // The placement engine's fourth mode, driven from here because it is the one
-  // mode whose build is worthless without the swings and the hat changes around
-  // it. The decision — whether, where, and how good — belongs to the engine and
-  // is taken by SpikeTickSolver; what belongs here is the order the steps go out
-  // in, and the discipline of giving the window back the moment it stops being
-  // worth holding.
-  //
-  // Novastorm runs the identical sequence as an instaKill queue —
-  // ["secondary", "primary", "turret", "stop"] — one entry consumed per tick.
-  // This client already speaks that shape: SpikeSync, SpikeSyncHammer,
-  // VelocityTick and ToolHammerSpearInsta all claim the tick, set forceHat /
-  // forceWeapon / useAngle / shouldAttack, and hand the turret its own tick
-  // afterwards. So the sequence below is written in that idiom rather than in a
-  // new one, and it reaches the wire through Autohat and UpdateAttack exactly as
-  // the other four do — no timer, no setTimeout, no send path of its own.
-  //
-  //   tick 1  BREAK   tank gear + hammer, swung at the trap and the target
-  //                   together. The trap dies, and they are free to be moved.
-  //   tick 2  STRIKE  spike + bull helmet + primary swing, in one tick. This is
-  //                   the tick the whole sequence exists for: the build lands on
-  //                   ground the swing before it opened, the hat is on before
-  //                   the weapon select, and the swing that throws them onto the
-  //                   spike goes out behind both.
-  //   tick 3  TURRET  turret gear. Equipping it is the shot, and it lands on the
-  //                   tick the throw does.
-  //
-  // Novastorm gets its build onto the first tick instead, by sending it from a
-  // `setTimeout(..., 111 - ping)` at the tail of that tick so it arrives after
-  // the swing has taken the trap down. Same packet order, bought with a timer.
-  // This client has no timer in its send path and is not getting one.
-  //
-  // The window is claimed with ModuleHandler.moduleActive, which every module
-  // after this one reads, and with the engine's own spike tick lock, which
-  // preplace, replace and the Luna auto placer read. Any tick on which the
-  // sequence cannot be justified releases both and returns without claiming
-  // anything, so the normal engine runs behind it in that same tick.
-  // ==========================================================================
   const ST_PHASE_IDLE = 0;
   const ST_PHASE_STRIKE = 1;
   const ST_PHASE_TURRET = 2;
 
-  // How long the action window may stay open before it is taken back.
   const ST_LOCK_TICKS = 4;
-  // A short tail after a completed sequence. The trap we broke is deleted by
-  // the server a round trip later, and that deletion must not read as ground to
-  // replace — we broke it on purpose.
   const ST_SETTLE_TICKS = 2;
 
   class SpikeTick {
@@ -9375,8 +9331,6 @@ window.grbtp = 35;
       const ModuleHandler = this.client._ModuleHandler;
       return ModuleHandler && ModuleHandler.staticModules ? ModuleHandler.staticModules.placementEngine : null;
     }
-    // hard gives the window back in the tick it is called; anything else leaves
-    // the short tail that swallows the deletion of the trap we broke.
     _close(hard) {
       this.phase = ST_PHASE_IDLE;
       this.targetId = null;
@@ -9390,8 +9344,6 @@ window.grbtp = 35;
         } catch (_) {}
       }
     }
-    // The target has to still be the target, still be alive, and still be the
-    // one the sequence opened on. Anything else and the window is handed back.
     _liveTarget() {
       const target = this.client.EnemyManager.nearestEnemy;
       if (target === null || target.id !== this.targetId) return null;
@@ -9404,13 +9356,8 @@ window.grbtp = 35;
         if (this.phase !== ST_PHASE_IDLE) this._close(true);
         return;
       }
-      // A sequence in flight is re-judged from scratch every tick rather than
-      // played out on faith.
       if (this.phase !== ST_PHASE_IDLE) {
         const target = this._liveTarget();
-        // Something above us in the ladder took the tick — an insta, a sync, a
-        // defence. It outranks a tick in progress, and standing down costs
-        // nothing that is not already on the ground.
         if (target === null || ModuleHandler.moduleActive || ModuleHandler.tickCount - this.startedTick > ST_LOCK_TICKS) {
           this._close(true);
           return;
@@ -9419,8 +9366,7 @@ window.grbtp = 35;
         else this._turret();
         return;
       }
-      if (ModuleHandler.moduleActive) return;
-      // Being about to die is not the moment to start one.
+      if (ModuleHandler.moduleActive || ModuleHandler.placedOnce) return;
       if (EnemyManager2.shouldIgnoreModule()) return;
       const engine = this._engine();
       if (engine === null) return;
@@ -9428,18 +9374,11 @@ window.grbtp = 35;
       if (solution === null) return;
       this._open(engine, solution);
     }
-    // Tick 1. Tank gear and the hammer, aimed between the trap and the target so
-    // the one swing takes both. Nothing is built here: the ground the solver
-    // picked is under the trap, which is the whole reason there is a next tick.
     _open(engine, solution) {
       const ModuleHandler = this.client._ModuleHandler;
       engine.lockSpikeTick();
       ModuleHandler.moduleActive = true;
       ModuleHandler.useAngle = solution.breakAngle;
-      // Set before the build, not after: place() closes with
-      // whichWeapon(_getPredictWeapon()), which reads forceWeapon first, so
-      // naming the weapon here means the restore already selects the hammer and
-      // UpdateAttack has no second select to send.
       ModuleHandler.forceWeapon = 1;
       if (ModuleHandler.canBuy(0, 40)) ModuleHandler.forceHat = 40;
       this.placed = false;
@@ -9449,14 +9388,6 @@ window.grbtp = 35;
       this.startedTick = ModuleHandler.tickCount;
       this.phase = ST_PHASE_STRIKE;
     }
-    // Tick 2. Spike, bull helmet and the primary swing, all inside this tick.
-    // The build is re-decided rather than replayed: the trap is off them now and
-    // they have had a tick to move, so the angle that was best a tick ago is not
-    // necessarily the angle that catches them.
-    //
-    // A build that cannot be made is not a reason to skip the hit. The swing is
-    // free — the target is in range and the primary is loaded — and a spike we
-    // already own may well be what catches them anyway.
     _strike(target) {
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
       const engine = this._engine();
@@ -9464,8 +9395,6 @@ window.grbtp = 35;
       const pos2 = target.pos.future ?? target.pos.current;
       ModuleHandler.moduleActive = true;
       ModuleHandler.useAngle = pos1.angle(pos2);
-      // Named before the build for the same reason as the break tick: the
-      // weapon restore that closes place() then already selects the primary.
       ModuleHandler.forceWeapon = 0;
       if (ModuleHandler.canBuy(0, 7)) ModuleHandler.forceHat = 7;
       if (!this.placed && engine !== null && this.trap !== null) {
@@ -9474,14 +9403,9 @@ window.grbtp = 35;
           this.placed = engine.commitSpikeTick(solution) > 0;
         }
       }
-      // PreAttack drops this again if the primary is not actually ready, which
-      // is the client's own gate and the right one: the hat still goes on.
       ModuleHandler.shouldAttack = true;
       this.phase = ST_PHASE_TURRET;
     }
-    // Tick 3. Novastorm's "turret" step, and this client's: turret gear is the
-    // shot. No turret is built and no second turret system exists — equipping
-    // the hat is what fires, and Reloading already tracks its cycle as type 2.
     _turret() {
       const ModuleHandler = this.client._ModuleHandler;
       const {reloading: reloading} = ModuleHandler.staticModules;
@@ -9523,12 +9447,9 @@ window.grbtp = 35;
   // are left as explicit `false` so the ladder still reads 1:1 against Luna.
   //
   // `canTrapTick` is Luna's spike tick, and this client does now have one — but
-  // it is not this ladder's. Spike Tick is a mode of the placement engine, runs
-  // as its own module immediately before this one, and holds the engine's spike
-  // tick lock for the whole sequence; `lunaTickOwnerBusy` below reads that lock
-  // and this module stands down for the duration. Wiring the branch back in
-  // here would put a second placer on the same ground and the same packets, so
-  // it stays false.
+  // it is not this ladder's. Spike Tick is a mode of the placement engine and
+  // runs as its own module immediately before this one; `lunaTickOwnerBusy`
+  // below reads its lock and this module stands down for the duration.
   // ==========================================================================
   const LUNA_SPIKE_TYPE = 4;
   const LUNA_TRAP_TYPE = 7;
@@ -9557,10 +9478,6 @@ window.grbtp = 35;
   const LUNA_TICK_OWNER_MODULES = new Set([ "spikeSync", "spikeSyncHammer", "spikeTrap", "teammateSpikeTrap", "spikeTick" ]);
   function lunaTickOwnerBusy(ModuleHandler) {
     if (LUNA_TICK_OWNER_MODULES.has(ModuleHandler.activeModule)) return true;
-    // A spike tick spans three ticks, and only the first of them puts its name
-    // in activeModule. The engine's lock is what covers the other two, so auto
-    // place stays off the ground and the packets for the whole sequence rather
-    // than only while the first tick is being built.
     const engine = ModuleHandler.staticModules && ModuleHandler.staticModules.placementEngine;
     return !!(engine && engine.spikeTickLocked());
   }
@@ -9851,7 +9768,7 @@ window.grbtp = 35;
       return angles.filter(a => this._lineInRect(a.x - pad(a), a.y - pad(a), a.x + pad(a), a.y + pad(a), enemyPos.x, enemyPos.y, enemyFut.x, enemyFut.y)).sort((a, b) => Math.hypot(enemyFut.x - a.x, enemyFut.y - a.y) - Math.hypot(enemyFut.x - b.x, enemyFut.y - b.y))[0] ?? null;
     }
 
-    // Novastorm's *other* knockback model, the one `_closestSpikeToKb` above
+    // The reference client's *other* knockback model, the one `_closestSpikeToKb` above
     // is not: the spike worth building because the primary swing that is
     // already coming will throw them onto it, or onto one we own.
     //
@@ -10294,7 +10211,7 @@ window.grbtp = 35;
   };
 
   // ── Spike opportunity evaluator ───────────────────────────────────────────
-  // Novastorm reasons about knockback in two separate places, and only one of
+  // The reference client reasons about knockback in two separate places, and only one of
   // them had been carried across into this client.
   //
   //   1. `closestSpikeToKb` — the *candidate spike's own* push. Already here
@@ -10307,7 +10224,7 @@ window.grbtp = 35;
   //
   //          pos = enemy + 111 * (0.3 + weapon.knock) * dir(player -> enemy)
   //
-  //      Novastorm uses that to decide when a tick is live, and to predict
+  //      The reference client uses that to decide when a tick is live, and to predict
   //      being shoved onto a spike itself. Nothing used it to decide where to
   //      build.
   //
@@ -10340,7 +10257,7 @@ window.grbtp = 35;
   // ==========================================================================
 
   // How far off the push axis a spike may sit and still count as something the
-  // enemy is being driven into. Novastorm's own alignment filter has no
+  // enemy is being driven into. The reference client's own alignment filter has no
   // ceiling — it keeps the best of whatever already intersects the segment,
   // which is right when the only job is ranking spikes. Here the result has to
   // be able to lose to a trap, so a glancing chain has to be able to score low.
@@ -10397,7 +10314,7 @@ window.grbtp = 35;
       const myPlayer = client.myPlayer;
       if (!myPlayer || !enemy || !enemyRef || !spikes) return null;
 
-      // Novastorm gates the whole idea on the swing being able to land.
+      // The reference client gates the whole idea on the swing being able to land.
       // getPrimaryKnockback is RYN's own version of that gate — it returns the
       // weapon's travel only while the primary is inside a tick of being ready
       // and the enemy is inside its range, and 0 otherwise. A swing that
@@ -10411,7 +10328,7 @@ window.grbtp = 35;
       const landY = enemyRef.y + travel * Math.sin(push);
 
       // Which of our spikes the push already ends on. Alignment is measured
-      // the way Novastorm measures it — the angle between the push and
+      // the way the reference client measures it — the angle between the push and
       // enemy -> spike — but against the primary axis rather than the
       // candidate spike's axis.
       let best = null;
@@ -10767,17 +10684,19 @@ window.grbtp = 35;
     // the build either exists or is on its way.
     //
     // A soft claim is an intention. It holds against equal or lower priority
-    // so nothing wanders onto the slot, and normally yields to anything above
-    // it, because a decision taken from something that actually happened
-    // outranks a prediction about what might. Normally, but not blindly: a
-    // soft claim that is worth clearly more than the claim trying to take it
-    // keeps its ground. Priority decides who wins a close call; it does not
-    // let a marginal placement bulldoze a valuable one.
+    // so nothing wanders onto the slot, and yields to anything above it,
+    // because a decision taken from something that actually happened outranks
+    // a prediction about what might. Either way value settles it first: a claim
+    // worth clearly more than the intention takes the ground whatever its
+    // priority, and an intention worth clearly more keeps it. Priority decides
+    // who wins a close call; it does not let a marginal placement bulldoze a
+    // valuable one, and it does not let a prediction outrank a decision.
     blocked(x, y, radius, priority, value, ignoreToken) {
       for (const e of this.entries) {
         if (ignoreToken !== undefined && e.token === ignoreToken) continue;
         if (Math.hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
         if (!e.soft) return true;
+        if (value !== undefined && value > e.value * RPE_SOFT_DOMINANCE) continue;
         if (e.priority > priority) return true;
         if (e.priority === priority && (value === undefined || value <= e.value)) return true;
         if (e.priority < priority && value !== undefined && e.value > value * RPE_SOFT_DOMINANCE) return true;
@@ -10793,9 +10712,11 @@ window.grbtp = 35;
         const e = this.entries[i];
         if (!e.soft) continue;
         if (Math.hypot(x - e.x, y - e.y) >= radius + e.radius) continue;
-        if (e.priority > priority) continue;
-        if (e.priority === priority && (value === undefined || value <= e.value)) continue;
-        if (e.priority < priority && value !== undefined && e.value > value * RPE_SOFT_DOMINANCE) continue;
+        if (!(value !== undefined && value > e.value * RPE_SOFT_DOMINANCE)) {
+          if (e.priority > priority) continue;
+          if (e.priority === priority && (value === undefined || value <= e.value)) continue;
+          if (e.priority < priority && value !== undefined && e.value > value * RPE_SOFT_DOMINANCE) continue;
+        }
         taken.push(e.token);
         this.entries.splice(i, 1);
       }
@@ -11876,11 +11797,10 @@ window.grbtp = 35;
   // resolution, planning, validation, execution, memory — is the same code for
   // all three, and none of them looks at the world on its own.
   //
-  //   AUTO       the world as it is, this tick
-  //   PREPLACE   the world as it is predicted to be, held until it is due
-  //   REPLACE    the world as it just became, on the packet that said so
-  //   SPIKE_TICK the world for the two ticks a pinned target can be finished
-  //              in — a build whose worth is the swing that follows it
+  //   AUTO        the world as it is, this tick
+  //   PREPLACE    the world as it is predicted to be, held until it is due
+  //   REPLACE     the world as it just became, on the packet that said so
+  //   SPIKE_TICK  the two ticks a pinned target can be finished in
   const RPE_MODE = {
     AUTO: "auto",
     PREPLACE: "preplace",
@@ -11891,9 +11811,6 @@ window.grbtp = 35;
     auto: RPE_PRIORITY.ENGAGEMENT,
     preplace: RPE_PRIORITY.ANTICIPATION,
     replace: RPE_PRIORITY.RECOVERY,
-    // A kill in progress outranks every other reason to build, and is outranked
-    // only by an insta. This is the whole of spike tick's precedence: it is one
-    // number in the table the other three already read, not a branch anywhere.
     spiketick: RPE_PRIORITY.SYNC
   };
   // One scorer, four emphases. The terms are identical everywhere; what
@@ -11917,9 +11834,6 @@ window.grbtp = 35;
       followUp: .8,
       staleness: .6
     },
-    // The spike is placed for one swing that is already happening. Timing is
-    // everything, follow-up almost nothing, and how often we have tried this
-    // angle before does not enter into it.
     spiketick: {
       recovery: 0,
       timing: 1.6,
@@ -11928,70 +11842,14 @@ window.grbtp = 35;
     }
   };
 
-  // ── Spike tick solver ─────────────────────────────────────────────────────
-  // Novastorm's fourth placement decision, and the only one this client did not
-  // carry across. Its two functions read:
-  //
-  //   canTrapTick()    the target is inside one of our traps; that trap dies to
-  //                    a single hammer swing; the trap is inside spike.scale+95
-  //                    of me; and some legal spike angle lands within
-  //                    spike.scale+55 of the target — measured with the trap
-  //                    removed from the object list, because it is about to be.
-  //
-  //   canSpikeTick()   of those angles, only the ones whose push
-  //                    (spike -> target) sits at least PI/5 off target -> me.
-  //                    A spike that shoves them into my face is the wrong spike.
-  //
-  //   instaKill = ["secondary", "primary", "turret", "stop"]
-  //                    hammer under tank gear frees them into the spike, bull
-  //                    helmet lands the primary that throws them onto it,
-  //                    turret gear fires, done. One entry consumed per tick.
-  //
-  // What follows is that decision written against this engine rather than
-  // beside it. The frame is ThreatAnalyzer's, the legal angles are the aperture
-  // solver's, the execution position is TargetMotion's, and the knockback chain
-  // is SpikeOpportunity — the same evaluator auto place already uses for its own
-  // knockback pick. There is no second world scan, no second angle probe, no
-  // second predictor and no second packet counter anywhere below.
-  //
-  // Two things are done differently from novastorm, both deliberate.
-  //
-  // The first is which angle wins. Novastorm keeps whichever legal angle is
-  // nearest the object it is replacing, which is the right answer when the only
-  // job is to get a spike down. Here the spike exists to catch a body that is
-  // about to be thrown, so the angles that qualify are ranked on where that body
-  // ends up — contact now, the primary's push, the rebound off a spike we
-  // already own, the pair that makes a sandwich, the trap's own ground, and the
-  // exits it closes.
-  //
-  // The second is when the build is sent. The angle that wins is on the trap's
-  // own ground — that is most of why it wins — so it is not legal until the
-  // trap is down, and the server would refuse it. Novastorm sends it anyway on
-  // the same tick as the hammer swing, from a `setTimeout(..., 111 - ping)` at
-  // the tail of that tick so it arrives after the swing has landed. This client
-  // has no timer in its send path and is not getting one: the build goes out on
-  // the next tick instead, which is the same packet order without the timer and
-  // is where SpikeSyncHammer already puts its own.
   const RPE_SPIKE_TYPE = 4;
 
-  // Novastorm's own two distances, unchanged.
   const ST_TRAP_REACH = 95;
   const ST_ENEMY_PAD = 55;
-  // Novastorm's canSpikeTick gate.
   const ST_MIN_PUSH_AWAY = Math.PI / 5;
-  // How many legal angles are ranked. anglesFor returns aperture edges, wide
-  // aperture midpoints and the direction asked for, sorted nearest-first, so
-  // this is a ceiling on an already-short list rather than a scan resolution.
-  // Novastorm probes 72 angles per item per call, several times a tick.
   const ST_ANGLE_LIMIT = 20;
-  // What the whole sequence costs: one build, plus a hat equip, a weapon
-  // select, attack + stopAttack and an angle update on each of its three ticks.
-  // Checked before anything is sent, so a sequence is never opened that cannot
-  // be finished inside the allowance.
   const ST_PACKET_COST = RPE_PLACE_PACKETS + 9;
 
-  // Ranking weights. Same shape as PlacementWeights: a plain table with no
-  // behaviour in it.
   const ST_W_CONTACT = 3.4;
   const ST_W_KB = 2.6;
   const ST_W_AWAY = 1.5;
@@ -12000,33 +11858,19 @@ window.grbtp = 35;
   const ST_MIN_VALUE = .6;
 
   const SpikeTickSolver = {
-    // Opening a sequence. Cheap gates first, in the order that rejects the most
-    // for the least: the toggle, then the target, then the trap, then the
-    // weapons, then the packet budget. Nothing below the trap test runs unless a
-    // target is genuinely pinned in something of ours, which is a rare state, so
-    // the standing cost of having spike tick switched on is a handful of
-    // comparisons per tick.
     solve(engine) {
       const client = engine.client;
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer, EnemyManager: EnemyManager2, PlayerManager: PlayerManager2} = client;
       if (!Settings_default._spikeTick) return null;
       if (!myPlayer || !myPlayer.inGame) return null;
 
-      // The engine's target. Not a second target tracker — this is the same
-      // nearestEnemy every other module and the frame itself read.
       const target = EnemyManager2.nearestEnemy;
       if (target === null || target.currentHealth <= 0) return null;
 
-      // Actually inside one of ours, right now. EnemyManager.enemyTrappedByMe
-      // keeps a four-tick grace after they are freed, which is what its own
-      // callers want and exactly what this must not have: the sequence is worth
-      // opening only while the trap is still standing on them.
       const trap = target.trappedIn;
       if (!trap || !(trap instanceof PlayerObject) || trap.type !== 15) return null;
       if (PlayerManager2.isEnemyByID(trap.ownerID, myPlayer)) return null;
 
-      // Both weapons, novastorm's requirement: the hammer frees them, the
-      // primary is the hit that follows.
       const {reloading: reloading} = ModuleHandler.staticModules;
       const primaryID = myPlayer.getItemByType(0);
       const secondaryID = myPlayer.getItemByType(1);
@@ -12035,34 +11879,21 @@ window.grbtp = 35;
       if (!DataHandler_default.isMelee(secondaryID)) return null;
       if (!reloading.isReloaded(0, 1) || !reloading.isReloaded(1)) return null;
 
-      // The trap has to die to that one swing. Tank gear triples building
-      // damage, so whether we own it changes the answer — canBuy is the
-      // client's own "is this hat available to me" test.
       if (myPlayer.getBuildingDamage(secondaryID, ModuleHandler.canBuy(0, 40)) < trap.health) return null;
 
       const spikeID = myPlayer.getItemByType(RPE_SPIKE_TYPE);
       if (spikeID === null || spikeID === undefined) return null;
       const myPos = myPlayer.pos.current;
       const dTrap = myPos.distance(trap.pos.current);
-      // Novastorm's bound, and the swing's own reach. Whichever is stricter.
       if (dTrap > Items[spikeID].scale + ST_TRAP_REACH) return null;
       if (dTrap > DataHandler_default.getWeapon(secondaryID).range + trap.hitScale) return null;
-      // And the primary has to reach them, or the hit after the break lands on
-      // nobody and the trap was spent for nothing.
       if (!myPlayer.collidingEntity(target, DataHandler_default.getWeapon(primaryID).range + target.hitScale)) return null;
 
-      // The engine's allowance, read the way every other placement path reads
-      // it. A sequence that cannot be paid for is not opened.
       if (ModuleHandler.packetCount + ST_PACKET_COST > ModuleHandler.packetLimit) return null;
 
       return this._rank(engine, target, trap);
     },
 
-    // The build, taken again on the tick the ground is actually free. The trap
-    // is gone by now — that was the point of the swing — so its gates cannot be
-    // asked again and are not: what is re-checked is the target, the primary's
-    // reach, the item and the allowance, which is everything the placement
-    // itself depends on.
     restrike(engine, target, trap) {
       const client = engine.client;
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = client;
@@ -12076,21 +11907,12 @@ window.grbtp = 35;
       return this._rank(engine, target, trap);
     },
 
-    // The ranking both entry points share. `trap` is the object the sequence is
-    // built around; it may already have been destroyed, in which case excluding
-    // it from the blocker set is simply a no-op and its position still says
-    // where the ground worth taking is.
     _rank(engine, target, trap) {
       const client = engine.client;
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = client;
 
-      // One sweep, shared. sense() is memoised on the tick, so calling it here
-      // warms exactly the frame the engine's own cycle will use a few modules
-      // later rather than building a second one.
       const frame = engine.sense();
       if (frame === null || frame.targetId !== target.id) return null;
-      // observe() is idempotent within a tick, so this is the same measurement
-      // preplace runs on, taken once.
       engine.motion.observe(target, frame.tick);
       const lead = engine.motion.predict(target, 1);
       const enemyRef = {
@@ -12101,15 +11923,8 @@ window.grbtp = 35;
       const myPos = frame.myPos;
       const trapPos = trap.pos.current;
 
-      // The primary swing's push, solved once for this position. This is the
-      // Player -> Enemy -> Spike chain, and with ctx.best set it is also the
-      // Player -> Enemy -> Spike -> Spike sandwich: SpikeOpportunity carries the
-      // rebound line and the pair count for us.
       const kbCtx = SpikeOpportunity.context(client, target, enemyRef, enemyScale, frame.ourSpikes, "spiketick");
 
-      // A spike we already own, already touching them. If the push also already
-      // ends on one, the geometry the sequence needs is standing: build nothing
-      // and spend the tick on the swing instead.
       let existing = null;
       const targetPos = target.pos.current;
       for (const sp of frame.ourSpikes) {
@@ -12132,9 +11947,6 @@ window.grbtp = 35;
         value: value,
         strength: kbCtx === null ? 0 : kbCtx.strength,
         existing: existing,
-        // The hammer swing has to take the trap and would rather also take
-        // them; both sit in the same direction, and the client already has the
-        // bisector helper SpikeSyncHammer uses for exactly this pairing.
         breakAngle: findMiddleAngle(angleToEnemy, angleToTrap),
         hitAngle: angleToEnemy
       });
@@ -12142,14 +11954,10 @@ window.grbtp = 35;
         return settled(null, ST_MIN_VALUE);
       }
 
-      // A build we cannot afford in resources or item count is not a candidate.
       if (!myPlayer.canPlace(RPE_SPIKE_TYPE)) {
         return existing === null ? null : settled(null, ST_MIN_VALUE);
       }
 
-      // Legal ground, from the engine's aperture solver, with the trap taken
-      // out — it is about to stop blocking, which is the whole point of the
-      // hammer swing and is exactly novastorm's `objects.filter(o => o != trap)`.
       const angles = engine.anglesFor(RPE_SPIKE_TYPE, angleToEnemy, {
         excludes: trap,
         limit: ST_ANGLE_LIMIT
@@ -12175,15 +11983,10 @@ window.grbtp = 35;
         const d = Math.hypot(x - enemyRef.x, y - enemyRef.y);
         if (d > outerR) continue;
 
-        // Two ways for a spike to matter here, and a candidate needs one of
-        // them. Either it is touching them when the trap opens, or it is
-        // standing where the swing is about to put them.
         const contact = d < touchR ? 1 - d / touchR : 0;
         const kbScore = SpikeOpportunity.score(kbCtx, x, y, footR);
         if (contact <= 0 && kbScore <= 0) continue;
 
-        // Novastorm's gate. Only a spike that is touching them pushes them, so
-        // only a touching spike has to answer for its direction.
         let away = Math.PI;
         if (contact > 0) {
           away = getAngleDist(Math.atan2(enemyRef.y - y, enemyRef.x - x), enemyToMe);
@@ -12191,8 +11994,6 @@ window.grbtp = 35;
         }
 
         let value = ST_W_CONTACT * contact + ST_W_KB * kbScore + ST_W_AWAY * (away / Math.PI) + ST_W_TRAP * (1 - Math.min(1, Math.hypot(x - trapPos.x, y - trapPos.y) / trapReach));
-        // Ground that closes a way out of the ring they are standing in. The
-        // escape analysis is the engine's, already solved for this tick.
         if (exits && exits.length) {
           const toCand = Math.atan2(y - enemyRef.y, x - enemyRef.x);
           for (const exit of exits) {
@@ -12212,8 +12013,6 @@ window.grbtp = 35;
       }
 
       if (best === null || bestValue < ST_MIN_VALUE) {
-        // Nothing worth building. Still worth swinging if something of ours is
-        // already on them.
         return existing === null ? null : settled(null, ST_MIN_VALUE);
       }
       return settled(best, bestValue);
@@ -12394,14 +12193,6 @@ window.grbtp = 35;
       SpikeOpportunity.reset();
     }
 
-    // ── spike tick ──────────────────────────────────────────────────────────
-    // The fourth mode. It differs from the other three in one respect only:
-    // the moment it is worth acting on is also the moment two weapons and a
-    // hat have to move, so the decision is taken here and driven by the
-    // SpikeTick module rather than resolved inside a planning cycle. Everything
-    // that is about not getting in the way — legality against the live world,
-    // the reservation ledger, the packet budget, batching, memory — is the same
-    // path every other placement takes.
     spikeTickSolution() {
       const tick = this.client._ModuleHandler.tickCount;
       if (this._spikeTickTick === tick) return this._spikeTickSolution;
@@ -12412,8 +12203,6 @@ window.grbtp = 35;
       } catch (_) {}
       return this._spikeTickSolution;
     }
-    // The same build, re-decided on the tick its ground came free. Not memoised
-    // with the opening solve: it is asked once, on the one tick that asks it.
     spikeTickRestrike(target, trap) {
       try {
         return SpikeTickSolver.restrike(this, target, trap);
@@ -12427,25 +12216,15 @@ window.grbtp = 35;
     lockSpikeTick() {
       this._spikeTickLock = this.client._ModuleHandler.tickCount + ST_LOCK_TICKS;
     }
-    // settle is the tail a finished sequence leaves behind so the deletion of
-    // the trap it broke does not come back as a replacement. A sequence that
-    // failed passes 0 and the window is gone in the same tick it opened.
     releaseSpikeTick(settle = 0) {
       const tick = this.client._ModuleHandler.tickCount;
       this._spikeTickLock = settle > 0 ? Math.min(this._spikeTickLock, tick + settle) : -1;
     }
-    // The spike itself. Built as an intent of mode SPIKE_TICK and sent through
-    // commitIntent, so it is re-checked against the live world, claims its
-    // ground in the ledger at the mode's own priority, is counted against the
-    // one packet allowance and is written to memory like every other build.
     commitSpikeTick(solution) {
       if (!solution || !solution.needsSpike || solution.angle === null) return 0;
       const intent = this.intentAt(RPE_SPIKE_TYPE, solution.angle, {
         owner: "spikeTick",
         priority: RPE_MODE_PRIORITY[RPE_MODE.SPIKE_TICK],
-        // A directed placement outvalues the engine's own opportunism, on the
-        // same grounds request() states: the module asking has context the
-        // scorer does not. Here that context is a kill.
         value: 1e6,
         excludes: solution.trap
       });
@@ -13204,12 +12983,8 @@ window.grbtp = 35;
     postTick() {
       const {myPlayer: myPlayer} = this.client;
       if (!myPlayer || !myPlayer.inGame) return;
-      // Before the mode gate, not after it. Every placement path in the client
-      // writes a footprint here — auto place and the directed modules through
-      // _notePlacement, spike tick through its own intent — and this is the only
-      // call that takes them out again. Behind the gate it never ran with
-      // preplace switched off, and the entries every other path had written
-      // stayed in the list for the rest of the game.
+      // Before the mode gate: this is the only call that removes footprints,
+      // and behind the gate it never ran with preplace off.
       this.ledger.expire(this.client._ModuleHandler.tickCount);
       const modes = [];
       // Auto place is not this engine's. RYN v5.4's Luna placer owns it and
@@ -13222,10 +12997,6 @@ window.grbtp = 35;
         if (this.book.records.length) this.book.invalidateAll("disabled", this);
         return;
       }
-      // Spike tick owns the action window while a sequence is live. Preplace
-      // must not spend the packets that sequence has budgeted for, must not
-      // claim the ground it is about to build on, and must not be holding a
-      // record inside the trap it is about to break.
       if (this.spikeTickLocked()) {
         if (this.book.records.length) this.book.invalidateAll("spikeTick", this);
         return;
@@ -13247,10 +13018,6 @@ window.grbtp = 35;
       const {_ModuleHandler: ModuleHandler, myPlayer: myPlayer} = this.client;
       if (!Settings_default._prePlace && !Settings_default._replace) return;
       if (!myPlayer || !myPlayer.inGame) return;
-      // The trap a spike tick breaks is deleted on purpose. Its deletion packet
-      // is the engine's replace trigger, and rebuilding into that ground is the
-      // one thing the sequence must not do — it is where the target is standing
-      // and where the spike has just gone.
       if (this.spikeTickLocked()) return;
       if (this._scheduler.budget() < RPE_PLACE_PACKETS) return;
       const frame = this._threat.build();
@@ -14429,7 +14196,7 @@ window.grbtp = 35;
       }
     }
   }
-  // Novastorm caps totalDmgPot at 140 before comparing it against health, so a
+  // The reference client caps totalDmgPot at 140 before comparing it against health, so a
   // pile-up of five enemies does not read as more lethal than the two hits that
   // will actually land. The +5 for hat 7 is its bias for scuba's lack of
   // defence; the 0.75 for soldier is the hat's own dmgMult.
@@ -14448,8 +14215,8 @@ window.grbtp = 35;
       this.forceHeal = false;
     }
 
-    // novastorm's `(tick - damageTick) > 0`. damageTick is set to tickCount + 1
-    // on damage exactly as novastorm sets it to tick + 1, so this reads true two
+    // The reference client's `(tick - damageTick) > 0`. damageTick is set to tickCount + 1
+    // on damage exactly as the reference client sets it to tick + 1, so this reads true two
     // ticks (~222ms) after a hit — past the 120ms window in which an apple adds
     // shame rather than removing two.
     isSaveHealTick() {
@@ -14457,9 +14224,9 @@ window.grbtp = 35;
       return tickCount - damageTick > 0;
     }
     // ------------------------------------------------------------------------
-    // Autoheal — Novastorm's rule, whole.
+    // Autoheal — the reference client's rule, whole.
     //
-    // Novastorm decides with one number. It accumulates every source of damage
+    // The reference client decides with one number. It accumulates every source of damage
     // that could land this tick — spike contact, weapon hits in range and off
     // reload, turrets, secondaries, poison — caps it at 140, adjusts for the hat
     // that is actually on, and heals if that number reaches its health. On top
@@ -14481,7 +14248,7 @@ window.grbtp = 35;
     // was sitting right there, and each branch healed a different amount for no
     // stated reason.
     //
-    // Two things are RYN's and stay, because novastorm has no equivalent:
+    // Two things are RYN's and stay, because the reference client has no equivalent:
     //   · myPlayer.shameActive — do not spend food while the server is refusing
     //     it anyway
     //   · ModuleHandler.heal()'s shame guard, which queues a heal that lands
@@ -14509,7 +14276,7 @@ window.grbtp = 35;
         return;
       }
 
-      // Novastorm's totalDmgPot. EnemyManager has already summed weapon,
+      // The reference client's totalDmgPot. EnemyManager has already summed weapon,
       // turret, secondary and projectile damage into potentialDamage and
       // resolved the spike term into potentialSpikeDamage this tick.
       let dmgPot = EnemyManager2.potentialDamage + EnemyManager2.potentialSpikeDamage;
@@ -14525,19 +14292,19 @@ window.grbtp = 35;
       }
       const healing = tempHealth <= dmgPot;
 
-      // novastorm's condition, whole:
+      // The reference client's condition, whole:
       //
       //     if (((healing && myPlayer.shameCount < 7) || (tick - damageTick) > 0)
       //         && myPlayer.health < 100) heal(100 - myPlayer.health);
       //
       // isSaveHealTick() IS that second half. RYN sets damageTick to
-      // tickCount + 1 exactly as novastorm sets it to tick + 1, so
+      // tickCount + 1 exactly as the reference client sets it to tick + 1, so
       // `tickCount - damageTick > 0` is true two ticks after a hit — about
       // 222ms, already clear of the 120ms window in which an apple raises shame
       // instead of lowering it.
       //
       // A 125ms wall-clock guard used to sit beside it. It was the looser of the
-      // two and never the binding one, so novastorm's tick test now stands
+      // two and never the binding one, so the reference client's tick test now stands
       // alone, as it does there.
       //
       // The emergency branch deliberately does not wait: +1 shame is a better
@@ -14546,7 +14313,7 @@ window.grbtp = 35;
         return;
       }
 
-      // novastorm's heal(value): one food place per heal step until the deficit
+      // The reference client's heal(value): one food place per heal step until the deficit
       // is covered, and no in-flight accounting.
       //
       //     function heal(value) {
@@ -14555,7 +14322,7 @@ window.grbtp = 35;
       //     }
       //
       // What was here subtracted the apples already sent and unacknowledged, so
-      // a tick inside the round trip healed nothing. novastorm re-sends the
+      // a tick inside the round trip healed nothing. The reference client re-sends the
       // whole deficit every tick until the server's health echo comes back, and
       // that re-send is the behaviour being restored here.
       const needTimes = Math.ceil((maxHealth - tempHealth) / restore);
@@ -15582,7 +15349,7 @@ window.grbtp = 35;
     reset() {
       this.active = true;
     }
-    // Novastorm's automill is a combat mill, not an XP mill:
+    // The reference client's automill is a combat mill, not an XP mill:
     //
     //     if (autoMills && lastMoveAngle != null && !nearestTrap) { ... }
     //
@@ -15590,14 +15357,17 @@ window.grbtp = 35;
     // What was here was gated on `myPlayer.isSandbox`, `age < 20` and
     // `!autoBuy.boughtEverything()` — an opening-minutes XP grinder that could
     // not run in a real game at all, which is why the toggle appeared to do
-    // nothing. Those three gates are gone. `!nearestTrap` is novastorm's, and it
+    // nothing. Those three gates are gone. `!nearestTrap` is the reference client's, and it
     // matters: milling while pinned walls you into your own trap.
     get canAutomill() {
       const isOwner = this.client.isOwner;
-      const {attacking: attacking, placedOnce: placedOnce} = this.client._ModuleHandler;
+      const {attacking: attacking, placedOnce: placedOnce, staticModules: staticModules} = this.client._ModuleHandler;
       const {myPlayer: myPlayer, EnemyManager: EnemyManager2} = this.client;
       if (!Settings_default._automill || !this.active) return false;
       if (placedOnce) return false;
+      // The break tick of a spike tick places nothing, so placedOnce does not
+      // cover it. Mills are never worth the packets a kill in progress needs.
+      if (staticModules.placementEngine && staticModules.placementEngine.spikeTickLocked()) return false;
       if (isOwner && attacking) return false;
       if (myPlayer.isTrapped || EnemyManager2.nearestTrap !== null) return false;
       return true;
@@ -15620,7 +15390,7 @@ window.grbtp = 35;
         this.toggle = false;
         return;
       }
-      // Novastorm re-tests canPlace every tick rather than latching. Latching
+      // The reference client re-tests canPlace every tick rather than latching. Latching
       // `active = false` on the first refusal meant hitting the windmill cap once
       // disabled automill until the next death, which is wrong for a mill you
       // drop and lose continuously in a fight.
@@ -15654,10 +15424,10 @@ window.grbtp = 35;
       const offset = Math.asin(clamp(spacing / (2 * distance), -1, 1)) * 2;
       const leftAngle = angle - offset;
       const rightAngle = angle + offset;
-      // Novastorm gates the trio on the centre mill being placeable, then tests
+      // The reference client gates the trio on the centre mill being placeable, then tests
       // each of the three on its own and places the ones that fit. Requiring all
       // three, as this did, meant one rock behind you cancelled the whole thing.
-      // The offset stays RYN's exact solve rather than novastorm's
+      // The offset stays RYN's exact solve rather than the reference client's
       // `toRad(scale + scale / 2)`, which is a degrees-for-radians approximation
       // that only lands near the right answer for a windmill's scale.
       if (!this.canPlaceWindmill(angle)) {
@@ -17140,7 +16910,7 @@ window.grbtp = 35;
       RYNLink.postTick(this.client);
     }
   }
-  // Novastorm's Safe Soldier radius.
+  // The reference client's Safe Soldier radius.
   const SAFE_SOLDIER_RANGE = 300;
   class ModuleHandler {
     client;
@@ -17270,11 +17040,6 @@ window.grbtp = 35;
         safeWalk: new SafeWalk(client2),
         rynLink: new RYNLinkModule(client2)
       };
-      // spikeTick sits immediately before autoPlacer and placementEngine, which
-      // is the whole of its precedence: every sync and insta above it keeps the
-      // tick it already had, and the three placement modes below it stand down
-      // for the two ticks a kill is in progress. Nothing else moved.
-      //
       // botRangedAttack claims the tick before movement so it can take over
       // where the bot walks; botAutoBreak runs after, and only fires when the
       // movement it just asked for did not happen.
@@ -17558,7 +17323,7 @@ window.grbtp = 35;
       this.stopAttack(angle);
       this.whichWeapon(this._getPredictWeapon());
     }
-    // novastorm's heal is a bare send — `place(myPlayer.items[0], null)` — with
+    // The reference client's heal is a bare send — `place(myPlayer.items[0], null)` — with
     // no budget test and no shame handling of its own. The shame rule is served
     // entirely by the caller's `(tick - damageTick) > 0`, which is already two
     // ticks clear of the 120ms window.
@@ -17580,7 +17345,7 @@ window.grbtp = 35;
       return this.client.PacketManager.packetCount;
     }
     set packetCount(_v) {}
-    // Novastorm's budget: `packets + 5 > 119`. The server's own allowance is
+    // The reference client's budget: `packets + 5 > 119`. The server's own allowance is
     // 120 a second, so 119 is the whole of it. RYN sat at 70 and left a third of
     // the allowance unspent, which is why a busy tick ran out of packets while
     // the connection was nowhere near its limit. Safe to take now that
@@ -17634,7 +17399,7 @@ window.grbtp = 35;
       const _em = this.client.EnemyManager;
       const _mp = this.client.myPlayer;
       const _canSoldier = this.canBuy(0, 6);
-      // Novastorm's Safe Soldier sits on its own toggle and is not part of its
+      // The reference client's Safe Soldier sits on its own toggle and is not part of its
       // anti-enemy logic. Nesting it inside RYN's `_antienemy` block meant
       // turning that off silently disabled Safe Soldier too, which is not what
       // the switch says it does.
@@ -17645,7 +17410,7 @@ window.grbtp = 35;
         const _atkRange = _primary2 !== null ? DataHandler_default.getWeapon(_primary2).range + (_nearest?.hitScale || 35) : 85;
         const _dist = _nearest !== null ? _mp.pos.current.distance(_nearest.pos.current) : Infinity;
         const _isClose = Settings_default._antienemy && _dist <= _atkRange + 20;
-        // Novastorm's Safe Soldier:
+        // The reference client's Safe Soldier:
         //
         //     if (isBoughtHat(6,0) && nearestEnemy
         //         && getDistance(nearestEnemy, myPlayer) < 300
@@ -19487,16 +19252,13 @@ window.grbtp = 35;
     _spikeGearInsta: true,
     _turretSync: true,
     _velocityTick: true,
-    // Off by default, like novastorm's `autoMills = false`. It is now a real
+    // Off by default, like the reference client's `autoMills = false`. It is now a real
     // combat mill rather than a sandbox-only XP grinder, so leaving it on would
     // drop windmills behind every player from the first spawn.
     _automill: false,
     _autoplacer: true,
     _prePlace: true,
     _replace: true,
-    // Off by default, like novastorm's own `shameTick: false`. It breaks one of
-    // your own traps on purpose, which is the right trade only when you meant
-    // it, so it does not turn itself on for someone who has not asked.
     _spikeTick: false,
     _trapAnimal: false,
     _placementDefense: true,
