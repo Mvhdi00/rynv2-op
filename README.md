@@ -117,6 +117,7 @@ but nothing in the client needs it. It is stripped from the build.
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        Ryn Type 2, a separate standalone client (see below)
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -126,7 +127,11 @@ tools/extract-drivers.js  game bundle  -> drivers/game-drivers.json
 tools/verify-drivers.js   client tables vs. drivers/game-drivers.json
 tools/check-hooks.js      client's bundle-rewrite hooks vs. the game bundle
 tools/build-reup.js       src/RYN_Client_v4.js -> ReUp_Mix.user.js
+tools/verify-glotus-port.js  Ryn Type 2's ported Glotus modules vs. Glotus
 ```
+
+`Ryn_Type_2.user.js` is its own script with its own menu — it is not built
+from `src/` and `tools/build-reup.js` does not touch it.
 
 ## Build
 
@@ -169,6 +174,70 @@ against, and re-checks the observable parts ~15s after load — frame signature
 width, transport mode, live opcode table size. A server-side protocol change
 shows up as a console warning instead of as packets that quietly stop being
 understood.
+
+---
+
+## Ryn Type 2: the Glotus spike tick and anti retrap
+
+Two modules from Glotus Client 5.5.5 were carried into `Ryn_Type_2.user.js`
+whole — `SpikeTick` and `AntiRetrap`. Both classes are Glotus' code unchanged;
+what the port had to supply was everything around them.
+
+**Spike tick** (`_spikeTick`, Combat → Kill Sequences) asks a different
+question from the three spike ticks Ryn already had. Those ask *can I knock
+this target into a spike I am about to place*. This one asks *is the target
+already touching a spike on the extrapolated frame* — `enemySpikeCollider`,
+which `EnemyManager.checkCollision` was already computing every tick, exactly
+the way Glotus computes it — and swings the primary under a bull hat so the hit
+and the spike land together, then spends the turret reload on hat 53 the tick
+after. The toggle is the existing "Spike Tick" switch; it stays off by default,
+as it already was, and the sub-rows under it are still Ryn's own variants.
+
+**Anti retrap** (`_antiRetrap`, Combat → Anti Systems) was already in the file
+and already byte-identical to Glotus, and could still never fire. It sat at the
+back of the run list, behind Autobreak.
+
+Module order is priority — the first module to set `moduleActive` owns the tick
+— and anti retrap only means anything *above* Autobreak. It is the module that
+says "swing at them first, break the trap after", and being trapped is exactly
+the moment Autobreak claims the tick. Both modules now sit where Glotus runs
+them: after `spikeSync`, ahead of `velocityTick`.
+
+`_spikeTickTimes` was added to `StatsManager` and to the Misc → Session
+counters alongside it. That row is not decoration: `UI.updateStats` throws when
+the element is missing, so a counter written by a module with no row on the
+menu would take the tick down with it.
+
+One ordering difference from Glotus is deliberate and predates this: Ryn runs
+`defaultAcc` at the back of the list where Glotus runs it near the front, because
+it reads `forceHat` to pick the accessory matching whatever hat a tick module
+just forced. It sets `useAcc` and never `moduleActive`, so it takes no tick from
+anything — and it is why the bull and turret hats this port forces get the right
+accessory. `verify-glotus-port.js` records it as a known exception.
+
+### Verification
+
+```sh
+node tools/verify-glotus-port.js Ryn_Type_2.user.js path/to/glotus.txt
+node --check Ryn_Type_2.user.js
+```
+
+The Glotus source is a reference, not a build input; without it the structural
+checks still run and the comparisons skip. The tool checks that each ported
+class still diffs clean against Glotus, that both modules are constructed and
+present exactly once in the run list, that their priority relative to every
+shared module still matches Glotus, that the settings/stats/menu rows they
+depend on exist, and that the client methods they call are still there. It then
+loads each class from both files into a stub world and asserts they reach the
+same decision across 24 scenarios — firing, both halves of the turret chain,
+and every early-return branch.
+
+The `Reloading.isReloaded` check in that list is worth keeping. There are two
+`isReloaded` methods in the client: `Player`'s takes `(type, tick)` with no
+default and returns false for every single-argument call, and the `Reloading`
+module's takes `(ticks = 0)`. Both ported modules call the second one.
+
+---
 
 ## Notes
 
