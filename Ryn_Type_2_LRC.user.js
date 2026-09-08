@@ -24391,6 +24391,62 @@ const RynLRC = (function () {
     try { return new Date().toISOString(); } catch (_) { return ""; }
   }
 
+  /* ---- name comparison, shared by the fetcher and the validator ---- */
+
+  function tokensOf(s) {
+    let t = String(s == null ? "" : s).toLowerCase();
+    try { t = t.normalize("NFKD").replace(/[̀-ͯ]/g, ""); } catch (_) {}
+    return t.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+  }
+
+  /* Token overlap, 0..1. Cheap, and enough to tell "the same song" from
+   * "somebody else's song". */
+  function similarity(a, b) {
+    const ta = tokensOf(a), tb = tokensOf(b);
+    if (!ta.length || !tb.length) return 0;
+    const set = new Set(tb);
+    let hit = 0;
+    for (let i = 0; i < ta.length; i++) if (set.has(ta[i])) hit++;
+    return hit / Math.max(ta.length, tb.length);
+  }
+
+  /* Which alphabet a string is mostly written in. Comparing "Lemon" with
+   * "レモン" by token overlap scores zero even though they are the same
+   * song, so names are only ever judged when both sides are in the same
+   * script — otherwise the comparison is skipped rather than failed. */
+  function scriptOf(s) {
+    const t = String(s == null ? "" : s);
+    let latin = 0, cjk = 0, other = 0;
+    for (let i = 0; i < t.length; i++) {
+      const c = t.charCodeAt(i);
+      if (c < 0x30) continue;                                   /* punctuation, space */
+      if (c < 0x250) latin++;
+      else if ((c >= 0x3040 && c <= 0x30ff) || (c >= 0x3400 && c <= 0x9fff) ||
+               (c >= 0xac00 && c <= 0xd7af)) cjk++;
+      else other++;
+    }
+    const total = latin + cjk + other;
+    if (!total) return "none";
+    if (latin / total > 0.7) return "latin";
+    if (cjk / total > 0.5) return "cjk";
+    return "other";
+  }
+
+  function comparableNames(a, b) {
+    const sa = scriptOf(a), sb = scriptOf(b);
+    return sa !== "none" && sb !== "none" && sa === sb;
+  }
+
+  /* "04:16" or "256" -> seconds. Returns 0 when it is neither. */
+  function parseClock(text) {
+    const t = String(text == null ? "" : text).trim();
+    let m = t.match(/^(\d{1,3}):([0-5]?\d)(?:[.:]\d+)?$/);
+    if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    m = t.match(/^(\d{1,5})(?:\.\d+)?$/);
+    if (m) return parseInt(m[1], 10);
+    return 0;
+  }
+
   function clampInt(v, lo, hi, dflt) {
     const n = parseInt(v, 10);
     if (!isFinite(n)) return dflt;
@@ -24890,10 +24946,51 @@ const RynLRC = (function () {
       if (last <= 0) return { ok: false, reason: "every timestamp is zero" };
       if (last > 3 * 3600 * 1000) return { ok: false, reason: "timestamps run past three hours" };
 
-      /* Does this lyric belong to this song? A synced file whose last line
-       * lands well past the end of the audio is a different release, or a
-       * different song entirely. */
+      /* ---- does this lyric belong to THIS song? ----
+       *
+       * Three pieces of evidence, weakest last. The first two come out of
+       * the .lrc's own metadata tags, which state outright which track the
+       * file was written for; the third is the shape of the timeline. */
+      const meta = parsed && parsed.meta || {};
       const dur = opts.durationSec;
+      const confirmed = [];
+
+      /* 1. [length:] — the file's own claim about the track's duration.
+       *    Language-independent and far sharper than the envelope check
+       *    below: it is what catches a different song of similar length. */
+      if (dur && isFinite(dur) && dur > 1 && meta.length) {
+        const claimed = parseClock(meta.length);
+        if (claimed > 5) {
+          const tol = Math.max(20, dur * 0.12);
+          if (Math.abs(claimed - dur) > tol) {
+            return { ok: false, reason: "the .lrc is for a " + fmtClock(claimed) +
+              " track, this audio is " + fmtClock(dur) + " — a different song" };
+          }
+          confirmed.push("length");
+        }
+      }
+
+      /* 2. [ti:] / [ar:] — which song the file says it is. Only judged when
+       *    both sides are in the same script, so a romanised [ti:Lemon]
+       *    against a kanji title is skipped rather than failed. */
+      const names = [
+        [ meta.ti, opts.title, "titled" ],
+        [ meta.ar, opts.artist, "by" ]
+      ];
+      for (let i = 0; i < names.length; i++) {
+        const claim = names[i][0], mine = names[i][1];
+        if (!claim || !mine) continue;
+        if (!comparableNames(claim, mine)) continue;
+        const sim = similarity(claim, mine);
+        if (sim >= 0.34) { confirmed.push(names[i][2] === "titled" ? "title" : "artist"); continue; }
+        if (sim === 0) {
+          return { ok: false, reason: 'the .lrc is ' + names[i][2] + ' "' +
+            String(claim).slice(0, 40) + '", this song is "' +
+            String(mine).slice(0, 40) + '"' };
+        }
+      }
+
+      /* 3. The timeline envelope. */
       if (dur && isFinite(dur) && dur > 1) {
         const durMs = dur * 1000;
         /* Some slack: an .lrc can carry a trailing credit line, and the file
@@ -24911,11 +25008,15 @@ const RynLRC = (function () {
           return { ok: false, reason: "lyrics cover only " +
             Math.round(last / durMs * 100) + "% of the audio" };
         }
+        confirmed.push("duration");
       }
 
       return {
         ok: true,
         reason: "",
+        /* What actually confirmed the match, so the details panel can say
+         * whether the song was identified by name or only by length. */
+        confirmedBy: confirmed,
         stats: { events: lines.length, withText: withText, firstMs: first, lastMs: last }
       };
     },
@@ -25546,19 +25647,10 @@ const RynLRC = (function () {
   const LRCLIB = "https://lrclib.net";
 
   const LRCFetcher = {
-    _tokens: function (s) {
-      return SongIdentifier.normalise(s).replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
-    },
-
-    /* Token overlap, 0..1. Good enough to reject a wrong match and cheap. */
-    similarity: function (a, b) {
-      const ta = this._tokens(a), tb = this._tokens(b);
-      if (!ta.length || !tb.length) return 0;
-      const set = new Set(tb);
-      let hit = 0;
-      for (let i = 0; i < ta.length; i++) if (set.has(ta[i])) hit++;
-      return hit / Math.max(ta.length, tb.length);
-    },
+    /* Shared with the validator, which judges the same names from the other
+     * direction: the fetcher picks a candidate by them, the validator checks
+     * the file that came back still claims to be this song. */
+    similarity: similarity,
 
     score: function (cand, want) {
       const titleSim = this.similarity(cand.trackName || "", want.title);
@@ -26201,6 +26293,18 @@ const RynLRC = (function () {
       this.kv(doc, card, "Duration", fmtClock(meta.durationSec));
       this.kv(doc, card, "Lyrics source",
         (meta.source || "unknown") + (meta.sourceId ? " #" + meta.sourceId : ""));
+      if (synced) {
+        const by = Array.isArray(meta.matchedBy) ? meta.matchedBy : [];
+        const NAMES = { length: "the .lrc's own length tag", title: "title",
+                        artist: "artist", duration: "track length" };
+        const parts = by.map(function (k) { return NAMES[k] || k; });
+        /* "duration" alone means nothing named the song — worth saying, since
+         * a different song of similar length would also pass that. */
+        const weak = by.length <= 1 && by[0] === "duration";
+        this.kv(doc, card, "Matched by",
+          parts.length ? parts.join(", ") : "nothing — accepted on shape alone",
+          weak || !parts.length ? "warn" : "ok");
+      }
       this.kv(doc, card, "Cache", "stored · v" + meta.version + " · " +
         (meta.lastUpdate ? String(meta.lastUpdate).slice(0, 10) : "unknown"), "ok");
       this.kv(doc, card, "Song ID", String(meta.songId || "").slice(0, 16) + "…");
@@ -26447,6 +26551,7 @@ const RynLRC = (function () {
       let parsed = null;      /* its parsed lines */
       let plainOnly = null;   /* unsynced lyrics, kept only as a last resort */
       let lastReason = "";    /* why the previous candidate was rejected */
+      let matchedBy = [];     /* what confirmed this is the right song */
 
       for (let s = 0; s < sources.length && !parsed; s++) {
         this._setState(song, index, sources[s].busy);
@@ -26459,8 +26564,16 @@ const RynLRC = (function () {
           continue;
         }
         const p = LRCParser.parse(cand.synced);
-        const c = LRCValidator.validateParsed(p, { durationSec: id.durationSec });
-        if (c.ok) { found = cand; parsed = p; }
+        const c = LRCValidator.validateParsed(p, {
+          durationSec: id.durationSec,
+          /* Deliberately the file's own tags and not the library title: a
+           * user names songs whatever they like, and failing a good .lrc
+           * because its [ti:] does not match "song1" would be worse than
+           * the mismatch it is meant to catch. No tags, no name check. */
+          title: id.tags && id.tags.title,
+          artist: id.tags && id.tags.artist
+        });
+        if (c.ok) { found = cand; parsed = p; matchedBy = c.confirmedBy || []; }
         else lastReason = c.reason;
       }
 
@@ -26571,6 +26684,7 @@ const RynLRC = (function () {
         originalLrc: LRCParser.format(parsed.lines, header),
         englishLrc: LRCParser.format(english, header),
         lineCount: english.length,
+        matchedBy: matchedBy,
         fileOffsetMs: parsed.meta.offset || 0,
         provider: provider,
         untranslated: failedLines,
@@ -26608,6 +26722,7 @@ const RynLRC = (function () {
         matchedTitle: (r.found && r.found.matchedTitle) || "",
         matchedArtist: (r.found && r.found.matchedArtist) || "",
         lineCount: r.lineCount || 0,
+        matchedBy: r.matchedBy || [],
         fileOffsetMs: r.fileOffsetMs || 0,
         provider: r.provider || "",
         untranslated: r.untranslated || 0,

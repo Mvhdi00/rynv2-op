@@ -358,7 +358,7 @@ const JA_LRC = [
   "[ar:Kenshi Yonezu]",
   "[al:Lemon]",
   "[by:someone]",
-  "[length:04:16]",
+  "[length:03:20]",          /* matches the 200s the hosts below mock */
   "",
   "[00:12.50]君を忘れない",
   "[00:15.20]いつまでも",
@@ -386,7 +386,7 @@ const EN_LRC = [
 
   eq("parser: metadata ti", r.meta.ti, "Lemon");
   eq("parser: metadata ar", r.meta.ar, "Kenshi Yonezu");
-  eq("parser: metadata length", r.meta.length, "04:16");
+  eq("parser: metadata length", r.meta.length, "03:20");
   ok("parser: malformed line counted, not thrown", r.malformed === 1, "malformed=" + r.malformed);
   ok("parser: empty timed line skipped", r.emptyTimed === 1, "emptyTimed=" + r.emptyTimed);
 
@@ -481,6 +481,62 @@ const EN_LRC = [
 }
 
 /* ------------------------------------------------------------------ *
+ * 3b. Is this .lrc actually for this song?
+ * ------------------------------------------------------------------ */
+{
+  const h = makeHost();
+  const V = h.lrc.Validator;
+  const P = h.lrc.Parser;
+  const body = "[00:05.00]one line here\n[00:30.00]another line\n[01:40.00]and a third one";
+
+  /* [length:] is the sharp one: it catches a different song whose timeline
+   * shape would otherwise pass. */
+  const wrongLen = P.parse("[length:06:40]\n" + body);
+  const rl = V.validateParsed(wrongLen, { durationSec: 200 });
+  ok("belongs: [length:] mismatch rejected", !rl.ok, rl.reason);
+  ok("belongs: rejection names both durations", /6:40.*3:20/.test(rl.reason), rl.reason);
+
+  const rightLen = V.validateParsed(P.parse("[length:03:20]\n" + body), { durationSec: 200 });
+  ok("belongs: matching [length:] accepted", rightLen.ok, rightLen.reason);
+  ok("belongs: and recorded as confirmation",
+     rightLen.confirmedBy.indexOf("length") >= 0, JSON.stringify(rightLen.confirmedBy));
+
+  /* A stale [length:] inside the tolerance must not reject. */
+  ok("belongs: a few seconds out is still the same song",
+     V.validateParsed(P.parse("[length:03:35]\n" + body), { durationSec: 200 }).ok);
+
+  /* [ti:] / [ar:] versus the file's own tags. */
+  const named = P.parse("[ti:Bohemian Rhapsody]\n[ar:Queen]\n" + body);
+  const rn = V.validateParsed(named, { durationSec: 200, title: "Lemon", artist: "Kenshi Yonezu" });
+  ok("belongs: [ti:] naming a different song rejected", !rn.ok, rn.reason);
+  ok("belongs: rejection quotes both titles",
+     /Bohemian Rhapsody/.test(rn.reason) && /Lemon/.test(rn.reason), rn.reason);
+
+  const same = V.validateParsed(P.parse("[ti:Lemon]\n[ar:Kenshi Yonezu]\n" + body),
+                                { durationSec: 200, title: "Lemon", artist: "Kenshi Yonezu" });
+  ok("belongs: matching [ti:]/[ar:] accepted", same.ok, same.reason);
+  eq("belongs: both names recorded as confirmation",
+     same.confirmedBy.filter(c => c === "title" || c === "artist").sort(), ["artist", "title"]);
+
+  /* The false-positive guard: a romanised tag against a native-script title
+   * is the same song, and must not be judged by token overlap. */
+  const romaji = V.validateParsed(P.parse("[ti:Lemon]\n" + body),
+                                  { durationSec: 200, title: "\u30EC\u30E2\u30F3" });
+  ok("belongs: romanised [ti:] vs kanji title is skipped, not failed", romaji.ok, romaji.reason);
+  eq("belongs: and claims no name confirmation",
+     romaji.confirmedBy.indexOf("title"), -1);
+
+  /* Partial overlap is a match, not a mismatch: releases carry suffixes. */
+  ok("belongs: \"Lemon (TV Size)\" still matches \"Lemon\"",
+     V.validateParsed(P.parse("[ti:Lemon (TV Size)]\n" + body),
+                      { durationSec: 200, title: "Lemon" }).ok);
+
+  /* No tags on the file means no name check at all. */
+  const noNames = V.validateParsed(named, { durationSec: 200 });
+  ok("belongs: without file tags the name check is skipped", noNames.ok, noNames.reason);
+}
+
+/* ------------------------------------------------------------------ *
  * 4. Binary search
  * ------------------------------------------------------------------ */
 {
@@ -552,6 +608,8 @@ async function testPrepare() {
   eq("prepare: offset starts at zero", meta && meta.offsetMs, 0);
   eq("prepare: provider recorded", meta && meta.provider, "gtx");
   ok("prepare: source recorded", meta && meta.source === "lrclib" && meta.sourceId === "4242");
+  eq("prepare: what confirmed the match is recorded",
+     meta && (meta.matchedBy || []).slice().sort(), ["duration", "length"]);
   ok("prepare: songId is a content hash, not the filename",
      meta && /^[0-9a-f]{32}$/.test(meta.songId), meta && meta.songId);
 
@@ -1131,6 +1189,27 @@ async function testLocalSource() {
     const meta = h.lrc.Cache.getMetaSync(h.mp._songs[0].lrcId);
     eq("local mismatch: falls through to the provider", meta && meta.source, "lrclib");
     eq("local mismatch: still ends ready", meta && meta.status, "ready");
+  }
+
+  /* A pasted .lrc for a different song, same rough length: the timeline
+     envelope alone would let it through, its own [length:] tag does not. */
+  {
+    const h = makeHost({ duration: 200, route });
+    h.mp._songs.push({
+      title: "Lemon", artist: "Kenshi Yonezu", url: "data:audio/mp3;base64,LLL4",
+      lyrics: "[ti:Some Other Song]\n[length:06:40]\n" +
+              "[00:10.00]words from\n[00:40.00]a completely\n[01:20.00]different track"
+    });
+    h.songList.appendChild(h.buildRow(0, h.mp._songs[0]));
+    h.lrc.UI.decorateRows();
+    await h.lrc.Manager.prepare(0, {});
+    await settle(90);
+    const meta = h.lrc.Cache.getMetaSync(h.mp._songs[0].lrcId);
+    eq("wrong-song paste: not accepted", meta && meta.source, "lrclib");
+    eq("wrong-song paste: the provider's copy is used instead", meta && meta.status, "ready");
+    const rec = await h.lrc.Cache.getLrc(meta.songId);
+    ok("wrong-song paste: its words never reached the cache",
+       rec.originalLrc.indexOf("different track") < 0, rec.originalLrc.slice(0, 80));
   }
 
   /* Pasted lyrics with no timestamps are not treated as a synced source. */

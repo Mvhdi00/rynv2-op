@@ -365,10 +365,35 @@ cache entry when it drifts by more than 5 seconds.
 ## Validation
 
 Before anything is marked ready: at least one parseable timestamp, at least
-three lines carrying words, timestamps in order and non-negative, and the
-timeline compatible with the audio's actual length — lyrics running past the
-end by more than a scaled slack are rejected as a different release. The
-translation must return the same number of lyric events with the same
+three lines carrying words, and timestamps in order and non-negative.
+
+**Is this `.lrc` even for this song?** Three pieces of evidence, strongest
+first:
+
+| Evidence | Catches |
+|---|---|
+| `[length:]` — the file's own claim about the track's duration | A different song whose timeline *shape* would otherwise pass. Language-independent, and the sharpest of the three. |
+| `[ti:]` / `[ar:]` — which song the file says it is | An outright wrong file, quoted back in the rejection: *the .lrc is titled "Bohemian Rhapsody", this song is "Lemon"*. |
+| The timeline envelope against the real duration | Lyrics running past the end, or covering a fraction of it. |
+
+Two guards against false rejections, both of which matter more than the
+checks themselves:
+
+- Names are compared **only against the file's own ID3 tags**, never the
+  library title. Songs get named `song1` and `my fav`, and failing a good
+  `.lrc` because its `[ti:]` does not match arbitrary user text would be
+  worse than the mismatch being hunted. No tags on the file, no name check.
+- Names are compared **only when both sides are in the same script**. A
+  romanised `[ti:Lemon]` against a title stored as `レモン` is the same song
+  and scores zero on token overlap, so that comparison is skipped rather
+  than failed.
+
+What confirmed the match is recorded and shown in the details panel, so
+"matched by title, artist, track length" is distinguishable from "matched by
+track length" — the latter being the case a different song of similar length
+could also produce.
+
+The translation must return the same number of lyric events with the same
 timestamps; if it does not, the song is not marked ready. Failures surface as
 `LRC unavailable` or `No synchronised lyrics found`, with the reason recorded
 in the details panel.
@@ -414,7 +439,7 @@ provider text through `innerHTML`.
 
 ```sh
 node tools/build-lrc.js     # src/Ryn_Type_2.user.js + src/lrc/lrc-ai.js -> Ryn_Type_2_LRC.user.js
-node tools/test-lrc.js      # 171 checks
+node tools/test-lrc.js      # 188 checks
 node --check Ryn_Type_2_LRC.user.js
 ```
 
@@ -430,7 +455,8 @@ lines, metadata, malformed input, precision, round-tripping), language
 detection, validation, the binary search, a full Japanese prepare-to-playback
 run, seek in both directions, offset, song change, every failure path, ID3
 reading (v2.2/2.3/2.4 text encodings, v1 with Shift-JIS, and six kinds of
-malformed input), provider fall-through, a pasted `.lrc` as the source (used, translated, invalidated when replaced, and
+malformed input), the "is this the right song" checks including both
+false-rejection guards, provider fall-through, a pasted `.lrc` as the source (used, translated, invalidated when replaced, and
 fallen through when it does not match), storage with IndexedDB refused, and that the wrappers leave a song with
 hand-pasted lyrics behaving exactly as before.
 
