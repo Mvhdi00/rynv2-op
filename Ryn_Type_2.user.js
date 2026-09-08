@@ -3076,12 +3076,13 @@ window.grbtp = 35;
         return;
       }
       const itemType = 4;
+      let sent = 0;
       for (const angle of placementAngles) {
-        ModuleHandler.requestPlace(itemType, angle, "spikeSync");
+        sent += ModuleHandler.requestPlace(itemType, angle, "spikeSync");
       }
-      ModuleHandler.placedOnce = true;
-      ModuleHandler.placeAngles[0] = itemType;
-      ModuleHandler.placeAngles[1] = placementAngles;
+      if (sent > 0) {
+        ModuleHandler.placedOnce = true;
+      }
     }
     handleEnemies(enemies) {
       this.reset();
@@ -13565,8 +13566,6 @@ window.grbtp = 35;
           ModuleHandler.requestPlace(itemType, angle, "spikeSync");
         }
         ModuleHandler.placedOnce = true;
-        ModuleHandler.placeAngles[0] = itemType;
-        ModuleHandler.placeAngles[1] = placementAngles;
         ModuleHandler.moduleActive = true;
         ModuleHandler.useAngle = angleTo;
         ModuleHandler.forceHat = 7;
@@ -13627,8 +13626,6 @@ window.grbtp = 35;
             ModuleHandler.requestPlace(itemType, angle, "spikeSyncHammer");
           }
           ModuleHandler.placedOnce = true;
-          ModuleHandler.placeAngles[0] = itemType;
-          ModuleHandler.placeAngles[1] = placementAngles;
           ModuleHandler.moduleActive = true;
           ModuleHandler.useAngle = futureAngle;
           ModuleHandler.forceHat = 7;
@@ -14835,13 +14832,7 @@ window.grbtp = 35;
       if (!ObjectManager2.canPlaceItem(id, position)) {
         return false;
       }
-      ModuleHandler.requestPlace(8, angle, "autoGrind");
-      if (!Array.isArray(ModuleHandler.placeAngles[1])) {
-        ModuleHandler.placeAngles[1] = [];
-      }
-      ModuleHandler.placeAngles[0] = 8;
-      ModuleHandler.placeAngles[1].push(angle);
-      return true;
+      return ModuleHandler.requestPlace(8, angle, "autoGrind") > 0;
     }
     postTick() {
       const {_ModuleHandler: ModuleHandler, EnemyManager: EnemyManager2, myPlayer: myPlayer, ObjectManager: ObjectManager2} = this.client;
@@ -15377,11 +15368,9 @@ window.grbtp = 35;
     }
     placeWindmill(angle) {
       const {_ModuleHandler: ModuleHandler} = this.client;
-      const type = 5;
-      ModuleHandler.requestPlace(type, angle, "autoMill");
-      ModuleHandler.placedOnce = true;
-      ModuleHandler.placeAngles[0] = type;
-      ModuleHandler.placeAngles[1].push(angle);
+      if (ModuleHandler.requestPlace(5, angle, "autoMill") > 0) {
+        ModuleHandler.placedOnce = true;
+      }
     }
     postTick() {
       const {myPlayer: myPlayer, _ModuleHandler: ModuleHandler} = this.client;
@@ -15791,18 +15780,19 @@ window.grbtp = 35;
         }
         const distance1 = pos1.distance(pos2);
         const placementScale = DataHandler_default.getItem(id).scale;
+        let sent = 0;
         for (const angle2 of angles) {
           const pos3 = pos1.addDirection(angle2, length);
           const rectStart = pos3.copy().sub(placementScale);
           const rectEnd = pos3.copy().add(placementScale);
           const distance2 = pos3.distance(pos2);
           if (distance2 < distance1 && lineIntersectsRect(pos2, pos1, rectStart, rectEnd)) {
-            ModuleHandler.requestPlace(type, angle2, "placementDefense");
+            sent += ModuleHandler.requestPlace(type, angle2, "placementDefense");
           }
         }
-        ModuleHandler.placedOnce = true;
-        ModuleHandler.placeAngles[0] = type;
-        ModuleHandler.placeAngles[1] = [ angle ];
+        if (sent > 0) {
+          ModuleHandler.placedOnce = true;
+        }
       }
     }
   }
@@ -16073,8 +16063,6 @@ window.grbtp = 35;
       const id = myPlayer.getItemByType(4);
       const current = myPlayer.getPlacePosition(pos1, id, angle);
       const distance2 = current.distance(pos1);
-      ModuleHandler.placeAngles[0] = 4;
-      ModuleHandler.placeAngles[1] = angles;
       if (distance > distance2 || !angles.every(angle2 => myPlayer.canPlaceObject(4, angle2))) {
         return;
       }
@@ -16113,8 +16101,6 @@ window.grbtp = 35;
       const len = ModuleHandler.currentType === 7 ? 30 : 0;
       const current = myPlayer.getPlacePosition(pos1, id, angle);
       const distance2 = current.distance(pos1) + len;
-      ModuleHandler.placeAngles[0] = 4;
-      ModuleHandler.placeAngles[1] = angles;
       if (distance > distance2) {
         return;
       }
