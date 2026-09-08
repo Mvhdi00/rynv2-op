@@ -2731,6 +2731,24 @@ window.grbtp = 35;
     escapable=true;
     healTarget=0;
     override=false;
+    // True when a kill sequence is visibly under way rather than merely
+    // possible. The damage estimate upstream is a worst case — getMaxWeaponDamage
+    // applies the Bull Helmet's 1.5 to every enemy whether they are wearing it
+    // or not — so "this could kill me" is the normal state of standing near
+    // anyone armed, and is far too weak a condition to act on. This is the
+    // difference between that and something actually happening.
+    sequenceLive=false;
+    // A persistent emergency, as distinct from sequenceLive above.
+    //
+    // These are the two states you cannot simply step out of: held by an
+    // enemy trap, or standing in a spike. They last for as long as the
+    // geometry lasts, and while a lethal threat sits on top of one of them
+    // there is nothing worth spending packets on except surviving it.
+    //
+    // "Was hit a tick ago" is deliberately NOT one of them. That is true of
+    // every ordinary trade, and a placer that stops for two ticks after every
+    // hit has stopped placing during exactly the fight it exists for.
+    emergency=false;
     poisonDamage=0;
     burstDamage=0;
     spikeDamage=0;
@@ -2756,6 +2774,8 @@ window.grbtp = 35;
       this.escapable = true;
       this.healTarget = 0;
       this.override = false;
+      this.sequenceLive = false;
+      this.emergency = false;
       this.poisonDamage = 0;
       this.burstDamage = 0;
       this.spikeDamage = 0;
@@ -2982,7 +3002,13 @@ window.grbtp = 35;
       // damageTick is set to tickCount + 1 when damage lands, so
       // `damageTick >= tickCount` is true for the tick of the hit and the one
       // after it, and false from the second tick on.
-      const sequenceLive = this.trappedByEnemy || this.spikeDamage > 0 || meleeAndTurret > 0 || myPlayer.damageTick >= myPlayer.tickCount;
+      // `damageTick > 0` guards the opening tick: damageTick and tickCount
+      // both start at 0, so without it the very first tick of a life reads as
+      // "just hit".
+      const justHit = myPlayer.damageTick > 0 && myPlayer.damageTick >= myPlayer.tickCount;
+      const sequenceLive = this.trappedByEnemy || this.spikeDamage > 0 || justHit;
+      this.sequenceLive = sequenceLive;
+      this.emergency = this.trappedByEnemy || this.spikeDamage > 0;
       // The upstream term arrives as one number — canPossiblyInstakill sums
       // weapon, secondary and turret damage per enemy into potentialDamage —
       // so the mask records that something in that group fired rather than
@@ -3045,7 +3071,16 @@ window.grbtp = 35;
       // genuinely lethal, and it is recomputed from scratch every tick, so it
       // falls away on the first tick the sequence does — no latch, no timer,
       // nothing to clear.
-      this.override = Settings_default._defensePriority && this.level >= THREAT.CRITICAL;
+      // The stand-down for Auto Place, Preplace and Replace.
+      //
+      // Three conditions, and all three are needed. CRITICAL alone is not
+      // enough: the damage estimate it rests on is a worst case, so it is true
+      // whenever anyone armed is in reach and we are not at full health, and a
+      // placer that stops every time that happens has stopped. sequenceLive
+      // adds "and something is actually happening", and healTarget adds "and
+      // the heal has somewhere to put the packets" — at full health there is
+      // nothing for the placer to yield to.
+      this.override = Settings_default._defensePriority && this.level >= THREAT.CRITICAL && this.emergency && this.healTarget > 0;
     }
     // Fed from Player.updateHealth, which is where damage is actually
     // observed. Keeping the burst record here rather than on the player keeps
@@ -3235,7 +3270,11 @@ window.grbtp = 35;
     // any of them, and there is still exactly one place that decides what
     // "stand down" means.
     instaThreat() {
-      if (this.defense.level >= THREAT.CRITICAL) return true;
+      // Same guard as the override, for the same reason: CRITICAL on its own
+      // means "the worst case in reach could kill me", which is true of
+      // standing next to anyone armed. It only counts as an insta threat once
+      // a sequence is actually running.
+      if (this.defense.level >= THREAT.CRITICAL && this.defense.emergency) return true;
       return this.velocityTickThreat || this.reverseInsta || this.rangedBowInsta || this.toolHammerInsta || this.primaryDamage + this.potentialSpikeKnockbackDamage >= 100;
     }
     shouldIgnoreModule() {
@@ -3664,12 +3703,22 @@ window.grbtp = 35;
       // So the same question is asked a second time against pos.future — the
       // extrapolation the game's own next tick will move us to. One extra
       // distance comparison per angle, on a list that was already computed.
+      // The damage itself is NOT added here. handleDanger already folds a
+      // placeable spike into potentialSpikeDamage through canPlaceSpikeObject,
+      // and adding it again would bill one hypothetical spike twice — once
+      // into the base's own detectedEnemy / detectedDangerEnemy flags, which
+      // drive the soldier hat and the existing stand-down gates, and once into
+      // the defensive sum.
+      //
+      // The prediction this anti was asked for is delivered where it belongs:
+      // detectSpikeInsta now tests pos.future as well as pos.current, so the
+      // existing pathway sees a spike aimed at where we are walking instead of
+      // only one aimed at where we stand. All that is left to do here is
+      // record which term spoke, for the readout.
       if (Settings_default._antiSpikeTick) {
         for (let i = 0, len = enemies.length; i < len; i++) {
-          const enemy = enemies[i];
-          if (!enemy.canPlaceSpike) continue;
+          if (!enemies[i].canPlaceSpike) continue;
           this.defense.sources |= THREAT_SRC.SPIKE_PLACE;
-          this.defense.spikeDamage += enemy.spikeDamage;
           break;
         }
       }
@@ -14613,6 +14662,27 @@ window.grbtp = 35;
       if (myPlayer.receivedDamage === null) return false;
       return this.isShameSafe() && this.isSaveHealTick();
     }
+    // This module never sets ModuleHandler.moduleActive, and must not.
+    //
+    // In this client that flag means "I own this tick" — twenty-two modules
+    // early-return on it, including every combat, placement, breaking and
+    // gathering module. Healing is three packets and coexists with all of
+    // them; it is not a reason for the client to stop fighting.
+    //
+    // It is worth stating because the temptation is real and the failure is
+    // not obvious. The damage estimate this module reads is a worst case —
+    // getMaxWeaponDamage applies the Bull Helmet's 1.5 to every enemy whether
+    // they wear it or not, so one katana enemy in reach with a turret up
+    // scores about 96 — which clears any "am I in danger" bar at nearly any
+    // health. A heal that claimed the tick on that signal would claim every
+    // tick of every fight, and the client would go silent exactly when it is
+    // needed.
+    //
+    // Running first is what this module gets instead, and all it needs: its
+    // packets go out before the placer spends the budget, and nothing else is
+    // suppressed. The one genuine stand-down — Auto Place, Preplace and
+    // Replace yielding for a tick — is DefenseCore.override, which is
+    // deliberately much narrower than "in danger".
     postTick() {
       this.forceHeal = false;
       if (!Settings_default._autoheal) {
@@ -14640,7 +14710,6 @@ window.grbtp = 35;
       // made now would spend the hitTime that the real heal wants.
       if (tempHealth >= maxHealth) {
         if (this.shouldCleanShame() && defense.level === THREAT.NONE) {
-          ModuleHandler.moduleActive = true;
           ModuleHandler.heal(true);
         }
         return;
@@ -14692,7 +14761,6 @@ window.grbtp = 35;
         // the heal waits for the window to pass.
         if (threatened) {
           this.forceHeal = true;
-          ModuleHandler.moduleActive = true;
         }
         return;
       }
@@ -14713,9 +14781,6 @@ window.grbtp = 35;
       // so a bad health reading cannot turn into an unbounded send loop.
       const sends = Math.min(needTimes, Math.ceil(maxHealth / restore));
       this.forceHeal = threatened;
-      if (threatened) {
-        ModuleHandler.moduleActive = true;
-      }
       // healedOnce is set from what actually went out. heal() can decline at
       // the packet ceiling, and AutoGrind reads this flag to stand down for
       // the tick — it should stand down for a heal that happened, not for one
