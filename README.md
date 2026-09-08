@@ -113,10 +113,93 @@ but nothing in the client needs it. It is stripped from the build.
 
 ---
 
+## Ryn Type 2
+
+`Ryn_Type_2.user.js` is a separate client from the mix — a different RYN branch
+(its own comments date it to a v5.4 core), not a descendant of this build. It
+is checked in with the login fix below and the webhook ping stripped;
+everything else is as supplied.
+
+It is not a superset of ReUp Mix, so neither replaces the other. It carries a
+13-class placement engine (`RynPlacementEngine`, `PlacementPlanner`,
+`CandidateGenerator`, `PlacementScorer`, `ConflictResolver`, `PreplaceBook`,
+`ThreatAnalyzer`, …) and nine bundle hooks the mix does not have
+(`objectAlpha`, `buildingTint`, `resourceTint`, `animalTint`,
+`meleeWeapon`/`meleeHands`/`meleeBody`, `cowName`, `wolfName`). It does not
+carry `AutoRetrap`, `AntiSync`, `AntiTrapProtect`, `LunaPathfinder`,
+`LunaSafeWalk`, `ShameSpam`, the spectate stack or the knockback-tick family,
+and it has no `objectRotation` hook, so no spike/mill rotation freeze, no
+username cycler and no menu themes.
+
+It already resolves item limits through `ClientPlayer.getItemCount`, so the
+`_isItemLimit` bug documented above was never present in it.
+
+### The login fix
+
+The reported symptom was intermittent: sometimes the menu would not connect,
+and switching to another mode logged in immediately.
+
+`disabled` on `#enterGame` is the game's "we hold a Cloudflare Turnstile token"
+flag, not a cosmetic state. `onGotTurnstileToken` is the only thing that clears
+it, in the same expression that assigns the token, and `onTurnstileError` /
+`onTurnstileExpired` both null the token and put the class back — so the class
+and the token are always in sync.
+
+Type 2 cleared it unconditionally on window load, which broke that sync in the
+one direction that hurts: Play became clickable before any token existed. The
+bundle handles that badly. The click handler commits to the connecting state
+first —
+
+```js
+we.classList.contains("disabled") || (Si("Connecting..."), /* … */ Fi())
+```
+
+— and `Fi()` is
+
+```js
+!vi || ei || (ei = !0, Sa || pi ? ue && Lt("cf:" + ue) : ue ? Lt("cf:" + ue) : Lt())
+```
+
+On moomoo.io `vi` is true (`pi` is false, so `(!pi || We) && (vi = !0)` fires)
+and `Sa` is true, so the branch taken is `ue && Lt("cf:" + ue)`. With no token
+that short-circuits and `Lt` is never reached — **no socket is opened at all**.
+But `ei` has already latched true one comma earlier, so every subsequent click
+is a no-op too. The menu sits on "Connecting..." and nothing recovers it.
+
+Switching server calls `re.switchServer()`, which assigns `window.location`.
+That reload clears `ei` and gives Turnstile a warm token, which is why
+switching modes always looked like the cure.
+
+`_autospawn` made it easier to hit: `clientSpawn()` calls `enterGame.click()`,
+and the `checkTrusted` hook strips the `isTrusted` guard, so the click can land
+before the token arrives without anyone touching the mouse.
+
+Two changes:
+
+- **The unconditional enable is gone.** The game's own gating decides when Play
+  is live. A watcher reports a Turnstile that never arrives, so a blocked
+  challenge reads as a blocked challenge instead of a dead button.
+- **The altcha proof-of-work is lazy.** `altcha.generate()` ran at
+  `document-start` on every load, spawning `min(16, hardwareConcurrency)`
+  SHA-256 workers against every core during exactly the window Turnstile needs
+  to fetch and solve its own challenge — and the game gives its widget only
+  `100 × 150ms` to appear. Starving the machine is enough to miss that on a
+  slower box, which is what made the failure intermittent. The token is only
+  ever consumed by `RYN.startGame()`, which runs only when the bundle never
+  installed its own `#enterGame` handler, so on a normal load the work was
+  pure waste. It is generated on demand and memoised now. It was also a
+  floating promise — `solve()` rejects with `"Not solved"` and nothing caught
+  it — so a failure surfaced as an unhandled rejection at load; that is
+  handled and resolves to `null`, which `startGame()` already treats as
+  failure.
+
+---
+
 ## Layout
 
 ```
 ReUp_Mix.user.js          the build output — this is the script to install
+Ryn_Type_2.user.js        separate client: a different RYN branch, login-fixed
 drivers/game-drivers.json protocol + data tables extracted from the game bundle
 src/RYN_Client_v4.js      base client (input)
 src/Luna_Client_1.1.js    Luna client, kept for reference (input)
@@ -156,6 +239,18 @@ Current state of the build:
 - **Hooks** — 36/36 bundle-rewrite hooks bind, including the new
   `objectRotation` hook and the pre-existing `freezeTurnSpeed`, which now
   resolves to the animal turn-rate site only.
+
+Both tools take a path, so they run against Ryn Type 2 as well:
+
+```sh
+node tools/verify-drivers.js Ryn_Type_2.user.js
+node tools/check-hooks.js Ryn_Type_2.user.js
+node --check Ryn_Type_2.user.js
+```
+
+It passes the same driver check on the same 42 scalar keys, and **44/44** of
+its hooks bind — the nine extra render hooks listed above, minus
+`objectRotation`, which it does not have.
 
 `check-hooks.js` re-minifies `src/game_index.js` before matching, because the
 hook patterns are written against minified code and the bundle checked in here
