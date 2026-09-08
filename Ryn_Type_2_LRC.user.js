@@ -25130,14 +25130,22 @@ const RynLRC = (function () {
       this._lsDelete("lrc", songId);
     },
 
-    /* A cache entry stops being trusted when the module's format moves on, or
-     * when the audio it was matched against is no longer the same length. */
-    isUsable: function (meta, durationSec) {
+    /* A cache entry stops being trusted when the module's format moves on,
+     * when the audio it was matched against is no longer the same length, or
+     * when it was built from a pasted .lrc that has since been replaced —
+     * otherwise pasting a better file would silently keep serving the old
+     * translation. */
+    isUsable: function (meta, durationSec, localRaw) {
       if (!meta) return false;
       if (meta.version !== CACHE_VERSION) return false;
       if (meta.status !== "ready" && meta.status !== "plain") return false;
       if (durationSec && meta.durationSec &&
           Math.abs(durationSec - meta.durationSec) > DURATION_DRIFT_S) return false;
+      if (meta.source === "local" && meta.sourceId && localRaw !== undefined) {
+        const raw = String(localRaw || "");
+        const now = LRCParser.looksSynced(raw) ? fnv1aHex(raw).slice(0, 8) : "";
+        if (now !== meta.sourceId) return false;
+      }
       return true;
     },
 
@@ -26016,7 +26024,7 @@ const RynLRC = (function () {
        *    unless the user explicitly asked to re-fetch. */
       if (!opts.force) {
         const cached = await LRCCache.getMeta(id.songId);
-        if (LRCCache.isUsable(cached, id.durationSec)) {
+        if (LRCCache.isUsable(cached, id.durationSec, song.lyrics)) {
           this._setState(song, index, null);
           LRCUI.paint(index);
           LRCUI.toast(cached.status === "ready" ? "✓ LRC Ready (cached)" : "Cached lyrics are not synced");
@@ -26035,52 +26043,99 @@ const RynLRC = (function () {
         }
       }
 
-      /* 6-7. Fetch. Synchronised lyrics preferred over plain. */
-      this._setState(song, index, "fetching");
-      const found = await LRCFetcher.find({
-        title: id.title,
-        artist: id.artist,
-        album: id.album,
-        durationSec: id.durationSec
-      }, token);
-      if (token.cancelled) { this._setState(song, index, null); return; }
+      /* 6-8. Source the lyrics, then parse and validate what came back.
+       *
+       * A synced .lrc the user already pasted into the song comes first: it
+       * is already here, it costs no network, and they chose it deliberately.
+       * LRCLIB is the fallback — and also the second chance if the pasted
+       * file turns out not to match this audio.
+       *
+       * This is the point of the whole feature for a song whose only .lrc is
+       * in another language: paste it, press the button, get it in English
+       * with its timestamps untouched. */
+      const localRaw = String(song.lyrics || "");
+      const sources = [];
+      if (LRCParser.looksSynced(localRaw)) {
+        sources.push({
+          busy: "parsing",
+          get: function () {
+            return Promise.resolve({
+              synced: localRaw,
+              plain: "",
+              source: "local",
+              sourceId: fnv1aHex(localRaw).slice(0, 8),
+              matchedTitle: id.title,
+              matchedArtist: id.artist,
+              matchedDuration: id.durationSec,
+              score: 1
+            });
+          }
+        });
+      }
+      sources.push({
+        busy: "fetching",
+        get: function () {
+          return LRCFetcher.find({
+            title: id.title,
+            artist: id.artist,
+            album: id.album,
+            durationSec: id.durationSec
+          }, token);
+        }
+      });
 
-      if (!found || (!found.synced && !found.plain)) {
-        this._setState(song, index, null);
-        await this._writeFailure(song, index, "none", "No synchronised lyrics found for this title and artist.");
-        LRCUI.toast("No synchronised lyrics found");
-        return;
+      let found = null;       /* the source that validated */
+      let parsed = null;      /* its parsed lines */
+      let plainOnly = null;   /* unsynced lyrics, kept only as a last resort */
+      let lastReason = "";    /* why the previous candidate was rejected */
+
+      for (let s = 0; s < sources.length && !parsed; s++) {
+        this._setState(song, index, sources[s].busy);
+        const cand = await sources[s].get();
+        if (token.cancelled) { this._setState(song, index, null); return; }
+        if (!cand || (!cand.synced && !cand.plain)) continue;
+
+        if (!cand.synced || !LRCParser.looksSynced(cand.synced)) {
+          if (!plainOnly) plainOnly = cand;
+          continue;
+        }
+        const p = LRCParser.parse(cand.synced);
+        const c = LRCValidator.validateParsed(p, { durationSec: id.durationSec });
+        if (c.ok) { found = cand; parsed = p; }
+        else lastReason = c.reason;
       }
 
       /* Plain lyrics only: recorded, labelled honestly, never faked into a
        * timeline. A synchronisation engine could be added later without
        * touching anything else here. */
-      if (!found.synced || !LRCParser.looksSynced(found.synced)) {
+      if (!parsed && plainOnly) {
         await this._writeResult(song, index, id, {
           status: "plain",
           language: LanguageDetector.detect(
-            String(found.plain).split("\n").map(function (t) { return { text: t }; })
+            String(plainOnly.plain).split("\n").map(function (t) { return { text: t }; })
           ).lang,
           languageSource: "detector",
-          originalLrc: String(found.plain || "").slice(0, 200000),
+          originalLrc: String(plainOnly.plain || "").slice(0, 200000),
           englishLrc: "",
-          lineCount: String(found.plain || "").split("\n").filter(function (l) { return l.trim(); }).length,
+          lineCount: String(plainOnly.plain || "").split("\n").filter(function (l) { return l.trim(); }).length,
           note: "Lyrics found — synchronisation unavailable.",
-          found: found
+          found: plainOnly
         });
         this._setState(song, index, null);
         LRCUI.toast("Lyrics found — sync unavailable");
         return;
       }
 
-      /* 8. Parse and validate the original. */
-      this._setState(song, index, "parsing");
-      const parsed = LRCParser.parse(found.synced);
-      const check = LRCValidator.validateParsed(parsed, { durationSec: id.durationSec });
-      if (!check.ok) {
+      if (!parsed) {
         this._setState(song, index, null);
-        await this._writeFailure(song, index, "error", "LRC unavailable: " + check.reason);
-        LRCUI.toast("LRC unavailable");
+        if (lastReason) {
+          await this._writeFailure(song, index, "error", "LRC unavailable: " + lastReason);
+          LRCUI.toast("LRC unavailable");
+        } else {
+          await this._writeFailure(song, index, "none",
+            "No synchronised lyrics found for this title and artist.");
+          LRCUI.toast("No synchronised lyrics found");
+        }
         return;
       }
 
@@ -26298,7 +26353,7 @@ const RynLRC = (function () {
       if (!meta || meta.status !== "ready") { LRCUI.paint(index); return; }
 
       const liveDur = mp._audio && isFinite(mp._audio.duration) ? mp._audio.duration : 0;
-      if (!LRCCache.isUsable(meta, liveDur)) {
+      if (!LRCCache.isUsable(meta, liveDur, song.lyrics)) {
         /* The audio behind this id changed length; the cached timeline is no
          * longer the right one for it. */
         LRCUI.paint(index);

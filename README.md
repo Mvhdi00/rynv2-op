@@ -254,13 +254,24 @@ Components, each independent: `LRCManager`, `SongIdentifier`, `LRCFetcher`,
 
 ## The pipeline
 
-Identify -> cache check -> fetch -> parse -> validate -> detect language ->
-translate -> validate the translation -> cache -> ready.
+Identify -> cache check -> source (pasted `.lrc`, else LRCLIB) -> parse ->
+validate -> detect language -> translate -> validate the translation ->
+cache -> ready.
 
-**Lyrics come from [LRCLIB](https://lrclib.net)** — public, key-less,
-CORS-enabled, and already the provider the Music page's own guide points at.
-Synchronised lyrics always win over plain; candidates are scored on title,
-artist and duration, and a weak best match is rejected rather than accepted.
+**A synced `.lrc` already pasted into the song is the first source tried** —
+it is on the machine, it costs no request, and the user chose it deliberately.
+That is the answer for a song whose only `.lrc` is in another language: paste
+it into the Add-song box, press the button, and get it back in English with
+its timestamps untouched. Replacing that pasted file later invalidates the
+cache, so the button returns to `LRC AI` instead of serving the old
+translation.
+
+**Otherwise lyrics come from [LRCLIB](https://lrclib.net)** — public,
+key-less, CORS-enabled, and already the provider the Music page's own guide
+points at. LRCLIB is also the second chance when a pasted file turns out not
+to match the audio. Synchronised lyrics always win over plain; candidates are
+scored on title, artist and duration, and a weak best match is rejected
+rather than accepted.
 
 **Language detection is offline.** Script ranges settle Japanese, Korean,
 Chinese, Arabic, Russian, Hindi, Hebrew, Thai and Greek outright; Latin
@@ -354,6 +365,9 @@ provider text through `innerHTML`.
 - **Chat sync is not switched on for you.** Lyrics load and the engine arms
   automatically, but sending them into the game's chat stays behind the
   existing *Chat sync* toggles. The details panel says so when they are off.
+- **A song with no `.lrc` anywhere still has the manual route.** Paste one
+  into the Add-song box; it is then the first thing `LRC AI` reaches for, and
+  gets translated and cached like any other source.
 - **Unsynchronised lyrics are labelled, not faked.** If only plain lyrics
   exist they are cached and the button reads `LRC: no sync`; nothing invents
   timestamps for them. A synchronisation engine could be added later without
@@ -372,7 +386,7 @@ provider text through `innerHTML`.
 
 ```sh
 node tools/build-lrc.js     # src/Ryn_Type_2.user.js + src/lrc/lrc-ai.js -> Ryn_Type_2_LRC.user.js
-node tools/test-lrc.js      # 125 checks
+node tools/test-lrc.js      # 140 checks
 node --check Ryn_Type_2_LRC.user.js
 ```
 
@@ -386,8 +400,9 @@ verbatim from the base client — so the playback assertions are against the
 actual chat loop, not a stand-in for it. It covers the parser (multi-timestamp
 lines, metadata, malformed input, precision, round-tripping), language
 detection, validation, the binary search, a full Japanese prepare-to-playback
-run, seek in both directions, offset, song change, every failure path,
-storage with IndexedDB refused, and that the wrappers leave a song with
+run, seek in both directions, offset, song change, every failure path, a
+pasted `.lrc` as the source (used, translated, invalidated when replaced, and
+fallen through when it does not match), storage with IndexedDB refused, and that the wrappers leave a song with
 hand-pasted lyrics behaving exactly as before.
 
 ---

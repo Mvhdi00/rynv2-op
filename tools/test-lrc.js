@@ -845,6 +845,94 @@ async function testFailures() {
 }
 
 /* ------------------------------------------------------------------ *
+ * 7a. A pasted .lrc is a source, not just a fallback
+ * ------------------------------------------------------------------ */
+
+async function testLocalSource() {
+  /* A song the provider knows nothing about, but whose Japanese .lrc the
+   * user pasted in by hand. The pasted file must be used, translated, and
+   * cached — without a single lyrics-provider request. */
+  {
+    const h = makeHost({
+      duration: 200,
+      route: u => u.indexOf("https://translate.googleapis.com/") === 0 ? route(u) : null
+    });
+    h.mp._songs.push({ title: "Obscure B-side", artist: "", url: "data:audio/mp3;base64,LLL1",
+                       lyrics: JA_LRC });
+    h.songList.appendChild(h.buildRow(0, h.mp._songs[0]));
+    h.lrc.UI.decorateRows();
+    await h.lrc.Manager.prepare(0, {});
+    await settle(80);
+
+    const meta = h.lrc.Cache.getMetaSync(h.mp._songs[0].lrcId);
+    eq("local: pasted lyrics are used", meta && meta.status, "ready");
+    eq("local: recorded as the source", meta && meta.source, "local");
+    eq("local: language detected from the pasted file", meta && meta.language, "ja");
+    eq("local: no lyrics-provider request was made",
+       h.net.calls.filter(u => u.indexOf("lrclib") >= 0).length, 0);
+    ok("local: it was still translated",
+       h.net.calls.filter(u => u.indexOf("translate") >= 0).length > 0);
+
+    const rec = await h.lrc.Cache.getLrc(meta.songId);
+    const P = h.lrc.Parser;
+    const orig = P.parse(JA_LRC).lines, eng = P.parse(rec.englishLrc).lines;
+    eq("local: timestamps preserved from the pasted file",
+       eng.map(l => l.ts), orig.map(l => l.ts));
+    eq("local: first line translated", eng[0].text, "I won't forget you");
+    eq("local: button reads ready",
+       h.doc.querySelector("#song-list .rm-lrc-btn").textContent, "\u2713 LRC");
+
+    /* Playback uses the cached English, not the pasted Japanese. */
+    h.mp.play(0);
+    await settle(60);
+    ok("local: playback activates the English timeline",
+       h.mp._lyrics.length > 0 && !/[\u3040-\u30FF\u4E00-\u9FFF]/.test(
+         h.mp._lyrics.map(l => l.text).join("")),
+       JSON.stringify(h.mp._lyrics.slice(0, 2)));
+
+    /* Replacing the pasted .lrc must invalidate the cache rather than keep
+     * serving the translation of the old one. */
+    h.mp._songs[0].lyrics = EN_LRC;
+    const st = h.lrc.UI.stateOf(h.mp._songs[0]);
+    eq("local: the entry survives a re-read on its own", st.state, "ready");
+    eq("local: but a replaced .lrc is no longer usable",
+       h.lrc.Cache.isUsable(meta, 200, EN_LRC), false);
+    eq("local: the original .lrc is still usable",
+       h.lrc.Cache.isUsable(meta, 200, JA_LRC), true);
+  }
+
+  /* A pasted .lrc that does not match the audio falls through to LRCLIB
+   * rather than being accepted or ending the run. */
+  {
+    const h = makeHost({ duration: 200, route });
+    h.mp._songs.push({
+      title: "Lemon", artist: "Kenshi Yonezu", url: "data:audio/mp3;base64,LLL2",
+      lyrics: "[00:01.00]wrong\n[00:02.00]file\n[59:00.00]entirely\n[59:30.00]here"
+    });
+    h.songList.appendChild(h.buildRow(0, h.mp._songs[0]));
+    h.lrc.UI.decorateRows();
+    await h.lrc.Manager.prepare(0, {});
+    await settle(80);
+    const meta = h.lrc.Cache.getMetaSync(h.mp._songs[0].lrcId);
+    eq("local mismatch: falls through to the provider", meta && meta.source, "lrclib");
+    eq("local mismatch: still ends ready", meta && meta.status, "ready");
+  }
+
+  /* Pasted lyrics with no timestamps are not treated as a synced source. */
+  {
+    const h = makeHost({ duration: 200, route: () => null });
+    h.mp._songs.push({ title: "Words Only", artist: "", url: "data:audio/mp3;base64,LLL3",
+                       lyrics: "just some words\nwith no timestamps" });
+    h.songList.appendChild(h.buildRow(0, h.mp._songs[0]));
+    h.lrc.UI.decorateRows();
+    await h.lrc.Manager.prepare(0, {});
+    await settle(60);
+    const meta = h.lrc.Cache.getMetaSync(h.mp._songs[0].lrcId);
+    eq("local unsynced: not accepted as a timeline", meta && meta.status, "none");
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * 7b. Storage that will not open
  * ------------------------------------------------------------------ */
 
@@ -948,6 +1036,7 @@ async function testNonInterference() {
     await testPrepare();
     await testPlayback();
     await testFailures();
+    await testLocalSource();
     await testStorageFallback();
     await testNonInterference();
   } catch (e) {
