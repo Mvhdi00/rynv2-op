@@ -177,3 +177,138 @@ understood.
 - Rotation toggles default to **on**, i.e. vanilla behaviour. Luna defaulted
   them off; the mix does not silently change how the game looks on first run.
 - `_lowQuality` still freezes all object rotation, as it did in RYN.
+
+---
+
+# Ryn Type 2 — defensive core
+
+`Ryn_Type_2.user.js` is a second, separate build in this repo. It is not
+produced by `tools/build-reup.js`; it is edited directly, and it is the only
+client file the defensive work below touches.
+
+```sh
+node --check Ryn_Type_2.user.js
+node tools/verify-drivers.js  Ryn_Type_2.user.js   # data tables vs the game bundle
+node tools/check-hooks.js     Ryn_Type_2.user.js   # bundle-rewrite hooks
+node tools/test-defense-core.js                    # the defensive core, behaviourally
+```
+
+## What replaced the old Auto Heal
+
+`AntiInsta` is gone. It was a threshold healer: it read
+`potentialDamage + potentialSpikeDamage`, compared it to health, and ate. It ran
+at position thirty of fifty-five in the module chain, so anything ahead of it had
+already claimed the tick, and it could not stop anything behind it. It could not
+see a sequence coming, and its shame rule (`healing && shameCount < 7`) was true
+on most ticks with an enemy in reach — every one of them bought a point of shame
+for a heal that would have been free two ticks later. That is the shame climb.
+
+In its place, `DefenseCore` runs fifth, ahead of every insta, placement and
+combat module. Each tick it senses once, classifies, decides what is worn and
+what stops, and then heals.
+
+### Sensing
+
+| Source | What was taken |
+|---|---|
+| Novastorm | the damage-potential accumulator — spike contact, predicted knockback, per-enemy weapon/turret/secondary terms, poison, capped at 140. RYN's `EnemyManager` already computes it; the core reads it instead of sweeping again. |
+| Chicken / Falcon | `interpretDamage`. Damage values that just landed are matched against each near enemy's weapon palette, which says *which* weapon they spent and therefore what is still loaded. The follow-up is priced before it is thrown. |
+| Chicken / Falcon | `start0ShameHeal`. A heal that is not needed now is delayed until it is free. |
+| Chicken / Falcon | `forcedAddOns` / `onlySoldier()`. A hat lock on a tick countdown that every equip request is routed through. |
+| Whiteout | `qHeal`. A turret-gear enemy at boost-tick distance arms the healer three ticks before anything lands. |
+| Misery | heal and hat are committed before the tick's breaker, gather and building packets. |
+
+Detectors combine by `max`, not by sum: each returns a complete estimate of one
+sequence, and an enemy's swing appears in several of them. The long-range musket
+term is the exception and adds, because it only counts shooters the geometric
+estimate cannot see.
+
+### Shame
+
+The server charges shame in one place — `buildItem` in `src/game_index.js`:
+
+```js
+if (this.hitTime) {
+    const W = Date.now() - this.hitTime;
+    this.hitTime = 0;
+    W <= 120 ? this.shameCount++ : this.shameCount -= 2;
+}
+```
+
+Three things follow that no reference client states:
+
+- The charge is **per hit, not per apple** — the first food of a burst zeroes
+  `hitTime` — so healing the whole deficit costs what healing one point costs.
+- With no outstanding hit, food is **free**: no `+1`, no `-2`.
+- A late heal is worth **-2**, so shame falls on its own while panic heals stay
+  rarer than one in three.
+
+`Player.receivedDamage` is this client's mirror of `hitTime`, so the rule is
+applied exactly rather than estimated. The core eats inside the 120 ms window
+only when the alternative is dying. Holding the food key by hand is routed
+through the same rule, because the client turning one key-hold into an eat every
+111 ms was the fastest way in this build to become a clown.
+
+**Anti Clown** (`ShameReset`) manufactures the one thing a recovery needs and the
+ordinary heal cannot: an outstanding hit at full health. Bull Helmet's
+`healthRegen: -5` is a real `changeHealth(-5)`, so it sets `hitTime`, and the
+core's own late heal then pays `-2`. It runs only at full health — below it the
+heal the core is already going to make is worth the same `-2` for free — never
+while anything can reach us, and never against the defensive lock.
+
+**There is no Q Fast path.** The core's only wire call is `ModuleHandler.heal()`
+(`selectItem(2)` → attack → restore weapon). `KeyQ` appears once in the client,
+as the player's own food binding, reachable only from a real `keydown`. The test
+suite asserts all of this against the source.
+
+### The lock
+
+`ModuleHandler.defenseLock` is a tick countdown with a hat. While it holds,
+`_equip` routes every non-player hat request to that hat — one gate, because
+every hat in this client is equipped through that one function — and auto place,
+preplace and replace stand down. It is a deferral, not a disable: the count runs
+out on its own and the engine resumes. Two carve-outs: Auto Shield keeps running
+(a raised shield beats Soldier), and one tank-gear break is let through on a tick
+the core sanctions, snapping back the tick after.
+
+### The antis
+
+They are not ten systems. They are ten detectors proposing into one threat
+object; the highest level wins and ties go to the tighter sequence, so
+simultaneous detections produce one hat and one lock rather than three modules
+fighting over the hat.
+
+| # | Anti | Condition | Answer |
+|---|---|---|---|
+| 1 | Velocity tick | turret-gear enemy, primary up, gap 150–420; critical at **190–250** and at Whiteout's boost-tick band **307–417** | Soldier, arm 3 ticks |
+| 2 | Sync spike | pushed onto / colliding with a spike with a swing ready | Soldier + arm; tank-gear break sanctioned when one swing kills the spike |
+| 3,7 | Musket insta | ranged secondary aimed inside **1700** (reach is `Weapons[15].range` 1400, bullet 50), cone narrowing with distance | Soldier + arm; one minimal perpendicular step if free and the step is clear |
+| 4 | Clown | above | Bull drain at full health only |
+| 5 | Bull-hat spam | 2 attributed bull hits inside 700 ms | Soldier + arm |
+| 6 | Dagger spam | 3 attributed dagger hits inside 700 ms | Soldier + arm |
+| 8 | Spike tick | enemy can place a spike touching us with a swing ready | push with turret gear when there is room; Soldier when trapped together |
+| 9 | Trap insta | held in an enemy trap with someone's combo up | Soldier + arm 3; hammer break sanctioned if it kills the trap |
+| 10 | KB spike | knockback landing point carries spike damage | Soldier + arm |
+
+Push versus tank is decided by where the damage sits: Soldier only wins the tick
+in the band where it is the thing that saves us (kills bare, survives in
+Soldier). Above that band the hat is not enough and prevention is the only out;
+below it nothing is at risk.
+
+### Removed
+
+**Angel Wings** is out of the loadout. `DefaultAcc.getBestCurrentAcc` is the
+whole of the accessory loadout, and accessory 13 no longer appears in it — it was
+returned above every other combat branch from the moment an enemy was seen, so
+Shadow Wings and Corrupt X Wings were unreachable in exactly the fights they are
+for. It is also out of `_storeItems`. The Be Angel bot option keeps its halo
+(`Hats[48]`, a hat). The only Angel Wings left is the death-corpse sprite, which
+is drawn on something that is not a player and equips nothing.
+
+**The Shadow Wings button** is removed, and with it the `_shadowWings` setting:
+with Angel Wings gone there is no longer a second option for Soldier's accessory
+slot, so the toggle had nothing to toggle and would have been a switch no UI
+could reach. Shadow Wings itself stays and is now Soldier's accessory
+unconditionally.
+
+No buttons were added.
